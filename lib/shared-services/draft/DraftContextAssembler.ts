@@ -49,6 +49,11 @@ import type { LeagueSport } from '@prisma/client'
 import type { PoolPlayerRecord } from '@/lib/sport-teams/types'
 import type { RecommendationInput } from './types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { picksUntilNextTurn, type ScoringWindow } from '@/lib/draft-helper/draftContextSignals'
+import { ownDraftSlot, planOwnNextPick, poolAtPlannedPick, type OwnPickPlan } from './planForOwnPick'
+import { projectionKey, projectionsFromPoolEntries } from '@/lib/draft-room/poolProjections'
 
 /**
  * Real keeper-lock extraction (Phase 30) from DraftSession.keeperSelections
@@ -82,7 +87,7 @@ export function extractKeeperLockedPlayers(keeperSelectionsJson: unknown): Array
  * engine treats as "no auction adjustment" (snake/linear drafts unaffected).
  */
 export function resolveAuctionContext(
-  session: { draftType: string | null; auctionBudgetPerTeam: number | null; auctionBudgets: unknown; slotOrder: unknown },
+  session: { draftType: string | null; auctionBudgetPerTeam: number | null; auctionBudgets: unknown; slotOrder: unknown; rounds?: number | null },
   targetRosterId: string,
   rosterSlots: string[],
   teamRosterCount: number
@@ -91,17 +96,94 @@ export function resolveAuctionContext(
   try {
     const budgets = getBudgetsFromSession(session)
     const remainingBudget = budgets[targetRosterId] ?? session.auctionBudgetPerTeam ?? 200
-    const rosterSlotsRemaining = Math.max(0, rosterSlots.length - teamRosterCount)
+    /*
+     * ⚠ OPEN SLOTS ARE THE DRAFT'S ROUNDS, NOT THE STARTING SLOTS (fixed 2026-11-14). The bid engine
+     * (AuctionEngine) counts open slots as `session.rounds − picks`; `rosterSlots` is starters only,
+     * so this used to report ~7 open slots where the bid engine saw ~15 and misjudged affordability.
+     */
+    const totalSlots = session.rounds != null && session.rounds > 0 ? session.rounds : rosterSlots.length
+    const rosterSlotsRemaining = Math.max(0, totalSlots - teamRosterCount)
     return { remainingBudget, rosterSlotsRemaining }
   } catch {
     return undefined
   }
 }
 
+/**
+ * The league's draft roster shape — starting slots plus superflex/2QB — from the SAME rules
+ * `buildDraftDecisionContext` uses (`resolveLeagueScoringFlags`, `isIdpLeague`, `getRosterTemplate`).
+ * For callers that need the engine's need model without the whole decision context, e.g. the queue
+ * reorder. Fails closed to the sport defaults (empty slots, no flags) rather than throwing.
+ */
+export async function resolveDraftRosterShape(
+  leagueId: string,
+  league: { sport: string; settings: unknown; starters: unknown },
+): Promise<{ rosterSlots: string[]; isSF: boolean; is2QB: boolean }> {
+  try {
+    const { rosterSlots, isSF, is2QB } = await readDraftRosterRules(leagueId, league)
+    return { rosterSlots, isSF, is2QB }
+  } catch {
+    return { rosterSlots: [], isSF: false, is2QB: false }
+  }
+}
+
+/**
+ * The league's draft rules as the draft engine reads them: starting slots, IDP or not, superflex / 2QB, the scoring
+ * format and TE premium. Everything `buildDraftDecisionContext` takes from the league's configuration.
+ */
+export interface DraftRosterRules {
+  rosterSlots: string[]
+  idp: boolean
+  isSF: boolean
+  is2QB: boolean
+  scoringFormat: 'standard' | 'half_ppr' | 'ppr'
+  tePremiumValue: number | null
+}
+
+type DraftRulesLeague = { sport: string; settings: unknown; starters: unknown }
+
+/**
+ * Derive the draft rules live — the ONE derivation, which Draft OS's feed caches (`draftRosterRulesSource`). Pass the
+ * league row when the caller already holds it. Resolves null for a missing league; a failing read throws, as the
+ * inline reads it replaced did.
+ */
+export async function deriveDraftRosterRules(leagueId: string, league?: DraftRulesLeague | null): Promise<DraftRosterRules | null> {
+  const row =
+    league ??
+    (await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, starters: true } }))
+  if (!row) return null
+  const flags = resolveLeagueScoringFlags(row.settings, row.starters)
+  const idp = await isIdpLeague(leagueId)
+  const template = await getRosterTemplate(row.sport as LeagueSport, idp ? 'IDP' : 'standard', leagueId)
+  const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+  return { rosterSlots, idp, ...flags }
+}
+
+/**
+ * The draft rules through Draft OS's 60-second cache (2026-11-20). A live draft re-assembled these on every poll —
+ * an IDP lookup and the roster template, for a fact that does not move mid-draft. Cached, every manager polling one
+ * league in the same minute shares one read; a commissioner's settings change is seen within a minute. When the
+ * cache cannot answer, the live derivation runs here, so a cache problem never becomes a draft problem.
+ */
+export async function readDraftRosterRules(leagueId: string, league: DraftRulesLeague): Promise<DraftRosterRules> {
+  const { loadDraftRosterRules } = await import('@/lib/decision-os/draft-os')
+  const cached = await loadDraftRosterRules({ leagueId, sport: league.sport }).catch(() => null)
+  if (cached) return cached
+  const live = await deriveDraftRosterRules(leagueId, league)
+  if (!live) throw new Error(`League not found: ${leagueId}`)
+  return live
+}
+
 export interface BuildDraftDecisionContextInput {
   leagueId: string
   rosterId: string
   mode?: 'bpa' | 'needs'
+  /**
+   * Off the clock, rank for the roster's own next turn (`plannedFor`). Only the pick DECISION asks for this
+   * (`pickDecision.ts`, the decision route). The pick outlook must see the pool as it stands NOW — its whole job
+   * is to say who is likely gone — and the shadow compare is about the pick on the clock, so both leave it off.
+   */
+  planForOwnTurn?: boolean
 }
 
 export interface DraftDecisionContext {
@@ -116,7 +198,22 @@ export interface DraftDecisionContext {
   /** Real 2QB flag (Phase 31), mutually exclusive with isSF — see resolveLeagueScoringFlags(). */
   is2QB: boolean
   round: number
+  /** Overall pick number in the draft (DraftSession.nextOverallPick) — unchanged meaning. */
   pick: number
+  /**
+   * Pick within the round (1..totalTeams) — what the ENGINE's `pick` means. Added 2026-11-14; the
+   * engine input now gets this, not `pick`. `pick` keeps its overall meaning so consumers on the
+   * decision-boundary backlog (DraftShadowService) are untouched.
+   */
+  pickInRound: number
+  /** The weeks this draft scores, for a tournament-stage league; null for a season-long one. */
+  scoringWindow: ScoringWindow | null
+  /**
+   * Set when the roster is NOT on the clock — before the draft, or while another team picks (build item 8,
+   * 2026-11-19). `round`, `pick`, `pickInRound` and the engine input are then for the roster's NEXT turn, and the
+   * players ADP says go before it are left out of the pool (`planForOwnPick.ts`). Null on the clock.
+   */
+  plannedFor: OwnPickPlan | null
   totalTeams: number
   status: string | null
   draftType: string | null
@@ -250,12 +347,22 @@ export interface DraftPickRow {
   team: string | null
   byeWeek: number | null
   playerName: string | null
+  /** Overall pick number and draft slot, when the caller has them (live context; not backtests). */
+  overall?: number | null
+  slot?: number | null
 }
 
 export interface AssembleEngineInputParams {
   /** All picks already made, as of the point in time being evaluated — the exclusion/roster source. Live: every pick in the in-progress session. Backtest: every pick with overall < the historical pick being replayed. */
   picksSoFar: DraftPickRow[]
   targetRosterId: string
+  /**
+   * Other ids the target's picks may be filed under. A draft mirrored from Sleeper stores the
+   * SLEEPER USER ID in `DraftPick.rosterId` (lib/draft/sleeperSync.ts), so matching on the AF
+   * `Roster.id` alone found none of the user's own picks and every mirrored draft scored an empty
+   * roster. See `resolveTargetRosterAliases`.
+   */
+  targetRosterAliases?: readonly string[]
   adpEntries: Array<{ playerName: string; position: string; team: string | null; adp: number }>
   poolByKey: ReadonlyMap<string, PoolPlayerRecord>
   rosterSlots: string[]
@@ -283,6 +390,16 @@ export interface AssembleEngineInputParams {
   auctionContext?: { remainingBudget: number; rosterSlotsRemaining: number }
   /** Real TE Premium points-per-reception value (Phase 31), from resolveLeagueScoringFlags(). Null when the real league settings don't populate it. */
   tePremiumValue?: number | null
+  /** Team abbreviation → bye week for the league's season (lib/schedule/teamByeWeeks.ts). */
+  byeByTeam?: ReadonlyMap<string, number>
+  /** `projectionKey(name, position)` → season projection, from the league's warm draft pool. */
+  projectionByKey?: ReadonlyMap<string, number>
+  /** The weeks this draft's rosters score, when it is an in-season / tournament-stage draft. */
+  scoringWindow?: ScoringWindow | null
+  /** This draft's most recent pick positions, oldest first. */
+  recentPickPositions?: string[]
+  /** Positions drafted so far by each team picking before the target's next turn. */
+  teamsAheadPositions?: string[][]
 }
 
 export interface AssembledEngineInput {
@@ -306,9 +423,14 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
   for (const locked of params.keeperLockedPlayers ?? []) {
     draftedKeys.add(playerKey(locked.playerName, locked.position))
   }
+  const ownIds = new Set([params.targetRosterId, ...(params.targetRosterAliases ?? [])].filter(Boolean))
+  const byeFor = (team: string | null | undefined): number | null => {
+    if (!team || !params.byeByTeam) return null
+    return params.byeByTeam.get(normalizeTeamAbbrev(team) ?? team.toUpperCase()) ?? params.byeByTeam.get(team.toUpperCase()) ?? null
+  }
   const teamRoster = params.picksSoFar
-    .filter((p) => p.rosterId === params.targetRosterId)
-    .map((p) => ({ position: p.position ?? '', team: p.team ?? null, byeWeek: p.byeWeek ?? null }))
+    .filter((p) => ownIds.has(p.rosterId))
+    .map((p) => ({ position: p.position ?? '', team: p.team ?? null, byeWeek: p.byeWeek ?? byeFor(p.team) }))
 
   const playerIdByKey = new Map<string, string>()
   let unresolvedPlayerIdCount = 0
@@ -328,7 +450,10 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
         position: e.position,
         team: poolMatch?.team_abbreviation ?? poolMatch?.team ?? e.team ?? null,
         adp: e.adp,
-        byeWeek: null,
+        // The schedule-derived bye for the player's team; null when the team or schedule is unknown.
+        byeWeek: byeFor(poolMatch?.team_abbreviation ?? poolMatch?.team ?? e.team ?? null),
+        // The draft room's own season projection, so replacement value runs here too (2026-11-14).
+        projectedPoints: params.projectionByKey?.get(projectionKey(e.playerName, e.position)) ?? null,
         // Phase 29: real age, already resolved by the shared player pool
         // resolver (PoolPlayerRecord.age) -- reused directly, not refetched.
         age: poolMatch?.age ?? null,
@@ -350,6 +475,9 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
     isSF: params.isSF,
     is2QB: params.is2QB ?? false,
     mode: params.mode,
+    scoringWindow: params.scoringWindow ?? null,
+    recentPickPositions: params.recentPickPositions,
+    teamsAheadPositions: params.teamsAheadPositions,
   }
 
   return {
@@ -363,13 +491,134 @@ export function assembleEngineInputFromPicks(params: AssembleEngineInputParams):
   }
 }
 
+/**
+ * The ids a roster's draft picks can be filed under, beyond its AF `Roster.id`: the roster's own
+ * `platformUserId`, and — for a draft mirrored from Sleeper, which files picks by Sleeper user id —
+ * the Sleeper user id linked to the AF user who holds the roster (`UserProfile.sleeperUserId`).
+ * Fails closed to what it already has: a lookup error never blocks the decision.
+ */
+export async function resolveTargetRosterAliases(args: {
+  platformUserId: string | null
+  isSleeperMirror: boolean
+}): Promise<string[]> {
+  const aliases = new Set<string>()
+  if (args.platformUserId) aliases.add(args.platformUserId)
+  if (args.isSleeperMirror && args.platformUserId) {
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId: args.platformUserId },
+        select: { sleeperUserId: true },
+      })
+      if (profile?.sleeperUserId) aliases.add(profile.sleeperUserId)
+    } catch {
+      // Keep the ids already known.
+    }
+  }
+  return [...aliases]
+}
+
+/**
+ * The NFL weeks a league's draft scores. Two sources, most specific first:
+ *
+ *   1. A tournament stage: TournamentLeague → TournamentRound.weekStart/weekEnd (the KBI calendar
+ *      drafts a redraft stage in week 10 and scores from week 11).
+ *   2. A league that starts after week 1: the imported Sleeper `start_week`
+ *      (`League.settings.start_week`, 2026-11-14), scored through the end of the season.
+ *
+ * Null for an ordinary week-1 league — every bye then falls inside the season and scoring them would
+ * only shift every player equally. Fails closed to null.
+ */
+export async function resolveDraftScoringWindow(leagueId: string): Promise<ScoringWindow | null> {
+  const fromTournament = await resolveTournamentScoringWindow(leagueId)
+  if (fromTournament) return fromTournament
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+    return scoringWindowFromLeagueSettings(league?.settings)
+  } catch {
+    return null
+  }
+}
+
+/** PURE. A window from a league's stored settings, when it starts after week 1. */
+export function scoringWindowFromLeagueSettings(settings: unknown): ScoringWindow | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
+  const start = Number((settings as Record<string, unknown>).start_week)
+  if (!Number.isInteger(start) || start <= 1 || start > 18) return null
+  return { startWeek: start, endWeek: null, label: `League starts week ${start}` }
+}
+
+async function resolveTournamentScoringWindow(leagueId: string): Promise<ScoringWindow | null> {
+  try {
+    const row = await prisma.tournamentLeague.findUnique({
+      where: { leagueId },
+      select: {
+        round: { select: { roundNumber: true, weekStart: true, weekEnd: true } },
+        tournament: { select: { name: true } },
+      },
+    })
+    const round = row?.round
+    if (!round || !Number.isFinite(round.weekStart) || round.weekStart < 1) return null
+    const endWeek = Number.isFinite(round.weekEnd) && round.weekEnd >= round.weekStart ? round.weekEnd : null
+    const label = `${row?.tournament?.name ? `${row.tournament.name} ` : ''}round ${round.roundNumber}`
+    return { startWeek: round.weekStart, endWeek, label }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Season projections for a league's draft, from the WARM draft pool the room itself reads
+ * (`getWarmDraftPoolSnapshotFast`, allowing a stale row). Never builds the pool: a cold build is
+ * 60–522 s, and a decision must not wait on it. Cold or failing → an empty map, and the engine
+ * simply has no projection signal, exactly as before. Imported dynamically so this assembler's
+ * other callers and tests do not load the pool resolver.
+ */
+export async function loadWarmPoolProjections(leagueId: string): Promise<Map<string, number>> {
+  try {
+    const { getWarmDraftPoolSnapshotFast } = await import('@/lib/draft-room/ensureDraftPoolReady')
+    const snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
+    return snap.warm ? projectionsFromPoolEntries(snap.payload.entries) : new Map()
+  } catch {
+    return new Map()
+  }
+}
+
+/**
+ * The positions each team picking before the target's next turn has drafted so far — read off this
+ * draft's picks by DRAFT SLOT, so it works for a draft mirrored from Sleeper, whose pick rows carry a
+ * Sleeper user id rather than an AF roster id. The target's slot is the slot of its own first pick;
+ * with no own pick yet there is nothing to anchor on and the list is empty. PURE.
+ */
+export function teamsAheadFromPicks(args: {
+  picks: ReadonlyArray<{ rosterId: string; position: string | null; overall?: number | null; slot?: number | null }>
+  ownIds: ReadonlySet<string>
+  currentOverall: number
+  totalTeams: number
+  snake: boolean
+}): string[][] {
+  const teams = Math.max(1, args.totalTeams)
+  const own = args.picks.find((p) => args.ownIds.has(p.rosterId) && p.slot != null)
+  if (!own || own.slot == null) return []
+  const ahead = picksUntilNextTurn({ currentOverall: args.currentOverall, targetSlot: own.slot, totalTeams: teams, snake: args.snake })
+  const slots: number[] = []
+  for (let overall = args.currentOverall; overall < args.currentOverall + ahead; overall++) {
+    const round = Math.ceil(overall / teams)
+    const inRound = ((overall - 1) % teams) + 1
+    const slot = args.snake && round % 2 === 0 ? teams - inRound + 1 : inRound
+    if (slot !== own.slot && !slots.includes(slot)) slots.push(slot)
+  }
+  return slots.map((slot) =>
+    args.picks.filter((p) => p.slot === slot && p.position).map((p) => String(p.position).toUpperCase()),
+  )
+}
+
 export async function buildDraftDecisionContext(input: BuildDraftDecisionContextInput): Promise<DraftDecisionContext> {
   const assembledAt = new Date().toISOString()
 
   const [league, session, targetRoster] = await Promise.all([
     prisma.league.findUnique({
       where: { id: input.leagueId },
-      select: { sport: true, platform: true, isDynasty: true, settings: true, starters: true },
+      select: { sport: true, platform: true, isDynasty: true, settings: true, starters: true, season: true },
     }),
     prisma.draftSession.findFirst({ where: { leagueId: input.leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER }),
     prisma.roster.findUnique({ where: { id: input.rosterId }, select: { platformUserId: true } }),
@@ -381,42 +630,85 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
 
   const picks = await prisma.draftPick.findMany({
     where: { sessionId: session.id },
-    select: { rosterId: true, position: true, team: true, byeWeek: true, playerName: true },
+    select: { rosterId: true, position: true, team: true, byeWeek: true, playerName: true, overall: true, slot: true },
+    orderBy: { overall: 'asc' },
   })
 
-  const { isSF, is2QB, scoringFormat, tePremiumValue } = resolveLeagueScoringFlags(league.settings, league.starters)
-  // Phase 32: resolve the real roster-template format instead of a hardcoded
-  // 'standard' -- previously this made RosterTemplateService.ts's real IDP
-  // branch (gated on formatType === 'IDP') permanently unreachable from
-  // Draft OS, even for a real IDP league. Reuses isIdpLeague() (lib/idp),
-  // the same real detector lib/league/getEffectiveLeagueRosterTemplate.ts
-  // already establishes as the canonical way to check IDP status.
-  const rosterFormatType = (await isIdpLeague(input.leagueId)) ? 'IDP' : 'standard'
-
-  const [adpResult, template, pool] = await Promise.all([
+  /*
+   * The league's draft rules — slots, IDP, superflex/2QB, scoring — through Draft OS's 60-second cache
+   * (`readDraftRosterRules`). Phase 32's fix still holds inside the derivation: the roster template is resolved for
+   * the league's real format (`isIdpLeague`), never a hardcoded 'standard'.
+   */
+  const isFootball = league.sport === 'NFL' || league.sport === 'NCAAF'
+  const [adpResult, draftRules, pool, byeByTeam, scoringWindow, projectionByKey] = await Promise.all([
     readAllFantasyAdpForLeague(input.leagueId),
-    getRosterTemplate(league.sport, rosterFormatType, input.leagueId),
+    readDraftRosterRules(input.leagueId, league),
     getPlayerPoolForLeague(input.leagueId, league.sport as LeagueSport, { limit: 800 }).catch(() => []),
+    // Byes and the scoring window (2026-11-14): the specifics that separate this draft from a generic one.
+    isFootball ? resolveTeamByeWeeks(league.sport, league.season).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
+    resolveDraftScoringWindow(input.leagueId),
+    loadWarmPoolProjections(input.leagueId),
   ])
 
   const poolByKey = new Map(pool.map((p) => [playerKey(p.full_name, p.position), p]))
-  const rosterSlots = template.slots.flatMap((slot) => Array(Math.max(0, slot.starterCount)).fill(slot.slotName))
+  const { rosterSlots, isSF, is2QB, scoringFormat, tePremiumValue } = draftRules
 
-  const round = session.currentRoundNum ?? 1
-  const pick = session.nextOverallPick ?? 1
   const totalTeams = session.teamCount ?? Math.max(1, new Set(picks.map((p) => p.rosterId)).size || 1)
+  /*
+   * 🛑 THE ENGINE'S `pick` IS THE PICK WITHIN THE ROUND, NOT THE OVERALL PICK (fixed 2026-11-14).
+   * `computeDraftPlayerRankings` computes `overall = (round - 1) * totalTeams + pick`, and the draft
+   * room posts `pick: currentPick.slot`. This passed `nextOverallPick`, so round 4 pick 64 of a
+   * 16-team draft was scored as pick 112: every ADP edge, reach/value warning and VORP horizon in the
+   * Decision OS card was ~a round and a half late.
+   */
+  const overallPick = Math.max(1, session.nextOverallPick ?? 1)
+  const round = session.currentRoundNum ?? Math.ceil(overallPick / Math.max(1, totalTeams))
+  const pickInRound = ((overallPick - 1) % Math.max(1, totalTeams)) + 1
   const keeperLockedPlayers = extractKeeperLockedPlayers(session.keeperSelections)
-  const targetRosterPickCount = picks.filter((p) => p.rosterId === input.rosterId).length
+  const targetRosterAliases = await resolveTargetRosterAliases({
+    platformUserId: targetRoster.platformUserId ?? null,
+    isSleeperMirror: Boolean(session.sleeperDraftId),
+  })
+  const ownPickIds = new Set([input.rosterId, ...targetRosterAliases])
+  const targetRosterPickCount = picks.filter((p) => ownPickIds.has(p.rosterId)).length
+  /*
+   * Off the clock, rank for the roster's own next turn rather than the pick being made now (planForOwnPick.ts):
+   * before the draft that is the roster's first pick, not overall pick 1.
+   */
+  const plan = !input.planForOwnTurn
+    ? null
+    : planOwnNextPick({
+        status: session.status ?? null,
+        draftType: session.draftType ?? null,
+        currentOverall: overallPick,
+        ownSlot: ownDraftSlot({ slotOrder: session.slotOrder, ownIds: ownPickIds, picks }),
+        totalTeams,
+        rounds: session.rounds ?? null,
+      })
+  const targetRound = plan?.round ?? round
+  const targetPickInRound = plan?.pickInRound ?? pickInRound
   const auctionContext = resolveAuctionContext(session, input.rosterId, rosterSlots, targetRosterPickCount)
 
   const assembled = assembleEngineInputFromPicks({
     picksSoFar: picks,
     targetRosterId: input.rosterId,
+    targetRosterAliases,
+    byeByTeam,
+    projectionByKey,
+    scoringWindow,
+    recentPickPositions: picks.map((p) => p.position ?? '').filter(Boolean).slice(-Math.max(6, totalTeams)),
+    teamsAheadPositions: teamsAheadFromPicks({
+      picks,
+      ownIds: ownPickIds,
+      currentOverall: overallPick,
+      totalTeams,
+      snake: (session.draftType ?? 'snake') !== 'linear',
+    }),
     adpEntries: adpResult.entries,
     poolByKey,
     rosterSlots,
-    round,
-    pick,
+    round: targetRound,
+    pick: targetPickInRound,
     totalTeams,
     sport: league.sport,
     isDynasty: league.isDynasty,
@@ -429,6 +721,13 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     mode: input.mode ?? 'needs',
   })
 
+  let plannedFor: OwnPickPlan | null = null
+  if (plan) {
+    const { pool, leftOut } = poolAtPlannedPick(assembled.engineInput.available, plan.picksAway)
+    assembled.engineInput.available = pool
+    plannedFor = { ...plan, leftOut }
+  }
+
   return {
     leagueId: input.leagueId,
     rosterId: input.rosterId,
@@ -438,8 +737,11 @@ export async function buildDraftDecisionContext(input: BuildDraftDecisionContext
     isDynasty: league.isDynasty,
     isSF,
     is2QB,
-    round,
-    pick,
+    round: targetRound,
+    pick: plannedFor?.overall ?? overallPick,
+    pickInRound: targetPickInRound,
+    scoringWindow,
+    plannedFor,
     totalTeams,
     status: session.status,
     draftType: session.draftType ?? null,

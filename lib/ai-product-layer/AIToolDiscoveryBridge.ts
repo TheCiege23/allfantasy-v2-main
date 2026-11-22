@@ -10,20 +10,20 @@ import type { AIProductContext } from './types';
 import type { ToolAIEntryKey } from '@/lib/unified-ai/types';
 
 const LINKS: Array<Omit<AIToolDiscoveryLink, 'href'> & { featureKey: ToolAIEntryKey | string }> = [
-  { label: 'Ask Chimmy', description: 'Private AI chat', featureKey: 'chimmy_chat', category: 'chat' },
+  { label: 'Ask Chimmy', description: 'Private Chimmy chat', featureKey: 'chimmy_chat', category: 'chat' },
   { label: 'Trade Analyzer', description: 'Trade evaluations', featureKey: 'trade_analyzer', category: 'tool' },
   { label: 'Trade Evaluator', description: 'Trade acceptance guidance', featureKey: 'trade_evaluator', category: 'tool' },
-  { label: 'Waiver AI', description: 'Waiver recommendations', featureKey: 'waiver_ai', category: 'tool' },
-  { label: 'Rankings AI', description: 'Power rankings and explanations', featureKey: 'rankings', category: 'tool' },
+  { label: 'Waiver Chimmy', description: 'Waiver recommendations', featureKey: 'waiver_ai', category: 'tool' },
+  { label: 'Rankings Chimmy', description: 'Power rankings and explanations', featureKey: 'rankings', category: 'tool' },
   { label: 'Draft Helper', description: 'Draft picks and war room help', featureKey: 'draft_helper', category: 'tool' },
   {
-    label: 'League Matchup AI',
-    description: 'Head-to-head AI breakdown in the league hub',
+    label: 'League Matchup Chimmy',
+    description: 'Head-to-head Chimmy breakdown in the league hub',
     featureKey: 'league_matchup_ai',
     category: 'tool',
   },
   {
-    label: 'Start/Sit AI',
+    label: 'Start/Sit Chimmy',
     description: 'Compare two starters with multi-model analysis',
     featureKey: 'league_start_sit_ai',
     category: 'tool',
@@ -62,7 +62,7 @@ export function getChimmyQuickActionLink(context?: AIProductContext): AIToolDisc
   return {
     label: entry.label,
     href: entry.href,
-    description: 'Open AI chat',
+    description: 'Open Chimmy chat',
     featureKey: 'chimmy_chat',
     category: 'chat',
   };

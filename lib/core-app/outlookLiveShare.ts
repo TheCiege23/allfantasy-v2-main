@@ -28,7 +28,7 @@ export function remainingShare(starters: readonly StarterRead[]): number | null 
   return left / starters.length
 }
 
-export type LiveRow = { week: number; rosterId: string; pointsFor: number; pointsAgainst: number }
+type LiveRow = { week: number; rosterId: string; pointsFor: number; pointsAgainst: number }
 
 const hasPoints = (r: LiveRow | undefined) => r != null && (r.pointsFor > 0 || r.pointsAgainst > 0)
 

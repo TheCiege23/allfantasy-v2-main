@@ -1,4 +1,7 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import crypto from 'crypto'
+import { getNativeLeagueMock } from '@/lib/mock-draft/native-league'
+import { leagueMockRoomFacts } from '@/lib/mock-draft/leagueMockRoomFacts'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
@@ -272,6 +275,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'leagueId or platformLeagueId is required' }, { status: 400 })
   }
 
+  if (leagueId) {
+    const native = await getNativeLeagueMock(leagueId, userId)
+    if (native) {
+      // Room v2: the league's real type, rule note and slot salaries (lib/mock-draft/leagueMockRoomFacts).
+      const nativeLeague = (native.body as { league?: { leagueId: string | null; draftType: string; rounds: number; teamCount: number } }).league
+      if (native.status === 200 && nativeLeague) Object.assign(nativeLeague, await leagueMockRoomFacts(nativeLeague.leagueId, nativeLeague))
+      return NextResponse.json(native.body, { status: native.status })
+    }
+  }
+
   const [league, sleeperLeague] = await Promise.all([
     leagueId
       ? prisma.league.findFirst({
@@ -378,7 +391,7 @@ export async function GET(req: NextRequest) {
   const userLookup = new Map(sleeperUsers.map((user) => [user.user_id, user]))
   const leagueTeamLookup = new Map((league?.teams ?? []).map((team) => [team.externalId, team]))
   const ownRosterData =
-    league?.rosters.find((roster) => roster.platformUserId === userId)?.playerData ?? null
+    (league?.rosters.find((roster) => roster.platformUserId === userId) ?? league?.rosters.find((roster) => isRosterManagedBy(roster, userId)))?.playerData ?? null
 
   const detectedUserRosterId = inferUserRosterId({
     ownRosterData,
@@ -450,6 +463,9 @@ export async function GET(req: NextRequest) {
     15
 
   const draftType = normalizeDraftType(recordFromUnknown(leagueInfo.settings)?.type)
+  const teamCount = leagueInfo.total_rosters ?? league?.leagueSize ?? sleeperLeague?.totalTeams ?? orderedManagers.length
+  // Room v2: the league's real type, rule note and slot salaries (lib/mock-draft/leagueMockRoomFacts).
+  const roomFacts = await leagueMockRoomFacts(league?.id, { draftType, rounds, teamCount })
 
   return NextResponse.json({
     league: {
@@ -459,13 +475,14 @@ export async function GET(req: NextRequest) {
       sport: normalizedSport,
       scoring: scoringLabel,
       isDynasty: Boolean(league?.isDynasty ?? sleeperLeague?.isDynasty),
-      teamCount: leagueInfo.total_rosters ?? league?.leagueSize ?? sleeperLeague?.totalTeams ?? orderedManagers.length,
+      teamCount,
       rounds,
       draftType,
       superflex: inferSuperflex(league?.settings) || inferSuperflex(leagueInfo.settings),
       managers: orderedManagers,
       detectedUserSlot,
       hasExplicitDraftOrder: Boolean(draftOrder),
+      ...roomFacts,
     },
   })
 }

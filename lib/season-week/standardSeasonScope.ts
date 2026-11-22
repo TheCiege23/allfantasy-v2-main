@@ -17,6 +17,7 @@ import { canRunSeasonForSport } from '@/lib/sport-scope'
 
 export const STANDARD_WEEKLY_SEASON_FORMATS: ReadonlySet<string> = new Set([
   'redraft',
+  'pirate',
   'keeper',
   'dynasty',
   'best_ball',
@@ -36,7 +37,7 @@ export function seasonSportToLeagueSport(sport: string | null | undefined): stri
   return u
 }
 
-export function runsStandardWeeklySeason(sport: string | null | undefined, format: string | null | undefined): boolean {
+export function runsStandardWeeklySeason(sport: string | null | undefined, format: string | null | undefined, season?: number | null): boolean {
   const f = String(format ?? 'redraft').trim().toLowerCase() || 'redraft'
-  return canRunSeasonForSport(seasonSportToLeagueSport(sport)) && STANDARD_WEEKLY_SEASON_FORMATS.has(f)
+  return canRunSeasonForSport(seasonSportToLeagueSport(sport), season) && STANDARD_WEEKLY_SEASON_FORMATS.has(f)
 }

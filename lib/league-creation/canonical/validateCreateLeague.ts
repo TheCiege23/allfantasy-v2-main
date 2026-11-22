@@ -1,9 +1,14 @@
+import { zombieCreationLeagueCount } from '@/lib/zombie/creationPolicy'
 import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
 import { validateTribeSlots } from '@/lib/survivor/survivorTribeIdentity'
 import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
 import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
+import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
+import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
  */
@@ -14,6 +19,7 @@ import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { TE_PREMIUM_POINT_OPTIONS, isValidTePremiumPoints } from '@/lib/nfl-scoring/nflScoringSeedForCreate'
 import type { LeagueSport } from '@prisma/client'
 import { getSurvivorTribeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { isImportedTeamCountAllowed } from '@/lib/league-creation/importedTeamCount'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import {
   isDraftTypeAllowedForFormat,
@@ -29,8 +35,7 @@ import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   isSurvivorCreationSportAvailable,
   SURVIVOR_CREATION_UNAVAILABLE_MESSAGE,
-  SURVIVOR_PAID_CREATION_ENABLED,
-  SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE,
+  readSurvivorEntryFee,
 } from '@/lib/survivor/survivorCreationAvailability'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
@@ -40,13 +45,19 @@ import {
 } from '@/lib/bestball/rules'
 import { isSupportedDevyCreateDraftType } from '@/lib/league-concepts/devyDefaults'
 import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  sportSupportsProspectStash,
+  leagueSupportsTaxiDevy,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 /** Maps execution modes (offline/auto/team) to a core draft id for format-engine checks. */
 export function normalizeDraftTypeForEngine(draftType: string): string {
   return normalizeDraftTypeForEngineValidation(draftType)
 }
 
-export const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
+const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
   'userId',
   'user_id',
   'commissionerUserId',
@@ -86,14 +97,14 @@ const dynastyCreationChoicesSchema = z.object({
 
 const SPORTS = z.enum(['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'])
 
-export const createLeagueBodySchema = z.object({
+const createLeagueBodySchema = z.object({
   concept: z.string().min(1).max(64),
   sport: SPORTS,
   scoringPreset: z.string().min(1).max(96).trim(),
   teamCount: z.number().int().min(2).max(256),
   draftType: z.string().min(1).max(32),
   leagueName: z.string().min(1).max(100).trim(),
-  conceptSetup: z.record(z.unknown()).optional().nullable(),
+  conceptSetup: z.record(z.string(), z.unknown()).optional().nullable(),
   soccerPipeline: z.enum(['mls', 'euro']).optional().nullable(),
   timezone: z.string().trim().min(1).max(64).refine(isValidIanaTimeZone, 'Choose a valid IANA timezone').optional(),
   language: z.enum(['en', 'es']).optional(),
@@ -104,7 +115,7 @@ export type ValidatedCreateLeagueBody = z.infer<typeof createLeagueBodySchema> &
   sport: LeagueSport
 }
 
-export type ValidateCreateLeagueResult =
+type ValidateCreateLeagueResult =
   | { ok: true; data: ValidatedCreateLeagueBody }
   | { ok: false; error: string; status: number; errors: ValidationIssue[] }
 
@@ -119,7 +130,17 @@ function issuesFromZod(err: z.ZodError): ValidationIssue[] {
 /**
  * Structural + business validation (format-engine allowlists, team counts).
  */
-export function validateCreatePayload(input: unknown): ValidateCreateLeagueResult {
+export function validateCreatePayload(
+  input: unknown,
+  options: {
+    /**
+     * Set only when the request carries over an imported league: that league's real team count.
+     * A request for exactly this count is accepted for the import-flexible league types even when
+     * the native list lacks it (see lib/league-creation/importedTeamCount.ts).
+     */
+    importedTeamCount?: number | null
+  } = {},
+): ValidateCreateLeagueResult {
   const stripped = stripForbiddenCreateLeagueFields(input)
   const parsed = createLeagueBodySchema.safeParse(stripped.body)
   if (!parsed.success) {
@@ -198,14 +219,53 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
   }
 
   const formatId = normalized.formatId
+  if (formatId === 'zombie') {
+    try { zombieCreationLeagueCount(data.conceptSetup) } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid Zombie league count.'
+      return { ok: false, status: 400, error: message,
+        errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] }
+    }
+  } else if (data.conceptSetup?.zombieLeagueCount != null && data.conceptSetup.zombieLeagueCount !== 1) {
+    const message = 'Multiple leagues can be created together only for a Zombie universe.'
+    return { ok: false, status: 400, error: message,
+      errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] }
+  }
   if (formatId === 'survivor' && !isSurvivorCreationSportAvailable(sport)) {
     return { ok: false, error: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE, status: 400,
       errors: [{ path: 'sport', message: SURVIVOR_CREATION_UNAVAILABLE_MESSAGE }] }
   }
-  if (formatId === 'survivor' && !SURVIVOR_PAID_CREATION_ENABLED &&
-      (data.conceptSetup?.survivor_entry_fee_mode === 'paid' || data.conceptSetup?.survivorEntryFeeMode === 'paid')) {
-    return { ok: false, error: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE, status: 400,
-      errors: [{ path: 'conceptSetup.survivor_entry_fee_mode', message: SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE }] }
+  if (formatId === 'survivor') {
+    const fee = readSurvivorEntryFee(
+      data.conceptSetup?.survivorEntryFeeMode ?? data.conceptSetup?.survivor_entry_fee_mode,
+      data.conceptSetup?.survivorEntryFeeAmountCents ?? data.conceptSetup?.survivor_entry_fee_amount_cents,
+    )
+    if ('error' in fee) {
+      return { ok: false, error: fee.error, status: 400,
+        errors: [{ path: 'conceptSetup.survivorEntryFeeAmountCents', message: fee.error }] }
+    }
+  }
+  if (!leagueSupportsTaxiDevy({ leagueType: formatId })) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const devy = Number(setup.devySlots ?? setup.devySize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : Number.isFinite(devy) && devy > 0 ? 'conceptSetup.devySlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      const message = 'Taxi and devy slots are available only in Dynasty, Devy, Salary Cap, and C2C leagues.'
+      return { ok: false, status: 400, error: message, errors: [{ path, message, code: 'TAXI_DEVY_NOT_AVAILABLE' }] }
+    }
+  }
+  // NHL / MLB have no prospect pool: refuse a taxi squad or devy rounds on any concept that carries them.
+  if (!sportSupportsProspectStash(sport)) {
+    const setup = data.conceptSetup ?? {}
+    const taxi = Number(setup.taxiSlots ?? setup.taxiSize ?? 0)
+    const path = Number.isFinite(taxi) && taxi > 0 ? 'conceptSetup.taxiSlots'
+      : setup.devyRoundsEnabled === true ? 'conceptSetup.devyRoundsEnabled' : null
+    if (path) {
+      return { ok: false, status: 400, error: PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+        errors: [{ path, message: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE }] }
+    }
   }
   if (formatId === 'dynasty') {
     const choices = dynastyCreationChoicesSchema.safeParse(data.conceptSetup ?? {})
@@ -312,9 +372,33 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  /*
+   * A pro-sport Redraft or Dynasty league must fit the sport's players (lib/league-creation/
+   * playerSupply.ts): the form offers 250 teams in every sport and a 250-team NFL draft runs dry.
+   * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
+   * College leagues are not checked. A league carried over from an import keeps the size it has.
+   */
+  // C2C as well: a college C2C league's pro side must fit the pro sport (owner's decision, 2026-11-22).
+  if ((formatId === 'redraft' || formatId === 'dynasty' || formatId === 'c2c') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+    const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
+    if (!supply.ok && supply.message) {
+      return {
+        ok: false,
+        status: 400,
+        error: supply.message,
+        errors: [{ path: 'teamCount', message: supply.message, code: 'PLAYER_SUPPLY_EXHAUSTED' }],
+      }
+    }
+  }
+
   const teamOpts = getTeamCountOptions(sport as SupportedSport, formatId as LeagueTypeId, data.soccerPipeline ?? null)
 
-  if (!teamOpts.includes(data.teamCount)) {
+  const importedCountAccepted =
+    options.importedTeamCount != null &&
+    options.importedTeamCount === data.teamCount &&
+    isImportedTeamCountAllowed(idpRequested ? 'idp' : formatId, data.teamCount, teamOpts)
+
+  if (!teamOpts.includes(data.teamCount) && !importedCountAccepted) {
     return {
       ok: false,
       error: 'Invalid team count for this concept and sport',
@@ -405,18 +489,50 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  /*
+   * Best ball lineups fill every starter seat for every team from what it drafted, so the league's
+   * seats must fit the sport's player pool (lib/bestball/poolCapacity.ts). Checked against the roster
+   * template bootstrap installs for this league type: `best_ball` for Classic Best Ball, the Guilly
+   * template for a best ball Guilly league. Tight-but-possible is a wizard warning, not a refusal.
+   */
+  const bestBallLeagueType =
+    formatId === 'best_ball' ? 'best_ball' : formatId === 'guillotine' && schedule.guillotineBestBall === true ? 'guillotine' : null
+  if (bestBallLeagueType) {
+    const poolCheck = checkNewBestBallLeaguePool({ sport, leagueType: bestBallLeagueType, teamCount: data.teamCount })
+    if (poolCheck.refusals.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: poolCheck.refusals[0].message,
+        errors: poolCheck.refusals.map((r) => ({ path: 'teamCount', message: r.message, code: 'BEST_BALL_POOL_EXHAUSTED' })),
+      }
+    }
+  }
+
+  // Two-week Guilly elimination periods (lib/guillotine/eliminationPeriods.ts): MLB only. Refused rather
+  // than dropped, so a league is never created on a period length it did not ask for.
+  if (schedule.guillotinePeriodWeeks !== undefined && schedule.guillotinePeriodWeeks !== 1) {
+    const message =
+      schedule.guillotinePeriodWeeks !== 2
+        ? 'An elimination period is one week or two.'
+        : formatId !== 'guillotine' || !supportsTwoWeekPeriods(sport)
+          ? 'Two-week elimination periods are for MLB Guilly leagues.'
+          : null
+    if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.guillotinePeriodWeeks', message }] }
+  }
+
   if (formatId === 'survivor' && schedule.survivorTribeSlots !== undefined) {
     const count = Number(schedule.survivorTribeCount ?? 4)
     const message = validateTribeSlots(schedule.survivorTribeSlots, data.teamCount, count)
     if (message) return { ok: false, status: 400, error: message, errors: [{ path: 'conceptSetup.survivorTribeSlots', message }] }
   }
-  if (formatId === 'survivor' && (sport === 'NBA' || sport === 'NHL')) {
+  if (formatId === 'survivor' && isSurvivorPlanSport(sport)) {
     try {
       if (schedule.survivorSeasonEndWeek !== undefined && typeof schedule.survivorSeasonEndWeek !== 'number') throw new Error('Survivor end week must be a number.')
       const draftAt = typeof date === 'string' && typeof time === 'string' ? toUtc(date, time, String(zone)) : undefined
       if (draftAt && draftAt.getTime() <= Date.now()) throw new Error('Choose a future Survivor draft date and time.')
       const exileSettings = normalizeSurvivorFoundationSettings(schedule)
-      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: exileSettings.exileReturnWeek, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
+      buildSurvivorFullSeasonPlan({ exileEnabled: exileSettings.exileIslandEnabled, exileReturnWeek: typeof schedule.exileReturnWeek === 'number' || typeof schedule.survivorExileReturnWeek === 'number' ? exileSettings.exileReturnWeek : undefined, finalistCount: readSurvivorLateSeasonSettings(schedule).finalistCount, sport, season: resolveLeagueCreationSeason(sport), castSize: data.teamCount, draftAt,
         endWeek: typeof schedule.survivorSeasonEndWeek === 'number' ? schedule.survivorSeasonEndWeek : undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid Survivor season calendar'

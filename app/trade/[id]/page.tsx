@@ -178,7 +178,7 @@ export default async function TradeSharePage(props: { params: Promise<{ id: stri
 
           <div className="text-center pt-4">
             <a
-              href="/dynasty-trade-analyzer"
+              href="/trade-evaluator"
               className="text-sm text-cyan-400 hover:text-cyan-300 underline"
             >
               Analyze your own trade on AllFantasy &rarr;

@@ -1,6 +1,7 @@
 /**
  * [UPDATED] GET/PUT: Commissioner roster settings (multi-sport: NFL + NBA).
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -13,7 +14,28 @@ import {
   updateLeagueRosterConfig,
 } from '@/lib/roster-engine'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
+import { normalizeRosterSlots } from '@/lib/league-rules-explainer/snapshot'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { RULES_EXPLAINER_SPORTS } from '@/lib/league-rules-explainer/types'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { syncLeagueIrSlotsColumn } from '@/lib/roster-engine/irSlotsColumn'
+import { alertManagersToFixLineups, findLineupsNeedingFixes } from '@/lib/roster-legality/recheckLeagueLineups'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import {
+  PROSPECT_STASH_UNAVAILABLE_CODE,
+  PROSPECT_STASH_UNAVAILABLE_MESSAGE,
+  filterRosterTemplatesForProspectPolicy,
+  findAddedProspectStashSlots,
+  isProspectStashSlotKey,
+  sportSupportsProspectStash,
+  leagueSupportsTaxiDevy,
+  isTaxiDevySlot,
+} from '@/lib/league-creation/prospectStashPolicy'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +69,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
     )
   }
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, leagueType: true, leagueVariant: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, leagueType: true, leagueVariant: true, isDynasty: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const registry = getRosterEngineRegistry()
@@ -63,11 +85,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
     getLeagueRosterConfig(leagueId),
   ])
 
+  // NHL / MLB: do not OFFER taxi / prospect slots. A slot this league already has stays listed, so an
+  // existing league's editor still renders and can reduce it.
+  const currentSlots = config.slots ?? {}
+  const supportsTaxiDevy = leagueSupportsTaxiDevy(league)
+  const slotDefs = service.getSlots().filter((def) => {
+    const existing = Number(currentSlots[def.key] ?? 0) > 0
+    if (!supportsTaxiDevy && isTaxiDevySlot(def.key)) return existing
+    if (!sportSupportsProspectStash(league.sport) && isProspectStashSlotKey(def.key)) return existing
+    return true
+  })
+
   return NextResponse.json({
     config,
     unifiedConfig,
-    slotDefs: service.getSlots(),
-    templates: service.getTemplates(),
+    slotDefs,
+    templates: filterRosterTemplatesForProspectPolicy(league.sport, service.getTemplates()).map(template => supportsTaxiDevy ? template : { ...template, slots: Object.fromEntries(Object.entries(template.slots).filter(([key]) => !isTaxiDevySlot(key))) }),
     defaultTemplateKey: defaultTemplate.key,
     isCommissioner: permission.isCommissioner,
     roleAwareReadOnlyMode: permission.readOnly,
@@ -81,7 +114,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true } })
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: {
+      userId: true, sport: true, leagueType: true, leagueVariant: true, isDynasty: true,
+      // The best ball pool check below: is this a best ball league, and how many teams does it seat.
+      settings: true, bestBallMode: true, guillotineMode: true, leagueSize: true,
+    },
+  })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const registry = getRosterEngineRegistry()
@@ -89,16 +129,52 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     return NextResponse.json({ error: `Roster settings not yet available for ${league.sport}` }, { status: 400 })
   }
 
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'rosters')
+  if (refused) return refused
+  const locked = await settingsLockedResponse(leagueId, 'rosters')
+  if (locked) return locked
 
   const body = await req.json().catch(() => ({}))
   const slots = body.slots as Record<string, number> | undefined
   const templateKey = (body.templateKey as string) ?? 'custom'
   if (!slots || typeof slots !== 'object') return NextResponse.json({ error: 'slots required' }, { status: 400 })
+  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
+  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
 
   const oldConfig = await getLeagueRosterConfig(leagueId)
+  // NHL / MLB have no prospect pool: refuse adding or growing TAXI / PROSPECT / RIGHTS / MINORS.
+  // Keeping or lowering what the league already has is allowed.
+  const previousSlots = (await registry.getService(league.sport).getConfig(leagueId)).slots ?? {}
+  if (!leagueSupportsTaxiDevy(league)) {
+    const added = Object.keys(slots).filter(key => isTaxiDevySlot(key) && Number(slots[key] ?? 0) > Number(previousSlots[key] ?? 0))
+    if (added.length) return NextResponse.json({ error: 'Taxi and devy slots are available only in Dynasty, Devy, Salary Cap, and C2C leagues.', code: 'TAXI_DEVY_NOT_AVAILABLE', slots: added }, { status: 400 })
+  }
+  const addedStash = findAddedProspectStashSlots(league.sport, slots, previousSlots)
+  if (addedStash.length > 0) {
+    return NextResponse.json(
+      { error: PROSPECT_STASH_UNAVAILABLE_MESSAGE, code: PROSPECT_STASH_UNAVAILABLE_CODE, slots: addedStash },
+      { status: 400 },
+    )
+  }
+  /*
+   * Best ball: every team's starter seats are filled from what it drafted, so the new seats must fit the
+   * sport's player pool at this league size (lib/bestball/poolCapacity.ts). An impossible layout is
+   * refused before anything is written; a tight one saves and comes back with a warning.
+   */
+  const poolCheck = league.leagueSize
+    ? checkLeagueBestBallPool(league, { teamCount: league.leagueSize, rosterSlots: slots })
+    : null
+  if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
   await updateLeagueRosterConfig(leagueId, { templateKey, slots }, session.user.id)
+  // `League.irSlots` is what trade context, league summaries and the AI read for IR; the slot map is what lineups
+  // are checked against. Keep the column on the count just saved so the two never disagree (2026-11-15).
+  await syncLeagueIrSlotsColumn(leagueId, slots)
   invalidateLeagueDraftCaches(leagueId)
+  // Rounds = draftable roster spots, so the draft follows the roster it was just given.
+  const draftRounds = await applyRosterTemplateChange(leagueId, {
+    keepManualOverride: await hasAfCommissionerSub(session.user.id),
+    logTag: 'roster-settings PUT',
+  })
   const config = await registry.getService(league.sport).getConfig(leagueId)
   const unifiedConfig = await getLeagueRosterConfig(leagueId)
 
@@ -128,5 +204,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
     }
   } catch { /* non-fatal */ }
 
-  return NextResponse.json({ ok: true, config, unifiedConfig })
+  // Before/after for the league home's "What changed" card (lib/league-rules-explainer, NFL/NBA/NHL).
+  // Never throws.
+  if ((RULES_EXPLAINER_SPORTS as readonly string[]).includes(String(league.sport))) {
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: session.user.id,
+      section: 'roster',
+      changes: diffRuleSnapshots(
+        { rosterSlots: normalizeRosterSlots(previousSlots) },
+        { rosterSlots: normalizeRosterSlots(config.slots) },
+      ),
+    })
+  }
+
+  await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings', detail: { templateKey } })
+  // Every saved lineup against the layout just saved: the commissioner sees how many need moves, those managers are
+  // alerted (lib/roster-legality/recheckLeagueLineups.ts). Nothing is moved for anyone.
+  const lineupsNeedingFixes = await findLineupsNeedingFixes(leagueId)
+  if (lineupsNeedingFixes.length > 0) void alertManagersToFixLineups(leagueId, lineupsNeedingFixes)
+  return NextResponse.json({
+    ok: true, config, unifiedConfig, draftRounds,
+    bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+    lineupsNeedingFixes: lineupsNeedingFixes.length,
+  })
+}
+
+/** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */
+function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  return hasAfCommissionerPlan({ id: userId })
 }

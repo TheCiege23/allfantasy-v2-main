@@ -8,6 +8,8 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   league: { findUnique: async () => ({ settings: m.settings }) },
   draftSession: { findFirst: m.read, update: m.writes },
 } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromBoolean(() => async () => Boolean(m.commissioner)))
 import { PATCH, GET } from '@/app/api/leagues/[leagueId]/draft/order/route'
 const ctx = { params: Promise.resolve({ leagueId: 'native' }) }
 const request = () => new Request('https://local.test/api', { method: 'PATCH', body: JSON.stringify({ slotOrder: [{ slot: 1, rosterId: 'r1', displayName: 'Team' }] }) }) as any

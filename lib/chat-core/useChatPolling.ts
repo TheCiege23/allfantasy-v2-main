@@ -69,11 +69,15 @@ export function useChatPolling(args: {
       if (document.visibilityState === 'visible') void tick()
     }
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    window.addEventListener('online', onVisible)
 
     return () => {
       cancelled = true
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      window.removeEventListener('online', onVisible)
     }
   }, [enabled, active])
 }

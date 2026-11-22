@@ -42,7 +42,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       - name: Install dependencies
         run: npm ci

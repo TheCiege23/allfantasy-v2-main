@@ -5,10 +5,17 @@
 import { prisma } from '@/lib/prisma'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import { getPlayoffSeedingRule } from '@/lib/scoring-engine/scoringSettingsResolved'
+import { loadNativePlayoffSeedPreview } from '@/lib/playoff-runtime/playoffSeedPreview'
 
 export type PlayoffSeedRow = { rosterId: string; seed: number; pointsFor: number; wins: number }
 
 export async function computePlayoffSeeds(leagueId: string, season: number): Promise<PlayoffSeedRow[]> {
+  // A native season seeds through the playoff runtime — the bracket's own seeding, divisions and the
+  // commissioner's tiebreaker order included (lib/playoff-runtime/playoffSeedPreview.ts) — so the stored
+  // seeds match the bracket. The ranking below stays for leagues without one.
+  const native = await loadNativePlayoffSeedPreview(leagueId, season).catch(() => null)
+  if (native && native.seeds.length > 0) return storeNativeSeeds(leagueId, season, native.seeds)
+
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { playoffTeams: true, playoffSeedingRule: true, settings: true, bestBallMode: true, bbMatchupFormat: true },
@@ -61,6 +68,29 @@ export async function computePlayoffSeeds(leagueId: string, season: number): Pro
   }
 
   return seeds
+}
+
+async function storeNativeSeeds(
+  leagueId: string,
+  season: number,
+  seeds: Array<{ rosterId: string; seed: number }>,
+): Promise<PlayoffSeedRow[]> {
+  const rows = await prisma.fantasyStanding.findMany({ where: { leagueId, season } })
+  const byRoster = new Map(rows.map((r) => [r.rosterId, r]))
+  const out: PlayoffSeedRow[] = []
+  for (const s of seeds) {
+    const row = byRoster.get(s.rosterId)
+    out.push({ rosterId: s.rosterId, seed: s.seed, pointsFor: Number(row?.pointsFor) || 0, wins: row?.wins ?? 0 })
+    if (!row) continue
+    await prisma.fantasyStanding
+      .update({ where: { leagueId_season_rosterId: { leagueId, season, rosterId: s.rosterId } }, data: { playoffSeed: s.seed } })
+      .catch(() => {})
+  }
+  // A team the runtime no longer seeds must not keep a seed from an earlier pass.
+  await prisma.fantasyStanding
+    .updateMany({ where: { leagueId, season, rosterId: { notIn: seeds.map((s) => s.rosterId) }, playoffSeed: { not: null } }, data: { playoffSeed: null } })
+    .catch(() => {})
+  return out
 }
 
 async function orderStandingsDivisionWinnersFirst(

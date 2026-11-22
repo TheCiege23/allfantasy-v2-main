@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'rosters')
   } catch (err) {
     if (err instanceof Response) return err
     throw err

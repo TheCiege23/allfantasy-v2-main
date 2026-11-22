@@ -29,6 +29,7 @@ import {
 } from '@/lib/af-projections/writeAfProjectionSnapshots'
 import type { ScoringFormat } from '@/lib/af-projections/types'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { projectionSportOrder } from '@/lib/af-projections/projectionSportOrder'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -220,6 +221,7 @@ async function runOneSport(
               // being played was blended player by player — a 2025-based row is a different claim.
               basisSeasonCounts: result.basisSeasonCounts,
               priorSeasonBasis: result.priorSeasonBasis,
+              seasonBlend: result.seasonBlend,
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
               noSourceSeasonYet: v.noSourceSeasonYet,
@@ -255,6 +257,7 @@ async function runOneSport(
         targetSeasonClamp: r.targetSeasonClamp,
         basisSeasonCounts: r.basisSeasonCounts,
         priorSeasonBasis: r.priorSeasonBasis,
+        seasonBlend: r.seasonBlend,
         scoringFormat: r.scoringFormat,
         idpPreset: r.idpPreset,
         statLinesRead: r.statLinesRead,
@@ -386,11 +389,15 @@ async function handle(req: NextRequest) {
   const results: Array<{ body: Record<string, unknown>; failed: boolean }> = []
   const deferred: string[] = []
 
-  for (const sport of rotateForFairness(
-    SUPPORTED_SPORTS.map((s) => String(s)),
-    undefined,
-    undefined,
-    SPORT_LEAD_SHARE,
+  // In the NFL season NFL always goes first, so the budget can never run out before it
+  // (`lib/af-projections/projectionSportOrder.ts`); the others keep their rotation behind it.
+  for (const sport of projectionSportOrder(
+    rotateForFairness(
+      SUPPORTED_SPORTS.map((s) => String(s)),
+      undefined,
+      undefined,
+      SPORT_LEAD_SHARE,
+    ),
   )) {
     if (budget.exhausted()) {
       deferred.push(sport)

@@ -1,13 +1,15 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import {
   getAllowedActions,
   loadLeagueForLifecycle,
+  loadLifecycleLeagueContext,
   transitionLeagueState,
   normalizeLifecycleState,
 } from '@/server/services/leagueLifecycleService'
-import { isElevatedCommissioner, isHeadCommissioner } from '@/server/services/permissionService'
+import { isHeadCommissioner } from '@/server/services/permissionService'
 import type { LeagueLifecycleState } from '@prisma/client'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
@@ -38,14 +40,18 @@ export async function GET(
   const row = await loadLeagueForLifecycle(params.leagueId)
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const snap = getAllowedActions({
-    lifecycleState: row.lifecycleState,
-    locked: row.locked,
-    emergencyPaused: row.emergencyPaused,
-  })
+  // A dynasty league's offseason player actions depend on the league, not only its phase.
+  const snap = getAllowedActions(
+    {
+      lifecycleState: row.lifecycleState,
+      locked: row.locked,
+      emergencyPaused: row.emergencyPaused,
+    },
+    await loadLifecycleLeagueContext(params.leagueId, row),
+  )
 
   const [elevated, head] = await Promise.all([
-    isElevatedCommissioner(params.leagueId, userId),
+    canCommissionerAct(params.leagueId, userId, 'league'),
     isHeadCommissioner(params.leagueId, userId),
   ])
 
@@ -67,7 +73,7 @@ export async function POST(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const elevated = await isElevatedCommissioner(params.leagueId, userId)
+  const elevated = await canCommissionerAct(params.leagueId, userId, 'league')
   if (!elevated) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   let body: { nextState?: string; force?: boolean }

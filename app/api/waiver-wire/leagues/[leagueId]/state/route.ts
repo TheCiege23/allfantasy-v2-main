@@ -1,3 +1,6 @@
+import { watchlistKeyForUser } from '@/lib/league/teamScopedKey'
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -16,9 +19,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const [leagueAsOwner, rosterAsMember] = await Promise.all([
+  // The team shown: the named one when the manager holds it, else their first (lib/league/viewerTeams.ts).
+  const [leagueAsOwner, rosterAsMember, coOwnerRosterId] = await Promise.all([
     (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true, playerData: true } }),
+    resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(req)),
+    acceptedCoOwnerRosterId(leagueId, userId),
   ])
   if (!leagueAsOwner && !rosterAsMember) {
     return NextResponse.json({ error: "League not found" }, { status: 404 })
@@ -41,7 +46,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         season: {
           leagueId: leagueId,
         },
-        ownerId: userId,
+        ...(rosterAsMember?.redraftRosterId
+          ? { id: rosterAsMember.redraftRosterId }
+          : coOwnerRosterId ? { id: '__unlinked_coowner__' } : { ownerId: userId }),
       },
       select: {
         faabBalance: true,
@@ -56,7 +63,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       const watchlistData = await (prisma as any).waiverWatchlist.findMany({
         where: {
           leagueId: leagueId,
-          userId: userId,
+          // The watchlist of the team being viewed (lib/league/teamScopedKey.ts).
+          userId: await watchlistKeyForUser(leagueId, userId, requestedRosterIdFrom(req)),
         },
         select: {
           playerId: true,

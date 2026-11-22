@@ -1,0 +1,203 @@
+/*
+ * Dynasty Era detail pieces: pick chips, pipeline badges, the lottery card and the tokens that
+ * replace violet on dynasty surfaces. Every class here is drawn ONLY on a dynasty league; a
+ * non-dynasty league never receives one, so it renders exactly as before.
+ *
+ * Tokens always carry their fallback, so this works whether or not the Dynasty Era theme
+ * (native-league.css) has defined them on the page.
+ */
+
+/* ── Pick chip: R1 gold outline, later rounds a line outline ───────────────────────────── */
+.dyd-pick-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--dyn-line, #2A3345);
+  border-radius: 6px;
+  background: var(--dyn-rail, #1C2333);
+  color: var(--dyn-text, #E8ECF2);
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dyd-pick-chip[data-round='1'] {
+  border-color: var(--dyn-gold, #D4A24C);
+  color: var(--dyn-gold-soft, #F3D79F);
+}
+.dyd-pick-chip[data-traded-away='true'] {
+  border-style: dashed;
+}
+.dyd-pick-chip-via {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: Inter, system-ui, sans-serif;
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dyn-faint, #9AA4B2);
+}
+.dyd-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── Pipeline badges: Taxi teal, Devy violet, Rookie gold, Prospect ember ─────────────── */
+.dyd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+small > .dyd-badge { margin: 0 6px 0 0; }
+.dyd-badge[data-kind='taxi'] { color: var(--dyn-teal, #2DD4BF); }
+.dyd-badge[data-kind='rookie'] { color: var(--dyn-gold, #D4A24C); }
+.dyd-badge[data-kind='devy'] { color: #C4B5FD; }
+.dyd-badge[data-kind='prospect'] { color: var(--dyn-ember, #F07A4A); }
+
+/* ── Violet replaced by the Dynasty Era palette ──────────────────────────────────────── */
+.dyd-accent-box {
+  border: 1px solid color-mix(in srgb, var(--dyn-gold, #D4A24C) 35%, transparent);
+  background: color-mix(in srgb, var(--dyn-gold, #D4A24C) 12%, transparent);
+  color: var(--dyn-gold-soft, #F3D79F);
+}
+.dyd-accent-box:hover { background: color-mix(in srgb, var(--dyn-gold, #D4A24C) 20%, transparent); }
+.dyd-accent-icon { color: var(--dyn-gold, #D4A24C); }
+.dyd-review-chip {
+  border-color: color-mix(in srgb, var(--dyn-gold, #D4A24C) 40%, transparent);
+  background: color-mix(in srgb, var(--dyn-gold, #D4A24C) 12%, transparent);
+  color: var(--dyn-gold-soft, #F3D79F);
+}
+.dyd-review-border { border-color: color-mix(in srgb, var(--dyn-gold, #D4A24C) 45%, transparent); }
+.dyd-gold-icon { color: var(--dyn-gold, #D4A24C); }
+.dyd-faint-icon { color: var(--dyn-faint, #9AA4B2); }
+
+/* ── History: season clock and the rookie-draft toggle ───────────────────────────────── */
+.dyd-season-clock {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border: 1px solid var(--dyn-gold, #D4A24C);
+  border-radius: 999px;
+  color: var(--dyn-gold-soft, #F3D79F);
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dyd-link {
+  color: var(--dyn-gold-soft, #F3D79F);
+  font-size: 11px;
+  font-weight: 600;
+}
+.dyd-link:hover { color: var(--dyn-gold, #D4A24C); }
+
+/* ── Standings: the rookie draft lottery card ────────────────────────────────────────── */
+.dyd-lottery {
+  border: 1px solid var(--dyn-line, #2A3345);
+  border-radius: 14px;
+  background: var(--dyn-vault, #121826);
+  color: var(--dyn-text, #E8ECF2);
+  padding: 16px;
+  min-width: 0;
+}
+.dyd-lottery h3 {
+  margin: 0;
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+.dyd-lottery p { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--dyn-text2, #C3CAD5); }
+.dyd-lottery-rows { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.dyd-lottery-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.dyd-lottery-row[data-you='true'] .dyd-lottery-team { color: var(--dyn-gold-soft, #F3D79F); }
+.dyd-lottery-seed {
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--dyn-faint, #9AA4B2);
+}
+.dyd-lottery-team { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.dyd-lottery-team small { margin-left: 6px; font-size: 11px; font-weight: 500; color: var(--dyn-faint, #9AA4B2); }
+.dyd-lottery-odds {
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  font-stretch: 112%;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.dyd-lottery-bar {
+  grid-column: 2 / 4;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--dyn-rail, #1C2333);
+  overflow: hidden;
+}
+.dyd-lottery-bar > span { display: block; height: 100%; background: var(--dyn-line, #2A3345); }
+.dyd-lottery-row[data-you='true'] .dyd-lottery-bar > span { background: var(--dyn-gold, #D4A24C); }
+.dyd-lottery-head {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dyn-faint, #9AA4B2);
+}
+.dyd-lottery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dyd-lottery-actions a,
+.dyd-lottery-actions button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dyn-line, #2A3345);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dyn-text, #E8ECF2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dyd-lottery-actions a:hover,
+.dyd-lottery-actions button:hover { border-color: var(--dyn-gold, #D4A24C); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .dyd-lottery-bar > span { transition: width 300ms ease; }
+}

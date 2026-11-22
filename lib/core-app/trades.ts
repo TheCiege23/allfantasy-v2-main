@@ -5,20 +5,20 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { readTradeAgentSuggestions, tradeAgentTableReady } from '@/lib/decision-os/trade/tradeAgentStore'
-import { LATEST_TRADE_ORDER } from './tradePicks'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import { receiptIdForGrade, storedTradeLink } from '@/lib/decision-os/trade/recordTradeGrade'
-import { gradeArchivedTradeRows } from './archivedTradeGrade'
+import { loadGradedLeagueTradeRows } from './leagueTradeRowGrades'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
-import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import { collapseMirroredTradeRows } from './tradeHistorySelection'
-import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { leagueContextFor, type ClaimedTeamRow, type LeagueContext, type LeagueContextRow } from './leagueContext'
+import { loadPickTradeDeadlineView, loadTradeDeadlineCountdown, type PickTradeDeadlineView } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import { createRenderTimer, type RenderTimer } from './renderTiming'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -198,129 +198,18 @@ async function resolveGrades(
   viewerPlatformUserId: string | null,
   /** The viewer, recorded on each grade's receipt. */
   userId: string | null = null,
+  /** The league's sport, so a Sleeper id is named from its own sport's pool. */
+  sport: string | null = null,
+  /** The league's platform: which id space its stored player ids are in (`playerIdSpaceFor`). */
+  platform: string | null = null,
 ): Promise<SectionState<GradedTrade[]>> {
-  if (!platformLeagueId) {
-    return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
-  }
-
-  const histories = await prisma.leagueTradeHistory.findMany({
-    where: { sleeperLeagueId: platformLeagueId },
-    select: { id: true, sleeperUsername: true },
-  })
-  if (histories.length === 0) {
-    return { available: false, reason: 'no trade history has been synced for this league' }
-  }
-
-  const trades = await prisma.leagueTrade.findMany({
-    where: { historyId: { in: histories.map((h) => h.id) } },
-    select: {
-      transactionId: true, season: true, week: true,
-      playersGiven: true, playersReceived: true,
-      /*
-       * ⚠ THE PICK COLUMNS, WHICH THIS GRADE LIST NEVER READ. Grading "a player and a
-       * 2027 1st for a player" on the two players alone is not neutral — it values the
-       * pick at zero and favours whichever side gave it. See `gradeableSide`.
-       */
-      picksGiven: true, picksReceived: true,
-      /* The other manager's display name, for the breakdown's labels. */
-      partnerName: true,
-      /* Which side of the graded ledger is the OTHER one — see `draftedPickNamesForRow`. */
-      partnerRosterId: true,
-      history: { select: { sleeperUsername: true } },
-    },
-    /*
-     * 🛑 `tradeDate` FIRST — see `LATEST_TRADE_ORDER`. Ordering by `(season, week)` is
-     * ordering by the LEG Sleeper served a trade under, not by when it happened, and
-     * every offseason trade in a league shares one leg.
-     */
-    orderBy: [...LATEST_TRADE_ORDER],
-    /* One source row exists per manager involved. Read enough rows to return
-       sixty distinct trades after the mirrored copies are collapsed. */
-    take: 240,
-  })
-  if (trades.length === 0) {
-    return { available: false, reason: 'no trades on file for this league' }
-  }
-
   /*
-   * One grade per platform transaction. Prefer the viewer's mirrored row so
-   * "received" and "gave" are from the same point of view as the page. Before
-   * this collapse the grade list could contain two or more entries for one deal
-   * while Completed trades contained none, which made the two sections look as
-   * though they described different leagues.
+   * The read, the identity resolution and the grading live in `leagueTradeRowGrades.ts`, shared with the
+   * Trade Center's provider-completed history so one trade reads one letter on both screens.
    */
-  const distinctTrades = collapseMirroredTradeRows(trades, viewerPlatformUserId, 60)
-
-  // Latest snapshot per player. Ranks, not raw values — see tradeGrading.
-  const ids = new Set<string>()
-  for (const t of distinctTrades) {
-    for (const arr of [t.playersGiven, t.playersReceived]) {
-      if (Array.isArray(arr)) arr.forEach((x) => ids.add(String(x)))
-    }
-  }
-  /*
-   * ⚠ `source: 'FANTASYCALC'` IS AN EXPLICIT LICENCE BOUNDARY, NOT A TIDY FILTER.
-   * DynastyProcess's value files are derived from FantasyPros ECR and carry
-   * FantasyPros ids and page paths; FantasyPros' terms prohibit commercial use of
-   * any portion of their site, and a permissive licence on the redistributing repo
-   * cannot relicense third-party data inside it. FantasyCalc is the one source in
-   * use here with no such encumbrance.
-   *
-   * Today only FantasyCalc rows exist, so this filter is currently a no-op — which
-   * is exactly why it is written down. The moment a second source is ingested, an
-   * unfiltered query would silently start pricing trades on data we may not be
-   * licensed to use commercially, and nothing would fail.
-   */
-  /*
-   * ⚠ NEWEST ROW PER ID ONLY, AND ONE EDGE THAT MOVES WITH IT. The old read fetched every dated
-   * snapshot and kept the first with a NON-NULL rank — so a player whose newest row carried no rank
-   * silently borrowed one from an older day. Now he is unranked, which is what the newest data
-   * says. The ingest writes `overallRank ?? null`, so the case is possible; staging held zero such
-   * rows on 2026-09-16 (0 of 15,375), so it changes no grade that exists today.
-   */
-
-  /*
-   * Names and positions, for the breakdown only.
-   *
-   * ⚠ THIS PATH DELIBERATELY HELD NO NAMES UNTIL NOW — the comment on `withheldReason`
-   * below says so, and it was right: a counts-only summary list needs none. The breakdown
-   * does, so it is one bounded query over the ids already collected above, issued in
-   * parallel with the snapshot read rather than after it. A failure degrades to
-   * `Player <id>` in a sentence, never to a wrong name or a missing asset.
-   */
-  const playersPromise =
-    ids.size > 0
-      ? prisma.sportsPlayer
-          .findMany({
-            where: { sleeperId: { in: [...ids] } },
-            select: { sleeperId: true, name: true, position: true },
-          })
-          .catch(() => [] as Array<{ sleeperId: string; name: string; position: string | null }>)
-      : Promise.resolve([] as Array<{ sleeperId: string; name: string; position: string | null }>)
-
-  const playerById = new Map((await playersPromise).map((p) => [p.sleeperId, p] as const))
-
-  /*
-   * 🛑 THE LETTER IS THE ONE GRADE (2026-09-25). This list used to grade in RANK space — each
-   * player's FantasyCalc overall rank pushed through a curve, picks from a separate pick book,
-   * defenders from the IDP board, letters on share-of-value bands (65/55/45/35) — a rule of its own
-   * beside the Trade Center's. A deal read one letter here and another on every other screen.
-   *
-   * Now each trade is graded by the one grader (`lib/decision-os/trade/completedTradeGrade.ts`) on
-   * this league's own chart and scoring, TODAY, from the row's point of view, without roster need
-   * (the trade has happened). The honesty rule survives unchanged: any asset that cannot be priced
-   * — an unnamed player, a pick whose draft has been held — withholds the letter; it is never zero.
-   */
-  const nameOf = (id: string) => playerById.get(id)?.name?.trim() || null
-  // Warm the per-player analytics cache the pricer reads, in ONE query, before sixty deals hit it.
-  await getPlayerAnalyticsBatch([...playerById.values()].map((p) => p.name)).catch(() => null)
-
-  /*
-   * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). The grading itself —
-   * drafted-pick names from the league's ledger, then the one grader — lives in
-   * `archivedTradeGrade.ts`, shared with the player card so one trade reads one letter on both.
-   */
-  const gradedRows = await gradeArchivedTradeRows({ afLeagueId: leagueId, platformLeagueId, rows: distinctTrades, nameOf })
+  const loaded = await loadGradedLeagueTradeRows({ leagueId, platformLeagueId, viewerPlatformUserId, sport, platform })
+  if (!loaded.available) return loaded
+  const { rows: distinctTrades, graded: gradedRows } = loaded
 
   const graded: GradedTrade[] = await Promise.all(distinctTrades.map(async (t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
@@ -414,6 +303,15 @@ export type TradesData = {
   sent: SectionState<PendingOffer[]>
   grades: SectionState<GradedTrade[]>
   deadline: SectionState<TradeDeadline>
+  /**
+   * The deadline the ENGINE enforces (lib/trade-deadline), worded as a countdown. `deadline` above is
+   * the import snapshot's week, which native leagues never carry; this is the verdict every trade path
+   * checks, so the chip can never call trades open when a proposal would be refused. Null when it could
+   * not be read — the chip then falls back to `deadline`.
+   */
+  deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades (lib/trade-deadline/pickTradeDeadline.ts); null when they follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /**
    * The nightly trade agent's ideas for this manager (design step 9): deals the one grade reads C for
    * both sides, on which both rosters gain. Suggest only — nothing is sent, and the partner is not told.
@@ -669,22 +567,100 @@ async function resolveAgentIdeas(leagueId: string, userId: string): Promise<{ ag
   }
 }
 
+/**
+ * The part of the Trades screen that paints first: the Trade Center's header and its summary strip
+ * (league, format, team count, deadline chips). Every field is copied verbatim into `TradesData`.
+ */
+export type TradesShell = Pick<TradesData, 'league' | 'gradingContext' | 'deadline' | 'deadlineCountdown' | 'pickTradeDeadline'>
+
+/** The shell, read; and the whole screen's data, still on its way. */
+export type TradesRead = { shell: TradesShell; data: Promise<TradesData> }
+
 export async function getTradesData(
   leagueId: string,
   userId: string,
   /** The render's shared league context — see `leagueContext.ts`. */
   ctx?: LeagueContext | null,
 ): Promise<TradesData | null> {
+  const read = await startTradesRead(leagueId, userId, ctx)
+  return read ? read.data : null
+}
+
+/**
+ * The Trades screen in two parts (2026-11-06), so the page can paint before the slow history lands.
+ *
+ * ⚠ WHAT IS SLOW IS KNOWN, NOT GUESSED — see the timings on `readTradesSections` below: the Sleeper
+ * history (19–30s cold) behind the grade list (1–9s cold), with the live pending-offer scan (0.7–7s)
+ * beside them. The shell needs none of those: it is the league row (already read by the shell's
+ * league context), one team count, the claimed team and the two deadline reads, so it resolves as
+ * soon as they do and `data` keeps going on its own.
+ *
+ * `data` is EXACTLY what `getTradesData` returned before this split — the shell's fields are reused,
+ * not re-read — so the screen renders the same values in the same order once it arrives.
+ */
+export async function startTradesRead(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<TradesRead | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
+  // Spans the whole read, shell and sections; logged once `data` lands (see `readTradesSections`).
+  const timer = createRenderTimer('trades')
   /* The shared row. `sport` matters to the pending-offer scan: Sleeper's player
      dictionary is NFL-only, so a non-NFL league must not be handed one. */
   const league = await lc.league()
   if (!league) return null
 
-  const [teamCount, myTeam] = await Promise.all([
-    prisma.leagueTeam.count({ where: { leagueId } }),
-    lc.claimedTeam(),
+  const teamRead = Promise.all([prisma.leagueTeam.count({ where: { leagueId } }), lc.claimedTeam()])
+  // The two deadline reads share nothing with the sections, so they start with the team read.
+  const deadlineReads = Promise.all([
+    loadTradeDeadlineCountdown(league.id).catch(() => null),
+    loadPickTradeDeadlineView(league.id).catch(() => null),
   ])
+  const shellRead: Promise<TradesShell> = Promise.all([teamRead, deadlineReads]).then(
+    ([[teamCount], [deadlineCountdown, pickTradeDeadline]]) => ({
+      league: {
+        id: league.id,
+        name: leagueDisplayName(league.name),
+        platform: String(league.platform ?? 'manual').toLowerCase(),
+        sourceLink: resolveSourceScreenLink({
+          platform: league.platform,
+          sourceLeagueId: league.platformLeagueId,
+          leagueName: leagueDisplayName(league.name),
+          season: league.season,
+          screen: 'trade',
+          action: 'trade',
+        }),
+      },
+      gradingContext: {
+        available: true as const,
+        data: { leagueName: leagueDisplayName(league.name), format: league.leagueType ?? null, teamCount },
+      },
+      deadline: resolveDeadline(league.settings),
+      deadlineCountdown,
+      pickTradeDeadline,
+    }),
+  )
+  const data = teamRead.then(([, myTeam]) => readTradesSections(league, lc, leagueId, userId, myTeam, shellRead, timer))
+  /*
+   * ⚠ When the shell read fails, the caller gets that failure and never sees `data` — which then
+   * rejects with the same error and nobody listening. Marking it handled here stops one failure being
+   * reported twice (the second time as an unhandled rejection). Anyone awaiting `data` still gets it.
+   */
+  data.catch(() => {})
+  return { shell: await shellRead, data }
+}
+
+async function readTradesSections(
+  league: LeagueContextRow,
+  lc: LeagueContext,
+  leagueId: string,
+  userId: string,
+  myTeam: ClaimedTeamRow | null,
+  shellRead: Promise<TradesShell>,
+  timer: RenderTimer,
+): Promise<TradesData> {
   const sleeperHistory = String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId
 
   /*
@@ -699,12 +675,14 @@ export async function getTradesData(
    * together, which surface's letter becomes a trade's permanent original would be a race. In order,
    * the grade list freezes first and the history reuses it, exactly as before.
    */
-  const gradesThenHistory = (async () => {
+  const gradesThenHistory = timer.time('gradesThenHistory', (async () => {
     const grades = await resolveGrades(
       league.id,
       league.platformLeagueId ?? null,
       myTeam?.platformUserId?.trim() || null,
       userId,
+      league.sport ?? null,
+      league.platform ?? null,
     )
     const current = sleeperHistory
       ? await getSleeperTradeHistory(
@@ -715,31 +693,110 @@ export async function getTradesData(
         ).catch(() => null)
       : null
     return { grades, current }
-  })()
-  const [{ grades, current }, pendingOffers, agentIdeas] = await Promise.all([
+  })())
+
+  /*
+   * ⚠ THE NON-SLEEPER HISTORY'S OWN READS START WITH THE SECTIONS, NOT AFTER THEM (2026-11-14). The
+   * warehouse facts, the league's teams and the mirrored `LeagueTrade` rows used to wait for the grade
+   * list, the offer scan and the ideas above, then run one after another — although they need only the
+   * league row, and the trade rows need only the facts (for their transaction ids). None of the sections
+   * writes a table these read: grading freezes into `trade_analysis_snapshots` and receipts, never into
+   * `TransactionFact`, `LeagueTeam` or `LeagueTrade`. Each is still awaited where it was used, in the
+   * same order, so the values and the error that surfaces first are unchanged; only the waiting
+   * overlaps. A Sleeper league returns from its own branch below and never starts them, as before.
+   * The player-name read stays after the trade rows, because it reads their ids.
+   *
+   * ⚠ A read started here and awaited later must never reject unobserved: `timer.time` attaches a
+   * handler, which is why every early read goes through it. `facts` and `teams` keep their original
+   * lack of a `.catch` — a failure still throws out of this loader at the await, as it did before.
+   */
+  const factsRead = sleeperHistory
+    ? null
+    : timer.time('facts', prisma.transactionFact.findMany({
+        where: { leagueId, type: 'trade' },
+        orderBy: [{ season: 'desc' }, { weekOrPeriod: 'desc' }],
+        take: 400,
+        select: {
+          transactionId: true,
+          managerId: true,
+          season: true,
+          weekOrPeriod: true,
+          payload: true,
+          createdAt: true,
+        },
+      }))
+  const teamsRead = sleeperHistory
+    ? null
+    : timer.time('teams', prisma.leagueTeam.findMany({
+        where: { leagueId },
+        select: { externalId: true, platformUserId: true, teamName: true, ownerName: true, claimedByUserId: true },
+      }))
+  const tradeRowsRead = factsRead
+    ? timer.time('tradeRows', factsRead.then((facts) => {
+        /*
+         * Name the players each trade moved.
+         *
+         * `dw_transaction_facts` carries counts only; `LeagueTrade` carries the Sleeper
+         * id arrays. Two bounded queries for the whole page — one for the trades, one
+         * to resolve every referenced id to a name — rather than a lookup per row.
+         */
+        const txIds = [...groupFactsBySleeperTx(facts).keys()]
+        /*
+         * Completed history and grades now share LeagueTrade as a source. Transaction
+         * facts remain the richer warehouse path for every provider, but a Sleeper
+         * league whose historical importer populated LeagueTrade first must not show
+         * "no trades" above grades created from those exact rows.
+         */
+        return league.platformLeagueId || txIds.length
+          ? prisma.leagueTrade
+              .findMany({
+                where: league.platformLeagueId
+                  ? {
+                      OR: [
+                        ...(txIds.length ? [{ transactionId: { in: txIds } }] : []),
+                        { history: { sleeperLeagueId: league.platformLeagueId } },
+                      ],
+                    }
+                  : { transactionId: { in: txIds } },
+                /*
+                 * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
+                 * one trade tie on every payload field, so without a deterministic key
+                 * the order Postgres happens to return decides which manager appears
+                 * first — and a trade could read one way round on one render and the
+                 * other way on the next. `historyId` is stable and unique per side.
+                 */
+                orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
+                select: {
+                  transactionId: true,
+                  season: true,
+                  week: true,
+                  playersGiven: true,
+                  playersReceived: true,
+                  picksGiven: true,
+                  picksReceived: true,
+                  partnerName: true,
+                  tradeDate: true,
+                  createdAt: true,
+                  history: { select: { sleeperUsername: true } },
+                },
+                take: 400,
+              })
+              .catch(() => [])
+          : []
+      }))
+    : null
+
+  // The shell (header fields and the two deadline reads) rides along; its values are reused below.
+  const [{ grades, current }, pendingOffers, agentIdeas, shell] = await Promise.all([
     gradesThenHistory,
-    resolvePendingOffers(league, userId, lc),
-    resolveAgentIdeas(league.id, userId),
+    timer.time('pendingOffers', resolvePendingOffers(league, userId, lc)),
+    timer.time('agentIdeas', resolveAgentIdeas(league.id, userId)),
+    shellRead,
   ])
 
   const base = {
-    league: {
-      id: league.id,
-      name: leagueDisplayName(league.name),
-      platform: String(league.platform ?? 'manual').toLowerCase(),
-      sourceLink: resolveSourceScreenLink({
-        platform: league.platform,
-        sourceLeagueId: league.platformLeagueId,
-        leagueName: leagueDisplayName(league.name),
-        season: league.season,
-        screen: 'trade',
-        action: 'trade',
-      }),
-    },
-    gradingContext: {
-      available: true as const,
-      data: { leagueName: leagueDisplayName(league.name), format: league.leagueType ?? null, teamCount },
-    },
+    league: shell.league,
+    gradingContext: shell.gradingContext,
     /*
      * Read LIVE off the platform, not from a table.
      *
@@ -756,11 +813,14 @@ export async function getTradesData(
      */
     ...pendingOffers,
     grades,
-    deadline: resolveDeadline(league.settings),
+    deadline: shell.deadline,
+    deadlineCountdown: shell.deadlineCountdown,
+    pickTradeDeadline: shell.pickTradeDeadline,
     ...agentIdeas,
   }
 
   if (sleeperHistory) {
+    timer.done({ platform: 'sleeper' })
     return {
       ...base,
       canonicalHistory: true,
@@ -771,24 +831,10 @@ export async function getTradesData(
     }
   }
 
-  const facts = await prisma.transactionFact.findMany({
-    where: { leagueId, type: 'trade' },
-    orderBy: [{ season: 'desc' }, { weekOrPeriod: 'desc' }],
-    take: 400,
-    select: {
-      transactionId: true,
-      managerId: true,
-      season: true,
-      weekOrPeriod: true,
-      payload: true,
-      createdAt: true,
-    },
-  })
+  // Both started above under `!sleeperHistory`, which the early return just established, so never null here.
+  const facts = await factsRead!
 
-  const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId },
-    select: { externalId: true, platformUserId: true, teamName: true, ownerName: true, claimedByUserId: true },
-  })
+  const teams = await teamsRead!
   const teamByExternal = new Map(teams.map((t) => [String(t.externalId), t.teamName]))
   /*
    * ⚠ KEYED ON `platformUserId`, NOT `externalId`. `LeagueTradeHistory.sleeperUsername`
@@ -802,69 +848,12 @@ export async function getTradesData(
     ),
   )
 
-  // Each trade writes one fact PER SIDE, so collapse on the sleeper transaction
-  // id to get one row per trade rather than listing every deal twice.
-  const bySleeperTx = new Map<string, typeof facts>()
-  for (const f of facts) {
-    const payload = (f.payload ?? {}) as Record<string, unknown>
-    const key = String(payload.sleeperTransactionId ?? f.transactionId.split(':')[0])
-    const bucket = bySleeperTx.get(key) ?? []
-    bucket.push(f)
-    bySleeperTx.set(key, bucket)
-  }
+  const bySleeperTx = groupFactsBySleeperTx(facts)
 
   const mine = myTeam?.externalId != null ? String(myTeam.externalId) : null
 
-  /*
-   * Name the players each trade moved.
-   *
-   * `dw_transaction_facts` carries counts only; `LeagueTrade` carries the Sleeper
-   * id arrays. Two bounded queries for the whole page — one for the trades, one
-   * to resolve every referenced id to a name — rather than a lookup per row.
-   */
-  const txIds = [...bySleeperTx.keys()]
-  /*
-   * Completed history and grades now share LeagueTrade as a source. Transaction
-   * facts remain the richer warehouse path for every provider, but a Sleeper
-   * league whose historical importer populated LeagueTrade first must not show
-   * "no trades" above grades created from those exact rows.
-   */
-  const tradeRows = league.platformLeagueId || txIds.length
-    ? await prisma.leagueTrade
-        .findMany({
-          where: league.platformLeagueId
-            ? {
-                OR: [
-                  ...(txIds.length ? [{ transactionId: { in: txIds } }] : []),
-                  { history: { sleeperLeagueId: league.platformLeagueId } },
-                ],
-              }
-            : { transactionId: { in: txIds } },
-          /*
-           * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
-           * one trade tie on every payload field, so without a deterministic key
-           * the order Postgres happens to return decides which manager appears
-           * first — and a trade could read one way round on one render and the
-           * other way on the next. `historyId` is stable and unique per side.
-           */
-          orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
-          select: {
-            transactionId: true,
-            season: true,
-            week: true,
-            playersGiven: true,
-            playersReceived: true,
-            picksGiven: true,
-            picksReceived: true,
-            partnerName: true,
-            tradeDate: true,
-            createdAt: true,
-            history: { select: { sleeperUsername: true } },
-          },
-          take: 400,
-        })
-        .catch(() => [])
-    : []
+  // Started above with the sections, from the same facts (see `tradeRowsRead`).
+  const tradeRows = await tradeRowsRead!
 
   const asIds = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
@@ -888,7 +877,7 @@ export async function getTradesData(
   const namedRows = allTradeIds.length
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: allTradeIds } },
+          where: { ...(league.sport ? { sport: league.sport.toUpperCase() } : {}), sleeperId: { in: allTradeIds } },
           distinct: ['sleeperId'],
           orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
           select: { sleeperId: true, name: true, position: true, team: true },
@@ -1006,9 +995,26 @@ export async function getTradesData(
 
   history.sort((a, b) => b.at.getTime() - a.at.getTime())
 
+  timer.done({ platform: String(league.platform ?? '') })
   if (history.length === 0) {
     return { ...base, history: { available: false, reason: 'no completed trades are on file for this league' } }
   }
 
   return { ...base, history: { available: true, data: history } }
+}
+
+/**
+ * Each trade writes one fact PER SIDE, so collapse on the sleeper transaction
+ * id to get one row per trade rather than listing every deal twice.
+ */
+function groupFactsBySleeperTx<F extends { transactionId: string; payload: unknown }>(facts: F[]): Map<string, F[]> {
+  const bySleeperTx = new Map<string, F[]>()
+  for (const f of facts) {
+    const payload = (f.payload ?? {}) as Record<string, unknown>
+    const key = String(payload.sleeperTransactionId ?? f.transactionId.split(':')[0])
+    const bucket = bySleeperTx.get(key) ?? []
+    bucket.push(f)
+    bySleeperTx.set(key, bucket)
+  }
+  return bySleeperTx
 }

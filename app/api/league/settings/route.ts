@@ -1,3 +1,4 @@
+import { readCommissionerStanding } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -8,7 +9,8 @@ import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return jsonError(gate.status === 404 ? 'League not found' : 'Forbidden', gate.status)
 
-  const [league, userRole, commissionerEntitlement, scoringConfig] = await Promise.all([
+  const [league, userRole, commissionerEntitlement, scoringConfig, standing] = await Promise.all([
     prisma.league.findFirst({
       where: { id: leagueId },
       include: {
@@ -41,10 +43,12 @@ export async function GET(req: NextRequest) {
       },
     }),
     getLeagueRole(leagueId, userId),
-    new EntitlementResolver()
-      .resolveForUser(userId, 'commissioner_ai_tools')
-      .catch(() => ({ hasAccess: false })),
+    // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts).
+    hasAfCommissionerPlan(session?.user ?? { id: userId }).then((hasAccess) => ({ hasAccess })),
     getLeagueScoringConfig(leagueId),
+    // The areas this viewer may change (lib/league/commissionerAccess.ts) — every area for the head commissioner,
+    // the granted ones for a co-commissioner, none for anyone else.
+    readCommissionerStanding(leagueId, userId),
   ])
 
   if (!league) return jsonError('League not found', 404)
@@ -67,6 +71,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     userRole,
+    commissionerScopes: standing.scopes,
     /** League creator (`League.userId`) — used for remove-from-AF and head-only tools. */
     leagueOwnerUserId: league.userId,
     viewerHasTeam,
@@ -86,7 +91,19 @@ export async function GET(req: NextRequest) {
       teamCount: league.leagueSize ?? league.teams.length,
       isDynasty: league.isDynasty,
       leagueVariant: league.leagueVariant ?? null,
+      // With sport, isDynasty and leagueType (from `comm`), what the draft panels need to hide
+      // the Autostart toggle where it does nothing (lib/draft/redraftScheduledStart.ts).
+      platform: league.platform ?? null,
+      // The Import / Sync tab: where an imported league came from and when it was last read. The
+      // stored sync error is never sent — it can carry provider text.
+      importedAt: league.importedAt?.toISOString() ?? null,
+      lastSyncedAt: league.lastSyncedAt?.toISOString() ?? null,
+      syncStatus: league.syncStatus ?? null,
+      survivorMode: league.survivorMode ?? null,
+      guillotineMode: league.guillotineMode ?? null,
       bestBallMode: league.bestBallMode ?? null,
+      // Classic Best Ball or best ball Guilly — the AutoCoach card reads this, not the column alone.
+      lineupSetsItself: bestBallLineupSetsItself(league),
       autoCoachEnabled: league.autoCoachEnabled ?? true,
       rosterSize: league.rosterSize,
       totalRosterSlots,

@@ -34,6 +34,7 @@ export function useAppleIapPrices() {
   const [appleApp, setAppleApp] = useState(false)
   const [prices, setPrices] = useState<Record<string, string>>({})
   const [needsUpdate, setNeedsUpdate] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     if (!isAppleApp()) return
     setAppleApp(true)
@@ -41,14 +42,39 @@ export function useAppleIapPrices() {
       setNeedsUpdate(true)
       return
     }
-    nativeRequest({ action: "products" }).then((result) => {
-      setPrices(Object.fromEntries((result.products ?? []).map((p) => [p.id, p.displayPrice])))
-    }).catch(() => {})
+    let mounted = true
+    const loadPrices = () => {
+      nativeRequest({ action: "products" }, 30_000).then((result) => {
+        if (!mounted) return
+        if (result.error) {
+          setError(`Apple could not load subscription prices: ${result.error}`)
+          return
+        }
+        if (!result.products?.length) {
+          setError("Apple returned no subscription products. Please try again later.")
+          return
+        }
+        setPrices(Object.fromEntries(result.products.map((p) => [p.id, p.displayPrice])))
+        setError(null)
+      }).catch(() => {
+        if (mounted) setError("Apple could not load subscription prices. Please try again later.")
+      })
+    }
+    loadPrices()
+    // StoreKit can recover after the app returns from the background or connectivity changes.
+    const onVisible = () => { if (document.visibilityState === "visible") loadPrices() }
+    window.addEventListener("online", loadPrices)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      mounted = false
+      window.removeEventListener("online", loadPrices)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [])
-  return { appleApp, prices, needsUpdate }
+  return { appleApp, prices, needsUpdate, error }
 }
 
-function nativeRequest(message: Record<string, string>): Promise<AppleResult> {
+function nativeRequest(message: Record<string, string>, timeoutMs = 90_000): Promise<AppleResult> {
   const bridge = handler()
   if (!bridge) return Promise.reject(new Error("Update the AllFantasy iOS app to buy subscriptions or tokens."))
   const requestId = crypto.randomUUID()
@@ -56,7 +82,7 @@ function nativeRequest(message: Record<string, string>): Promise<AppleResult> {
     const timeout = window.setTimeout(() => {
       window.removeEventListener("allfantasy:apple-iap", listener)
       reject(new Error("Apple did not respond. Please try again."))
-    }, 90_000)
+    }, timeoutMs)
     function listener(event: Event) {
       const detail = (event as CustomEvent<AppleResult>).detail
       if (detail?.requestId !== requestId) return

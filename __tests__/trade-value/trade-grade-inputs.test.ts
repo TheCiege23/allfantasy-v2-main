@@ -15,9 +15,9 @@ describe('pending-offer assets → the one grader', () => {
   it('retains distinct provider namespaces and position hints', () => {
     const asset = { playerName: 'Justin Jefferson', playerId: '42', position: 'LB', team: 'CLE' }
     expect(gradeInputsFromPending([asset], 'sleeper').assets).toEqual([
-      { kind: 'player', name: 'Justin Jefferson', providerIdentity: { provider: 'sleeper', id: '42', position: 'LB', team: 'CLE' } },
+      { kind: 'player', name: 'Justin Jefferson', rosterPlayerId: '42', providerIdentity: { provider: 'sleeper', id: '42', position: 'LB', team: 'CLE' } },
     ])
-    expect(gradeInputsFromPending([asset], 'yahoo').assets[0]).toMatchObject({ providerIdentity: { provider: 'yahoo', id: '42' } })
+    expect(gradeInputsFromPending([asset], 'yahoo').assets[0]).toMatchObject({ rosterPlayerId: '42', providerIdentity: { provider: 'yahoo', id: '42' } })
     expect(gradeInputsFromPending([asset]).assets[0]).not.toHaveProperty('providerIdentity')
   })
 
@@ -86,7 +86,7 @@ describe('native trade items → the one grader', () => {
       { itemType: 'rookie_pick', itemReference: 'fdp:20x8:2:roster-9', metadata: null },
     ])
     expect(r.assets).toEqual([
-      { kind: 'pick', year: 2028, round: 2 },
+      { kind: 'pick', year: 2028, round: 2, draftSide: 'canton' },
       { kind: 'pick', year: 2027, round: 1 },
     ])
     expect(r.unpriceable).toEqual(['a draft pick with no season or round on file'])

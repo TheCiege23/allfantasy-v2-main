@@ -1,0 +1,153 @@
+/**
+ * Import carryover keeps the imported league's team count for redraft, dynasty, keeper and best
+ * ball even when the native create list for that type lacks it (a 9-team best ball import).
+ * Dynasty itself now takes every size from 4 to 250 natively.
+ * Native creation keeps today's lists, the requested count must still equal the import's, and the
+ * special modes (Zombie here) stay on their lists.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const executeMock = vi.hoisted(() => vi.fn())
+const leagueFindUnique = vi.hoisted(() => vi.fn())
+const leagueTeamCount = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    league: { findUnique: leagueFindUnique },
+    leagueTeam: { count: leagueTeamCount },
+  },
+}))
+vi.mock('@/lib/league/permissions', () => ({
+  getLeagueRole: vi.fn().mockResolvedValue('commissioner'),
+  isCommissionerRole: (role: string) => role === 'commissioner' || role === 'co_commissioner',
+}))
+vi.mock('@/lib/subscription/EntitlementResolver', () => ({
+  EntitlementResolver: vi.fn(function EntitlementResolverMock(this: { resolveSnapshot?: unknown }) {
+    this.resolveSnapshot = vi.fn().mockResolvedValue({ plans: [], status: 'none' })
+  }),
+}))
+vi.mock('@/lib/meta-capi', () => ({ trackMetaServerEvent: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/lib/league-creation/canonical/executeCanonicalLeagueCreation', () => ({
+  executeCanonicalLeagueCreation: executeMock,
+}))
+vi.mock('@/lib/redraft-creation/resolve-app-user-for-league', () => ({
+  resolveAppUserIdForLeagueCreate: vi.fn().mockResolvedValue({ ok: true, appUserId: 'app-user-1', resolvedVia: 'id' as const }),
+}))
+vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'app-user-1' } }) }))
+vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+
+import { postCreateLeague } from '@/lib/league-creation/canonical/createLeagueHandler'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
+
+function body(teamCount: number, concept = 'dynasty', extra: Record<string, unknown> = {}) {
+  return {
+    concept,
+    sport: 'NFL',
+    scoringPreset: 'fb_half_ppr',
+    teamCount,
+    draftType: 'snake',
+    leagueName: 'Carryover Test',
+    ...extra,
+  }
+}
+
+function post(payload: Record<string, unknown>) {
+  return postCreateLeague(new Request('http://localhost/api/leagues', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }))
+}
+
+function importedLeague(teams: number) {
+  leagueFindUnique.mockResolvedValue({ id: 'imported-1', platform: 'sleeper', sport: 'NFL', leagueSize: teams })
+  leagueTeamCount.mockResolvedValue(teams)
+}
+
+describe('import carryover keeps the imported team count', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    executeMock.mockResolvedValue({
+      ok: true,
+      response: { success: true, league: { id: 'league-new', concept: 'dynasty', sport: 'NFL' }, homepageUrl: '/league/league-new' },
+    })
+  })
+
+  it.each([9, 32])('accepts a %i-team dynasty carryover', async (teams) => {
+    importedLeague(teams)
+    const res = await post(body(teams, 'dynasty', { sourceLeagueId: 'imported-1' }))
+    expect(res.status).toBe(200)
+    expect(executeMock).toHaveBeenCalledTimes(1)
+    expect(executeMock.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      sourceLeagueId: 'imported-1',
+      body: expect.objectContaining({ teamCount: teams }),
+    }))
+  })
+
+  it('accepts a native 9-team dynasty', async () => {
+    const res = await post(body(9))
+    expect(res.status).toBe(200)
+    expect(leagueFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('accepts a 9-team best ball carryover, and still refuses it as a native create', async () => {
+    importedLeague(9)
+    expect((await post(body(9, 'best_ball', { sourceLeagueId: 'imported-1' }))).status).toBe(200)
+    vi.clearAllMocks()
+    const res = await post(body(9, 'best_ball'))
+    expect(res.status).toBe(400)
+    // Refused for its team count, not for some other field in the body.
+    expect((await res.json()).error).toMatch(/team count/i)
+    expect(executeMock).not.toHaveBeenCalled()
+    expect(leagueFindUnique).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [9, 10],
+    [9, 32],
+    [32, 31],
+  ])('refuses a carryover of a %i-team import that asks for %i teams', async (imported, requested) => {
+    importedLeague(imported)
+    const res = await post(body(requested, 'dynasty', { sourceLeagueId: 'imported-1' }))
+    expect(res.status).toBe(400)
+    // Refused for its team count, not for some other field in the body.
+    expect((await res.json()).error).toMatch(/team count/i)
+    expect(executeMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps Zombie on its own list even for a carryover', async () => {
+    importedLeague(9)
+    const res = await post(body(9, 'zombie', { sourceLeagueId: 'imported-1' }))
+    expect(res.status).toBe(400)
+    // Refused for its team count, not for some other field in the body.
+    expect((await res.json()).error).toMatch(/team count/i)
+    expect(executeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('validateCreatePayload and the imported team count', () => {
+  it('refuses an off-list best ball count unless it is the import carryover count', () => {
+    expect(validateCreatePayload(body(9, 'best_ball')).ok).toBe(false)
+    expect(validateCreatePayload(body(9, 'best_ball'), { importedTeamCount: 9 }).ok).toBe(true)
+    expect(validateCreatePayload(body(32, 'best_ball'), { importedTeamCount: 32 }).ok).toBe(true)
+    // The allowance is for the import's own count only, and never past 250.
+    expect(validateCreatePayload(body(32, 'best_ball'), { importedTeamCount: 9 }).ok).toBe(false)
+    expect(validateCreatePayload(body(251, 'best_ball'), { importedTeamCount: 251 }).ok).toBe(false)
+  })
+
+  it('takes every dynasty size from 4 to 250 natively, and nothing past it', () => {
+    // College: the whole native range. The owner's own college leagues run 140 and 180 teams.
+    const college = { sport: 'NCAAF', scoringPreset: 'ncaaf_half_ppr' }
+    for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams, 'dynasty', college)).ok, `NCAAF ${teams}`).toBe(true)
+    // NFL: never more teams than the NFL has (owner's rule, 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS).
+    for (const teams of [4, 9, 31, 32]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(true)
+    for (const teams of [33, 34, 36, 88, 160]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(false)
+    // An imported 34- or 36-team pro league (the owner's commissioner runs both on Fantrax) keeps its size.
+    for (const teams of [34, 36]) expect(validateCreatePayload(body(teams), { importedTeamCount: teams }).ok, `NFL import ${teams}`).toBe(true)
+    // An imported league keeps the size it has.
+    expect(validateCreatePayload(body(160), { importedTeamCount: 160 }).ok).toBe(true)
+    expect(validateCreatePayload(body(3)).ok).toBe(false)
+    expect(validateCreatePayload(body(251)).ok).toBe(false)
+    expect(validateCreatePayload(body(251), { importedTeamCount: 251 }).ok).toBe(false)
+  })
+})

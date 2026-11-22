@@ -1,0 +1,192 @@
+/*
+ * Shared /core page pieces (components/core-app/primitives). One definition each, so redesigned
+ * screens stop re-cutting the same header, stat strip, filter chips and empty card in their own
+ * stylesheets and drifting apart. /core tokens only, so light, dark and AF modes all follow.
+ *
+ * Specificity is deliberate:
+ *   - Text pieces are `.af-core .af-pg-*` (0,2,0), so they outrank a screen's older single-class base
+ *     rules (`.af-ml-title`, `.af-tl-title`…) that the redesign sheets used to override one by one.
+ *   - The header's LAYOUT defaults sit in :where() (0,0,0), so a screen's own head class still decides
+ *     whether its header is a row, a column or a card.
+ */
+
+/* ── Page header: eyebrow, title, one-line purpose, actions ── */
+/*
+ * No align-items default: a row head wants its own (flex-end, center…) and a column head (Tools) must
+ * stay stretched — a flex-end default pushed a column head's text to the right edge.
+ */
+:where(.af-pg-head) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+.af-core .af-pg-headline { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-core .af-pg-headline > * { margin: 0; }
+.af-core .af-pg-eyebrow {
+  color: var(--muted);
+  font: 600 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+/* One title size per breakpoint: --af-title-size is 30px, 26px at 760px and below (af-core.css). */
+.af-core .af-pg-title {
+  color: var(--text);
+  font: 800 var(--af-title-size, 30px)/1.1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+/* `titleAside`: a chip, tip or link on the title's line, beside the heading rather than inside it. */
+.af-core .af-pg-titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.af-core .af-pg-titlerow > * { margin: 0; }
+.af-core .af-pg-sub { max-width: 62ch; color: var(--text2); font-size: 14px; line-height: 1.5; }
+.af-core .af-pg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/*
+ * ── Stat strip: count-aware, never a ragged last row ──
+ * Laid out by how many tiles it holds (`data-count`) against its OWN width, because the same strip
+ * sits in a 1000px column beside the rail and full-width on a phone. From 760px every tile shares one
+ * row; between 600 and 759px only full rows (3 across, 2 by 2, 3 over 2); narrower, two columns with
+ * an odd last tile taking the full width.
+ */
+.af-core .af-pg-stats-wrap { container: af-pg-stats / inline-size; min-width: 0; }
+.af-core .af-pg-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.af-core .af-pg-stats > .af-pg-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+@container af-pg-stats (min-width: 600px) and (max-width: 759px) {
+  .af-core .af-pg-stats[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .af-core .af-pg-stats[data-count='3'] > .af-pg-stat:last-child:nth-child(odd) { grid-column: auto; }
+  .af-core .af-pg-stats[data-count='5'] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .af-core .af-pg-stats[data-count='5'] > .af-pg-stat { grid-column: span 2; }
+  .af-core .af-pg-stats[data-count='5'] > .af-pg-stat:nth-child(n + 4) { grid-column: span 3; }
+}
+@container af-pg-stats (min-width: 760px) {
+  .af-core .af-pg-stats { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .af-core .af-pg-stats > .af-pg-stat:last-child:nth-child(odd) { grid-column: auto; }
+}
+.af-core .af-pg-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-card, 16px);
+  background: var(--surface);
+}
+.af-core .af-pg-stat-label {
+  color: var(--muted);
+  font: 600 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-core .af-pg-stat-value {
+  color: var(--text);
+  font: 800 28px/1.05 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.af-core .af-pg-stat[data-tone='warn'] .af-pg-stat-value { color: var(--warn); }
+.af-core .af-pg-stat[data-tone='accent'] .af-pg-stat-value { color: var(--accent); }
+.af-core .af-pg-stat[data-tone='good'] .af-pg-stat-value { color: var(--good); }
+.af-core .af-pg-stat[data-tone='bad'] .af-pg-stat-value { color: var(--bad); }
+.af-core .af-pg-stat-sub { color: var(--text2); font-size: 12px; line-height: 1.4; }
+/* A missing tile's reason, or a tile's note: quieter than the sub, still above the 11px floor. */
+.af-core .af-pg-stat-why { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.af-core .af-pg-stat[data-missing='true'] .af-pg-stat-value { color: var(--faint, var(--muted)); }
+/*
+ * Value first: the label finishes the figure's sentence ("3 · already clinched", "62% · title odds in
+ * Kings"), so it reads as words in sentence case rather than as a mono caption.
+ */
+.af-core .af-pg-stats[data-order='value-first'] .af-pg-stat-label {
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Movement beside the figure: arrow and amount drawn, the sentence read — colour is never the only signal. */
+.af-core .af-pg-stat-valuerow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.af-core .af-pg-stat-move { color: var(--muted); font: 800 12px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); }
+.af-core .af-pg-stat-move[data-dir='up'] { color: var(--good); }
+.af-core .af-pg-stat-move[data-dir='down'] { color: var(--bad); }
+.af-core .af-pg-stat-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Filter chips: a pressed pill is the selection ── */
+.af-core .af-pg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-core .af-pg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-pg-chip[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.af-core .af-pg-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-core .af-pg-chip-n { font: 600 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace); opacity: 0.8; }
+/* On a phone a chip row scrolls sideways inside itself rather than wrapping into a tall block. */
+@media (max-width: 760px) {
+  .af-core .af-pg-chips[data-scroll='phone'] { flex-wrap: nowrap; overflow-x: auto; }
+  .af-core .af-pg-chips[data-scroll='phone'] > .af-pg-chip { flex: none; }
+}
+
+/*
+ * ── Empty card: "nothing here yet", said as a titled card ──
+ * Same class names as af-empty-state.css (PR #3261), so that sheet folds into this one once it lands.
+ */
+.af-core .af-empty-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 20px 22px;
+  border: 1px dashed var(--line2, var(--line));
+  border-radius: var(--af-radius-card, 16px);
+  background: var(--surface);
+  color: var(--text);
+}
+.af-core .af-empty-card-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--af-radius-inner, 12px);
+  background: var(--accent-soft, var(--chip));
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.af-core .af-empty-card-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-core .af-empty-card-title { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+/* Loader reasons arrive lowercase; as a sentence they lead with a capital. */
+.af-core .af-empty-card-body { margin: 0; color: var(--text2); font-size: 14px; line-height: 1.5; }
+.af-core .af-empty-card-body::first-letter { text-transform: uppercase; }
+.af-core .af-empty-card-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.af-core .af-empty-card-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 0; font-size: 13px; font-weight: 700; }
+.af-core .af-empty-card-links a { display: inline-flex; align-items: center; min-height: 32px; color: var(--accent); text-decoration: none; }
+.af-core .af-empty-card-links a:hover { text-decoration: underline; }
+.af-core .af-empty-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; }
+@media (max-width: 480px) {
+  .af-core .af-empty-card { gap: 12px; padding: 16px; }
+  .af-core .af-empty-card-mark { width: 30px; height: 30px; font-size: 15px; }
+}

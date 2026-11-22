@@ -12,7 +12,7 @@ import { getFinalNomineeRosterIds } from './BigBrotherNominationEngine'
 import { getEligibleVoterRosterIds } from './BigBrotherVoteEngine'
 import { getJuryMembers } from './BigBrotherJuryEngine'
 
-export interface BigBrotherEligibility {
+interface BigBrotherEligibility {
   /** Can compete in HOH this week */
   canCompeteHOH: string[]
   /** Can be nominated (not HOH, not evicted) */
@@ -84,19 +84,12 @@ export async function getEligibility(
   }
 
   const finalNoms = await getFinalNomineeRosterIds(options.cycleId)
-  const nomSet = new Set(finalNoms)
   base.canVote = await getEligibleVoterRosterIds(leagueId, options.cycleId, config.hohVotesOnlyInTie, config.evictionTieBreakMode === 'hoh_vote')
 
   const vetoFixed = cycle.hohRosterId ? [cycle.hohRosterId, ...finalNoms].filter(Boolean) : finalNoms
   base.eligibleForVetoDraw = activeRosterIds.filter((id) => !vetoFixed.includes(id))
 
   return base
-}
-
-/** Can this roster perform competitive actions (lineup, waiver, trade)? */
-export async function canRosterCompete(leagueId: string, rosterId: string): Promise<boolean> {
-  const excluded = await getExcludedRosterIds(leagueId)
-  return !excluded.includes(rosterId)
 }
 
 /** Is this roster jury (eliminated but jury member)? */

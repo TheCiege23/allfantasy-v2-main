@@ -1,4 +1,7 @@
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -77,22 +80,36 @@ async function proposalAccess(proposalId: string, userId: string) {
       seasonId: true,
       proposerRosterId: true,
       receiverRosterId: true,
+      additionalRosterIds: true,
       status: true,
     },
   })
   if (!proposal) return { ok: false as const, status: 404 as const, error: 'Proposal not found' }
+  /*
+   * 🛑 THIS RUNTIME IS TWO-TEAM. Its accept settles on the receiver's word alone and its execution moves
+   * assets between proposer and receiver only, so a multi-team proposal acted on here would skip the
+   * other teams' acceptance. Multi-team trades are created, accepted, reviewed and settled through the
+   * Trade Center routes (`/api/redraft/trade-proposals`, `/api/redraft/trade-votes`), and refused here.
+   */
+  if (Array.isArray(proposal.additionalRosterIds) && proposal.additionalRosterIds.length > 0) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      error: 'This is a multi-team trade. Open it in the Trade Center to act on it.',
+    }
+  }
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: proposal.seasonId, id: { in: [proposal.proposerRosterId, proposal.receiverRosterId] } },
     select: { id: true, ownerId: true },
   })
   const owners = new Map(rosters.map((roster: { id: string; ownerId: string | null }) => [roster.id, roster.ownerId]))
-  const commissioner = await assertLeagueCommissioner(proposal.leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(proposal.leagueId, userId, 'trades')
   return {
     ok: true as const,
     proposal,
     isCommissioner: commissioner.ok,
-    isProposer: owners.get(proposal.proposerRosterId) === userId,
-    isReceiver: owners.get(proposal.receiverRosterId) === userId,
+    isProposer: owners.get(proposal.proposerRosterId) === userId || await isAcceptedCoOwnerForRedraftRoster(proposal.leagueId, proposal.proposerRosterId, userId),
+    isReceiver: owners.get(proposal.receiverRosterId) === userId || await isAcceptedCoOwnerForRedraftRoster(proposal.leagueId, proposal.receiverRosterId, userId),
   }
 }
 
@@ -112,8 +129,8 @@ async function rosterOwnerAccess(input: {
     select: { id: true, ownerId: true, seasonId: true, leagueId: true },
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
-  if (roster.ownerId === input.userId) return { ok: true as const, roster, isCommissioner: false }
-  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
+  if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
+  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId, 'trades')
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }
 }
@@ -137,13 +154,16 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `TradeRuntimeRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftTradeRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })

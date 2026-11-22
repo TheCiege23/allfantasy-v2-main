@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getPlayoffBracketView } from "@/lib/playoffs/playoffService"
 import PlayoffBracketEntryShell from "@/components/brackets/playoffs/PlayoffBracketEntryShell"
+import BracketQuickNav from "@/components/brackets/BracketQuickNav"
 
 export const dynamic = "force-dynamic"
 
@@ -119,7 +120,10 @@ export default async function PlayoffBracketEntryPage(
       return <EntryNotFound leagueId={params.leagueId} />
     }
 
-    return <PlayoffBracketEntryShell initialView={view} />
+    return <>
+      <BracketQuickNav leagueId={params.leagueId} showInvite={view.challenge.ownerUserId === session?.user?.id && Boolean(view.challenge.inviteCode)} />
+      <PlayoffBracketEntryShell initialView={view} />
+    </>
   } catch (err) {
     if (isExpectedPlayoffEntryError(err)) {
       return <EntryUnavailable leagueId={params.leagueId} />

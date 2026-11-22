@@ -40,7 +40,7 @@ describe("user-settings core services", () => {
         sleeperUsername: null,
         sleeperLinkedAt: null,
         bio: null,
-        preferredSports: ["NFL", "foo", "SOCCER", "NBA", "nba"],
+        preferredSports: ["NFL", "foo", "SOCCER", "NBA", "nba", "wnba", "NCAABASE"],
         notificationPreferences: null,
         onboardingStep: null,
         onboardingCompletedAt: null,
@@ -48,7 +48,9 @@ describe("user-settings core services", () => {
       },
     })
 
-    expect(result.profile.preferredSports).toEqual(["NFL", "NBA", "SOCCER"])
-    expect(result.patchPayload.preferredSports).toEqual(["NFL", "NBA", "SOCCER"])
+    expect(result.profile.preferredSports).toEqual(["NFL", "NBA", "SOCCER", "NCAABASE", "WNBA"])
+    expect(result.patchPayload.preferredSports).toEqual(["NFL", "NBA", "SOCCER", "NCAABASE", "WNBA"])
+    const secondLoad = resolveSharedProfileBootstrap({ profile: result.profile })
+    expect(secondLoad.patchPayload.preferredSports).toBeUndefined()
   })
 })

@@ -5,11 +5,11 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import type { DayClassification, DayVolume, WeekVolumeProfile, ScheduleSport, SportScheduleConfig } from './types'
+import type { DayClassification, DayVolume, WeekVolumeProfile, ScheduleSport } from './types'
 import { getDefaultScheduleConfig } from './types'
 
 /** Classify a day by its game count. */
-export function classifyDay(
+function classifyDay(
   gameCount: number,
   thresholdHeavy: number,
   thresholdModerate: number

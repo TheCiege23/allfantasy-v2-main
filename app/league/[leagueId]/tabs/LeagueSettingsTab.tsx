@@ -18,11 +18,15 @@ import { getUpgradeUrlWithHighlightForFeature } from '@/lib/subscription/feature
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { DraftOrderSlotRow } from '@/lib/draft/pick-order'
 import { pickTimerSecondsFromLeagueSettings } from '@/lib/league/league-settings-pick-timer'
+import { startsAtScheduledTimeRegardlessOfAutostart } from '@/lib/draft/redraftScheduledStart'
 import { COMMON_TIMEZONES, formatInTz, isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { DraftOrderList } from './settings/DraftOrderList'
 import { KeeperModal } from './settings/KeeperModal'
 import { ResetDraftModal } from './settings/ResetDraftModal'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AlertTriangle, ClipboardList, Lock, Users } from 'lucide-react'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import '@/components/dynasty/dynasty-details.css'
 import {
   DangerButton,
   Input,
@@ -252,6 +256,8 @@ export function LeagueSettingsTab({
 
   const s = data?.settings as RawSettings | null
   const league = data?.league
+  // Dynasty only: lucide icons in place of the emoji below; every other league keeps them.
+  const dynastyEra = league ? usesDynastyBackground(league) : false
 
   const patch = useCallback(
     async (partial: Record<string, unknown>) => {
@@ -431,7 +437,9 @@ export function LeagueSettingsTab({
   const isHeadCommissioner =
     userRole != null ? userRole === 'commissioner' : Boolean(isHeadCommissionerShell)
 
-  const isBestBall = isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
+  // The server's one answer (Classic Best Ball or best ball Guilly); the column is the fallback for a
+  // payload that predates it.
+  const isBestBall = league.lineupSetsItself ?? isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null)
 
   const handleAutoCoachLeagueToggle = async () => {
     const next = !(league.autoCoachEnabled ?? true)
@@ -471,7 +479,7 @@ export function LeagueSettingsTab({
           data-testid="league-settings-view-only-banner"
         >
           <span className="text-[16px] text-amber-400" aria-hidden>
-            🔒
+            {dynastyEra ? <Lock className="h-4 w-4" /> : '🔒'}
           </span>
           <p className="text-[12px] text-amber-300/80">{t('league.draftSettings.viewOnlyBanner')}</p>
         </div>
@@ -559,12 +567,19 @@ export function LeagueSettingsTab({
         title="Automation"
         description="Control how the draft handles timers, pauses, and auto-picks."
       >
-        <SettingsRow
-          label="Autostart Draft"
-          description="Draft begins automatically at the scheduled time."
-          faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
-          control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
-        />
+        {/* Native redraft drafts start at their time whatever this says, so it is hidden for them. */}
+        {startsAtScheduledTimeRegardlessOfAutostart(league) ? (
+          <p className="border-b border-white/[0.04] py-2 text-[12px] text-white/60" data-testid="draft-autostart-scheduled-note">
+            {t('draft.autostartScheduledNote')}
+          </p>
+        ) : (
+          <SettingsRow
+            label="Autostart Draft"
+            description="Draft begins automatically at the scheduled time."
+            faqText="When enabled, the draft starts automatically at your scheduled time. Works for both live and slow drafts. Requires a draft time to be set."
+            control={<Toggle checked={Boolean(s?.autostart)} onChange={(v) => void patch({ autostart: v })} />}
+          />
+        )}
         <SettingsRow
           label="Slow Draft Auto-Pause"
           description="Pause the draft daily during a quiet window."
@@ -606,14 +621,14 @@ export function LeagueSettingsTab({
           control={<Toggle checked={Boolean(s?.cpuAutoPick ?? true)} onChange={(v) => void patch({ cpuAutoPick: v })} />}
         />
         <SettingsRow
-          label="AI Auto-Pick"
+          label="Chimmy Auto-Pick"
           description="Chimmy drafts intelligently when timer expires — considers roster build, positional scarcity, projections, and bye weeks."
-          faqText="AI Auto-Pick uses Chimmy to make smart draft decisions. Falls back to CPU if AI unavailable."
+          faqText="Chimmy Auto-Pick uses Chimmy to make smart draft decisions. Falls back to CPU if Chimmy unavailable."
           control={
             <div>
               <Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />
               {s?.aiAutoPick ? (
-                <p className="mt-1.5 text-[11px] text-[#ff3d81]/70">✓ AI takes priority over CPU auto-pick</p>
+                <p className="mt-1.5 text-[11px] text-[#ff3d81]/70">✓ Chimmy takes priority over CPU auto-pick</p>
               ) : null}
             </div>
           }
@@ -884,7 +899,13 @@ export function LeagueSettingsTab({
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h4 className="text-sm font-bold text-white">🏈 Dispersal Draft</h4>
+              {dynastyEra ? (
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-white">
+                  <Users className="dyd-gold-icon h-4 w-4" aria-hidden /> Dispersal Draft
+                </h4>
+              ) : (
+                <h4 className="text-sm font-bold text-white">🏈 Dispersal Draft</h4>
+              )}
               <p className="text-xs text-white/50 mt-0.5">
                 For orphaned teams or league downsizing. Pool assets and draft them among new managers.
               </p>
@@ -1024,7 +1045,14 @@ export function LeagueSettingsTab({
             onClick={() => setKeeperOpen(true)}
             className="mt-2 rounded-xl border border-[#ff3d81]/30 bg-transparent px-4 py-2 text-[12px] font-semibold text-[#ff3d81] hover:bg-[#ff3d81]/10"
           >
-            📋 Set Keeper / Dynasty Players
+            {dynastyEra ? (
+              <>
+                <ClipboardList className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />
+                Set Keeper / Dynasty Players
+              </>
+            ) : (
+              '📋 Set Keeper / Dynasty Players'
+            )}
           </button>
         )}
       </SettingsSection>
@@ -1055,11 +1083,11 @@ export function LeagueSettingsTab({
 
       <SettingsSection
         id="ai-controls"
-        title="AI Features"
-        description="Configure AllFantasy AI assistance for your draft."
+        title="Chimmy Features"
+        description="Configure AllFantasy Chimmy assistance for your draft."
       >
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#ff3d81]/12 bg-[#ff3d81]/[0.06] p-3">
-          <span className="text-[12px] font-semibold text-[#ff9ec0]">AI Scope:</span>
+          <span className="text-[12px] font-semibold text-[#ff9ec0]">Chimmy Scope:</span>
           <Select value={String(s?.aiScope ?? 'everyone')} onChange={(v) => void patch({ aiScope: v })} className="max-w-[220px]">
             <option value="everyone">Available to everyone</option>
             <option value="per_user">Optional per user</option>
@@ -1068,13 +1096,13 @@ export function LeagueSettingsTab({
           </Select>
         </div>
         <SettingsRow
-          label="AI Auto-Pick"
-          description="Matches Automation → AI Auto-Pick."
+          label="Chimmy Auto-Pick"
+          description="Matches Automation → Chimmy Auto-Pick."
           faqText="When a manager times out, Chimmy picks based on roster needs, value, scarcity, and bye weeks."
           control={<Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />}
         />
         <SettingsRow
-          label="AI Queue Suggestions"
+          label="Chimmy Queue Suggestions"
           faqText="Chimmy suggests players to queue before your pick."
           control={<Toggle checked={Boolean(s?.aiQueueSuggestions ?? true)} onChange={(v) => void patch({ aiQueueSuggestions: v })} />}
         />
@@ -1125,7 +1153,7 @@ export function LeagueSettingsTab({
       {isHeadCommissioner ? (
         isBestBall ? (
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-            <p className="text-sm font-bold text-white/80">⚡ AutoCoach AI</p>
+            <p className="text-sm font-bold text-white/80">⚡ AutoCoach Chimmy</p>
             <p className="mt-1 text-xs text-white/45">
               Not available in Best Ball — lineups optimize automatically for this format.
             </p>
@@ -1135,7 +1163,7 @@ export function LeagueSettingsTab({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-white">
-                  ⚡ AutoCoach AI
+                  ⚡ AutoCoach Chimmy
                   <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[11px] font-bold text-[#ff3d81]">
                     FREE FOR LEAGUES
                   </span>
@@ -1147,7 +1175,7 @@ export function LeagueSettingsTab({
               </div>
               <button
                 type="button"
-                aria-label="Toggle AutoCoach AI for this league"
+                aria-label="Toggle AutoCoach Chimmy for this league"
                 onClick={() => void handleAutoCoachLeagueToggle()}
                 className={[
                   'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
@@ -1235,7 +1263,11 @@ export function LeagueSettingsTab({
           {isHeadCommissioner ? (
             <div className="rounded-xl border border-red-500/15 bg-red-500/[0.06] p-4">
               <div className="flex items-start gap-3">
-                <span className="text-[20px]">⚠️</span>
+                {dynastyEra ? (
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" aria-hidden />
+                ) : (
+                  <span className="text-[20px]">⚠️</span>
+                )}
                 <div>
                   <p className="mb-1 text-[14px] font-bold text-red-400">Reset Draft</p>
                   <p className="mb-4 text-[12px] text-white/50">

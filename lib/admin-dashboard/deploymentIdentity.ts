@@ -15,7 +15,7 @@
 import "server-only"
 import crypto from "crypto"
 
-export type DeploymentEnvironmentKey = "production" | "preview" | "development"
+type DeploymentEnvironmentKey = "production" | "preview" | "development"
 
 /**
  * Values that could not be determined are `null`, never a plausible-looking
@@ -23,7 +23,7 @@ export type DeploymentEnvironmentKey = "production" | "preview" | "development"
  * itself a finding — it must not render as "unknown version" or an empty string
  * that reads as absence of a problem.
  */
-export type DeploymentIdentity = {
+type DeploymentIdentity = {
   /** Which host reported this identity; null when neither platform's variables are present. */
   platform: "railway" | "vercel" | null
   /** Railway service name (web and worker deploy from the same repo). Null off Railway. */
@@ -48,7 +48,7 @@ export type DeploymentIdentity = {
   database: DatabaseIdentity
 }
 
-export type DatabaseIdentity = {
+type DatabaseIdentity = {
   /** Neon/Postgres endpoint label — the leading DNS label of the host. Not a credential. */
   endpointLabel: string | null
   /** Database name from the connection path. Not a credential. */

@@ -66,7 +66,7 @@ beforeEach(() => {
   h.followers = []
   h.roster = [roster('mgr', 'lg-1')]
   h.dispatch.mockReset()
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
 })
 
 describe('the same story, re-ingested', () => {

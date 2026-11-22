@@ -56,3 +56,14 @@ export async function listUserIdsPlayingSport(sport: string): Promise<string[]> 
     return []
   }
 }
+
+/** Sport interests and team follows are sufficient; playing a fantasy league is not required. */
+export async function listSportsAlertAudience(sport: string): Promise<string[]> {
+  const S = sport.toUpperCase()
+  const [members, profiles, follows] = await Promise.all([
+    listUserIdsPlayingSport(S),
+    prisma.userProfile.findMany({ where: { preferredSports: { array_contains: [S] } }, select: { userId: true } }),
+    prisma.teamFollow.findMany({ where: { sport: S }, select: { userId: true } }),
+  ])
+  return [...new Set([...members, ...profiles.map(p => p.userId), ...follows.map(f => f.userId)])]
+}

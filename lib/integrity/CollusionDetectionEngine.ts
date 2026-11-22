@@ -13,6 +13,9 @@ import { ELIMINATED_PLAYOFF_PCT } from "@/lib/decision-os/trade/tradeReview"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity"
+import { auditRowFromReview, recordTradeValueAudit } from "./tradeValueAudit"
+import { checkRepeatTradingPairs } from "./pairFrequencyCheck"
+import { recordCollusionValuation, type CollusionValuation } from "./collusionValuationCoverage"
 
 /**
  * The post-trade collusion scan — commissioner review mode, run by the integrity worker once a trade
@@ -22,7 +25,8 @@ import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity
  * own AI verdict ("clean" / "suspicious" / "likely_collusion") from a direct Anthropic call, over a
  * legacy mirror table that only redraft trades were ever copied into. Now:
  *
- *   - the trade is the REAL trade (`AfLeagueTrade` or `RedraftTradeProposal`), read by `loadTrade`;
+ *   - the trade is the REAL trade (`AfLeagueTrade`, `RedraftTradeProposal`, or an imported Sleeper
+ *     league's `ProviderTradeOffer`), read by `loadTrade`;
  *   - the values are the one grade, and the flags are the review's six checks, computed in code by
  *     `buildTradeReview` — exactly what a commissioner sees in the trade's review panel;
  *   - the commissioner's sensitivity picks which of those flags open an integrity flag
@@ -33,20 +37,25 @@ import { collusionFlagsAtSensitivity, normalizeSensitivity } from "./sensitivity
  * Nothing here decides anything. A flag asks a commissioner to look.
  */
 
-export type ScanTradeRef = { kind: "af"; tradeId: string } | { kind: "redraft"; proposalId: string }
+export type ScanTradeRef =
+  | { kind: "af"; tradeId: string }
+  | { kind: "redraft"; proposalId: string }
+  /** A completed trade in an imported Sleeper league, from the stored trade ledger (`ProviderTradeOffer`). */
+  | { kind: "provider"; provider: "sleeper"; providerTradeId: string }
 
-type TradeAsset = { name: string; position: string; estimatedValue: number }
+type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
 export type CollusionEvidence = {
   tradeTransactionId: string
-  team1: { rosterId: string; teamName: string }
-  team2: { rosterId: string; teamName: string }
+  team1: { rosterId: string; teamName: string; managerName?: string }
+  team2: { rosterId: string; teamName: string; managerName?: string }
   assetsTeam1Gave: TradeAsset[]
   assetsTeam2Gave: TradeAsset[]
-  team1TotalValue: number
-  team2TotalValue: number
-  valueDifferential: number
-  valueDifferentialPct: number
+  team1TotalValue: number | null
+  team2TotalValue: number | null
+  valueDifferential: number | null
+  valueDifferentialPct: number | null
+  valuation: CollusionValuation
   /** Earlier trades between the pair this season; absent when history could not be read. */
   priorTradesBetweenPair?: number
   /** Only when a current season forecast exists: false means eliminated. */
@@ -69,12 +78,18 @@ export type CollusionScanResult = {
     evidence: CollusionEvidence
   }[]
   scannedAt: string
+  valuation?: CollusionValuation
+  valuationCoverage?: { priced: number; unavailable: number }
 }
 
 export type CollusionScanDeps = {
   review: typeof reviewStoredTrade
   explain: typeof explainTrade
   notify: typeof notifyCommissionerOfFlag
+  /** Records the trade's values as priced now — at completion, for a trade the scan reaches as it settles. */
+  audit: typeof recordTradeValueAudit
+  /** League-wide: pairs trading far more often than the league's volume predicts (./pairFrequencyCheck.ts). */
+  pairCheck: (leagueId: string) => Promise<unknown>
   now: () => Date
 }
 
@@ -82,6 +97,8 @@ const defaultDeps: CollusionScanDeps = {
   review: reviewStoredTrade,
   explain: explainTrade,
   notify: notifyCommissionerOfFlag,
+  audit: recordTradeValueAudit,
+  pairCheck: (leagueId) => checkRepeatTradingPairs(leagueId),
   now: () => new Date(),
 }
 
@@ -91,9 +108,18 @@ function topSeverity(checks: readonly Pick<ReviewCheck, "severity">[]): ReviewSe
   return checks.reduce<ReviewSeverity>((top, c) => (SEVERITY_RANK[c.severity] > SEVERITY_RANK[top] ? c.severity : top), "low")
 }
 
+function valuationOf(r: StoredTradeReview): CollusionValuation {
+  if (!r.ok) return { status: 'unavailable', reason: r.refusal.reason, ...(r.refusal.code === 'unresolved_player' ? { gap: 'unresolved_player' } : {}) }
+  const g = r.receipt.grade
+  if (r.facts.gapPct?.ok) return { status: 'priced', percentDiff: r.facts.gapPct.value }
+  return g.graded ? { status: 'priced', percentDiff: g.market?.percentDiff ?? g.percentDiff }
+    : { status: 'unavailable', reason: g.reason, ...(g.valuationGap ? { gap: g.valuationGap } : {}) }
+}
+
 /** The evidence the integrity flag card renders, taken from the review and its receipt — nothing estimated. */
 export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredTradeReview, { ok: true }>): CollusionEvidence {
-  const { receipt, review, sides, sideNames, facts } = r
+  const { receipt, review, sides, sideNames, sideManagers, facts } = r
+  const manager = (i: 0 | 1) => (sideManagers?.[i] ? { managerName: sideManagers[i]! } : {})
   const positionOf = (name: string) => {
     for (const s of sides) for (const g of s.gives) if (g.kind === "player" && g.name === name) return g.position ?? "UNK"
     return "UNK"
@@ -104,23 +130,26 @@ export function collusionEvidence(tradeTransactionId: string, r: Extract<StoredT
       .map((l) => ({
         name: l.name,
         position: l.kind === "player" ? positionOf(l.name) : l.kind.toUpperCase(),
-        estimatedValue: l.leagueValue ?? 0,
+        estimatedValue: l.leagueValue,
       }))
   const g = receipt.grade
-  const give = g.graded ? g.giveValue : 0
-  const get = g.graded ? g.getValue : 0
+  const give = g.graded ? g.giveValue : null
+  const get = g.graded ? g.getValue : null
+  const valuation = valuationOf(r)
   const eliminated = (pct: number) => pct < ELIMINATED_PLAYOFF_PCT
   return {
     tradeTransactionId,
-    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0] },
-    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1] },
+    team1: { rosterId: sides[0].rosterId ?? sides[0].teamId, teamName: sideNames[0], ...manager(0) },
+    team2: { rosterId: sides[1].rosterId ?? sides[1].teamId, teamName: sideNames[1], ...manager(1) },
     // Side A gives what the receipt calls `give`; side B gives what side A gets.
     assetsTeam1Gave: lines("give"),
     assetsTeam2Gave: lines("get"),
     team1TotalValue: give,
     team2TotalValue: get,
-    valueDifferential: Math.abs(give - get),
-    valueDifferentialPct: g.graded ? Math.abs(g.percentDiff) : 0,
+    valueDifferential: give == null || get == null ? null : Math.abs(give - get),
+    // The review's gap: priced when the trade happened where that is on record (lib/integrity/tradeValueAudit.ts).
+    valueDifferentialPct: valuation.status === 'priced' ? Math.abs(valuation.percentDiff) : null,
+    valuation,
     ...(facts.history.ok ? { priorTradesBetweenPair: Math.max(0, facts.history.value.length - 1) } : {}),
     ...(facts.playoffPct.ok
       ? { isPlayoffContender: { team1: !eliminated(facts.playoffPct.value[0]), team2: !eliminated(facts.playoffPct.value[1]) } }
@@ -157,6 +186,16 @@ export async function scanTradeForCollusion(
   // Reviewed as the league's commissioner — the one viewer every trade in the league is visible to.
   const r = await d.review({ leagueId, ref, userId: league.userId, surface: "integrity-scan" })
   const flags: CollusionScanResult["flags"] = []
+
+  /*
+   * Record what the trade is worth NOW, once. A trade reaches this scan as it settles, so for almost
+   * every trade "now" is the trade date; one reached later says so (`basis: first_audited`). Write-once,
+   * so a re-scan weeks later never re-prices it. Failure-contained: the scan does not depend on it.
+   */
+  const auditRow = auditRowFromReview(r, ref, d.now())
+  if (auditRow) {
+    await d.audit(leagueId, auditRow).catch((e) => console.warn("[integrity] trade value audit write failed", { leagueId, error: String(e) }))
+  }
 
   if (r.ok) {
     const raised = collusionFlagsAtSensitivity(r.review.flags, normalizeSensitivity(settings?.collusionSensitivity))
@@ -196,37 +235,52 @@ export async function scanTradeForCollusion(
     console.warn(`[integrity] collusion scan could not review ${tradeTransactionId}: ${r.refusal.reason}`)
   }
 
+  await d.pairCheck(leagueId).catch((e) => console.warn("[integrity] repeat-pair check failed", { leagueId, error: String(e) }))
+
   const at = d.now()
+  const valuation = valuationOf(r)
+  await recordCollusionValuation(leagueId, valuation, at).catch(() => undefined)
   await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
     create: { leagueId, lastCollusionScanAt: at },
     update: { lastCollusionScanAt: at },
   })
 
-  return { leagueId, flags, scannedAt }
+  return { leagueId, flags, scannedAt, valuation }
 }
 
 /** Every trade settled in the league in the last 30 days that has not been flagged already. */
 export async function fullLeagueCollusionScan(leagueId: string, deps: Partial<CollusionScanDeps> = {}): Promise<CollusionScanResult> {
   const d = { ...defaultDeps, ...deps }
   const since = new Date(d.now().getTime() - 30 * 24 * 60 * 60 * 1000)
-  const [native, redraft] = await Promise.all([
+  const [native, redraft, imported] = await Promise.all([
     prisma.afLeagueTrade.findMany({ where: { leagueId, status: "processed", updatedAt: { gte: since } }, select: { id: true } }),
     prisma.redraftTradeProposal.findMany({ where: { leagueId, status: "accepted", updatedAt: { gte: since } }, select: { id: true } }),
+    // An imported Sleeper league's completed trades, as the trade sweep recorded them.
+    prisma.providerTradeOffer.findMany({
+      where: { leagueId, provider: "sleeper", status: "accepted", lastSeenAt: { gte: since } },
+      select: { providerTradeId: true },
+    }),
   ])
   const refs: Array<{ id: string; ref: ScanTradeRef }> = [
     ...native.map((t) => ({ id: t.id, ref: { kind: "af" as const, tradeId: t.id } })),
     ...redraft.map((t) => ({ id: t.id, ref: { kind: "redraft" as const, proposalId: t.id } })),
+    ...imported.map((t) => ({
+      id: t.providerTradeId,
+      ref: { kind: "provider" as const, provider: "sleeper" as const, providerTradeId: t.providerTradeId },
+    })),
   ]
 
   const flags: CollusionScanResult["flags"] = []
   let scannedAt = d.now().toISOString()
+  const valuationCoverage = { priced: 0, unavailable: 0 }
   for (const { id, ref } of refs) {
     const dup = await prisma.integrityFlag.findFirst({ where: { leagueId, tradeTransactionId: id } })
     if (dup) continue
     const r = await scanTradeForCollusion(leagueId, id, ref, deps)
     scannedAt = r.scannedAt
     flags.push(...r.flags)
+    if (r.valuation) valuationCoverage[r.valuation.status]++
   }
-  return { leagueId, flags, scannedAt }
+  return { leagueId, flags, scannedAt, valuationCoverage }
 }

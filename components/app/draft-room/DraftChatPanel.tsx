@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { Maximize2, MessageCircle, Megaphone, Minimize2, RotateCw } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MessageCircle, Megaphone } from 'lucide-react'
 import type { DraftChatWireMessage } from '@/lib/draft-room/draft-chat-contract'
 import { PlayerAvatar } from './PlayerAvatar'
 import { ChatMessageList, type ChatListMessage } from '@/components/core-app/comms/ChatMessageList'
@@ -14,6 +14,8 @@ import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMenti
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { chatFailure } from '@/components/core-app/comms/chatFailure'
 import type { ReportReason } from '@/lib/moderation/shared'
+import { TypingNote } from '@/components/core-app/comms/TypingNote'
+import { useTypingSignal } from '@/components/core-app/comms/useTypingSignal'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -87,6 +89,11 @@ export type DraftChatPanelProps = {
 }
 
 type View = 'draft' | 'league'
+/** What the stream shows (2026-11-19): everything, only the pick cards, or only people talking. */
+type StreamFilter = 'all' | 'picks' | 'messages'
+
+/** How often the room asks who is typing — the same cadence league chat uses. */
+const TYPING_POLL_MS = 4000
 
 function isCopilotLocal(m: DraftChatMessage): boolean {
   return m.id.startsWith('ai-copilot-')
@@ -100,7 +107,7 @@ function isCopilotLocal(m: DraftChatMessage): boolean {
  * checks — an arbitrary pasted host still renders as text, never as an <img>.
  */
 function toListMessage(m: DraftChatMessage): ChatListMessage {
-  const system = Boolean(m.isDraftPickEvent || m.isAiSuggestion)
+  const system = Boolean(m.isDraftPickEvent || m.isAiSuggestion || m.draftRoomEvent)
   const meta: Record<string, unknown> = { ...(m.metadata ?? {}) }
   const type = String(m.messageType ?? '').toLowerCase()
   if (m.mediaUrl && !Array.isArray(meta.attachments) && (type === 'image' || type === 'meme')) {
@@ -116,7 +123,7 @@ function toListMessage(m: DraftChatMessage): ChatListMessage {
     authorId: system ? null : m.senderUserId ?? null,
     authorName: m.from || m.senderDisplayName || 'Someone',
     avatarUrl: m.senderAvatarUrl ?? null,
-    body: m.isDraftPickEvent ? '' : m.text,
+    body: m.isDraftPickEvent || m.draftRoomEvent ? '' : m.text,
     createdAt: m.at,
     parentMessageId: m.parentMessageId ?? null,
     metadata: meta,
@@ -144,8 +151,9 @@ export function DraftChatPanel({
 }: DraftChatPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [view, setView] = useState<View>('draft')
-  /** Laptop only: the chat lifted out of the short dock into a tall panel. */
-  const [popped, setPopped] = useState(false)
+  /* The pop-out and refresh buttons are gone (2026-11-19): the chat refreshes itself, and the dock
+     is resized from the board's View menu. */
+  const [streamFilter, setStreamFilter] = useState<StreamFilter>('all')
   const [replyTo, setReplyTo] = useState<DraftChatMessage | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
@@ -174,9 +182,69 @@ export function DraftChatPanel({
     () =>
       messages
         .filter((m) => !m.senderUserId || !blockedAuthors.has(m.senderUserId))
+        .filter((m) => {
+          if (streamFilter === 'all') return true
+          const isPick = Boolean(m.isDraftPickEvent)
+          return streamFilter === 'picks' ? isPick : !isPick && !m.isAiSuggestion && !m.draftRoomEvent
+        })
         .map(toListMessage),
-    [messages, blockedAuthors],
+    [messages, blockedAuthors, streamFilter],
   )
+
+  /**
+   * The first pick card of each round, in stream order: it carries a "Round N" divider, so a long
+   * draft reads as rounds rather than one undifferentiated wall of picks.
+   */
+  const roundStartIds = useMemo(() => {
+    const seen = new Set<number>()
+    const out = new Set<string>()
+    for (const m of messages) {
+      const round = m.isDraftPickEvent ? m.draftPickMeta?.round : null
+      if (typeof round !== 'number' || seen.has(round)) continue
+      seen.add(round)
+      out.add(m.id)
+    }
+    return out
+  }, [messages])
+
+  /*
+   * "Sam is typing…" (2026-11-19). Linked to league chat, the room IS league chat, so it shares
+   * that typing channel; otherwise the draft has its own (`league:<id>:draft`, allowed by the
+   * typing route for league members) so league-chat typing does not show up here.
+   */
+  const typingRoom = leagueId ? (leagueChatSync ? `league:${leagueId}` : `league:${leagueId}:draft`) : null
+  const signalTyping = useTypingSignal(disabled ? null : typingRoom)
+  const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
+  /* Same people typing → keep the same array: a new [] every poll re-rendered the whole chat every
+     4 seconds for nothing, and raced the composer's @-suggestions. */
+  const setTypingIfChanged = useCallback((next: Array<{ userId: string; name: string }>) => {
+    setTyping((prev) =>
+      prev.length === next.length && prev.every((p, i) => p.userId === next[i]!.userId && p.name === next[i]!.name) ? prev : next,
+    )
+  }, [])
+  useEffect(() => {
+    if (!typingRoom || disabled) {
+      setTypingIfChanged([])
+      return
+    }
+    let alive = true
+    const read = () => {
+      void fetch(`/api/shared/chat/threads/${encodeURIComponent(typingRoom)}/typing`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { typing?: Array<{ userId: string; name: string }> } | null) => {
+          if (alive) setTypingIfChanged(Array.isArray(d?.typing) ? d!.typing! : [])
+        })
+        .catch(() => {
+          if (alive) setTypingIfChanged([])
+        })
+    }
+    read()
+    const t = window.setInterval(read, TYPING_POLL_MS)
+    return () => {
+      alive = false
+      window.clearInterval(t)
+    }
+  }, [typingRoom, disabled, setTypingIfChanged])
 
   const nameForUserId = useCallback(
     (id: string): string | null => messages.find((m) => m.senderUserId === id)?.from ?? null,
@@ -339,7 +407,8 @@ export function DraftChatPanel({
         metadata.poll = {
           question: payload.poll.question,
           options: payload.poll.options.map((t, i) => ({ id: `opt-${i}-${Date.now()}`, text: t, votes: [] as string[] })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }
@@ -371,71 +440,95 @@ export function DraftChatPanel({
         const when = meta?.pickedAt ? new Date(meta.pickedAt) : new Date(m.at)
         const headshot = meta?.headshotUrl ?? null
         const isAi = meta?.aiManager === true
+        const label = meta?.pickLabel ?? (meta?.round != null && meta?.roundSlot != null ? `${meta.round}.${String(meta.roundSlot).padStart(2, '0')}` : null)
+        /*
+         * One line per pick, like Sleeper (2026-11-19): pick, headshot, player, who took him, time.
+         * The old card was ~110px tall, so a 240px dock showed two picks and no conversation.
+         */
         return (
-          <div
-            className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-lg ${
-              rs
-                ? 'border-emerald-400/35 bg-[linear-gradient(135deg,rgba(16,185,129,0.14),rgba(6,12,28,0.98))] ring-1 ring-emerald-500/15'
-                : 'border-emerald-400/25 bg-emerald-500/10'
-            }`}
-            data-testid="draft-chat-pick-event"
-            data-ai-manager={isAi ? 'true' : 'false'}
-          >
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/95">
-                Pick{meta?.pickLabel ? ` ${meta.pickLabel}` : ''}
-              </span>
-              <span className="text-[11px] text-white/55 tabular-nums">
-                {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
-              </span>
-            </div>
-            <div className="mt-2 flex items-start gap-2.5">
-              {/* D.6.3 — player headshot via shared PlayerAvatar (silhouette+initials fallback,
-                  DEF team-logo promotion, broken-load handling all centralized). */}
+          <div className="w-full min-w-0">
+            {roundStartIds.has(m.id) && meta?.round != null ? (
+              <div className="flex items-center gap-2 px-1 pb-1 pt-2" data-testid="draft-chat-round-divider" role="separator">
+                <span className="h-px flex-1 bg-white/10" aria-hidden />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">Round {meta.round}</span>
+                <span className="h-px flex-1 bg-white/10" aria-hidden />
+              </div>
+            ) : null}
+            <div
+              className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] ${
+                rs ? 'border-emerald-400/25 bg-emerald-500/[0.08]' : 'border-emerald-400/20 bg-emerald-500/[0.07]'
+              }`}
+              data-testid="draft-chat-pick-event"
+              data-ai-manager={isAi ? 'true' : 'false'}
+              title={meta?.overall != null ? `#${meta.overall} overall` : undefined}
+            >
+              {label ? (
+                <span className="w-9 shrink-0 text-[11px] font-bold tabular-nums text-emerald-200">{label}</span>
+              ) : null}
               <PlayerAvatar
                 headshotUrl={headshot}
                 teamLogoUrl={meta?.teamLogoUrl ?? null}
                 teamAbbr={meta?.nflTeam ?? null}
                 position={meta?.position ?? null}
                 displayName={meta?.playerName ?? 'Player'}
-                size={48}
+                size={28}
                 testIdBase="draft-chat-pick-headshot"
               />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold leading-snug text-white">
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-[12px] font-semibold text-white">
                   {meta?.playerName ?? m.text}
-                  {meta?.position ? (
-                    <span className="ml-1.5 text-[12px] font-medium text-white/65">{meta.position}</span>
-                  ) : null}
-                  {meta?.nflTeam ? (
-                    <span className="ml-1.5 text-[11px] font-medium text-white/45">· {meta.nflTeam}</span>
-                  ) : null}
-                </p>
-                <p className="mt-1 text-[12px] text-emerald-100/90" data-testid="draft-chat-pick-drafter">
-                  <span className="text-white/50">To </span>
-                  <span className="font-medium">{meta?.rosterDisplayName ?? 'Team'}</span>
+                  {meta?.position ? <span className="ml-1 font-medium text-white/60">{meta.position}</span> : null}
+                  {meta?.nflTeam ? <span className="ml-1 font-medium text-white/40">{meta.nflTeam}</span> : null}
+                </span>
+                <span className="block truncate text-[11px] text-emerald-100/80" data-testid="draft-chat-pick-drafter">
+                  {meta?.rosterDisplayName ?? 'Team'}
                   {isAi ? (
                     <span
-                      className="ml-1.5 inline-flex items-center rounded-full border border-violet-400/35 bg-violet-500/15 px-1.5 py-[1px] text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-100"
+                      className="ml-1.5 rounded-full border border-violet-400/35 bg-violet-500/15 px-1.5 text-[11px] font-semibold text-violet-100"
                       data-testid="draft-chat-pick-ai-badge"
                     >
-                      AI
+                      Chimmy
                     </span>
                   ) : null}
-                </p>
-                {(meta?.overall != null || meta?.round != null) && (
-                  <p className="mt-1 text-[11px] text-white/45">
-                    {meta?.round != null && meta?.roundSlot != null ? (
-                      <>
-                        Round {meta.round} · Pick {meta.roundSlot}
-                      </>
-                    ) : meta?.pickLabel ? (
-                      <>Round/pick {meta.pickLabel}</>
-                    ) : null}
-                    {meta?.overall != null ? <> · #{meta.overall} overall</> : null}
-                  </p>
-                )}
-              </div>
+                </span>
+              </span>
+              <span className="shrink-0 text-[11px] tabular-nums text-white/40">
+                {when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+        )
+      }
+      if (m.draftRoomEvent) {
+        const ev = m.draftRoomEvent
+        const trade = ev.kind === 'pick_trade'
+        return (
+          <div
+            className={`rounded-xl border px-3 py-2.5 text-[11px] shadow-lg ${
+              trade ? 'border-sky-400/30 bg-sky-500/10' : 'border-amber-400/30 bg-amber-500/10'
+            }`}
+            data-testid={trade ? 'draft-chat-trade-event' : 'draft-chat-commish-event'}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
+              <span className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${trade ? 'text-sky-200/95' : 'text-amber-200/95'}`}>
+                {ev.title}
+              </span>
+              <span className="text-[11px] text-white/55 tabular-nums">
+                {new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
+            <div className="mt-2 flex items-start gap-2.5">
+              {ev.playerName ? (
+                <PlayerAvatar
+                  headshotUrl={ev.headshotUrl}
+                  teamAbbr={ev.team}
+                  position={ev.position}
+                  displayName={ev.playerName}
+                  size={40}
+                  testIdBase="draft-chat-event-headshot"
+                />
+              ) : null}
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-white/90">{ev.detail}</p>
             </div>
           </div>
         )
@@ -534,7 +627,7 @@ export function DraftChatPanel({
       }
       return null
     },
-    [byId, rs, onAiSuggestionClick],
+    [byId, rs, onAiSuggestionClick, roundStartIds],
   )
 
   const tagFor = useCallback(
@@ -562,20 +655,19 @@ export function DraftChatPanel({
   return (
     <section
       className={`flex flex-col overflow-hidden rounded-xl border bg-[#060d1e] ${
-        popped
-          ? 'af-dc-popped h-[min(70dvh,640px)] min-h-[320px] md:fixed md:bottom-4 md:right-4 md:top-4 md:z-[70] md:h-auto md:min-h-0 md:w-[min(460px,calc(100vw-32px))]'
-          : 'h-[min(70dvh,640px)] min-h-[320px] md:h-full md:min-h-[200px]'
+        // Phones: fill the tray (it sizes the chat); a fixed 70dvh overflowed a half tray and hid the composer.
+        'h-full min-h-0 md:min-h-[200px]'
       } ${
         rs ? 'border-cyan-500/20 shadow-[0_12px_44px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(34,211,238,0.06)]' : 'border-white/10'
       }`}
       data-testid="draft-chat-panel"
       data-view={activeView}
-      data-popped={popped ? 'true' : 'false'}
     >
       {/*
         One compact row. The draft room's dock is ~240px tall on a laptop, so every pixel of
-        header is a line of chat the room cannot see — the explainer line below it shows on a
-        phone and when the chat is popped out, and is the title's tooltip otherwise.
+        header is a line of chat the room cannot see — the explainer line below it shows only
+        when the chat is popped out, and is the title's tooltip otherwise (phones included, since
+        2026-10-29: in the phone tray it cost two lines of a 325px half-height sheet).
       */}
       <div
         className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2.5 py-1.5 ${
@@ -633,18 +725,6 @@ export function DraftChatPanel({
               Chimmy
             </button>
           )}
-          {onReconnect && (
-            <button
-              type="button"
-              onClick={onReconnect}
-              data-testid="draft-chat-refresh"
-              className={`${iconBtn} border-white/12 bg-black/20 text-white/75 hover:bg-white/10`}
-              aria-label="Refresh chat"
-              title="Refresh chat"
-            >
-              <RotateCw className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          )}
           {isCommissioner && onBroadcast && (
             <button
               type="button"
@@ -657,21 +737,34 @@ export function DraftChatPanel({
               <Megaphone className="h-3.5 w-3.5" aria-hidden />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setPopped((p) => !p)}
-            data-testid="draft-chat-popout"
-            className={`${iconBtn} hidden border-white/12 bg-black/20 text-white/75 hover:bg-white/10 md:inline-flex`}
-            aria-pressed={popped}
-            aria-label={popped ? 'Dock the chat' : 'Pop out the chat'}
-            title={popped ? 'Dock the chat' : 'Pop out the chat — more room to talk'}
-          >
-            {popped ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
-          </button>
         </div>
       </div>
+      {activeView === 'draft' ? (
+        <div
+          className={`flex items-center gap-1 border-b px-2.5 py-1 ${rs ? 'border-cyan-500/10' : 'border-white/8'}`}
+          role="group"
+          aria-label="Show in chat"
+          data-testid="draft-chat-filter"
+        >
+          {(['all', 'picks', 'messages'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setStreamFilter(f)}
+              aria-pressed={streamFilter === f}
+              data-testid={`draft-chat-filter-${f}`}
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                streamFilter === f ? 'bg-white/15 text-white' : 'text-white/55 hover:text-white'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'picks' ? 'Picks' : 'Messages'}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {/* The explainer is the title's tooltip and stays readable to screen readers. */}
       <p
-        className={`${popped ? '' : 'md:hidden'} border-b px-3 py-1 text-[11px] leading-snug ${
+        className={`sr-only border-b px-3 py-1 text-[11px] leading-snug ${
           rs ? 'border-cyan-500/10 text-cyan-200/55' : 'border-white/8 text-white/50'
         }`}
         data-testid="draft-chat-subtitle"
@@ -791,14 +884,20 @@ export function DraftChatPanel({
                 )
               }}
               empty={
+                streamFilter === 'picks' ? (
+                  <div className="af-cm-empty"><p className="af-cm-empty-t">No picks yet.</p></div>
+                ) : (
                 <div className="af-cm-empty">
                   <p className="af-cm-empty-t">Quiet in here. Start the trash talk.</p>
                   <p className="af-cm-empty-b">
                     Drop a GIF, run a poll, @ a manager who&apos;s on the clock. Pick alerts show up here as they happen.
                   </p>
                 </div>
+                )
               }
             />
+
+            <TypingNote typing={typing} />
 
             {replyTo ? (
               <div className="af-cm-replybar">
@@ -823,8 +922,8 @@ export function DraftChatPanel({
               instead of sliding its right end and the send button underneath.
             */}
             <div
-              className={`af-dc-composer border-t p-2.5 sm:p-3 ${rs ? 'border-cyan-500/15 bg-[#050a14]' : 'border-white/8'}`}
-              data-fab-corner={popped ? undefined : 'true'}
+              className={`af-dc-composer border-t p-1.5 sm:p-3 ${rs ? 'border-cyan-500/15 bg-[#050a14]' : 'border-white/8'}`}
+              data-fab-corner="true"
             >
               <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
                 <div className="relative min-w-0 flex-1">
@@ -832,6 +931,8 @@ export function DraftChatPanel({
                     <p className="px-2 py-2 text-[12px] text-white/55">Chat is paused right now.</p>
                   ) : (
                     <ChatComposer
+                      compactTools
+                      onTypingChange={signalTyping}
                       leagueId={leagueId ?? ''}
                       currentUserId={currentUserId ?? undefined}
                       chatType="draft"
@@ -848,6 +949,7 @@ export function DraftChatPanel({
                         poll: 'draft-chat-poll-toggle',
                         photo: 'draft-chat-media-image',
                         video: 'draft-chat-media-video',
+                        more: 'draft-chat-more-tools',
                       }}
                     />
                   )}

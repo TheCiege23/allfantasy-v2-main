@@ -105,16 +105,16 @@ describe('every surface says how a frozen letter was priced — EN and ES', () =
     expect(gradeMoment({ ...g, pricedAsOf: '2026-09-14T23:00:00.000Z' })).toBe('from Sep 14, 2026, the day of the trade (no market record from the trade date)')
   })
 
-  it('a guillotine grade says what it was priced on, never a market it never used (2026-10-11)', () => {
+  it('a Guilly grade says what it was priced on, never a market it never used (2026-10-11)', () => {
     const g = { frozenAt: FROZEN_AT, frozenBasis: 'first_graded' as const, pricedAsOf: '2026-09-14T23:00:00.000Z', tradeAt: TRADE_AT }
     const lines = [{ valueSource: 'guillotine_points' }, { valueSource: 'guillotine_faab' }]
-    expect(gradeMoment({ ...g, lines })).toBe('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)')
-    expect(gradeMoment({ ...g, lines }, 'es')).toBe('del 14 sep 2026, el mismo día del traspaso (valores de guillotina: alineación y FAAB)')
+    expect(gradeMoment({ ...g, lines })).toBe('from Sep 14, 2026, the day of the trade (Guilly lineup and FAAB values)')
+    expect(gradeMoment({ ...g, lines }, 'es')).toBe('del 14 sep 2026, el mismo día del traspaso (valores Guilly: alineación y FAAB)')
     // The compact copy surfaces carry keeps it, and a market line anywhere keeps the market wording.
-    expect(gradeMoment(gradeMomentOf({ ...g, lines }))).toBe('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)')
+    expect(gradeMoment(gradeMomentOf({ ...g, lines }))).toBe('from Sep 14, 2026, the day of the trade (Guilly lineup and FAAB values)')
     expect(gradeMoment({ ...g, lines: [...lines, { valueSource: 'faab_formula' }] })).toMatch(/no market record from the trade date\)$/)
     expect(gradeMomentToSpanish('from Sep 14, 2026, the day of the trade (guillotine lineup and FAAB values)'))
-      .toBe('del 14 sep 2026, el mismo día del traspaso (valores de guillotina: alineación y FAAB)')
+      .toBe('del 14 sep 2026, el mismo día del traspaso (valores Guilly: alineación y FAAB)')
   })
 
   it('a v1 original (no basis): the old wording, never a claim about the trade-date record', () => {
@@ -122,6 +122,15 @@ describe('every surface says how a frozen letter was priced — EN and ES', () =
     expect(gradeMoment(g)).toBe('when first graded Sep 30')
     expect(gradeMoment(g, 'es')).toBe('cuando se calificó por primera vez el 30 sep')
     expect(gradeMoment({ frozenAt: '2026-09-30T15:00:00.000Z', frozenBasis: null })).toBe('when first graded Sep 30')
+  })
+
+  it('labels a first-graded Zombie player estimate by its projection basis', () => {
+    const grade = { frozenAt: FROZEN_AT, frozenBasis: 'first_graded' as const,
+      pricedAsOf: '2026-09-30T15:00:00.000Z', tradeAt: TRADE_AT,
+      lines: [{ valueSource: 'zombie_points' }] }
+    expect(gradeMoment(grade)).toContain('(Zombie player and free-agent values)')
+    expect(gradeMoment(gradeMomentOf(grade), 'es')).toContain('(valores Zombie: jugadores y agentes libres)')
+    expect(gradeMomentToSpanish(gradeMoment(grade))).toContain('(valores Zombie: jugadores y agentes libres)')
   })
 
   it('a live grade', () => {

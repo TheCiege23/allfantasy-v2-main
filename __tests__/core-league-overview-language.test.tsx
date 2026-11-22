@@ -8,9 +8,12 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({
-  useOptionalLanguage: () => ({ language: 'es' }),
-}))
+vi.mock('@/components/i18n/LanguageProviderClient', async () => {
+  // The real catalog: CustomizeLeagueLink reads its label through `t`.
+  const { translations: dict } = await import('@/lib/i18n/translations')
+  const t = (k: string) => dict.es?.[k] ?? dict.en[k] ?? k
+  return { useOptionalLanguage: () => ({ language: 'es', t }) }
+})
 
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
@@ -41,7 +44,8 @@ describe('Spanish league overview', () => {
     expect(screen.getByRole('heading', { name: 'Calendario de temporada · Liga Uno' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Esta semana en la liga' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Tabla de rendimiento' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Preguntar a Chimmy' })).toBeTruthy()
+    // The Ask Chimmy card left the Overview on 2026-11-14; the league bar and the chat button open Chimmy.
+    expect(screen.queryByRole('heading', { name: 'Preguntar a Chimmy' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Conectar una liga →' })).toHaveAttribute('href', '/core/connect-leagues?league=league-1')
     expect(screen.getAllByRole('link', { name: 'Volver al inicio →' })).toHaveLength(2)
   })

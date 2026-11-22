@@ -21,6 +21,7 @@ import {
 } from '@/lib/import-os/runner'
 import { createSleeperScopeFetcher } from './sleeperScopeFetcher'
 import {
+  connectionReadableWithoutCredential,
   fetchNormalizedForConnection,
   resolveStoredCredentialUserIds,
   SyncLeagueGoneError,
@@ -36,6 +37,7 @@ import { resolveLeagueIdsForConnection } from './enumerate'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 import { sleeperScoreBackfillWeeks } from '@/lib/sleeper/sync/sleeperScoreBackfillWeeks'
+import { processSleeperImportedAlerts } from '@/lib/imported-league-alerts/sleeperAlerts'
 
 /** NFL regular season + playoffs. The cache only fetches weeks it lacks. */
 const MAX_WEEKS = 18
@@ -269,7 +271,8 @@ export async function syncConnectedLeague(
    */
   if (!deps.skipCredentialPreflight && providerNeedsCredential(connection.provider)) {
     const withCredentials = await resolveStoredCredentialUserIds(connection)
-    if (withCredentials.length === 0) {
+    /* A public ESPN league owned by the system account reads without any credential. */
+    if (withCredentials.length === 0 && !(await connectionReadableWithoutCredential(connection))) {
       const reason = `no importing user has stored ${connection.provider} credentials for this league`
       /* Durable, so the explanation outlives this cron response — see the note above. */
       await recordSkippedConnection(connection, seasonState, reason)
@@ -312,6 +315,16 @@ export async function syncConnectedLeague(
     isTerminalError: (err) => err instanceof SyncLeagueGoneError,
   })
 
+  // Alert failures are isolated from the sync; the durable baseline remains retryable.
+  if (connection.provider === 'sleeper' && result.status === 'completed' && result.terminalError === undefined) {
+    try {
+      await processSleeperImportedAlerts(connection, await loadNormalized(), (deps.clock ?? realClock).now())
+    } catch (err: unknown) {
+      console.warn('[sync] imported Sleeper alerts failed', connection.externalLeagueId, err instanceof Error ? err.message : err)
+      store.notes.push('Imported league alerts could not be processed; they will retry on the next successful sync.')
+    }
+  }
+
   /*
    * ⚠ TURN THE TAP ON. ensureMatchupsCached and refreshWeekCache — the only two
    * writers of WeeklyMatchup — had ZERO callers anywhere in the codebase. The
@@ -350,10 +363,10 @@ export async function syncConnectedLeague(
    * — write `WeeklyMatchup` rows keyed on a non-Sleeper league id that the readers would then
    * join against, producing scores for the wrong league.
    *
-   * ESPN, Yahoo and Fantrax get their `WeeklyMatchup` rows from the parity collectors
-   * (`externalMatchupParity`, `fantraxMatchupParity`) which speak their own APIs. MFL and
-   * Fleaflicker have no weekly-matchup writer yet — a known gap, recorded rather than papered
-   * over by pointing a Sleeper fetcher at them.
+   * ESPN, Yahoo, Fantrax, MFL and Fleaflicker get their `WeeklyMatchup` rows from the parity
+   * collectors (`externalMatchupParity`, `fantraxMatchupParity`, `mflMatchupParity`,
+   * `fleaflickerMatchupParity`), which speak their own APIs. Those are team-level scores; no
+   * non-Sleeper platform writes per-player weekly lineups on a schedule.
    */
   /* Nor after a run the provider ended by saying the league is gone: both calls would 404 too. */
   if (

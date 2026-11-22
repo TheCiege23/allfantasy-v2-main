@@ -30,14 +30,17 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
   const leagueId = typeof body?.leagueId === 'string' ? body.leagueId : ''
-  const format = typeof body?.format === 'string' ? body.format : 'combined'
-  const season = typeof body?.season === 'number' ? body.season : new Date().getFullYear()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  const room = await buildC2CDraftRoom(leagueId, format, season)
-  return NextResponse.json({ initialized: true, draft: room })
+  // This older endpoint only described pools; it never created a DraftSession. The real session
+  // endpoint requires commissioner authority and handles the league's persisted draft settings.
+  return NextResponse.json({
+    initialized: false,
+    error: 'Create the draft from league draft settings using the commissioner draft session endpoint.',
+    sessionEndpoint: `/api/leagues/${encodeURIComponent(leagueId)}/draft/session`,
+  }, { status: 409 })
 }
 

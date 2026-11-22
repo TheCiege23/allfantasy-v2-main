@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ZombieSettlementHoldCard } from './ZombieSettlementHoldCard'
 import clsx from 'clsx'
 import { getZombieSportConfig } from '@/lib/zombie/sportRulesConfig'
+import { ZombieCorrectionRecovery } from '@/components/zombie/ZombieCorrectionRecovery'
 
 type ResolutionRow = {
   id: string
@@ -11,7 +13,8 @@ type ResolutionRow = {
   resolvedAt: string | null
   hordeSize: number | null
   survivorCount: number | null
-  infectionsThisWeek: number | null
+  infectionCount: number | null
+  requiresStatCorrection: boolean
 }
 
 type LeagueInfo = {
@@ -51,9 +54,9 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
     setLoading(true)
     fetch(`/api/zombie/league?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { league?: LeagueInfo; resolutions?: ResolutionRow[] } | null) => {
+      .then((d: { league?: LeagueInfo & { weeklyResolutions?: ResolutionRow[] } } | null) => {
         if (d?.league) setLeague(d.league)
-        if (d?.resolutions) setResolutions(d.resolutions)
+        setResolutions(d?.league?.weeklyResolutions ?? [])
       })
       .catch(() => null)
       .finally(() => setLoading(false))
@@ -70,9 +73,12 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
   const cfg = getZombieSportConfig(league.sport)
   const latestResolution = resolutions[0]
   const isResolved = latestResolution?.status === 'complete'
+  const needsCorrection = resolutions.some((resolution) => resolution.requiresStatCorrection)
 
   return (
     <div className="px-6 py-5 text-[13px] text-white/85">
+      {canEdit && league.sport === 'NFL' && <ZombieCorrectionRecovery leagueId={leagueId} />}
+      <ZombieSettlementHoldCard leagueId={leagueId} canEdit={canEdit} />
       {/* Status overview */}
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatusCard
@@ -89,11 +95,17 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
         />
         <StatusCard
           label="Resolution"
-          value={isResolved ? 'COMPLETE' : 'PENDING'}
+          value={isResolved ? 'COMPLETE' : latestResolution?.status === 'review_required' ? 'ON HOLD' : 'PENDING'}
           color={isResolved ? 'var(--zombie-green)' : 'var(--zombie-gold)'}
           icon={isResolved ? '✅' : '⏳'}
         />
       </div>
+
+      {needsCorrection && (
+        <p role="alert" className="mb-5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[12px] text-amber-100">
+          A settled week has a score correction that needs commissioner review. Check the affected week before confirming any payout.
+        </p>
+      )}
 
       {/* Sport config */}
       <section className="mb-5 rounded-xl border border-[var(--zombie-border)] bg-[var(--zombie-panel)] p-4">
@@ -191,7 +203,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
                         className={clsx(
                           'rounded px-1.5 py-0.5 text-[11px] font-bold',
                           r.status === 'complete'
-                            ? 'bg-[var(--zombie-green)]/15 text-[var(--zombie-green)]'
+                            ? 'bg-zombie-green/15 text-[var(--zombie-green)]'
                             : 'bg-amber-500/15 text-amber-300',
                         )}
                       >
@@ -200,7 +212,7 @@ export function ZombieAutomationPanel({ leagueId, canEdit }: { leagueId: string;
                     </td>
                     <td className="p-2.5 text-[var(--zombie-purple)]">{r.hordeSize ?? '—'}</td>
                     <td className="p-2.5 text-[var(--zombie-green)]">{r.survivorCount ?? '—'}</td>
-                    <td className="p-2.5">{r.infectionsThisWeek ?? '—'}</td>
+                    <td className="p-2.5">{r.infectionCount ?? '—'}</td>
                     <td className="p-2.5 text-[var(--zombie-text-dim)]">
                       {r.resolvedAt ? new Date(r.resolvedAt).toLocaleString() : '—'}
                     </td>

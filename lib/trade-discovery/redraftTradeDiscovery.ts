@@ -78,8 +78,25 @@ export interface PartnerMatch {
   mySurpluses: string[]
   matchScore: number
   matchReasons: string[]
+  /**
+   * `matchReasons` as stable codes and their values, in the same order, so a client can say them in
+   * the reader's language (`tradeCenter.discovery.reason.<code>`). The English stays in `matchReasons`,
+   * which Chimmy's grounding reads.
+   */
+  matchReasonCodes: MatchReason[]
   warningFlags: DiscoveryWarning[]
 }
+
+export type MatchReasonCode =
+  | 'surplus'
+  | 'theyHave'
+  | 'complementary'
+  | 'recentlyActive'
+  | 'blockMatch'
+  | 'interestMatch'
+  | 'exploratory'
+
+export type MatchReason = { code: MatchReasonCode; params?: { positions: string } }
 
 export type FairnessBand = 'balanced' | 'slight edge you' | 'slight edge partner' | 'lopsided' | 'low confidence'
 
@@ -164,14 +181,17 @@ export function findPartners(input: {
       const iCanGet = overlap(partner.strongPositions.length ? partner.strongPositions : theirs.surpluses, my.needs)
 
       const reasons: string[] = []
+      const reasonCodes: MatchReason[] = []
       let score = 0
       if (iCanGive.length) {
         score += 30
         reasons.push(`You have surplus ${iCanGive.join('/')} they need`)
+        reasonCodes.push({ code: 'surplus', params: { positions: iCanGive.join('/') } })
       }
       if (iCanGet.length) {
         score += 30
         reasons.push(`They have ${iCanGet.join('/')} you need`)
+        reasonCodes.push({ code: 'theyHave', params: { positions: iCanGet.join('/') } })
       }
       if (
         (input.myRoster.stance === 'contender' && partner.stance === 'rebuilder') ||
@@ -179,12 +199,14 @@ export function findPartners(input: {
       ) {
         score += 20
         reasons.push('Complementary team directions (contender ↔ rebuilder)')
+        reasonCodes.push({ code: 'complementary' })
       } else if (input.myRoster.stance === 'middle' || partner.stance === 'middle') {
         score += 5
       }
       if ((partner.recentTradeCount ?? 0) > 0) {
         score += 10
         reasons.push('Recently active in trades')
+        reasonCodes.push({ code: 'recentlyActive' })
       }
       score += Math.min(10, (iCanGive.length + iCanGet.length) * 2)
 
@@ -198,6 +220,7 @@ export function findPartners(input: {
       if (blockMatch) {
         score += 20
         reasons.push('Player is on the trade block that fits your need')
+        reasonCodes.push({ code: 'blockMatch' })
         warningFlags.push('TRADE_BLOCK_MATCH')
       }
       // T8: I marked interest in a player this partner owns.
@@ -205,6 +228,7 @@ export function findPartners(input: {
       if (interestMatch) {
         score += 15
         reasons.push('You marked interest in a player on this team')
+        reasonCodes.push({ code: 'interestMatch' })
         warningFlags.push('INTEREST_MATCH')
         if (input.myInterest?.hasPrivate) warningFlags.push('PRIVATE_INTEREST_USED')
       }
@@ -229,13 +253,15 @@ export function findPartners(input: {
         mySurpluses: my.surpluses,
         matchScore: Math.max(0, Math.min(100, score)),
         matchReasons: reasons.length ? reasons : ['Limited overlap — exploratory match'],
+        matchReasonCodes: reasonCodes.length ? reasonCodes : [{ code: 'exploratory' }],
         warningFlags,
       }
     })
     .sort((a, b) => b.matchScore - a.matchScore)
 }
 
-function fairnessFor(valueDelta: number, scale: number, lowConfidence: boolean): FairnessBand {
+/** Exported so Chimmy's pick / win-now packages band on the same thresholds as these. */
+export function fairnessFor(valueDelta: number, scale: number, lowConfidence: boolean): FairnessBand {
   if (lowConfidence) return 'low confidence'
   const pct = scale > 0 ? Math.abs(valueDelta) / scale : 0
   if (pct <= 0.08) return 'balanced'

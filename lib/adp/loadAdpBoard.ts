@@ -60,8 +60,35 @@ export interface AdpBoardEntry {
   lastUpdatedAt: Date | null
 }
 
+/** One corpus's view of a player, projected into the league's size. */
+export interface AdpCorpusValue {
+  adp: number
+  /** Drafts this player was taken in, within this corpus. */
+  sampleSize: number
+}
+
+/**
+ * The two OBSERVED corpora behind a player, kept apart so they can be weighed separately.
+ *
+ * `entries` answers "what is our board's number" and fills thin exact boards from every corpus at
+ * once — imported drafts included. The AF ADP blend needs the opposite: AllFantasy-run drafts and
+ * drafts from imported real leagues as SEPARATE inputs, each discounted by its own sample size.
+ * Folding them together first would let a deep imported corpus pass itself off as our own drafts.
+ *
+ *   own       drafts run in AllFantasy: the exact board when it has the player, else the cross-size
+ *             projection over every non-imported board.
+ *   imported  `draftType: 'imported'` boards (`DraftFact` from Sleeper/ESPN/MFL/Fantrax imports),
+ *             projected to this league's size by the same weighted median.
+ */
+export interface AdpCorpusSplit {
+  own: AdpCorpusValue | null
+  imported: AdpCorpusValue | null
+}
+
 export interface AdpBoard {
   entries: AdpBoardEntry[]
+  /** Per player key. Empty when the cross-size tier was skipped. */
+  corpora: Map<string, AdpCorpusSplit>
   contextHash: string
   draftMode: DraftMode
   exactCount: number
@@ -134,6 +161,10 @@ export async function loadAdpBoard(
 
   const exactCount = entries.length
   let crossSizeCount = 0
+  const corpora = new Map<string, AdpCorpusSplit>()
+  for (const e of entries) {
+    corpora.set(e.playerKey, { own: { adp: e.adp, sampleSize: e.sampleSize }, imported: null })
+  }
 
   if (options.includeCrossSize !== false) {
     const have = new Set(entries.map((e) => e.playerKey))
@@ -172,6 +203,29 @@ export async function loadAdpBoard(
       targetDraftType: context.draftType,
     })
 
+    /*
+     * The same projection, run once per corpus. `buildCrossSizeBoard` drops auction boards for a
+     * non-auction reader and takes a weighted median, so each corpus gets the identical treatment
+     * the combined fill already gets.
+     */
+    const projectCorpus = (rows: typeof rekeyed) =>
+      buildCrossSizeBoard(rows as CrossSizeRow[], {
+        targetTeamCount: context.teamCount,
+        targetDraftType: context.draftType,
+      })
+    const ownProjected = projectCorpus(rekeyed.filter((r) => r.draftType !== 'imported'))
+    const importedProjected = projectCorpus(rekeyed.filter((r) => r.draftType === 'imported'))
+    for (const [playerKey, entry] of ownProjected) {
+      const split = corpora.get(playerKey) ?? { own: null, imported: null }
+      if (!split.own) split.own = { adp: entry.adp, sampleSize: entry.sampleSize }
+      corpora.set(playerKey, split)
+    }
+    for (const [playerKey, entry] of importedProjected) {
+      const split = corpora.get(playerKey) ?? { own: null, imported: null }
+      split.imported = { adp: entry.adp, sampleSize: entry.sampleSize }
+      corpora.set(playerKey, split)
+    }
+
     for (const [playerKey, entry] of projected) {
       if (have.has(playerKey)) continue
       entries.push({
@@ -208,5 +262,5 @@ export async function loadAdpBoard(
 
   entries.sort((a, b) => a.adp - b.adp)
 
-  return { entries, contextHash, draftMode, exactCount, crossSizeCount, computedAt }
+  return { entries, corpora, contextHash, draftMode, exactCount, crossSizeCount, computedAt }
 }

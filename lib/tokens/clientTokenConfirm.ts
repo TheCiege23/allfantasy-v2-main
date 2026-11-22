@@ -1,3 +1,4 @@
+import { paidToolFetch, approvePaidToolQuote } from './paidToolClient'
 /**
  * Ask before spending tokens — the client half of `requireFeatureEntitlement`'s token fallback.
  *
@@ -15,13 +16,13 @@
  * network errors propagate as `fetch` raises them.
  */
 
-export type TokenConfirmationPreview = {
+type TokenConfirmationPreview = {
   tokenCost?: number
   currentBalance?: number
   featureLabel?: string
 }
 
-export type TokenConfirmationBody = {
+type TokenConfirmationBody = {
   code?: string
   message?: string
   preview?: TokenConfirmationPreview
@@ -52,7 +53,7 @@ function defaultConfirm(message: string): boolean {
   return window.confirm(message)
 }
 
-export type TokenConfirmedPost = {
+type TokenConfirmedPost = {
   /** The last response: the confirmed call's, or the 409 when the person declined. */
   response: Response
   /** True when the server asked and the person said no — nothing was spent. */
@@ -69,7 +70,7 @@ export async function postWithTokenConfirm(
 ): Promise<TokenConfirmedPost> {
   const doFetch = opts.fetchImpl ?? fetch
   const post = (body: Record<string, unknown>) =>
-    doFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    paidToolFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, doFetch)
 
   const first = await post({ ...payload, confirmTokenSpend: false })
   if (first.status !== 409) return { response: first, declined: false }
@@ -79,6 +80,7 @@ export async function postWithTokenConfirm(
 
   const yes = await (opts.confirm ?? defaultConfirm)(tokenConfirmationMessage(body))
   if (!yes) return { response: first, declined: true }
+  if (!approvePaidToolQuote(body)) return { response: first, declined: false }
   return { response: await post({ ...payload, confirmTokenSpend: true }), declined: false }
 }
 

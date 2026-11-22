@@ -1,12 +1,22 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
+import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
+import { gradeInputsFromRedraftAssets } from '@/lib/decision-os/trade/tradeGradeInputs'
+import {
+  MULTI_TEAM_GRADE_WITHHELD,
+  isMultiTeamTrade,
+  joinTeamNames,
+  tradeParticipantRosterIds,
+  tradeTeamMoves,
+} from '@/lib/redraft/tradeParticipants'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // first build walks every season's transactions
@@ -31,7 +41,7 @@ export async function GET(req: NextRequest) {
   const league = await prisma.league.findFirst({
     where: {
       id: leagueId,
-      OR: [{ userId: userId }, { teams: { some: { claimedByUserId: userId } } }],
+      OR: leagueMemberWhere(userId),
     },
     select: { id: true, platform: true, platformLeagueId: true },
   })
@@ -41,12 +51,20 @@ export async function GET(req: NextRequest) {
   // Private offers are visible only to their participants. Approved trades are league-visible.
   if (req.nextUrl.searchParams.get('view') === 'proposals') {
     const cursor = req.nextUrl.searchParams.get('cursor')
+    // A multi-team trade's third and fourth teams are in `additionalRosterIds`, a plain id list, so a
+    // private offer is visible to them by roster id (lib/redraft/tradeParticipants.ts). Unreadable
+    // reads as none: the proposer/receiver visibility below is unchanged either way.
+    const myRosterIds = await Promise.resolve()
+      .then(() => prisma.redraftRoster.findMany({ where: { leagueId: league.id, ownerId: userId }, select: { id: true } }))
+      .then(rows => rows.map(r => r.id))
+      .catch((): string[] => [])
     const proposals = await prisma.redraftTradeProposal.findMany({
       where: {
         leagueId: league.id,
         OR: [
           { proposerRoster: { ownerId: userId } },
           { receiverRoster: { ownerId: userId } },
+          ...(myRosterIds.length ? [{ additionalRosterIds: { hasSome: myRosterIds } }] : []),
           { status: { in: ['accepted', 'approved', 'completed', 'executed'] } },
         ],
       },
@@ -55,25 +73,66 @@ export async function GET(req: NextRequest) {
       take: 51,
       select: {
         id: true, status: true, createdAt: true,
+        proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true,
         proposerRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
         receiverRoster: { select: { teamName: true, ownerName: true, ownerId: true } },
-        assets: { select: { playerName: true, assetType: true, pickSeason: true, pickRound: true } },
-        valueSnapshot: { select: { grade: true, confidenceScore: true, payload: true } },
+        assets: { select: { playerId: true, playerName: true, assetType: true, pickSeason: true, pickRound: true,
+          fromRosterId: true, toRosterId: true, metadata: true } },
       },
     })
+    const page = proposals.slice(0, 50)
+    const extraTeamIds = [...new Set(page.filter(p => isMultiTeamTrade(p)).flatMap(p => p.additionalRosterIds))]
+    const extraTeams = extraTeamIds.length
+      ? await prisma.redraftRoster.findMany({ where: { id: { in: extraTeamIds } }, select: { id: true, teamName: true, ownerName: true, ownerId: true } })
+      : []
+    const assetLabel = (a: { playerName: string | null; assetType: string; pickSeason: number | null; pickRound: number | null }) =>
+      a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)
+    let graderPromise: ReturnType<typeof createLeagueTradeGrader> | null = null
+    const grader = () => (graderPromise ??= createLeagueTradeGrader({ leagueId: league.id, userId }).catch(() => null))
     return NextResponse.json({
-      proposals: proposals.slice(0, 50).map(p => {
-        const payload = p.valueSnapshot?.payload as { grade?: { insufficientData?: boolean; bullets?: string[] } } | null
-        const graded = p.valueSnapshot && p.valueSnapshot.confidenceScore >= 60 && payload?.grade?.insufficientData === false
+      proposals: await Promise.all(page.map(async p => {
+        if (isMultiTeamTrade(p)) {
+          /*
+           * A 3- or 4-team trade: every team and what each gives and gets. Not graded, ever: the
+           * fairness snapshot compares two sides and is not even written for these.
+           */
+          const team = new Map([
+            [p.proposerRosterId, p.proposerRoster],
+            [p.receiverRosterId, p.receiverRoster],
+            ...extraTeams.map(r => [r.id, r] as const),
+          ])
+          const nameOf = (id: string) => team.get(id)?.teamName || team.get(id)?.ownerName || 'A team'
+          const moves = tradeTeamMoves(p, p.assets)
+          return {
+            id: p.id, status: p.status, createdAt: p.createdAt,
+            title: `${joinTeamNames(moves.map(m => nameOf(m.rosterId)))} (${moves.length}-team trade)`,
+            involvesYou: tradeParticipantRosterIds(p).some(id => team.get(id)?.ownerId === userId),
+            assets: moves.map(m => `${nameOf(m.rosterId)} gets ${m.gets.map(assetLabel).join(', ') || 'nothing'}`),
+            grade: null,
+            explanation: MULTI_TEAM_GRADE_WITHHELD,
+            multiTeam: true as const,
+            teams: moves.map(m => ({ rosterId: m.rosterId, name: nameOf(m.rosterId), gives: m.gives.map(assetLabel), gets: m.gets.map(assetLabel) })),
+          }
+        }
+        // Use the same proposer perspective and inputs as the Trade Center list.
+        const grade = p.assets.some(a => a.assetType === 'zombie_item')
+          ? { graded: false as const, reason: 'The future scoring estimate does not yet include infection, revival, loot, or cash payout outcomes.' }
+          : p.assets.length === 0
+            ? { graded: false as const, reason: 'This proposal has no assets on record.' }
+            : await gradeDeal(await grader(), {
+                give: gradeInputsFromRedraftAssets(p.assets.filter(a => a.fromRosterId === p.proposerRosterId)),
+                get: gradeInputsFromRedraftAssets(p.assets.filter(a => a.toRosterId === p.proposerRosterId)),
+                viewerSide: false,
+              }).catch(() => ({ graded: false as const, reason: 'This trade could not be graded just now.' }))
         return {
           id: p.id, status: p.status, createdAt: p.createdAt,
           title: `${p.proposerRoster.teamName || p.proposerRoster.ownerName} → ${p.receiverRoster.teamName || p.receiverRoster.ownerName}`,
           involvesYou: p.proposerRoster.ownerId === userId || p.receiverRoster.ownerId === userId,
-          assets: p.assets.map(a => a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)),
-          grade: graded ? p.valueSnapshot!.grade : null,
-          explanation: graded ? (payload?.grade?.bullets ?? []).join(' ') || 'Snapshot of trade fairness when proposed.' : 'Not enough verified valuation data to grade this proposal.',
+          assets: p.assets.map(assetLabel),
+          grade: grade.graded ? grade.letter : null,
+          explanation: grade.graded ? grade.recommendation : grade.reason,
         }
-      }),
+      })),
       nextCursor: proposals.length > 50 ? proposals[49].id : null,
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
@@ -81,7 +140,7 @@ export async function GET(req: NextRequest) {
     const cursor = req.nextUrl.searchParams.get('cursor')
     const [viewerRosterId, commissioner] = await Promise.all([
       getCurrentUserRosterIdForLeague(league.id, userId),
-      isCommissioner(league.id, userId),
+      canCommissionerAct(league.id, userId, 'view'),
     ])
     const participantVisibility = viewerRosterId
       ? [{ proposerRosterId: viewerRosterId }, { receiverRosterId: viewerRosterId }]

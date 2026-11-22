@@ -1,3 +1,5 @@
+import { parseZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
+import { beta2025ContextFromSnapshot } from '@/lib/zombie/beta2025Winnings'
 /**
  * GET: Zombie league summary (statuses, whisperer, survivors, zombies, config). PROMPT 353.
  *
@@ -21,6 +23,7 @@ import { getWeeklyBoardData } from '@/lib/zombie/ZombieWeeklyBoardService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
 import { getAmbushBalance } from '@/lib/zombie/ZombieAmbushEngine'
 import { prisma } from '@/lib/prisma'
+import { importedZombieNote } from '@/lib/zombie/importedZombieNote'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import {
   redactStatusEntries,
@@ -58,7 +61,12 @@ export async function GET(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const isZombie = await isZombieLeague(leagueId)
-  if (!isZombie) return NextResponse.json({ error: 'Not a zombie league' }, { status: 404 })
+  if (!isZombie) {
+    // A league played as Zombie on another platform has no outbreak records here: say so, calmly.
+    const imported = importedZombieNote(await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, leagueVariant: true } }))
+    if (imported) return NextResponse.json({ importedNote: imported })
+    return NextResponse.json({ error: 'Not a zombie league' }, { status: 404 })
+  }
 
   const [config, statuses, whispererId, league, rosters, myRosterId, teams] = await Promise.all([
     getZombieLeagueConfig(leagueId),
@@ -161,9 +169,9 @@ export async function GET(
      */
     const unused = myTeam?.items ?? []
     const weapons =
-      weaponRows.reduce((sum, row) => sum + row.balance, 0) + unused.filter((i) => i.itemType.startsWith('weapon')).length
+      (sport === 'NFL' && weekResults !== null ? 0 : weaponRows.reduce((sum, row) => sum + row.balance, 0)) + unused.filter((i) => i.itemType.startsWith('weapon')).length
     myResources = {
-      serums: serums + unused.filter((i) => i.itemType.includes('serum')).length,
+      serums: (sport === 'NFL' && weekResults !== null ? 0 : serums) + unused.filter((i) => i.itemType.includes('serum')).length,
       weapons,
       ambush: Math.max(ambush, myTeam?.ambushesRemaining ?? 0),
     }
@@ -189,6 +197,12 @@ export async function GET(
   const hiddenRoster = (rosterId: string) => !viewer.canSee && identity.rosterIds.has(rosterId)
   const nameOf = (rosterId: string) => rosterDisplayNames[rosterId] ?? 'A team'
   const lossToZombieInfects = config.infectionLossToZombie !== false
+  const winningsResolution = zl ? await prisma.zombieWeeklyResolution.findUnique({
+    where: { zombieLeagueId_week: { zombieLeagueId: zl.id, week } },
+    select: { status: true, settlementSnapshot: true },
+  }) : null
+  const winningsContext = beta2025ContextFromSnapshot(winningsResolution?.settlementSnapshot)
+  const winningsPolicy = winningsContext || winningsResolution?.status !== 'complete' ? 'beta_2025' : 'legacy_score'
   const views = buildZombieMatchups({
     results: weekResults,
     statusOf,
@@ -197,6 +211,10 @@ export async function GET(
     rules,
     lossToZombieInfects,
     myRosterId,
+    winningsContext,
+    hideWinningsOf: rosterId => !viewer.canSee && viewer.identity.rosterIds.has(rosterId),
+    winningsPolicy,
+    winningsRules: parseZombieSettlementSnapshot(winningsResolution?.settlementSnapshot)?.rules,
   })
   const weeklyBoard = withBoardDetail(
     buildZombieWeeklyBoard({
@@ -294,8 +312,9 @@ export async function GET(
       axeMargin: rules.weaponAxeMargin,
       // What serumEngine.revive checks — not config.serumReviveCount, which no engine reads.
       reviveSerums: rules.reviveThreshold,
-      bashShare: BASH_TRANSFER_SHARE,
-      maulShare: MAUL_TRANSFER_SHARE,
+      winningsPolicy,
+      bashShare: winningsPolicy === 'beta_2025' ? 1 : BASH_TRANSFER_SHARE,
+      maulShare: winningsPolicy === 'beta_2025' ? 1 : MAUL_TRANSFER_SHARE,
     },
   })
 }

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-const h = vi.hoisted(() => ({ session: vi.fn(), teams: vi.fn(), feed: vi.fn() }))
+const h = vi.hoisted(() => ({ session: vi.fn(), teams: vi.fn(), feed: vi.fn(), weeks: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/prisma', () => ({ prisma: { leagueTeam: { findMany: h.teams } } }))
+vi.mock('@/lib/prisma', () => ({ prisma: { leagueTeam: { findMany: h.teams }, weeklyMatchup: { findMany: h.weeks } } }))
 vi.mock('@/lib/core-app/sleeperRailFeed', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/core-app/sleeperRailFeed')>(), sleeperRailFeed: h.feed,
 }))
@@ -72,5 +72,30 @@ describe('authenticated live rail endpoint', () => {
   it('reports provider failure instead of inventing zeros', async () => {
     h.feed.mockRejectedValue(new Error('Offline'))
     expect((await GET(request('mine'))).status).toBe(503)
+  })
+
+  /*
+   * Owner's report 2026-10-30: an imported guillotine league read "T-7th of 18" mid-week. The refresh ranked
+   * every roster the provider lists, chopped ones included, and took the format from `guillotineMode`, which
+   * is false on every imported guillotine league.
+   */
+  it('ranks a guillotine league (known by its type) in the live field, with the weeks left', async () => {
+    h.teams.mockReset()
+    h.teams.mockResolvedValueOnce([{ externalId: '1', league: { id: 'mine', platform: 'sleeper', platformLeagueId: '123456789012345678', guillotineMode: false, leagueType: 'guillotine', settings: {} } }])
+      .mockResolvedValueOnce([1, 2, 3, 4, 5].map((n) => ({ leagueId: 'mine', externalId: String(n), teamName: `Team ${n}` })))
+    // Week 1: roster 5 was lowest, so it is out; the season runs to week 3.
+    h.weeks.mockResolvedValue([
+      ...[[1, 90], [2, 80], [3, 70], [4, 60], [5, 50]].map(([r, p]) => ({ week: 1, rosterId: String(r), pointsFor: p })),
+      ...[1, 2, 3, 4, 5].flatMap((r) => [{ week: 2, rosterId: String(r), pointsFor: 0 }, { week: 3, rosterId: String(r), pointsFor: 0 }]),
+    ])
+    h.feed.mockImplementation(async (path: string) => {
+      if (path === 'state/nfl') return { season: '2026', week: 2, season_type: 'regular' }
+      if (path.includes('/matchups/')) return [1, 2, 3, 4, 5].map((n) => ({ roster_id: n, matchup_id: n, points: ({ 1: 40, 2: 55, 3: 61, 4: 22, 5: 0 } as Record<number, number>)[n] }))
+      return { sport: 'nfl', season: '2026' }
+    })
+    const data = await (await GET(request('mine'))).json()
+    expect(h.weeks.mock.calls[0][0].where).toEqual({ leagueId: '123456789012345678', seasonYear: 2026 })
+    expect(data.updates.mine.standing).toMatchObject({ outOf: 4, rank: 3, elimination: true, weeksLeft: 2, cutTeam: 'Team 4', cutTeamValue: 22 })
+    expect(data.updates.mine.fieldStanding).toMatchObject({ outOf: 4, played: 4 })
   })
 })

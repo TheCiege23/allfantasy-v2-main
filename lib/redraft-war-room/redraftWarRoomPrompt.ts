@@ -13,7 +13,7 @@ import type { LineupResult } from './redraftLineupEngine'
 import type { WaiverResult } from './redraftWaiverEngine'
 import type { TradeAnalysis, TradeFinderResult } from './redraftTradeEngine'
 
-export interface RedraftWarRoomPromptInputs {
+interface RedraftWarRoomPromptInputs {
   context: RedraftWarRoomContext
   needs?: TeamNeedsResult | null
   lineup?: LineupResult | null
@@ -122,6 +122,7 @@ export function buildRedraftWarRoomPrompt(inputs: RedraftWarRoomPromptInputs): s
     lines.push('')
     lines.push(`=== UPCOMING MATCHUP (W${m.week}, ${m.status}) ===`)
     lines.push(`opponentRosterId=${m.opponentRosterId ?? 'n/a'} homeProj=${m.homeProjected ?? 'n/a'} awayProj=${m.awayProjected ?? 'n/a'}`)
+    if (m.extraMatchup) lines.push(m.extraMatchup)
   }
 
   if (inputs.needs) {

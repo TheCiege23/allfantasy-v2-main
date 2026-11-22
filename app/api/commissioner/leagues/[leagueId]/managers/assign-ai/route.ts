@@ -1,10 +1,11 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { updateDraftUISettings } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { applyChimmyAutopilot } from '@/lib/inactive-manager/inactiveManagerService'
 
 type SessionWithUser = { user?: { id?: string; email?: string | null } } | null
 
@@ -19,11 +20,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const gate = await requireFeatureEntitlement({
     userId,
@@ -61,7 +59,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     },
     data: {
       externalId: roster.id,
-      ownerName: 'AI Manager',
+      ownerName: 'Chimmy Manager',
     },
   })
 
@@ -70,10 +68,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     orphanDrafterMode: 'ai',
   })
 
+  // The seat is empty now; Chimmy drafts it and runs it for the season (lib/inactive-manager), until a
+  // real manager takes it. Handed over AFTER the seat is emptied, so it is stamped with the empty seat as
+  // its owner and is not mistaken for a team that changed hands.
+  const chimmy = await applyChimmyAutopilot(params.leagueId, userId, roster.id, undefined)
+
   return NextResponse.json({
     status: 'ok',
     rosterId: roster.id,
     orphanPlatformUserId: orphanId,
     aiManagerEnabled: true,
+    chimmyManages: chimmy.ok,
+    ...(chimmy.ok ? {} : { chimmyError: chimmy.error }),
   })
 }

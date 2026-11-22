@@ -5,7 +5,7 @@ import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import {
   generateWeeklyGuillotineRecap,
   generateEliminationPage,
-  generateWaiverWarRecap,
+  generateChopWeekWaiverRecap,
   generateFinalStagePreview,
 } from '@/lib/guillotine/ai/storylineGenerator'
 
@@ -33,7 +33,7 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-describe('Guillotine config and storyline gaps', () => {
+describe('Guilly config and storyline gaps', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -93,7 +93,7 @@ describe('Guillotine config and storyline gaps', () => {
       { playerName: 'Player B', releaseStatus: 'pending', claimedByRosterId: null, winningBid: null },
     ])
 
-    const story = await generateWaiverWarRecap('season-1', 7)
+    const story = await generateChopWeekWaiverRecap('season-1', 7)
     expect(story.body).toContain('1 players were claimed and 1 remain available')
     expect(story.body).toContain('Player A for $42')
   })

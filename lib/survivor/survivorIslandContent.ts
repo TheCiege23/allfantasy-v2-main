@@ -16,16 +16,6 @@ export const SURVIVOR_WELCOME_BLURB = [
   'Twists and advantages can appear during the season. Chimmy runs the Elimination Council and publishes the Torch Ceremony.',
 ].join(' ')
 
-/**
- * Default island copy is tribe-count first — the season headline (Heroes vs Villains, Rooks vs Vets, etc.)
- * is set by the commissioner, not assumed here.
- */
-export const SURVIVOR_TRIBE_THEME_CONTEXT = [
-  'This format uses 2–4 tribes (set in Survivor settings). Your commissioner names the season theme and tribes.',
-  'Some leagues run “Rooks vs Vets” or “Heroes vs Villains” — those are flavor, not a required default.',
-  'Tribes form after the draft (random or commissioner pattern). Then it’s tribe chat, side chats, and alliances until merge.',
-].join(' ')
-
 export const SURVIVOR_TIPS = [
   'This may be the most active league you’re in — tribe chat, side chats, and DMs all matter.',
   'Early votes often target the least active; don’t go quiet.',
@@ -44,12 +34,6 @@ export const SURVIVOR_CONDUCT_BULLETS = [
   'Spectator / “ghost” viewers may be allowed by the host — they must not tip active players.',
 ] as const
 
-/** Survivor “pool” (conference / pick-em style) — informational */
-export const SURVIVOR_POOL_RULES = [
-  'Some seasons run a Survivor-style pick pool (e.g. pick a winner from a chosen conference each week).',
-  'Wrong picks may cost advantages; many formats allow a limited number of “revives” before you’re locked out — your commissioner sets the exact rules.',
-].join(' ')
-
 /** Token Pool (parallel path for eliminated players) */
 export const SURVIVOR_TOKEN_POOL_BLURB = [
   'Exiled managers earn tokens from verified results for their separate weekly roster.',
@@ -62,7 +46,7 @@ export const EXILE_ISLAND_RULES = {
   intro:
     'Voted out isn’t always the end. On Exile, you can fight to return while the main island keeps playing.',
   lineup:
-    'Each week starts with an empty Exile roster. Claim an NFL quarterback, NBA point guard, or NHL goalie to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.',
+    'Each week starts with an empty Exile roster. Claim an NFL quarterback, NBA point guard, NHL goalie, or MLB pitcher to reserve that real-world team, then claim only that team’s players. All players return to waivers after the week.',
   tokens:
     'Verified weekly Exile scoring awards tokens. At the configured deadline, the highest balance meeting the minimum takes the single return spot.',
   bossReset:
@@ -70,10 +54,6 @@ export const EXILE_ISLAND_RULES = {
   conduct:
     'Same conduct rules as the main island: no harassment. Exile rosters and token results follow the published league rules.',
 } as const
-
-/** Example prize copy — commissioner may change */
-export const SURVIVOR_PRIZE_EXAMPLES =
-  'Example KB season prizes: top prize and runner-up rebates were posted by the host — your AllFantasy league may use different stakes.'
 
 /**
  * Appended to Survivor AI system prompts so Chimmy/host voice matches the product spec:

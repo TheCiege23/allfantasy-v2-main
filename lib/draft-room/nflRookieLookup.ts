@@ -109,7 +109,7 @@ async function loadYearsExpFromDb(): Promise<NflRookieLookup | null> {
   }
 }
 
-export type RookieMetadataRow = {
+type RookieMetadataRow = {
   yearsExp: number | null
   /** Sleeper's player_id when present; useful for diagnostics. */
   sleeperId?: string | null
@@ -129,7 +129,7 @@ export type NflRookieLookup = {
 /** Where `years_exp` map rows were materialized (for NFL rookie diagnostics). */
 export type NflRookieFetchSource = 'sleeper_live' | 'sportsdatacache_compact'
 
-export type NflRookieLookupResult = {
+type NflRookieLookupResult = {
   lookup: NflRookieLookup
   fetchSource: NflRookieFetchSource
 }
@@ -159,8 +159,8 @@ function normPos(pos: string | null | undefined): string {
  * persisted compact map in `SportsDataCache`. On Sleeper success the compact
  * map is written to `SportsDataCache` asynchronously (fire-and-forget).
  */
-export async function loadNflRookieLookup(): Promise<NflRookieLookupResult> {
-  if (dbFirstMode.useDbCacheOnly || dbFirstMode.disableLiveApiOnPageLoad) {
+export async function loadNflRookieLookup(options: { allowLive?: boolean } = {}): Promise<NflRookieLookupResult> {
+  if (options.allowLive === false || dbFirstMode.useDbCacheOnly || dbFirstMode.disableLiveApiOnPageLoad) {
     const cached = await loadYearsExpFromDb()
     return { lookup: cached ?? EMPTY_LOOKUP, fetchSource: 'sportsdatacache_compact' }
   }

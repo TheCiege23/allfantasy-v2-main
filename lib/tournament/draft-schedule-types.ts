@@ -5,7 +5,7 @@
 
 export type DraftPhaseKey = 'startup' | 'redraft_first' | 'redraft_finals'
 
-export type DraftScheduleMode = 'uniform' | 'per_league' | 'grouped'
+type DraftScheduleMode = 'uniform' | 'per_league' | 'grouped'
 
 export type PhaseScheduleFields = {
   scheduledAt: string | null
@@ -29,12 +29,6 @@ export type DraftScheduleV1 = {
 }
 
 export const DRAFT_PHASE_KEYS: DraftPhaseKey[] = ['startup', 'redraft_first', 'redraft_finals']
-
-export const DRAFT_PHASE_LABEL: Record<DraftPhaseKey, string> = {
-  startup: 'Startup draft',
-  redraft_first: 'First cut / redraft',
-  redraft_finals: 'Finals / second redraft',
-}
 
 export function defaultPhaseSchedule(): PhaseScheduleFields {
   return {

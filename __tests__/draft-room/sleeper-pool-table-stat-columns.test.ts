@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { applyPoolSort, sortValueForKey, type PoolSortPlayer } from '@/components/app/draft-room/SleeperPoolSort'
 import {
@@ -30,7 +32,7 @@ describe('sleeper pool table layout — headers by sport', () => {
         'rk',
         'player',
         'adp',
-        'aiAdp',
+        'afAdp',
         'bye',
         'pts',
         'avg',
@@ -57,7 +59,7 @@ describe('sleeper pool table layout — headers by sport', () => {
 
   it('NBA exposes points / rebounds / assists / steals / blocks / threes', () => {
     const statCols = buildSleeperPoolTableLayout('NBA').statDefs.map((d) => d.key)
-    expect(statCols).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
+    expect(statCols).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'fg_pct', 'ft_pct', 'gp', 'nba_proj'])
   })
 
   it('MLB hitter vs pitcher columns from position hint', () => {
@@ -106,11 +108,12 @@ describe('cells — missing stats render em dash, not zero', () => {
   })
 })
 
-describe('ADP vs AI ADP remain distinct columns in layout', () => {
-  it('both adp and aiAdp precede stat section', () => {
+describe('market ADP and AF ADP remain distinct columns in layout', () => {
+  it('both adp and afAdp precede stat section, and AI ADP is no longer a column', () => {
     const keys = layoutKeys('NFL')
+    expect(keys).not.toContain('aiAdp')
     const iAdp = keys.indexOf('adp')
-    const iAi = keys.indexOf('aiAdp')
+    const iAi = keys.indexOf('afAdp')
     const iPts = keys.indexOf('pts')
     expect(iAdp).toBeGreaterThan(-1)
     expect(iAi).toBeGreaterThan(-1)
@@ -158,12 +161,35 @@ describe('buildSleeperPoolTableLayout — LEFT @ column', () => {
     expect(buildSleeperPoolTableLayout('NBA', undefined, { leftAtPickLabel: null }).columns.map((c) => c.key)).not.toContain('leftAt')
   })
 
-  it('follows AI ADP, carries the pick label, and widens the table', () => {
+  it('follows AF ADP, carries the pick label, and widens the table', () => {
     const plain = buildSleeperPoolTableLayout('NFL')
     const withLeft = buildSleeperPoolTableLayout('NFL', undefined, { leftAtPickLabel: '4.16' })
     const keys = withLeft.columns.map((c) => c.key)
-    expect(keys.indexOf('leftAt')).toBe(keys.indexOf('aiAdp') + 1)
+    expect(keys.indexOf('leftAt')).toBe(keys.indexOf('afAdp') + 1)
     expect(withLeft.columns.find((c) => c.key === 'leftAt')?.label).toBe('LEFT @ 4.16')
     expect(withLeft.minWidth).toBe(plain.minWidth + 76)
+  })
+})
+
+describe('room v2: the pool row leads with its actions', () => {
+  it('puts the actions column first, left-aligned, in every sport', () => {
+    for (const sport of ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'MLB', 'NHL', 'SOCCER']) {
+      const cols = buildSleeperPoolTableLayout(sport).columns
+      expect(cols[0]).toMatchObject({ key: 'actions', align: 'left' })
+      expect(cols.filter((c) => c.key === 'actions')).toHaveLength(1)
+    }
+  })
+
+  it('renders Draft (or Nominate) before queue and compare inside the cell', () => {
+    const src = readFileSync(resolve(__dirname, '..', '..', 'components/app/draft-room/SleeperPoolTable.tsx'), 'utf8')
+    const cell = src.slice(src.indexOf("case 'actions':"), src.indexOf('default: {', src.indexOf("case 'actions':")))
+    const nominate = cell.indexOf('-nominate`}')
+    const draft = cell.indexOf('-draft`}')
+    const queue = cell.indexOf('-queue`}')
+    const compare = cell.indexOf('-compare`}')
+    expect(nominate).toBeGreaterThan(-1)
+    expect(Math.max(nominate, draft)).toBeLessThan(queue)
+    expect(queue).toBeLessThan(compare)
+    expect(cell).toMatch(/<Cell key=\{col\.key\} width=\{col\.width\} align=\{col\.align\}/)
   })
 })

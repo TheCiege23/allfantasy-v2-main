@@ -24,12 +24,12 @@ vi.mock('@/lib/tokens/client-confirm', () => ({ confirmTokenSpend: vi.fn(), prev
 import { ChimmyChatPageClient } from '@/app/chimmy/chat/ChimmyChatPageClient'
 import { ChatMessageList, type ChatListMessage } from '@/components/core-app/comms/ChatMessageList'
 
-const LEAGUES = [{ id: 'L1', name: 'Test Guillotine', platform: 'sleeper', platformLeagueId: '99', isCommissioner: false, teamCount: 12 }]
-const GROUNDING = { grounded: true, leagueId: 'L1', leagueName: 'Test Guillotine', platform: 'sleeper', season: 2026, lastSyncedAt: null }
+const LEAGUES = [{ id: 'L1', name: 'Test Guilly', platform: 'sleeper', platformLeagueId: '99', isCommissioner: false, teamCount: 12 }]
+const GROUNDING = { grounded: true, leagueId: 'L1', leagueName: 'Test Guilly', platform: 'sleeper', season: 2026, lastSyncedAt: null }
 
-const SAVE_CARD = { version: 1, leagueName: 'Test Guillotine', outcome: 'save', elimination: true, remaining: 150, seasonBudget: 200,
+const SAVE_CARD = { version: 1, leagueName: 'Test Guilly', outcome: 'save', elimination: true, remaining: 150, seasonBudget: 200,
   lineupAssumed: false, valuesAsOf: '2026-09-28', bids: [], moreCount: 0, nonUpgrades: 0, pricedCount: 41, waiverLink: null }
-const BID_CARD = { version: 1, leagueName: 'Test Guillotine', outcome: 'bid', elimination: true, remaining: 150, seasonBudget: 200,
+const BID_CARD = { version: 1, leagueName: 'Test Guilly', outcome: 'bid', elimination: true, remaining: 150, seasonBudget: 200,
   lineupAssumed: false, valuesAsOf: '2026-09-28',
   bids: [
     { name: 'Casey Runner', position: 'RB', ceiling: 31, sharePct: 62, displacedName: 'Jordan Slow' },
@@ -128,7 +128,7 @@ describe('the Chimmy panel shows the engine\'s call above the prose', () => {
    * SAFE / OUT (2026-09-28): a guillotine week that is DECIDED, from the settle verdict the matchup
    * tool read. Good news in the good tone, bad news in the bad one — colour AND words.
    */
-  it('a decided guillotine week reads SAFE in the good tone, and OUT in the bad one', async () => {
+  it('a decided Guilly week reads SAFE in the good tone, and OUT in the bad one', async () => {
     render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
     answers.push({ response: 'You cannot be chopped this week.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['get_my_matchup'],
       verdict: { key: 'safe', source: 'elimination_settle', detail: 'Week decided' } } })
@@ -191,5 +191,50 @@ describe('a private @chimmy reply in league chat', () => {
   it('shows nothing for a member\'s message carrying the same metadata — only Chimmy-marked rows', () => {
     list([row({ authorId: 'sam', authorName: 'Sam', metadata: { decision: { status: 'ready', verdict: { key: 'start', source: 'lineup_engine', detail: 'X' } } } })])
     expect(screen.queryByTestId('chimmy-verdict')).toBeNull()
+  })
+})
+
+/*
+ * AF Pro depth (lib/chimmy/chimmyDepth.ts, owner's choices 2026-11-16): a free answer whose question
+ * needed a Pro tool gets ONE line and a Get AF Pro button; an answer that quoted the user's earlier
+ * chats gets a "From your past chats" chip. Both from meta the server built from what the executor
+ * did — never from the prose, which is pinned by the second case.
+ */
+describe('AF Pro depth on the panel', () => {
+  it('shows the upgrade line and button under a free answer the executor refused a Pro tool for', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'You are 7-3 and two games up on the cut line.', meta: {
+      leagueGrounding: GROUNDING, toolsUsed: ['get_league_standings'], proUpsell: ['get_playoff_outlook', 'find_trade_ideas', 'not_a_tool'] } })
+    const turn = await ask('What are my playoff odds?', 'You are 7-3 and two games up on the cut line.')
+    const upsell = within(turn).getByTestId('chimmy-pro-upsell')
+    expect(upsell.textContent).toContain('AF Pro adds the playoff simulator and trade ideas.')
+    expect(within(upsell).getByRole('link', { name: 'Get AF Pro' }).getAttribute('href')).toBe('/upgrade?plan=af_pro&from=chimmy-pro-tool')
+    expect(within(turn).queryByTestId('chimmy-past-chats')).toBeNull()
+  })
+
+  it('prose that mentions AF Pro, with no refusal in meta, gets no button', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'AF Pro adds the playoff simulator.', meta: { leagueGrounding: GROUNDING, toolsUsed: [] } })
+    const turn = await ask('Odds?', 'AF Pro adds the playoff simulator.')
+    expect(within(turn).queryByTestId('chimmy-pro-upsell')).toBeNull()
+  })
+
+  it('marks an answer that recalled past chats — live, and again from the stored transcript', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'On Nov 2 I said hold Bijan.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['recall_past_chats'], recalledPastChats: true } })
+    const turn = await ask('What did you tell me about Bijan?', 'On Nov 2 I said hold Bijan.')
+    expect(within(turn).getByTestId('chimmy-past-chats').textContent).toBe('From your past chats')
+    expect(within(turn).queryByTestId('chimmy-pro-upsell')).toBeNull()
+    cleanup()
+
+    // A new tab: no sessionStorage, so the chip below came from the stored row (readStoredDisplay).
+    sessionStorage.clear()
+    historyTurns = [
+      { id: 'hist-0', role: 'you', text: 'What did you tell me about Bijan?', leagueId: 'L1' },
+      { id: 'hist-1', role: 'chimmy', text: 'On Nov 2 I said hold Bijan.', leagueId: 'L1', grounding: GROUNDING, recalledPastChats: true },
+    ]
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    const stored = (await screen.findByText('On Nov 2 I said hold Bijan.')).closest('.af-cm-turn') as HTMLElement
+    expect(within(stored).getByTestId('chimmy-past-chats')).toBeTruthy()
   })
 })

@@ -17,6 +17,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig, DEFAULT_END_WEEK_BY_SPORT } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { countSeatsHeldByPeople } from '@/lib/league/leagueSeats'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
@@ -86,6 +87,8 @@ export type GuillotineSeatState = {
   eliminationStartWeek: number
   eliminationEndWeek: number
   teamsPerChop: number
+  /** Teams left when chops stop, and the final weeks after (endgameRules.ts). */
+  endgame?: { threshold: number; cumulativePeriods: number }
 }
 
 /** Native guillotine leagues only; null for everything else (callers then behave as before). */
@@ -94,7 +97,7 @@ export async function loadGuillotineSeatState(leagueId: string): Promise<Guillot
     where: { id: leagueId },
     select: {
       id: true, name: true, userId: true, sport: true, season: true, leagueSize: true, platform: true,
-      guillotineMode: true, leagueVariant: true, survivorMode: true,
+      guillotineMode: true, leagueVariant: true, survivorMode: true, settings: true, guillotineEndgame: true,
     },
   })
   if (!league) return null
@@ -122,6 +125,7 @@ export async function loadGuillotineSeatState(leagueId: string): Promise<Guillot
     eliminationStartWeek: config.eliminationStartWeek,
     eliminationEndWeek: config.eliminationEndWeek ?? DEFAULT_END_WEEK_BY_SPORT[sport as keyof typeof DEFAULT_END_WEEK_BY_SPORT] ?? 18,
     teamsPerChop: config.teamsPerChop,
+    endgame: resolveGuillotineEndgame(league),
   }
 }
 
@@ -140,6 +144,7 @@ export async function guillotineSeatsAt(
     eliminationEndWeek: state.eliminationEndWeek,
     teamsPerChop: state.teamsPerChop,
     draftWeek: week ?? 0,
+    endgame: state.endgame,
   })
   const decision = decideGuillotineSeats({ configuredSize, claimed: state.claimed, maxTeams: window.maxTeams })
   return { window, decision, weekKnown: week != null }
@@ -338,13 +343,13 @@ export async function holdGuillotineScheduledDraft(
   state: GuillotineSeatState,
   plan: Extract<GuillotineScheduledPlan, { action: 'roll' | 'blocked_floor' }>,
 ): Promise<GuillotineHoldOutcome> {
-  const leagueName = state.leagueName?.trim() || 'your guillotine league'
+  const leagueName = state.leagueName?.trim() || 'your Guilly league'
   if (plan.action === 'blocked_floor') {
     await notifyCommissionerOnce(state, {
       type: 'guillotine_draft_below_floor',
       dedupeKey: `guillotine_draft_below_floor:${state.leagueId}:${state.draftAt?.toISOString() ?? 'none'}`,
       title: `${leagueName} cannot start yet`,
-      body: `${state.claimed}/${plan.seats} spots filled. A guillotine league needs at least ${GUILLOTINE_MIN_TEAMS} teams that can still be chopped before the last chop week, so the draft is on hold. Fill the open spots and it starts on the next check.`,
+      body: `${state.claimed}/${plan.seats} spots filled. A Guilly league needs at least ${GUILLOTINE_MIN_TEAMS} teams that can still be chopped before the last chop week, so the draft is on hold. Fill the open spots and it starts on the next check.`,
       severity: 'high',
     })
     return 'blocked'
@@ -397,7 +402,7 @@ export async function prepareGuillotineSeatsForStart(
     await notifyCommissionerOnce(state, {
       type: 'guillotine_claimed_exceeds_chops',
       dedupeKey: `guillotine_claimed_exceeds_chops:${state.leagueId}`,
-      title: `${state.leagueName?.trim() || 'Your guillotine league'} has more teams than chops left`,
+      title: `${state.leagueName?.trim() || 'Your Guilly league'} has more teams than chops left`,
       body: `${plan.claimed} teams are claimed but only ${plan.supportedSeats} can be played down to one by the last chop week. Every claimed team stays; the season will end with more than one team standing unless the chop settings change.`,
       severity: 'high',
     }).catch(() => false)

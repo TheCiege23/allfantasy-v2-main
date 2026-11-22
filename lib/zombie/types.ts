@@ -16,6 +16,7 @@ export interface ZombieLeagueConfigLoaded {
   infectionLossToWhisperer: boolean
   infectionLossToZombie: boolean
   serumReviveCount: number
+  autoSerumRevive: boolean
   serumAwardHighScore: boolean
   serumAwardOnBashMaul: boolean
   serumUseBeforeLastStarter: boolean
@@ -35,28 +36,6 @@ export interface WeaponThreshold {
   weaponType: string
 }
 
-/** Per-roster status row. */
-export interface ZombieLeagueTeamRow {
-  id: string
-  leagueId: string
-  zombieLeagueId: string | null
-  rosterId: string
-  status: ZombieOwnerStatus
-  weekBecameZombie: number | null
-  killedByRosterId: string | null
-  revivedAt: Date | null
-}
-
-/** Matchup result (team space: LeagueTeam.id). */
-export interface ZombieMatchupResult {
-  teamA: string
-  teamB: string
-  scoreA: number
-  scoreB: number
-  winnerTeamId: string | null
-  matchupId?: string
-}
-
 /** Roster <-> Team mapping for a league (by draft order or index). */
 export interface RosterTeamMap {
   rosterIdToTeamId: Map<string, string>
@@ -68,25 +47,6 @@ export interface ZombieInfectionOutcome {
   leagueId: string
   week: number
   infected: { survivorRosterId: string; infectedByRosterId: string; matchupId?: string }[]
-}
-
-/** Universe level row. */
-export interface ZombieUniverseLevelRow {
-  id: string
-  universeId: string
-  name: string
-  rankOrder: number
-  leagueCount: number
-}
-
-/** Universe league row (league in universe). */
-export interface ZombieUniverseLeagueRow {
-  id: string
-  universeId: string
-  levelId: string
-  leagueId: string
-  name: string | null
-  orderInLevel: number
 }
 
 /** Audit event types (deterministic). */

@@ -24,6 +24,10 @@ const ASK = {
   preview: { tokenCost: 30, currentBalance: 120, featureLabel: 'League storyline' },
 }
 
+function quotedAsk(init: RequestInit) {
+  return json(409, { ...ASK, tokenQuote: 'signed-test-price', paidToolRequestId: new Headers(init.headers).get('x-paid-tool-request-id') })
+}
+
 function sentBodies(fetchImpl: ReturnType<typeof vi.fn>) {
   return fetchImpl.mock.calls.map((c) => JSON.parse(String((c[1] as RequestInit).body)))
 }
@@ -40,7 +44,7 @@ describe('postWithTokenConfirm', () => {
   })
 
   it('asks with the cost named, and only a yes sends the confirmation', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(json(409, ASK)).mockResolvedValueOnce(json(200, { narrative: 'ok' }))
+    const fetchImpl = vi.fn().mockImplementationOnce((_url, init) => Promise.resolve(quotedAsk(init))).mockResolvedValueOnce(json(200, { narrative: 'ok' }))
     const confirm = vi.fn().mockReturnValue(true)
     const r = await postWithTokenConfirm('/x', { eventId: 'e1' }, { fetchImpl, confirm })
     expect(confirm).toHaveBeenCalledWith('League storyline uses 30 tokens (you have 120). Continue?')
@@ -53,14 +57,14 @@ describe('postWithTokenConfirm', () => {
   })
 
   it('a no spends nothing: no second call, and the caller is told it was declined', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(json(409, ASK))
+    const fetchImpl = vi.fn().mockImplementation((_url, init) => Promise.resolve(quotedAsk(init)))
     const r = await postWithTokenConfirm('/x', { eventId: 'e1' }, { fetchImpl, confirm: () => false })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(r.declined).toBe(true)
   })
 
   it('an async confirm (a dialog) is awaited', async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce(json(409, ASK)).mockResolvedValueOnce(json(200, {}))
+    const fetchImpl = vi.fn().mockImplementationOnce((_url, init) => Promise.resolve(quotedAsk(init))).mockResolvedValueOnce(json(200, {}))
     await postWithTokenConfirm('/x', {}, { fetchImpl, confirm: async () => true })
     expect(sentBodies(fetchImpl)[1]).toEqual({ confirmTokenSpend: true })
   })
@@ -82,7 +86,7 @@ describe('postWithTokenConfirm', () => {
   })
 
   it('without a browser, the default confirm says no rather than spending', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(json(409, ASK))
+    const fetchImpl = vi.fn().mockImplementation((_url, init) => Promise.resolve(quotedAsk(init)))
     const r = await postWithTokenConfirm('/x', {}, { fetchImpl })
     expect(r.declined).toBe(true)
     expect(fetchImpl).toHaveBeenCalledTimes(1)

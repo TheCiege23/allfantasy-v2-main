@@ -5,7 +5,7 @@ export default async function SurvivorCommissionerPage({ params }: { params: Pro
   const { leagueId } = await params
   return (
     <div className="mx-auto max-w-6xl px-3 pb-16 pt-4 sm:px-4">
-      <Suspense fallback={<div className="p-8 text-center text-white/50">Loading command center…</div>}>
+      <Suspense fallback={<div className="p-8 text-center text-[var(--survivor-text-dim)]">Loading command center…</div>}>
         <SurvivorCommissionerDashboard leagueId={leagueId} />
       </Suspense>
     </div>

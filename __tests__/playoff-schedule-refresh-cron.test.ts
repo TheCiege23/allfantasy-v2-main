@@ -1,11 +1,12 @@
 import { readFileSync } from "fs"
 import { resolve } from "path"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 const serviceMocks = vi.hoisted(() => ({
   refreshPlayoffScheduleMetadataForChallenge: vi.fn(),
   syncPlayoffChallengeSeries: vi.fn(),
+  sweepBracketExperience: vi.fn(),
   applyPlayoffSeedsToChallenges: vi.fn(),
   prisma: {
     playoffBracketChallenge: {
@@ -19,10 +20,11 @@ vi.mock("@/lib/prisma", () => ({ prisma: serviceMocks.prisma }))
 vi.mock("@/lib/playoffs/playoffSeeding", () => ({
   applyPlayoffSeedsToChallenges: serviceMocks.applyPlayoffSeedsToChallenges,
 }))
-vi.mock("@/lib/playoffs/playoffSeriesSyncService", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/playoffs/playoffSeriesSyncService")>()
+vi.mock("@/lib/playoffs/bracketExperienceService", () => ({
+  sweepBracketExperience: serviceMocks.sweepBracketExperience,
+}))
+vi.mock("@/lib/playoffs/playoffSeriesSyncService", () => {
   return {
-    ...actual,
     refreshPlayoffScheduleMetadataForChallenge: serviceMocks.refreshPlayoffScheduleMetadataForChallenge,
     syncPlayoffChallengeSeries: serviceMocks.syncPlayoffChallengeSeries,
   }
@@ -64,7 +66,11 @@ describe("playoff schedule refresh cron route", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubEnv("CRON_SECRET", "cron-secret")
-    serviceMocks.prisma.playoffBracketChallenge.findMany.mockResolvedValue([{ id: "nba-1" }, { id: "nhl-1" }])
+    serviceMocks.prisma.playoffBracketChallenge.findMany.mockImplementation(async ({ where }: any) =>
+      where?.isTestMode === false
+        ? [{ id: "nba-1", sport: "nba", seasonYear: 2026 }, { id: "nhl-1", sport: "nhl", seasonYear: 2026 }]
+        : [{ id: "nba-1" }, { id: "nhl-1" }])
+    serviceMocks.sweepBracketExperience.mockResolvedValue({ processed: 2, alerts: 1, failures: 0 })
     serviceMocks.refreshPlayoffScheduleMetadataForChallenge.mockImplementation(({ challengeId }) =>
       Promise.resolve(mockRefreshResult(challengeId, challengeId.startsWith("nhl") ? "nhl" : "nba"))
     )
@@ -72,6 +78,7 @@ describe("playoff schedule refresh cron route", () => {
       challengesSeeded: 0, slotsFilled: 0, picksMigrated: 0, slotsUnresolved: 0, warnings: [], errors: [],
     })
   })
+  afterEach(() => vi.useRealTimers())
 
   it("rejects missing or invalid auth", async () => {
     const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
@@ -195,6 +202,35 @@ describe("playoff schedule refresh cron route", () => {
     await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=results", "cron-secret"))
     expect(serviceMocks.refreshPlayoffScheduleMetadataForChallenge).not.toHaveBeenCalled()
     expect(serviceMocks.syncPlayoffChallengeSeries).toHaveBeenCalledTimes(1)
+  })
+
+  it("runs push and in-app bracket observations without provider sync on alert-only fires", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=alerts", "cron-secret"))
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.bracketAlerts).toEqual({ processed: 4, alerts: 2, failures: 0 })
+    expect(serviceMocks.applyPlayoffSeedsToChallenges).not.toHaveBeenCalled()
+    expect(serviceMocks.refreshPlayoffScheduleMetadataForChallenge).not.toHaveBeenCalled()
+    expect(serviceMocks.syncPlayoffChallengeSeries).not.toHaveBeenCalled()
+    expect(serviceMocks.sweepBracketExperience).toHaveBeenCalledWith("nba", 2026, ["nba-1"])
+    expect(serviceMocks.sweepBracketExperience).toHaveBeenCalledWith("nhl", 2026, ["nhl-1"])
+  })
+
+  it("uses the hourly provider window and alert-only work on the same scheduled cron slot", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-01T16:00:00Z"))
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=auto", "cron-secret"))
+    expect(serviceMocks.syncPlayoffChallengeSeries).toHaveBeenCalled()
+    vi.clearAllMocks()
+    serviceMocks.prisma.playoffBracketChallenge.findMany.mockImplementation(async ({ where }: any) =>
+      where?.isTestMode === false ? [{ id: "nfl-1", sport: "nfl", seasonYear: 2026 }] : [])
+    serviceMocks.sweepBracketExperience.mockResolvedValue({ processed: 1, alerts: 1, failures: 0 })
+    vi.setSystemTime(new Date("2026-11-01T16:15:00Z"))
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=auto", "cron-secret"))
+    expect(serviceMocks.syncPlayoffChallengeSeries).not.toHaveBeenCalled()
+    expect(serviceMocks.sweepBracketExperience).toHaveBeenCalledWith("nfl", 2026, ["nfl-1"])
   })
 
   it("isolates a failing challenge instead of losing the rest of the sweep", async () => {
@@ -333,14 +369,14 @@ describe("playoff schedule refresh cron route", () => {
 })
 
 describe("playoff schedule refresh cron Vercel config", () => {
-  it("registers the ESPN schedule refresh during 16:00-19:00 UTC", () => {
+  it("registers 15-minute alerts while retaining the hourly provider window", () => {
     const root = resolve(__dirname, "..")
     const json = JSON.parse(readFileSync(resolve(root, "cron-schedule.json"), "utf8")) as { crons?: Array<{ path: string; schedule: string }> }
-    const entry = json.crons?.find((cron) => cron.path === "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn")
+    const entry = json.crons?.find((cron) => cron.path === "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto")
 
     expect(entry).toEqual({
-      path: "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn",
-      schedule: "0 16-19 * * *",
+      path: "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn&job=auto",
+      schedule: "*/15 * * * *",
     })
   })
 })

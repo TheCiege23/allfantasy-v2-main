@@ -103,9 +103,9 @@ describe('daily lock — NBA', () => {
     expect(warnings).toEqual([])
   })
 
-  it('daily mode says out loud that scoring is still weekly', async () => {
+  it('daily mode says each day is scored on that day\'s starters', async () => {
     const { warnings } = await nbaLocks('2026-10-21T13:00:00.000Z', DAILY_ON)
-    expect(warnings.some((w) => /daily lineup lock/i.test(w) && /weekly/i.test(w))).toBe(true)
+    expect(warnings.some((w) => /daily lineup lock/i.test(w) && /each day is scored/i.test(w))).toBe(true)
   })
 })
 

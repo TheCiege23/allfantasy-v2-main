@@ -35,10 +35,6 @@ export const YAHOO_AUTH_URL = 'https://api.login.yahoo.com/oauth2/request_auth'
  */
 export const YAHOO_STATE_COOKIE_NAMES = ['yahoo_oauth_state', 'yahoo_league_oauth_state'] as const
 
-export function getYahooClientId(): string | undefined {
-  return process.env.YAHOO_CLIENT_ID
-}
-
 /**
  * The redirect URI to send Yahoo, and to expect back.
  *
@@ -182,7 +178,6 @@ export function sanitizeYahooReturnTo(value: string | null | undefined): string 
 
   return trimmed
 }
-
 
 /**
  * Cookie domain for the OAuth state.

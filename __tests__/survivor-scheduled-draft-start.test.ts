@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   due: vi.fn(), session: vi.fn(), pool: vi.fn(), prewarm: vi.fn(), start: vi.fn(), lock: vi.fn(),
   notifyStart: vi.fn(), enqueue: vi.fn(), priorNotice: vi.fn(), league: vi.fn(),
+  readiness: vi.fn(), alert: vi.fn(), report: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -17,6 +18,9 @@ vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({
 }))
 vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ startDraftSession: m.start }))
 vi.mock('@/lib/draft/draftLock', () => ({ withControlLock: m.lock }))
+vi.mock('@/lib/survivor/survivorDraftStartReadiness', () => ({ getSurvivorDraftStartReadiness: m.readiness }))
+vi.mock('@/lib/survivor/survivorCommissionerAlerts', () => ({ notifySurvivorCommissionerOnce: m.alert, SURVIVOR_SEATS_ALERT_LEAD_MS: 24 * 60 * 60 * 1000 }))
+vi.mock('@/lib/survivor/survivorAutomationReporting', () => ({ reportSurvivorAutomationError: m.report }))
 
 import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvivorDrafts'
 
@@ -32,6 +36,41 @@ describe('scheduled Survivor draft start', () => {
     m.notifyStart.mockResolvedValue(undefined)
     m.priorNotice.mockResolvedValue(null)
     m.league.mockResolvedValue({ userId: 'commish' })
+    m.readiness.mockResolvedValue({ ready: true })
+    m.alert.mockResolvedValue({ sent: true, notificationId: 'n' })
+  })
+  it('warns the commissioner a day ahead when a scheduled draft could not start, once per draft time', async () => {
+    const now = new Date('2026-10-20T19:00:00Z')
+    const draftDateUtc = new Date('2026-10-21T18:00:00Z')
+    // First scan: nothing due. Second scan: tomorrow's draft, with a seat problem.
+    m.due.mockResolvedValueOnce([]).mockResolvedValueOnce([{ leagueId: 'league-2', draftDateUtc, league: { platform: 'allfantasy' } }])
+    m.session.mockResolvedValue({ status: 'pre_draft', sessionKind: 'live', sleeperDraftId: null, teamCount: 16, rounds: 12, slotOrder: [] })
+    m.readiness.mockResolvedValueOnce({ ready: false, error: 'Claim all 2 open Survivor cast seats before starting the draft.' })
+    await startScheduledSurvivorDrafts(now)
+    expect(m.due.mock.calls[1][0].where.draftDateUtc).toEqual({ gt: now, lte: new Date('2026-10-21T19:00:00Z') })
+    expect(m.alert).toHaveBeenCalledWith('league-2', 'seats_unclaimed_before_draft', expect.objectContaining({
+      dedupeKey: draftDateUtc.toISOString(),
+      body: expect.stringContaining('Claim all 2 open Survivor cast seats'),
+      deepLinkPath: '/league/league-2/draft',
+    }))
+    expect(m.start).not.toHaveBeenCalled()
+  })
+  it('stays quiet a day ahead when every seat is claimed', async () => {
+    m.due.mockResolvedValueOnce([]).mockResolvedValueOnce([{ leagueId: 'league-2', draftDateUtc: new Date('2026-10-21T18:00:00Z'), league: { platform: 'allfantasy' } }])
+    m.session.mockResolvedValue({ status: 'pre_draft', sessionKind: 'live', sleeperDraftId: null, teamCount: 16, rounds: 12, slotOrder: [] })
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.alert).not.toHaveBeenCalled()
+  })
+  it('a draft that fails to start is reported to Sentry with its league; a normal start reports nothing', async () => {
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.report).not.toHaveBeenCalled()
+    const boom = new Error('session write failed')
+    m.start.mockRejectedValue(boom)
+    expect((await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))).errors).toHaveLength(1)
+    expect(m.report).toHaveBeenCalledWith(boom, { job: 'draft_start', leagueId: 'league-1' })
+    m.start.mockResolvedValue({ ok: false, reason: 'POOL_EMPTY', error: 'pool is empty' })
+    await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
+    expect(m.report).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'Scheduled Survivor draft did not start: pool is empty' }), { job: 'draft_start', leagueId: 'league-1' })
   })
   it('starts a due native live draft exactly once through the control lock', async () => {
     const now = new Date('2026-10-20T19:00:00Z')
@@ -41,9 +80,10 @@ describe('scheduled Survivor draft start', () => {
     }))
     expect(m.lock).toHaveBeenCalledWith('league-1', expect.any(Function))
     expect(m.start).toHaveBeenCalledOnce()
-    expect(m.notifyStart).toHaveBeenCalledWith('league-1')
+    // startDraftSession owns the lifecycle alert; this scheduler must not send a second one.
+    expect(m.notifyStart).not.toHaveBeenCalled()
   })
-  it('scans guillotine leagues as well as survivor leagues', async () => {
+  it('scans Guilly leagues as well as survivor leagues', async () => {
     await startScheduledSurvivorDrafts(new Date('2026-10-20T19:00:00Z'))
     expect(m.due.mock.calls[0][0].where.league).toEqual({
       is: { OR: [{ survivorMode: true }, { guillotineMode: true }, { leagueVariant: 'guillotine' }] },

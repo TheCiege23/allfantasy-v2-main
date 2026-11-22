@@ -51,7 +51,21 @@ export type ReviewCheck = {
   status: ReviewCheckStatus
   /** Plain language, with the numbers it rests on. Shown to the commissioner as written. */
   explanation: string
+  /**
+   * The same explanation as stable codes and their values, in order, so a client can write it in the
+   * reader's language (`tradeCenter.reviewText.<code>`, joined with a space). Its English is
+   * `explanation`, word for word (pinned by `__tests__/redraft/trade-server-text-i18n.test.ts`).
+   * Absent on a review stored before 2026-10-31: show `explanation`.
+   */
+  explanationParts?: ReviewTextPart[]
 }
+
+/**
+ * One sentence of an explanation as a code and the values it names. The code `reason` carries a
+ * reason the facts came with (`params.reason`), passed through as written in English; a `reason`
+ * param on any other code is such a reason too. A client localizes those sentences on its own.
+ */
+export type ReviewTextPart = { code: string; params?: Record<string, string | number> }
 
 export type TradeReview = {
   /** The raised checks — the design's `flags`. */
@@ -111,16 +125,20 @@ export const CONTENDER_PLAYOFF_PCT = 50
 export type Known<T> = { ok: true; value: T } | { ok: false; reason: string }
 
 export type ReviewSideLineup = {
-  /** Projected starting points this week, before the trade. */
-  startingBefore: number
-  /** Change in projected starting points this week. */
-  startingDelta: number
+  /**
+   * Projected starting points this week, before the trade, and its change. Null where no weekly
+   * projection prices the lineup (every sport but NFL): who starts is still known, its points are not.
+   */
+  startingBefore: number | null
+  startingDelta: number | null
   /** League value of everything this side receives, and the part of it that would NOT start. */
   receivedValue: number | null
   receivedBenchValue: number | null
   /** Players this side SENDS that start for it today. */
   sentStarterNames: string[]
 }
+
+export type ReviewStanding = { eliminated: boolean; holdsPlayoffSpot: boolean }
 
 export type TradeReviewFacts = {
   /** Side A is the receipt's graded (`give`) side; B the other. */
@@ -138,6 +156,12 @@ export type TradeReviewFacts = {
   inactiveDays: Known<readonly [number | null, number | null]>
   /** Season forecast playoff odds per side, in percent. */
   playoffPct: Known<readonly [number, number]>
+  /**
+   * A league played on AllFantasy, from its own standings when no forecast exists: whether each side is
+   * mathematically out of the race (lib/eliminated-lineups/eliminatedLineups.ts) and whether it holds
+   * a playoff spot. Absent or not ok: the elimination check reads the forecast only.
+   */
+  standing?: Known<readonly [ReviewStanding, ReviewStanding]>
   /** The deadline instant (ISO), or null when the league has no trade deadline. */
   deadlineAt: Known<string | null>
   now: string
@@ -158,15 +182,32 @@ export type TradeReviewFacts = {
 
 const pct = (n: number) => `${Math.round(Math.abs(n))}%`
 
+/** A part of an explanation, as its stable code and values (`ReviewTextPart`). */
+const part = (code: string, params?: Record<string, string | number>): ReviewTextPart => (params ? { code, params } : { code })
+/** A reason the facts carried, passed through as written (a client localizes the sentence itself). */
+const reasonPart = (reason: string): ReviewTextPart => part('reason', { reason })
+
 function lopsided(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'heavily_lopsided' as const, severity: 'high' as const }
-  if (!f.gapPct.ok) return { ...base, status: 'not_computed', explanation: `The trade is not graded: ${f.gapPct.reason}` }
+  if (!f.gapPct.ok) {
+    return { ...base, status: 'not_computed', explanation: `The trade is not graded: ${f.gapPct.reason}`, explanationParts: [part('notGraded', { reason: f.gapPct.reason })] }
+  }
   const g = f.gapPct.value
   const favoured = g > 0 ? f.sides[0].name : f.sides[1].name
   if (Math.abs(g) > LOPSIDED_GAP_PCT) {
-    return { ...base, status: 'raised', explanation: `${favoured} receives ${pct(g)} more league value — past the ${LOPSIDED_GAP_PCT}% line for a heavily lopsided trade.` }
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `${favoured} receives ${pct(g)} more league value — past the ${LOPSIDED_GAP_PCT}% line for a heavily lopsided trade.`,
+      explanationParts: [part('lopsided.raised', { team: favoured, gap: pct(g), line: LOPSIDED_GAP_PCT })],
+    }
   }
-  return { ...base, status: 'clear', explanation: `The value gap is ${pct(g)}, under the ${LOPSIDED_GAP_PCT}% line.` }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: `The value gap is ${pct(g)}, under the ${LOPSIDED_GAP_PCT}% line.`,
+    explanationParts: [part('lopsided.clear', { gap: pct(g), line: LOPSIDED_GAP_PCT })],
+  }
 }
 
 function tanking(f: TradeReviewFacts): ReviewCheck {
@@ -175,11 +216,12 @@ function tanking(f: TradeReviewFacts): ReviewCheck {
   const base = rebuild
     ? { code: 'rebuild_signal' as const, severity: 'medium' as const }
     : { code: 'tanking_signal' as const, severity: 'high' as const }
-  if (!f.lineup.ok) return { ...base, status: 'not_computed', explanation: f.lineup.reason }
+  if (!f.lineup.ok) return { ...base, status: 'not_computed', explanation: f.lineup.reason, explanationParts: [reasonPart(f.lineup.reason)] }
   const found: string[] = []
+  const foundParts: ReviewTextPart[] = []
   let unknown = 0
   f.lineup.value.forEach((side, i) => {
-    if (!side || side.receivedValue == null || side.receivedBenchValue == null || side.startingBefore <= 0) {
+    if (!side || side.receivedValue == null || side.receivedBenchValue == null || side.startingBefore == null || side.startingDelta == null || side.startingBefore <= 0) {
       unknown++
       return
     }
@@ -191,61 +233,128 @@ function tanking(f: TradeReviewFacts): ReviewCheck {
         `${f.sides[i]!.name}'s projected starting lineup falls ${drop.toFixed(1)} points this week (${pct((drop / side.startingBefore) * 100)} of it), ` +
           `and ${pct(benchShare * 100)} of the value it receives would not start.`,
       )
+      foundParts.push(
+        part('tanking.side', {
+          team: f.sides[i]!.name,
+          points: drop.toFixed(1),
+          share: pct((drop / side.startingBefore) * 100),
+          benchShare: pct(benchShare * 100),
+        }),
+      )
     }
   })
   if (found.length) {
     const lead = rebuild
       ? `In a ${f.leagueType!.label.toLowerCase()} league this reads as a rebuild, which is normal — worth a word with both managers, not a veto. `
       : ''
-    return { ...base, status: 'raised', explanation: lead + found.join(' ') }
+    return {
+      ...base,
+      status: 'raised',
+      explanation: lead + found.join(' '),
+      explanationParts: [...(rebuild ? [part('tanking.rebuildLead', { leagueType: f.leagueType!.label.toLowerCase() })] : []), ...foundParts],
+    }
   }
-  if (unknown) return { ...base, status: 'not_computed', explanation: 'The lineup effect could not be priced for every team in this trade.' }
-  return { ...base, status: 'clear', explanation: 'Neither team gives up lineup strength for mostly bench value.' }
+  if (unknown) {
+    return { ...base, status: 'not_computed', explanation: 'The lineup effect could not be priced for every team in this trade.', explanationParts: [part('tanking.unknown')] }
+  }
+  return { ...base, status: 'clear', explanation: 'Neither team gives up lineup strength for mostly bench value.', explanationParts: [part('tanking.clear')] }
 }
 
 function repeatPartners(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'repeat_partners' as const, severity: 'medium' as const }
-  if (!f.history.ok) return { ...base, status: 'not_computed', explanation: f.history.reason }
+  if (!f.history.ok) return { ...base, status: 'not_computed', explanation: f.history.reason, explanationParts: [reasonPart(f.history.reason)] }
   const trades = f.history.value
   const n = trades.length
   if (n < REPEAT_PARTNER_TRADES) {
-    return { ...base, status: 'clear', explanation: `${n === 1 ? 'This is their only trade' : `These two teams have made ${n} trades`} this season.` }
+    return {
+      ...base,
+      status: 'clear',
+      explanation: `${n === 1 ? 'This is their only trade' : `These two teams have made ${n} trades`} this season.`,
+      explanationParts: [n === 1 ? part('repeat.only') : part('repeat.few', { count: n })],
+    }
   }
   const graded = trades.flatMap((g) => (g == null ? [] : [g]))
   if (graded.length < n) {
-    return { ...base, status: 'not_computed', explanation: `These two teams have made ${n} trades this season, but ${n - graded.length} of them could not be graded, so which way they lean is unknown.` }
+    return {
+      ...base,
+      status: 'not_computed',
+      explanation: `These two teams have made ${n} trades this season, but ${n - graded.length} of them could not be graded, so which way they lean is unknown.`,
+      explanationParts: [part('repeat.ungraded', { count: n, ungraded: n - graded.length })],
+    }
   }
   const favoursA = graded.every((g) => g >= LEAN_EVEN_BAND_PCT)
   const favoursB = graded.every((g) => g <= -LEAN_EVEN_BAND_PCT)
   if (favoursA || favoursB) {
     const who = favoursA ? f.sides[0].name : f.sides[1].name
-    return { ...base, status: 'raised', explanation: `These two teams have made ${n} trades this season, and every one favours ${who}.` }
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `These two teams have made ${n} trades this season, and every one favours ${who}.`,
+      explanationParts: [part('repeat.raised', { count: n, team: who })],
+    }
   }
-  return { ...base, status: 'clear', explanation: `These two teams have made ${n} trades this season, but they do not all lean one way.` }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: `These two teams have made ${n} trades this season, but they do not all lean one way.`,
+    explanationParts: [part('repeat.clear', { count: n })],
+  }
 }
 
 function inactive(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'inactive_manager' as const, severity: 'medium' as const }
-  if (!f.inactiveDays.ok) return { ...base, status: 'not_computed', explanation: f.inactiveDays.reason }
-  const idle = f.inactiveDays.value.flatMap((d, i) => (d != null && d >= INACTIVE_DAYS ? [`${f.sides[i]!.name}'s roster has not changed in ${Math.floor(d)} days`] : []))
-  if (idle.length) return { ...base, status: 'raised', explanation: `${idle.join('; ')} — ${INACTIVE_DAYS}+ days is inactive.` }
-  if (f.inactiveDays.value.some((d) => d == null)) {
-    return { ...base, status: 'not_computed', explanation: 'Recent activity is not on record for every team in this trade.' }
+  if (!f.inactiveDays.ok) return { ...base, status: 'not_computed', explanation: f.inactiveDays.reason, explanationParts: [reasonPart(f.inactiveDays.reason)] }
+  const idleSides = f.inactiveDays.value.flatMap((d, i) => (d != null && d >= INACTIVE_DAYS ? [{ team: f.sides[i]!.name, days: Math.floor(d) }] : []))
+  const idle = idleSides.map((s) => `${s.team}'s roster has not changed in ${s.days} days`)
+  if (idle.length) {
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `${idle.join('; ')} — ${INACTIVE_DAYS}+ days is inactive.`,
+      explanationParts: [
+        idleSides.length === 1
+          ? part('inactive.raisedOne', { team: idleSides[0]!.team, days: idleSides[0]!.days, threshold: INACTIVE_DAYS })
+          : part('inactive.raisedTwo', {
+              teamA: idleSides[0]!.team,
+              daysA: idleSides[0]!.days,
+              teamB: idleSides[1]!.team,
+              daysB: idleSides[1]!.days,
+              threshold: INACTIVE_DAYS,
+            }),
+      ],
+    }
   }
-  return { ...base, status: 'clear', explanation: `Both rosters have changed in the last ${INACTIVE_DAYS} days.` }
+  if (f.inactiveDays.value.some((d) => d == null)) {
+    return { ...base, status: 'not_computed', explanation: 'Recent activity is not on record for every team in this trade.', explanationParts: [part('inactive.unknown')] }
+  }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: `Both rosters have changed in the last ${INACTIVE_DAYS} days.`,
+    explanationParts: [part('inactive.clear', { threshold: INACTIVE_DAYS })],
+  }
 }
 
 function eliminatedDumping(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'eliminated_team_dumping' as const, severity: 'medium' as const }
-  if (!f.playoffPct.ok) return { ...base, status: 'not_computed', explanation: f.playoffPct.reason }
+  if (!f.playoffPct.ok) {
+    if (f.standing?.ok) return eliminatedDumpingFromStandings(f, f.standing.value)
+    return { ...base, status: 'not_computed', explanation: f.playoffPct.reason, explanationParts: [reasonPart(f.playoffPct.reason)] }
+  }
   const [pa, pb] = f.playoffPct.value
   const pairs: Array<[number, number]> = [[0, 1], [1, 0]]
   for (const [e, c] of pairs) {
     const pe = e === 0 ? pa : pb
     const pc = c === 0 ? pa : pb
     if (pe >= ELIMINATED_PLAYOFF_PCT || pc < CONTENDER_PLAYOFF_PCT) continue
+    const names = { eliminated: f.sides[e]!.name, contender: f.sides[c]!.name, odds: pe.toFixed(1) }
     if (!f.lineup.ok || !f.lineup.value[e]) {
-      return { ...base, status: 'not_computed', explanation: `${f.sides[e]!.name} is out of the playoff race (${pe.toFixed(1)}% odds) and ${f.sides[c]!.name} is a contender, but who starts for ${f.sides[e]!.name} could not be read.` }
+      return {
+        ...base,
+        status: 'not_computed',
+        explanation: `${f.sides[e]!.name} is out of the playoff race (${pe.toFixed(1)}% odds) and ${f.sides[c]!.name} is a contender, but who starts for ${f.sides[e]!.name} could not be read.`,
+        explanationParts: [part('eliminated.unreadable', names)],
+      }
     }
     const starters = f.lineup.value[e]!.sentStarterNames
     if (starters.length) {
@@ -253,26 +362,80 @@ function eliminatedDumping(f: TradeReviewFacts): ReviewCheck {
         ...base,
         status: 'raised',
         explanation: `${f.sides[e]!.name} is out of the playoff race (${pe.toFixed(1)}% odds) and sends starters (${starters.join(', ')}) to ${f.sides[c]!.name}, a contender at ${pc.toFixed(0)}%.`,
+        explanationParts: [part('eliminated.raised', { ...names, starters: starters.join(', '), contenderOdds: pc.toFixed(0) })],
       }
     }
   }
-  return { ...base, status: 'clear', explanation: 'No eliminated team sends starters to a contender.' }
+  return { ...base, status: 'clear', explanation: 'No eliminated team sends starters to a contender.', explanationParts: [part('eliminated.clear')] }
+}
+
+/**
+ * The same check on the league's own standings (no forecast): a team that cannot reach a playoff spot
+ * even by winning every game left, sending starters to a team that holds one. Stricter than the
+ * forecast's 1%: only a mathematical elimination counts.
+ */
+function eliminatedDumpingFromStandings(f: TradeReviewFacts, standing: readonly [ReviewStanding, ReviewStanding]): ReviewCheck {
+  const base = { code: 'eliminated_team_dumping' as const, severity: 'medium' as const }
+  for (const [e, c] of [[0, 1], [1, 0]] as const) {
+    if (!standing[e].eliminated || !standing[c].holdsPlayoffSpot) continue
+    const names = { eliminated: f.sides[e]!.name, contender: f.sides[c]!.name }
+    if (!f.lineup.ok || !f.lineup.value[e]) {
+      return {
+        ...base,
+        status: 'not_computed',
+        explanation: `${f.sides[e]!.name} is out of the playoff race and ${f.sides[c]!.name} holds a playoff spot, but who starts for ${f.sides[e]!.name} could not be read.`,
+        explanationParts: [part('eliminated.standingsUnreadable', names)],
+      }
+    }
+    const starters = f.lineup.value[e]!.sentStarterNames
+    if (starters.length) {
+      return {
+        ...base,
+        status: 'raised',
+        explanation: `${f.sides[e]!.name} can no longer reach the playoffs and sends starters (${starters.join(', ')}) to ${f.sides[c]!.name}, which holds a playoff spot.`,
+        explanationParts: [part('eliminated.standingsRaised', { ...names, starters: starters.join(', ') })],
+      }
+    }
+  }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: 'No team out of the playoff race sends starters to a team holding a playoff spot.',
+    explanationParts: [part('eliminated.standingsClear')],
+  }
 }
 
 function deadlineRush(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'deadline_rush' as const, severity: 'low' as const }
-  if (!f.deadlineAt.ok) return { ...base, status: 'not_computed', explanation: f.deadlineAt.reason }
-  if (f.deadlineAt.value == null) return { ...base, status: 'clear', explanation: 'This league has no trade deadline.' }
+  if (!f.deadlineAt.ok) return { ...base, status: 'not_computed', explanation: f.deadlineAt.reason, explanationParts: [reasonPart(f.deadlineAt.reason)] }
+  if (f.deadlineAt.value == null) return { ...base, status: 'clear', explanation: 'This league has no trade deadline.', explanationParts: [part('deadline.none')] }
   const deadline = Date.parse(f.deadlineAt.value)
   const now = Date.parse(f.now)
   const inWindow = now <= deadline && deadline - now <= DEADLINE_RUSH_WINDOW_MS
-  if (!inWindow) return { ...base, status: 'clear', explanation: 'The trade is not within 48 hours of the deadline.' }
-  if (!f.gapPct.ok) return { ...base, status: 'not_computed', explanation: 'The trade is within 48 hours of the deadline, but it is not graded, so the gap is unknown.' }
+  if (!inWindow) return { ...base, status: 'clear', explanation: 'The trade is not within 48 hours of the deadline.', explanationParts: [part('deadline.outside')] }
+  if (!f.gapPct.ok) {
+    return {
+      ...base,
+      status: 'not_computed',
+      explanation: 'The trade is within 48 hours of the deadline, but it is not graded, so the gap is unknown.',
+      explanationParts: [part('deadline.notGraded')],
+    }
+  }
   if (Math.abs(f.gapPct.value) > DEADLINE_RUSH_GAP_PCT) {
     const hours = Math.max(0, Math.round((deadline - now) / 3_600_000))
-    return { ...base, status: 'raised', explanation: `Proposed ${hours} hours before the trade deadline with a ${pct(f.gapPct.value)} value gap.` }
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `Proposed ${hours} hours before the trade deadline with a ${pct(f.gapPct.value)} value gap.`,
+      explanationParts: [part('deadline.raised', { hours, gap: pct(f.gapPct.value) })],
+    }
   }
-  return { ...base, status: 'clear', explanation: `Within 48 hours of the deadline, but the gap (${pct(f.gapPct.value)}) is under ${DEADLINE_RUSH_GAP_PCT}%.` }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: `Within 48 hours of the deadline, but the gap (${pct(f.gapPct.value)}) is under ${DEADLINE_RUSH_GAP_PCT}%.`,
+    explanationParts: [part('deadline.clear', { gap: pct(f.gapPct.value), line: DEADLINE_RUSH_GAP_PCT })],
+  }
 }
 
 /**
@@ -282,24 +445,38 @@ function deadlineRush(f: TradeReviewFacts): ReviewCheck {
  */
 function classGap(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'class_gap' as const, severity: 'low' as const }
-  if (!f.managerDivisions) return { ...base, status: 'not_computed', explanation: 'Manager Classes were not read for this review.' }
-  if (!f.managerDivisions.ok) return { ...base, status: 'not_computed', explanation: f.managerDivisions.reason }
+  if (!f.managerDivisions) return { ...base, status: 'not_computed', explanation: 'Manager Classes were not read for this review.', explanationParts: [part('class.notRead')] }
+  if (!f.managerDivisions.ok) {
+    return { ...base, status: 'not_computed', explanation: f.managerDivisions.reason, explanationParts: [reasonPart(f.managerDivisions.reason)] }
+  }
   const [da, db] = f.managerDivisions.value
   if (da == null || db == null) {
     return {
       ...base,
       status: 'not_computed',
       explanation: 'Only an AllFantasy manager with an established Class has a division, and one side of this trade does not.',
+      explanationParts: [part('class.noDivision')],
     }
   }
   const apart = Math.abs(da - db)
   if (apart <= CLASS_GAP_DIVISIONS) {
-    return { ...base, status: 'clear', explanation: `The managers are Division ${da} and Division ${db} — close enough that a public league would match them.` }
+    return {
+      ...base,
+      status: 'clear',
+      explanation: `The managers are Division ${da} and Division ${db} — close enough that a public league would match them.`,
+      explanationParts: [part('class.close', { divisionA: da, divisionB: db })],
+    }
   }
   const stronger = da > db ? 0 : 1
   const pair = `Division ${Math.max(da, db)} and Division ${Math.min(da, db)}, ${apart} divisions apart`
+  const pairParams = { high: Math.max(da, db), low: Math.min(da, db), apart }
   if (!f.gapPct.ok) {
-    return { ...base, status: 'not_computed', explanation: `The managers are ${pair}, but the trade is not graded, so which way it leans is unknown.` }
+    return {
+      ...base,
+      status: 'not_computed',
+      explanation: `The managers are ${pair}, but the trade is not graded, so which way it leans is unknown.`,
+      explanationParts: [part('class.notGraded', pairParams)],
+    }
   }
   // Signed from side A: + means A receives more.
   const towardStronger = stronger === 0 ? f.gapPct.value : -f.gapPct.value
@@ -308,9 +485,15 @@ function classGap(f: TradeReviewFacts): ReviewCheck {
       ...base,
       status: 'raised',
       explanation: `${f.sides[stronger]!.name} (the stronger manager by Class) receives ${pct(towardStronger)} more value from a manager ${apart} divisions below — ${pair}. Worth a look if the other manager may not know what they gave up.`,
+      explanationParts: [part('class.raised', { ...pairParams, team: f.sides[stronger]!.name, gap: pct(towardStronger) })],
     }
   }
-  return { ...base, status: 'clear', explanation: `The managers are ${pair}, but the trade does not lean toward the stronger one.` }
+  return {
+    ...base,
+    status: 'clear',
+    explanation: `The managers are ${pair}, but the trade does not lean toward the stronger one.`,
+    explanationParts: [part('class.clear', pairParams)],
+  }
 }
 
 export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRecommendation {

@@ -30,7 +30,7 @@ beforeEach(() => {
 })
 
 describe('ensureScheduleForNewSeason', () => {
-  it('writes no head-to-head schedule for a guillotine league', async () => {
+  it('writes no head-to-head schedule for a Guilly league', async () => {
     m.isGuillotineLeague.mockResolvedValue(true)
     await ensureScheduleForNewSeason(params)
     expect(db.redraftMatchup.createMany).not.toHaveBeenCalled()

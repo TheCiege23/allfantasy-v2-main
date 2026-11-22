@@ -1,5 +1,7 @@
 'use client'
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Bot, Loader2, RefreshCw, ShieldAlert, Sparkles } from 'lucide-react'
@@ -239,13 +241,13 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           { cache: 'no-store' }
         )
         const data = (await res.json().catch(() => ({}))) as OverviewPayload & { error?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to load AI Commissioner data')
+        if (!res.ok) throw new Error(data.error || 'Failed to load Chimmy Commissioner data')
         setPayload(data)
         setDraft(data.config)
         setSeason(String(data.season || ''))
         setSport(normalizeToSupportedSport(data.config?.sport ?? sport))
       } catch (e: any) {
-        setError(e?.message || 'Failed to load AI Commissioner data')
+        setError(e?.message || 'Failed to load Chimmy Commissioner data')
       } finally {
         setLoading(false)
       }
@@ -265,10 +267,10 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         { cache: 'no-store' }
       )
       const data = (await res.json().catch(() => ({}))) as InsightPayload & { error?: string }
-      if (!res.ok) throw new Error(data.error || 'Failed to load AI Commissioner insights')
+      if (!res.ok) throw new Error(data.error || 'Failed to load Chimmy Commissioner insights')
       setInsights(data)
     } catch (e: any) {
-      setInsightsError(e?.message || 'Failed to load AI Commissioner insights')
+      setInsightsError(e?.message || 'Failed to load Chimmy Commissioner insights')
     } finally {
       setInsightsLoading(false)
     }
@@ -356,12 +358,12 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         }),
       })
       const data = (await res.json().catch(() => ({}))) as ConfigView & { error?: string }
-      if (!res.ok) throw new Error(data.error || 'Failed to save AI Commissioner settings')
+      if (!res.ok) throw new Error(data.error || 'Failed to save Chimmy Commissioner settings')
       setDraft(data)
       setPayload((prev) => (prev ? { ...prev, config: data } : prev))
-      toast.success('AI Commissioner settings saved')
+      toast.success('Chimmy Commissioner settings saved')
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to save AI Commissioner settings')
+      toast.error(e?.message || 'Failed to save Chimmy Commissioner settings')
     } finally {
       setSavingConfig(false)
     }
@@ -370,7 +372,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
   const executeRunCycle = useCallback(async () => {
     setRunning(true)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/run`, {
+      const res = await paidToolFetchWithConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -380,11 +382,11 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; createdAlerts?: Array<unknown> }
-      if (!res.ok) throw new Error(data.error || 'AI Commissioner run failed')
-      toast.success(`AI Commissioner run complete (${data.createdAlerts?.length ?? 0} new alerts)`)
+      if (!res.ok) throw new Error(data.error || 'Chimmy Commissioner run failed')
+      toast.success(`Chimmy Commissioner run complete (${data.createdAlerts?.length ?? 0} new alerts)`)
       await refreshAll()
     } catch (e: any) {
-      toast.error(e?.message || 'AI Commissioner run failed')
+      toast.error(e?.message || 'Chimmy Commissioner run failed')
     } finally {
       setRunning(false)
     }
@@ -481,7 +483,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
 
     setChatting(true)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
+      const res = await paidToolFetchWithConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/ai-commissioner/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -492,10 +494,10 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; answer?: string }
-      if (!res.ok) throw new Error(data.error || 'Failed to reach AI Commissioner')
+      if (!res.ok) throw new Error(data.error || 'Failed to reach Chimmy Commissioner')
       setCommissionerAnswer(String(data.answer ?? '').trim())
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to reach AI Commissioner')
+      toast.error(e?.message || 'Failed to reach Chimmy Commissioner')
     } finally {
       setChatting(false)
     }
@@ -542,7 +544,8 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
           }),
         })
         const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-        if (!res.ok) throw new Error(data.error || 'Failed to apply unified action')
+        // A refused action comes back as { ok: false, message } (e.g. the league locked that area).
+        if (!res.ok) throw new Error(data.error || data.message || 'Failed to apply unified action')
         toast.success(data.message || 'Commissioner action applied')
         await refreshAll()
       } catch (e: any) {
@@ -591,13 +594,13 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Bot className="h-4 w-4 text-purple-300" /> AI Commissioner
+            <Bot className="h-4 w-4 text-purple-300" /> Chimmy Commissioner
           </h2>
           <p className="mt-1 text-xs text-white/65">
             Governance assistant for rule enforcement, reminders, disputes, collusion signals, and commissioner notice workflow.
           </p>
           <p className="mt-1 text-[11px] text-white/50">
-            AI Commissioner provides explainable guidance and does not silently override league rules.
+            Chimmy Commissioner provides explainable guidance and does not silently override league rules.
           </p>
         </div>
         <Link
@@ -609,7 +612,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
       </div>
 
       <InContextMonetizationCard
-        title="AI Commissioner Access"
+        title="Chimmy Commissioner Access"
         featureId="commissioner_automation"
         tokenRuleCodes={[
           'commissioner_ai_cycle_run',
@@ -651,7 +654,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         <div>
           <Label className="text-[11px] text-white/65">Sport</Label>
           <select
-            aria-label="AI commissioner sport filter"
+            aria-label="Chimmy commissioner sport filter"
             value={sport}
             onChange={(event) => setSport(normalizeToSupportedSport(event.target.value))}
             className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
@@ -695,7 +698,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
             <span className="ml-1">
               {running
                 ? 'Running...'
-                : `Run AI cycle${runCycleTokenCost ? ` (${runCycleTokenCost} token${runCycleTokenCost === 1 ? '' : 's'})` : ''}`}
+                : `Run Chimmy cycle${runCycleTokenCost ? ` (${runCycleTokenCost} token${runCycleTokenCost === 1 ? '' : 's'})` : ''}`}
             </span>
           </Button>
         </div>
@@ -789,7 +792,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
             <div>
               <Label className="text-[11px] text-white/65">Notification mode</Label>
               <select
-                aria-label="AI commissioner notification mode"
+                aria-label="Chimmy commissioner notification mode"
                 value={draft.commissionerNotificationMode}
                 onChange={(event) =>
                   setDraft((prev) =>
@@ -820,7 +823,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         data-testid="ai-commissioner-recap-panel"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-white">AI recap panel</p>
+          <p className="text-xs font-semibold text-white">Chimmy recap panel</p>
           <Button
             size="sm"
             variant="outline"
@@ -920,7 +923,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
                         disabled={!!explaining[key]}
                         data-testid={`ai-commissioner-trade-explain-${trade.tradeId}`}
                       >
-                        {explaining[key] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'AI explain'}
+                        {explaining[key] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Chimmy explain'}
                       </Button>
                       {explanations[key] ? (
                         <p className="mt-1 text-[11px] text-white/80">{explanations[key]}</p>
@@ -935,11 +938,11 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
             </div>
           </>
         ) : (
-          <p className="text-xs text-white/55">Loading AI recap insights...</p>
+          <p className="text-xs text-white/55">Loading Chimmy recap insights...</p>
         )}
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
-          <p className="text-xs font-semibold text-white/90">Ask AI Commissioner</p>
+          <p className="text-xs font-semibold text-white/90">Ask Chimmy Commissioner</p>
           <div className="flex flex-wrap gap-2">
             <Input
               value={commissionerQuestion}
@@ -1110,7 +1113,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
         ) : null}
         {!loading && payload && payload.alerts.length === 0 ? (
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-white/65">
-            No alerts yet. Run the AI cycle to generate commissioner guidance.
+            No alerts yet. Run Chimmy cycle to generate commissioner guidance.
           </div>
         ) : null}
         {(payload?.alerts ?? []).map((alert) => (
@@ -1230,7 +1233,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
                 {explaining[alert.alertId] ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  'AI explain'
+                  'Chimmy explain'
                 )}
               </Button>
             </div>
@@ -1246,7 +1249,7 @@ export default function AICommissionerPanel({ leagueId }: { leagueId: string }) 
       <TokenSpendPreflightModal
         open={Boolean(tokenModalPreview)}
         preview={tokenModalPreview}
-        title={pendingAction === 'run_cycle' ? 'Confirm AI Commissioner cycle run' : 'Confirm AI Commissioner question'}
+        title={pendingAction === 'run_cycle' ? 'Confirm Chimmy Commissioner cycle run' : 'Confirm Chimmy Commissioner question'}
         confirmLabel={pendingAction === 'run_cycle' ? 'Run cycle now' : 'Ask question'}
         onClose={() => {
           setTokenModalPreview(null)

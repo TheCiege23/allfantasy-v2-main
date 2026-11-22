@@ -1,0 +1,13 @@
+{
+  "method": "Playwright WebKit with phone device descriptors against the PirateHome React component",
+  "results": [
+    {
+      "device": "ios-webkit",
+      "viewport": 390,
+      "content": 390,
+      "protectionTapWorks": true,
+      "claimActionVisible": true,
+      "screenshot": "docs/pirate-validation/mobile-ios-webkit.png"
+    }
+  ]
+}

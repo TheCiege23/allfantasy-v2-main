@@ -1,8 +1,8 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { generateRulesDocument, getRulesDocAsHtml, getRulesDocAsText } from '@/lib/zombie/rulesDocGenerator'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,12 @@ export async function GET(req: Request) {
   const format = searchParams?.get('format') ?? 'html'
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, session.user.id)
+  try {
+    await requireCommissionerAccess(leagueId, session.user.id, 'view')
+  } catch (denied) {
+    if (denied instanceof Response) return denied
+    throw denied
+  }
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -24,14 +29,15 @@ export async function GET(req: Request) {
     where: { leagueId: z.id },
     orderBy: { version: 'desc' },
   })
-  if (!latest) return NextResponse.json({ error: 'No document yet — POST to generate' }, { status: 404 })
+  const doc = latest && (z.sport.toUpperCase() === 'NFL' ? latest.sectionSerums.includes('2025 NFL:') : latest.sectionSerums.includes('Serums to revive:'))
+    ? latest : await generateRulesDocument(z.id)
 
   if (format === 'text') {
-    return new NextResponse(getRulesDocAsText(latest), {
+    return new NextResponse(getRulesDocAsText(doc), {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
-  return new NextResponse(getRulesDocAsHtml(latest), {
+  return new NextResponse(getRulesDocAsHtml(doc), {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   })
 }
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, session.user.id)
+  await requireCommissionerAccess(leagueId, session.user.id, 'league')
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

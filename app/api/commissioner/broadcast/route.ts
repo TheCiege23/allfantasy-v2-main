@@ -5,7 +5,8 @@
  * (`broadcastRefusal` in lib/commissioner/broadcastAccess.ts — the rule every surface that offers a
  * send also uses, `GET /api/commissioner/leagues` included; that file says why imported leagues are
  * refused).
- * Also sends in-app + email/SMS notification to all league members (commissioner_alerts).
+ * Also sends in-app + email/SMS notification to all league members (commissioner_alerts). The send
+ * itself is lib/commissioner/postLeagueAnnouncement.ts, shared with scheduled announcements.
  *
  * ⚠ RATE-LIMITED PER USER. One call can fan out email and text to every member of several leagues,
  * and more than one person per league may now send. Five sends in ten minutes is well past any real
@@ -15,15 +16,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { broadcastRefusal } from '@/lib/commissioner/broadcastAccess'
+import { postLeagueAnnouncement } from '@/lib/commissioner/postLeagueAnnouncement'
 import { rateLimit } from '@/lib/rate-limit'
-import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
-import { getLeagueChatThreadId } from '@/lib/commissioner-settings/CommissionerAnnouncementService'
-import { createSystemMessage } from '@/lib/platform/chat-service'
-import { getLeagueMemberAppUserIds } from '@/lib/draft-notifications/DraftNotificationService'
-import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { isLeaguePrefEnabled, parseLeagueNotificationPrefs } from '@/lib/league/league-notification-prefs'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +48,6 @@ export async function POST(req: NextRequest) {
   }
 
   const results: { leagueId: string; sent: boolean; error?: string }[] = []
-  const text = `@everyone ${message}`
   for (const leagueId of leagueIds) {
     const refusal = await broadcastRefusal(leagueId, userId).catch((): 'forbidden' => 'forbidden')
     if (refusal) {
@@ -64,47 +58,7 @@ export async function POST(req: NextRequest) {
       })
       continue
     }
-    const threadId = await getLeagueChatThreadId(leagueId)
-    if (threadId && !threadId.startsWith('league:')) {
-      const sent = await createSystemMessage(threadId, 'broadcast', text)
-      results.push({ leagueId, sent: !!sent })
-    } else {
-      const created = await createLeagueChatMessage(leagueId, userId, text, { type: 'broadcast' })
-      results.push({ leagueId, sent: !!created })
-    }
-    const memberIds = await getLeagueMemberAppUserIds(leagueId)
-    const leagueRow = await prisma.league.findUnique({
-      where: { id: leagueId },
-      select: { settings: true, leagueVariant: true },
-    })
-    if (results[results.length - 1]?.sent && leagueRow?.leagueVariant === 'survivor') {
-      await prisma.survivorCommissionerAction.create({
-        data: {
-          leagueId,
-          commissionerId: userId,
-          actionType: 'league_announcement',
-          description: 'Universal league announcement sent',
-          newState: { characterCount: message.length },
-        },
-      })
-    }
-    const prefs = parseLeagueNotificationPrefs(leagueRow?.settings)
-    if (memberIds.length > 0 && isLeaguePrefEnabled(prefs, 'commissionerBroadcasts')) {
-      dispatchNotification({
-        userIds: memberIds,
-        category: 'commissioner_alerts',
-        productType: 'app',
-        type: 'commissioner_broadcast',
-        title: 'Commissioner announcement',
-        body: message,
-        // The text says THAT there is a message; the words stay in-app (no user-written text over SMS).
-        smsBody: 'New commissioner announcement in your league. Open AllFantasy to read it.',
-        actionHref: `/league/${leagueId}`,
-        actionLabel: 'Open league',
-        meta: { leagueId },
-        severity: 'medium',
-      }).catch((e) => console.error('[commissioner broadcast] notify', e))
-    }
+    results.push({ leagueId, sent: await postLeagueAnnouncement(leagueId, userId, message) })
   }
   return NextResponse.json({ ok: true, results })
 }

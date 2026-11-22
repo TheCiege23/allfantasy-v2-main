@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { FinalScoreLogos } from "./FinalScoreLogos"
 import {
   Bell,
   Check,
@@ -15,7 +16,6 @@ import {
   Pause,
   Play,
 } from "lucide-react"
-import { useNotifications } from "@/hooks/useNotifications"
 import type { PlatformNotification } from "@/types/platform-shared"
 import {
   groupNotifications,
@@ -92,7 +92,7 @@ export interface NotificationPanelState {
   refresh: () => Promise<void> | void
 }
 
-export interface NotificationPanelViewProps {
+interface NotificationPanelViewProps {
   state: NotificationPanelState
   onClose?: () => void
   showFooter?: boolean
@@ -200,6 +200,7 @@ export function NotificationPanelView({
                               <p className="text-[11px] font-medium" style={{ color: "var(--text)" }}>
                                 {n.title}
                               </p>
+                              <FinalScoreLogos type={n.type} meta={n.meta} />
                               {n.body && (
                                 <p className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--muted2)" }}>
                                   {n.body}
@@ -285,7 +286,3 @@ export function NotificationPanelView({
   )
 }
 
-export default function NotificationPanel({ onClose }: { onClose?: () => void }) {
-  const state = useNotifications(40, { usePlaceholders: false })
-  return <NotificationPanelView state={state} onClose={onClose} />
-}

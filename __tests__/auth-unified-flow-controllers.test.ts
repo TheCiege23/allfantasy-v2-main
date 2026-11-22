@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveLoginCallbackUrl } from '@/lib/auth/LoginFlowController'
 import {
   resolvePostSignupCallbackUrl,
   resolveSignupRedirectPath,
@@ -10,25 +9,8 @@ import {
   normalizePhoneE164,
 } from '@/lib/auth/ForgotPasswordFlowController'
 import { getProviderFallbackMessage } from '@/lib/auth/ProviderFallbackFlowService'
-import { resolveAuthSessionDestination } from '@/lib/auth/AuthSessionRouter'
 
 describe('Unified auth flow controllers', () => {
-  it('resolves safe login destination from callback or next', () => {
-    expect(
-      resolveLoginCallbackUrl({
-        callbackUrl: '/brackets',
-        next: '/dashboard',
-      })
-    ).toBe('/brackets')
-
-    expect(
-      resolveLoginCallbackUrl({
-        callbackUrl: 'https://bad.site',
-        next: '/dashboard',
-      })
-    ).toBe('/dashboard')
-  })
-
   it('resolves signup destination from next or callback fallback', () => {
     expect(
       resolveSignupRedirectPath({
@@ -90,20 +72,5 @@ describe('Unified auth flow controllers', () => {
     // see lib/auth/SocialProviderResolver.ts's MANUALLY_SUSPENDED_PROVIDERS.
     expect(getProviderFallbackMessage('facebook')).toContain('Meta platform review')
     expect(getProviderFallbackMessage('google')).toContain('not configured')
-  })
-
-  it('resolves auth session fallback destination', () => {
-    expect(
-      resolveAuthSessionDestination({
-        callbackUrl: '/dashboard',
-      })
-    ).toBe('/dashboard')
-    expect(
-      resolveAuthSessionDestination({
-        callbackUrl: 'https://evil.site',
-        next: null,
-        fallback: '/dashboard',
-      })
-    ).toBe('/dashboard')
   })
 })

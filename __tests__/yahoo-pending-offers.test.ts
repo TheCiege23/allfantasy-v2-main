@@ -127,7 +127,9 @@ describe('⚠ platformLeagueId is not guaranteed to be a league key', () => {
      */
     expect(FETCH).toContain('IS NOT GUARANTEED TO BE A LEAGUE KEY')
     expect(FETCH).toContain('const resolved = await resolveYahooLeagueLookup(leagueKey, context)')
-    expect(FETCH).toContain('/league/${resolved.leagueKey}/transactions')
+    /* The paged transactions read (start/count) takes the RESOLVED key, never the stored one. */
+    expect(FETCH).toMatch(/fetchAllYahooTransactions\(\s*resolved\.leagueKey,/)
+    expect(FETCH).toContain('/league/${leagueKey}/transactions;${filters};start=${start};count=${count}')
   })
 })
 

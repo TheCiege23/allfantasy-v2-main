@@ -5,12 +5,18 @@
 import type { League } from '@prisma/client'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import type { TradeReviewType } from '@/lib/league-trade-engine/types'
+import { deadlinePassed, readDeadlineAt } from '@/lib/trade-deadline/tradeDeadlineTime'
+import { tradeReviewMode as chosenTradeReviewMode } from '@/lib/league-rules-explainer/snapshot'
+import { readVetoRule, type VetoRule } from './vetoRule'
 
 export type ResolvedLeagueTradeSettings = {
   tradeReviewMode: TradeReviewType
   tradeDeadlineWeek: number | null
   tradeReviewHours: number
-  vetoThresholdPercent: number
+  /** The league's veto rule (./vetoRule.ts): a vote count by default, or a percent of the teams. */
+  vetoRule: VetoRule
+  /** The percent, when the rule is a percent; null for a vote count. Stored on each new trade. */
+  vetoThresholdPercent: number | null
   processingDelayHours: number
   tradesAllowed: boolean
   faabTradingAllowed: boolean
@@ -35,8 +41,19 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   const cr = (snap?.conceptRules ?? {}) as { extensions?: Record<string, unknown> }
   const ext = cr.extensions ?? {}
 
+  /*
+   * 🛑 THE TRADE REVIEW CHOSEN AT CREATION WAS IGNORED HERE. League creation stores the commissioner's
+   * choice as `settings.trade_review_mode` (the key the rules popup reads), while
+   * `commissionerSettings.tradeReviewMode` keeps the format's default — so a league created as
+   * "League vote" or "Instant" got commissioner review on the main trades screen, whatever the popup
+   * said. The chosen key wins now (owner's decision, 2026-10-29); every save since #2907 writes both
+   * keys the same, so for those leagues nothing moves.
+   */
   const rawMode = String(
-    comm.tradeReviewMode ?? (league as { tradeReviewMode?: string }).tradeReviewMode ?? 'commissioner',
+    chosenTradeReviewMode((league.settings ?? {}) as Record<string, unknown>) ??
+      comm.tradeReviewMode ??
+      (league as { tradeReviewMode?: string }).tradeReviewMode ??
+      'commissioner',
   ).toLowerCase()
 
   let tradeReviewMode: TradeReviewType = 'commissioner'
@@ -51,10 +68,8 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
 
   const tradeReviewHours = num(comm.tradeReviewHours ?? league.tradeReviewHours, 48)
 
-  const vetoThresholdPercent = Math.min(
-    100,
-    Math.max(1, num(comm.vetoThresholdPercent ?? ext.vetoThresholdPercent, 50)),
-  )
+  const vetoRule = readVetoRule(league.settings, ext.vetoThresholdPercent)
+  const vetoThresholdPercent = vetoRule.mode === 'percent' ? vetoRule.value : null
 
   const processingDelayHours = Math.max(
     0,
@@ -69,6 +84,16 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
    */
   const platform = String((league as { platform?: string | null }).platform ?? '').trim().toLowerCase()
   const nativeBestBall = Boolean(league.bestBallMode) && (platform === '' || platform === 'manual' || platform === 'allfantasy')
+  /*
+   * 🛑 A NATIVE CLASSIC BEST BALL LEAGUE NEVER TRADES, WHATEVER `bbTradesEnabled` SAYS (owner's decision,
+   * 2026-11-07). Best ball scoring does not split a traded player's week (audit 2026-11-06, "Ownership
+   * history"). Deliberately NOT read from any switch, so no saved value can reopen it; the best ball read
+   * model says the same (lib/bestball/bestBallLeagueState.ts: `transactions.trades` is false for
+   * Classic), and every surface that used to offer a trade switch — /api/bestball/settings, the
+   * commissioner panel, creation — now refuses or omits it. A league that
+   * saved `bbTradesEnabled: true` earlier is still refused here. Guilly + Best Ball is not `bestBallMode`
+   * and keeps the guillotine rule below.
+   */
   let tradesAllowed = !league.lockAllMoves && !nativeBestBall
   if (league.guillotineMode) {
     const g = (snap as Record<string, unknown>).guillotineSettings as { tradesAllowed?: boolean } | undefined
@@ -80,10 +105,6 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     const survivorGuillotine = raw.survivorGuillotine as { tradesEnabled?: boolean } | undefined
     tradesAllowed = tradesAllowed && survivorGuillotine?.tradesEnabled === true
   }
-  if (nativeBestBall && league.bbTradesEnabled === false) {
-    tradesAllowed = false
-  }
-
   /*
    * 🛑 THIS DEFAULTED TO THE DRAFT-PICK SETTING, WHICH DEFAULTS TO FALSE.
    *
@@ -115,6 +136,7 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     tradeReviewMode,
     tradeDeadlineWeek,
     tradeReviewHours,
+    vetoRule,
     vetoThresholdPercent,
     processingDelayHours,
     tradesAllowed,
@@ -125,8 +147,13 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   }
 }
 
-export function isPastTradeDeadline(league: League, currentWeek: number | null): boolean {
+/**
+ * `currentWeek` is the server's in-season week (`serverWeekForTradeDeadline`), null when no deadline
+ * applies. In season, the commissioner's close time (`settings.trade_deadline_at`) closes trades too,
+ * whichever comes first.
+ */
+export function isPastTradeDeadline(league: League, currentWeek: number | null, now: Date = new Date()): boolean {
+  if (currentWeek == null) return false
   const s = resolveLeagueTradeSettings(league)
-  if (s.tradeDeadlineWeek == null || currentWeek == null) return false
-  return currentWeek > s.tradeDeadlineWeek
+  return deadlinePassed({ inSeason: true, currentWeek, deadlineWeek: s.tradeDeadlineWeek, deadlineAt: readDeadlineAt(league.settings), now }).passed
 }

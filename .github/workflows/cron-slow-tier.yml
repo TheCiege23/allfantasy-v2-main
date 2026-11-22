@@ -47,8 +47,6 @@ on:
     - cron: "0 11 * * 1"
     - cron: "0 12 * * *"
     - cron: "0 14-16 * * 2"
-    - cron: "0 16-19 * * *"
-    - cron: "0 3 * * 1"
     - cron: "0 4 * * 3"
     - cron: "0 7 * * *"
     - cron: "0 9 * * *"
@@ -57,6 +55,7 @@ on:
     - cron: "10 5 * * *"
     - cron: "10 9 * * *"
     - cron: "15,45 * * * *"
+    - cron: "45 * * * *"
     - cron: "20 */4 * * *"
     - cron: "20 6 * * *"
     # /api/cron/import-schedules?odds=1 — declared in cron-schedule.json since
@@ -111,7 +110,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       # No `npm ci`. The dispatcher uses only the Node standard library and global fetch, so
       # installing would be most of the runtime for nothing -- same reasoning as cron-budget.yml.

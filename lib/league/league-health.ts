@@ -9,7 +9,7 @@
  */
 import { OVERDUE_CLAIM_DAYS } from '@/lib/core-app/commissioner/signals'
 
-export type HealthAction = { kind: 'settings'; panel: string } | { kind: 'tab'; tab: string }
+type HealthAction = { kind: 'settings'; panel: string } | { kind: 'tab'; tab: string }
 
 export type HealthItem = {
   id: 'settings' | 'seats' | 'dues' | 'trades_review' | 'trades_vote' | 'waivers_overdue'

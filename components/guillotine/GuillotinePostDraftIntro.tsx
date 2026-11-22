@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 const STORAGE_KEY_PREFIX = 'guillotine_post_draft_intro_seen_'
 const INTRO_VIDEO_SRC = '/guillotine/Guillotine%20League%20Intro.mp4'
 
-export interface GuillotinePostDraftIntroProps {
+interface GuillotinePostDraftIntroProps {
   leagueId: string
   /** Call when user dismisses (Continue). */
   onContinue: () => void
@@ -43,9 +43,9 @@ export function GuillotinePostDraftIntro({ leagueId, onContinue }: GuillotinePos
 
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-      <h2 className="mb-3 text-lg font-semibold text-white">Guillotine League — Intro</h2>
+      <h2 className="mb-3 text-lg font-semibold text-white">Guilly League — Intro</h2>
       <p className="mb-4 text-sm text-white/70">
-        Your draft is complete. Watch a quick intro to how your Guillotine League works.
+        Your draft is complete. Watch a quick intro to how your Guilly League works.
       </p>
       <div className="rounded-xl overflow-hidden bg-black">
         <video

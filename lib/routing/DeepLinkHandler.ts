@@ -10,13 +10,15 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
   "/dashboard",
   "/discover",
   "/leagues",
+  "/league",
   "/web",
   "/app",
   "/bracket",
   "/brackets",
   "/af-legacy",
-  // The primary rankings surface; player links from news and sports alerts resolve here
-  // (lib/fantasy-news-aggregator/playerLinkResolver.ts). Without it every such link fell
+  // The primary rankings surface; sports-alert player links resolve here. (News player links
+  // did too until 2026-11-12; they now open /player/<name>, see
+  // lib/fantasy-news-aggregator/playerLinkResolver.ts.) Without it every such link fell
   // through to the product fallback and a "Player X" alert opened /af-legacy instead.
   "/af-rankings",
   "/legacy",
@@ -45,7 +47,7 @@ const ALLOWED_DEEP_LINK_PREFIXES = [
  * Normalize a deep link path: ensure it starts with / and is not a full URL.
  * Returns the path if allowed, otherwise a safe default.
  */
-export function normalizeDeepLink(path: string | null | undefined): string {
+function normalizeDeepLink(path: string | null | undefined): string {
   const safe = safeRedirectPath(path)
   return safe
 }

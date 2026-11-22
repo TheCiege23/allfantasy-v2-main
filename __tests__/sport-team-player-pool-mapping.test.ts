@@ -312,21 +312,6 @@ describe('Sport teams, logos, and player pool mapping', () => {
     )
   })
 
-  it('resolves logo from db first and static fallback otherwise', async () => {
-    const { resolveTeamLogoUrl, resolveTeamLogoUrlSync } = await import('@/lib/sport-teams/TeamLogoResolver')
-
-    sportsTeamFindFirstMock.mockResolvedValueOnce({ logo: 'https://cdn.example/bos.png' })
-    const dbLogo = await resolveTeamLogoUrl('BOS', 'NBA')
-    expect(dbLogo).toBe('https://cdn.example/bos.png')
-
-    sportsTeamFindFirstMock.mockResolvedValueOnce(null)
-    const fallbackLogo = await resolveTeamLogoUrl('LAL', 'NBA')
-    expect(fallbackLogo).toContain('/nba/500/lal.png')
-
-    const syncLogo = resolveTeamLogoUrlSync('LAL', 'NBA')
-    expect(syncLogo).toContain('/nba/500/lal.png')
-  })
-
   it('bootstraps league player pool context with sport-specific teams and players', async () => {
     const { bootstrapLeaguePlayerPool } = await import('@/lib/sport-teams/LeaguePlayerPoolBootstrapService')
 
@@ -453,11 +438,13 @@ describe('Sport teams, logos, and player pool mapping', () => {
     expect(getPrimaryLogoUrlForTeam('NFL', 'NO')).toContain('/nfl/500/no.png')
   })
 
-  it('getTeamIdByAbbreviationMap has correct size for NBA, MLB, NHL', async () => {
+  it('getTeamIdByAbbreviationMap covers every club for NBA, MLB, NHL', async () => {
     const { getTeamIdByAbbreviationMap } = await import('@/lib/sport-teams/SportTeamMetadataRegistry')
-    expect(getTeamIdByAbbreviationMap('NBA').size).toBe(30)
-    expect(getTeamIdByAbbreviationMap('MLB').size).toBe(30)
-    expect(getTeamIdByAbbreviationMap('NHL').size).toBe(32)
+    // Clubs, not keys: provider aliases (AZ, CHW, GSW, …) are extra keys pointing at the same team_id.
+    const clubs = (sport: string) => new Set(getTeamIdByAbbreviationMap(sport).values()).size
+    expect(clubs('NBA')).toBe(30)
+    expect(clubs('MLB')).toBe(30)
+    expect(clubs('NHL')).toBe(32)
   })
 
   it('getTeamMetadataForSportDbAware falls back to static registry when DB returns empty', async () => {

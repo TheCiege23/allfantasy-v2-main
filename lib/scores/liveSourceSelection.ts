@@ -141,7 +141,31 @@ function sliceKey(row: SourcedRow, sliceBy: 'week' | 'day'): string {
  *
  * Input order is preserved, because callers sort by kickoff before selecting.
  */
-export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Date.now(), sliceBy: 'week' | 'day' = 'week'): T[] {
+export interface PickSourceOptions {
+  /**
+   * Hold a fresh feed to the coverage bar of EVERY ranked feed, stale ones included.
+   *
+   * 🛑 FOR A WEEK'S SLATE, A PARTIAL FEED MUST NOT WIN BECAUSE THE COMPLETE ONE MISSED A REFRESH.
+   * Dead feeds are dropped before coverage is compared, so the bar is set only by what is live.
+   * Measured on production 2026-10-19, NBA week 1: thesportsdb 53 games (refreshed every 6h, one
+   * run abandoned on 10-18) and rolling_insights 20 games, every one at a midnight-UTC placeholder
+   * time. Once thesportsdb passes 6h, rolling_insights is the only live feed, clears its own bar, and
+   * the lineup lock and the week seal read 20 of 53 games — players on the other teams never lock,
+   * and a week can seal without them.
+   *
+   * A scoreboard wants the freshest scores, so it keeps the default. A week read (locks, seals)
+   * wants the whole slate: with this set, a live feed under 80% of the best-covered ranked feed is
+   * disqualified even when that feed is stale, and the stale complete feed answers instead.
+   */
+  coverageBarIncludesStale?: boolean
+}
+
+export function pickFreshestSourceRows<T extends SourcedRow>(
+  rows: T[],
+  now = Date.now(),
+  sliceBy: 'week' | 'day' = 'week',
+  options: PickSourceOptions = {},
+): T[] {
   if (rows.length === 0) return rows
 
   const slices = new Map<string, T[]>()
@@ -151,16 +175,16 @@ export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Da
     if (slice) slice.push(row)
     else slices.set(key, [row])
   }
-  if (slices.size === 1) return pickOneSource(rows, now)
+  if (slices.size === 1) return pickOneSource(rows, now, options)
 
   const keep = new Set<T>()
   for (const slice of slices.values()) {
-    for (const row of pickOneSource(slice, now)) keep.add(row)
+    for (const row of pickOneSource(slice, now, options)) keep.add(row)
   }
   return rows.filter((row) => keep.has(row))
 }
 
-function pickOneSource<T extends SourcedRow>(rows: T[], now: number): T[] {
+function pickOneSource<T extends SourcedRow>(rows: T[], now: number, options: PickSourceOptions = {}): T[] {
   const bySource = new Map<string, { rows: T[]; newest: number }>()
   for (const row of rows) {
     const key = row.source ?? ''
@@ -178,7 +202,7 @@ function pickOneSource<T extends SourcedRow>(rows: T[], now: number): T[] {
   // Prefer live feeds; fall back to everything only if none is current, so a
   // fully stale sport still renders something rather than an empty screen.
   const live = all.filter(([, v]) => now - v.newest <= LIVE_SOURCE_DEAD_AFTER_MS)
-  const available = live.length > 0 ? live : all
+  let available = live.length > 0 ? live : all
 
   const rank = (source: string): number => {
     const i = (LIVE_SOURCE_PREFERENCE as readonly string[]).indexOf(source)
@@ -198,6 +222,18 @@ function pickOneSource<T extends SourcedRow>(rows: T[], now: number): T[] {
    * the pool can never be emptied by this step.
    */
   const unranked = LIVE_SOURCE_PREFERENCE.length
+  if (options.coverageBarIncludesStale) {
+    const barAll = all.reduce(
+      (max, [source, v]) => (rank(source) < unranked ? Math.max(max, v.rows.length) : max),
+      0,
+    )
+    const clears = ([source, v]: (typeof all)[number]) =>
+      rank(source) === unranked || v.rows.length >= LIVE_SOURCE_COVERAGE_FLOOR * barAll
+    // A live feed that clears the whole-slate bar still wins on freshness; if none does, a stale
+    // feed that covers the week answers rather than a fresh partial one.
+    const liveClearing = live.filter(clears)
+    available = liveClearing.length > 0 ? liveClearing : all.filter(clears)
+  }
   const rankedMax = available.reduce(
     (max, [source, v]) => (rank(source) < unranked ? Math.max(max, v.rows.length) : max),
     0,

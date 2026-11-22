@@ -1,29 +1,34 @@
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { executeImmediateAddDrop } from "@/lib/waiver-wire/free-agent-service"
-import { dailyScheduleImmediateAddRefusal, loadDailyTransactionPolicy } from "@/lib/waiver-wire/daily-schedule-gate"
+import { checkImmediateAddGate } from "@/lib/waiver-wire/immediateAddGate"
 import { mapAddDropErrorCode, addDropErrorStatus, ADD_DROP_ERROR_COPY, type AddDropErrorCode } from "@/lib/waiver-wire/addDropErrors"
-import { assertLeagueActionGate } from "@/server/services/leagueActionGate"
-import { assertRosterTransactionsAllowed } from "@/lib/roster-legality/rosterTransactionGates"
 import { logAction } from "@/server/services/auditService"
 import { invalidateIntelligence } from "@/lib/dashboard/intelligence-events"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
+import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
 
 export const dynamic = "force-dynamic"
 
-function errorResponse(code: AddDropErrorCode, message?: string) {
-  return NextResponse.json({ ok: false, code, error: message ?? ADD_DROP_ERROR_COPY[code] }, { status: addDropErrorStatus(code) })
+function errorResponse(code: AddDropErrorCode, message?: string, extra?: Record<string, unknown>) {
+  return NextResponse.json(
+    { ok: false, code, error: message ?? ADD_DROP_ERROR_COPY[code], ...(extra ?? {}) },
+    { status: addDropErrorStatus(code) },
+  )
 }
 
 /**
  * POST — immediate free-agent add/drop for NFL/NCAAF redraft.
  *
- * Only performs an immediate move when the league allows it (FCFS or instant-free-agent). When the
+ * Only performs an immediate move when the league allows it (FCFS or instant-free-agent, a daily
+ * free-agent unlock, or an offseason opened as first-come free agency). When the
  * player must be claimed through waivers, returns `WAIVER_REQUIRED` so the client routes to the
- * claim drawer instead. Single-roster only — never runs the league-wide processor, so other teams'
+ * claim drawer instead. A drop that would leave a starting slot unfillable answers `LINEUP_WARNING`
+ * once; the screen asks the manager, and a retry with `confirmLineupWarning: true` goes through.
+ * Single-roster only — never runs the league-wide processor, so other teams'
  * pending claims are untouched and never exposed.
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -33,7 +38,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return errorResponse("UNAUTHORIZED")
 
   const leagueId = params.leagueId
-  let roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } })
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  let roster: { id: string } | null = acting.ok ? { id: acting.rosterId } : null
   if (!roster) {
     const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
     if (league?.leagueVariant === 'survivor_guillotine') {
@@ -48,36 +56,30 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const dropPlayerId = body.dropPlayerId ?? body.drop_player_id ?? null
   if (!addPlayerId) return errorResponse("VALIDATION_FAILED", "addPlayerId is required.")
 
-  // League + roster gates (locks, season state, legality).
-  const gate = await assertLeagueActionGate(leagueId, userId, "waiver_claim_submit")
+  // Every rule an instant add must pass (season phase incl. bbFaEnabled, league + roster gates, the
+  // waiver-vs-free-agent decision and the after-drop hold) lives in lib/waiver-wire/immediateAddGate.ts,
+  // shared with the waiver runtime's add_free_agent.
+  const gate = await checkImmediateAddGate({ leagueId, rosterId: roster.id, userId, addPlayerId: String(addPlayerId), dropPlayerId })
   if (!gate.ok) {
-    const code = mapAddDropErrorCode(gate.err.error ?? "", { hasDrop: Boolean(dropPlayerId) })
-    return errorResponse(code === "VALIDATION_FAILED" ? "LEAGUE_NOT_ACTIVE" : code, gate.err.error)
+    return NextResponse.json({ ok: false, code: gate.code, error: gate.error ?? (ADD_DROP_ERROR_COPY as Record<string, string>)[gate.code], ...(gate.extra ?? {}) }, { status: gate.status })
   }
-  const legality = await assertRosterTransactionsAllowed({ leagueId, rosterIds: [roster.id], userId, kind: "waiver_claim" })
-  if (!legality.ok) {
-    return errorResponse(mapAddDropErrorCode(legality.error ?? "", { hasDrop: Boolean(dropPlayerId) }), legality.error)
-  }
+  const phase = { firstComeAdds: gate.firstComeAdds }
 
-  // Decide immediate-add vs waiver. A commissioner's per-day schedule (lib/waivers/dailyWaiverSchedule.ts)
-  // decides when one is enabled: Locked day → refused; Free-agents day, or a "Waivers → Free agents"
-  // day after its run cleared → first-come, except a player still in the after-drop waiver period;
-  // any other waiver day → claim through waivers. Otherwise: FCFS or instant-free-agent leagues only.
-  const daily = await loadDailyTransactionPolicy(leagueId).catch(() => null)
-  if (daily) {
-    if (daily.policy.mode === "locked") return errorResponse("LEAGUE_NOT_ACTIVE", daily.policy.immediateRefusal ?? undefined)
-    const refusal = await dailyScheduleImmediateAddRefusal(leagueId, daily, String(addPlayerId))
-    if (refusal) return errorResponse("WAIVER_REQUIRED", refusal)
-  } else {
-    const settings = await getEffectiveLeagueWaiverSettings(leagueId)
-    const immediateAllowed = settings.normalizedWaiverType === "fcfs" || settings.instantFaAfterClear === true
-    if (!immediateAllowed) {
-      return errorResponse("WAIVER_REQUIRED", "This player must be claimed through waivers in this league.")
+  // A drop that leaves a starting slot unfillable is the manager's call, but they confirm it first.
+  if (dropPlayerId && !lineupWarningConfirmed(body)) {
+    const warning = await loadLineupFillWarning({ leagueId, rosterId: roster.id, addPlayerId: String(addPlayerId), dropPlayerId })
+    if (warning) {
+      return NextResponse.json({ ok: false, code: LINEUP_WARNING_CODE, error: warning.message, warning }, { status: 409 })
     }
   }
 
   try {
-    const result = await executeImmediateAddDrop(leagueId, roster.id, { addPlayerId: String(addPlayerId), dropPlayerId })
+    const result = await executeImmediateAddDrop(
+      leagueId,
+      roster.id,
+      { addPlayerId: String(addPlayerId), dropPlayerId },
+      ...(phase.firstComeAdds ? [{ offseasonFreeAgency: true }] : []),
+    )
 
     void logAction({
       leagueId,

@@ -24,7 +24,7 @@ export const pirateModel: FormatValueModel = {
     const giver = object(input.teamState)
     const receiver = object(input.acquiringTeamState)
     if (giver?.inLockWindow === true || receiver?.inLockWindow === true) {
-      return { ok: false, reason: 'Trading is locked from Thursday kickoff until the Monday games end.' }
+      return { ok: false, reason: 'Trading is locked from Thursday kickoff until the Monday games end.', reasonCode: 'pirate.locked' }
     }
     return { ok: true }
   },

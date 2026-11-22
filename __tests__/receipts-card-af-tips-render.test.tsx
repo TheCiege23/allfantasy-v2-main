@@ -9,7 +9,7 @@ import { savedLines, savedMargin } from '@/components/core-app/screens/AfSavedSh
 const tip = (over: Partial<ChimmyReceipt> = {}): ChimmyReceipt => ({
   id: 'g26:2026:7:in:out',
   leagueId: 'g26',
-  leagueName: 'Guillotine League 26',
+  leagueName: 'Guilly League 26',
   season: 2026,
   week: 7,
   slot: null,

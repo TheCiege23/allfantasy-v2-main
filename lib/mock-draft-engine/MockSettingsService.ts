@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { MockDraftSettings, MockSlotConfigEntry } from './types'
+import { normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 export async function getMockDraftSettings(draftId: string, userId?: string): Promise<MockDraftSettings | null> {
   const draft = await prisma.mockDraft.findFirst({
@@ -16,7 +17,7 @@ export async function getMockDraftSettings(draftId: string, userId?: string): Pr
     sport: String(m.sport ?? 'NFL'),
     leagueType: String(m.leagueType ?? 'redraft'),
     draftType: String(m.draftType ?? 'snake'),
-    numTeams: Math.min(16, Math.max(8, Number(m.numTeams) ?? 12)),
+    numTeams: normalizeMockDraftTeamCount(m.numTeams, m.sport, m.leagueType),
     rounds: Math.min(22, Math.max(1, Number(m.rounds) ?? 15)),
     timerSeconds: Number(m.timerSeconds) ?? 60,
     aiEnabled: Boolean(m.aiEnabled ?? true),
@@ -60,6 +61,8 @@ export async function updateMockDraftSettings(
     ...(partial.keepersEnabled != null && { keepersEnabled: partial.keepersEnabled }),
     ...(partial.keepers != null && { keepers: partial.keepers }),
   }
+  // Store a size a league of this sport and type accepts, so what is saved is what every reader sees.
+  if (nextMeta.numTeams != null) nextMeta.numTeams = normalizeMockDraftTeamCount(nextMeta.numTeams, nextMeta.sport, nextMeta.leagueType)
   await prisma.mockDraft.update({
     where: { id: draftId },
     data: {

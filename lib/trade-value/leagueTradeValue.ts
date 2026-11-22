@@ -21,7 +21,15 @@
 
 import { signedGapPct } from '@/lib/decision-os/trade/tradeGrade'
 
-export type LeagueValueAdjustmentKind = 'scoring' | 'need'
+/**
+ * `tradeMarket`: what managers actually paid for the player across completed trades in AllFantasy-
+ * connected leagues, against what the chart says (`lib/trade-market/afTradeMarketReads.ts`). Bounded
+ * at ±12% by the writer, and only from a fresh, centred run — so it can never dominate the others.
+ * `lineup`: how much more (or less) his position trades for in leagues starting more (or fewer) of it
+ * than usual — 2-TE, 3-WR, 4-QB — MEASURED from completed trades (`formatMarkets.computeLineupFactors`),
+ * applied only where that measurement has the breadth to publish, bounded 0.8–1.25.
+ */
+type LeagueValueAdjustmentKind = 'scoring' | 'need' | 'tradeMarket' | 'lineup'
 
 export type LeagueValueAdjustment = {
   kind: LeagueValueAdjustmentKind
@@ -45,7 +53,7 @@ export type LeagueValuedLine = {
  * than three times his market price, which no trade market would pay. The cap keeps the combined
  * move inside the range either helper is individually trusted with.
  */
-export const LEAGUE_FACTOR_MIN = 0.5
+const LEAGUE_FACTOR_MIN = 0.5
 export const LEAGUE_FACTOR_MAX = 2.0
 
 /** Apply this league's adjustments to one line's market value. Factors of exactly 1 are dropped. */

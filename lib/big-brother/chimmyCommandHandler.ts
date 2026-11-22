@@ -3,7 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isBigBrotherLeague } from './BigBrotherLeagueConfig'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { getCurrentCycleForLeague, transitionPhase } from './BigBrotherPhaseStateMachine'
 import { getEligibility, isJuryRoster } from './BigBrotherEligibilityEngine'
 import { setNominations, setReplacementNominee } from './BigBrotherNominationEngine'
@@ -212,7 +212,7 @@ export async function processBigBrotherLeagueChatInput(
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 
   if (looksLikePublicEvictionVote(rawMessage)) {
     await logBigBrotherChatCommand({
@@ -362,7 +362,7 @@ export async function processBigBrotherLeagueChatInput(
       '• `@chimmy status` — house snapshot',
       '• `@chimmy deadlines` — configured windows',
       '• `@chimmy minigame` — themed HOH/POV minigame for this week',
-      '• `@chimmy explain [term]` — rules glossary / AI',
+      '• `@chimmy explain [term]` — rules glossary / Chimmy',
       '• Actions (role + phase): nominate, replacement, veto, vote (private only)',
       '• Eviction votes are always private — use Vote Center or DM Chimmy.',
     ].join('\n')
@@ -737,7 +737,7 @@ export async function getBbChimmyMentionOptions(args: {
     where: { leagueId, platformUserId: userId },
     select: { id: true },
   })
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 
   const current = await getCurrentCycleForLeague(leagueId)
   if (!current) return { type: 'command', options: getBbChimmyCommandSuggestions({ phase: '—', myRosterId, hohRosterId: null, vetoWinnerRosterId: null, nominee1RosterId: null, nominee2RosterId: null, vetoParticipantRosterIds: null, canVote: [], juryRosterIds: [], isJury: false, finaleActive: false }) }

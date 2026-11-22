@@ -42,6 +42,8 @@ export interface EspnImportTeam {
   waiverPriority: number | null
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
+  /** ESPN's own slot per starter, keyed by player id. Optional: the MLB service does not fill it. */
+  starterSlotById?: Record<string, string>
   reservePlayerIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
@@ -55,6 +57,14 @@ export interface EspnImportScheduleWeek {
     teamId2: string | null
     points1?: number
     points2?: number
+    categories1?: Record<string, number>
+    categories2?: Record<string, number>
+    /**
+     * ESPN's `winner === 'UNDECIDED'`: not played yet, or still being played. Its `totalPoints` are
+     * 0 (future) or partial (live). Kept on the matchup so the IMPORT can leave its result unset —
+     * the live-scoring path (`fetchEspnScheduleForSync`) still wants the partial points.
+     */
+    undecided?: boolean
   }>
 }
 
@@ -104,8 +114,13 @@ export interface EspnImportPayload {
     season: string
     sourceLeagueId: string
   }>
-  /** Logged-in user's team id when ESPN cookies identify the member in `raw` members/teams. */
+  /**
+   * The importing user's team id: from the SWID cookie when one is saved, otherwise from the ESPN
+   * team code they set on their team (`espnTeamCode.ts`). `viewerTeamProof` says which.
+   */
   viewerTeamId?: string | null
+  /** How `viewerTeamId` was established. Absent/null when it was not. */
+  viewerTeamProof?: 'swid' | 'team_code' | null
   /**
    * True when this user has ESPN cookies saved. With `viewerTeamId` null, this means the saved
    * ESPN account has no team in this league — not that ESPN is unconnected.

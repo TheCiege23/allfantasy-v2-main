@@ -86,7 +86,7 @@ export async function buildZombieContextForChimmy(
     whispererLine,
   ]
   parts.push(
-    'When the user asks about using serum, weapon, or ambush: explain how they work and recommend the official Zombie tools (Resources panel, league Zombie AI, commissioner for usage). Do not execute or authorize usage. When they ask am I human/zombie/whisperer or what actions are available: use this context. Private actions (e.g. using a serum) must be done through the designated flow, not decided by Chimmy.'
+    'When the user asks about using serum, weapon, or ambush: explain how they work and recommend the official Zombie tools (Resources panel, league Zombie Chimmy, commissioner for usage). Do not execute or authorize usage. When they ask am I human/zombie/whisperer or what actions are available: use this context. Private actions (e.g. using a serum) must be done through the designated flow, not decided by Chimmy.'
   )
   return parts.join(' ')
 }

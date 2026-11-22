@@ -33,7 +33,7 @@ export interface RedraftDataAvailability {
   tradeValues: DataState
 }
 
-export interface RedraftFreshness {
+interface RedraftFreshness {
   /** ISO timestamp the context was assembled. */
   generatedAt: string
   /** ISO timestamp of newest finalized PlayerWeeklyScore used, if any. */
@@ -138,6 +138,12 @@ export interface RedraftMatchupSummary {
   awayProjected: number | null
   isUserMatchup: boolean
   opponentRosterId: string | null
+  /**
+   * An odd-team league's extra matchup that week (lib/redraft/oddTeamExtraMatchupRules.ts): "Extra
+   * matchup vs <team> (<reason>) · 112.4–98.0". For the leftover team `opponentRosterId` is the chosen
+   * team, whose own game supplies its score.
+   */
+  extraMatchup?: string | null
 }
 
 /** The one canonical, serializable redraft War Room context object. */
@@ -178,10 +184,3 @@ export interface RedraftWarRoomContext {
   }
 }
 
-export type RedraftWarRoomAction =
-  | 'state'
-  | 'waivers'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'lineup'
-  | 'ask'

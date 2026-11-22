@@ -191,7 +191,7 @@ describe('Scout draws each format', () => {
     expect(html).not.toContain('You have not played them')
   })
 
-  it('elimination: "Every team against the cut" opens the standings — the Matchup screen lists no teams in a guillotine league', () => {
+  it('elimination: "Every team against the cut" opens the standings — the Matchup screen lists no teams in a Guilly league', () => {
     const html = render(
       { format: fmt({ kind: 'guillotine', elimination: true }), managers: { available: true, data: [mgr('1', { isYou: true }), mgr('2')] } },
       { rank: 3, outOf: 12, overCut: 9, basis: 'points', placesAboveCut: 9, cutLine: 60, elimination: true },

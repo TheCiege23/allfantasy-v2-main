@@ -1,0 +1,951 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-26T02:22:22Z",
+    "source": "https://www.fantrax.com/fxea/general/{getLeagueInfo,getTeamRosters,getStandings,getDraftPicks,getDraftResults}?leagueId=<public league, id withheld>",
+    "note": "Public pre-draft NFL league, no credentials (fxea/general is unauthenticated). Captured with the owner's consent. League id, league name, team ids and team names replaced with placeholders; playerInfo trimmed to 20 of 6011 pool entries; scoring, roster and playoff settings verbatim."
+  },
+  "info": {
+    "seasonYear": 2026,
+    "startDate": "2026-09-09",
+    "endDate": "2027-01-06",
+    "draftType": "snake",
+    "ppr": true,
+    "rosterInfo": {
+      "positionConstraints": {
+        "RB": {
+          "maxActive": 2
+        },
+        "TE": {
+          "maxActive": 1
+        },
+        "SFX": {
+          "maxActive": 2
+        },
+        "LB": {
+          "maxActive": 3
+        },
+        "DL": {
+          "maxActive": 2
+        },
+        "WR": {
+          "maxActive": 3
+        },
+        "K": {
+          "maxActive": 1
+        },
+        "ID": {
+          "maxActive": 3
+        },
+        "ER": {
+          "maxActive": 1
+        },
+        "DB": {
+          "maxActive": 2
+        },
+        "RWT": {
+          "maxActive": 2
+        }
+      },
+      "maxTotalPlayers": 38,
+      "maxTotalActivePlayers": 22,
+      "maxTotalReservePlayers": 16
+    },
+    "scoringSystem": {
+      "scoringCategories": {
+        "OFFENSE": {
+          "TD": {
+            "Default": "points6"
+          },
+          "REC": {
+            "Default": "points1"
+          },
+          "2RR": {
+            "Default": "points2"
+          },
+          "RtT": {
+            "Default": "points6"
+          },
+          "FL": {
+            "Default": "points-1"
+          },
+          "YDS": {
+            "Default": "points0.1"
+          },
+          "FRTD": {
+            "Default": "points6"
+          },
+          "Int": {
+            "Default": "points-2"
+          }
+        },
+        "DEFENSE": {
+          "FF": {
+            "Default": "points2"
+          },
+          "BPTD": {
+            "Default": "points6"
+          },
+          "BK": {
+            "Default": "points3"
+          },
+          "FR": {
+            "Default": "points1"
+          },
+          "BP": {
+            "Default": "points1"
+          },
+          "Int": {
+            "Default": "points6"
+          },
+          "BXPRS": {
+            "Default": "points2"
+          },
+          "BFGTD": {
+            "Default": "points6"
+          },
+          "PD": {
+            "Default": "points1"
+          },
+          "QBH": {
+            "Default": "points0.5"
+          },
+          "InTD": {
+            "Default": "points6"
+          },
+          "Tk": {
+            "Default": "points0.5"
+          },
+          "Sk": {
+            "Default": "points5"
+          },
+          "TFL": {
+            "Default": "points1"
+          },
+          "FRTD": {
+            "Default": "points6"
+          }
+        },
+        "KICKING": {
+          "FG": {
+            "Default": "points3"
+          },
+          "XP": {
+            "Default": "points1"
+          }
+        }
+      },
+      "scoringCategorySettings": [
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_LOST",
+                "name": "Fumbles Lost",
+                "id": "2670",
+                "shortName": "FL"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS_OFFENSE",
+                "name": "Fumbles Recovered for Touchdowns - Offense",
+                "id": "2701",
+                "shortName": "FRTD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INTERCEPTIONS_THROWN",
+                "name": "Interceptions Thrown",
+                "id": "2760",
+                "shortName": "Int"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PASSING_TOUCHDOWNS",
+                "name": "Passing Touchdowns",
+                "id": "2860",
+                "shortName": "TD"
+              },
+              "points": 4.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PASSING_YARDS",
+                "name": "Passing Yards",
+                "id": "2870",
+                "shortName": "YDS"
+              },
+              "points": 0.05
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEIVING_TOUCHDOWNS",
+                "name": "Receiving Touchdowns",
+                "id": "2880",
+                "shortName": "TD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEIVING_YARDS",
+                "name": "Receiving Yards",
+                "id": "2890",
+                "shortName": "YDS"
+              },
+              "points": 0.1
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RECEPTIONS",
+                "name": "Receptions",
+                "id": "2900",
+                "shortName": "REC"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RUSHING_TOUCHDOWNS",
+                "name": "Rushing Touchdowns",
+                "id": "3040",
+                "shortName": "TD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RUSHING_YARDS",
+                "name": "Rushing Yards",
+                "id": "3050",
+                "shortName": "YDS"
+              },
+              "points": 0.1
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TWO_POINT_CONVERSIONS_SCORES",
+                "name": "Two Point Conversion Rushes & Receptions",
+                "id": "3147",
+                "shortName": "2RR"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RETURN_TOUCHDOWNS",
+                "name": "Kickoff/Punt Return Touchdowns",
+                "id": "3217",
+                "shortName": "RtT"
+              },
+              "points": 6.0
+            }
+          ],
+          "group": {
+            "code": "FOOTBALL_OFFENSE",
+            "name": "Offense",
+            "id": "1010",
+            "shortName": "Off"
+          }
+        },
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_FIELD_GOAL_TOUCHDOWNS",
+                "name": "Blocked Field Goals for Touchdowns",
+                "id": "256e",
+                "shortName": "BFGTD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_KICKS",
+                "name": "Blocked Kicks",
+                "id": "256g",
+                "shortName": "BK"
+              },
+              "points": 3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_PUNTS",
+                "name": "Blocked Punts",
+                "id": "256h",
+                "shortName": "BP"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_PUNT_TOUCHDOWNS",
+                "name": "Blocked Punts for Touchdowns",
+                "id": "256i",
+                "shortName": "BPTD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_EXTRA_POINT_RETURNS_FOR_SCORE",
+                "name": "Blocked Extra Point Returns for Score",
+                "id": "256j",
+                "shortName": "BXPRS"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_FORCED",
+                "name": "Forced Fumbles",
+                "id": "2680",
+                "shortName": "FF"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_RECOVERED",
+                "name": "Fumbles Recovered",
+                "id": "2690",
+                "shortName": "FR"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FUMBLES_RECOVERED_TOUCHDOWNS",
+                "name": "Fumbles Recovered for Touchdowns",
+                "id": "2700",
+                "shortName": "FRTD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INTERCEPTIONS_CAUGHT",
+                "name": "Interceptions Caught",
+                "id": "2730",
+                "shortName": "Int"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INTERCEPTIONS_CAUGHT_TOUCHDOWNS",
+                "name": "Interceptions Returned for Touchdowns",
+                "id": "2740",
+                "shortName": "InTD"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PASSES_DEFENSED",
+                "name": "Passes Defensed (Deflected)",
+                "id": "2770",
+                "shortName": "PD"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_QB_HITS",
+                "name": "Quarterback Hits",
+                "id": "289w",
+                "shortName": "QBH"
+              },
+              "points": 0.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SACKS_DEFENSIVE",
+                "name": "Sacks",
+                "id": "3060",
+                "shortName": "Sk"
+              },
+              "points": 5.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TACKLES",
+                "name": "Tackles",
+                "id": "3100",
+                "shortName": "Tk"
+              },
+              "points": 0.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TACKLES_FOR_LOSS",
+                "name": "Tackles For Loss",
+                "id": "3117",
+                "shortName": "TFL"
+              },
+              "points": 1.0
+            }
+          ],
+          "group": {
+            "code": "FOOTBALL_DEFENSE",
+            "name": "Individual Defense",
+            "id": "1020",
+            "shortName": "Def"
+          }
+        },
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_EXTRA_POINTS_MADE",
+                "name": "Extra Points Made",
+                "id": "2570",
+                "shortName": "XP"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FIELD_GOALS_MADE",
+                "name": "Field Goals Made",
+                "id": "2590",
+                "shortName": "FG"
+              },
+              "points": 3.0
+            }
+          ],
+          "group": {
+            "code": "FOOTBALL_KICKING",
+            "name": "Kicking",
+            "id": "1030",
+            "shortName": "Kick"
+          }
+        }
+      ],
+      "type": "HEAD_TO_HEAD_POINTS_BASED"
+    },
+    "playoffs": {
+      "lastRegularSeasonPeriod": 14,
+      "numPlayoffTeams": 6,
+      "firstPlayoffPeriod": 15,
+      "mergePlayoffPeriods": false,
+      "used": true
+    },
+    "draftSettings": {
+      "draftType": "snake"
+    },
+    "poolSettings": {
+      "duplicatePlayerType": "NONE",
+      "playerSourceType": "ALL_TEAMS"
+    },
+    "leagueName": "Public NFL league",
+    "scoringPeriods": [
+      {
+        "number": 1,
+        "endDate": "2026-09-17T20:14:59.0-0400",
+        "startDate": "2026-09-09T20:20:00.0-0400"
+      },
+      {
+        "number": 2,
+        "endDate": "2026-09-24T20:14:59.0-0400",
+        "startDate": "2026-09-17T20:15:00.0-0400"
+      }
+    ],
+    "teamInfo": {
+      "team01": {
+        "division": "AFC",
+        "id": "team01",
+        "name": "Team 01"
+      },
+      "team02": {
+        "division": "AFC",
+        "id": "team02",
+        "name": "Team 02"
+      },
+      "team03": {
+        "division": "NFC",
+        "id": "team03",
+        "name": "Team 03"
+      },
+      "team04": {
+        "division": "NFC",
+        "id": "team04",
+        "name": "Team 04"
+      },
+      "team05": {
+        "division": "AFC",
+        "id": "team05",
+        "name": "Team 05"
+      },
+      "team06": {
+        "division": "AFC",
+        "id": "team06",
+        "name": "Team 06"
+      },
+      "team07": {
+        "division": "NFC",
+        "id": "team07",
+        "name": "Team 07"
+      },
+      "team08": {
+        "division": "AFC",
+        "id": "team08",
+        "name": "Team 08"
+      },
+      "team09": {
+        "division": "AFC",
+        "id": "team09",
+        "name": "Team 09"
+      },
+      "team10": {
+        "division": "NFC",
+        "id": "team10",
+        "name": "Team 10"
+      },
+      "team11": {
+        "division": "NFC",
+        "id": "team11",
+        "name": "Team 11"
+      },
+      "team12": {
+        "division": "NFC",
+        "id": "team12",
+        "name": "Team 12"
+      },
+      "team13": {
+        "division": "AFC",
+        "id": "team13",
+        "name": "Team 13"
+      },
+      "team14": {
+        "division": "NFC",
+        "id": "team14",
+        "name": "Team 14"
+      }
+    },
+    "playerInfo": {
+      "06op5": {
+        "eligiblePos": "ID,DL",
+        "status": "WW"
+      },
+      "04ziw": {
+        "eligiblePos": "DB,ID",
+        "status": "WW"
+      },
+      "04zit": {
+        "eligiblePos": "SFX",
+        "status": "WW"
+      },
+      "04ziv": {
+        "eligiblePos": "DB,ID",
+        "status": "WW"
+      },
+      "0700e": {
+        "eligiblePos": "DB,ID",
+        "status": "WW"
+      },
+      "0700c": {
+        "eligiblePos": "LB,ID",
+        "status": "WW"
+      },
+      "0700d": {
+        "eligiblePos": "ER,ID,DL",
+        "status": "WW"
+      },
+      "01hrc": {
+        "eligiblePos": "K",
+        "status": "WW"
+      },
+      "046g5": {
+        "eligiblePos": "ID,DL",
+        "status": "WW"
+      },
+      "0529i": {
+        "eligiblePos": "DB,ID",
+        "status": "WW"
+      },
+      "04zfm": {
+        "eligiblePos": "RWT,SFX,RB",
+        "status": "WW"
+      },
+      "04zfl": {
+        "eligiblePos": "RWT,SFX,WR",
+        "status": "WW"
+      },
+      "04zfo": {
+        "eligiblePos": "RWT,SFX,WR",
+        "status": "WW"
+      },
+      "04zfn": {
+        "eligiblePos": "RWT,SFX,WR",
+        "status": "WW"
+      },
+      "04zfi": {
+        "eligiblePos": "RWT,SFX,RB",
+        "status": "WW"
+      },
+      "04zfh": {
+        "eligiblePos": "RWT,SFX,RB",
+        "status": "WW"
+      },
+      "04zfk": {
+        "eligiblePos": "RWT,SFX,TE",
+        "status": "WW"
+      },
+      "04zfj": {
+        "eligiblePos": "RWT,SFX,RB",
+        "status": "WW"
+      },
+      "04zfe": {
+        "eligiblePos": "RWT,SFX,RB",
+        "status": "WW"
+      },
+      "04zfd": {
+        "eligiblePos": "RWT,SFX,TE",
+        "status": "WW"
+      }
+    }
+  },
+  "rosters": {
+    "period": 7,
+    "rosters": {
+      "team01": {
+        "teamName": "Team 01",
+        "rosterItems": []
+      },
+      "team02": {
+        "teamName": "Team 02",
+        "rosterItems": []
+      },
+      "team03": {
+        "teamName": "Team 03",
+        "rosterItems": []
+      },
+      "team04": {
+        "teamName": "Team 04",
+        "rosterItems": []
+      }
+    }
+  },
+  "standings": [
+    {
+      "teamName": "Team 11",
+      "totalPointsFor": 0.0,
+      "teamId": "team11",
+      "gamesBack": 0.0,
+      "rank": 1,
+      "points": "0-0-6",
+      "winPercentage": 0.5
+    },
+    {
+      "teamName": "Team 04",
+      "totalPointsFor": 0.0,
+      "teamId": "team04",
+      "gamesBack": 0.0,
+      "rank": 2,
+      "points": "0-0-6",
+      "winPercentage": 0.5
+    },
+    {
+      "teamName": "Team 06",
+      "totalPointsFor": 0.0,
+      "teamId": "team06",
+      "gamesBack": 0.0,
+      "rank": 3,
+      "points": "0-0-6",
+      "winPercentage": 0.5
+    }
+  ],
+  "draftPicks": {
+    "currentDraftPicks": [
+      {
+        "round": 1,
+        "pick": 7,
+        "teamId": "team01"
+      },
+      {
+        "round": 2,
+        "pick": 8,
+        "teamId": "team01"
+      },
+      {
+        "round": 3,
+        "pick": 7,
+        "teamId": "team01"
+      },
+      {
+        "round": 4,
+        "pick": 8,
+        "teamId": "team01"
+      },
+      {
+        "round": 5,
+        "pick": 7,
+        "teamId": "team01"
+      }
+    ]
+  },
+  "draftResults": {
+    "draftDate": "2027-01-06T13:00:00.0-0500",
+    "draftPicks": [
+      {
+        "round": 1,
+        "pick": 1,
+        "teamId": "team03",
+        "time": 1792973708759,
+        "pickInRound": 1
+      },
+      {
+        "round": 1,
+        "pick": 2,
+        "teamId": "team05",
+        "time": 1792973708759,
+        "pickInRound": 2
+      },
+      {
+        "round": 1,
+        "pick": 3,
+        "teamId": "team11",
+        "time": 1792973708759,
+        "pickInRound": 3
+      },
+      {
+        "round": 1,
+        "pick": 4,
+        "teamId": "team12",
+        "time": 1792973708759,
+        "pickInRound": 4
+      },
+      {
+        "round": 1,
+        "pick": 5,
+        "teamId": "team14",
+        "time": 1792973708759,
+        "pickInRound": 5
+      }
+    ],
+    "draftState": "running",
+    "draftOrder": [
+      "team03",
+      "team05",
+      "team11",
+      "team12",
+      "team14"
+    ],
+    "draftType": "snake"
+  },
+  "counts": {
+    "poolSize": 6011,
+    "teams": 14,
+    "poolInNbaMap": 0,
+    "poolInNhlMap": 0
+  }
+}

@@ -7,11 +7,22 @@ export type DraftSessionStatus = 'pre_draft' | 'in_progress' | 'paused' | 'compl
 
 export type DraftType = 'snake' | 'linear' | 'auction'
 
+/** Survivor: the seat's tribe, shown on the board once tribes are locked before the draft. */
+export interface SlotOrderTribeBadge {
+  id: string
+  name: string
+  colorHex: string | null
+  markUrl: string | null
+  crestUrl: string | null
+}
+
 export interface SlotOrderEntry {
   slot: number
   rosterId: string
   displayName: string
   platformUserId?: string
+  /** Present only on Survivor leagues whose tribes exist and whose plan shows them on the board. */
+  tribe?: SlotOrderTribeBadge | null
 }
 
 /** One traded pick: ownership change for (round, slot) from originalRosterId to newRosterId. */
@@ -110,10 +121,12 @@ export interface DraftSessionSnapshot {
   pausedByUserId?: string | null
   /** Whether picks are allowed during the overnight auto-pause window. Client uses this to show/hide the pick panel. Server enforcement added in Commit 4. */
   allowPicksDuringOvernightPause?: boolean
+  /** Every roster that picks by itself right now (Chimmy-run, or "Auto-pick me" on). The board marks these AUTO. */
+  autoDraftRosterIds?: string[]
   /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
   viewerAutopick?: {
     enabled: boolean
-    mode: 'standard' | 'ai_queue'
+    mode: 'standard' | 'ai_queue' | 'draft_as_me'
     isProEligible: boolean
     updatedAt: string | null
   } | null
@@ -160,6 +173,8 @@ export interface DraftPickSnapshot {
   amount?: number | null
   /** Market ADP when the pick was made (`pickMetadata.adpAtPick`); absent on older picks. */
   adpAtPick?: number | null
+  /** Why the clock picked this player (`pickMetadata.autopick.reason`); absent on a pick a person made. */
+  autoPickReason?: string | null
   createdAt: string
 }
 
@@ -237,28 +252,6 @@ export interface QueueEntry {
   aiReason?: string | null
 }
 
-export type DraftEventType =
-  | 'session_created'
-  | 'session_started'
-  | 'session_paused'
-  | 'session_resumed'
-  | 'session_completed'
-  | 'pick_submitted'
-  | 'pick_undone'
-  | 'timer_reset'
-  | 'autopick_triggered'
-  | 'auction_nominated'
-  | 'auction_bid'
-  | 'auction_sold'
-
-export interface DraftEvent {
-  type: DraftEventType
-  sessionId: string
-  leagueId: string
-  at: string
-  payload?: Record<string, unknown>
-}
-
 // ————— Auction draft (deterministic) —————
 
 export interface AuctionNomination {
@@ -270,6 +263,10 @@ export interface AuctionNomination {
 }
 
 export interface AuctionState {
+  /** One-time transferred nomination turns followed by the ordinary repeating rotation. */
+  nominationOrder?: SlotOrderEntry[]
+  nominationFallbackStart?: number
+  rookieAuction?: unknown
   /** Index into slotOrder for who nominates next (0-based). */
   nominationOrderIndex: number
   /** Currently nominated player (on the block). */

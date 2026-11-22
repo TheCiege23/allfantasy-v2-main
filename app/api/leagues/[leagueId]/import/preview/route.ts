@@ -11,7 +11,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
 import {
   DEFAULT_EXISTING_LEAGUE_IMPORT_OPTIONS,
@@ -24,6 +24,8 @@ function mapImportPreviewErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  /* A sport this provider's import does not support: understood, and a retry will not change it. */
+  if (code === 'UNSUPPORTED_SPORT') return 422
   return 500
 }
 
@@ -65,7 +67,7 @@ export async function POST(
     return NextResponse.json({ error: 'sourceId is required' }, { status: 400 })
   }
   if (!isImportProviderAvailable(provider)) {
-    return NextResponse.json({ error: `Import from ${provider} is not yet available.` }, { status: 400 })
+    return NextResponse.json({ error: importComingSoonMessage(provider), code: 'coming_soon' }, { status: 400 })
   }
 
   const importGate = await assertImportCommissioner({

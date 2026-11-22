@@ -1544,4 +1544,128 @@
 .af-lh-week-summary-grid strong { line-height:1.3; }
 .af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
 .af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
+/* The other cells are whole-card links styled by `> a > span:last-child`; this cell is a div holding two
+   links, which nothing styled — so "Trades →" and "Waivers →" fell back to 18px plain text. Same look,
+   and a 44px target because each is its own small link. */
+.af-lh-week-summary-moves > span:last-child a { display:inline-flex; align-items:center; min-height:44px; color:var(--accent); font-size:12px; text-decoration:none; }
+.af-lh-week-summary-moves > span:last-child a:hover,
+.af-lh-week-summary-moves > span:last-child a:focus-visible { text-decoration:underline; }
 @media (max-width:800px) { .af-lh-week-summary-grid { grid-template-columns:1fr; } .af-lh-week-summary { padding:14px; } }
+
+
+/* Shared league overview density follows the core scoreboard and cards. */
+.af-core .af-lh { min-width: 0; }
+.af-core .af-lh :is(.af-card, .af-lh-card) { border-radius: 16px; box-shadow: none; }
+.af-core .af-lh :is(h1, h2, h3) { letter-spacing: -.025em; }
+@media (max-width: 720px) {
+  .af-core .af-lh :is(.af-card, .af-lh-card) { padding: 14px; border-radius: 14px; }
+  .af-core .af-lh :is(input, select, textarea) { font-size: 16px; }
+  .af-core .af-lh .af-btn { min-height: 44px; }
+}
+
+/* Prediction Leaderboard (components/core-app/PredictionLeaderboard.tsx). */
+.af-lh-predictions-empty { margin: 6px 0 0; font-size: 12px; color: var(--faint); }
+.af-lh-predictions-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; }
+.af-lh-predictions-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint); padding: 4px 6px; }
+.af-lh-predictions-table td { padding: 5px 6px; border-top: 1px solid var(--line); }
+.af-lh-predictions-table tr[data-me='true'] td { color: var(--accent); font-weight: 600; }
+.af-lh-team-directory { margin-bottom: 16px; }
+.af-lh-team-directory summary { cursor: pointer; font-weight: 700; }
+.af-lh-team-directory p { color: var(--text2); font-size: 13px; margin: 12px 0; }
+.af-lh-team-directory ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; list-style: none; padding: 0; margin: 14px 0 0; }
+.af-lh-team-directory li { display: flex; flex-direction: column; gap: 2px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.af-lh-team-directory li strong { overflow-wrap: anywhere; font-size: 13px; }
+.af-lh-team-directory li span, .af-lh-team-directory li small { color: var(--text2); font-size: 12px; }
+
+.af-lh-side:empty { display: none; }
+.af-lh-grid:has(> .af-lh-side:empty) { grid-template-columns: minmax(0, 1fr); }
+
+/*
+ * ── KPI row + "Needs your attention" (home redesign, 2026-11-01) ──────────
+ * ⚠ APPENDED AT TOP LEVEL, with its own @media at the end — never inside an
+ * earlier query (see the notes above on mid-@media edits). Tokens only.
+ */
+.af-lh-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.af-lh-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-lh-kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-lh-kpi-sub {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.af-lh-kpi-sub[data-trend='up'] { color: var(--good); }
+.af-lh-kpi-sub[data-trend='down'] { color: var(--bad); }
+.af-lh-kpi--link { min-height: 44px; transition: border-color 120ms ease; }
+.af-lh-kpi--link:hover,
+.af-lh-kpi--link:focus-visible { border-color: var(--accent); }
+.af-lh-kpi--link[data-deadline-state='closed'] .af-lh-kpi-value { color: var(--muted); }
+
+.af-lh-attention { display: flex; flex-direction: column; gap: 8px; }
+.af-lh-attention-title { margin: 0; }
+.af-lh-attention-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.af-lh-attention .af-lh-urgent-cta { min-height: 44px; }
+.af-lh-urgent--minor { padding: 12px 14px; }
+.af-lh-urgent--minor .af-lh-urgent-title { font-size: 14px; }
+
+@media (max-width: 720px) {
+  /* Two tiles a row on a phone; a lone fourth tile spans rather than sitting half-empty. */
+  .af-lh-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .af-lh-kpi { padding: 12px; }
+  .af-lh-kpi-value { font-size: 20px; }
+  .af-lh-kpis > .af-lh-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/*
+ * The redraft home's page tools, moved to the foot (LeagueHome `toolsAtFoot`): the imported-league
+ * bar, then "Customize page" and "Back to home" on one row. Top level, not inside any @media.
+ */
+.af-core .af-lh-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.af-core .af-lh-foot-actions {
+  justify-content: flex-start;
+}
+
+/*
+ * ⚠ THE IMPORTED-LEAGUE STRIP, INSIDE /core ONLY. ImportedLeagueQuickActions is shared with the
+ * always-dark LeagueShell, so its Tailwind colours are fixed dark: a #0b1328 band, white text and a
+ * rose-100 Remove label. On a light /core page that drew a 96px navy band across League Home (measured
+ * 2026-11-07). Inside the shell it takes the theme's tokens; LeagueShell is untouched.
+ */
+.af-core .af-imported-actions { background:var(--surface); border-color:var(--line); }
+.af-core .af-imported-actions-text { color:var(--text2); }
+.af-core .af-imported-actions-remove { color:var(--bad); background:var(--bad-soft); }
+.af-core .af-imported-actions-error { color:var(--bad); }
+
+/* Member status — the draft time and your dues (components/league-home/MemberStatusCard.tsx). */
+.af-core .af-lh-member-status { display:flex; flex-direction:column; gap:10px; padding:12px 14px; }
+.af-core .af-lh-ms-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; }
+.af-core .af-lh-ms-row + .af-lh-ms-row { padding-top:10px; border-top:1px solid var(--line); }
+.af-core .af-lh-ms-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.af-core .af-lh-ms-text strong { font-size:14px; color:var(--text); }
+.af-core .af-lh-ms-note { font-size:12px; color:var(--muted); }
+.af-core .af-lh-ms-links { display:flex; flex-wrap:wrap; gap:6px; }
+.af-core .af-lh-ms-btn { min-height:44px; display:inline-flex; align-items:center; text-decoration:none; }

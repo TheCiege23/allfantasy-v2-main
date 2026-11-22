@@ -1,14 +1,14 @@
 import type { LeagueSport } from '@prisma/client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
-export type KeeperWindow = {
+type KeeperWindow = {
   declarationDeadlineDaysBeforeDraft: number
   maxKeepers: number
   roundCostMode: 'previous_round' | 'fixed_round' | 'salary_value'
   requiresCommissionerApproval: boolean
 }
 
-export type KeeperRecommendation = KeeperWindow & {
+type KeeperRecommendation = KeeperWindow & {
   sport: LeagueSport
   leagueType: string
   carryoverSupported: boolean
@@ -47,6 +47,21 @@ export function resolveKeeperPolicy(options: {
 export function supportsKeeperDeclarations(leagueType?: string | null): boolean {
   const key = String(leagueType ?? '').toLowerCase()
   return key === 'keeper' || key === 'dynasty' || key === 'devy' || key === 'c2c'
+}
+
+/**
+ * A league that trades only its current draft's picks. Everything dynasty-family (which keeps a
+ * rookie draft and a future inventory), salary-cap, and anything with keeper declarations is not.
+ * Also what decides whether last season may shape next season's draft order
+ * (lib/playoff-runtime/consolationPlaysFor.ts): a redraft league starts fresh.
+ */
+export function isRedraftPickLeague(league: { leagueType?: string | null; isDynasty?: boolean | null }): boolean {
+  if (league.isDynasty === true) return false
+  const type = String(league.leagueType ?? '').trim().toLowerCase()
+  if (supportsKeeperDeclarations(type)) return false
+  // Compound spellings (`c2c_dynasty`, `devy_dynasty`, `salary_cap`) carry multi-season picks too —
+  // the same substring reading the trade-settings resolver uses for its C2C and devy gates.
+  return !/dynasty|devy|c2c|keeper|salary/.test(type)
 }
 
 /**

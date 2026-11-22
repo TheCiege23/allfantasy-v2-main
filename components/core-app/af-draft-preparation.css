@@ -141,3 +141,12 @@
 }
 
 .af-prep-rules summary::before{content:"▸"}.af-prep-rules[open] summary::before{content:"▾"}
+
+/* Points an empty benchmark at the real player pool in the draft room. */
+.af-prep-pool-link a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 800;
+  color: var(--accent);
+}

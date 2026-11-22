@@ -7,6 +7,14 @@ import {
   previewImportedRosterForLeague,
 } from '@/lib/roster-engine'
 import { invalidateLeagueDraftCaches } from '@/lib/league/invalidateLeagueDraftCaches'
+import { applyRosterTemplateChange } from '@/lib/draft/syncDraftRoundsToRoster'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
+import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { prisma } from '@/lib/prisma'
+import { mapImportedRosterToAF } from '@/lib/roster-engine/RosterImportMapper'
+import type { SupportedRosterSport } from '@/lib/roster-engine/RosterEngineTypes'
+import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   const sourcePlatform = String(body.sourcePlatform ?? '').trim()
   const importedConfig = body.importedConfig as Record<string, number> | undefined
 
+  // A preview changes nothing; only applying an import is a roster-settings write.
+  const locked = action !== 'preview' ? await settingsLockedResponse(leagueId, 'rosters') : null
+  if (locked) return locked
   if (!sourcePlatform) return NextResponse.json({ error: 'sourcePlatform required' }, { status: 400 })
   if (!importedConfig || typeof importedConfig !== 'object') {
     return NextResponse.json({ error: 'importedConfig required' }, { status: 400 })
@@ -30,9 +41,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
 
   try {
     if (action === 'apply') {
+      const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'roster', body)
+      if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
+      // Best ball: an imported seat layout gets the same pool check as the roster-settings PUT
+      // (lib/bestball/poolCapacity.ts), on the slots mapImportedRosterToLeagueConfig is about to write.
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { sport: true, leagueType: true, leagueVariant: true, settings: true, bestBallMode: true, guillotineMode: true, leagueSize: true },
+      })
+      const poolCheck = league?.leagueSize && lineupSetsItself(league)
+        ? checkLeagueBestBallPool(league, {
+            teamCount: league.leagueSize,
+            rosterSlots: mapImportedRosterToAF({ sourcePlatform, sport: league.sport as SupportedRosterSport, importedConfig }).mappedSlots,
+          })
+        : null
+      if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
       const config = await mapImportedRosterToLeagueConfig(leagueId, sourcePlatform, importedConfig)
       invalidateLeagueDraftCaches(leagueId)
-      return NextResponse.json({ ok: true, action: 'apply', unifiedConfig: config })
+      // An imported roster is a roster change like any other: draft rounds and roster limits follow.
+      // Like reset-default, it asks for the imported shape, so no manual round count survives it.
+      const draftRounds = await applyRosterTemplateChange(leagueId, { keepManualOverride: false, logTag: 'roster-settings import' })
+      await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true, leagueId: leagueId, userId: session.user.id, section: 'roster', source: 'roster-settings/import', detail: { sourcePlatform } })
+      return NextResponse.json({
+        ok: true, action: 'apply', unifiedConfig: config, draftRounds,
+        bestBallPoolWarnings: poolCheck?.warnings.map((w) => w.message) ?? [],
+      })
     }
 
     const preview = await previewImportedRosterForLeague(leagueId, sourcePlatform, importedConfig)

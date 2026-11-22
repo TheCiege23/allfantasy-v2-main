@@ -40,6 +40,15 @@ function slateWithout(offClub: string) {
   }))
 }
 
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: async ({ rosterIds, week }: { rosterIds: string[]; week: number }) => ({
+    season: 2026, week, unit: 'fantasy points',
+    rows: db.settings ? rosterIds.flatMap(rosterPlayerId => {
+      const id = db.platform === 'sleeper' ? rosterPlayerId : db.crosswalk.get(rosterPlayerId)
+      return id && id in RECEPTIONS ? [{ rosterPlayerId, weekly: RECEPTIONS[id] }] : []
+    }) : [],
+  }),
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     roster: {
@@ -49,13 +58,6 @@ vi.mock('@/lib/prisma', () => ({
       ]),
     },
     league: { findUnique: vi.fn(async () => ({ settings: db.settings, platform: db.platform, sport: 'NFL' })) },
-    fantasyProjection: {
-      findMany: vi.fn(async ({ where }: { where: { playerId: { in: string[] } } }) =>
-        where.playerId.in
-          .filter((id) => id in RECEPTIONS)
-          .map((playerId) => ({ playerId, stats: { stats: { rec: RECEPTIONS[playerId] } } })),
-      ),
-    },
     sportsPlayer: {
       findMany: vi.fn(async ({ where }: { where: { sleeperId: { in: string[] } } }) =>
         where.sleeperId.in.map((sleeperId) => ({ sleeperId, name: `Player ${sleeperId}`, team: CLUB[sleeperId] ?? null, sport: 'NFL' })),
@@ -146,7 +148,7 @@ describe('Matchup scoreboard — a ruled-out starter', () => {
 
     expect(sides?.you.lineup).toEqual([
       { playerId: 'a', projected: 0, unavailable: 'out' },
-      { playerId: 'b', projected: 6 },
+      { playerId: 'b', projected: 6, afEngine: 6 },
     ])
     expect(sides?.you.projectedRemaining).toBe(6)
     expect(sides?.opponent.projectedRemaining).toBe(8)
@@ -192,7 +194,7 @@ describe('Matchup scoreboard — a starter on bye', () => {
     db.games = slateWithout('KC') // `d`'s club
     const sides = await load()
     expect(sides?.opponent.lineup).toEqual([
-      { playerId: 'c', projected: 8 },
+      { playerId: 'c', projected: 8, afEngine: 8 },
       { playerId: 'd', projected: 0, unavailable: 'bye' },
     ])
     expect(sides?.opponent.projectedRemaining).toBe(8)

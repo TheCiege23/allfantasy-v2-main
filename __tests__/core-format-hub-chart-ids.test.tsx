@@ -23,7 +23,7 @@ describe('FormatHub → WorkbookBarChart', () => {
   it('keys each league’s bar by its league id, not its name', () => {
     const league = (leagueId: string, pct: number) => ({
       leagueId,
-      name: 'Guillotine League 26',
+      name: 'Guilly League 26',
       platform: 'sleeper',
       sub: 'Sleeper · 18 managers',
       meter: { pct, value: `${pct}%`, tone: 'accent' as const },
@@ -46,8 +46,8 @@ describe('FormatHub → WorkbookBarChart', () => {
     }
     render(<FormatHub data={data} />)
     expect(seen.data.map((d) => [d.key, d.label, d.value])).toEqual([
-      ['L1', 'Guillotine League 26', 80],
-      ['L2', 'Guillotine League 26', 40],
+      ['L1', 'Guilly League 26', 80],
+      ['L2', 'Guilly League 26', 40],
     ])
   })
 })

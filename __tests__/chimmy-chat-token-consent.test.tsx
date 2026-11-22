@@ -11,15 +11,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
  * new contract exists and the typechecker proves the field NAMES are wired, because
  * the old field no longer exists on the input type.
  *
- * Neither proves the thing that was actually broken: that this component reports the
- * consent it obtained. ChimmyChat asks the user itself (window.confirm, via
- * lib/tokens/client-confirm) and then tells the service not to ask again — so if it
- * forgets to pass the answer along, the user clicks OK and the server is still told
- * "not confirmed". requireFeatureEntitlement answers that with 409
- * token_confirmation_required for any account without AF Pro, and
- * lib/chimmy-chat/response-copy.ts files that code under PREMIUM_GATE_CODES, so a
- * user holding tokens who had just agreed to spend them was shown "Upgrade to AF
- * Pro". That is the bug these two cases exist to keep fixed.
+ * The server now applies included daily answers before asking for paid-token consent.
+ * This component sends an unconfirmed request and lets the service handle a server 409.
+ * Cancelling that prompt restores the user's draft instead of leaving an unpaid message.
  */
 
 const confirmTokenSpendMock = vi.hoisted(() => vi.fn())
@@ -108,7 +102,7 @@ describe("ChimmyChat token consent", () => {
     document.documentElement.removeAttribute("data-mode")
   })
 
-  it("reports the consent it obtained, and does not ask the service to ask again", async () => {
+  it("lets the server apply included answers before any token consent prompt", async () => {
     confirmTokenSpendMock.mockResolvedValue({ confirmed: true, preview: spendPreview() })
 
     const composer = await renderChat()
@@ -117,26 +111,26 @@ describe("ChimmyChat token consent", () => {
 
     await waitFor(() => expect(sendChimmyMessageMock).toHaveBeenCalledTimes(1))
 
-    expect(confirmTokenSpendMock).toHaveBeenCalledWith("ai_chimmy_chat_message")
+    expect(confirmTokenSpendMock).not.toHaveBeenCalled()
 
     const sent = sendChimmyMessageMock.mock.calls[0]![0]
     expect(sent.message).toBe(PAID_QUESTION)
     /* The whole bug in one assertion: the user said yes, so the server must hear yes. */
-    expect(sent.tokenSpendConfirmed).toBe(true)
+    expect(sent.tokenSpendConfirmed).toBe(false)
     /* And it must not be asked a second time, which is why the flag was conflated. */
-    expect(sent.promptForTokenSpend).toBe(false)
+    expect(sent.promptForTokenSpend).not.toBe(false)
   })
 
-  it("sends nothing at all when the user declines, and gives the question back", async () => {
-    confirmTokenSpendMock.mockResolvedValue({ confirmed: false, preview: spendPreview() })
+  it("restores the question when the service reports declined token consent", async () => {
+    sendChimmyMessageMock.mockResolvedValue({ ok: false, response: 'Token spend cancelled.', error: 'Token spend cancelled by user.' })
 
     const composer = await renderChat()
     fireEvent.change(composer, { target: { value: PAID_QUESTION } })
     fireEvent.keyDown(composer, { key: "Enter" })
 
-    await waitFor(() => expect(confirmTokenSpendMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(sendChimmyMessageMock).toHaveBeenCalledTimes(1))
 
-    expect(sendChimmyMessageMock).not.toHaveBeenCalled()
+    expect(confirmTokenSpendMock).not.toHaveBeenCalled()
     /* Declining must not cost the user their typing. */
     await waitFor(() => expect((composer as HTMLInputElement).value).toBe(PAID_QUESTION))
   })

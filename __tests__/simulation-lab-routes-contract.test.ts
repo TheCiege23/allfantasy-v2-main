@@ -10,9 +10,15 @@ vi.mock('@/lib/simulation-lab', () => ({
   runDynastySimulation: runDynastySimulationMock,
 }))
 
+// The restored routes require a signed-in session (the originals did not). These contract
+// tests describe a signed-in caller; denial is covered in simulation-lab-routes-guards.test.ts.
+const requireAuthMock = vi.fn()
+vi.mock('@/lib/auth-guard', () => ({ requireAuth: requireAuthMock }))
+
 describe('Simulation lab route contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    requireAuthMock.mockResolvedValue({ ok: true, userId: 'user-contract', session: null })
   })
 
   it('season route validates required fields', async () => {

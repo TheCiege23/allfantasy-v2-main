@@ -20,15 +20,15 @@ export async function POST(req: NextRequest) {
   if (!body.leagueId || !body.bashingEventId || !body.decision) {
     return NextResponse.json({ error: 'leagueId, bashingEventId, and decision required' }, { status: 400 })
   }
-  if (body.decision !== 'spare' && body.decision !== 'infect') {
-    return NextResponse.json({ error: 'decision must be spare or infect' }, { status: 400 })
+  if (body.decision !== 'spare' && body.decision !== 'infect' && body.decision !== 'replace') {
+    return NextResponse.json({ error: 'decision must be spare, infect or replace' }, { status: 400 })
   }
 
   const gate = await assertLeagueMember(body.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
-    await resolveBashingDecision(body.bashingEventId, body.decision, userId)
+    await resolveBashingDecision(body.bashingEventId, body.decision, userId, body.leagueId)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 })

@@ -44,7 +44,7 @@ describe('league trade proposal suggestions', () => {
     expect(generateTradePartnerSuggestions({ viewerRosterId: null, rosters: [], rosterPositions: [], faabBudget: 100 })).toEqual([])
   })
 
-  it('uses survival strategy in guillotine leagues and does not spend future picks', () => {
+  it('uses survival strategy in Guilly leagues and does not spend future picks', () => {
     const mine = roster({
       rosterId: 'mine',
       players: [{ id: 'wr', name: 'Wideout', position: 'WR', value: 3000 }],

@@ -9,31 +9,31 @@
 import type { WorldCupMatchView, WorldCupPickView, WorldCupRound } from "./types"
 import { WORLD_CUP_ROUNDS } from "./types"
 
-export type WorldCupGroupStageProjectionTeam = {
+type WorldCupGroupStageProjectionTeam = {
   teamId: string
   name: string
   logoUrl?: string | null
 }
 
-export type WorldCupGroupStageProjectionGroup = {
+type WorldCupGroupStageProjectionGroup = {
   id: string
   groupKey: string
   teams: WorldCupGroupStageProjectionTeam[]
 }
 
-export type WorldCupGroupStageProjectionRankingPick = {
+type WorldCupGroupStageProjectionRankingPick = {
   groupId: string
   teamId: string
   predictedRank: number
 }
 
-export type WorldCupGroupStageProjectionThirdPlacePick = {
+type WorldCupGroupStageProjectionThirdPlacePick = {
   groupId: string
   teamId: string
   isSelected: boolean
 }
 
-export type WorldCupGroupStageProjectionView = {
+type WorldCupGroupStageProjectionView = {
   groups: WorldCupGroupStageProjectionGroup[]
   groupRankingPicks: WorldCupGroupStageProjectionRankingPick[]
   thirdPlaceAdvancerPicks: WorldCupGroupStageProjectionThirdPlacePick[]
@@ -44,43 +44,43 @@ export type WorldCupGroupStageProjectionView = {
   }
 }
 
-export type WorldCupGroupStageProjectionStatus =
+type WorldCupGroupStageProjectionStatus =
   | "ready"
   | "missing_group_stage"
   | "missing_rankings"
   | "missing_third_place"
   | "best_third_mapping_unconfirmed"
 
-export type WorldCupGroupStageProjectionResult = {
+type WorldCupGroupStageProjectionResult = {
   matches: WorldCupMatchView[]
   status: WorldCupGroupStageProjectionStatus
   resolvedSlotCount: number
   message: string
 }
 
-export type WorldCupGuidedPickPayloadLike = {
+type WorldCupGuidedPickPayloadLike = {
   selectedTeamId?: string | null
   selectedSlotKey?: string | null
 }
 
-export type WorldCupPickSelectionLike = {
+type WorldCupPickSelectionLike = {
   selectedTeamId?: string | null
   selectedSlotKey?: string | null
 }
 
-export type WorldCupPickMatchIdentityLike = {
+type WorldCupPickMatchIdentityLike = {
   matchId?: string | null
   round?: WorldCupRound | string | null
   matchNumber?: number | null
 }
 
-export type WorldCupMatchIdentityLike = {
+type WorldCupMatchIdentityLike = {
   id?: string | null
   round?: WorldCupRound | string | null
   matchNumber?: number | null
 }
 
-export type WorldCupMatchPickabilityLike = {
+type WorldCupMatchPickabilityLike = {
   id?: string | null
   round?: WorldCupRound | string
   status?: string | null
@@ -90,7 +90,7 @@ export type WorldCupMatchPickabilityLike = {
   awayTeamName?: string | null
 }
 
-export type WorldCupProjectedMatchStatusLike = {
+type WorldCupProjectedMatchStatusLike = {
   apiFixtureId?: number | null
   status?: string | null
   startsAt?: string | Date | null
@@ -107,9 +107,9 @@ export type WorldCupProjectedMatchStatusLike = {
   lastScoreSyncedAt?: string | Date | null
 }
 
-export type WorldCupGuidedPicksState = "fixtures_not_synced" | "fixtures_not_ready" | "ready"
+type WorldCupGuidedPicksState = "fixtures_not_synced" | "fixtures_not_ready" | "ready"
 
-export type WorldCupUnpickableReason =
+type WorldCupUnpickableReason =
   | "missing_home_team"
   | "missing_away_team"
   | "placeholder_team"
@@ -124,7 +124,7 @@ function normalizeTeamName(value: string | null | undefined): string {
  * True when the label is still a bracket-template placeholder (group winner, 3rd-place slot, etc.)
  * — not a resolved nation/club name.
  */
-export function isWorldCupBracketPlaceholderLabel(value: string | null | undefined): boolean {
+function isWorldCupBracketPlaceholderLabel(value: string | null | undefined): boolean {
   const normalized = normalizeTeamName(value)
   if (!normalized) return true
   if (normalized === "tbd" || normalized === "to be determined") return true
@@ -142,12 +142,7 @@ export function isWorldCupBracketPlaceholderLabel(value: string | null | undefin
   return false
 }
 
-/** @deprecated use isWorldCupBracketPlaceholderLabel — kept for older call sites */
-export function isPlaceholderTeamName(value: string | null | undefined): boolean {
-  return isWorldCupBracketPlaceholderLabel(value)
-}
-
-export type WorldCupProjectedSide = {
+type WorldCupProjectedSide = {
   teamId: string | null
   teamName: string
   teamLogo: string | null
@@ -225,7 +220,7 @@ export function hasWorldCupPickSelection(pick: WorldCupPickSelectionLike | null 
   return Boolean(pick?.selectedTeamId || pick?.selectedSlotKey)
 }
 
-export type WorldCupPickMatchMethod = "matchId" | "round_matchNumber"
+type WorldCupPickMatchMethod = "matchId" | "round_matchNumber"
 
 export function getWorldCupPickMatchMethod(
   pick: WorldCupPickMatchIdentityLike | null | undefined,
@@ -337,10 +332,6 @@ export function resetWorldCupProjectedMatchStatus<T extends WorldCupProjectedMat
 
 const BEST_THIRD_SLOT_KEYS = ["C3", "D3", "G3", "H3", "K3", "L3", "TBD1", "TBD2"] as const
 const BEST_THIRD_SLOT_KEY_SET = new Set<string>(BEST_THIRD_SLOT_KEYS)
-
-function isGroupRankSlot(slotKey: string) {
-  return /^([A-L])([12])$/.test(slotKey)
-}
 
 function isBestThirdSlot(slotKey: string) {
   return BEST_THIRD_SLOT_KEY_SET.has(slotKey)

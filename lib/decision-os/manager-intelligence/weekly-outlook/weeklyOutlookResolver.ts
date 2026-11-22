@@ -12,6 +12,8 @@
  * reads its output. The caller owns auth (session + league membership).
  */
 
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import { describeExtraMatchupReason } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { prisma } from '@/lib/prisma'
 import { resolveRedraftRosterLookupReadOnly } from '@/lib/redraft/redraftRosterIdentity'
 import { aggregateManagerTeamHealth } from '@/lib/decision-os/manager-intelligence/team-health/teamHealthAggregator'
@@ -79,13 +81,20 @@ export function createLiveWeeklyOutlookDataProvider(): WeeklyOutlookDataProvider
         if (row) {
           const isHome = row.homeRosterId === roster.id
           const opponent = isHome ? row.awayRoster : row.homeRoster
+          // An odd-team league's leftover team plays an extra matchup instead of its bye
+          // (lib/redraft/oddTeamExtraMatchupRules.ts): its opponent is the chosen team.
+          const extra = !row.awayRosterId
+            ? await readExtraMatchupViewForSeason({ seasonId: roster.seasonId, week: currentWeek, redraftRosterId: roster.id })
+            : null
           matchup = {
             hasMatchup: true,
             week: row.week,
             status: row.status,
             userProjected: isHome ? row.homeProjected : row.awayProjected,
             opponentProjected: isHome ? row.awayProjected : row.homeProjected,
-            opponentName: opponent ? opponent.teamName ?? opponent.ownerName ?? null : null,
+            opponentName: extra?.role === 'leftover'
+              ? `${extra.teamName} (extra matchup: ${describeExtraMatchupReason(extra.reason)})`
+              : opponent ? opponent.teamName ?? opponent.ownerName ?? null : null,
           }
         }
       }

@@ -65,7 +65,13 @@ async function handle(req: NextRequest) {
       })
     }
 
-    const runMoments = only !== "news"
+    /*
+     * ⚠ LIVE MOMENTS ARE OFF BY DEFAULT SINCE 2026-10-22. Halftime, period ends, close games,
+     * overtime and finals are sent by lib/engagement-alerts (the minute-by-minute game engine), which
+     * already sent most of them — so people got two pushes per moment. Run it explicitly with
+     * `only=moments`, or set AF_LEGACY_GAME_ALERTS=1 to restore it on every tick.
+     */
+    const runMoments = only === "moments" || (only !== "news" && process.env.AF_LEGACY_GAME_ALERTS === "1")
     const runNews = only !== "moments"
     // Every other two-minute tick, unless forced either way.
     const refreshNews =

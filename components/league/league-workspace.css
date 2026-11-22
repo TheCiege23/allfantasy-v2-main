@@ -144,3 +144,14 @@
 .af-workspace-navigation-mode > span { font-size: 12px; font-weight: 750; color: var(--accent); }
 .af-workspace-navigation-mode p { margin: 6px 0 0; max-width: 75ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .af-workspace-navigation :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media(max-width:767px){
+  .af-league-workspace .af-workspace-navigation{padding:10px 12px}
+  .af-league-workspace .af-workspace-navigation-links{flex-wrap:nowrap;overflow-x:auto;gap:6px;overscroll-behavior-x:contain}
+  .af-league-workspace .af-workspace-navigation-links a{flex-shrink:0;padding:8px 10px;font-size:12px}
+  .af-league-workspace .af-workspace-navigation-mode{margin-top:8px}
+  .af-league-workspace .af-workspace-navigation-mode p{font-size:12px;line-height:1.4;margin-top:3px}
+  .af-league-workspace [data-testid=league-command-center-header]{position:relative;top:auto}
+  .af-league-workspace :is(button,summary,a[aria-label]){min-height:44px;min-width:44px;touch-action:manipulation}
+  .af-league-workspace :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;min-height:44px}
+}

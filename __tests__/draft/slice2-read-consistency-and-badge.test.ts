@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { translations } from '@/lib/i18n/translations'
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
 
@@ -39,7 +40,8 @@ describe('Slice 2 — 3RR header badge', () => {
     const src = read('components/app/draft-room/DraftTopBar.tsx')
     expect(src).toMatch(/data-testid="draft-topbar-third-round-reversal-badge"/)
     expect(src).toMatch(/thirdRoundReversal \? \(/)
-    expect(src).toMatch(/3RR On/)
+    expect(src).toMatch(/t\('draftRoom\.topBar\.thirdRoundReversalOn'\)/)
+    expect(translations.en['draftRoom.topBar.thirdRoundReversalOn']).toBe('3RR On')
   })
 
   it('DraftRoomPageClient passes thirdRoundReversal from session into DraftTopBar', () => {

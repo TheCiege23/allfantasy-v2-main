@@ -47,6 +47,11 @@ export interface AppModalProps {
   hideHeader?: boolean
   /** Disable closing on backdrop click / Escape (e.g. mid-submit). */
   dismissible?: boolean
+  /**
+   * Accessible name of the close (X) button. Defaults to "Close"; a translated caller passes its own,
+   * so this shared component does not need a language context its other callers' tests may not mock.
+   */
+  closeLabel?: string
   className?: string
   /** Extra classes for the scrollable body. */
   bodyClassName?: string
@@ -64,6 +69,7 @@ export function AppModal({
   footer,
   hideHeader = false,
   dismissible = true,
+  closeLabel = "Close",
   className,
   bodyClassName,
   children,
@@ -113,7 +119,7 @@ export function AppModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  aria-label="Close"
+                  aria-label={closeLabel}
                   data-testid="app-modal-close"
                   className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"
                 >

@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   guillotineSeason: { updateMany: vi.fn(), findUnique: vi.fn() },
   roster: { findMany: vi.fn() },
   league: { findUnique: vi.fn() },
+  guillotineLeagueConfig: { updateMany: vi.fn() },
 }))
 const m = vi.hoisted(() => ({
   isGuillotineLeague: vi.fn(),
@@ -31,6 +32,8 @@ const m = vi.hoisted(() => ({
   acquire: vi.fn(),
   release: vi.fn(),
   finish: vi.fn(),
+  recordReleases: vi.fn(),
+  recordBaseline: vi.fn(),
 }))
 vi.mock('@/lib/guillotine/finishGuillotineSeason', async (orig) => ({
   ...(await orig<typeof import('@/lib/guillotine/finishGuillotineSeason')>()),
@@ -56,6 +59,8 @@ vi.mock('@/lib/redraft/weekFinalizer', () => ({
 }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: m.scoreRosterForWeek }))
 vi.mock('@/lib/automation/locks', () => ({ acquireAutomationLock: m.acquire, releaseAutomationLock: m.release }))
+vi.mock('@/lib/guillotine/choppedReleases', () => ({ recordChoppedReleases: m.recordReleases }))
+vi.mock('@/lib/guillotine/statCorrectionHandler', () => ({ recordGuillotineCorrectionBaseline: m.recordBaseline }))
 
 import { runNativeGuillotineWeek } from '@/lib/guillotine/nativeGuillotineWeek'
 import { isPastCorrectionCutoff } from '@/lib/guillotine/GuillotineWeekEvaluator'
@@ -117,6 +122,7 @@ function arrange(overrides: { lastChopWeek?: number | null; active?: typeof SEAS
   m.finish.mockResolvedValue({ championRosterId: 'rr-a', archived: true })
   m.release.mockResolvedValue(undefined)
   m.savePeriodScores.mockResolvedValue(undefined)
+  m.recordReleases.mockResolvedValue(16)
   m.runElimination.mockResolvedValue({
     leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: ['R-b'], tiebreakStepUsed: null, reason: 'lowest score',
     eliminationFlagged: { marked: ['rr-b'], unresolved: [] },
@@ -156,6 +162,25 @@ describe('runNativeGuillotineWeek', () => {
     // The week pointer follows the calendar (the hourly roll skips guillotine).
     expect(db.redraftSeason.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { currentWeek: 4 } })
     expect(m.release).toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE RELEASED-PLAYER LIST HAD NO WRITER (lib/guillotine/choppedReleases.ts): the home's chop moment
+   * and the war room read GuillotineWaiverRelease, and nothing ever wrote it.
+   */
+  it('lists the chopped team’s players for the league while the roster still holds them, then drops them', async () => {
+    arrange()
+    await run()
+    expect(m.recordReleases).toHaveBeenCalledWith({ leagueId: 'L1', guillotineSeasonId: 'g1', week: 3, redraftRosterIds: ['rr-b'], availableAt: NOW })
+    // Listed BEFORE the drop: the list is read from the players not yet dropped.
+    expect(m.recordReleases.mock.invocationCallOrder[0]).toBeLessThan(db.redraftRosterPlayer.updateMany.mock.invocationCallOrder[0])
+  })
+
+  it('a list that fails to write never stops the chop or the drop', async () => {
+    arrange()
+    m.recordReleases.mockRejectedValueOnce(new Error('db blip'))
+    expect(await run()).toMatchObject({ outcome: 'chopped', week: 3 })
+    expect(db.redraftRosterPlayer.updateMany).toHaveBeenCalledWith({ where: { rosterId: { in: ['rr-b'] }, droppedAt: null }, data: { droppedAt: NOW } })
   })
 
   it('hands the tiebreak bench points and last week\'s points, which the native path never filled', async () => {
@@ -198,6 +223,16 @@ describe('runNativeGuillotineWeek', () => {
     expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
   })
 
+  it('a chop tie waiting on the commissioner ends as waiting, not refused, and drops nobody', async () => {
+    arrange()
+    m.runElimination.mockResolvedValue({ leagueId: 'L1', weekOrPeriod: 3, choppedRosterIds: [], tiebreakStepUsed: null, reason: 'awaiting commissioner tiebreak' })
+
+    const r = await run()
+
+    expect(r).toMatchObject({ outcome: 'waiting', week: 3, reason: 'commissioner_tiebreak' })
+    expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
+  })
+
   it('does nothing for a league that is not guillotine', async () => {
     arrange()
     m.isGuillotineLeague.mockResolvedValue(false)
@@ -229,6 +264,112 @@ describe('runNativeGuillotineWeek', () => {
     const syncWeekStats = vi.fn(async () => undefined)
     expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
     expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+  })
+
+  it('🛑 a game missing its box score is backfilled once, and while it stays missing nobody is chopped', async () => {
+    arrange()
+    m.finalizeRedraftWeek.mockResolvedValue({ refusal: 'game_stats_missing', slate: null })
+    const syncWeekStats = vi.fn(async () => undefined)
+    expect(await run(4, { syncWeekStats })).toMatchObject({ outcome: 'waiting', week: 3, reason: 'game_stats_missing' })
+    expect(syncWeekStats).toHaveBeenCalledOnce()
+    expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(2)
+    expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
+    expect(m.runElimination).not.toHaveBeenCalled()
+  })
+
+  it('records the stat-correction baseline from the chop’s own scores, chopped team included, per player', async () => {
+    arrange()
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: POINTS[rosterId],
+      playerPoints: [{ playerId: `${rosterId}-qb`, points: POINTS[rosterId], isStarter: true }],
+    }))
+    await run()
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ includeBench: true, collectPlayerPoints: true })
+    expect(m.recordBaseline).toHaveBeenCalledOnce()
+    const b = m.recordBaseline.mock.calls[0]![0]
+    expect(b).toMatchObject({ seasonId: 's1', leagueId: 'L1', season: 2026, week: 3, capturedAt: NOW })
+    expect(b.teams).toContainEqual({
+      redraftRosterId: 'rr-b',
+      engineRosterId: 'R-b',
+      recordedPoints: 72.5,
+      playerPoints: [{ playerId: 'rr-b-qb', points: 72.5, isStarter: true }],
+    })
+    expect(b.teams).toHaveLength(3)
+    // Recorded before the engine chops, while the chopped roster still holds its players.
+    expect(m.recordBaseline.mock.invocationCallOrder[0]!).toBeLessThan(m.runElimination.mock.invocationCallOrder[0]!)
+  })
+
+  it("a DAILY best ball week's baseline keeps the scorer's per-day inputs; a weekly one carries none", async () => {
+    arrange()
+    const detail = (rosterId: string) => ({
+      days: ['2026-09-21', '2026-09-22'],
+      players: [{ playerId: `${rosterId}-p`, sport: 'NBA', position: 'PG', onRosterDays: ['2026-09-21', '2026-09-22'], pointsByDay: { '2026-09-21': POINTS[rosterId] } }],
+    })
+    m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => ({
+      points: POINTS[rosterId],
+      playerPoints: [{ playerId: `${rosterId}-p`, points: POINTS[rosterId], isStarter: true }],
+      ...(rosterId === 'rr-c' ? {} : { dailyBestBall: detail(rosterId) }),
+    }))
+    await run()
+    expect(m.scoreRosterForWeek.mock.calls[0]![0]).toMatchObject({ collectDailyBestBallDetail: true })
+    const teams = m.recordBaseline.mock.calls[0]![0].teams
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-b').dailyWeeks).toEqual([{ week: 3, ...detail('rr-b') }])
+    expect(teams.find((t: any) => t.redraftRosterId === 'rr-c')).not.toHaveProperty('dailyWeeks')
+  })
+
+  it('a baseline that cannot be written never stops the chop', async () => {
+    arrange()
+    m.recordBaseline.mockRejectedValueOnce(new Error('cache down'))
+    expect((await run()).outcome).toBe('chopped')
+  })
+
+  describe('pre-chop stat refresh (a correction inside the window decides the chop)', () => {
+    it('re-pulls the week and re-seals it before any team is scored', async () => {
+      arrange()
+      const order: string[] = []
+      const syncWeekStats = vi.fn(async () => { order.push('sync') })
+      m.finalizeRedraftWeek.mockImplementation(async () => {
+        order.push('seal')
+        return { refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } }
+      })
+      m.scoreRosterForWeek.mockImplementation(async ({ rosterId }: { rosterId: string }) => {
+        order.push('score')
+        return { points: POINTS[rosterId] }
+      })
+
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).toHaveBeenCalledWith({ seasonId: 's1', week: 3 })
+      expect(order.slice(0, 4)).toEqual(['seal', 'sync', 'seal', 'score'])
+    })
+
+    it('waits instead of chopping when the refreshed week will not re-seal', async () => {
+      arrange()
+      m.finalizeRedraftWeek
+        .mockResolvedValueOnce({ refusal: null, finalized: true, slate: { lastStartTime: LAST_KICKOFF } })
+        .mockResolvedValueOnce({ refusal: 'stat_coverage_below_floor', slate: null })
+      const r = await run(4, { syncWeekStats: vi.fn(async () => undefined) })
+      expect(r).toMatchObject({ outcome: 'waiting', week: 3, reason: 'pre_chop_refresh:stat_coverage_below_floor' })
+      expect(m.runElimination).not.toHaveBeenCalled()
+      expect(m.release).toHaveBeenCalled()
+    })
+
+    it('a refresh that throws chops on the sealed stats rather than stall the season', async () => {
+      arrange()
+      const r = await run(4, { syncWeekStats: vi.fn(async () => { throw new Error('provider down') }) })
+      expect(r.outcome).toBe('chopped')
+      expect(m.finalizeRedraftWeek).toHaveBeenCalledTimes(1)
+    })
+
+    it('an "immediate" league has no window, so nothing is re-pulled', async () => {
+      arrange()
+      m.getGuillotineConfig.mockResolvedValue({
+        eliminationStartWeek: 1, eliminationEndWeek: 17, teamsPerChop: 1, correctionWindow: 'immediate',
+        statCorrectionHours: null, customCutoffDayOfWeek: null, customCutoffTimeUtc: null,
+      })
+      const syncWeekStats = vi.fn(async () => undefined)
+      expect((await run(4, { syncWeekStats })).outcome).toBe('chopped')
+      expect(syncWeekStats).not.toHaveBeenCalled()
+    })
   })
 
   it('waits inside the stat-correction window', async () => {
@@ -327,6 +468,70 @@ describe('runNativeGuillotineWeek', () => {
     expect(result).toMatchObject({ outcome: 'chopped', week: 2, reason: 'recovered previously selected chop' })
     expect(m.scoreRosterForWeek).not.toHaveBeenCalled()
     expect(m.runElimination).toHaveBeenCalledWith(expect.objectContaining({ weekOrPeriod: 2, skipChat: true }))
+  })
+
+  describe('a league that drafted after week 1 (2026-10-29)', () => {
+    // No chop yet, so no chopped team in the league.
+    const FRESH_ROSTERS = LEAGUE_ROSTERS.filter((r) => r.id !== 'R-gone')
+
+    it('never chops a week before its draft, and saves the week after the draft as the first chop', async () => {
+      arrange({ lastChopWeek: null, rosters: FRESH_ROSTERS })
+      const afterDraft = vi.fn(async () => 11)
+      // Week 11 is the current week: nothing can be chopped yet — before, week 1 was chopped here.
+      expect(await run(11, { firstChopWeekAfterDraft: afterDraft })).toMatchObject({ outcome: 'waiting', week: 11, reason: 'week_in_progress' })
+      expect(m.finalizeRedraftWeek).not.toHaveBeenCalled()
+      expect(afterDraft).toHaveBeenCalledWith({ leagueId: 'L1', sport: 'NFL', season: 2026 })
+      expect(db.guillotineLeagueConfig.updateMany).toHaveBeenCalledWith({
+        where: { leagueId: 'L1', eliminationStartWeek: { lt: 11 } },
+        data: { eliminationStartWeek: 11 },
+      })
+      // Once week 11 is over, week 11 is the first chop.
+      vi.clearAllMocks()
+      arrange({ lastChopWeek: null, rosters: FRESH_ROSTERS })
+      expect(await run(12, { firstChopWeekAfterDraft: vi.fn(async () => 11) })).toMatchObject({ outcome: 'chopped', week: 11 })
+      expect(m.finalizeRedraftWeek).toHaveBeenCalledWith({ seasonId: 's1', week: 11 })
+    })
+
+    it('a draft before week 1, or one it cannot date, keeps the configured first chop week', async () => {
+      arrange({ lastChopWeek: null, rosters: FRESH_ROSTERS })
+      expect(await run(4, { firstChopWeekAfterDraft: vi.fn(async () => 1) })).toMatchObject({ outcome: 'chopped', week: 1 })
+      vi.clearAllMocks()
+      arrange({ lastChopWeek: null, rosters: FRESH_ROSTERS })
+      expect(await run(4, { firstChopWeekAfterDraft: vi.fn(async () => null) })).toMatchObject({ outcome: 'chopped', week: 1 })
+      expect(db.guillotineLeagueConfig.updateMany).not.toHaveBeenCalled()
+    })
+
+    it('is only asked before the first chop', async () => {
+      arrange({ lastChopWeek: 2 })
+      const afterDraft = vi.fn(async () => 11)
+      await run(4, { firstChopWeekAfterDraft: afterDraft })
+      expect(afterDraft).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('the last week of a season (2026-10-29)', () => {
+    it('a finished current week is chopped — NFL week 19 never starts, so week 18 used to wait forever', async () => {
+      arrange({ lastChopWeek: 3 })
+      const r = await runNativeGuillotineWeek({ seasonId: 's1', currentFantasyWeek: 4, currentWeekComplete: true }, { now: () => NOW })
+      expect(r).toMatchObject({ outcome: 'chopped', week: 4 })
+      expect(m.finalizeRedraftWeek).toHaveBeenCalledWith({ seasonId: 's1', week: 4 })
+    })
+
+    it('a current week still being played waits', async () => {
+      arrange({ lastChopWeek: 3 })
+      expect(await runNativeGuillotineWeek({ seasonId: 's1', currentFantasyWeek: 4, currentWeekComplete: false }, { now: () => NOW })).toMatchObject({
+        outcome: 'waiting', week: 4, reason: 'week_in_progress',
+      })
+      expect(m.finalizeRedraftWeek).not.toHaveBeenCalled()
+    })
+
+    it('past the last chop week with teams still standing, the season is finished ranked by survival, not left hanging', async () => {
+      arrange({ lastChopWeek: 17 })
+      const r = await run(19)
+      expect(r).toMatchObject({ outcome: 'season_complete', week: 18, reason: 'elimination_window_ended' })
+      expect(m.finish).toHaveBeenCalledWith({ seasonId: 's1', guillotineSeasonId: 'g1' })
+      expect(m.runElimination).not.toHaveBeenCalled()
+    })
   })
 
   it('completes the season when one team is left', async () => {

@@ -12,15 +12,18 @@ import { prisma } from '@/lib/prisma'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 
 import { buildAssetPoolFromRosters } from './assetPoolBuilder'
+import { applyNativeDispersal, isNativeDispersalLeague } from './nativeDispersal'
 import type { DispersalAsset, DispersalDraftConfig, DispersalDraftState } from './types'
 
-type DispersalModelClient = {
-  dispersalAssetPool: any
-  dispersalDraft: any
-  dispersalDraftParticipant: any
-  dispersalDraftPick: any
-  dispersalDraftRoster: any
-}
+/**
+ * The dispersal draft's own delegates. These were `any` while the models were missing from
+ * prisma/schema.prisma — which hid that the generated client had no `dispersalDraft` at all, so every
+ * call threw. They are the real delegates now, so typecheck covers every call below.
+ */
+type DispersalModelClient = Pick<
+  Prisma.TransactionClient,
+  'dispersalAssetPool' | 'dispersalDraft' | 'dispersalDraftParticipant' | 'dispersalDraftPick' | 'dispersalDraftRoster'
+>
 
 /** Transaction client for nested writes in dispersal draft seeding. */
 type DispersalTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0] & DispersalModelClient
@@ -167,6 +170,23 @@ function computeRoundsPicksPerRound(
   return { totalRounds, picksPerRound: n }
 }
 
+/**
+ * When the current pick's clock runs out, or null when no clock runs.
+ *
+ * 🛑 THE CLOCK USED TO LIVE ONLY IN THE ON-THE-CLOCK MANAGER'S BROWSER, AND IT NEVER RAN OUT. The draft page
+ * set its deadline to `now + pickTimeSeconds` in an effect keyed on the whole state object, so every 3-second
+ * poll restarted it; only that manager's page could auto-pick, and nothing on the server did. A dispersal
+ * draft — the one draft that exists because a manager left — stalled on the first absent manager.
+ *
+ * The clock starts when the draft row was last written: every write that moves the pick (a pick, a pass, a
+ * timeout, the start) updates the row, so `updatedAt` is when the current pick began. The only other writes
+ * (a manager passing out or a commissioner letting them back in) can only lengthen a clock, never shorten it.
+ */
+export function pickDeadlineFor(row: { status: string; pickTimeSeconds: number; updatedAt: Date }): Date | null {
+  if (row.status !== 'in_progress' || !(row.pickTimeSeconds > 0)) return null
+  return new Date(row.updatedAt.getTime() + row.pickTimeSeconds * 1000)
+}
+
 async function rowToState(row: {
   id: string
   leagueId: string
@@ -184,6 +204,7 @@ async function rowToState(row: {
   autoPickOnTimeout: boolean
   startedAt: Date | null
   completedAt: Date | null
+  updatedAt: Date
   picks: {
     pickNumber: number
     round: number
@@ -236,6 +257,7 @@ async function rowToState(row: {
     completedAt: row.completedAt?.toISOString() ?? null,
     pickTimeSeconds: row.pickTimeSeconds,
     autoPickOnTimeout: row.autoPickOnTimeout,
+    pickDeadlineAt: pickDeadlineFor(row)?.toISOString() ?? null,
   }
 }
 
@@ -594,7 +616,12 @@ export class DispersalDraftEngine {
   /**
    * Auto-pick when the pick timer expires: claims the best available asset (player first), else advances.
    */
-  static async advancePickOnTimeout(draftId: string, rosterId: string): Promise<DispersalDraftState> {
+  static async advancePickOnTimeout(
+    draftId: string,
+    rosterId: string,
+    /** The pick whose clock ran out; a pick made since then moved the draft on, and nothing is auto-picked. */
+    opts: { expectedPickIndex?: number } = {},
+  ): Promise<DispersalDraftState> {
     const row = await dispersalPrisma.dispersalDraft.findUnique({
       where: { id: draftId },
       include: { picks: { orderBy: { pickNumber: 'asc' } } },
@@ -605,6 +632,7 @@ export class DispersalDraftEngine {
     if (row.pickTimeSeconds <= 0) throw new Error('No pick timer configured')
     const current = getCurrentRosterId(row.draftOrder, row.currentPickIndex, row.passedRosterIds)
     if (!current || current !== rosterId) throw new Error('Not your pick')
+    if (opts.expectedPickIndex != null && row.currentPickIndex !== opts.expectedPickIndex) throw new Error('Not your pick')
     if (row.passedRosterIds.includes(rosterId)) throw new Error('You have passed out of this dispersal draft')
 
     const assets = parseAssetPool(row.assetPool)
@@ -681,6 +709,22 @@ export class DispersalDraftEngine {
       await DispersalDraftEngine.completeDraft(draftId)
     }
     return rowToState(after)
+  }
+
+  /**
+   * The current pick, if its clock has run out and the draft auto-picks on timeout: the same auto-pick as
+   * `advancePickOnTimeout`, for whoever is on the clock. Anyone may ask (the server's sweep, any member's
+   * page) because nothing here depends on who asks — the expiry is read from the row, never taken on trust.
+   * Returns null, and writes nothing, when there is nothing to do.
+   */
+  static async advanceExpiredPick(draftId: string, now: Date = new Date()): Promise<DispersalDraftState | null> {
+    const row = await dispersalPrisma.dispersalDraft.findUnique({ where: { id: draftId } })
+    if (!row || !row.autoPickOnTimeout) return null
+    const deadline = pickDeadlineFor(row)
+    if (!deadline || now.getTime() < deadline.getTime()) return null
+    const current = getCurrentRosterId(row.draftOrder, row.currentPickIndex, row.passedRosterIds)
+    if (!current) return null
+    return DispersalDraftEngine.advancePickOnTimeout(draftId, current, { expectedPickIndex: row.currentPickIndex })
   }
 
   /**
@@ -792,7 +836,30 @@ export class DispersalDraftEngine {
         isTradedPick?: boolean
       }[] = []
 
-      for (const asset of assets) {
+      // A league AllFantasy runs keeps its rosters in RedraftRosterPlayer, its picks in
+      // future_draft_picks and its FAAB on RedraftRoster (./nativeDispersal.ts); the JSON edits below
+      // are for every other league. The unclaimed lists are recorded the same way for both.
+      const native = await isNativeDispersalLeague(rawTx, row.leagueId)
+      if (native) {
+        for (const asset of assets) {
+          if (asset.claimedByRosterId) continue
+          if (asset.assetType === 'player' && asset.playerId) unclaimedPlayerIds.push(String(asset.playerId))
+          if (asset.assetType === 'draft_pick') {
+            unclaimedPickAuction.push({
+              assetId: asset.id,
+              pickId: asset.pickId,
+              round: asset.pickRound,
+              year: asset.pickYear,
+              originalOwnerRosterId: asset.originalOwnerRosterId ?? asset.sourceRosterId,
+              tradedToRosterId: asset.tradedToRosterId ?? asset.sourceRosterId,
+              isTradedPick: asset.isTradedPick,
+            })
+          }
+        }
+        await applyNativeDispersal(rawTx, { leagueId: row.leagueId, assets })
+      }
+
+      for (const asset of native ? [] : assets) {
         if (!asset.claimedByRosterId) {
           if (asset.assetType === 'faab' && asset.sourceRosterId) {
             await tx.roster.updateMany({

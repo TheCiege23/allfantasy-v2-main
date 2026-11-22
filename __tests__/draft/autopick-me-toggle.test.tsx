@@ -181,6 +181,42 @@ describe('AutopickMeToggle — mode selection', () => {
   })
 })
 
+describe('AutopickMeToggle — draft like me (AF Pro)', () => {
+  it('is locked for non-Pro users and says why', () => {
+    renderToggle({ ...enabledAutopick, isProEligible: false })
+    const btn = screen.getByTestId('autopick-mode-draft-as-me')
+    expect(btn.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(btn)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId('autopick-me-error').textContent).toMatch(/AF Pro/)
+  })
+
+  it('posts { enabled: true, mode: "draft_as_me" } for a Pro user', async () => {
+    mockFetchOk({ ...enabledAutopick, mode: 'draft_as_me', isProEligible: true })
+    renderToggle({ ...enabledAutopick, isProEligible: true })
+    fireEvent.click(screen.getByTestId('autopick-mode-draft-as-me'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ enabled: true, mode: 'draft_as_me' })
+  })
+
+  it('says where it learned the style, or that it has too little to go on (2026-11-21)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ style: { ready: false, summary: 'Draft like me needs 10 of your own picks from past drafts and has 2.' } }),
+    })
+    renderToggle({ ...enabledAutopick, mode: 'draft_as_me', isProEligible: true })
+    await waitFor(() => expect(screen.getByTestId('autopick-draft-like-me-summary').textContent).toMatch(/needs 10 of your own picks/))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/leagues/league-1/draft/autopick/me/style')
+  })
+
+  it('asks nothing about style in the other modes', async () => {
+    renderToggle({ ...enabledAutopick, mode: 'standard', isProEligible: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('autopick-draft-like-me-summary')).toBeNull()
+  })
+})
+
 describe('AutopickMeToggle — success response', () => {
   it('calls onUpdate with server-returned viewerAutopick after success', async () => {
     const updated: ViewerAutopickData = { enabled: true, mode: 'standard', isProEligible: true, updatedAt: '2026-01-01T00:00:00Z' }

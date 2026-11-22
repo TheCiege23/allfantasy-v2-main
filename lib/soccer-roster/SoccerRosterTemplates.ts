@@ -52,7 +52,7 @@ export const SOCCER_ROSTER_TEMPLATES: SoccerRosterTemplate[] = [
     slots: { GK: 1, DEF: 3, MID: 4, FWD: 3, BN: 4, IR: 1 } },
   { key: 'category', label: 'Category League', leagueTypes: ['redraft'], description: 'Category-based scoring.',
     slots: { GK: 1, DEF: 4, MID: 4, FWD: 2, BN: 4, IR: 1 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean guillotine.',
     slots: { GK: 1, DEF: 3, MID: 4, FWD: 2, BN: 3 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Survivor roster.',
     slots: { GK: 1, DEF: 3, MID: 4, FWD: 3, BN: 4 } },

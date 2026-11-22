@@ -1,20 +1,59 @@
 /** Scoring capabilities, never inferred from missing opponents or a league name. */
 export type WeeklyFormat = 'head-to-head' | 'elimination' | 'categories' | 'roto' | 'season-points'
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
+/**
+ * Every settings key `weeklyFormat` reads, at the top level and inside each nested block, plus Fantrax's
+ * `fantrax_settings.scoringSystem.type`. Exported so a reader that selects settings as SQL subpaths
+ * (the rail, `railMatchups.ts`) asks for exactly these and cannot drift from the rule.
+ */
+export const WEEKLY_FORMAT_SETTINGS_BLOCKS = ['league', 'sleeper', 'sleeperLeague', 'sportConfig'] as const
+export const WEEKLY_FORMAT_SETTINGS_KEYS = ['scoring_mode', 'scoringMode', 'scoring_type', 'scoringType', 'format', 'leagueType'] as const
+/**
+ * Yahoo's own `scoring_type`, from the raw settings a Yahoo import keeps at `settings.yahoo_settings`
+ * (YahooAdapter) — an object, or Yahoo's array of fragments. Without it every Yahoo category or roto
+ * league read as head-to-head points and was given win odds. Values the repo evidences: 'head'
+ * (head-to-head categories), 'headpoint' (head-to-head points), 'roto'. Any other value is not mapped.
+ */
+function yahooScoringType(yahooSettings: unknown): string | null {
+  const fragments = Array.isArray(yahooSettings) ? yahooSettings : [yahooSettings]
+  for (const f of fragments) {
+    const v = object(f).scoring_type
+    if (typeof v === 'string' && v.trim()) return v
+  }
+  return null
+}
+
 export function weeklyFormat(league: { leagueType?: string | null; settings?: unknown }): WeeklyFormat {
   const s = object(league.settings)
-  const blocks = [s, object(s.league), object(s.sleeper), object(s.sleeperLeague), object(s.sportConfig)]
-  const values = [league.leagueType, ...blocks.flatMap(b => [b.scoring_mode, b.scoringMode, b.scoring_type, b.scoringType, b.format, b.leagueType])]
+  const blocks = [s, ...WEEKLY_FORMAT_SETTINGS_BLOCKS.map(b => object(s[b]))]
+  // A Fantrax import states its scoring only as `fantrax_settings.scoringSystem.type`; without it every
+  // Fantrax category/roto league read as head-to-head points and was given win odds.
+  const fantraxType = object(object(s.fantrax_settings).scoringSystem).type
+  const yahooType = yahooScoringType(s.yahoo_settings)
+  const values = [league.leagueType, fantraxType, yahooType, ...blocks.flatMap(b => WEEKLY_FORMAT_SETTINGS_KEYS.map(k => b[k]))]
     .filter(v => typeof v === 'string').map(v => String(v).toLowerCase().replace(/[ -]/g, '_'))
   if (values.some(v => /guillotine|survivor|elimination/.test(v))) return 'elimination'
   if (values.some(v => /roto|rotisserie/.test(v))) return 'roto'
   if (values.some(v => /categor|h2h_each|h2h_most/.test(v))) return 'categories'
+  // Yahoo's 'head' is head-to-head CATEGORIES ('headpoint' is head-to-head points). Exact, and Yahoo's only.
+  if (String(yahooType ?? '').trim().toLowerCase() === 'head') return 'categories'
   if (values.some(v => /season_points|total_points|points_table/.test(v))) return 'season-points'
   return 'head-to-head'
 }
+/**
+ * Is this league's schedule in AllFantasy's own tables (`redraft_*`) rather than a provider's?
+ *
+ * ⚠ A NATIVE LEAGUE CAN CARRY A `manual-<uuid>` PLATFORM ID. League creation stamps one, so the
+ * old "manual AND no platform id" test sent every such league to `WeeklyMatchup` — which never holds
+ * a native game — and Season Outlook reported a league five weeks into its season as "No matchups
+ * have been synced" (production, 2026-11-11). Measured the same day: of 35 `platform = 'manual'`
+ * leagues, none has a `WeeklyMatchup` row, and the only ones with native games carry `manual-`.
+ */
 export function nativeWeeklyLeague(league: { platform?: string | null; platformLeagueId?: string | null }): boolean {
-  return ['allfantasy', 'native', 'manual', ''].includes(String(league.platform ?? '').toLowerCase()) && !league.platformLeagueId
-    || ['allfantasy', 'native'].includes(String(league.platform ?? '').toLowerCase())
+  const platform = String(league.platform ?? '').toLowerCase()
+  if (['allfantasy', 'native'].includes(platform)) return true
+  if (!['manual', ''].includes(platform)) return false
+  return !league.platformLeagueId || league.platformLeagueId.startsWith('manual-')
 }
 export function weeklyScopeKey(league: { id: string; platform?: string | null; platformLeagueId?: string | null }): string {
   return nativeWeeklyLeague(league) || !league.platformLeagueId ? `native:${league.id}`

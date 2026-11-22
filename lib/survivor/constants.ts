@@ -38,7 +38,7 @@ export const DEFAULT_IDOL_EXPIRY_PLAYERS_REMAINING = 5
  */
 export const EXILE_KEY_POSITION_BY_SPORT: Record<string, string> = {
   NFL: 'QB',
-  MLB: 'SP',
+  MLB: 'P',
   NHL: 'G',
   NBA: 'PG',
   NCAAF: 'QB',
@@ -154,7 +154,8 @@ export function parseTribeIdFromSource(source: string | null): string | null {
  */
 export const KEY_POSITION_BY_SPORT: Record<string, { code: string; label: string }> = {
   NFL: { code: 'QB', label: 'Quarterback' },
-  MLB: { code: 'SP', label: 'Starting Pitcher' },
+  // MLB pitchers are stored as plain `P` (never SP/RP), so `SP` matched nobody.
+  MLB: { code: 'P', label: 'Pitcher' },
   NHL: { code: 'G', label: 'Goaltender' },
   NBA: { code: 'PG', label: 'Point Guard' },
   NCAAF: { code: 'QB', label: 'Quarterback' },

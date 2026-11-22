@@ -1,6 +1,6 @@
 import type { NormalizedPlayerSportsProfile } from '@/lib/sports-data-normalization/types'
 
-export type PlayerIdentityAnnotation = {
+type PlayerIdentityAnnotation = {
   confidence: 'full' | 'degraded' | 'ambiguous'
   notes: string[]
 }

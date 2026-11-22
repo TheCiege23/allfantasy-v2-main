@@ -37,6 +37,8 @@ import {
   providerIdIsUsableForPlayer,
   suffixlessCanonicalName,
 } from '../lib/draft-room/player-canonical-identity'
+import { proposeRosterIdPropagation, rewriteRosterPlayerIds } from '../lib/league-runtime/rosterPlayerIdRewrite'
+import { resolveWriteAuthority } from '../lib/league/write-authority'
 
 const prisma = new PrismaClient()
 
@@ -311,6 +313,21 @@ async function main() {
     console.log(`   platform ${pf.padEnd(14)} ${String(e.rows).padStart(5)} row(s) in ${e.leagues.size} league(s)`)
   }
 
+  /*
+   * 🛑 THE ROSTER BLOB MUST MOVE WITH ITS SCORING ROWS. Each repair above changes
+   * `RedraftRosterPlayer.playerId`; the linked NATIVE `Roster.playerData` (lineup, picker, every move
+   * path) still names the old id, so a bench or a drop no longer reaches the row that scores. Leagues
+   * repaired by an earlier run of this script are already in exactly that state — so the blob is
+   * also reconciled against rows that are ALREADY right (`proposeRosterIdPropagation`).
+   *
+   * Native only: on an imported league the platform owns `playerData` and the collector rewrites it.
+   */
+  const rosterRewrites = await planRosterBlobRewrites(repairs, rows)
+  console.log(`\n${rosterRewrites.length} native roster blob(s) would change:`)
+  for (const rw of rosterRewrites.slice(0, args.limitSamples)) {
+    console.log(`   roster ${rw.rosterId}  ${[...rw.mapping].map(([a, b]) => `${a} -> ${b}`).join(', ')}`)
+  }
+
   if (!args.apply) {
     console.log('\ndry run — nothing written. Re-run with --apply --confirm-host=<prefix> to write.')
     return
@@ -323,7 +340,18 @@ async function main() {
   const undoPath = `roster-id-repair-undo-${host.split('.')[0]}-${Date.now()}.json`
   await writeFile(
     undoPath,
-    JSON.stringify({ host, sport: args.sport, at: new Date().toISOString(), changes: repairs }, null, 2),
+    JSON.stringify(
+      {
+        host,
+        sport: args.sport,
+        at: new Date().toISOString(),
+        changes: repairs,
+        // The whole previous blob, so a rewrite is undone by writing it back.
+        rosterBlobs: rosterRewrites.map((rw) => ({ rosterId: rw.rosterId, previousPlayerData: rw.before })),
+      },
+      null,
+      2,
+    ),
     'utf8',
   )
   console.log(`\nundo written to ${undoPath} (${repairs.length} row(s), each with its previous id)`)
@@ -339,6 +367,43 @@ async function main() {
     console.log(`   wrote ${written}/${repairs.length}`)
   }
   console.log(`\nAPPLIED: ${written} roster row(s) updated on ${host}`)
+
+  for (const rw of rosterRewrites) {
+    await prisma.roster.update({ where: { id: rw.rosterId }, data: { playerData: rw.after as never } })
+  }
+  console.log(`APPLIED: ${rosterRewrites.length} native roster blob(s) updated on ${host}`)
+}
+
+type RosterRewrite = { rosterId: string; mapping: Map<string, string>; before: unknown; after: unknown }
+
+async function planRosterBlobRewrites(
+  repairs: ReadonlyArray<{ id: string; from: string; to: string }>,
+  rows: ReadonlyArray<{ id: string; rosterId: string; playerId: string; playerName: string }>,
+): Promise<RosterRewrite[]> {
+  const rowById = new Map(rows.map((r) => [r.id, r]))
+  const redraftRosterIds = [...new Set(rows.map((r) => r.rosterId))]
+  const generic = await prisma.roster.findMany({
+    where: { redraftRosterId: { in: redraftRosterIds } },
+    select: { id: true, redraftRosterId: true, playerData: true, league: { select: { platform: true } } },
+  })
+  const out: RosterRewrite[] = []
+  for (const g of generic) {
+    if (!g.redraftRosterId || resolveWriteAuthority(g.league?.platform) !== 'NATIVE') continue
+    const rid = g.redraftRosterId
+    // The scoring rows as they will stand after this run's repairs.
+    const after = new Map(repairs.map((r) => [r.id, r.to]))
+    const liveRows = rows
+      .filter((r) => r.rosterId === rid)
+      .map((r) => ({ playerId: after.get(r.id) ?? r.playerId, playerName: r.playerName }))
+    const mapping = new Map<string, string>()
+    for (const r of repairs) if (rowById.get(r.id)?.rosterId === rid) mapping.set(r.from, r.to)
+    for (const [from, to] of proposeRosterIdPropagation(rewriteRosterPlayerIds(g.playerData, mapping), liveRows)) {
+      mapping.set(from, to)
+    }
+    if (mapping.size === 0) continue
+    out.push({ rosterId: g.id, mapping, before: g.playerData, after: rewriteRosterPlayerIds(g.playerData, mapping) })
+  }
+  return out
 }
 
 main()

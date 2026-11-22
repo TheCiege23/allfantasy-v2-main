@@ -25,20 +25,21 @@
  * than passed in, so a caller cannot accidentally promote one.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 // ── Contract mirrors ────────────────────────────────────────────────────────
-type TradeAsset = { name: string; position: string; estimatedValue: number }
+type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
-export type CollusionEvidenceLike = {
+type CollusionEvidenceLike = {
   tradeTransactionId?: string
-  team1?: { rosterId?: string; teamName?: string; wins?: number; losses?: number }
-  team2?: { rosterId?: string; teamName?: string; wins?: number; losses?: number }
+  team1?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
+  team2?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
   assetsTeam1Gave?: TradeAsset[]
   assetsTeam2Gave?: TradeAsset[]
-  team1TotalValue?: number
-  team2TotalValue?: number
-  valueDifferentialPct?: number
+  valuation?: { status: 'priced' } | { status: 'unavailable'; reason: string }
+  team1TotalValue?: number | null
+  team2TotalValue?: number | null
+  valueDifferentialPct?: number | null
   priorTradesBetweenPair?: number
   isPlayoffContender?: { team1?: boolean; team2?: boolean }
   redFlags?: string[]
@@ -50,7 +51,7 @@ export type CollusionEvidenceLike = {
   reviewModel?: string
 }
 
-export type TankingEvidenceLike = {
+type TankingEvidenceLike = {
   teamName?: string
   currentRecord?: { wins?: number; losses?: number }
   weekNumber?: number
@@ -66,6 +67,22 @@ export type TankingEvidenceLike = {
   pointsLeftOnBench?: number
   eliminatedFromPlayoffs?: boolean
   redFlags?: string[]
+  /** `rules`: raised by the lineup rules (lib/integrity/tankingRules.ts) — no model confidence to show. */
+  detector?: string
+  /** The flagged manager's explanation (lib/integrity/managerReply.ts). */
+  managerReply?: { text?: string; submittedAt?: string }
+  rosterId?: string
+  /** The Lineup Integrity score behind the case (lib/integrity/lineupIntegrityScore.ts). */
+  lineupIntegrity?: LineupIntegrityLike
+}
+
+type LineupIntegrityLike = {
+  weeks?: { week?: number; ratio?: number | null; startedTopCount?: number | null; starterCount?: number | null }[]
+  pattern?: boolean
+  below?: number
+  needed?: number
+  run?: number[]
+  pickNote?: string | null
 }
 
 export type IntegrityFlagRow = {
@@ -77,6 +94,8 @@ export type IntegrityFlagRow = {
   aiConfidence: number
   tradeTransactionId: string | null
   affectedTeamNames?: string[]
+  /** Resolved by the GET handler (lib/integrity/flagManagers.ts), so older flags carry it too. */
+  affectedManagers?: { rosterId: string; managerName: string; teamName: string | null }[]
   createdAt: string
   evidenceJson: unknown
 }
@@ -118,6 +137,32 @@ function assetLine(assets: TradeAsset[] | undefined): string | null {
   return names.length > 0 ? names.join(', ') : null
 }
 
+type Manager = { name: string; team: string | null }
+
+/**
+ * Who is behind one side of the flag. Prefers the handler's lookup, then the name the scan stored in
+ * the evidence. A team name that merely repeats the manager's name is dropped so it is not said twice.
+ */
+function managerFor(
+  flag: IntegrityFlagRow,
+  side: { rosterId?: string; teamName?: string; managerName?: string } | undefined,
+  index: number,
+): Manager | null {
+  const managers = Array.isArray(flag.affectedManagers) ? flag.affectedManagers : []
+  const hit = side?.rosterId ? managers.find((m) => m.rosterId === side.rosterId) : managers[index]
+  const name = (hit?.managerName ?? side?.managerName ?? '').trim()
+  const team = (hit?.teamName ?? side?.teamName ?? '').trim()
+  if (!name && !team) return null
+  if (!name) return { name: team, team: null }
+  return { name, team: team && team.toLowerCase() !== name.toLowerCase() ? team : null }
+}
+
+function managerLabel(m: Manager): string {
+  return m.team ? `${m.name} (${m.team})` : m.name
+}
+
+const LEVELS = ['low', 'medium', 'high'] as const
+
 function fmtValue(n: unknown): string | null {
   return typeof n === 'number' && Number.isFinite(n) ? n.toFixed(1) : null
 }
@@ -129,9 +174,9 @@ function fmtValue(n: unknown): string | null {
  * assets — a one-sided render would read as "this manager gave nothing away",
  * which is a much stronger accusation than "we could not price one side".
  */
-function TradeSides({ ev }: { ev: CollusionEvidenceLike }) {
-  const aName = ev.team1?.teamName?.trim()
-  const bName = ev.team2?.teamName?.trim()
+function TradeSides({ ev, a, b }: { ev: CollusionEvidenceLike; a: Manager | null; b: Manager | null }) {
+  const aName = a ? managerLabel(a) : null
+  const bName = b ? managerLabel(b) : null
   const aAssets = assetLine(ev.assetsTeam1Gave)
   const bAssets = assetLine(ev.assetsTeam2Gave)
   if (!aAssets || !bAssets) return null
@@ -200,24 +245,115 @@ function TankingStats({ ev }: { ev: TankingEvidenceLike }) {
   )
 }
 
+/**
+ * The team's Lineup Integrity score, week by week: started projection ÷ best possible, from the
+ * projections it saw at kickoff. Weeks in the low run that made the case are marked. Exported for the
+ * manager's own view of a flag (app/league/[leagueId]/tanking-flag/[flagId]).
+ */
+export function LineupScoreStrip({ li }: { li: LineupIntegrityLike }) {
+  type Week = { week: number; ratio?: number | null; startedTopCount?: number | null; starterCount?: number | null }
+  const weeks = (Array.isArray(li.weeks) ? li.weeks : []).filter((w): w is Week => typeof w?.week === 'number')
+  if (weeks.length === 0) return null
+  const run = new Set(Array.isArray(li.run) ? li.run : [])
+  const line = typeof li.below === 'number' ? Math.round(li.below * 100) : null
+  return (
+    <div className="af-cm-lineup-scores" data-testid="lineup-integrity-strip">
+      <div className="af-label">Lineup Integrity{line != null ? ` · flag line ${line}%` : ''}</div>
+      <div className="af-cm-lineup-chips">
+        {[...weeks]
+          .sort((a, b) => a.week - b.week)
+          .map((w) => {
+            const scored = typeof w.ratio === 'number'
+            return (
+              <span key={w.week} className="af-cm-lineup-chip af-num" data-low={run.has(w.week) ? 'true' : undefined}>
+                <span className="af-cm-lineup-chip-week">Wk {w.week}</span>
+                <span className="af-cm-lineup-chip-val">{scored ? `${Math.round((w.ratio as number) * 100)}%` : '—'}</span>
+                <span className="af-cm-lineup-chip-top">
+                  {!scored
+                    ? 'not scored'
+                    : typeof w.startedTopCount === 'number' && typeof w.starterCount === 'number'
+                      ? `${w.startedTopCount}/${w.starterCount} top`
+                      : ''}
+                </span>
+              </span>
+            )
+          })}
+      </div>
+      <p className="af-cm-lineup-basis">
+        Projected points started, out of the best lineup available, using the projections the manager saw at kickoff. Players who could not play are left out.
+      </p>
+    </div>
+  )
+}
+
+function PostLineupReport({ leagueId, rosterId }: { leagueId: string; rosterId: string }) {
+  const [state, setState] = useState<string>('idle')
+  async function post() {
+    setState('posting')
+    try {
+      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/lineup-integrity/post`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rosterId }),
+      })
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      setState(res.ok ? 'posted' : (body?.error ?? `HTTP ${res.status}`))
+    } catch (e) {
+      setState(String(e))
+    }
+  }
+  return (
+    <div className="af-cm-lineup-post">
+      <button
+        type="button"
+        className="af-btn af-btn--ghost"
+        data-testid="post-lineup-report"
+        disabled={state === 'posting' || state === 'posted'}
+        onClick={() => void post()}
+      >
+        {state === 'posting' ? 'Posting…' : state === 'posted' ? 'Posted to league chat' : 'Post lineup report to league chat'}
+      </button>
+      {state !== 'idle' && state !== 'posting' && state !== 'posted' ? (
+        <span className="af-cm-actions-note" role="alert">
+          {state}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 // ── Card ────────────────────────────────────────────────────────────────────
 
-export function IntegrityFlagCard({
+function IntegrityFlagCard({
   flag,
   onDismiss,
   onEscalate,
   onMessage,
+  onSetSeverity,
   busy = false,
+  highlighted = false,
+  leagueId,
 }: {
   flag: IntegrityFlagRow
+  /** Enables "Post lineup report to league chat" on a tanking case with a Lineup Integrity score. */
+  leagueId?: string
   onDismiss?: (flag: IntegrityFlagRow) => void
   onEscalate?: (flag: IntegrityFlagRow) => void
   onMessage?: (flag: IntegrityFlagRow) => void
+  onSetSeverity?: (flag: IntegrityFlagRow, severity: 'low' | 'medium' | 'high') => void
   busy?: boolean
+  /** The flag an alert linked to — outlined so it is found at a glance. */
+  highlighted?: boolean
 }) {
   const severity = normalizeSeverity(flag.severity)
   const isCollusion = flag.flagType.trim().toLowerCase() === 'collusion'
   const ev = asRecord(flag.evidenceJson)
+
+  const managerA = isCollusion
+    ? managerFor(flag, (ev as CollusionEvidenceLike).team1, 0)
+    : managerFor(flag, { teamName: (ev as TankingEvidenceLike).teamName }, 0)
+  const managerB = isCollusion ? managerFor(flag, (ev as CollusionEvidenceLike).team2, 1) : null
 
   const { context, hasDecidableEvidence } = useMemo(() => {
     const bullets: string[] = []
@@ -265,10 +401,20 @@ export function IntegrityFlagCard({
          * K. Walker (OUT) · at 0.0 projected over…", which reads as two facts
          * rather than one sentence. Caught by the test below this file's fixture.
          */
+        /*
+         * The bench player who could have taken the slot, by name (2026-11-06 on). Older flags stored
+         * the placeholders "bench" / "higher projection on bench" here instead of a player, and those
+         * are not names.
+         */
+        const benchName = first.benchedBetterOption?.trim()
+        const namedBench =
+          benchName && benchName !== 'bench' && benchName !== 'higher projection on bench' ? benchName : null
         const projection =
           typeof startProj === 'number' && typeof benchProj === 'number'
-            ? ` at ${startProj.toFixed(1)} projected over a bench option at ${benchProj.toFixed(1)}`
-            : ''
+            ? ` at ${startProj.toFixed(1)} projected over ${namedBench ?? 'a bench option'} at ${benchProj.toFixed(1)}`
+            : namedBench
+              ? ` with ${namedBench} available on the bench`
+              : ''
         parts.push(`started ${who}${status ? ` (${status})` : ''}${projection}`)
       }
       if (parts.length > 0) bullets.push(`${parts.join(' · ')}.`)
@@ -277,12 +423,18 @@ export function IntegrityFlagCard({
       if (typeof rf === 'string' && rf.trim()) bullets.push(rf.trim())
     }
     const suspicious = Array.isArray(t.illegalOrSuspiciousStarters) ? t.illegalOrSuspiciousStarters.length : 0
-    return { context: bullets, hasDecidableEvidence: suspicious > 0 }
+    // A Lineup Integrity pattern is a case on its own (lib/integrity/TankingDetectionEngine.ts).
+    return { context: bullets, hasDecidableEvidence: suspicious > 0 || t.lineupIntegrity?.pattern === true }
   }, [ev, isCollusion])
 
   const age = ageLabel(flag.createdAt)
+  const reply = isCollusion ? undefined : (ev as TankingEvidenceLike).managerReply
+  const managerReplyText = typeof reply?.text === 'string' && reply.text.trim() ? reply.text.trim() : null
+  const managerReplyAt = typeof reply?.submittedAt === 'string' ? ageLabel(reply.submittedAt)?.replace('flagged', 'sent') ?? null : null
   const fromReview = isCollusion && typeof (ev as CollusionEvidenceLike).reviewModel === 'string'
-  const confidencePct = !fromReview && Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
+  // A rules-raised tanking flag has no confidence; showing its stored 0 (or an imported flag's 1) would read as a score.
+  const fromLineupRules = !isCollusion && (ev as TankingEvidenceLike).detector === 'rules'
+  const confidencePct = !fromReview && !fromLineupRules && Number.isFinite(flag.aiConfidence) ? Math.round(flag.aiConfidence * 100) : null
 
   /*
    * ⚠ BUILD RULE 3, ENFORCED HERE RATHER THAN BY THE CALLER. A flag whose
@@ -294,16 +446,51 @@ export function IntegrityFlagCard({
   const actionable = flag.status === 'open' && hasDecidableEvidence
 
   const messageLabel = (() => {
+    /*
+     * Name people only when the handler actually resolved them. Falling back to a team name here
+     * would put a team, not a person, on the button.
+     */
+    const known = Array.isArray(flag.affectedManagers) && flag.affectedManagers.length > 0
+    if (isCollusion) return known && managerA && managerB ? `Message ${managerA.name} & ${managerB.name}` : 'Message both'
+    if (known && managerA) return `Message ${managerA.name}`
     const names = Array.isArray(flag.affectedTeamNames) ? flag.affectedTeamNames.filter(Boolean) : []
-    if (isCollusion) return 'Message both'
     return names.length === 1 ? `Message ${names[0]}` : 'Message manager'
   })()
+
+  const whoLine = isCollusion
+    ? managerA && managerB
+      ? `Trade between ${managerLabel(managerA)} and ${managerLabel(managerB)}`
+      : null
+    : managerA
+      ? `Manager: ${managerLabel(managerA)}`
+      : null
+
+  /*
+   * On a phone a card starts as one compact row — severity, who, gap, age — and expands on tap, so a
+   * queue of flags fits on a screen. Wider screens ignore this (CSS shows the detail regardless).
+   * The flag an alert linked to opens expanded.
+   */
+  const [expanded, setExpanded] = useState(highlighted)
+  useEffect(() => {
+    if (highlighted) setExpanded(true)
+  }, [highlighted])
+  const detailId = `integrity-flag-detail-${flag.id}`
+
+  const valuation = isCollusion ? (ev as CollusionEvidenceLike).valuation : undefined
+  const gapPct = isCollusion ? (ev as CollusionEvidenceLike).valueDifferentialPct : undefined
+  const gapLabel =
+    typeof gapPct === 'number' && Number.isFinite(gapPct) && Math.round(Math.abs(gapPct)) > 0
+      ? `${Math.round(Math.abs(gapPct))}% value gap`
+      : null
 
   return (
     <article
       className="af-cm-flagcard"
+      data-expanded={expanded ? 'true' : 'false'}
       data-sev={actionable ? severity : 'medium'}
+      id={`integrity-flag-${flag.id}`}
       data-testid={`integrity-flag-${flag.id}`}
+      data-highlight={highlighted ? 'true' : undefined}
     >
       <div className="af-cm-flagcard-top">
         <div className="af-cm-flagcard-tags">
@@ -311,68 +498,150 @@ export function IntegrityFlagCard({
             {isCollusion ? 'Collusion' : 'Tanking'} &middot; {severity}
           </span>
           <span className="af-cm-state af-num">{flag.status}</span>
+          {gapLabel ? <span className="af-cm-state af-num af-cm-gap">{gapLabel}</span> : null}
         </div>
         <div className="af-cm-flagcard-meta af-num">
-          {[fromReview ? 'Found by the trade review' : confidencePct != null ? `Confidence ${confidencePct}%` : null, age]
+          {[
+            fromReview
+              ? 'Found by the trade review'
+              : fromLineupRules
+                ? 'Found by the lineup check'
+                : confidencePct != null
+                  ? `Confidence ${confidencePct}%`
+                  : null,
+            age,
+          ]
             .filter(Boolean)
             .join(' · ')}
         </div>
       </div>
 
-      <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
-
-      {isCollusion ? <TradeSides ev={ev as CollusionEvidenceLike} /> : <TankingStats ev={ev as TankingEvidenceLike} />}
-
-      {context.length > 0 ? (
-        <ul className="af-cm-evidence">
-          {context.map((line, i) => (
-            <li key={i}>{line}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {actionable ? (
-        <div className="af-cm-actions">
-          {/*
-            Build rule 2: an escalation path, a communication path, and Dismiss.
-            Never a lone Dismiss — a commissioner given only "make this go away"
-            will make it go away.
-          */}
-          {onEscalate ? (
-            <button
-              type="button"
-              className={`af-btn ${severity === 'high' || severity === 'critical' ? 'af-cm-btn-warn' : ''}`}
-              onClick={() => onEscalate(flag)}
-              disabled={busy}
-            >
-              {isCollusion ? 'Open review' : 'Escalate'}
-            </button>
-          ) : null}
-          {onMessage ? (
-            <button type="button" className="af-btn af-btn--ghost" onClick={() => onMessage(flag)} disabled={busy}>
-              {messageLabel}
-            </button>
-          ) : null}
-          {onDismiss ? (
-            <button type="button" className="af-btn af-btn--ghost" onClick={() => onDismiss(flag)} disabled={busy}>
-              Dismiss
-            </button>
-          ) : null}
-          {/*
-            Says where the actual power lives. Integrity flags are a review
-            surface; reversing a trade is a league-settings action, and a
-            commissioner who expects "Open review" to undo the trade will be
-            surprised at the worst possible moment.
-          */}
-          {isCollusion ? (
-            <span className="af-cm-actions-note">Reversing a trade happens in league settings, not here.</span>
-          ) : null}
+      {whoLine ? (
+        <div className="af-cm-flagcard-who" data-testid="integrity-flag-managers">
+          {whoLine}
         </div>
-      ) : flag.status === 'open' ? (
-        <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 14 }}>
-          Frequency alone is not proof &mdash; it raises the review priority of each individual trade.
-        </p>
       ) : null}
+
+      <button
+        type="button"
+        className="af-cm-flagcard-toggle"
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        onClick={() => setExpanded((x) => !x)}
+      >
+        {expanded ? 'Hide details' : 'Show details'}
+      </button>
+
+      <div className="af-cm-flagcard-detail" id={detailId}>
+        <h3 className="af-cm-flagcard-lead">{flag.summary}</h3>
+        {valuation?.status === 'unavailable' && <p>Trade valuation unavailable. {valuation.reason}</p>}
+
+        {isCollusion ? (
+          <TradeSides ev={ev as CollusionEvidenceLike} a={managerA} b={managerB} />
+        ) : (
+          <>
+            <TankingStats ev={ev as TankingEvidenceLike} />
+            {(ev as TankingEvidenceLike).lineupIntegrity ? <LineupScoreStrip li={(ev as TankingEvidenceLike).lineupIntegrity!} /> : null}
+            {leagueId && (ev as TankingEvidenceLike).lineupIntegrity && typeof (ev as TankingEvidenceLike).rosterId === 'string' ? (
+              <PostLineupReport leagueId={leagueId} rosterId={(ev as TankingEvidenceLike).rosterId!} />
+            ) : null}
+          </>
+        )}
+
+        {context.length > 0 ? (
+          <ul className="af-cm-evidence">
+            {context.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        {/*
+          The manager's side, read before ruling. Shown as their words, quoted, never merged into the
+          evidence: it is a claim to weigh, not a fact the scan established.
+        */}
+        {managerReplyText ? (
+          <blockquote className="af-cm-manager-reply" data-testid="integrity-manager-reply">
+            <div className="af-label">
+              Manager&rsquo;s reply{managerReplyAt ? ` · ${managerReplyAt}` : ''}
+            </div>
+            <p>{managerReplyText}</p>
+          </blockquote>
+        ) : !isCollusion && flag.status === 'open' ? (
+          <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 10 }}>
+            The manager was told privately and can reply before you rule.
+          </p>
+        ) : null}
+
+        {/*
+          The commissioner's own rating of how serious this is. The scan's level is a first guess;
+          changing it re-sorts the queue. Offered on every open flag the viewer can review.
+        */}
+        {flag.status === 'open' && onSetSeverity ? (
+          <div className="af-cm-flaglevel">
+            <div className="af-label">Your rating</div>
+            <div className="af-cm-seg" role="group" aria-label="Flag level">
+              {LEVELS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className="af-cm-seg-btn"
+                  aria-pressed={severity === level}
+                  disabled={busy}
+                  onClick={() => {
+                    if (level !== severity) onSetSeverity(flag, level)
+                  }}
+                >
+                  {level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Medium'}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {actionable ? (
+          <div className="af-cm-actions">
+            {/*
+              Build rule 2: an escalation path, a communication path, and Dismiss.
+              Never a lone Dismiss — a commissioner given only "make this go away"
+              will make it go away.
+            */}
+            {onEscalate ? (
+              <button
+                type="button"
+                className={`af-btn ${severity === 'high' || severity === 'critical' ? 'af-cm-btn-warn' : ''}`}
+                onClick={() => onEscalate(flag)}
+                disabled={busy}
+              >
+                {isCollusion ? 'Open review' : 'Escalate'}
+              </button>
+            ) : null}
+            {onMessage ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => onMessage(flag)} disabled={busy}>
+                {messageLabel}
+              </button>
+            ) : null}
+            {onDismiss ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => onDismiss(flag)} disabled={busy}>
+                Dismiss
+              </button>
+            ) : null}
+            {/*
+              Says where the actual power lives. Integrity flags are a review
+              surface; reversing a trade is a league-settings action, and a
+              commissioner who expects "Open review" to undo the trade will be
+              surprised at the worst possible moment.
+            */}
+            {isCollusion ? (
+              <span className="af-cm-actions-note">Reversing a trade happens in league settings, not here.</span>
+            ) : null}
+          </div>
+        ) : flag.status === 'open' ? (
+          <p className="af-cm-actions-note" style={{ marginLeft: 0, marginTop: 14 }}>
+            Frequency alone is not proof &mdash; it raises the review priority of each individual trade.
+          </p>
+        ) : null}
+      </div>
     </article>
   )
 }

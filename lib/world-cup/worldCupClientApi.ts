@@ -1,16 +1,10 @@
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
 /**
  * Client-side API helpers for World Cup bracket entries.
  * All functions are safe to call from React components ("use client").
  */
 
-import type {
-  WorldCupAiMatchupPreview,
-  WorldCupAiStrategy,
-  WorldCupChallengeView,
-  WorldCupLeaderboardRow,
-  WorldCupMatchupIntelligence,
-  WorldCupPickView,
-} from "./types"
+import type { WorldCupAiStrategy, WorldCupChallengeView, WorldCupMatchupIntelligence, WorldCupPickView } from "./types"
 import {
   confirmWorldCupTokenSpend,
   isWorldCupTokenConfirmationResponse,
@@ -19,7 +13,7 @@ import { trackMetaEventsFromResponse } from "@/lib/meta-client"
 
 // ── Local types ──────────────────────────────────────────────────────────────
 
-export type WorldCupEntryStatus =
+type WorldCupEntryStatus =
   | "not_started"
   | "in_progress"
   | "complete"
@@ -47,7 +41,7 @@ export type WorldCupBracketEntryClient = {
   updatedAt: string
 }
 
-export type WorldCupEntryPickPayload = {
+type WorldCupEntryPickPayload = {
   activeEntryId?: string
   matchId: string
   selectedTeamId?: string | null
@@ -62,7 +56,7 @@ export type WorldCupEntryPickPayload = {
   confidencePoints?: number | null
 }
 
-export type WorldCupEntryPickResult = {
+type WorldCupEntryPickResult = {
   success: boolean
   entry: WorldCupBracketEntryClient | null
   pick: unknown
@@ -71,7 +65,7 @@ export type WorldCupEntryPickResult = {
   view?: WorldCupChallengeView
 }
 
-export type WorldCupBracketEntryDetailClient = WorldCupBracketEntryClient & {
+type WorldCupBracketEntryDetailClient = WorldCupBracketEntryClient & {
   picks?: WorldCupPickView[]
 }
 
@@ -151,15 +145,11 @@ export type WorldCupEntryCompletionReviewClient = {
   needsRefinalize?: boolean
 }
 
-export type WorldCupEntryFinalizeResult = {
+type WorldCupEntryFinalizeResult = {
   ok: boolean
   entry: WorldCupBracketEntryClient
   completion: WorldCupEntryCompletionReviewClient
   view?: WorldCupChallengeView
-}
-
-export type WorldCupEntryLeaderboardRow = WorldCupLeaderboardRow & {
-  championAlive?: boolean
 }
 
 export type WorldCupChallengeIntegrityReport = {
@@ -180,7 +170,8 @@ export type WorldCupChallengeIntegrityReport = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, {
+  const transport = url.endsWith('/ai/matchup') ? paidToolFetch : fetch
+  const res = await transport(url, {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   })
@@ -386,23 +377,6 @@ export async function getWorldCupIntegrityReport(
 
 // ── AI matchup preview ────────────────────────────────────────────────────────
 
-export async function getWorldCupAiMatchupPreview(
-  challengeId: string,
-  payload: {
-    matchId: string
-    entryId?: string
-    strategy?: WorldCupAiStrategy
-  }
-): Promise<WorldCupAiMatchupPreview> {
-  const res = await apiFetch(
-    `/api/brackets/world-cup/${challengeId}/ai/matchup-preview`,
-    { method: "POST", body: JSON.stringify(payload) }
-  )
-  const data = await res.json()
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? "AI preview failed")
-  return (data as { preview: WorldCupAiMatchupPreview }).preview
-}
-
 export async function getWorldCupMatchupIntelligence(
   challengeId: string,
   entryId: string,
@@ -517,7 +491,7 @@ export type WorldCupAdminSyncGroupStandingsResult = {
 
 export type WorldCupAdminSimulationStrategy = "random" | "higher_seed" | "home" | "away"
 
-export type WorldCupAdminSimulationMatchResult = {
+type WorldCupAdminSimulationMatchResult = {
   ok: boolean
   result: {
     challengeId: string
@@ -529,7 +503,7 @@ export type WorldCupAdminSimulationMatchResult = {
   }
 }
 
-export type WorldCupAdminSimulationRoundResult = {
+type WorldCupAdminSimulationRoundResult = {
   ok: boolean
   result: {
     challengeId: string
@@ -542,7 +516,7 @@ export type WorldCupAdminSimulationRoundResult = {
   }
 }
 
-export type WorldCupAdminSimulationTournamentResult = {
+type WorldCupAdminSimulationTournamentResult = {
   ok: boolean
   result: {
     challengeId: string
@@ -562,7 +536,7 @@ export type WorldCupAdminSimulationTournamentResult = {
   }
 }
 
-export type WorldCupAdminResetSimulationResult = {
+type WorldCupAdminResetSimulationResult = {
   ok: boolean
   result: {
     challengeId: string
@@ -720,7 +694,7 @@ export async function adminResetWorldCupSimulation(
   return data as WorldCupAdminResetSimulationResult
 }
 
-export type WorldCupAdminLoadTestFixturesResult = {
+type WorldCupAdminLoadTestFixturesResult = {
   ok: boolean
   result: {
     success: boolean

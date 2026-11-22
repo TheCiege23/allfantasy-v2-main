@@ -287,8 +287,12 @@ describe('finalizeRedraftWeek — a daily sport', () => {
     )
 
     expect(result.refusal).toBe('season_start_unknown')
-    // It refused before reading a slate, rather than reading an empty one and blaming that.
-    expect(prisma.sportsGame.findMany).not.toHaveBeenCalled()
+    // It refused before reading a slate, rather than reading an empty one and blaming that. The
+    // one schedule read allowed is the opener derivation for an uncurated season, which selects
+    // only kickoff and season type — never a slate.
+    for (const [args] of (prisma.sportsGame.findMany as any).mock.calls) {
+      expect(args.select).toEqual({ startTime: true, seasonType: true })
+    }
   })
 
   /**

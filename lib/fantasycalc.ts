@@ -1,6 +1,7 @@
 import { getConsensusADP as getMultiPlatformConsensus } from './multi-platform-adp'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { getDynastySportConfig } from '@/lib/dynasty-core/dynastySportConfig'
+import { rookieDraftCalendarYear } from '@/lib/dynasty-core/rookieDraftCalendar'
 
 export interface FantasyCalcPlayerIdentity {
   id: number;
@@ -266,13 +267,16 @@ export function getDetailedTier(value: number, rank: number, position: string): 
 
 /**
  * Sports whose rookie-pick calendar and round count come from dynastySportConfig instead of the
- * NFL defaults (May 1 rookie fever, 5-round curve). Same set that gets native aging curves.
+ * NFL defaults (May 1 rookie fever, 5-round curve). NCAAF's "rookie" draft is the January class of
+ * incoming recruits (4 rounds), NCAAB's a May draft (3 rounds), SOCCER's a July draft (4 rounds).
  */
-const PICK_SPORTS_WITH_OWN_CALENDAR = new Set(['MLB', 'NBA', 'NHL'])
+const PICK_SPORTS_WITH_OWN_CALENDAR = new Set(['MLB', 'NBA', 'NHL', 'SOCCER', 'NCAAF', 'NCAAB'])
 
 type PickCalendar = {
   /** 1-12: month the fantasy rookie draft happens; the pre-draft bump counts down to its 1st day. */
   rookieDraftMonth: number
+  /** Calendar year of a `year` pick's draft — MLB's is held the winter before (`rookieDraftCalendar.ts`). */
+  draftYear: (year: number) => number
   /** Value of a pick in `round` (1-based) before slot / time / fever adjustments. */
   roundBase: (round: number) => number
 }
@@ -304,6 +308,7 @@ function sportPickCalendar(sport: string, isDynasty: boolean): PickCalendar {
   }
   return {
     rookieDraftMonth: cfg.offseason.rookieDraftMonth,
+    draftYear: (year) => rookieDraftCalendarYear(cfg.offseason, year),
     roundBase: (round) =>
       round <= rounds
         ? baseValues[Math.max(1, round)]
@@ -312,8 +317,8 @@ function sportPickCalendar(sport: string, isDynasty: boolean): PickCalendar {
 }
 
 /**
- * @param sport optional. Omitted (or NFL) keeps the historical NFL pricing exactly. MLB / NBA / NHL
- * use their own rookie-draft month and round count from dynastySportConfig.
+ * @param sport optional. Omitted (or NFL) keeps the historical NFL pricing exactly. MLB / NBA / NHL /
+ * SOCCER / NCAAF / NCAAB use their own rookie-draft month and round count from dynastySportConfig.
  */
 export function getPickValue(year: number, round: number, isDynasty: boolean, pickNumber?: number, numTeams?: number, sport?: string): number {
   const sportKey = String(sport ?? '').toUpperCase();
@@ -332,7 +337,7 @@ function pickValueWithCalendar(year: number, round: number, pickNumber: number |
 
   let daysToDraft: number | null = null;
   if (year >= currentYear && year <= currentYear + 3) {
-    const draftDate = new Date(year, cal.rookieDraftMonth - 1, 1);
+    const draftDate = new Date(cal.draftYear(year), cal.rookieDraftMonth - 1, 1);
     const diffDays = Math.ceil((draftDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     daysToDraft = diffDays > 0 ? diffDays : null;
   }

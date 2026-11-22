@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto"
+import { withPaidToolBilling, replayPaidToolRequest } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { userHasBracketBrainAi } from "@/lib/bracket-brain/bracketBrainAccess"
@@ -17,6 +17,7 @@ import { getCachedAiResult } from "@/lib/ai/ai-result-cache"
 import { getWorldCupDataTrustReport } from "@/lib/world-cup/worldCupDataTrustService"
 import {
   requireWorldCupApiUser,
+  assertWorldCupChallengeMemberOrManager,
   worldCupChallengeParamsSchema,
 } from "../../_utils"
 
@@ -89,7 +90,7 @@ const postSchema = z.object({
   confirmedTokenSpend: z.boolean().optional().default(false),
 })
 
-export async function POST(request: Request, props: { params: Promise<unknown> }) {
+async function paidToolPost(request: Request, props: { params: Promise<unknown> }) {
   const rawParams = await props.params
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
@@ -107,10 +108,37 @@ export async function POST(request: Request, props: { params: Promise<unknown> }
 
   const challengeId = params.data.challengeId
   const userId = auth.user.id
+  const membership = await assertWorldCupChallengeMemberOrManager(request, challengeId, auth.user)
+  if (!membership.ok) return membership.response
+  const replay = await replayPaidToolRequest(userId)
+  if (replay) return replay
 
   // ── Subscription check ─────────────────────────────────────────────────────
   const hasAi = await userHasBracketBrainAi(userId, auth.user.email ?? null)
   const entitled = hasAi || Boolean((auth as any).access?.isAdmin)
+
+  // ── Build the deterministic report (needed as LLM grounding) ─────────────
+  const context = await buildWorldCupChimmyContext({
+    challengeId,
+    userId,
+    locale: null,
+    userRole: "participant",
+  })
+  const report = computeWorldCupEdgeReport(context, userId)
+
+  const cached = await getCachedAiResult({
+    feature: "world_cup_daily_edge_report", scopeType: "user_pool_day",
+    scopeId: edgeReportCacheKey(challengeId, userId, todayUtcDate()), payload: {},
+  }).catch(() => null)
+  if (cached?.resultText) {
+    try {
+      const coaching = JSON.parse(cached.resultText)
+      if (typeof coaching.coachingInsight === 'string' && typeof coaching.commissionerPost === 'string') {
+        return NextResponse.json({ report, coaching: { ...coaching, generatedAt: todayUtcDate(), fromCache: true },
+          billing: { tokenCharged: false, fromCache: true, coveredByPlan: entitled } })
+      }
+    } catch { /* Invalid cache is regenerated only after a new explicit token quote. */ }
+  }
 
   // ── Token gate ─────────────────────────────────────────────────────────────
   // Subscription users: commitTokenSpend = null (plan covers it).
@@ -134,15 +162,6 @@ export async function POST(request: Request, props: { params: Promise<unknown> }
   if (!tokenAccess.ok) {
     return tokenAccess.response
   }
-
-  // ── Build the deterministic report (needed as LLM grounding) ─────────────
-  const context = await buildWorldCupChimmyContext({
-    challengeId,
-    userId,
-    locale: null,
-    userRole: "participant",
-  })
-  const report = computeWorldCupEdgeReport(context, userId)
 
   // ── Run the coaching layer ─────────────────────────────────────────────────
   const plan = entitled ? "pro" : null
@@ -179,10 +198,6 @@ export async function POST(request: Request, props: { params: Promise<unknown> }
       },
     })
   } catch (err) {
-    // Token spend failed after successful LLM — clean 402, no AI message saved
-    const isSpendFailure =
-      err instanceof Error &&
-      (err.message.includes("Insufficient") || err.message.includes("token"))
     return NextResponse.json(
       {
         error: "Token spend failed. Your coaching was generated but the token could not be deducted. Check your balance and try again.",
@@ -193,3 +208,5 @@ export async function POST(request: Request, props: { params: Promise<unknown> }
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

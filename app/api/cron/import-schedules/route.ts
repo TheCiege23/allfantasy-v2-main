@@ -1,7 +1,8 @@
 /**
  * GET/POST /api/cron/import-schedules
  *
- * Vercel Cron schedule: weekly on Monday at 03:00 UTC (see vercel.json).
+ * Schedule: daily at 07:00 UTC (see cron-schedule.json). It was weekly, Monday 03:00 UTC, which is mid Sunday
+ * Night Football: that game's row was stored as in progress and stayed so for seven days.
  * Runs a full schedule sync for NFL (and optionally NCAAF) using Rolling
  * Insights (primary) then API-Sports (supplement).  Stores games into the
  * sportsGame table and gameSchedule table where applicable.
@@ -10,6 +11,8 @@
  *   sport   — "NFL" (default) or "NCAAF"
  *   season  — 4-digit year string (defaults to current season)
  *   source  — "rolling_insights" | "api_sports" | "all" (default: "all")
+ *   tsdbSports — optional comma-separated sport scope, only with source=tsdb-only;
+ *                omitted preserves the normal seven-sport sweep.
  *   rosters — "1" runs ONLY the TheSportsDB roster sweep and skips every other
  *             block. See the roster section below for why it is its own mode.
  *   riProfiles — "1" runs ONLY the Rolling Insights team + player profile sweep, for all seven
@@ -27,14 +30,16 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
+import { createRunBudget, CRON_RUN_BUDGET_MS, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { selectRiProfileSports } from "@/lib/cron/riProfileSports"
+import { resolveTsdbScheduleSports } from "@/lib/cron/tsdbScheduleSports"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { prisma } from "@/lib/prisma"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
   syncAPISportsGameOddsToDb,
+  apiSportsOddsSportsFor,
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
@@ -152,14 +157,30 @@ function resolveSports(param: string | null): Array<"NFL" | "NCAAF"> {
   return [resolveSport(param)]
 }
 
-async function handle(req: NextRequest) {
+async function handle(req: NextRequest, signal?: AbortSignal) {
   const url = new URL(req.url)
   const sports = resolveSports(url.searchParams.get("sport"))
   const sport = sports[0]
   const season = url.searchParams.get("season") ?? undefined
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
+  const tsdbScope = url.searchParams.get("tsdbSports")
+  let tsdbSports: IngestSport[]
+  try {
+    if (tsdbScope !== null && source !== "tsdb-only") throw new Error("exclusive_scope_required")
+    tsdbSports = resolveTsdbScheduleSports(tsdbScope, TSDB_SPORTS)
+  } catch {
+    return NextResponse.json({ error: "tsdbSports requires source=tsdb-only and a comma-separated list of supported sports." }, { status: 400 })
+  }
   const rostersOnly = url.searchParams.get("rosters") === "1"
   /** Exclusive mode, like `?rosters=1` — see the block that reads it for why it gets its own fire. */
+  const rosterScope = url.searchParams.get("rosterSports")
+  let selectedRosterSports: IngestSport[]
+  try {
+    if (rosterScope !== null && (!rostersOnly || url.searchParams.get("riProfiles") === "1" || url.searchParams.get("odds") === "1" || source !== "all" || tsdbScope !== null)) throw new Error("exclusive_scope_required")
+    selectedRosterSports = resolveTsdbScheduleSports(rosterScope, TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers))
+  } catch {
+    return NextResponse.json({ error: "rosterSports requires rosters=1 and supported roster sports." }, { status: 400 })
+  }
   const riProfilesOnly = url.searchParams.get("riProfiles") === "1"
   /** Exclusive mode — see the header. Runs 6-hourly while the schedule blocks run weekly. */
   const oddsOnly = url.searchParams.get("odds") === "1"
@@ -177,7 +198,7 @@ async function handle(req: NextRequest) {
   const runScheduleBlocks = !rostersOnly && !riProfilesOnly && !oddsOnly
 
   const startedAt = Date.now()
-  const budget = createRunBudget()
+  const budget = createRunBudget(CRON_RUN_BUDGET_MS, Date.now, signal)
   const results: Record<string, unknown> = {}
   const diagnostics: Record<string, unknown> = {}
 
@@ -217,13 +238,22 @@ async function handle(req: NextRequest) {
      * Cheap by construction: `syncAPISportsGameOddsToDb` drives off SportsGame rows we already
      * store and fetches one game at a time within a bounded window, so an NFL week is ~16 calls
      * against a 300/hr budget. Per-sport isolation matches the games block above.
+     *
+     * College too, by default. With no `?sport=` the odds mode covers NFL then NCAAF; the
+     * schedules default stays NFL-only. Before 2026-11-22 the hourly entry passed no sport, so it
+     * synced NFL only and every college game on the Today strip read "Odds unavailable" while
+     * API-Sports was already supplying those games (5,508 NCAAF 2026 rows, source api_sports).
+     * Defaulting here instead of rewriting the cron path keeps `scripts/cron-freshness-check.mjs`,
+     * which is keyed on the exact path `?odds=1`, pointed at the right job. NCAAF's own window
+     * and cap are in API_SPORTS_ODDS_WINDOW.
      */
     if (oddsOnly) {
+      const oddsSports = apiSportsOddsSportsFor(url.searchParams.get("sport"))
       await withSyncJobRun(
-        { jobName: JOB_ODDS, jobScope: sports.join(","), trigger: "cron" },
+        { jobName: JOB_ODDS, jobScope: oddsSports.join(","), trigger: "cron" },
         async () => {
           const odds: Record<string, unknown> = {}
-          for (const s of sports) {
+          for (const s of oddsSports) {
             if (budget.exhausted()) {
               odds[s] = { deferred: true }
               continue
@@ -312,7 +342,7 @@ async function handle(req: NextRequest) {
         const deferred: string[] = []
         let gamesWritten = 0
         let failedSports = 0
-        for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
+        for (const s of rotateForFairness(tsdbSports, 6 * 60 * 60 * 1000)) {
         if (budget.exhausted()) {
           deferred.push(s)
           continue
@@ -350,7 +380,7 @@ async function handle(req: NextRequest) {
       }
 
       const tsdbRun = await withSyncJobRun(
-        { jobName: JOB_TSDB, trigger: 'cron' },
+        { jobName: JOB_TSDB, trigger: 'cron', ...(tsdbScope === null ? {} : { jobScope: tsdbSports.join(',') }) },
         runTsdb,
         (r) => ({
           rowsWritten: r.gamesWritten,
@@ -393,7 +423,7 @@ async function handle(req: NextRequest) {
     if (rostersOnly) {
       const rosters: Record<string, unknown> = {}
       const deferred: string[] = []
-      const rosterSports = TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers)
+      const rosterSports = selectedRosterSports
 
       /*
        * ⚠ A HEARTBEAT, BECAUSE A TABLE PROBE ON THIS JOB WOULD BE A FALSE GREEN.
@@ -660,7 +690,7 @@ async function handle(req: NextRequest) {
 async function handleBoundedByEdge(req: NextRequest) {
   const startedAt = Date.now()
   const { result, overran } = await respondBeforeEdge<NextResponse | null>(
-    () => handle(req),
+    (signal) => handle(req, signal),
     () => null,
     CRON_HARD_RESPONSE_MS,
     'import-schedules',

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { injuryClaimAsOf, isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
 
-export type DraftAiNewsBrief = {
+type DraftAiNewsBrief = {
   player: string
   team: string | null
   headline: string
@@ -10,7 +10,7 @@ export type DraftAiNewsBrief = {
   source: string
 }
 
-export type DraftAiInjuryBrief = {
+type DraftAiInjuryBrief = {
   player: string
   team: string | null
   status: string
@@ -18,7 +18,7 @@ export type DraftAiInjuryBrief = {
   date: string | null
 }
 
-export type DraftAiContextBundle = {
+type DraftAiContextBundle = {
   sport: string
   news: DraftAiNewsBrief[]
   injuries: DraftAiInjuryBrief[]

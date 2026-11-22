@@ -1,0 +1,114 @@
+/*
+ * The war chest (components/core-app/screens/WarChest.tsx) — War Room phase 6.
+ * Same tokens and rhythm as the rest of the War Room. All text at or above the 11px floor.
+ */
+
+.af-core .af-wch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  scroll-margin-top: 72px;
+}
+
+.af-core .af-wch-heading {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-wch-lead {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-wch-callout {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.af-core .af-wch-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-wch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 6px 18px;
+}
+
+.af-core .af-wch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name amount'
+    'bar  bar';
+  gap: 4px 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-wch-row[data-you='true'] {
+  font-weight: 700;
+}
+
+.af-core .af-wch-name {
+  grid-area: name;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-wch-amount {
+  grid-area: amount;
+  text-align: right;
+}
+
+.af-core .af-wch-amount[data-unknown='true'] {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.af-core .af-wch-bar {
+  grid-area: bar;
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.af-core .af-wch-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.af-core .af-wch-row[data-you='true'] .af-wch-bar-fill {
+  background: var(--accent);
+}

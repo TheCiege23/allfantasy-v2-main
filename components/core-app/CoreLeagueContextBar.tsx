@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { leagueWorkspaceMode } from '@/lib/league/league-workspace-navigation'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
@@ -17,11 +18,11 @@ import {
   type LeagueConceptType,
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
-import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { ageText, leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
+import { leagueConceptText } from '@/lib/core-app/shellCopy'
 import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
+import { useMessages } from '@/components/i18n/useMessages'
+import { leagueContextBarMessages } from '@/lib/core-app/messages/leagueContextBar'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -30,18 +31,15 @@ import '@/components/core-app/af-league-tabs.css'
  */
 function useBarCopy() {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const surfaceLabel = (surface: CoreSurfaceKey) => {
-    const english = CORE_SURFACE_LABELS[surface]
-    return es ? (SURFACE_LABEL_ES[english] ?? coreUiCopy(english, language)) : english
-  }
+  const m = useMessages(leagueContextBarMessages)
+  const surfaceLabel = (surface: CoreSurfaceKey) => m.surfaceLabel(CORE_SURFACE_LABELS[surface])
   const concept = (label: string) => leagueConceptText(label, language)
-  return { language, es, surfaceLabel, concept }
+  return { language, surfaceLabel, concept }
 }
 
-export type CoreLeagueRecommendationValue = { action: string; rationale: string }
+type CoreLeagueRecommendationValue = { action: string; rationale: string }
 
-export type CoreLeagueContextBarProps = {
+type CoreLeagueContextBarProps = {
   leagueId: string
   leagueName: string
   platform: string
@@ -78,6 +76,11 @@ export type CoreLeagueContextBarProps = {
    */
   decisionSlot?: ReactNode
   recommendationSlot?: ReactNode
+  /**
+   * "Open League ↗" (LeagueTabs `OpenLeagueLink`), drawn after the identity line so it does not
+   * cost a row of its own above this bar (2026-11-05 navigation cleanup).
+   */
+  workspaceLink?: ReactNode
 }
 
 /**
@@ -90,14 +93,12 @@ export type CoreLeagueContextBarProps = {
  * in-league screen. The internal module name stays `decision-os`; only the label changed.
  */
 export function CoreLeagueDecisionChip({ available }: { available: boolean | null }) {
-  const { es } = useBarCopy()
+  const m = useMessages(leagueContextBarMessages)
   const tone = available === null ? 'muted' : available ? 'decision' : 'muted'
-  const label = es
-    ? available === null ? 'comprobando' : available ? 'listo' : 'en preparación'
-    : available === null ? 'checking' : available ? 'ready' : 'building'
+  const label = available === null ? m.checking : available ? m.ready : m.building
   return (
     <span className="af-lctx-chip" data-tone={tone}>
-      {es ? 'Análisis de la liga' : 'League insights'} {label}
+      {m.leagueInsights} {label}
     </span>
   )
 }
@@ -111,16 +112,15 @@ export function CoreLeagueRecommendation({
   surface: CoreSurfaceKey
   recommendation: CoreLeagueRecommendationValue
 }) {
-  const { language, es, surfaceLabel } = useBarCopy()
+  const { language, surfaceLabel } = useBarCopy()
+  const m = useMessages(leagueContextBarMessages)
   const askChimmy = () => {
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
           // The question lands in the reader's own composer, so it is asked in their language.
-          prefill: es
-            ? `Revisa ${surfaceLabel(surface)} de ${leagueName} y dime la acción más importante que debo tomar ahora.`
-            : `Review ${leagueName}'s ${CORE_SURFACE_LABELS[surface]} and tell me the most important action to take next.`,
+          prefill: m.askChimmyPrefill(leagueName, surfaceLabel(surface)),
         },
       }),
     )
@@ -132,7 +132,7 @@ export function CoreLeagueRecommendation({
         <strong>{leagueRecommendationText(recommendation.action, language)}</strong>
         <span>{leagueRecommendationText(recommendation.rationale, language)}</span>
       </span>
-      <button type="button" onClick={askChimmy}>{es ? 'Preguntar a Chimmy' : 'Ask Chimmy'}</button>
+      <button type="button" onClick={askChimmy}>{m.askChimmy}</button>
     </div>
   )
 }
@@ -152,8 +152,11 @@ export default function CoreLeagueContextBar({
   surface,
   decisionSlot,
   recommendationSlot,
+  workspaceLink = null,
 }: CoreLeagueContextBarProps) {
-  const { language, es, surfaceLabel, concept } = useBarCopy()
+  const { language, surfaceLabel, concept } = useBarCopy()
+  const m = useMessages(leagueContextBarMessages)
+  const router = useRouter()
   const selectId = useId()
   const baseSelectId = useId()
   const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
@@ -174,6 +177,21 @@ export default function CoreLeagueContextBar({
    */
   const [confirmed, setConfirmed] = useState(false)
   const [typeStatus, setTypeStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading')
+  /** The commissioner reopened a confirmed type's editor from its chip (or a grade's `#league-type` link). */
+  const [editing, setEditing] = useState(false)
+
+  /*
+   * A grade's "Confirm your league type" link targets `#league-type`. On a confirmed league that
+   * anchor is the compact chip, so arriving by it opens the editor it points at.
+   */
+  useEffect(() => {
+    const openFromHash = () => {
+      if (window.location.hash === '#league-type') setEditing(true)
+    }
+    openFromHash()
+    window.addEventListener('hashchange', openFromHash)
+    return () => window.removeEventListener('hashchange', openFromHash)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -227,7 +245,9 @@ export default function CoreLeagueContextBar({
       })
       if (!response.ok) throw new Error('save failed')
       setConfirmed(true)
+      setEditing(false)
       setTypeStatus('saved')
+      router.refresh()
       window.setTimeout(() => setTypeStatus('ready'), 2400)
     } catch {
       setLeagueType(previous.leagueType)
@@ -249,8 +269,35 @@ export default function CoreLeagueContextBar({
   const askPirateBase = canConfirm && shownType === 'pirate'
   const busy = typeStatus === 'loading' || typeStatus === 'saving'
   const pirateBaseLabel = leagueType === 'pirate' ? pirateBaseFormatLabel(pirateBase) : null
+  const typeText =
+    typeStatus === 'loading'
+      ? m.loading
+      : pirateBaseLabel
+        ? `${concept(leagueConceptLabel(leagueType))} · ${concept(pirateBaseLabel)}`
+        : concept(leagueConceptLabel(leagueType))
+  /*
+   * 🛑 THE FULL CONTROL ONLY WHEN IT IS NEEDED (2026-11-05). It drew a labelled select on every
+   * in-league screen, for every league, including the ones whose type a person had already
+   * confirmed — measured on allfantasy.ai, this bar plus the tab row filled a 375px phone's first
+   * screen. An UNCONFIRMED type still gets the whole control, because every trade grade in the
+   * league is priced on it; a confirmed one is a chip that reopens the editor. The editor stays
+   * mounted (`hidden`), so its state and save path are exactly the ones that ran before.
+   */
+  const showEditor = canConfirm && (editing || pirateDraft || (typeStatus !== 'loading' && !confirmed))
+  const typeStatusText =
+    typeStatus === 'saving'
+      ? m.saving
+      : typeStatus === 'saved'
+        ? m.saved(concept(leagueConceptLabel(leagueType)))
+        : typeStatus === 'error'
+          ? m.loadSaveError
+          : pirateDraft
+            ? m.pickPirateBase
+            : typeStatus === 'ready' && !confirmed
+              ? m.notConfirmed
+              : ''
   return (
-    <section className="af-lctx" aria-label={es ? `Estado del sistema de ${leagueName}` : `${leagueName} system status`}>
+    <section className="af-lctx" aria-label={m.systemStatus(leagueName)}>
       {/*
         The league, named once.
 
@@ -279,8 +326,35 @@ export default function CoreLeagueContextBar({
         <strong className="af-lctx-name" title={leagueName}>
           {leagueName}
         </strong>
+        {/*
+          The type, one chip wide. A commissioner's chip opens the editor below it; a member's is
+          plain text, because there is nothing for them to change.
+        */}
+        {canConfirm && !showEditor ? (
+          <button
+            type="button"
+            id="league-type"
+            className="af-lctx-typechip"
+            data-confirmed={confirmed ? 'true' : 'false'}
+            title={m.leagueType}
+            onClick={() => setEditing(true)}
+          >
+            <span className="af-lctx-typechip-k">{m.leagueType}</span>
+            <span className="af-lctx-typechip-v">{typeText}</span>
+            {confirmed ? <span className="af-lctx-typechip-ok" aria-hidden>✓</span> : null}
+          </button>
+        ) : !canConfirm ? (
+          <span id="league-type" className="af-lctx-typechip" data-confirmed={confirmed ? 'true' : 'false'} title={m.leagueType}>
+            <span className="af-lctx-typechip-k">{m.leagueType}</span>
+            <span className="af-lctx-typechip-v">{typeText}</span>
+            {confirmed ? <span className="af-lctx-typechip-ok" aria-hidden>✓</span> : null}
+          </span>
+        ) : null}
+        {!showEditor ? <small className="af-lctx-typestatus" role="status" aria-live="polite">{typeStatusText}</small> : null}
       </div>
+      {workspaceLink}
 
+      <details className="af-lctx-details"><summary>{m.leagueDetails}</summary>
       <div className="af-lctx-statuses">
         {coverageHref && leagueWorkspaceMode(platform, language).authority !== 'NATIVE' ? (
           /*
@@ -295,11 +369,9 @@ export default function CoreLeagueContextBar({
             className="af-lctx-chip af-lctx-chip--link"
             data-tone="source"
             href={coverageHref}
-            title={es ? 'Qué hay registrado de esta importación' : 'What’s on file from this import'}
+            title={m.importTitle}
           >
-            {es
-              ? `Importación de ${platform.toUpperCase()} · qué hay registrado`
-              : `${platform.toUpperCase()} import · what’s on file`}
+            {m.importChip(platform.toUpperCase())}
           </Link>
         ) : (
           <span className="af-lctx-chip" data-tone="source">
@@ -308,16 +380,19 @@ export default function CoreLeagueContextBar({
         )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
           {gameDayActive
-            ? es ? 'Actualización de día de partido · 20 s' : 'Game-day view refresh · 20s'
-            : es ? `Sincronizado ${ageText(syncLabel, language)}` : `Synced ${syncLabel}`}
+            ? m.gameDay
+            : syncStale ? m.updatesDelayed : m.connected}
         </span>
         {decisionSlot !== undefined ? decisionSlot : <CoreLeagueDecisionChip available={Boolean(decisionAvailable)} />}
         <span className="af-lctx-chip" data-tone="chimmy">
           Chimmy · {surfaceLabel(surface)}
         </span>
-        {/* `#league-type`: every trade grade's "Confirm your league type" link lands here. */}
-        <div className="af-lctx-type" id="league-type" data-confirmed={confirmed ? 'true' : 'false'}>
-          <label htmlFor={selectId}>{es ? 'Tipo de liga' : 'League type'}</label>
+      </div></details>
+
+      {/* The grading control: shown for an unconfirmed type, or when the chip reopens it. Grade links target `#league-type`. */}
+      {canConfirm ? (
+      <div className="af-lctx-type" id={showEditor ? 'league-type' : undefined} data-confirmed={confirmed ? 'true' : 'false'} hidden={!showEditor}>
+          <label htmlFor={selectId}>{m.leagueType}</label>
           {canConfirm ? (
             <select
               id={selectId}
@@ -332,15 +407,7 @@ export default function CoreLeagueContextBar({
                 <option key={option.id} value={option.id}>{concept(option.label)}</option>
               ))}
             </select>
-          ) : (
-            <span>
-              {typeStatus === 'loading'
-                ? es ? 'Cargando…' : 'Loading…'
-                : pirateBaseLabel
-                  ? `${concept(leagueConceptLabel(leagueType))} · ${concept(pirateBaseLabel)}`
-                  : concept(leagueConceptLabel(leagueType))}
-            </span>
-          )}
+          ) : null}
           {askPirateBase ? (
             /*
              * The Pirate follow-up. Sits inside the same `.af-lctx-type` group, so on
@@ -348,7 +415,7 @@ export default function CoreLeagueContextBar({
              * and it picks up the same select styling.
              */
             <>
-              <label htmlFor={baseSelectId}>{es ? '¿Las plantillas se mantienen?' : 'Rosters carry over?'}</label>
+              <label htmlFor={baseSelectId}>{m.rostersCarryOver}</label>
               <select
                 id={baseSelectId}
                 value={pirateDraft ? '' : (pirateBase ?? '')}
@@ -357,7 +424,7 @@ export default function CoreLeagueContextBar({
                   if (isPirateBaseFormat(event.target.value)) void saveLeagueType('pirate', event.target.value)
                 }}
               >
-                <option value="" disabled>{es ? 'Elige' : 'Choose'}</option>
+                <option value="" disabled>{m.choose}</option>
                 {PIRATE_BASE_FORMAT_OPTIONS.map((option) => (
                   <option key={option.id} value={option.id}>{concept(option.label)}</option>
                 ))}
@@ -375,36 +442,17 @@ export default function CoreLeagueContextBar({
               onClick={() => void saveLeagueType(leagueType, leagueType === 'pirate' ? pirateBase : null)}
               disabled={leagueType === 'pirate' && !pirateBase}
             >
-              {es ? 'Confirmar' : 'Confirm'} {concept(leagueConceptLabel(leagueType))}
+              {m.confirm} {concept(leagueConceptLabel(leagueType))}
             </button>
           ) : null}
-          <small role="status" aria-live="polite">
-            {es
-              ? typeStatus === 'saving'
-                ? 'Guardando…'
-                : typeStatus === 'saved'
-                  ? `Guardado: los intercambios de esta liga se califican como ${concept(leagueConceptLabel(leagueType))}`
-                  : typeStatus === 'error'
-                    ? 'No se pudo cargar ni guardar'
-                    : pirateDraft
-                      ? 'Elige dynasty o redraft para guardar'
-                      : typeStatus === 'ready' && !confirmed
-                        ? 'Sin confirmar: tu tipo de liga decide cómo se califica cada intercambio de esta liga.'
-                        : ''
-              : typeStatus === 'saving'
-                ? 'Saving…'
-                : typeStatus === 'saved'
-                  ? `Saved — trades here are graded as ${leagueConceptLabel(leagueType)}`
-                  : typeStatus === 'error'
-                    ? 'Could not load or save'
-                    : pirateDraft
-                      ? 'Pick dynasty or redraft to save'
-                      : typeStatus === 'ready' && !confirmed
-                        ? `Not confirmed — ${LEAGUE_TYPE_DECIDES_GRADES.charAt(0).toLowerCase()}${LEAGUE_TYPE_DECIDES_GRADES.slice(1)}`
-                        : ''}
-          </small>
-        </div>
+          {showEditor ? <small role="status" aria-live="polite">{typeStatusText}</small> : null}
+          {editing && confirmed && !pirateDraft ? (
+            <button type="button" className="af-lctx-typedone" onClick={() => setEditing(false)}>
+              {m.done}
+            </button>
+          ) : null}
       </div>
+      ) : null}
 
       {recommendationSlot !== undefined ? (
         recommendationSlot

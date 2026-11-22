@@ -37,23 +37,28 @@ export function buildOrchestrationPromptSection(args: {
       ? `Secondary: ${secondary.map((s) => `${s.label} (${s.href})`).join('; ')}`
       : ''
 
-  const routingPct = (classification.confidence * 100).toFixed(0)
-
+  /*
+   * 🛑 THIS USED TO REQUIRE FIVE HEADINGS ON EVERY REPLY — Direct, Why, Tool, Confidence, Follow-up —
+   * and told the model to state "routing match ~N%". So "Explain PPR scoring in two short sentences"
+   * (2026-10-31) came back as five sections with "Routing match for this intent is ~62%" in it: the
+   * user's own length instruction lost to ours, and an internal classifier score was published as if
+   * it meant something to them. The routing score is no longer in the prompt at all; a model cannot
+   * repeat a number it was never shown.
+   */
   return `
 ## CHIMMY ORCHESTRATION (follow these rules)
-- Detected intent: ${classification.intent} (${classification.label}), routing confidence ~${routingPct}%.
+- Likely topic: ${classification.label}. Internal hint only — never mention intents, routing, or match percentages.
 - ${toolLine}
 ${alt ? `- ${alt}` : ''}
 - You are the premium AllFantasy assistant: concise, confident, never generic — never boilerplate or vague.
 
-### REQUIRED PUBLIC RESPONSE SHAPE (use these exact Markdown headings in your reply)
-1. **Direct** — One tight paragraph: the clearest action or call (who to start, what to do, or what to open).
-2. **Why** — 2–4 bullets: reasoning tied to data, league/roster context when loaded, and uncertainty where thin.
-3. **Tool** — One line naming the best AllFantasy tool for deeper work + markdown link when applicable, e.g. [Trade Analyzer](/trade-evaluator) or [Start A vs B](/tools/player-decision). Explain what they get there in one clause.
-4. **Confidence** — One line: your judgment confidence AND note routing match ~${routingPct}% for this intent.
-5. **Follow-up** — One suggested next question the user can paste back.
-
-- When deeper analysis is better than chat, the **Tool** section must recommend the link above.
+### HOW TO ANSWER
+- Answer the question that was asked, first. If the user sets a length or format ("two sentences", "one word", "a list"), follow it exactly — it overrides everything below.
+- Earlier turns supply context, not a replacement question. When the user corrects an earlier answer, acknowledge the concrete mistake and revisit their original constraints before suggesting a new move.
+- A definition or rules question gets a short plain answer: no headings, no confidence line, no tool pitch.
+- A decision (start/sit, trade, waiver, draft) leads with the call, then 2–4 reasons tied to the loaded league and roster data, and says plainly what data is missing. Use short headings only when the answer has several distinct parts.
+- Link one AllFantasy tool only when deeper work there would genuinely help, e.g. [Trade Analyzer](/trade-evaluator); prefer the recommended tool above.
+- Never show internal field or tool names (leagueId, players_query_context, find_open_leagues, …) — say what is missing in plain words.
 - ${memorySummary ? `User memory: ${memorySummary}` : 'No explicit preference memory yet — infer cautiously from context.'}
 `.trim()
 }

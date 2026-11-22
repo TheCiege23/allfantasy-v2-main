@@ -8,7 +8,7 @@ const TRADE_EVENT_TYPES = [
   'transaction.trade.vetoed', 'transaction.trade.processed', 'transaction.trade.expired',
 ]
 
-export type TradeOsHealthStatus = 'healthy' | 'degraded' | 'critical'
+type TradeOsHealthStatus = 'healthy' | 'degraded' | 'critical'
 
 export async function getTradeOsHealth() {
   const now = new Date()

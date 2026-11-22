@@ -1,8 +1,8 @@
+import { requireCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   if (!leagueId || !Number.isFinite(week))
     return NextResponse.json({ error: 'leagueId and week required' }, { status: 400 })
 
-  await requireCommissionerOnly(leagueId, userId)
+  await requireCommissionerAccess(leagueId, userId, 'league')
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -35,6 +35,8 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   const week = searchParams?.get('week')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  try { await requireCommissionerAccess(leagueId, session.user.id, 'view') }
+  catch (error) { if (error instanceof Response) return error; throw error }
 
   const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })

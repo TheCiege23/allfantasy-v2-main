@@ -60,6 +60,12 @@ const PITCHING: Readonly<Record<string, string>> = {
   WP: 'wp',
   BK: 'bk',
 }
+/**
+ * Every canonical key a PITCHING line can carry: the mapped fields plus the three derived below
+ * (ip, outs, qs). The games-limits step (lib/redraft/gamesLimits.ts) strips exactly these when an
+ * innings limit takes a day's pitching away, so a two-way player keeps his batting line.
+ */
+export const MLB_PITCHING_STAT_KEYS: ReadonlySet<string> = new Set([...Object.values(PITCHING), 'ip', 'outs', 'qs'])
 /** Pitching fields that score nothing. `IP` is handled separately (converted, then ip + outs). */
 // `player_id` rides in the stored stats as a number (measured on production's 2026 rows) — an id, not a stat.
 const PITCHING_NON_SCORING = new Set(['IBB', 'SB', 'CS', '1B', '2B', '3B', 'E', 'PO', 'pitches', 'strikes', 'player_id'])

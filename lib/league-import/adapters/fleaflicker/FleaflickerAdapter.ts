@@ -5,6 +5,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
   normalizeFleaflickerScoringRules,
   summarizeFleaflickerRosterShape,
+  fleaflickerTaxiSlots,
 } from '@/lib/league-import/fleaflicker/fleaflickerScoringRules'
 import {
   mapFleaflickerDraftBoard,
@@ -179,6 +180,8 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         league_type: isDynasty ? 'dynasty' : 'redraft',
         waiver_type: mapWaiverType(lg.waiverType),
         faab_budget: lg.defaultWaiverBudget ?? undefined,
+        /* Taxi squad size from FetchLeagueRules' TAXI group; undefined when the rules did not say. */
+        taxi_slots: fleaflickerTaxiSlots(raw.rules) ?? undefined,
         /*
          * 🛑 THIS WAS `Math.max(2, Math.floor(leagueSize / 2))` — A FABRICATED NUMBER,
          * AND THE WORST KIND, BECAUSE IT IS USUALLY PLAUSIBLE. A 12-team league got 6,

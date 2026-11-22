@@ -81,6 +81,7 @@ const ERROR_ES: Record<string, string> = {
   'The live Decision OS backend is not yet integrated in this environment.':
     'El backend en vivo de Decision OS aún no está integrado en este entorno.',
   'No active league could be resolved for this session.': 'No se pudo determinar una liga activa para esta sesión.',
+  'Manager records could not be read right now.': 'No se pudieron leer los historiales de los mánagers ahora.',
   'Decision OS response failed contract validation.': 'La respuesta de Decision OS no pasó la validación del contrato.',
   'This league has not been scanned yet. The workspace task scan runs daily; an empty list here would claim a clean bill of health nothing has checked.':
     'Esta liga todavía no se ha analizado. El análisis de tareas del espacio de trabajo se ejecuta a diario; una lista vacía aquí afirmaría que todo está en orden sin que nada lo haya comprobado.',
@@ -427,7 +428,7 @@ export function analyticsCopy(language: string | null | undefined): AnalyticsCop
 
 /* ── Reports ──────────────────────────────────────────────────────────────── */
 
-export interface ReportsCopy {
+interface ReportsCopy {
   status: Record<'queued' | 'generating' | 'ready' | 'failed', string>
   category: Record<'season_recap' | 'engagement' | 'transactions' | 'commissioner_digest', string>
   frequency: Record<'weekly' | 'monthly' | 'manual', string>
@@ -649,7 +650,7 @@ export function reportText(text: string | null | undefined, language: string | n
 
 type TaskStatus = 'open' | 'in_progress' | 'waiting_on_manager' | 'waiting_on_league_vote' | 'completed' | 'archived'
 
-export interface WorkspaceCopy {
+interface WorkspaceCopy {
   status: Record<TaskStatus, string>
   nextAction: Record<TaskStatus, string>
   // A task's priority badge is `taskPriorityLabelText` in cardsCopy, beside the masculine severity
@@ -784,9 +785,53 @@ const TASK_EXACT_ES: Record<string, string> = {
     'Ambos mánagers aceptaron este intercambio. Revisa la propuesta registrada antes de aprobarlo o rechazarlo.',
   'Recorded scoring recalculation failed': 'Falló un recálculo de puntuación registrado',
   'Recorded league deadline approaches': 'Se acerca una fecha límite registrada de la liga',
+  // inboxTasks.ts
+  'Keeper picks are missing': 'Faltan keepers por enviar',
+  'Keeper conflicts need a ruling': 'Hay conflictos de keepers por resolver',
+  'Integrity flag to review': 'Hay una alerta de integridad por revisar',
+  'Join requests are waiting': 'Hay solicitudes de ingreso pendientes',
+  'Orphan team adoption request': 'Solicitud para adoptar un equipo huérfano',
+  'League dues are unpaid': 'Hay cuotas de la liga sin pagar',
+  'Payout request awaits approval': 'Una solicitud de pago espera aprobación',
+  'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
+  'a Chimmy commissioner alert is open for this league.': 'Hay una alerta del comisionado Chimmy abierta en esta liga.',
+  'A dispute needs your ruling': 'Una disputa espera tu decisión',
+  'Managers say they paid dues': 'Hay mánagers que dicen haber pagado las cuotas',
+  'A rule change is waiting for you': 'Un cambio de reglas te está esperando',
+  'Lock a draft time': 'Fija la hora del draft',
+  'The draft-time poll has closed. Lock the time most managers can make.': 'La encuesta de horario del draft ya cerró. Fija la hora que le sirve a la mayoría de los mánagers.',
+  'The draft-time poll closes within a day. Lock the time most managers can make.': 'La encuesta de horario del draft cierra en menos de un día. Fija la hora que le sirve a la mayoría de los mánagers.',
 }
 
 const TASK_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
+  // inboxTasks.ts
+  [
+    /^(\d+) of (\d+) teams have not submitted keepers\. Picks lock at the deadline; teams that miss it follow the league's missed-deadline rule\.$/,
+    (n, total) => `${n} de ${total} equipos no han enviado sus keepers. Se bloquean en la fecha límite; los equipos que no lleguen siguen la regla de la liga para plazos vencidos.`,
+  ],
+  [
+    /^(\d+) teams? kept two players who cost the same round\. Resolve them before keepers lock\.$/,
+    (n) => `${n} ${n === '1' ? 'equipo guardó' : 'equipos guardaron'} dos jugadores que cuestan la misma ronda. Resuélvelo antes de que se bloqueen los keepers.`,
+  ],
+  [
+    /^(\d+) managers? asked to join outside the league's division\. Approve or decline each request\.$/,
+    (n) => `${n} ${n === '1' ? 'mánager pidió' : 'mánagers pidieron'} unirse fuera de la división de la liga. Aprueba o rechaza cada solicitud.`,
+  ],
+  [/^(.+) filed “(.+)”\. Rule on it from the dispute desk\.$/, (name, subject) => `${name} presentó «${subject}». Resuélvela desde la mesa de disputas.`],
+  [/^(.+) asked to take over an open team\. Approve or reject the request\.$/, (name) => `${name} pidió hacerse cargo de un equipo sin dueño. Aprueba o rechaza la solicitud.`],
+  [
+    /^(\d+) of (\d+) teams have not paid (\d{4}) dues: (.+)\.$/,
+    (n, total, season, names) => `${n} de ${total} equipos no han pagado las cuotas de ${season}: ${names}.`,
+  ],
+  [
+    /^(.+) (says it|say they) paid\. Confirm it in the dues tracker once the money has arrived\.$/,
+    (names, verb) => `${names} ${verb === 'says it' ? 'dice que pagó' : 'dicen que pagaron'}. Confírmalo en el registro de cuotas cuando llegue el dinero.`,
+  ],
+  [
+    /^A member proposed “(.+)”\. Approve it to open the league vote, or decline it with a reason\.$/,
+    (title) => `Un miembro propuso «${title}». Apruébalo para abrir la votación de la liga, o recházalo explicando el motivo.`,
+  ],
+  [/^An open (.+) flag needs a commissioner decision\.$/, (kind) => `Una alerta abierta de tipo «${kind}» necesita una decisión del comisionado.`],
   // taskSources.ts — detectStaleImport
   [
     /^The newest imported event for this league is (\d+) days? old\. Every rolling-window figure on League Analytics — active managers, trade activity, transactions per week — is computed over a (\d+)-day and 90-day window, so they now read as though the league went quiet\. Re-run the import to bring the feed current; the figures correct themselves once it does\.$/,

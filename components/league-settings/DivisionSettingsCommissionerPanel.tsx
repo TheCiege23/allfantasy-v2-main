@@ -3,7 +3,9 @@
 /**
  * components/league-settings/DivisionSettingsCommissionerPanel.tsx
  * Commissioner division settings panel matching Sleeper UI.
- * - Dropdown: No Divisions / 2 / 4 / 8
+ * - Dropdown: No Divisions / 2 / 3 / 4 (Survivor tribes: 2 / 4 / 8); a count needs two teams per division
+ * - Even or near-even split, checked here and refused by the route otherwise
+ * - Division playoff rule: winners take the top seeds (default), are guaranteed a spot, or neither
  * - Editable division names (or "Tribes" for Survivor leagues)
  * - AI naming toggle + generate button
  * - Team assignment to divisions
@@ -12,8 +14,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, Sparkles, Users, Pencil, RotateCcw } from 'lucide-react'
+import { ChevronDown, Sparkles, Users, RotateCcw } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { divisionSportMatch } from '@/lib/league/divisions/divisionSportMatch'
+import {
+  DEFAULT_DIVISION_PLAYOFF_RULE,
+  DIVISION_PLAYOFF_RULES,
+  divisionCountAllowed,
+  STANDARD_DIVISION_COUNTS,
+  evenDivisionSizes,
+  type DivisionPlayoffRule,
+} from '@/lib/league/divisions/leagueDivisions'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +35,8 @@ interface DivisionConfig {
   names: string[]
   teamAssignments: Record<string, number>
   aiNamingEnabled: boolean
+  playoffRule?: DivisionPlayoffRule
+  rivalsTwice?: boolean
   lastUpdatedAt: string | null
   lastUpdatedBy: string | null
 }
@@ -36,6 +49,10 @@ interface TeamSlot {
 }
 
 const DIVISION_COUNT_OPTIONS = [
+  ...STANDARD_DIVISION_COUNTS.map((value) => ({ value, label: value === 0 ? 'No' : String(value) })),
+]
+
+const TRIBE_COUNT_OPTIONS = [
   { value: 0, label: 'No' },
   { value: 2, label: '2' },
   { value: 4, label: '4' },
@@ -58,11 +75,14 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
   const [success, setSuccess] = useState(false)
   const [isCommissioner, setIsCommissioner] = useState(false)
   const [isSurvivor, setIsSurvivor] = useState(false)
+  const [sport, setSport] = useState<string | null>(null)
 
   const [count, setCount] = useState(0)
   const [names, setNames] = useState<string[]>([])
   const [teamAssignments, setTeamAssignments] = useState<Record<string, number>>({})
   const [aiNamingEnabled, setAiNamingEnabled] = useState(false)
+  const [playoffRule, setPlayoffRule] = useState<DivisionPlayoffRule>(DEFAULT_DIVISION_PLAYOFF_RULE)
+  const [rivalsTwice, setRivalsTwice] = useState(false)
   const [teams, setTeams] = useState<TeamSlot[]>([])
   const [aiGenerating, setAiGenerating] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -82,12 +102,15 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
         if (!active) return
         setIsCommissioner(data.isCommissioner ?? false)
         setIsSurvivor(data.isSurvivor ?? false)
+        setSport(typeof data.sport === 'string' ? data.sport : null)
         const cfg: DivisionConfig = data.config ?? { count: 0, names: [], teamAssignments: {}, aiNamingEnabled: false, lastUpdatedAt: null, lastUpdatedBy: null }
         setCount(cfg.count)
         setNames(cfg.names)
         setTeamAssignments(cfg.teamAssignments)
         setAiNamingEnabled(cfg.aiNamingEnabled)
-        setTeams(data.teams ?? [])
+        setPlayoffRule(cfg.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
+        setRivalsTwice(cfg.rivalsTwice === true)
+        setTeams((data.teams ?? []).filter((team: TeamSlot & { lifecycleState?: string }) => team.lifecycleState !== 'ARCHIVED'))
         setSavedConfig(cfg)
       })
       .catch(() => { if (active) setError(t('division.loadFailed')) })
@@ -149,7 +172,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/division-settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled }),
+        body: JSON.stringify({ count, names, teamAssignments, aiNamingEnabled, ...(isSurvivor ? {} : { playoffRule, rivalsTwice }) }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? t('leagueSettings.saveFailed')); return }
@@ -158,7 +181,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setSaving(false) }
-  }, [leagueId, count, names, teamAssignments, aiNamingEnabled])
+  }, [leagueId, count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, isSurvivor])
 
   const resetToSaved = useCallback(() => {
     if (savedConfig) {
@@ -166,6 +189,8 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       setNames(savedConfig.names)
       setTeamAssignments(savedConfig.teamAssignments)
       setAiNamingEnabled(savedConfig.aiNamingEnabled)
+      setPlayoffRule(savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
+      setRivalsTwice(savedConfig.rivalsTwice === true)
     }
   }, [savedConfig])
 
@@ -175,7 +200,9 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
       || JSON.stringify(names) !== JSON.stringify(savedConfig.names)
       || JSON.stringify(teamAssignments) !== JSON.stringify(savedConfig.teamAssignments)
       || aiNamingEnabled !== savedConfig.aiNamingEnabled
-  }, [count, names, teamAssignments, aiNamingEnabled, savedConfig])
+      || playoffRule !== (savedConfig.playoffRule ?? DEFAULT_DIVISION_PLAYOFF_RULE)
+      || rivalsTwice !== (savedConfig.rivalsTwice === true)
+  }, [count, names, teamAssignments, aiNamingEnabled, playoffRule, rivalsTwice, savedConfig])
 
   // Group teams by division
   const teamsByDivision = useMemo(() => {
@@ -193,6 +220,23 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
     return { groups, unassigned }
   }, [teams, teamAssignments, count])
 
+  // Even or near-even: the same rule the route enforces (validateDivisionSetup).
+  const evenSizes = useMemo(() => (count > 0 ? evenDivisionSizes(teams.length, count) : []), [teams.length, count])
+  const unevenSizes = useMemo(() => {
+    if (isSurvivor || count === 0) return null
+    const sizes = Array.from({ length: count }, (_, i) => teamsByDivision.groups[i]?.length ?? 0)
+    const cap = Math.ceil(teams.length / count)
+    const complete = teamsByDivision.unassigned.length === 0
+    const uneven = sizes.some((n) => n > cap) || (complete && Math.max(...sizes) - Math.min(...sizes) > 1)
+    return uneven ? sizes : null
+  }, [isSurvivor, count, teams.length, teamsByDivision])
+  // A standard league lists the counts it can fill, plus the first one it cannot, so the reason shows.
+  const firstBlockedDivisionCount = DIVISION_COUNT_OPTIONS.find((opt) => !divisionCountAllowed(teams.length, opt.value))?.value ?? null
+  const countOptions = isSurvivor
+    ? TRIBE_COUNT_OPTIONS
+    : DIVISION_COUNT_OPTIONS.filter((opt) => firstBlockedDivisionCount == null || opt.value <= Math.max(firstBlockedDivisionCount, 4))
+
+  const sportMatch = isSurvivor ? null : divisionSportMatch(sport, count)
   if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('division.loading')}</div>
 
   const noneLabel = isSurvivor ? t('division.noTribes') : t('division.noDivisions')
@@ -232,30 +276,89 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           </button>
 
           {dropdownOpen && isCommissioner && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
-              {DIVISION_COUNT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleCountChange(opt.value)}
-                  className={`flex w-full items-center px-4 py-2.5 text-left text-sm transition hover:bg-white/[0.06] ${
-                    count === opt.value ? 'text-cyan-300 font-medium' : 'text-white/80'
-                  }`}
-                >
-                  {opt.value === 0 ? (
-                    <span>{noneLabel}</span>
-                  ) : (
-                    <>
-                      <span>{opt.label}</span>
-                      <span className="ml-1 text-white/40">{groupLabelPlural}</span>
-                    </>
-                  )}
-                </button>
-              ))}
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
+              {countOptions.map((opt) => {
+                const blocked = !isSurvivor && !divisionCountAllowed(teams.length, opt.value)
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={blocked}
+                    onClick={() => handleCountChange(opt.value)}
+                    className={`flex w-full items-center px-4 py-2.5 text-left text-sm transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-40 ${
+                      count === opt.value ? 'text-cyan-300 font-medium' : 'text-white/80'
+                    }`}
+                  >
+                    {opt.value === 0 ? (
+                      <span>{noneLabel}</span>
+                    ) : (
+                      <>
+                        <span>{opt.label}</span>
+                        <span className="ml-1 text-white/40">{groupLabelPlural}</span>
+                        {blocked ? (
+                          <span className="ml-auto text-[11px] text-white/40">{t('division.count.needTeams').replace('{{n}}', String(opt.value * 2))}</span>
+                        ) : null}
+                      </>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
       </div>
+
+      {count > 0 && !isSurvivor && teams.length > 0 && (
+        <p data-testid="division-even-split" className="text-[11px] text-white/45">
+          {t('division.split').replace('{{sizes}}', evenSizes.join(' + '))}
+        </p>
+      )}
+
+      {/* ===== DIVISION PLAYOFF RULE ===== */}
+      {count > 0 && !isSurvivor && (
+        <div className="space-y-2">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('division.playoffRule')}</p>
+            <p className="text-[11px] text-white/30">{t('division.playoffRule.help')}</p>
+          </div>
+          <select
+            data-testid="division-playoff-rule"
+            value={playoffRule}
+            disabled={!isCommissioner}
+            onChange={(e) => setPlayoffRule(e.target.value as DivisionPlayoffRule)}
+            className="w-full rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2.5 text-sm text-white disabled:opacity-50"
+          >
+            {DIVISION_PLAYOFF_RULES.map((rule) => (
+              <option key={rule} value={rule}>{t(`division.playoffRule.${rule}`)}</option>
+            ))}
+          </select>
+          <label className="flex items-start gap-2 pt-1 text-sm text-white/80">
+            <input
+              type="checkbox"
+              data-testid="division-rivals-twice"
+              checked={rivalsTwice}
+              disabled={!isCommissioner}
+              onChange={(e) => setRivalsTwice(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-cyan-400 disabled:opacity-50"
+            />
+            <span>{t('division.rivalsTwice')}</span>
+          </label>
+          <p data-testid="division-schedule-note" className="text-[11px] text-white/30">
+            {t(rivalsTwice ? 'division.scheduleNote.twice' : 'division.scheduleNote.once')}
+          </p>
+          {/* Owner's page review #17: when the division count matches the real sport's, say what that sport plays. */}
+          {sportMatch ? (
+            <div data-testid="division-sport-match" className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/[0.06] px-3 py-2">
+              <p className="m-0 flex-1 text-[12px] leading-relaxed text-white/75">{t(sportMatch.key)}</p>
+              {isCommissioner && !rivalsTwice ? (
+                <button type="button" onClick={() => setRivalsTwice(true)} data-testid="division-sport-match-on" className="min-h-[36px] rounded-full border border-blue-400/50 px-3 text-[12px] font-bold text-blue-200">
+                  {t('division.sportMatch.turnOn')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* ===== DIVISION / TRIBE NAMES ===== */}
       {count > 0 && (
@@ -419,16 +522,25 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
             </div>
           )}
 
+          {unevenSizes ? (
+            <p data-testid="division-uneven-warning" className="rounded-lg border border-amber-500/20 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-200">
+              {t('division.unevenWarn').replace('{{sizes}}', unevenSizes.join(' + '))}
+            </p>
+          ) : null}
+
           {/* Auto-assign button */}
           {isCommissioner && teamsByDivision.unassigned.length > 0 && (
             <button
               type="button"
               onClick={() => {
-                const unassigned = teamsByDivision.unassigned
+                // Smallest division first, so the result is as even as the assigned teams allow.
+                const sizes = Array.from({ length: count }, (_, i) => teamsByDivision.groups[i]?.length ?? 0)
                 const newAssignments = { ...teamAssignments }
-                unassigned.forEach((team, i) => {
-                  newAssignments[team.id] = i % count
-                })
+                for (const team of teamsByDivision.unassigned) {
+                  const target = sizes.indexOf(Math.min(...sizes))
+                  newAssignments[team.id] = target
+                  sizes[target] += 1
+                }
                 setTeamAssignments(newAssignments)
               }}
               className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 transition"
@@ -461,7 +573,7 @@ export function DivisionSettingsCommissionerPanel({ leagueId }: Props) {
           <div className="flex gap-2">
             <button
               type="button"
-              disabled={saving || !hasChanges}
+              disabled={saving || !hasChanges || unevenSizes != null}
               onClick={save}
               className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition"
             >

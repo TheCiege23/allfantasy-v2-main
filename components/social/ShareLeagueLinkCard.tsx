@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Link2, Copy, Share2, Check, Loader2 } from 'lucide-react'
+import { Link2, Copy, Share2, Check } from 'lucide-react'
 
 interface ShareLeagueLinkCardProps {
   leagueId: string

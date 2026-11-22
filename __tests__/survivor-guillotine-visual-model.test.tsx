@@ -34,7 +34,7 @@ function input(over: Partial<SGVisualInput> = {}, points: Record<string, number>
   }
 }
 
-describe('Survivor Guillotine visual model', () => {
+describe('Survivor Guilly visual model', () => {
   it('decides the Match Play race on matchup wins, not total tribe points (engine rule)', () => {
     // Tribe A wins two of three matchups narrowly; tribe B has far more total points.
     const race = buildTribeRace(input({}, { a1: 101, b1: 100, a2: 101, b2: 100, a3: 10, b3: 200 }))

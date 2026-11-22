@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * The portfolio's chart primitives — inline SVG and plain HTML on the `/core` tokens, the same way
@@ -54,7 +55,7 @@ export function LevelSwatch({ level }: { level: 0 | 1 | 2 | 3 }) {
 
 // ── bar list ────────────────────────────────────────────────────────────────────────────────
 
-export type BarItem = { key: string; label: string; value: number; hint?: string }
+type BarItem = { key: string; label: string; value: number; hint?: string }
 
 /**
  * Horizontal bars, one hue, the count printed at the tip. Each bar is a button — the whole row is
@@ -139,17 +140,18 @@ export function Sparkline({ values, label }: { values: Array<number | null>; lab
 
 // ── line chart ──────────────────────────────────────────────────────────────────────────────
 
-export type LinePoint = { key: string; label: string; value: number | null; estimated: boolean; note?: string }
+type LinePoint = { key: string; label: string; value: number | null; estimated: boolean; note?: string }
 
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
-export const formatCompact = (n: number) => compact.format(n)
+// Built per call, not once at import: the locale is the reader's (lib/i18n/appLocale.ts).
+export const formatCompact = (n: number) =>
+  new Intl.NumberFormat(getAppIntlLocale(), { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 
 /**
  * A value a reader compares with its neighbours — three significant figures, so 2.05M does not
  * round to "2M" beside a tick reading "2.06M".
  */
-const precise = new Intl.NumberFormat('en-US', { notation: 'compact', maximumSignificantDigits: 3 })
-export const formatValue = (n: number) => precise.format(n)
+export const formatValue = (n: number) =>
+  new Intl.NumberFormat(getAppIntlLocale(), { notation: 'compact', maximumSignificantDigits: 3 }).format(n)
 
 /**
  * An axis tick, with as many decimals as the STEP needs.
@@ -377,7 +379,7 @@ export function LineChart({
 
 // ── heatmap ─────────────────────────────────────────────────────────────────────────────────
 
-export type HeatCell = { level: 0 | 1 | 2 | 3; count: number; unknown?: string }
+type HeatCell = { level: 0 | 1 | 2 | 3; count: number; unknown?: string }
 
 /**
  * Rows × columns, each cell a button carrying its count. A semantic table so a screen reader walks

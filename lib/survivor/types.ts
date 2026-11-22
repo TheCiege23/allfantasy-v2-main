@@ -2,8 +2,6 @@
  * Shared types for Survivor league backend engine (PROMPT 346).
  */
 
-import type { LeagueSport } from '@prisma/client'
-
 export type SurvivorMode = 'redraft' | 'bestball'
 export type TribeFormation = 'random' | 'commissioner'
 export type MergeTrigger = 'week' | 'player_count'
@@ -175,5 +173,11 @@ export type SurvivorAuditEventType =
   | 'idol_effect_applied'
   | 'jury_vote_submitted'
   | 'winner_crowned'
+  | 'jury_question_asked'
+  | 'jury_question_answered'
+  | 'jury_answer_seen'
+  | 'finalist_closing_speech'
+  | 'finale_windows_set'
+  | 'reunion_opened'
   | 'commissioner_override'
   | 'chat_membership_updated'

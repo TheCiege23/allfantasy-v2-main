@@ -50,7 +50,7 @@ export default function SurvivorTribalPage() {
           idolHref={`/league/${encodeURIComponent(leagueId)}?tab=survivor`}
         />
         <p className="mx-auto mt-4 max-w-lg px-3 text-center text-[12px] text-white/45">
-          Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="text-amber-200 underline">@Chimmy</Link>. It is the same ballot.
+          Prefer chat? You can still vote privately with <Link href={`${base}/chimmy`} className="sv-link underline">@Chimmy</Link>. It is the same ballot.
         </p>
       </div>
     )
@@ -61,13 +61,13 @@ export default function SurvivorTribalPage() {
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.12]"
         style={{
-          backgroundImage: `radial-gradient(circle at 20% 20%, rgba(255,68,68,0.25), transparent 40%), radial-gradient(circle at 80% 30%, rgba(255,140,66,0.2), transparent 35%)`,
+          backgroundImage: `radial-gradient(circle at 20% 20%, rgba(224,86,59,0.25), transparent 40%), radial-gradient(circle at 80% 30%, rgba(240,163,94,0.22), transparent 35%)`,
         }}
       />
       <div className="relative">
         <div className="mx-auto mb-6 max-w-3xl"><SurvivorWeeklyMoments leagueId={leagueId} exileHref={`${base}/exile`} /></div>
-        <p className="text-center text-[11px] font-bold uppercase tracking-[0.35em] text-red-300/80">Elimination Council</p>
-        <h1 className="mt-2 text-center text-2xl font-black uppercase tracking-[0.15em] text-white">
+        <p className="sv-eyebrow text-center !tracking-[0.3em]">Elimination Council</p>
+        <h1 className="sv-h mt-2 text-center text-2xl uppercase md:text-3xl">
           Week {week} · {tribe?.name ?? 'Tribe'} beach
         </h1>
 
@@ -89,7 +89,7 @@ export default function SurvivorTribalPage() {
             >
               <SurvivorAvatar name={p.displayName} size={48} status={survivorAvatarStatus({ immune: p.hasImmunityThisWeek, out: p.playerState === 'eliminated' })} imageUrl={p.avatarUrl ?? null} />
               <p className="mt-2 truncate text-[12px] font-semibold text-white">{p.displayName}</p>
-              <p className="mt-1 text-[11px] uppercase tracking-wide text-white/40">
+              <p className={clsx('mt-1 text-[11px] uppercase tracking-wide', p.hasImmunityThisWeek ? 'sv-immune font-semibold' : 'text-white/40')}>
                 {p.hasImmunityThisWeek ? 'Immune' : status === 'voting_open' ? 'Voting' : '—'}
               </p>
             </div>

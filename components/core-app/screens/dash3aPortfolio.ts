@@ -1,3 +1,4 @@
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 /**
  * Leagues per platform, for the home's portfolio chart.
  *
@@ -17,5 +18,5 @@ export function platformCountsOf(leagues: ReadonlyArray<{ platform?: string | nu
   }, new Map<string, number>())
   return [...counts]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString() }))
+    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString(getAppIntlLocale()) }))
 }

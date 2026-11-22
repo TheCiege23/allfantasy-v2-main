@@ -14,6 +14,9 @@ import {
 } from '@/lib/sleeper-client'
 import { getUniversalAIContext } from '@/lib/ai-player-context'
 import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 const openai = getOpenAIRouteClient()
 
@@ -61,7 +64,7 @@ Note: Superflex leagues are classified under their base type (redraft or dynasty
 
 ## EXCLUDED FORMATS (Track but don't grade for comparison)
 The following are EXCLUDED from head-to-head comparison:
-- **Guillotine leagues**: Elimination format creates artificial losses
+- **Guilly leagues**: Elimination format creates artificial losses
 - **Best Ball leagues**: No in-season management
 - **Survivor leagues**: Elimination format with skewed records
 - **Draft-only leagues**: No in-season component
@@ -219,7 +222,7 @@ function getLeagueTypeExtended(league: SleeperLeague): string {
   const positions = league.roster_positions || []
   const nameLower = (league.name || '').toLowerCase()
   
-  const isGuillotine = nameLower.includes('guillotine') || nameLower.includes('guilotine') || nameLower.includes('survivor elimination')
+  const isGuillotine = nameLower.includes('guillotine') || nameLower.includes('guilly') || nameLower.includes('guilotine') || nameLower.includes('survivor elimination')
   const isSurvivor = nameLower.includes('survivor') && !nameLower.includes('survivor elimination')
   const isDraftOnly = settings['type'] === 3 || nameLower.includes('draft only') || nameLower.includes('draft-only')
   const hasBestball = nameLower.includes('bestball') || nameLower.includes('best ball') || settings['best_ball'] === 1
@@ -404,6 +407,17 @@ function buildManagerSnapshot(
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/compare", tool: "LegacyCompare" })(async (request: NextRequest) => {
   try {
+    /*
+     * AF Legacy (`legacy_manager_compare`). This route took no session at all: anyone could run the comparison
+     * model on any two Sleeper usernames. Now sign-in and the plan the /af-legacy Manager Comparison lock names.
+     */
+    const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized', message: 'Sign in to compare managers.' }, { status: 401 })
+    }
+    const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: 'legacy_manager_compare' })
+    if (!plan.ok) return plan.response
+
     const ip = getClientIp(request)
     const body = await request.json()
     const { username_a, username_b } = body

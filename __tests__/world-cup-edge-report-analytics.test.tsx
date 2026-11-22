@@ -157,7 +157,7 @@ const COACHING_FROM_CACHE = makeCoachingResponse({ tokenCharged: false, fromCach
 const COACHING_PLAN = makeCoachingResponse({ tokenCharged: false, fromCache: false, coveredByPlan: true })
 
 function okRes(body: unknown) {
-  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response)
+  return Promise.resolve(Response.json(body))
 }
 
 function renderCard(overrides?: {

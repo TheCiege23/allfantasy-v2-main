@@ -34,7 +34,7 @@ const row = (
 
 const meta = (over: Partial<Record<string, unknown>> = {}) => ({
   id: 'internal-1',
-  name: 'Guillotine League 26',
+  name: 'Guilly League 26',
   platform: 'sleeper',
   elimination: true,
   imageUrl: null,

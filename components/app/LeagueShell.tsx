@@ -53,7 +53,7 @@ export default function LeagueShell({
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-white/60">Sleeper-style league shell with tabbed workflows and shared AI context.</p>
+        <p className="mt-1 text-sm text-white/60">Sleeper-style league shell with tabbed workflows and shared Chimmy context.</p>
       </section>
       <LeagueTabNav activeTab={activeTab} onChange={handleTabChange} tabs={tabs} />
       {renderTab(activeTab)}

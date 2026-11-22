@@ -14,15 +14,15 @@ const STYLES: Record<
   { className: string; label: string }
 > = {
   safe: {
-    className: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
+    className: 'border-[rgba(240,163,94,0.3)] bg-[rgba(240,163,94,0.1)] text-[#f6d3ae]',
     label: '✓ SAFE',
   },
   vulnerable: {
-    className: 'border-red-500/30 bg-red-500/15 text-red-300',
+    className: 'border-[rgba(224,86,59,0.4)] bg-[rgba(224,86,59,0.14)] text-[#f4a493]',
     label: '⚠ VULNERABLE',
   },
   immune: {
-    className: 'border-cyan-500/30 bg-cyan-500/15 text-cyan-200',
+    className: 'border-[rgba(242,196,107,0.45)] bg-[rgba(242,196,107,0.12)] text-[#f2c46b]',
     label: '🛡 IMMUNE',
   },
   exiled: {

@@ -34,8 +34,7 @@ export default function FantasySportsNoticeBody() {
         <h2>3. Where you can use AllFantasy</h2>
         <p>Fantasy sports laws differ from state to state and change over time. The following restrictions are our policy, applied conservatively. They are not legal advice and do not describe your rights under any particular law.</p>
         <ul>
-          <li><strong>Washington State.</strong> AllFantasy is not available to anyone located in Washington State.</li>
-          <li><strong>Hawaii, Idaho, Montana, and Nevada.</strong> Anyone located in these states may create a free Account and use free features but may not buy Subscriptions, Tokens, or other paid features, and may not use a League hosted on the Services that collects dues.</li>
+          <li><strong>Hawaii, Idaho, Montana, Nevada, and Washington.</strong> Anyone located in these states may create a free Account and use free features but may not buy Subscriptions, Tokens, or other paid features, and may not use a League hosted on the Services that collects dues.</li>
           <li><strong>Other states.</strong> Available.</li>
         </ul>
         <p>We determine your location from your network connection and other signals and may store the state we identify on your Account. Using a VPN, proxy, or any other method to disguise your location or get around these restrictions breaks the <Link href="/terms">Terms of Service</Link> and may result in suspension of your Account and cancellation of paid features without refund. If you believe we have identified your state incorrectly, contact <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a>; we may ask you to verify where you are.</p>

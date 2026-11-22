@@ -54,6 +54,8 @@ function jsonResponse(body: unknown) {
 
 function mockApi(c: Case) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    // The NBA/MLB panels also host the scoring-type editor (its own endpoint); it renders nothing here.
+    if (String(url).endsWith('/scoring-type')) return jsonResponse({})
     expect(String(url)).toContain(`/${c.route}`)
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body))

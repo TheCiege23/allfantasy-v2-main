@@ -76,4 +76,15 @@ describe("cancelSubscriptionsOnDelete", () => {
     expect(await cancelSubscriptionsOnDelete("u1", d)).toEqual({ cancelled: [], hasAppleSubscription: true })
     expect(d.getStripe).not.toHaveBeenCalled()
   })
+  it("requires confirmed Google cancellation before deleting a Play subscriber", async () => {
+    const row = { stripeSubscriptionId: null, stripeCustomerId: null, source: "google_play", status: "active" }
+    const f = fakeStripe({})
+    await expect(cancelSubscriptionsOnDelete("u1", deps([row], f.stripe))).rejects.toThrow(/must wait/)
+    const cancelGooglePlay = vi.fn(async () => ["google_play:receipt-hash"])
+    expect(await cancelSubscriptionsOnDelete("u1", { ...deps([row], f.stripe), cancelGooglePlay })).toMatchObject({ cancelled: ["google_play:receipt-hash"] })
+    expect(cancelGooglePlay).toHaveBeenCalledWith("u1")
+    cancelGooglePlay.mockRejectedValueOnce(new Error("Google unavailable"))
+    await expect(cancelSubscriptionsOnDelete("u1", { ...deps([row], f.stripe), cancelGooglePlay })).rejects.toThrow(/Google unavailable/)
+  })
+
 })

@@ -1,3 +1,4 @@
+import { withPaidToolBilling, preparePaidToolCharge, replayPaidToolRequest } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -20,7 +21,7 @@ type SpendRequestBody = {
 
 export const dynamic = "force-dynamic"
 
-export async function POST(req: Request) {
+async function paidToolPost(req: Request) {
   try {
     const session = (await getServerSession(authOptions as any)) as {
       user?: { id?: string; email?: string | null }
@@ -35,18 +36,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing ruleCode" }, { status: 400 })
     }
 
+    const replay = await replayPaidToolRequest(session.user.id)
+    if (replay) return replay
     const service = new TokenSpendService()
-    const ledger = await service.spendTokensForRule({
-      userId: session.user.id,
-      userEmail: session.user.email,
-      ruleCode,
-      confirmed: Boolean(body.confirmed),
-      sourceType: String(body.sourceType ?? "manual_token_spend"),
+    const preview = await service.previewSpend(session.user.id, ruleCode, session.user.email)
+    if (!preview.canSpend) return NextResponse.json({ code: 'insufficient_token_balance', error: 'Insufficient token balance', preview }, { status: 402 })
+    const prepared = await preparePaidToolCharge({
+      userId: session.user.id, userEmail: session.user.email, ruleCode, preview,
+      confirmed: body.confirmed === true, sourceType: 'manual_token_spend',
       sourceId: body.sourceId ? String(body.sourceId) : null,
-      idempotencyKey: body.idempotencyKey ? String(body.idempotencyKey) : null,
       description: body.description ? String(body.description) : null,
       metadata: body.metadata ?? null,
     })
+    if (!prepared.ok) return prepared.response
+    const ledger = await prepared.commit()
 
     return NextResponse.json({
       ok: true,
@@ -83,3 +86,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to spend tokens" }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

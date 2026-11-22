@@ -97,6 +97,8 @@ export function leagueSimHash(sim: SimInput, seed: number): string {
     `s${seed}`,
     `p${sim.playoffTeams}`,
     `b${sim.byeTeams}`,
+    // Only a median league carries the token, so every other league's stored run stays valid.
+    ...(sim.medianGame ? ['md1'] : []),
     teams.join('|'),
     games.join('|'),
   ].join('#')

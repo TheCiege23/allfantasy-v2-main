@@ -22,6 +22,8 @@ export type SnapshotAnalyticsSlice = {
 }
 
 export type RollingInsightsSeasonSlice = {
+  /** Box score from this exact selected season, including identity-checked fallback rows. */
+  stats?: unknown
   fantasyPointsPerGame: number | null
   fantasyPointsSeason: number | null
   gamesPlayed: number | null
@@ -321,6 +323,42 @@ export type RollingInsightsStatsDetailRow = {
   stats: unknown
   fantasyPoints: number | null
   fantasyPointsPerGame: number | null
+  /** The season this box describes. Every row in one load carries the same season. */
+  season?: string | null
+  gamesPlayed?: number | null
+  updatedAt?: Date
+}
+
+/**
+ * ONE season for the whole pool's stat columns.
+ *
+ * 🛑 Choosing per player mixed seasons in one column. Measured on production 2026-11-19:
+ * Justin Fields' 2026 row (2 games, no PPG) lost to his 2025 row, so the pool showed his
+ * 2025 rushing (71 att, 383 yds) beside Josh Allen's 2026 (60 att, 275 yds) — and Fields
+ * looked like the better runner. A column is only comparable when every row is one season.
+ *
+ * Newest candidate wins once it has genuinely started: at least 30% as many of these players
+ * have games in it as in the season before (so a preseason draft still reads last year).
+ */
+export function pickPoolStatSeason(
+  rows: Array<{ playerId: string; season: string | null; gamesPlayed: number | null }>,
+  candidateSeasons: string[],
+): string | null {
+  const played = new Map<string, Set<string>>()
+  for (const r of rows) {
+    if (!r.season || !((r.gamesPlayed ?? 0) > 0)) continue
+    const set = played.get(r.season) ?? new Set<string>()
+    set.add(r.playerId)
+    played.set(r.season, set)
+  }
+  const ordered = [...candidateSeasons].sort((a, b) => Number(b) - Number(a))
+  for (const season of ordered) {
+    const n = played.get(season)?.size ?? 0
+    if (n === 0) continue
+    const prior = played.get(String(Number(season) - 1))?.size ?? 0
+    if (n >= Math.max(1, prior * 0.3)) return season
+  }
+  return null
 }
 
 /**
@@ -330,6 +368,7 @@ export type RollingInsightsStatsDetailRow = {
  */
 export async function loadRollingInsightsStatsDetailByPlayerIds(
   playerIds: string[],
+  options?: { candidateSeasons?: string[] },
 ): Promise<Map<string, RollingInsightsStatsDetailRow>> {
   const out = new Map<string, RollingInsightsStatsDetailRow>()
   if (playerIds.length === 0) return out
@@ -352,11 +391,37 @@ export async function loadRollingInsightsStatsDetailByPlayerIds(
     },
   })
 
+  const poolSeason = options?.candidateSeasons?.length
+    ? pickPoolStatSeason(statsRows, options.candidateSeasons)
+    : null
+  if (options?.candidateSeasons?.length) {
+    // One season for everyone; a player with no games in it has no line (em dash), never
+    // another season's numbers.
+    if (!poolSeason) return out
+    const inSeason = statsRows
+      .filter((r) => r.season === poolSeason && (r.gamesPlayed ?? 0) > 0)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    for (const row of inSeason) {
+      if (out.has(row.playerId)) continue
+      out.set(row.playerId, {
+        stats: row.stats,
+        fantasyPoints: row.fantasyPoints ?? null,
+        fantasyPointsPerGame: row.fantasyPointsPerGame ?? null,
+        season: row.season ?? null,
+        gamesPlayed: row.gamesPlayed ?? null,
+        updatedAt: row.updatedAt,
+      })
+    }
+    return out
+  }
   for (const row of pickRiSeasonRowPerPlayer(statsRows).values()) {
     out.set(row.playerId, {
       stats: row.stats,
       fantasyPoints: row.fantasyPoints ?? null,
       fantasyPointsPerGame: row.fantasyPointsPerGame ?? null,
+      season: row.season ?? null,
+      gamesPlayed: row.gamesPlayed ?? null,
+      updatedAt: row.updatedAt,
     })
   }
   return out
@@ -431,6 +496,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
           playerId: true,
           season: true,
           fantasyPointsPerGame: true,
+          stats: true,
           fantasyPoints: true,
           gamesPlayed: true,
           updatedAt: true,
@@ -438,10 +504,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
         orderBy: [{ playerId: 'asc' }, { season: 'desc' }, { updatedAt: 'desc' }],
       })
 
-      const statsByRiId = new Map<string, (typeof statsRows)[0]>()
-      for (const row of statsRows) {
-        if (!statsByRiId.has(row.playerId)) statsByRiId.set(row.playerId, row)
-      }
+      const statsByRiId = pickRiSeasonRowPerPlayer(statsRows)
 
       for (const urow of unidentifiedRows) {
         if (!urow.sleeperCandidate) continue
@@ -454,6 +517,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.exactIdHits += 1
         }
@@ -510,6 +574,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             playerId: true,
             season: true,
             fantasyPointsPerGame: true,
+          stats: true,
             fantasyPoints: true,
             gamesPlayed: true,
             updatedAt: true,
@@ -517,10 +582,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
           orderBy: [{ playerId: 'asc' }, { season: 'desc' }, { updatedAt: 'desc' }],
         })
 
-        const statsByRiId = new Map<string, (typeof fallbackStats)[0]>()
-        for (const row of fallbackStats) {
-          if (!statsByRiId.has(row.playerId)) statsByRiId.set(row.playerId, row)
-        }
+        const statsByRiId = pickRiSeasonRowPerPlayer(fallbackStats)
 
         for (const urow of unmatched) {
           if (seasonByPoolKey.has(urow.poolKey)) continue
@@ -537,6 +599,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
                 gamesPlayed: statsRow.gamesPlayed ?? null,
                 season: statsRow.season ?? null,
                 updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
               })
               diagnostics.namePositionHits += 1
             }
@@ -563,6 +626,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
         position: true,
         season: true,
         fantasyPointsPerGame: true,
+          stats: true,
         fantasyPoints: true,
         gamesPlayed: true,
         updatedAt: true,
@@ -572,10 +636,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
 
     // Build canonical name+position → stats row map with ambiguity detection
     // Keep only the most recent row per playerId, then index by canonical key
-    const latestByPlayerId = new Map<string, (typeof allStatsRows)[0]>()
-    for (const row of allStatsRows) {
-      if (!latestByPlayerId.has(row.playerId)) latestByPlayerId.set(row.playerId, row)
-    }
+    const latestByPlayerId = pickRiSeasonRowPerPlayer(allStatsRows)
 
     const directNamePosMap = new Map<string, (typeof allStatsRows)[0]>()
     const directNamePosAmbiguous = new Set<string>()
@@ -606,6 +667,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
             gamesPlayed: statsRow.gamesPlayed ?? null,
             season: statsRow.season ?? null,
             updatedAt: statsRow.updatedAt,
+            stats: statsRow.stats,
           })
           diagnostics.namePositionHits += 1
         }

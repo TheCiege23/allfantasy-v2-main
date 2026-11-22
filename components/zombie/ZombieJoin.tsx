@@ -23,8 +23,6 @@ type Props = {
   joinedLeagueId: string | null
 }
 
-const pct = (share: number) => `${Math.round(share * 100)}%`
-
 /**
  * The invite page for a Zombie league — the existing `/join?code=` route, dressed for the variant the way
  * `SurvivorJoin` dresses a Survivor league. Every number is the engine's (`getZombieRulesForSport`).
@@ -125,7 +123,7 @@ export function ZombieJoinHero({
             : ''}
         </p>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/85">
-          One Whisperer hides among you. Every loss can turn you. Survive the season — or lead the horde.
+          Whisperers lead the outbreak. A loss can turn you. Survive the season — or lead the horde.
         </p>
         {children ? <div className="mt-6 max-w-md">{children}</div> : null}
       </div>
@@ -136,7 +134,7 @@ export function ZombieJoinHero({
 /** The four-step how-it-works, with the engine's numbers. */
 export function ZombieHowItWorks({ zombie: z }: { zombie: ZombieJoinPreview }) {
   const steps: [string, string, string][] = [
-    ['char-survivor', 'Start as a Survivor', `Everyone does — except one ${z.whispererSecret ? 'secret ' : ''}Whisperer.`],
+    ['char-survivor', 'Start as a Survivor', `Managers start as Survivors or ${z.whispererSecret ? 'secret ' : ''}Whisperers.`],
     [
       'turn',
       'Lose and you might turn',
@@ -147,7 +145,7 @@ export function ZombieHowItWorks({ zombie: z }: { zombie: ZombieJoinPreview }) {
     [
       'maul',
       'Every point counts',
-      `Your weekly score banks as Outbreak Points. Get infected and that week goes to whoever turned you; lose by ${z.maulingMargin}+ and ${pct(z.maulShare)} goes, by ${z.bashingMargin}+ and ${pct(z.bashShare)}.`,
+      `Survivor wins earn 2, 4 or 6 winnings units by opponent. A Survivor win by ${z.bashingMargin}+ is a bashing; a Zombie win by ${z.maulingMargin}+ is a mauling. Both take all the loser’s accumulated winnings. Zombies and Whisperers can also take winnings through ordinary wins.`,
     ],
     ['serum', 'Come back', `Collect ${z.reviveSerums} serums and a Zombie returns as a Survivor.`],
   ]

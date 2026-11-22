@@ -1,11 +1,17 @@
 import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
-import { getChopHoldStart, getWaiverBlindWindowStart } from '@/lib/guillotine/sportConfig'
+import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { identityWhereForLeagueId } from '@/lib/player-identity/externalIdNamespace'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertNotReservedByPirateClaim } from '@/lib/pirate/claimReservation'
+import { assertPirateAcquisitionCapacity } from '@/lib/pirate/rosterCapacity'
 import { assignIdpCapSalaryForWaiverClaim } from '@/lib/idp/capEngine'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
+import { withLeagueWaiverLock } from '@/lib/waiver-wire/leagueWaiverLock'
+import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
+import { sendWaiverResultNotices, waiverResultNotices } from './waiverResultNotices'
 
 export type ProcessedClaim = { claimId: string; status: string; reason?: string }
 
@@ -161,51 +167,35 @@ export function compareClaimsWithCurrentRosterPriority(
 
 /**
  * A guillotine league holds claims during the blind window before its sport's scheduled waiver run,
- * so the FAAB bids on a chopped team's players compete together instead of first-come-first-served
- * (the cron runs hourly and used to settle every pending claim each run). Outside the window claims
- * settle as they arrive. Returns the cutoff (claims submitted before it are due), or null for no gate.
+ * so the FAAB bids on a chopped team's players compete together (lib/guillotine/blindWaiverCutoff.ts,
+ * shared with lib/waiver-wire/process-engine.ts).
  */
-const BLIND_WAIVER_GUILLOTINE_SPORTS = new Set(['NBA', 'NFL'])
-
-async function guillotineClaimsCutoff(leagueId: string, now: Date): Promise<Date | null> {
-  let league: { sport: string | null; guillotineMode: boolean | null; leagueVariant: string | null } | null = null
-  try {
-    league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, guillotineMode: true, leagueVariant: true } })
-  } catch {
-    return null
-  }
-  if (!league) return null
-  const isGuillotine = league.guillotineMode === true || String(league.leagueVariant ?? '').toLowerCase() === 'guillotine'
-  if (!isGuillotine) return null
-  const sport = String(league.sport ?? '').toUpperCase()
-  // NBA and NFL (owner's decision, 2026-10-17, including NFL leagues already in season). Other sports
-  // keep settling every run until their schedules are checked against their engines.
-  if (!BLIND_WAIVER_GUILLOTINE_SPORTS.has(sport)) return null
-  let lastChop: { choppedAt: Date | null } | null = null
-  try {
-    lastChop = await prisma.guillotineRosterState.findFirst({
-      where: { leagueId, choppedAt: { not: null } },
-      orderBy: { choppedAt: 'desc' },
-      select: { choppedAt: true },
-    })
-  } catch {
-    lastChop = null
-  }
-  // The earlier of the calendar window and a hold anchored on the chop itself (an early or late chop).
-  const starts = [getWaiverBlindWindowStart(sport, now), getChopHoldStart(sport, lastChop?.choppedAt, now)]
-    .filter((d): d is Date => d != null)
-  if (starts.length === 0) return null
-  return new Date(Math.min(...starts.map((d) => d.getTime())))
-}
-
 export async function processWaiverWindow(
   leagueId: string,
   seasonId: string,
   now: Date = new Date(),
 ): Promise<ProcessedClaim[]> {
-  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } })
-  if (!season) return []
+  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId }, include: { league: { select: { leagueVariant: true } } } })
+  if (!season || season.league?.leagueVariant === 'survivor_guillotine') return []
+  /*
+   * 🛑 THIS ENGINE TOOK NO LOCK. It reads "who is rostered" from `RedraftRosterPlayer` and then writes
+   * from that read — the same check-then-write the native waiver run and the instant add hold
+   * `waiver:process:{leagueId}` around (lib/waiver-wire/leagueWaiverLock.ts). Without it, an instant add
+   * (either engine) or a second run between this run's read and its write put one player on two rosters.
+   * Busy: skip; the claims stay pending for the next hourly run.
+   */
+  const out = await withLeagueWaiverLock(leagueId, 'redraft-waiver-window', () => processWaiverWindowLocked(leagueId, seasonId, season, now))
+  if (out.ran) return out.value
+  console.info(`[redraft-waivers] league ${leagueId} skipped: another waiver run or add holds the league; pending claims stay pending`)
+  return []
+}
 
+async function processWaiverWindowLocked(
+  leagueId: string,
+  seasonId: string,
+  season: { sport: string | null },
+  now: Date,
+): Promise<ProcessedClaim[]> {
   const claimsCutoff = await guillotineClaimsCutoff(leagueId, now)
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { leagueId, seasonId, status: 'pending', ...(claimsCutoff ? { submittedAt: { lt: claimsCutoff } } : {}) },
@@ -218,6 +208,15 @@ export async function processWaiverWindow(
       { id: 'asc' },
     ],
   })
+  if (claims.length === 0) return []
+
+  // 🛑 A Guilly week's chop lands before the run that follows it (lib/guillotine/chopBeforeWaivers.ts):
+  // run first and the doomed team wins claims while bids on its players are denied. Nothing is touched.
+  const chop = await guillotineChopPendingForWaivers(leagueId)
+  if (chop.hold) {
+    console.info(`[redraft-waivers] league ${leagueId} skipped: week ${chop.week}'s Guilly chop has not landed; pending claims stay pending`)
+    return []
+  }
 
   // A Survivor Steal 3 raid grants the raided roster top priority for this week.
   // Claims can have been submitted before the raid, so their stored priority is
@@ -288,6 +287,7 @@ export async function processWaiverWindow(
     try {
       await runWaiverSettlement(async (tx: Prisma.TransactionClient) => {
         if (claim.dropPlayerId) {
+          await assertNotReservedByPirateClaim(tx, claim.rosterId, claim.dropPlayerId)
           const dropResult = await tx.redraftRosterPlayer.updateMany({
             where: { rosterId: claim.rosterId, playerId: claim.dropPlayerId, droppedAt: null },
             data: { droppedAt: new Date() },
@@ -301,6 +301,7 @@ export async function processWaiverWindow(
           }
         }
 
+        await assertPirateAcquisitionCapacity(tx, leagueId, claim.rosterId)
         await tx.redraftRosterPlayer.create({
           data: {
             rosterId: claim.rosterId,
@@ -334,6 +335,7 @@ export async function processWaiverWindow(
             where: { id: claim.rosterId },
             data: { faabBalance: Math.max(0, roster.faabBalance - bid) },
           })
+          await copyRedraftFaabToGeneric(tx, [claim.rosterId])
         }
       })
     } catch (err) {
@@ -396,6 +398,27 @@ export async function processWaiverWindow(
       payload: { claimId: r.claimId, result: r.status },
     })
   }
+  // Tell each manager whether they got their player (lib/redraft/waiverResultNotices.ts). Settled first, then told.
+  // Nothing here may reach the run: the claims are settled, and an alert that fails is only an alert.
+  if (results.length > 0) {
+    try {
+      const owners = await prisma.redraftRoster.findMany({
+        where: { id: { in: [...new Set(claims.map((c) => c.rosterId))] } },
+        select: { id: true, ownerId: true },
+      })
+      const ownerOf = new Map(owners.map((o) => [o.id, o.ownerId]))
+      sendWaiverResultNotices(
+        leagueId,
+        waiverResultNotices(
+          claims.map((c) => ({ id: c.id, ownerId: ownerOf.get(c.rosterId), addPlayerName: c.addPlayerName, dropPlayerName: c.dropPlayerName, bidAmount: c.bidAmount })),
+          results.map((r) => ({ claimId: r.claimId, status: r.status === 'approved' ? 'approved' : 'denied', reason: r.reason })),
+        ),
+      )
+    } catch (e) {
+      console.error('[redraft-waivers] result alerts failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   // Only summarise a window that actually DID something.
   //
   // This is called on every waiver cron fire — every five minutes — and previously emitted a

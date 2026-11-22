@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { createMockDraftSession } from '@/lib/mock-draft-engine/MockDraftSessionService'
 import { prisma } from '@/lib/prisma'
 import type { MockRoomMode, MockSlotConfigEntry } from '@/lib/mock-draft-engine/types'
+import { normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 function buildSlotConfigForMode(params: {
   roomMode: string
@@ -70,7 +71,8 @@ export async function POST(req: NextRequest) {
     const draftType = String(body?.draftType || 'snake')
     const aiEnabled = Boolean(body?.aiEnabled)
     const leagueId = body?.leagueId ?? null
-    const numTeams = Math.min(16, Math.max(8, Number(body?.numTeams) || 12))
+    // Any size a league of this sport and type accepts (lib/mock-draft/mockTeamCount.ts).
+    const numTeams = normalizeMockDraftTeamCount(body?.numTeams, sport, leagueType)
     const rounds = Math.min(22, Math.max(12, Number(body?.rounds) || 15))
     const timerSeconds = Number(body?.timerSeconds) ?? 0
     const scoringFormat = String(body?.scoringFormat || 'default')

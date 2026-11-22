@@ -47,7 +47,7 @@ import type {
 } from './types'
 
 /** Where a candidate league id came from. Precedence is expressed by this order. */
-export type LeagueIdSource =
+type LeagueIdSource =
   /** The request explicitly names one for THIS turn. */
   | 'explicit_request'
   /** The product already has one selected. */
@@ -55,7 +55,7 @@ export type LeagueIdSource =
   /** Inferred from the conversation, and only when it resolves to exactly one. */
   | 'conversation'
 
-export type LeagueCandidate = {
+type LeagueCandidate = {
   id: string
   source: LeagueIdSource
 }

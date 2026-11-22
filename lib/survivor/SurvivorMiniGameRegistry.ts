@@ -3,6 +3,7 @@
  */
 
 import type { SurvivorChallengeType } from './types'
+import type { SurvivorRewardType } from './survivorRewardModel'
 
 export const MINIGAME_TYPES: SurvivorChallengeType[] = [
   'score_prediction',
@@ -19,8 +20,12 @@ export const MINIGAME_TYPES: SurvivorChallengeType[] = [
 export interface MinigameTypeDef {
   id: SurvivorChallengeType
   label: string
-  /** Reward types this game can output. */
-  rewardTypes: ('immunity' | 'tribe_immunity' | 'score_boost' | 'faab' | 'advantage' | 'voting_safety')[]
+  /**
+   * Reward types this game can output. The first six are the original effect-engine rewards; the
+   * `SurvivorRewardType`s (score_penalty, faab_transfer, tribemate_points, free_trade_token,
+   * steal_blocker, steal, …) are paid through `applySurvivorReward` (SurvivorEffectEngine.ts).
+   */
+  rewardTypes: ('immunity' | 'tribe_immunity' | 'score_boost' | 'faab' | 'advantage' | 'voting_safety' | SurvivorRewardType)[]
   /** Submission schema hint: roster-only, tribe-only, or both. */
   submissionScope: 'roster' | 'tribe' | 'both'
 }

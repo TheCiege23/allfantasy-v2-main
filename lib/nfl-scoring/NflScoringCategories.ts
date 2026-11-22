@@ -48,6 +48,7 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'forty_yd_rush_bonus', label: '40+ Yard Rush Bonus', defaultValue: 0 },
       { key: 'forty_yd_rush_td_bonus', label: '40+ Yard Rush TD Bonus', defaultValue: 0 },
       { key: 'fifty_yd_rush_td_bonus', label: '50+ Yard Rush TD Bonus', defaultValue: 0 },
+      { key: 'rush_td_bonus_qb', label: 'Rushing TD Bonus - QB', defaultValue: 0 },
     ],
   },
   {
@@ -58,6 +59,7 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'receiving_td', label: 'Receiving TD', defaultValue: 6 },
       { key: 'receiving_first_down', label: 'Receiving 1st Down', defaultValue: 0 },
       { key: 'receiving_2pt', label: '2-Pt Conversion', defaultValue: 2 },
+      { key: 'target', label: 'Target', defaultValue: 0 },
       { key: 'rec_0_4_bonus', label: '0-4 Yard Reception Bonus', defaultValue: 0 },
       { key: 'rec_5_9_bonus', label: '5-9 Yard Reception Bonus', defaultValue: 0 },
       { key: 'rec_10_19_bonus', label: '10-19 Yard Reception Bonus', defaultValue: 0 },
@@ -129,6 +131,7 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'dst_fumble_return_yards', label: 'Fumble Return Yards', defaultValue: 0 },
       { key: 'dst_tackle_for_loss', label: 'Tackle For Loss', defaultValue: 0 },
       { key: 'dst_solo_tackle', label: 'Solo Tackle', defaultValue: 0 },
+      { key: 'dst_assisted_tackle', label: 'Assisted Tackle', defaultValue: 0 },
       { key: 'dst_tackle', label: 'Tackle', defaultValue: 0 },
       { key: 'dst_safety', label: 'Safety', defaultValue: 2 },
       { key: 'dst_forced_fumble', label: 'Forced Fumble', defaultValue: 0 },
@@ -155,6 +158,8 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'st_player_solo_tackle', label: 'ST Player Solo Tackle', defaultValue: 0 },
       { key: 'st_player_punt_return_yards', label: 'Player Punt Return Yards', defaultValue: 0 },
       { key: 'st_player_kick_return_yards', label: 'Player Kick Return Yards', defaultValue: 0 },
+      { key: 'st_player_kick_return_td', label: 'Player Kick Return TD', defaultValue: 0 },
+      { key: 'st_player_punt_return_td', label: 'Player Punt Return TD', defaultValue: 0 },
     ],
   },
   {
@@ -206,6 +211,7 @@ export const NFL_SCORING_CATEGORIES: ScoringCategory[] = [
       { key: 'idp_two_sack_bonus', label: '2+ Sack Bonus', defaultValue: 0 },
       { key: 'idp_three_pass_defended_bonus', label: '3+ Pass Defended Bonus', defaultValue: 0 },
       { key: 'idp_fifty_yd_int_return_td_bonus', label: '50+ Yard INT Return TD Bonus', defaultValue: 0 },
+      { key: 'idp_fifty_yd_fum_return_td_bonus', label: '50+ Yard Fumble Return TD Bonus', defaultValue: 0 },
     ],
   },
 ]

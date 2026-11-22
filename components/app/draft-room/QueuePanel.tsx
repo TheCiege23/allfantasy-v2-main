@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { ListOrdered, GripVertical, X, Zap, UserMinus, Play, ChevronDown } from 'lucide-react'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
@@ -9,9 +9,16 @@ import { PlayerAvatar } from './PlayerAvatar'
 import type { DraftAiOverlaySignal } from './PlayerPanel'
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 
+/** Name + position key for looking a queued player up in the pool when ids disagree. */
+export function queueNameKey(name: string | null | undefined, position: string | null | undefined): string | null {
+  const n = String(name ?? '').toLowerCase().replace(/\b(jr|sr|ii|iii|iv)\b\.?/g, '').replace(/[^a-z0-9]/g, '')
+  const p = String(position ?? '').toUpperCase().trim()
+  return n ? `name:${n}|${p}` : null
+}
+
 type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
-export type QueuePanelProps = {
+type QueuePanelProps = {
   queue: QueueEntry[]
   playerMetaById?: Record<
     string,
@@ -34,25 +41,33 @@ export type QueuePanelProps = {
   onAiReorderEnabledChange?: (value: boolean) => void
   autoPickFromQueue: boolean
   onAutoPickFromQueueChange: (value: boolean) => void
+  /**
+   * The ONE auto-pick control (the server-side "Auto-pick me"). When given, it replaces this panel's
+   * own "Auto-pick from queue" checkboxes: two auto-pick switches that meant slightly different
+   * things was a reported bug, and the server one also works with the tab closed.
+   */
+  autopickSlot?: ReactNode
   awayMode: boolean
   onAwayModeChange: (value: boolean) => void
   /** Next available player in queue (for auto-pick) */
   nextQueuedAvailable?: QueueEntry | null
-  /** Explanation from last AI reorder */
+  /** Explanation from last Chimmy reorder */
   aiReorderExplanation?: string | null
   /** Execution mode metadata from backend */
   aiReorderExecutionMode?: string | null
   /** Global commissioner setting for allowing auto-pick behaviors */
   autoPickEnabled?: boolean
-  /** When set, queue autopick/away/AI reorder emit product analytics beacons */
+  /** When set, queue autopick/away/Chimmy reorder emit product analytics beacons */
   analyticsLeagueId?: string
-  /** Rich inline AI overlays keyed by `name|position` (lowercase). */
+  /** Rich inline Chimmy overlays keyed by `name|position` (lowercase). */
   aiOverlaySignals?: Record<string, DraftAiOverlaySignal>
-  /** Shared visibility toggle for AI overlays across pool/queue/helper/topbar. */
+  /** Shared visibility toggle for Chimmy overlays across pool/queue/helper/topbar. */
   showAiOverlays?: boolean
   presentationVariant?: 'default' | 'redraft_snake'
   /** Viewer's next pick — each row gets an estimated "left @" chance from market ADP. */
   leftAtPick?: { overall: number; label: string } | null
+  /** Sleeper-mirrored room: Sleeper's public API has no queue endpoint, so nothing can sync from it. */
+  mirroredFromSleeper?: boolean
 }
 
 export function QueuePanel({
@@ -68,6 +83,7 @@ export function QueuePanel({
   onAiReorderEnabledChange,
   autoPickFromQueue,
   onAutoPickFromQueueChange,
+  autopickSlot,
   awayMode,
   onAwayModeChange,
   nextQueuedAvailable,
@@ -79,6 +95,7 @@ export function QueuePanel({
   showAiOverlays = true,
   presentationVariant = 'default',
   leftAtPick = null,
+  mirroredFromSleeper = false,
 }: QueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -88,7 +105,8 @@ export function QueuePanel({
 
   const resolveMeta = (entry: QueueEntry) => {
     const fromMap =
-      entry.playerId && playerMetaById ? playerMetaById[entry.playerId] : undefined
+      (entry.playerId && playerMetaById ? playerMetaById[entry.playerId] : undefined) ??
+      (playerMetaById ? playerMetaById[queueNameKey(entry.playerName, entry.position) ?? ''] : undefined)
     const fromEntry = entry as QueueEntry & {
       headshotUrl?: string | null
       teamLogoUrl?: string | null
@@ -163,16 +181,15 @@ export function QueuePanel({
 
   return (
     <section
-      className={`flex flex-col overflow-hidden rounded-lg border bg-[#101a30] ${
-        rs ? 'border-cyan-500/18 shadow-[0_10px_28px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]' : 'border-white/[0.07]'
-      }`}
+      className="flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-[#151b2e]"
       data-testid="draft-queue-panel"
     >
-      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(90deg,rgba(34,211,238,0.08),transparent)]' : 'border-white/[0.06]'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1 ${rs ? 'border-white/[0.06] bg-[#0d1424]' : 'border-white/[0.06]'}`}>
         <div className="flex items-center gap-2">
-          <ListOrdered className="h-3.5 w-3.5 text-cyan-400" />
+          <ListOrdered className="h-3.5 w-3.5 text-[#8b91a7]" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
         </div>
+        {autopickSlot ? null : (
         <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[11px] uppercase tracking-[0.12em] text-white/75">
           <input
             type="checkbox"
@@ -192,15 +209,18 @@ export function QueuePanel({
           />
           Auto-pick
         </label>
+        )}
       </div>
-      <div className="grid grid-cols-1 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
+      {autopickSlot ? <div data-testid="draft-queue-autopick-slot">{autopickSlot}</div> : null}
+      {/* Size for the dock's width: search and sort share a row, with positions below. */}
+      <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] p-1">
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search queued players"
           data-testid="draft-queue-search"
-          className="h-7 rounded-lg border border-white/12 bg-[#0b1328] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+          className="h-7 min-w-0 w-full rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white placeholder:text-white/40 outline-none transition focus:ring-2 focus:ring-white/20"
         />
         {/* Position filter — chip row matches the player pool's position pills
             so users see consistent affordances across both surfaces. */}
@@ -208,7 +228,7 @@ export function QueuePanel({
           role="radiogroup"
           aria-label="Queue position filter"
           data-testid="draft-queue-position-filter"
-          className="flex flex-wrap items-center gap-1"
+          className="order-last col-span-2 flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:thin]"
         >
           {positionOptions.map((position) => {
             const isActive = positionFilter === position
@@ -221,9 +241,9 @@ export function QueuePanel({
                 onClick={() => setPositionFilter(position)}
                 data-testid={`draft-queue-position-pill-${position.toLowerCase()}`}
                 data-active={isActive ? 'true' : 'false'}
-                className={`inline-flex h-6 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+                className={`inline-flex h-6 shrink-0 items-center rounded-full border px-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                   isActive
-                    ? 'border-cyan-400/45 bg-gradient-to-r from-cyan-500/22 to-violet-600/18 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.18)]'
+                    ? 'border-transparent bg-white text-[#14172a]'
                     : 'border-white/15 bg-black/20 text-white/65 hover:border-white/28 hover:text-white/90'
                 }`}
               >
@@ -236,20 +256,20 @@ export function QueuePanel({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as QueueSortMode)}
           data-testid="draft-queue-sort"
-          className="h-7 rounded-lg border border-white/12 bg-[#0b1328] px-2 text-[11px] text-white outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+          className="h-7 min-w-0 w-full rounded-lg border border-transparent bg-[#1d2236] px-2 text-[11px] text-white outline-none transition focus:ring-2 focus:ring-white/20"
         >
           <option value="queue">Sort: Queue order</option>
           <option value="adp">Sort: ADP</option>
-          <option value="rank">Sort: AI ADP</option>
+          <option value="rank">Sort: Chimmy ADP</option>
           <option value="name">Sort: Name</option>
         </select>
       </div>
       {rs ? (
         <details className="group border-b border-white/[0.06]" data-testid="draft-queue-ai-options">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90 [&::-webkit-details-marker]:hidden">
-            <span>Queue &amp; AI options</span>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/85 [&::-webkit-details-marker]:hidden">
+            <span>Queue &amp; Chimmy options</span>
             <ChevronDown
-              className="h-4 w-4 shrink-0 text-cyan-200/75 transition group-open:rotate-180"
+              className="h-4 w-4 shrink-0 text-[#8b91a7] transition group-open:rotate-180"
               aria-hidden
             />
           </summary>
@@ -257,7 +277,7 @@ export function QueuePanel({
             {onAiReorder && (
               <>
                 {onAiReorderEnabledChange && (
-                  <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                  <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/85 touch-manipulation">
                     <input
                       type="checkbox"
                       checked={aiReorderEnabled}
@@ -271,9 +291,9 @@ export function QueuePanel({
                         onAiReorderEnabledChange(e.target.checked)
                       }}
                       data-testid="draft-queue-ai-reorder-toggle"
-                      className="rounded border-cyan-300/40 w-4 h-4"
+                      className="rounded border-white/[0.06] w-4 h-4"
                     />
-                    AI explanation for reorder
+                    Chimmy explanation for reorder
                   </label>
                 )}
                 <button
@@ -289,13 +309,14 @@ export function QueuePanel({
                   }}
                   disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
                   data-testid="draft-queue-ai-reorder"
-                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[#1d2236] px-3 py-2.5 text-xs text-white/85 hover:bg-[#2a2f45] disabled:opacity-50 touch-manipulation"
                 >
                   <Zap className="h-3.5 w-3.5" />
                   {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
                 </button>
               </>
             )}
+            {autopickSlot ? null : (
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -315,6 +336,7 @@ export function QueuePanel({
               />
               Auto-pick from queue
             </label>
+            )}
             <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
               <input
                 type="checkbox"
@@ -342,7 +364,7 @@ export function QueuePanel({
           {onAiReorder && (
             <>
               {onAiReorderEnabledChange && (
-                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/85 touch-manipulation">
                   <input
                     type="checkbox"
                     checked={aiReorderEnabled}
@@ -356,9 +378,9 @@ export function QueuePanel({
                       onAiReorderEnabledChange(e.target.checked)
                     }}
                     data-testid="draft-queue-ai-reorder-toggle"
-                    className="rounded border-cyan-300/40 w-4 h-4"
+                    className="rounded border-white/[0.06] w-4 h-4"
                   />
-                  AI explanation for reorder
+                  Chimmy explanation for reorder
                 </label>
               )}
               <button
@@ -374,13 +396,14 @@ export function QueuePanel({
                 }}
                 disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
                 data-testid="draft-queue-ai-reorder"
-                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[#1d2236] px-3 py-2.5 text-xs text-white/85 hover:bg-[#2a2f45] disabled:opacity-50 touch-manipulation"
               >
                 <Zap className="h-3.5 w-3.5" />
                 {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
               </button>
             </>
           )}
+          {autopickSlot ? null : (
           <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
             <input
               type="checkbox"
@@ -400,6 +423,7 @@ export function QueuePanel({
             />
             Auto-pick from queue
           </label>
+          )}
           <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
             <input
               type="checkbox"
@@ -433,13 +457,13 @@ export function QueuePanel({
         </p>
       )}
       {aiReorderExplanation && (
-        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-cyan-100/90" title="AI reorder explanation">
+        <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-white/85" title="Chimmy reorder explanation">
           {aiReorderExplanation}
         </p>
       )}
       {aiReorderExecutionMode && (
         <p className="border-b border-white/8 px-2 py-1.5 text-[11px] text-white/60" data-testid="draft-queue-execution-mode">
-          Execution: {aiReorderExecutionMode === 'ai_explained' ? 'rules engine + AI explanation' : 'instant rules automation'}
+          Execution: {aiReorderExecutionMode === 'ai_explained' ? 'rules engine + Chimmy explanation' : 'instant rules automation'}
         </p>
       )}
       <div className="flex-1 overflow-auto overscroll-contain p-1">
@@ -447,17 +471,19 @@ export function QueuePanel({
           <div className="flex h-full min-h-[72px] flex-col items-center justify-center gap-1 px-2 py-2 text-center">
             <div
               className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
-                rs ? 'border-cyan-400/20 bg-cyan-500/8' : 'border-white/10 bg-white/[0.03]'
+                rs ? 'border-transparent bg-[#1d2236]' : 'border-white/10 bg-white/[0.03]'
               }`}
               aria-hidden
             >
-              <ListOrdered className={`h-3.5 w-3.5 ${rs ? 'text-cyan-200/70' : 'text-white/45'}`} />
+              <ListOrdered className={`h-3.5 w-3.5 ${rs ? 'text-[#8b91a7]' : 'text-white/45'}`} />
             </div>
-            <p className={`text-[11px] font-semibold ${rs ? 'text-cyan-100/88' : 'text-white/82'}`}>
+            <p className={`text-[11px] font-semibold ${rs ? 'text-white/85' : 'text-white/82'}`}>
               No players in your queue
             </p>
             <p className="max-w-[220px] text-[11px] leading-relaxed text-white/45">
-              Add from player pool to prep your next picks.
+              {mirroredFromSleeper
+                ? 'Your Sleeper queue does not sync here. Add players from the pool to plan your next picks, then draft on Sleeper.'
+                : 'Add from player pool to prep your next picks.'}
             </p>
           </div>
         ) : showFilteredEmptyState ? (
@@ -518,8 +544,9 @@ export function QueuePanel({
                   dragIndex === displayIndex ? 'opacity-60' : 'hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`shrink-0 touch-none ${canReorderVisually ? 'text-white/40' : 'text-white/20'}`} aria-hidden><GripVertical className="h-4 w-4" /></span>
+                <div className="flex items-center gap-2.5 min-w-0 max-md:gap-2">
+                  {/* HTML5 drag does not fire from touch, so on a phone the grip promised a gesture that does nothing; ↑/↓ reorder there. */}
+                  <span className={`shrink-0 touch-none max-md:hidden ${canReorderVisually ? 'text-white/40' : 'text-white/20'}`} aria-hidden><GripVertical className="h-4 w-4" /></span>
                   <PlayerAvatar
                     headshotUrl={meta.headshotUrl}
                     teamLogoUrl={meta.teamLogoUrl}
@@ -531,17 +558,17 @@ export function QueuePanel({
                   />
                   <div className="min-w-0">
                     <p className="truncate text-[11px] font-semibold tracking-tight text-white">{entry.playerName}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] max-md:flex-nowrap max-md:overflow-hidden">
                       {aiOverlaySignal ? (
                         <span
                           className={`rounded border px-1.5 py-[1px] ${
                             aiOverlaySignal.badge === 'ai_pick'
-                              ? 'border-cyan-300/35 bg-cyan-500/14 text-cyan-100'
+                              ? 'border-transparent bg-[#1d2236] text-white/85'
                               : aiOverlaySignal.badge === 'risky'
                                 ? 'border-amber-300/35 bg-amber-500/14 text-amber-100'
                                 : 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
                           }`}
-                          title={aiOverlaySignal.reason ?? aiOverlaySignal.strategyNote ?? 'AI recommendation tag'}
+                          title={aiOverlaySignal.reason ?? aiOverlaySignal.strategyNote ?? 'Chimmy recommendation tag'}
                         >
                           {aiBadgeLabel}
                         </span>
@@ -550,10 +577,10 @@ export function QueuePanel({
                         {entry.position}
                       </span>
                       {entry.team ? (
-                        <span className="rounded border border-white/15 bg-white/5 px-1.5 py-[1px] text-white/65">{entry.team}</span>
+                        <span className="rounded border border-white/15 bg-white/5 px-1.5 py-[1px] text-white/65 max-md:hidden">{entry.team}</span>
                       ) : null}
                       {adpText ? (
-                        <span className="rounded border border-cyan-300/35 bg-cyan-500/12 px-1.5 py-[1px] text-cyan-100">ADP {adpText}</span>
+                        <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-[1px] text-white/85">ADP {adpText}</span>
                       ) : null}
                       {leftAtPick && survivalProbability(meta.adp, leftAtPick.overall) != null
                         ? (() => {
@@ -578,7 +605,7 @@ export function QueuePanel({
                           })()
                         : null}
                       {aiAdpText ? (
-                        <span className="rounded border border-violet-300/30 bg-violet-500/10 px-1.5 py-[1px] text-violet-100">AI ADP {aiAdpText}</span>
+                        <span className="rounded border border-violet-300/30 bg-violet-500/10 px-1.5 py-[1px] text-violet-100">Chimmy ADP {aiAdpText}</span>
                       ) : null}
                       {queueValueDelta != null ? (
                         <span
@@ -620,19 +647,19 @@ export function QueuePanel({
                         </span>
                       ) : null}
                       {meta.experienceBadge ? (
-                        <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-[1px] text-cyan-50">
+                        <span className="rounded border border-transparent bg-[#1d2236] px-1.5 py-[1px] text-white">
                           {meta.experienceBadge}
                         </span>
                       ) : null}
                     </div>
                     {aiConfidencePct != null ? (
-                      <div className="mt-1 h-1 w-full max-w-[180px] overflow-hidden rounded-full border border-cyan-400/20 bg-slate-900/80" title={`AI confidence ${aiConfidencePct}%`}>
-                        <div className="h-full bg-gradient-to-r from-cyan-400/75 to-violet-400/75" style={{ width: `${aiConfidencePct}%` }} />
+                      <div className="mt-1 h-1 w-full max-w-[180px] overflow-hidden rounded-full border border-white/[0.06] bg-slate-900/80" title={`Chimmy confidence ${aiConfidencePct}%`}>
+                        <div className="h-full bg-gradient-to-r from-white/60 to-white/60" style={{ width: `${aiConfidencePct}%` }} />
                       </div>
                     ) : null}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5 max-md:gap-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -668,7 +695,7 @@ export function QueuePanel({
                       type="button"
                       onClick={() => onDraftFromQueue(entry)}
                       data-testid="draft-queue-draft-button"
-                      className="draft-live-action-btn min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/20 touch-manipulation"
+                      className="draft-live-action-btn min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-[#1d2236] px-2.5 py-1.5 text-[11px] font-semibold text-white/85 hover:bg-[#2a2f45] touch-manipulation"
                     >
                       <Play className="h-3.5 w-3.5" /> Draft
                     </button>

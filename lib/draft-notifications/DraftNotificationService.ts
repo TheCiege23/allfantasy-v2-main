@@ -3,14 +3,20 @@
  * Uses unified dispatcher for in-app + email + SMS per user preferences.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { rosterManagerKey, teamScopedKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
+import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { buildDraftStartingEmail } from './draftEmails'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { getBaseUrl } from '@/lib/get-base-url'
 import type { DraftNotificationEventType, DraftNotificationPayload } from './types'
+import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { formatSlot, groupByTimeZone } from '@/lib/draft-schedule/draftSchedule'
 
 const DRAFT_ROOM_PATH = (leagueId: string) => `/league/${leagueId}/draft`
 
@@ -25,10 +31,12 @@ async function getLeagueName(leagueId: string): Promise<string | undefined> {
 export async function getAppUserIdForRoster(rosterId: string): Promise<string | null> {
   const roster = await prisma.roster.findUnique({
     where: { id: rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) return null
-  return roster.platformUserId
+  // A manager's further team has a key of its own and names them (lib/league/rosterManager.ts).
+  const managerId = roster ? rosterManagerKey(roster) : null
+  if (!managerId || isSeatPlaceholderUserId(managerId)) return null
+  return (await resolveAppUserIds([managerId]))[0] ?? null
 }
 
 /**
@@ -45,13 +53,44 @@ export async function getAppUserIdForRoster(rosterId: string): Promise<string | 
 export async function getLeagueMemberAppUserIds(leagueId: string): Promise<string[]> {
   const rosters = await prisma.roster.findMany({
     where: { leagueId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
   const ids = new Set<string>()
   for (const r of rosters) {
-    if (r.platformUserId && !String(r.platformUserId).startsWith('orphan-')) ids.add(r.platformUserId)
+    const managerId = rosterManagerKey(r)
+    if (managerId && !isSeatPlaceholderUserId(managerId)) ids.add(managerId)
   }
-  return resolveAppUserIds(Array.from(ids))
+  const resolved = await resolveAppUserIds(Array.from(ids))
+  /*
+   * ⚠ PLUS EVERY CLAIMED TEAM. `Roster.platformUserId` is the PROVIDER's id on an imported league —
+   * an ESPN SWID, a Yahoo guid — and `resolveAppUserIds` only translates AF and Sleeper ids, so a
+   * member of an ESPN league was never reached. `LeagueTeam.claimedByUserId` is always an AF id, and
+   * for a public ESPN league joined by picking a team (owned by the system account) it is the ONLY
+   * place the members are recorded. Read through `.then` so a narrow test double without the
+   * delegate degrades to the old behaviour rather than throwing.
+   */
+  const claimed = await Promise.resolve()
+    .then(() =>
+      prisma.leagueTeam.findMany({
+        where: { leagueId, claimedByUserId: { not: null } },
+        select: { claimedByUserId: true },
+      }),
+    )
+    .catch(() => [] as Array<{ claimedByUserId: string | null }>)
+  const out = new Set(resolved)
+  for (const t of claimed ?? []) if (t.claimedByUserId) out.add(t.claimedByUserId)
+  for (const id of Array.from(out)) if (isSystemLeagueOwner(id)) out.delete(id)
+  return Array.from(out)
+}
+
+async function getDraftAudience(leagueId: string): Promise<string[]> {
+  const [members, league] = await Promise.all([
+    getLeagueMemberAppUserIds(leagueId),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }),
+  ])
+  // The system account owns leagues nobody proved they run; it is not a person to notify.
+  const owner = league?.userId && !isSystemLeagueOwner(league.userId) ? [league.userId] : []
+  return [...new Set([...members, ...owner])]
 }
 
 /**
@@ -63,6 +102,19 @@ function getTitleAndBody(
 ): { title: string; body: string | null; severity: 'low' | 'medium' | 'high' } {
   const league = payload.leagueName ? ` — ${payload.leagueName}` : ''
   switch (eventType) {
+    case 'draft_time_set':
+      // In the recipient's own zone, named ("8:00 PM PDT"), never a blanket "ET".
+      return { title: `Draft time set${league}`, body: payload.draftTime ? `The draft is scheduled for ${formatSlot(payload.draftTime, payload.timeZone ?? 'America/New_York')}.` : 'The commissioner set the draft time.', severity: 'high' }
+    case 'draft_started':
+      return { title: `Draft started${league}`, body: 'The draft is live. Open the draft room.', severity: 'high' }
+    case 'draft_ended':
+      return { title: `Draft ended${league}`, body: 'The draft is complete. View your team and results.', severity: 'high' }
+    case 'draft_three_picks_away':
+      return { title: `You're on the clock in 3 picks${league}`, body: `Get your queue ready${payload.pickLabel ? ` for pick ${payload.pickLabel}` : ''}.`, severity: 'high' }
+    case 'draft_two_picks_away':
+      return { title: `You're on the clock in 2 picks${league}`, body: `Get your queue ready${payload.pickLabel ? ` for pick ${payload.pickLabel}` : ''}.`, severity: 'high' }
+    case 'draft_next_pick':
+      return { title: `You're on the clock next${league}`, body: payload.pickLabel ? `Pick ${payload.pickLabel} is next.` : 'Your pick is next.', severity: 'high' }
     case 'draft_on_the_clock':
       return {
         title: `You're on the clock${league}`,
@@ -107,14 +159,14 @@ function getTitleAndBody(
       }
     case 'draft_ai_trade_review_available':
       return {
-        title: `AI trade review ready${league}`,
-        body: 'An AI review is available for a draft pick trade.',
+        title: `Chimmy trade review ready${league}`,
+        body: 'a Chimmy review is available for a draft pick trade.',
         severity: 'low',
       }
     case 'draft_orphan_ai_assigned':
       return {
-        title: `Orphan/AI manager updated${league}`,
-        body: 'Commissioner has updated AI manager settings for empty teams.',
+        title: `Orphan/Chimmy manager updated${league}`,
+        body: 'Commissioner has updated Chimmy manager settings for empty teams.',
         severity: 'low',
       }
     case 'draft_auction_outbid':
@@ -132,12 +184,15 @@ function getTitleAndBody(
     case 'draft_starting_soon':
       return {
         title: `Draft starting soon${league}`,
-        body: 'Your league draft is about to start.',
+        body:
+          payload.draftTime && typeof payload.minutesUntilStart === 'number'
+            ? `Your league draft starts in ${payload.minutesUntilStart >= 120 ? `about ${Math.round(payload.minutesUntilStart / 60)} hours` : payload.minutesUntilStart >= 60 ? 'about an hour' : `${payload.minutesUntilStart} minutes`} — ${formatSlot(payload.draftTime, payload.timeZone ?? 'America/New_York')}.`
+            : 'Your league draft is about to start.',
         severity: 'high',
       }
     case 'draft_intel_queue_ready':
       return {
-        title: `AI queue ready${league}`,
+        title: `Chimmy queue ready${league}`,
         body: payload.playerName
           ? `${payload.playerName} leads your Chimmy queue.`
           : 'Chimmy built your 5-pick queue.',
@@ -200,6 +255,22 @@ function resolveCategoryForEvent(eventType: DraftNotificationEventType) {
   return eventType.startsWith('draft_intel_') ? 'draft_intel_alerts' : 'draft_alerts'
 }
 
+const PUSH_IN_APP_SMS_EVENTS = new Set<DraftNotificationEventType>([
+  'draft_time_set', 'draft_started', 'draft_paused', 'draft_three_picks_away',
+  'draft_two_picks_away', 'draft_next_pick', 'draft_on_the_clock', 'draft_ended',
+])
+
+const DRAFT_SMS_COPY: Partial<Record<DraftNotificationEventType, string>> = {
+  draft_time_set: 'Your AllFantasy draft time was set. Open the app for details.',
+  draft_started: 'Your AllFantasy draft has started. Open the draft room.',
+  draft_paused: 'Your AllFantasy draft is paused. Open the app for details.',
+  draft_three_picks_away: 'You are on the clock in 3 picks. Open your AllFantasy draft room.',
+  draft_two_picks_away: 'You are on the clock in 2 picks. Open your AllFantasy draft room.',
+  draft_next_pick: 'You are on the clock next. Open your AllFantasy draft room.',
+  draft_on_the_clock: 'You are on the clock now. Make your AllFantasy draft pick.',
+  draft_ended: 'Your AllFantasy draft has ended. Open the app for results.',
+}
+
 /**
  * Create a single draft notification (in-app + email/SMS per preferences).
  * `emailOverride` swaps the plain email body for a designed template
@@ -225,6 +296,10 @@ export async function createDraftNotification(
     meta: { ...payload, leagueId: payload.leagueId },
     severity,
     emailOverride,
+    leagueId: payload.leagueId,
+    skipChannels: PUSH_IN_APP_SMS_EVENTS.has(eventType) ? { email: true } : undefined,
+    smsBody: DRAFT_SMS_COPY[eventType],
+    dedupePrefix: payload.eventKey ? `${eventType}:${payload.leagueId}:${payload.eventKey}` : undefined,
   })
   return true
 }
@@ -251,6 +326,10 @@ export async function createDraftNotificationForUsers(
     actionLabel: 'Open draft',
     meta: { ...payload, leagueId: payload.leagueId },
     severity,
+    leagueId: payload.leagueId,
+    skipChannels: PUSH_IN_APP_SMS_EVENTS.has(eventType) ? { email: true } : undefined,
+    smsBody: DRAFT_SMS_COPY[eventType],
+    dedupePrefix: payload.eventKey ? `${eventType}:${payload.leagueId}:${payload.eventKey}` : undefined,
   })
   return appUserIds.length
 }
@@ -284,20 +363,39 @@ export async function notifyOnTheClockAfterPick(leagueId: string): Promise<void>
       slotOrder,
     })
     if (!current) return
-    const appUserId = await getAppUserIdForRoster(current.rosterId)
-    if (!appUserId) return
+    const tradedPicks = Array.isArray(session.tradedPicks) ? session.tradedPicks as unknown as TradedPickRecord[] : []
+    const currentOwner = resolvePickOwner(current.round, current.slot, slotOrder, tradedPicks)
+    const appUserId = await getAppUserIdForRoster(currentOwner?.rosterId ?? current.rosterId)
     const leagueName = await getLeagueName(leagueId)
-    await createDraftNotification(appUserId, 'draft_on_the_clock', {
+    if (appUserId) await createDraftNotification(appUserId, 'draft_on_the_clock', {
       leagueId,
       leagueName,
       pickLabel: current.pickLabel,
       round: current.round,
       slot: current.slot,
       rosterId: current.rosterId,
-      displayName: current.displayName,
+      displayName: currentOwner?.displayName ?? current.displayName,
+      eventKey: `${session.id}:${current.overall}`,
     })
-  } catch {
-    // Fire-and-forget
+    if (session.draftType !== 'auction') for (const [distance, eventType] of [
+      [1, 'draft_next_pick'], [2, 'draft_two_picks_away'], [3, 'draft_three_picks_away'],
+    ] as const) {
+      if (current.overall + distance > totalPicks) continue
+      const upcoming = resolveCurrentOnTheClock({ totalPicks, picksCount: current.overall + distance - 1,
+        teamCount: session.teamCount, draftType: session.draftType as 'snake' | 'linear',
+        thirdRoundReversal: session.thirdRoundReversal, slotOrder })
+      if (upcoming) {
+        const upcomingOwner = resolvePickOwner(upcoming.round, upcoming.slot, slotOrder, tradedPicks)
+        const upcomingUser = await getAppUserIdForRoster(upcomingOwner?.rosterId ?? upcoming.rosterId)
+        if (upcomingUser) await createDraftNotification(upcomingUser, eventType, {
+          leagueId, leagueName, pickLabel: upcoming.pickLabel,
+          rosterId: upcomingOwner?.rosterId ?? upcoming.rosterId, eventKey: `${session.id}:${upcoming.overall}`,
+        })
+      }
+    }
+
+  } catch (error) {
+    console.error('[draft] pick notification failed', { leagueId, error })
   }
 }
 
@@ -305,12 +403,13 @@ export async function notifyOnTheClockAfterPick(leagueId: string): Promise<void>
  * Event trigger: draft paused — notify all league members.
  */
 export async function notifyDraftPaused(leagueId: string): Promise<void> {
-  const userIds = await getLeagueMemberAppUserIds(leagueId)
+  const userIds = await getDraftAudience(leagueId)
   if (userIds.length === 0) return
   const leagueName = await getLeagueName(leagueId)
   await createDraftNotificationForUsers(userIds, 'draft_paused', {
     leagueId,
     leagueName,
+    eventKey: await currentDraftEventKey(leagueId),
   })
 }
 
@@ -318,13 +417,70 @@ export async function notifyDraftPaused(leagueId: string): Promise<void> {
  * Event trigger: draft resumed — notify all league members.
  */
 export async function notifyDraftResumed(leagueId: string): Promise<void> {
-  const userIds = await getLeagueMemberAppUserIds(leagueId)
+  const userIds = await getDraftAudience(leagueId)
   if (userIds.length === 0) return
   const leagueName = await getLeagueName(leagueId)
   await createDraftNotificationForUsers(userIds, 'draft_resumed', {
     leagueId,
     leagueName,
+    eventKey: await currentDraftEventKey(leagueId),
   })
+}
+
+async function currentDraftEventKey(leagueId: string): Promise<string | undefined> {
+  const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { id: true, version: true } })
+  return session ? `${session.id}:${session.version}` : undefined
+}
+
+export async function notifyDraftLifecycle(leagueId: string, eventType: 'draft_started' | 'draft_ended', sessionId?: string): Promise<void> {
+  const userIds = await getDraftAudience(leagueId)
+  if (!userIds.length) return
+  await createDraftNotificationForUsers(userIds, eventType, {
+    leagueId, leagueName: await getLeagueName(leagueId), eventKey: sessionId ?? await currentDraftEventKey(leagueId),
+  })
+}
+
+/**
+ * Members grouped by the zone their message is written in: their profile's zone, else the league's.
+ * One dispatch per zone, so every member reads the time in their own clock.
+ */
+async function audienceByTimeZone(leagueId: string, userIds: string[]): Promise<Map<string, string[]>> {
+  const [profiles, settings] = await Promise.all([
+    prisma.userProfile.findMany({ where: { userId: { in: userIds } }, select: { userId: true, timezone: true } }).catch(() => [] as Array<{ userId: string; timezone: string | null }>),
+    prisma.leagueSettings.findUnique({ where: { leagueId }, select: { timezone: true } }).catch(() => null),
+  ])
+  const tzById = new Map(profiles.map((p) => [p.userId, p.timezone]))
+  return groupByTimeZone(userIds.map((userId) => ({ userId, timeZone: tzById.get(userId) ?? null })), settings?.timezone ?? 'America/New_York')
+}
+
+export async function notifyDraftTimeSet(leagueId: string, draftTime: Date): Promise<void> {
+  const userIds = await getDraftAudience(leagueId)
+  if (!userIds.length) return
+  const leagueName = await getLeagueName(leagueId)
+  for (const [timeZone, ids] of await audienceByTimeZone(leagueId, userIds)) {
+    await createDraftNotificationForUsers(ids, 'draft_time_set', {
+      leagueId, leagueName, draftTime: draftTime.toISOString(), timeZone, eventKey: draftTime.toISOString(),
+    })
+  }
+}
+
+/**
+ * The scheduled pre-draft reminders (lib/draft-schedule/draftStartReminders.ts): the day before and
+ * the hour before, each in the member's own zone. Keyed on the draft time and the window, so moving the
+ * draft sends a fresh pair and re-running the job sends nothing new.
+ */
+export async function notifyDraftStartsIn(leagueId: string, draftTime: Date, window: '24h' | '1h', now: Date = new Date()): Promise<number> {
+  const userIds = await getDraftAudience(leagueId)
+  if (!userIds.length) return 0
+  const leagueName = await getLeagueName(leagueId)
+  const minutesUntilStart = Math.max(1, Math.round((draftTime.getTime() - now.getTime()) / 60_000))
+  let sent = 0
+  for (const [timeZone, ids] of await audienceByTimeZone(leagueId, userIds)) {
+    sent += await createDraftNotificationForUsers(ids, 'draft_starting_soon', {
+      leagueId, leagueName, draftTime: draftTime.toISOString(), timeZone, minutesUntilStart, eventKey: `${draftTime.toISOString()}:${window}`,
+    })
+  }
+  return sent
 }
 
 /**
@@ -430,17 +586,17 @@ async function buildDraftStartingEmailsByUser(
   const slotByRosterId = new Map(slotOrder.map((entry) => [entry.rosterId, entry.slot]))
   const rosters = await prisma.roster.findMany({
     where: { leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   const baseUrl = getBaseUrl()
   for (const roster of rosters) {
-    const userId = roster.platformUserId
-    if (!userId || String(userId).startsWith('orphan-')) continue
+    const userId = rosterManagerKey(roster)
+    if (!userId || isSeatPlaceholderUserId(String(userId))) continue
     const slot = slotByRosterId.get(roster.id)
     if (slot == null) continue
     // A failed queue read must not render the "your queue is empty" warning
     // for a queue we simply could not see — that member keeps the plain email.
-    const loaded = await loadDraftQueueForUser(leagueId, userId).catch(() => null)
+    const loaded = await loadDraftQueueForUser(leagueId, userId, { queueKey: teamScopedKey(roster) }).catch(() => null)
     if (!loaded) continue
     out.set(
       userId,

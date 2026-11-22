@@ -7,6 +7,8 @@ import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
+import { isLeagueSmsCategory } from "@/lib/notifications/channelPolicy"
+import { isCategoryHiddenByHomeSection } from "@/lib/core-app/homeSections"
 import { sendSms } from "@/lib/twilio-client"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import type { SmsSendResult } from "./types"
@@ -21,6 +23,9 @@ export async function sendCriticalSms(
   category: NotificationCategoryId,
   message: string
 ): Promise<SmsSendResult> {
+  if (!isLeagueSmsCategory(category)) {
+    return { ok: false, userId, error: "Texts are reserved for league operations" }
+  }
   const profile = await getSettingsProfile(userId)
   if (!profile?.phone) {
     return { ok: false, userId, error: "No phone" }
@@ -40,6 +45,10 @@ export async function sendCriticalSms(
   if (!catPrefs?.enabled || !catPrefs.sms) {
     return { ok: false, userId, error: "SMS disabled for category" }
   }
+  // Settings → Home page: a hidden home section silences its alerts (lib/core-app/homeSections.ts).
+  if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
+    return { ok: false, userId, error: "Home section hidden" }
+  }
 
   const availability = getDeliveryMethodAvailability({
     hasEmail: !!profile.email,
@@ -55,18 +64,3 @@ export async function sendCriticalSms(
   return ok ? { ok: true, userId } : { ok: false, userId, error: "Send failed" }
 }
 
-/**
- * Send the same critical SMS to multiple users. Skips users without phone/SMS enabled.
- */
-export async function sendCriticalSmsToUsers(
-  userIds: string[],
-  category: NotificationCategoryId,
-  message: string
-): Promise<SmsSendResult[]> {
-  const results: SmsSendResult[] = []
-  for (const userId of userIds) {
-    const result = await sendCriticalSms(userId, category, message)
-    results.push(result)
-  }
-  return results
-}

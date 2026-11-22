@@ -30,6 +30,24 @@ const DETERMINISM_RULES = `CRITICAL RULES — You never decide or assert:
 - Whether someone returned from Exile.
 You only explain, narrate, and suggest strategy. Official commands (e.g. @Chimmy vote [manager]) are processed by the league engine; you may suggest command wording only.`
 
+function formatMyIdols(ctx: SurvivorAIDeterministicContext): string {
+  return ctx.myIdols.length ? ctx.myIdols.map((i) => i.powerType).join(', ') : 'None'
+}
+
+function formatIdolRules(ctx: SurvivorAIDeterministicContext): string {
+  const deadline = ctx.idolRules.playDeadlineAt
+    ? `Last moment to play an idol this week: ${ctx.idolRules.playDeadlineAt.toISOString()}.`
+    : 'No council is open this week, so there is no idol deadline right now.'
+  return `${deadline} ${ctx.idolRules.cutoffText ?? 'Idols can be played until votes close.'} ${ctx.idolRules.expiryText}`
+}
+
+function formatJury(ctx: SurvivorAIDeterministicContext): string {
+  return ctx.jury.map((j) => `${ctx.rosterDisplayNames[j.rosterId] ?? j.rosterId} (out week ${j.votedOutWeek})`).join(', ') || 'None yet'
+}
+
+/** Paid helpers that write more than the 600-token default. */
+export const SURVIVOR_AI_MAX_TOKENS: Partial<Record<SurvivorAIType, number>> = { weekly_plan: 1000 }
+
 function sportLabel(sport: string): string {
   return SPORT_LABELS[sport] ?? sport
 }
@@ -139,6 +157,27 @@ Finale: ${ctx.finale ? `open ${ctx.finale.open}, finalists ${ctx.finale.finalist
         `You are Chimmy, AllFantasy's Survivor bestball advisor. Explain optimized lineup outcomes, how tribe score is built, and merge-era risk and jury positioning in bestball. You never decide outcomes — only explain mechanics and strategy. ${DETERMINISM_RULES}`,
       )
       const user = `${baseUser}\nMode: ${ctx.config.mode}.\n\nExplain bestball tribe score, lineup optimization, and merge/jury positioning. Do not assert who wins or is eliminated.`
+      return { system, user }
+    }
+    case 'idol_timing_help': {
+      const system = withIslandVoice(
+        `You are Chimmy, AllFantasy's Survivor idol timing advisor. Using ONLY the manager's own idols and the league's idol rules below, give a concrete plan: for each idol, hold or play this week, and why; the exact last moment to play it; and what changes the call (being at council, the merge, the expiry rule). If the manager holds no idols, say so plainly and explain how to read idol risk from other managers' behaviour instead. You never know or guess which other managers hold idols. You never decide if a play is valid — the engine does. ${DETERMINISM_RULES}`,
+      )
+      const user = `${baseUser}\nUser's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'Not on a roster'}.\nUser's idols: ${formatMyIdols(ctx)}.\nIdol rules: ${formatIdolRules(ctx)}\nOfficial syntax: @Chimmy play idol [idol], @Chimmy play idol [idol] on [manager].\n\nGive a hold-or-play plan for this week with the deadline. Do not assert any other manager's idols or the validity of any play.`
+      return { system, user }
+    }
+    case 'jury_help': {
+      const system = withIslandVoice(
+        `You are Chimmy, AllFantasy's Survivor jury coach. Help the manager earn jury votes: how jurors judge a game, who on the jury they most need to win over and why (from the voted-out order and when each juror left), how to talk about their own moves, and what to avoid. Before the merge, explain how to protect jury relationships early. You never know how any juror will vote or has voted — only the count of submitted votes. ${DETERMINISM_RULES}`,
+      )
+      const user = `${baseUser}\nUser's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'Not on a roster'}.\nJury so far: ${formatJury(ctx)}.\n\nGive jury management advice for this manager now. Never claim to know any juror's vote.`
+      return { system, user }
+    }
+    case 'weekly_plan': {
+      const system = withIslandVoice(
+        `You are Chimmy, AllFantasy's Survivor strategy helper. Write one weekly game plan for this manager with short headed sections: 1) Where you stand (tribe, numbers, threats from public data), 2) This week's council (risk and who to talk to), 3) Challenges (what to submit, via official commands), 4) Idols (hold or play, with the deadline — own idols only), 5) Long game (merge, jury, or Exile, whichever applies). Use ONLY the data below. ${DETERMINISM_RULES}`,
+      )
+      const user = `${baseUser}\nUser's roster: ${ctx.myRosterId ? ctx.rosterDisplayNames[ctx.myRosterId] ?? ctx.myRosterId : 'Not on a roster'}.\nActive challenges this week: ${ctx.challenges.filter((c) => c.week === ctx.currentWeek).map((c) => c.challengeType).join(', ') || 'None'}.\nUser's idols: ${formatMyIdols(ctx)}.\nIdol rules: ${formatIdolRules(ctx)}\nUser exile status: ${ctx.myExileStatus ? `tokens ${ctx.myExileStatus.tokens}, eligible to return ${ctx.myExileStatus.eligibleToReturn}` : 'N/A'}.\n\nWrite the weekly game plan. Do not assert who will be voted out, any vote count, or any other manager's idols.`
       return { system, user }
     }
     default: {

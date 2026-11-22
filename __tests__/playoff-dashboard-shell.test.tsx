@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import PlayoffBracketShell from "@/components/brackets/playoffs/PlayoffBracketShell"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
@@ -88,6 +88,25 @@ describe("PlayoffBracketShell dashboard", () => {
     vi.clearAllMocks()
     useSessionMock.mockReturnValue({ data: null })
     getPlayoffBracketViewClientMock.mockResolvedValue(buildView())
+  })
+
+  it("adds another participant after they finalize while the Cup dashboard is open", async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }))
+    try {
+      const base = buildView()
+      const owner = { ...base.entries[0], isComplete: true, finalizedAt: new Date().toISOString(), rank: 1 }
+      const draft = { ...base.entries[0], id: "entry-2", userId: "user-2", name: "Friend's bracket", isComplete: false }
+      const initial = buildView({ challenge: { ...base.challenge, sport: "nba_cup" }, entries: [owner, draft], activeEntry: owner })
+      const finalized = { ...draft, isComplete: true, finalizedAt: new Date().toISOString(), rank: 2 }
+      getPlayoffBracketViewClientMock.mockResolvedValue({ ...initial, entries: [owner, finalized] })
+      const result = render(<PlayoffBracketShell initialView={initial} />)
+      expect(within(screen.getByTestId("playoff-dashboard-leaderboard")).queryByText(/Friend's bracket/)).not.toBeInTheDocument()
+      expect(screen.getByText(/1 saved bracket is not ranked yet/)).toBeInTheDocument()
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect(within(screen.getByTestId("playoff-dashboard-leaderboard")).getByText(/Friend's bracket/)).toBeInTheDocument()
+      result.unmount()
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals() }
   })
 
   it("renders NBA dashboard title and does not show NCAA label", () => {
@@ -656,6 +675,28 @@ describe("PlayoffBracketShell dashboard", () => {
     )
 
     expect(screen.queryByRole("button", { name: "Create Another Bracket" })).not.toBeInTheDocument()
-    expect(screen.getByText("Entry limit reached. Bracket 6 is blocked.")).toBeInTheDocument()
+    expect(screen.getByText("This league allows up to 5 brackets per person.")).toBeInTheDocument()
+  })
+
+  it("disables a new CFP bracket when the free tournament allowance was used in another league", () => {
+    render(
+      <PlayoffBracketShell
+        initialView={buildView({
+          challenge: {
+            ...buildView().challenge,
+            sport: "ncaaf",
+            firstGameStartsAt: new Date(Date.now() + 3600000).toISOString(),
+          },
+          viewerTournamentBracketLimit: 1,
+          viewerTournamentBracketUsed: 1,
+          activeEntry: null,
+          entries: [],
+        })}
+      />
+    )
+
+    expect(screen.getByRole("button", { name: "Bracket limit reached" })).toBeDisabled()
+    expect(screen.getByText(/1 of 1 brackets used across this tournament/)).toBeInTheDocument()
+    expect(screen.getByText("Tournament bracket limit reached (1).")).toBeInTheDocument()
   })
 })

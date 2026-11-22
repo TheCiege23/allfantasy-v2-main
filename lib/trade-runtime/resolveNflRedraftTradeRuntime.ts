@@ -1,10 +1,15 @@
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { checkSurvivorTradeRules, type SurvivorTradeRuleCheck } from '@/lib/survivor/survivorTradeRuleHook'
+import { governanceCopy } from '@/lib/survivor/survivorGovernanceCopy'
+import { survivorLeagueLanguage } from '@/lib/survivor/survivorTradeCheckHold'
+import { redeemSurvivorTradeBypass, survivorBypassSourceToRedeem } from '@/lib/survivor/survivorTradeRuleBypass'
 import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
-import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { isReserveRosterSlot, resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
+import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import { applyRedraftFaabDeltasInTransaction } from '@/lib/redraft/faabTransfer'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'
@@ -27,27 +32,6 @@ import {
   type NflRedraftTradeTransactionInput,
   type NflRedraftTradeVoteInput,
 } from './canonicalNflRedraftTradeRuntime'
-
-type ResolvedRosterRow = {
-  id: string
-  teamName: string | null
-  ownerName: string | null
-  ownerId: string | null
-  faabBalance: number | null
-  waiverPriority: number | null
-  players: Array<{
-    playerId: string
-    playerName: string
-    position: string
-    team: string | null
-    sport: string | null
-    slotType: string | null
-    isLocked: boolean | null
-    injuryStatus: string | null
-    byeWeek: number | null
-    acquisitionType: string | null
-  }>
-}
 
 export type NflRedraftTradeRuntimeResolved =
   | {
@@ -103,7 +87,6 @@ function positiveHours(value: unknown, fallback: number): number {
   const parsed = numberOrNull(value)
   return parsed == null || parsed <= 0 ? fallback : Math.max(1, Math.floor(parsed))
 }
-
 
 async function resolveSeason(input: { seasonId?: string | null; leagueId?: string | null }) {
   return prisma.redraftSeason.findFirst({
@@ -283,20 +266,76 @@ function toTransactionInput(row: {
   }
 }
 
+/**
+ * Where a READ path gets the league ruleset (2026-11-21 re-score: this read went around League OS). A GET route passes
+ * League OS's `loadRules` (`createLeagueOsLoaders`), which holds the ruleset for 60 s; every other caller — proposal
+ * validation, roster limits, move sync, matchup completion, anything that PERSISTS on the result — passes nothing and
+ * keeps reading it live, as League OS's own header requires.
+ */
+export type TradeRuntimeRulesDeps = { loadRules?: (leagueId: string) => ReturnType<typeof resolveCanonicalLeagueRules> }
+
 export async function resolveNflRedraftTradeRuntime(input: {
   seasonId?: string | null
   leagueId?: string | null
   week?: number | null
   now?: Date
-}): Promise<NflRedraftTradeRuntimeResolved> {
+}, deps: TradeRuntimeRulesDeps = {}): Promise<NflRedraftTradeRuntimeResolved> {
   const season = await resolveSeason(input)
   if (!season) return { ok: false, reason: 'season_not_found' }
   if (String(season.sport).toUpperCase() !== 'NFL') return { ok: false, reason: 'not_nfl_redraft' }
 
-  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  const rules = await (deps.loadRules ?? resolveCanonicalLeagueRules)(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') return { ok: false, reason: 'not_nfl_redraft' }
 
+  return buildResolvedTradeRuntime(season, rules, input, {})
+}
+
+/**
+ * The same runtime for ANY sport and format — what proposal validation uses where the NFL redraft
+ * runtime declines (`lib/redraft/tradeProposalValidation.ts`).
+ *
+ * 🛑 BEFORE THIS, EVERY DYNASTY LEAGUE (NFL INCLUDED) AND EVERY NBA / NHL / MLB LEAGUE got an
+ * ownership-only check: no lineup lock, no roster limit, no league-wide move lock. Nothing below is
+ * NFL-specific — the lock is derived from each sport's own schedule (`lineupLock.ts`: NFL and NCAAF
+ * weeks, NBA / NHL / MLB date-windowed weeks), and the roster config is resolved per sport — so the
+ * checks are the runtime's own, not a second copy of them.
+ *
+ * One difference, and only here: players in a reserve slot (IR, taxi…) are not counted against the
+ * active roster limit, which is computed with those slots already subtracted. The NFL redraft runtime
+ * keeps its count exactly as it was.
+ *
+ * ⚠ OUTSIDE THE SEASON THERE IS NO LINEUP LOCK (`inSeason: false`). The lock is "his game this week
+ * has kicked off", and it never unlocks within the week — so read against a finished season's last
+ * week, every player who played it is locked, and an offseason trade could never be made.
+ *
+ * ⚠ `state.sport` still reads 'NFL' — the state type's literal. Nothing on the validation path reads it.
+ */
+export async function resolveRedraftTradeRuntime(input: {
+  seasonId?: string | null
+  leagueId?: string | null
+  /** The server's week (lib/trade-deadline/tradeDeadlineWindow.ts). Null falls back to the stored week. */
+  week?: number | null
+  /** False when the league is between seasons: no lineup lock is derived. Defaults to true. */
+  inSeason?: boolean
+  now?: Date
+}): Promise<NflRedraftTradeRuntimeResolved> {
+  const season = await resolveSeason(input)
+  if (!season) return { ok: false, reason: 'season_not_found' }
+  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  if (!rules) return { ok: false, reason: 'league_not_found' }
+  return buildResolvedTradeRuntime(season, rules, input, {
+    isRosterLimitExemptSlot: isReserveRosterSlot,
+    skipLineupLock: input.inSeason === false,
+  })
+}
+
+async function buildResolvedTradeRuntime(
+  season: NonNullable<Awaited<ReturnType<typeof resolveSeason>>>,
+  rules: NonNullable<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>,
+  input: { week?: number | null; now?: Date },
+  opts: { isRosterLimitExemptSlot?: (slotType: string | null | undefined) => boolean; skipLineupLock?: boolean },
+): Promise<NflRedraftTradeRuntimeResolved> {
   const week = positiveWeek(input.week, season.currentWeek || 1)
   const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true, platform: true } })
   const rosterConfig = resolveRedraftRosterConfig(season.sport, league?.settings ?? null)
@@ -311,20 +350,22 @@ export async function resolveNflRedraftTradeRuntime(input: {
   })
   // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
   // game schedule at read time (lib/redraft/lineupLock.ts), so it is only meaningful after this.
-  const { players: rosterPlayers } = await hydrateRedraftLineupLocksForRosters(prisma, {
-    sport: season.sport,
-    season: season.season,
-    week,
-    leagueSettings: league?.settings ?? null,
-    players: storedRosterPlayers,
-    now: input.now,
-    // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
-    currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
-      sport: season.sport,
-      platform: league?.platform ?? null,
-      playerIds: storedRosterPlayers.map((p) => p.playerId),
-    }),
-  })
+  const { players: rosterPlayers } = opts.skipLineupLock
+    ? { players: storedRosterPlayers.map((player) => ({ ...player, isLocked: false })) }
+    : await hydrateRedraftLineupLocksForRosters(prisma, {
+        sport: season.sport,
+        season: season.season,
+        week,
+        leagueSettings: league?.settings ?? null,
+        players: storedRosterPlayers,
+        now: input.now,
+        // Lock on each player's current club, not the team stored when he was added (lineupLockCurrentTeam.ts).
+        currentTeamByPlayerId: await resolveCurrentLockTeams(prisma, {
+          sport: season.sport,
+          platform: league?.platform ?? null,
+          playerIds: storedRosterPlayers.map((p) => p.playerId),
+        }),
+      })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {
     const list = playersByRosterId.get(player.rosterId) ?? []
@@ -400,6 +441,7 @@ export async function resolveNflRedraftTradeRuntime(input: {
     activeRosterLimit,
     pickInventorySupported: false,
     now: input.now,
+    isRosterLimitExemptSlot: opts.isRosterLimitExemptSlot,
   })
 
   return {
@@ -483,9 +525,48 @@ function persistedAssetData(proposalId: string, assets: NflRedraftTradeAssetInpu
   })
 }
 
+/**
+ * The deadline against the SERVER'S week and the commissioner's close time. The runtime's own
+ * `deadlinePassed` reads the season's stored week and knows nothing about a close time, so this route
+ * (`/api/redraft/trade-runtime`) admitted what every other trade path refuses. A commissioner override
+ * still forces past it, exactly as it forces past the runtime's own check.
+ */
+async function assertRedraftDeadlineOpen(leagueId: string, commissionerOverride: boolean | undefined): Promise<void> {
+  if (commissionerOverride) return
+  const deadline = await evaluateRedraftTradeDeadline(leagueId)
+  if (deadline.passed) throw new Error(tradeDeadlinePassedMessage(deadline))
+}
+
+/**
+ * Survivor trade rules (lib/survivor/survivorTradeRuleHook.ts), bound at proposal and at execution
+ * like the deadline. A commissioner override forces past them, exactly as it forces past the deadline.
+ */
+async function assertSurvivorTradeRulesOpen(
+  leagueId: string,
+  trade: { proposerRosterId: string; receiverRosterId: string; assets: ReadonlyArray<{ assetType: string; playerId?: string | null; playerName?: string | null; fromRosterId: string; toRosterId: string }> },
+  commissionerOverride: boolean | undefined,
+  /** Settlement (not a proposal): a Survivor "hold for the commissioner" stops it here, unexecuted. */
+  atSettlement = false,
+): Promise<SurvivorTradeRuleCheck | null> {
+  if (commissionerOverride) return null
+  const check = await checkSurvivorTradeRules({
+    leagueId,
+    rosterIds: [trade.proposerRosterId, trade.receiverRosterId, ...trade.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])],
+    rosterIdSpace: 'redraft',
+    players: trade.assets.filter((a) => a.assetType === 'player' && a.playerId).map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
+  })
+  if (!check.ok) throw new Error(check.message)
+  // The check could not run and the league holds such trades: it stays pending for the commissioner,
+  // whose override (commissionerOverride) executes it. Never settled on an unchecked read.
+  if (atSettlement && check.holdForCommissioner) throw new Error(governanceCopy(await survivorLeagueLanguage(leagueId)).tradeHeldForCommissioner)
+  return check
+}
+
 export async function createNflRedraftTradeProposal(input: CreateNflRedraftTradeProposalInput) {
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
+  await assertRedraftDeadlineOpen(resolved.state.leagueId, input.commissionerOverride)
+  await assertSurvivorTradeRulesOpen(resolved.state.leagueId, input, input.commissionerOverride)
   const validation = validateNflRedraftTradeProposal({
     state: resolved.state,
     proposerRosterId: input.proposerRosterId,
@@ -590,6 +671,7 @@ async function applyExecutedTrade(input: {
 
   const proposal = input.state.proposals.find((row) => row.proposalId === input.proposalId)
   if (!proposal) throw new Error('proposal_not_found')
+  const survivorCheck = await assertSurvivorTradeRulesOpen(input.state.leagueId, proposal, input.commissionerOverride, true)
   const now = new Date()
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const claimed = await tx.redraftTradeProposal.updateMany({
@@ -664,6 +746,12 @@ async function applyExecutedTrade(input: {
     seasonId: input.state.seasonId,
     details: { proposalId: input.proposalId, rosterImpact: execution.rosterImpact },
   })
+  // Survivor: the free-trade token this trade needed is spent now that it has executed. Never throws.
+  // A commissioner override (force or approve) never spends a held token: survivorBypassSourceToRedeem.
+  const survivorRedeemSource = survivorBypassSourceToRedeem(survivorCheck, { commissionerOverride: input.commissionerOverride === true })
+  if (survivorRedeemSource && survivorCheck?.ok) {
+    await redeemSurvivorTradeBypass({ leagueId: input.state.leagueId, week: survivorCheck.week ?? 0, tradeRef: `redraft:${input.proposalId}`, source: survivorRedeemSource, actorUserId: input.actorUserId ?? null })
+  }
   const next = await resolveNflRedraftTradeRuntime({ seasonId: input.state.seasonId, week: input.state.week })
   if (!next.ok) throw new Error(next.reason)
   return { state: next.state, proposal: execution.proposal, events: execution.events, resolved: true }
@@ -773,6 +861,8 @@ export async function actOnNflRedraftTradeProposal(input: {
   }
 
   if (input.action === 'accept' || input.action === 'commissioner_approve') {
+    // Acceptance binds the deadline; a commissioner approval is the override convention.
+    await assertRedraftDeadlineOpen(resolved.state.leagueId, input.action === 'commissioner_approve' || input.commissionerOverride === true)
     return applyExecutedTrade({
       state: resolved.state,
       proposalId: input.proposalId,

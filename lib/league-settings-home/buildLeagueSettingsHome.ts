@@ -4,12 +4,15 @@
  * the caller already holds (league row, roster GET, draft settings GET, guillotine summary GET),
  * so the list is testable without a browser or a database.
  *
- * A row's `target` names the sub-page that edits it. Members get the same list with every target
- * removed (values shown, no way into an editor). The Commissioner tools row is commissioner-only.
+ * A row's `target` names its sub-page. Members can open read-only history; editors remain commissioner-only.
  */
 
+import { resolvePlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { isPirateLeague, readPirateRules, type PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
+import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount } from '@/lib/league/oddTeamLeagues'
+import { copyLeagueAvailable } from '@/lib/league/copyLeague'
 
 export type SettingsSubPageId =
   | 'general'
@@ -22,12 +25,25 @@ export type SettingsSubPageId =
   | 'guillotine-first-chop'
   /** Guillotine: chop schedule, double/no-chop weeks and immunity (lib/guillotine/chopSchedule.ts). */
   | 'guillotine-chop-rules'
+  /** Guillotine: endgame, release timing, tiebreakers, correction wait… (lib/guillotine/guillotineRules.ts). */
+  | 'guillotine-rules'
+  | 'pirate-rules'
+  /** AllFantasy-only rules with no other native editor: the odd-team extra matchup and keeper rules (Phase C2). */
+  | 'af-options'
   | 'playoffs'
   | 'members'
+  | 'team-settings'
+  | 'previous-leagues'
   | 'co-commissioners'
   | 'divisions'
   | 'ai'
   | 'commissioner-tools'
+  /** Who has paid the league's dues. Tracking only: AllFantasy never holds entry fees or pays winnings. */
+  | 'dues'
+  /** Lock areas of the rules for the season; unlocking mid-season takes a league vote (lib/league/settingsLock). */
+  | 'settings-lock'
+  /** Manual point adjustments per matchup, with a reason (lib/score-adjustments). */
+  | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
 
@@ -45,12 +61,13 @@ export type SettingsHomeRow = {
 
 export type SettingsHomeSection = { id: string; title: string; rows: SettingsHomeRow[] }
 
-export type SettingsHomeLeague = {
+type SettingsHomeLeague = {
   id: string
   name?: string | null
   sport?: string | null
   leagueSize?: number | null
   leagueVariant?: string | null
+  leagueType?: string | null
   survivorMode?: boolean | null
   guillotineMode?: boolean | null
   guillotineEndgame?: string | null
@@ -63,7 +80,7 @@ export type SettingsHomeLeague = {
   settings?: unknown
 }
 
-export type SettingsHomeTeam = {
+type SettingsHomeTeam = {
   claimedByUserId?: string | null
   isCoCommissioner?: boolean | null
   ownerName?: string | null
@@ -88,6 +105,8 @@ export type SettingsHomeGuillotine = {
   teamsPerChop?: number
   /** The first chop has happened — the start week can no longer move. */
   locked: boolean
+  /** The server's AF Commissioner check for guillotine rules; null when not reported. */
+  canEditPaidRules?: boolean | null
 }
 
 export type BuildSettingsHomeInput = {
@@ -104,6 +123,8 @@ export type BuildSettingsHomeInput = {
   draft: SettingsHomeDraft | null
   /** null = loading (or not a guillotine league). */
   guillotine: SettingsHomeGuillotine | null
+  /** Rules saved in this page session, ahead of the next league-row refresh. */
+  pirateRules?: PirateRules | null
   inviteUrl: string
   /** Viewer's IANA zone; defaults to the runtime's. */
   viewerTimeZone?: string
@@ -116,7 +137,7 @@ const LOADING = '…'
  * `data-layout="stacked"`; league-settings-home.css applies it below 480px). Short values stay
  * right-aligned like Sleeper. Nothing is ever truncated: a long value wraps.
  */
-export const LONG_SETTINGS_VALUE_CHARS = 24
+const LONG_SETTINGS_VALUE_CHARS = 24
 
 export function isLongSettingsValue(value: string | null | undefined): boolean {
   return String(value ?? '').length > LONG_SETTINGS_VALUE_CHARS
@@ -192,7 +213,7 @@ export function formatDraftDateTime(iso: string | null | undefined, timeZone?: s
   return `${get('weekday')} ${get('month')} ${get('day')}, ${get('hour')}:${get('minute')} ${get('dayPeriod')} ${ZONE_SHORT[zone] ?? zone}`.replace(/\s+/g, ' ').trim()
 }
 
-export function formatPickTimer(seconds: number | null | undefined): string {
+function formatPickTimer(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'No timer'
   if (seconds < 120) return `${seconds}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
@@ -200,19 +221,20 @@ export function formatPickTimer(seconds: number | null | undefined): string {
   return `${Number.isInteger(h) ? h : h.toFixed(1)}h`
 }
 
-export function formatDraftShape(draft: SettingsHomeDraft | null): string {
+function formatDraftShape(draft: SettingsHomeDraft | null): string {
   if (!draft) return LOADING
   const type = draft.type ? titleCase(draft.type) : 'Snake'
   const rounds = draft.rounds ? `${draft.rounds} rounds` : null
   return [type, rounds, formatPickTimer(draft.timerSeconds)].filter(Boolean).join(' · ')
 }
 
-export function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
+function formatWaivers(league: Pick<SettingsHomeLeague, 'waiverType' | 'waiverBudget'>): string {
   const type = String(league.waiverType ?? 'rolling').toLowerCase()
   if (type === 'faab') {
     const budget = Number(league.waiverBudget ?? 100)
     return `FAAB · $${budget.toLocaleString('en-US')}`
   }
+  if (type === 'fcfs') return 'Free agency · first come, first served'
   if (type === 'reverse_standings') return 'Reverse standings'
   return titleCase(type)
 }
@@ -224,7 +246,7 @@ const TRADE_REVIEW_LABELS: Record<string, string> = {
   none: 'Trades off',
 }
 
-export function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
+function formatTrades(league: Pick<SettingsHomeLeague, 'settings' | 'tradeDeadlineWeek'>): string {
   const s = settingsRecord(league.settings)
   const json = settingsRecord(s.settingsJson)
   const mode = String(s.trade_review_mode ?? s.tradeReviewMode ?? json.tradeReviewMode ?? 'commissioner').toLowerCase()
@@ -249,6 +271,20 @@ export function formatScoringMode(settings: unknown): string {
   return 'Points'
 }
 
+/**
+ * What the "AllFantasy options" sub-page holds for this league, or null when it holds nothing: the odd-team
+ * extra matchup (an odd redraft or keeper league), keeper rules (a keeper league) and, given the sport, copy
+ * league (an NFL league; docs/league-page/COPY_LEAGUES_DESIGN.md). Phase C2.
+ */
+export function afOptionsSummary(leagueType: string | null | undefined, teamCount: number, sport?: string | null): string | null {
+  const type = String(leagueType ?? '').toLowerCase()
+  const parts: string[] = []
+  if (copyLeagueAvailable(sport)) parts.push('Copy league')
+  if (isOddTeamCount(teamCount) && ODD_TEAM_MEDIAN_LEAGUE_TYPES.has(type)) parts.push('Odd-team extra matchup')
+  if (type === 'keeper') parts.push('Keeper rules')
+  return parts.length ? parts.join(' · ') : null
+}
+
 function divisionCount(settings: unknown): number {
   const s = settingsRecord(settings)
   const cfg = settingsRecord(s.division_config)
@@ -260,8 +296,10 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const { league, teams, canEdit } = input
   const edit = (target: SettingsSubPageId) => (canEdit ? { target } : {})
   const guillotine = isGuillotineSettingsLeague(league)
+  const pirate = isPirateLeague(league)
   const teamCount = league.leagueSize ?? teams.length
   const joined = teams.filter((t) => Boolean(t.claimedByUserId)).length
+  const afSummary = afOptionsSummary(league.leagueType, teamCount, league.sport)
 
   const sections: SettingsHomeSection[] = [
     {
@@ -269,8 +307,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       title: 'General',
       rows: [
         { id: 'name', label: 'League name', value: league.name?.trim() || 'Untitled league', ...edit('general') },
-        { id: 'teams', label: 'Teams', value: String(teamCount) },
+        { id: 'teams', label: 'Teams', value: String(teamCount), ...edit('general') },
         { id: 'format', label: 'Format', value: `${input.formatLabel} · ${formatScoringMode(league.settings)}`, ...edit('format') },
+        // Waivers sit with the league's format, not the draft (owner's call, 2026-11-01): how claims run is
+        // part of what kind of league this is.
+        { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
+        ...(afSummary ? [{ id: 'af-options', label: 'AllFantasy options', value: afSummary, ...edit('af-options') }] : []),
       ],
     },
     {
@@ -303,21 +345,40 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
       ],
     },
     {
-      id: 'waivers-trades',
-      title: 'Waivers & trades',
-      rows: [
-        { id: 'waivers', label: 'Waivers', value: formatWaivers(league), ...edit('waivers') },
-        { id: 'trades', label: 'Trades', value: formatTrades(league), ...edit('trades') },
-      ],
+      id: 'trades',
+      title: 'Trades',
+      rows: [{ id: 'trades', label: 'Trades', value: formatTrades(league), ...edit('trades') }],
     },
   ]
+
+  if (pirate) {
+    const rules = input.pirateRules ?? readPirateRules(league.settings)
+    sections.splice(1, 0, {
+      id: 'pirate',
+      title: 'Pirate League',
+      rows: [
+        {
+          id: 'pirate-rules',
+          label: 'Pirate rules',
+          value: `${rules.protectionLimit} protected · ${rules.selectionHours}h to choose · ${rules.claimHours}h to respond`,
+          ...edit('pirate-rules'),
+        },
+        {
+          id: 'pirate-playoffs',
+          label: 'Steals in playoffs',
+          value: rules.playoffClaims ? 'On' : 'Off',
+          ...edit('pirate-rules'),
+        },
+      ],
+    })
+  }
 
   if (guillotine) {
     const profile = getGuillotineSportConfig(String(league.sport ?? 'NFL'))
     const g = input.guillotine
     sections.push({
       id: 'guillotine',
-      title: 'Guillotine',
+      title: 'Guilly',
       rows: [
         {
           id: 'first-chop',
@@ -334,6 +395,12 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           ...edit('guillotine-chop-rules'),
         },
         {
+          id: 'league-rules',
+          label: 'League rules',
+          value: 'Endgame · tiebreakers · release timing',
+          ...edit('guillotine-rules'),
+        },
+        {
           id: 'chop-schedule',
           label: 'Chop & waiver schedule',
           value: profile ? `Chop ${profile.chopLabel.replace(/^By /, 'by ')} · Waivers ${profile.waiverLabel}` : 'Weekly',
@@ -342,6 +409,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
           id: 'endgame',
           label: 'Endgame',
           value: ENDGAME_LABELS[String(league.guillotineEndgame ?? 'last_team_standing')] ?? titleCase(String(league.guillotineEndgame)),
+          ...edit('guillotine-rules'),
         },
       ],
     })
@@ -353,7 +421,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         {
           id: 'playoffs',
           label: 'Playoffs',
-          value: `${league.playoffTeams ?? 4} teams · starts Wk ${league.playoffStartWeek ?? 14}`,
+          value: `${league.playoffTeams ?? 6} teams · starts Wk ${resolvePlayoffStartWeek(league).week}`,
           ...edit('playoffs'),
         },
       ],
@@ -364,6 +432,8 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const divisions = divisionCount(league.settings)
   const memberRows: SettingsHomeRow[] = [
     { id: 'managers', label: 'Managers', value: `${joined} / ${teamCount} joined`, ...edit('members') },
+    ...(canEdit ? [{ id: 'team-settings', label: 'Team settings', value: 'Names, logos and managers', target: 'team-settings' as const }] : []),
+    { id: 'previous-leagues', label: 'Previous Leagues', value: 'View history', target: 'previous-leagues' },
     {
       id: 'invite',
       label: 'Invite link',
@@ -372,16 +442,21 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
     },
     { id: 'co-commissioners', label: 'Co-commissioners', value: coCommissioners.length ? coCommissioners.join(', ') : 'None', ...edit('co-commissioners') },
   ]
-  if (divisions > 0) memberRows.push({ id: 'divisions', label: 'Divisions', value: `${divisions} divisions`, ...edit('divisions') })
+  if (divisions > 0 || canEdit) memberRows.push({ id: 'divisions', label: 'Divisions', value: divisions > 0 ? `${divisions} divisions` : 'Off', ...edit('divisions') })
   sections.push({ id: 'members', title: 'Members', rows: memberRows })
 
   if (canEdit) {
     sections.push({
       id: 'commissioner',
-      title: 'Commissioner tools',
+      // The Commissioner Hub (owner's page review #16) replaces "Commissioner tools"; the sub-page it
+      // used to name is the lineups / locks / schedule / members panel and league history.
+      title: 'Commissioner Hub',
       rows: [
-        { id: 'league-ai', label: 'League AI', value: 'Helpers & commissioner intelligence', target: 'ai' },
-        { id: 'commissioner-tools', label: 'Commissioner tools', value: 'Controls, dues, history', target: 'commissioner-tools' },
+        { id: 'league-ai', label: 'League Chimmy', value: 'Helpers & commissioner intelligence', target: 'ai' },
+        { id: 'commissioner-tools', label: 'Lineups, locks & schedule', value: 'Lineups, locks, schedule, members and league history', target: 'commissioner-tools' },
+        { id: 'dues', label: 'Dues & payouts', value: 'Track who has paid', target: 'dues' },
+        { id: 'settings-lock', label: 'Settings lock', value: 'Lock rules for the season', target: 'settings-lock' },
+        { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
           : []),

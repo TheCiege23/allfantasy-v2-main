@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   order: [] as string[],
   validate: vi.fn(),
   loadNative: vi.fn(),
+  checkTerms: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => {
@@ -57,6 +58,7 @@ vi.mock('@/lib/league-trade-engine/nativeFuturePicks', async (importOriginal) =>
   ...(await importOriginal<typeof import('@/lib/league-trade-engine/nativeFuturePicks')>()),
   loadNativeFuturePicks: h.loadNative,
 }))
+vi.mock('@/lib/league-trade-engine/pickTermsService', () => ({ checkOfferPickTerms: h.checkTerms }))
 vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({
   resolveLeagueTradeSettings: () => ({ tradeReviewMode: 'instant', processingDelayHours: 0, vetoThresholdPercent: 50 }),
 }))
@@ -96,6 +98,7 @@ beforeEach(() => {
   h.txCreate.mockResolvedValue({ id: 'trade-1' })
   h.txUpdate.mockResolvedValue({})
   h.txUpdateMany.mockResolvedValue({ count: 1 })
+  h.checkTerms.mockImplementation(async (_l: string, assets: unknown) => assets)
 })
 
 describe('offering a native future pick', () => {
@@ -109,6 +112,20 @@ describe('offering a native future pick', () => {
     await propose('rookie_pick', 'fdp:2027:1:ra')
     const item = h.txCreate.mock.calls[0]![0].data.items.create[0]
     expect(item.metadata).toMatchObject({ pickSeason: 2027, pickRound: 1, originalRosterId: 'ra' })
+  })
+
+  it('stores the item as the pick-terms check returned it, and a refusal stops the offer', async () => {
+    h.checkTerms.mockImplementationOnce(async (_l: string, assets: Array<Record<string, unknown>>) =>
+      assets.map((a) => ({ ...a, metadata: { pickTerms: { kind: 'protected', top: 3, ifProtected: 'stays' }, pickLabel: '2027 1st (A), top-3 protected' } })),
+    )
+    await propose('rookie_pick', 'fdp:2027:1:ra')
+    expect(h.checkTerms).toHaveBeenCalledWith('L', [expect.objectContaining({ itemReference: 'fdp:2027:1:ra' })])
+    expect(h.txCreate.mock.calls[0]![0].data.items.create[0].metadata).toMatchObject({ pickTerms: { kind: 'protected', top: 3 }, pickLabel: '2027 1st (A), top-3 protected', pickSeason: 2027 })
+
+    h.txCreate.mockClear()
+    h.checkTerms.mockRejectedValueOnce(Object.assign(new Error('Conditional and protected picks are not on in this league.'), { code: 'PICK_TERMS_OFF' }))
+    await expect(propose('rookie_pick', 'fdp:2027:1:ra')).rejects.toThrow('not on in this league')
+    expect(h.txCreate).not.toHaveBeenCalled()
   })
 
   it('a player item’s metadata is left as sent', async () => {

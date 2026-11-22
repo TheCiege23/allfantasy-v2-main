@@ -159,8 +159,8 @@ export function tradeLink(league: LinkLeague): { here: PlatformLink; there: Plat
  * rows, the since-last-visit brief and the matchup screen send the user to the
  * provider screen that acts on what they are looking at. A destination the resolver
  * cannot verify returns null — a homepage fallback, a missing league or team id, or
- * MFL / Fantrax / Fleaflicker, whose per-league URLs cannot be built from what is
- * stored — and the surface keeps its in-app destination. A button that promises
+ * MFL / Fleaflicker, whose per-league URLs cannot be built from what is stored, and
+ * every Fantrax screen except its league page — and the surface keeps its in-app destination. A button that promises
  * "your lineup" and opens a homepage is worse than no button.
  *
  * ⚠ UNLIKE `lineupLink` / `claimLink` ABOVE, THIS NEVER RETURNS THE LEAGUE PAGE UNDER
@@ -214,23 +214,3 @@ export function handoffFor(league: LinkLeague, screen: SourceScreen): PlatformLi
   return verifiedHandoff(league, screen) ?? (screen === 'league' ? null : verifiedHandoff(league, 'league'))
 }
 
-/**
- * Every screen for a league, with what the link resolves to today and the
- * unverified URL each format would build — the verification pass's worksheet.
- */
-export function deepLinkCandidates(league: LinkLeague): Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> {
-  const out: Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> = []
-  for (const screen of ['league', 'lineup', 'waivers', 'trade'] as const) {
-    const resolved = resolveSourceScreenLink({
-      platform: league.platform,
-      sourceLeagueId: league.platformLeagueId ?? null,
-      leagueName: league.name ?? null,
-      season: league.season ?? null,
-      teamId: league.teamId ?? null,
-      partnerTeamId: league.partnerTeamId ?? null,
-      screen,
-    })
-    if (resolved) out.push({ screen, href: resolved.href, verified: resolved.verified, candidate: resolved.candidate })
-  }
-  return out
-}

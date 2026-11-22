@@ -11,7 +11,7 @@ export type SurvivorUiPlayerState =
   | 'jury'
   | 'finalist'
 
-export type SurvivorSeasonTribeMember = {
+type SurvivorSeasonTribeMember = {
   rosterId?: string
   userId?: string | null
 }
@@ -47,7 +47,7 @@ export type SurvivorSeasonPlayer = {
   canAccessFinaleChat?: boolean
 }
 
-export type SurvivorSeasonCouncil = {
+type SurvivorSeasonCouncil = {
   isRevealed?: boolean
   eliminatedName?: string | null
   isTie?: boolean
@@ -66,7 +66,7 @@ export type SurvivorSeasonCouncil = {
   voteDeadlineAt?: string | null
 }
 
-export type SurvivorSeasonChallenge = {
+type SurvivorSeasonChallenge = {
   id: string
   week: number
   status?: string
@@ -93,6 +93,8 @@ export type SurvivorSeasonPayload = {
   exileStatus?: { isActive?: boolean; currentWeek?: number; bossName?: string | null } | null
   /** League setting: voted-out managers go to Exile Island. */
   exileEnabled?: boolean
+  /** Exile secrecy is on AND this viewer may not know who is on Exile (they see "eliminated"). */
+  exileMembershipHidden?: boolean
   juryStatus?: unknown
   userState?: SurvivorSeasonPlayer | null
   weeklyScores?: Array<{ userId: string; finalScore: number; tribeId: string | null; countedTowardTribeTotal: boolean; isFinalized: boolean }>

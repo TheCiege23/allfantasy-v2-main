@@ -17,6 +17,8 @@ export type DashboardLiveScore = {
   myRank: number | null
   totalTeams: number
   matchupStatus: string
+  /** An odd-team native league's extra matchup this week: "Extra matchup vs <team> (<reason>) · 112.4–98.0". */
+  extraMatchupLabel?: string
 }
 
 /** Per-player score breakdown returned by the roster-scores endpoint. */

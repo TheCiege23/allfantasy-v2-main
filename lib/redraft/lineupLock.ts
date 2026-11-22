@@ -23,27 +23,17 @@
  * Emergency commissioner unlocks (postponements/data errors) always win.
  */
 import type { PrismaClient } from '@prisma/client'
+import { getAllCanonicalTeams } from '@/lib/team-abbrev'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
-import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeasonStarts'
+import { resolveDailySportSeasonStart, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+// Client-safe: takes the client as an argument and imports Prisma for types only.
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
 // The pure cache reader, NOT riSeasonSchedule.ts: that module imports the server-only RI client, and
 // this file is in client bundles (teamDefenseIdentity -> the league Team tab).
 import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
-
-/**
- * Week-windowed sports whose players this lock does NOT lock yet, each with its reason.
- *
- * SOCCER: its week is a GAMEWEEK that skips international breaks (`resolveDailySportWeekWindow`,
- * which the finalizer and the stat sync read), while the windows below are seven days from the
- * opener — after the first break the lock would read a different set of games than the week is
- * sealed on. And the RI-schedule team names for European clubs have not been checked against
- * rostered players' teams. A lock on the wrong games is worse than none, so soccer stays unlocked
- * until both are done — which is what the soccer PR shipped and tested. (It became reachable only
- * because the NCAAB lock taught this module to read the RI schedule while that PR was open.)
- */
-const LOCK_NOT_WIRED_SPORTS: readonly string[] = ['SOCCER']
 
 /** `RedraftSeason.sport` stores the config key `NCAAFB`; every other layer says `NCAAF`. */
 function isNcaafLockSport(sport: string): boolean {
@@ -66,8 +56,8 @@ export type LineupLockMode = 'per_player_kickoff' | 'first_game_of_week' | 'manu
 
 /**
  * Sports whose leagues may opt into the `daily` lock. A daily sport plays most days, so a per-day lock
- * is meaningful; NFL/NCAAF play weekly and are never put on it. NCAAB and SOCCER are left out until
- * someone has checked them (SOCCER is not even locked yet — see LOCK_NOT_WIRED_SPORTS).
+ * is meaningful; NFL/NCAAF play weekly and are never put on it. NCAAB and SOCCER are left out
+ * because their period is scored as one lineup.
  */
 export const DAILY_LINEUP_LOCK_SPORTS: readonly string[] = ['NBA', 'NHL', 'MLB']
 
@@ -154,9 +144,11 @@ const NFL_TEAM_ALIASES: Record<string, string> = {
   NEP: 'NE',
 }
 
+const NFL_FULL_TEAM_NAMES = new Map(getAllCanonicalTeams().map(team => [team.fullName.toUpperCase(), team.abbrev]))
+
 export function normalizeNflTeam(team: string | null | undefined): string {
   const u = String(team ?? '').trim().toUpperCase()
-  return NFL_TEAM_ALIASES[u] ?? u
+  return NFL_TEAM_ALIASES[u] ?? NFL_FULL_TEAM_NAMES.get(u) ?? u
 }
 
 /**
@@ -168,13 +160,15 @@ export function normalizeLockTeam(sport: string, team: string | null | undefined
   if (String(sport).toUpperCase() === 'NFL') return normalizeNflTeam(team)
   // Full names from two feeds (Rolling Insights rosters, TheSportsDB games): drop accents and
   // punctuation so "Montréal Canadiens" / "St. Louis Blues" match "Montreal Canadiens" / "St Louis Blues".
-  return String(team ?? '')
+  const name = String(team ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^A-Za-z0-9 ]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ')
     .toUpperCase()
+  // ESPN's full display name differs from RI's player/schedule identity.
+  return String(sport).toUpperCase() === 'NBA' && name === 'LA CLIPPERS' ? 'LOS ANGELES CLIPPERS' : name
 }
 
 export type WeekKickoffs = {
@@ -187,6 +181,12 @@ export type WeekKickoffs = {
    * Read by the opt-in `daily` mode; every other mode ignores it. Absent for NFL/NCAAF.
    */
   byTeamDay?: Map<string, Map<string, Date>>
+  /**
+   * Daily sports only: normalized team → Eastern day → that day's opponent (the schedule's own team
+   * name) and whether the team is at home. Read by the AF projection to name a selected day's opponent
+   * (lib/projections/dailySportOutlook.ts); the lock itself ignores it. On a doubleheader, the first.
+   */
+  opponentsByTeamDay?: Map<string, Map<string, { opponent: string; home: boolean }>>
   warnings: string[]
 }
 
@@ -194,6 +194,19 @@ export type WeekKickoffs = {
 export function easternDayKey(instant: Date): string | null {
   const day = easternCalendarDay(instant)
   return day ? day.toISOString().slice(0, 10) : null
+}
+
+function setOpponentForDay(
+  opponents: Map<string, Map<string, { opponent: string; home: boolean }>>,
+  team: string,
+  day: string,
+  opponent: string | null | undefined,
+  home: boolean,
+): void {
+  if (!opponent) return
+  const days = opponents.get(team) ?? new Map<string, { opponent: string; home: boolean }>()
+  if (!days.has(day)) days.set(day, { opponent, home })
+  opponents.set(team, days)
 }
 
 function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: string, day: string, kickoff: Date): void {
@@ -210,7 +223,7 @@ function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: stri
  */
 export async function buildWeekKickoffMap(
   prisma: PrismaClient,
-  args: { sport: string; season: number; week: number },
+  args: { sport: string; season: number; week: number; scoringWindow?: { start: Date; end: Date } },
 ): Promise<WeekKickoffs> {
   const warnings: string[] = []
   const byTeam = new Map<string, Date>()
@@ -320,9 +333,10 @@ export async function buildWeekKickoffMap(
    * said in a warning rather than read as "no game". The next schedule sync writes them.
    * ⚠ A game with no start time locks at the start of its Eastern day — early, never late.
    */
-  if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport) && !LOCK_NOT_WIRED_SPORTS.includes(sport)) {
-    const seasonStart = resolveDailySportSeasonStart(sport, args.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+  if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
+    const window = args.scoringWindow ?? resolveDailySportWeekWindow(sport, args.season, args.week)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -330,7 +344,7 @@ export async function buildWeekKickoffMap(
     const games = await readRiScheduleWindow(prisma as never, {
       sport,
       season: args.season,
-      window: { start: new Date(window.start), end: new Date(window.end) },
+      window,
     })
     if (games == null) {
       warnings.push(`${sport} ${args.season} schedule is not synced yet; lineup locks fall open (no player locked).`)
@@ -338,46 +352,58 @@ export async function buildWeekKickoffMap(
     }
     let teamless = 0
     const byTeamDay = new Map<string, Map<string, Date>>()
+    const opponentsByTeamDay = new Map<string, Map<string, { opponent: string; home: boolean }>>()
     for (const g of games) {
       // The finalizer's regular slate: labelled regular, or unlabelled. A replaced game's replacement is its own row.
       if (g.seasonType != null && g.seasonType !== 'regular') continue
       if (g.replacedBy || String(g.status ?? '').toLowerCase() === 'replaced') continue
       // A postponed MLB original does not start a scoring game; the makeup locks on its own date.
       if (sport === 'MLB' && String(g.status ?? '').toLowerCase() === 'postponed') continue
-      if (!g.homeTeam && !g.awayTeam) {
+      if (sport === 'SOCCER' ? (!g.homeTeamId && !g.awayTeamId) : (!g.homeTeam && !g.awayTeam)) {
         teamless += 1
         continue
       }
       const kickoff = g.startTime ? new Date(g.startTime) : new Date(`${g.day}T04:00:00.000Z`)
       if (Number.isNaN(kickoff.getTime())) continue
       if (!firstKickoff || kickoff.getTime() < firstKickoff.getTime()) firstKickoff = kickoff
-      for (const team of [g.homeTeam, g.awayTeam]) {
-        const key = normalizeLockTeam(sport, team)
+      for (const [team, teamId, opponent, home] of [
+        [g.homeTeam, g.homeTeamId, g.awayTeam, true],
+        [g.awayTeam, g.awayTeamId, g.homeTeam, false],
+      ] as const) {
+        // The RI soccer player pool stores club IDs (e.g. "7"), while the schedule's
+        // display fields contain club names. Both feeds carry the same stable numeric IDs.
+        const key = normalizeLockTeam(sport, sport === 'SOCCER' ? teamId : team)
         if (!key) continue
         const existing = byTeam.get(key)
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
         // `g.day` IS the Eastern day (the schedule is keyed on it), so a no-time game's placeholder
         // instant — which falls on the PREVIOUS Eastern day in winter — never decides the day.
-        if (g.day) setEarliestForDay(byTeamDay, key, g.day, kickoff)
+        if (g.day) {
+          setEarliestForDay(byTeamDay, key, g.day, kickoff)
+          setOpponentForDay(opponentsByTeamDay, key, g.day, opponent, home)
+        }
       }
     }
     if (teamless > 0) {
-      warnings.push(`${teamless} ${sport} game(s) this week were synced before team names were kept; their players are not locked until the next schedule sync.`)
+      warnings.push(sport === 'SOCCER'
+        ? `${teamless} SOCCER game(s) this week have no club IDs; their players are not locked until the next schedule sync.`
+        : `${teamless} ${sport} game(s) this week were synced before team names were kept; their players are not locked until the next schedule sync.`)
     }
     if (games.length === 0) {
       warnings.push(`No ${sport} games in the schedule for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, byTeamDay, warnings }
+    return { byTeam, firstKickoff, byTeamDay, opponentsByTeamDay, warnings }
   }
 
   if (
     sport !== 'NFL' &&
     DATE_WINDOWED_SPORTS.includes(sport) &&
-    !RI_SCHEDULE_SLATE_SPORTS.includes(sport) &&
-    !LOCK_NOT_WIRED_SPORTS.includes(sport)
+    !RI_SCHEDULE_SLATE_SPORTS.includes(sport)
   ) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+    const window = args.scoringWindow ?? (seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -390,6 +416,7 @@ export async function buildWeekKickoffMap(
       dateWindow: { start: new Date(window.start), end: new Date(window.end) },
     })
     const byTeamDay = new Map<string, Map<string, Date>>()
+    const opponentsByTeamDay = new Map<string, Map<string, { opponent: string; home: boolean }>>()
     for (const g of games) {
       if (!g.startTime) continue
       const kickoff = g.startTime
@@ -401,26 +428,34 @@ export async function buildWeekKickoffMap(
         if (!key) continue
         const existing = byTeam.get(key)
         if (!existing || kickoff.getTime() < existing.getTime()) byTeam.set(key, kickoff)
-        if (day) setEarliestForDay(byTeamDay, key, day, kickoff)
+        if (day) {
+          setEarliestForDay(byTeamDay, key, day, kickoff)
+          const home = team === g.homeTeam
+          setOpponentForDay(opponentsByTeamDay, key, day, home ? g.awayTeam : g.homeTeam, home)
+        }
       }
     }
     if (games.length === 0) {
       warnings.push(`No ${sport} games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
     }
-    return { byTeam, firstKickoff, byTeamDay, warnings }
+    return { byTeam, firstKickoff, byTeamDay, opponentsByTeamDay, warnings }
   }
 
   if (sport !== 'NFL') {
     // Named from the lists, so this cannot go stale again when the next sport joins.
-    const lockable = ['NFL', 'NCAAF', ...DATE_WINDOWED_SPORTS.filter((s) => !LOCK_NOT_WIRED_SPORTS.includes(s))]
+    const lockable = ['NFL', 'NCAAF', ...DATE_WINDOWED_SPORTS]
     warnings.push(`Lineup lock schedule lookup is wired for ${lockable.join(', ')} only; ${args.sport} players are not locked.`)
     return { byTeam, firstKickoff, warnings }
   }
 
-  const games = (await prisma.sportsGame.findMany({
+  const rows = (await prisma.sportsGame.findMany({
     where: { sport: 'NFL', season: args.season, week: args.week, startTime: { not: null } },
-    select: { homeTeam: true, awayTeam: true, startTime: true },
-  })) as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null }>
+    select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true },
+  })) as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null; seasonType?: string | null }>
+  const games = nflRegularSlate(rows)
+  if (games.length < rows.length) {
+    warnings.push(`Ignored ${rows.length - games.length} NFL preseason/postseason row(s) filed under season ${args.season} week ${args.week}.`)
+  }
 
   for (const g of games) {
     if (!g.startTime) continue
@@ -438,6 +473,41 @@ export async function buildWeekKickoffMap(
     warnings.push(`No NFL games found for season ${args.season} week ${args.week}; lineup locks fall open (no player locked).`)
   }
   return { byTeam, firstKickoff, warnings }
+}
+
+/**
+ * How far an untagged game may sit from the week's tagged regular-season games and still count. A full
+ * week: a source may tag only PART of a slate (one Thursday game), and every Thursday-to-Monday game
+ * must still survive. The leaks it removes sit four weeks away (preseason) or months away (postseason).
+ */
+const NFL_SLATE_MARGIN_MS = 7 * 86_400_000
+
+/**
+ * One NFL week's REGULAR-SEASON games out of everything filed under that week number. Pure.
+ *
+ * 🛑 PRESEASON GAMES LOCKED THE FIRST WEEKS OF THE SEASON IN AUGUST. Several schedule sources file
+ * preseason (and postseason) games under the same `season` and `week` numbers as the regular season,
+ * and some leave `seasonType` null. Measured on production 2026-11-09: 2026 weeks 1–4 each carried 16–32
+ * August preseason rows (`api_sports`/`rolling_insights` tagged `pre`; `espn` week 2 and `espn_live`
+ * weeks 3–4 untagged), and 2025 weeks 1–3 carried 16 untagged August rows each. A team's lock is its
+ * EARLIEST game that week, so every team in those weeks "kicked off" in August — players locked the
+ * whole week, and `firstKickoff` (the trade deadline) read as long past.
+ *
+ * So: rows tagged `pre`/`post` are dropped, and when the week has tagged `regular` rows, an untagged row
+ * counts only within a week of them — the same week's games from a source that does not tag (in-season
+ * the untagged sources carry the same kickoffs, so nothing real is lost). Two days was tried first and
+ * dropped Sunday and Monday games whenever only Thursday's game was tagged (e2e zombie rehearsal). A week with NO tagged regular row
+ * keeps every untagged row: there is nothing to judge them against, and dropping the whole slate would
+ * leave every player unlocked.
+ */
+export function nflRegularSlate<T extends { startTime: Date | null; seasonType?: string | null }>(rows: readonly T[]): T[] {
+  const typed = (t: string | null | undefined) => String(t ?? '').trim().toLowerCase()
+  const kept = rows.filter((r) => r.startTime && typed(r.seasonType) !== 'pre' && typed(r.seasonType) !== 'post')
+  const regular = kept.filter((r) => typed(r.seasonType) === 'regular').map((r) => r.startTime!.getTime())
+  if (regular.length === 0) return kept
+  const from = Math.min(...regular) - NFL_SLATE_MARGIN_MS
+  const to = Math.max(...regular) + NFL_SLATE_MARGIN_MS
+  return kept.filter((r) => typed(r.seasonType) === 'regular' || (r.startTime!.getTime() >= from && r.startTime!.getTime() <= to))
 }
 
 type LockOverride = { week?: number; rosterId?: string; playerId?: string }
@@ -479,9 +549,8 @@ export function readLineupLockSettings(
     } else {
       mode = 'daily'
       warnings.push(
-        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day, ' +
-          'but matchup scoring is still a weekly aggregate for whoever holds a starter slot when the week is scored. ' +
-          'See docs/DAILY_LINEUPS_DESIGN.md.',
+        'Daily lineup lock is active: players lock at their own game start each day and unlock the next day; ' +
+          'each day is scored on that day\'s starters (lib/redraft/dailyLineups.ts). See docs/DAILY_LINEUPS_DESIGN.md.',
       )
     }
   }
@@ -524,11 +593,18 @@ async function loadLockContext(
 ): Promise<LockContext> {
   const settings = readLineupLockSettings(args.leagueSettings, args.sport)
   const { mode, manualLockedWeeks, overrides } = settings
+  const leagueSettings = args.leagueSettings as { survivorGuillotine?: { scoringWindow?: { period?: number; startsAt?: string; endsAt?: string } } } | null
+  const configured = leagueSettings?.survivorGuillotine?.scoringWindow
+  const startsAt = configured?.startsAt ? new Date(configured.startsAt) : null
+  const endsAt = configured?.endsAt ? new Date(configured.endsAt) : null
+  const start = startsAt && Number.isFinite(startsAt.getTime()) ? easternCalendarDay(startsAt) : null
+  const end = endsAt && Number.isFinite(endsAt.getTime()) ? easternCalendarDay(new Date(endsAt.getTime() - 1)) : null
+  const scoringWindow = configured?.period === args.week && start && end && end >= start ? { start, end: new Date(end.getTime() + 86400000) } : undefined
   // manual mode needs no schedule; kickoff-based modes do.
   const schedule: WeekKickoffs =
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
-      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week, scoringWindow })
   const kickoffs: WeekKickoffs = settings.warnings.length
     ? { ...schedule, warnings: [...settings.warnings, ...schedule.warnings] }
     : schedule

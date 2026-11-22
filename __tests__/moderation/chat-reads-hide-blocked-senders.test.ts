@@ -26,6 +26,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/draft/access', () => ({ canAccessLeague: async () => true }))
 vi.mock('@/lib/mock-draft-engine/MockDraftSessionService', () => ({ canAccessMockDraft: async () => true }))
 vi.mock('@/lib/platform/current-user', () => ({ resolvePlatformUser: async () => ({ appUserId: 'me' }) }))
+vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: async () => ({ role: 'member' }) }))
 vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: async () => true }))
 vi.mock('@/lib/big-brother/bbChatChannelAccess', () => ({
   filterBbReadableMessages: async (_l: string, _u: string, m: unknown[]) => m,

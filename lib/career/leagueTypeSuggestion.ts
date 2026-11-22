@@ -40,7 +40,7 @@ export type TypeSuggestion = {
 const NON_COMPETITIVE = /\b(commish\s*chat|chat|admin|test|practice|demo|sandbox)\b/i
 
 const PATTERNS: Array<{ type: SuggestedType; re: RegExp; why: string }> = [
-  { type: 'guillotine', re: /guillotine|🪓|chopped/i, why: 'name mentions guillotine' },
+  { type: 'guillotine', re: /guillotine|guilly|🪓|chopped/i, why: 'name mentions guillotine' },
   { type: 'zombie', re: /zombie|apocalyp|horde|whisperer|survivor universe/i, why: 'name mentions the zombie format' },
   { type: 'tournament', re: /\bkbi\b|king buffalo|invitational|\btournament\b/i, why: 'name matches a known tournament' },
   { type: 'survivor', re: /\bsurvivor\b/i, why: 'name mentions survivor' },
@@ -78,7 +78,7 @@ export function suggestLeagueType(input: {
     return {
       suggested: 'guillotine',
       confidence: 'high',
-      reasons: ['Sleeper reports guillotine mode for this league', ...reasons],
+      reasons: ['Sleeper reports Guilly mode for this league', ...reasons],
       detectedBuyIn,
       looksNonCompetitive,
     }

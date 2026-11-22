@@ -31,6 +31,9 @@ const TYPES = { trade: 'manager.trade.evaluate', lineup: 'manager.lineup.set', w
 /** Detect action requests, keeping rules education, history and general prices out of this lane. */
 export function chimmyDecisionKind(question: string): ChimmyDecisionKind | null {
   if (isGeneralMarketValueQuestion(question)) return null
+  // Feedback on Chimmy's earlier ideas needs the prior exchange, not an unnamed trade grade.
+  if (/\b(?:these|those|your|previous)\s+trades?\b/i.test(question) &&
+    /\b(?:didn'?t|didnt|wrong|giving up|gave up|consider|scoring players)\b/i.test(question)) return null
   if (/\baccept\s+or\s+(?:decline|reject)\b/i.test(question)) return 'trade'
   if (/\b(?:how\s+(?:does|do)|what\s+(?:is|are))\b.*\b(?:rules?|work|waiver\s+priority|faab)\b/i.test(question)) return null
   if (/\b(?:trades?|trading|offer|swap|counteroffer)\b/i.test(question) && /\b(?:should|worth|fair|grade|evaluate|accept|decline|reject|recommend|suggest|find|ideas?|targets?|improve|propose|for)\b/i.test(question)) return 'trade'

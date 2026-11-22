@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
+import { commissionerAccessResponse } from "@/lib/league/commissionerAccess"
+import { scopesForSettingsPatch } from "@/lib/league/coCommissionerScopes"
 import { isAdminEmailAllowed, isAdminRole } from "@/lib/adminAuth"
 import { getLeagueConfiguration } from "@/lib/commissioner-settings"
 import { validateCommissionerPatch } from "@/lib/commissioner-settings"
@@ -9,6 +10,7 @@ import type { LeagueSettingsPatch } from "@/lib/commissioner-settings/types"
 import { prisma } from "@/lib/prisma"
 import { STRUCTURAL_LEAGUE_KEYS, structuralPatchRefusal } from "@/lib/league/structuralSettingsLock"
 import { leagueChatThreadLinkRefusal } from "@/lib/league/leagueChatThreadLink"
+import { settingsPatchLockedResponse } from "@/lib/league/settingsLockGuard"
 
 type SessionUser = {
   id?: string
@@ -20,22 +22,13 @@ function isAdminUser(user: SessionUser | null | undefined): boolean {
   return Boolean(user && (isAdminRole(user.role) || isAdminEmailAllowed(user.email)))
 }
 
-async function assertCommissionerOrAdmin(leagueId: string, user: SessionUser | null | undefined) {
-  if (!user?.id) throw new Error("Unauthorized")
-  if (isAdminUser(user)) return
-  await assertCommissioner(leagueId, user.id)
-}
-
 export async function GET(_req: Request, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, "view")
+  if (refused) return refused
   const config = await getLeagueConfiguration(params.leagueId)
   if (!config) return NextResponse.json({ error: "League not found" }, { status: 404 })
   return NextResponse.json(config)
@@ -46,12 +39,14 @@ export async function PATCH(req: Request, props: { params: Promise<{ leagueId: s
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  try {
-    await assertCommissionerOrAdmin(params.leagueId, session?.user)
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
   const body = (await req.json().catch(() => ({}))) as LeagueSettingsPatch
+  // Each key is checked against the area it belongs to, so a co-commissioner granted trades can save the trade panel
+  // and not the roster one (lib/league/coCommissionerScopes.ts `scopesForSettingsPatch`). A site admin is not a
+  // commissioner and keeps the bypass this route always gave them.
+  if (!isAdminUser(session?.user)) {
+    const refused = await commissionerAccessResponse(params.leagueId, userId, scopesForSettingsPatch(body as Record<string, unknown>))
+    if (refused) return refused
+  }
   const validation = validateCommissionerPatch(body)
   if (!validation.valid) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
@@ -69,8 +64,11 @@ export async function PATCH(req: Request, props: { params: Promise<{ leagueId: s
     const structuralRefusal = await structuralPatchRefusal(params.leagueId, body as Record<string, unknown>, current)
     if (structuralRefusal) return NextResponse.json({ error: structuralRefusal }, { status: 409 })
   }
+  // An area the league locked for the season changes only after a league vote (lib/league/settingsLock.ts).
+  const locked = await settingsPatchLockedResponse(params.leagueId, body as Record<string, unknown>)
+  if (locked) return locked
   const { updateLeagueSettings } = await import("@/lib/commissioner-settings/CommissionerSettingsService")
-  const updated = await updateLeagueSettings(params.leagueId, body)
+  const updated = await updateLeagueSettings(params.leagueId, body, userId)
   if (!updated) return NextResponse.json({ error: "League not found" }, { status: 404 })
   return NextResponse.json(updated)
 }

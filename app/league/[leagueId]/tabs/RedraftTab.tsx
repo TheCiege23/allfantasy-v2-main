@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRedraftStream } from '@/lib/hooks/useRedraftStream'
 import { MatchupView } from './redraft/MatchupView'
+import { extraMatchupForRoster } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { RosterManager } from './redraft/RosterManager'
 import { ScheduleView } from './redraft/ScheduleView'
 import { StandingsView } from './redraft/StandingsView'
@@ -16,9 +17,12 @@ import {
   TradePremiumShells,
   WaiverPremiumShells,
 } from '@/components/redraft-premium'
+import { PlayoffSeriesStrip } from '@/components/league/PlayoffSeriesStrip'
 import {
   fetchRedraftLiveScoring,
   fetchRedraftMatchups,
+  fetchRedraftPlayoffRuntime,
+  type RedraftPlayoffRuntimeClient,
   fetchRedraftRoster,
   fetchRedraftSchedule,
   fetchRedraftSeason,
@@ -101,6 +105,28 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     }
   }, [leagueId, seasonId, currentWeek, season?.source])
 
+  // Best-of-N playoff series (lib/playoff-runtime/playoffSeries.ts): the bracket, read only while the
+  // season is in its playoffs, so the matchup screen can show the selected team's series record.
+  const [playoffRuntime, setPlayoffRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
+  const inPlayoffs = season?.status === 'playoffs'
+  useEffect(() => {
+    if (!seasonId || !inPlayoffs) {
+      setPlayoffRuntime(null)
+      return
+    }
+    let cancelled = false
+    fetchRedraftPlayoffRuntime({ seasonId })
+      .then((runtime) => {
+        if (!cancelled) setPlayoffRuntime(runtime)
+      })
+      .catch(() => {
+        if (!cancelled) setPlayoffRuntime(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [seasonId, inPlayoffs, currentWeek])
+
   useEffect(() => {
     if (!seasonId) {
       setSchedule(null)
@@ -139,24 +165,54 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     }
   }, [selectedRosterId, currentWeek])
 
+  /*
+   * Every game the selected team plays this week. One in an ordinary league; several in a league that
+   * plays more than one game a week (settings: games per team each week), where each is its own
+   * result. The league-median game is not a head-to-head and is left out.
+   */
+  const myWeekGames = useMemo(
+    () => (selectedRosterId
+      ? matchups.filter((m) => !(m as { isMedianMatchup?: boolean | null }).isMedianMatchup && m.awayRosterId != null
+          && (m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId))
+      : []),
+    [matchups, selectedRosterId],
+  )
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null)
   const visibleMatchup = useMemo(() => {
     if (!selectedRosterId) return matchups[0] ?? null
     return (
+      myWeekGames.find((m) => m.id === selectedGameId) ??
       matchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
       matchups[0] ??
       null
     )
-  }, [matchups, selectedRosterId])
+  }, [matchups, myWeekGames, selectedGameId, selectedRosterId])
+
+  // An odd-team league's extra game, in place of the bye (lib/redraft/oddTeamExtraMatchupRules.ts).
+  const extraMatchup = useMemo(() => {
+    if (!selectedRosterId) return null
+    const names = new Map<string, string>()
+    for (const m of matchups) {
+      names.set(m.homeRosterId, m.homeRoster?.teamName?.trim() || m.homeRoster?.ownerName || '')
+      if (m.awayRosterId && m.awayRoster) names.set(m.awayRosterId, m.awayRoster.teamName?.trim() || m.awayRoster.ownerName || '')
+    }
+    return extraMatchupForRoster(matchups, currentWeek, selectedRosterId, (id) => names.get(id))
+  }, [matchups, currentWeek, selectedRosterId])
 
   const visibleLiveMatchup = useMemo(() => {
     const liveMatchups = liveScoring?.matchups ?? []
     if (!selectedRosterId) return liveMatchups[0] ?? null
+    // The live game for the SAME pairing as the game on screen, so the score and the names agree.
+    const samePairing = visibleMatchup
+      ? liveMatchups.find((m) => m.homeRosterId === visibleMatchup.homeRosterId && m.awayRosterId === visibleMatchup.awayRosterId)
+      : undefined
     return (
-      liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
-      liveMatchups[0] ??
+      samePairing ??
+      (myWeekGames.length > 1 ? undefined : liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId)) ??
+      (myWeekGames.length > 1 ? null : liveMatchups[0]) ??
       null
     )
-  }, [liveScoring, selectedRosterId])
+  }, [liveScoring, selectedRosterId, visibleMatchup, myWeekGames.length])
 
   return (
     <div className="space-y-4 px-4 py-4">
@@ -187,7 +243,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
 
       {loading ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[12px] text-white/50">
-          Getting your NFL redraft season ready...
+          Getting your season ready...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-4 text-[12px] text-rose-100">
@@ -209,11 +265,60 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
             compact
           />
 
+          {playoffRuntime?.settings?.seriesLengths ? (
+            <PlayoffSeriesStrip
+              seriesLengths={playoffRuntime.settings.seriesLengths}
+              matchups={[
+                ...playoffRuntime.bracket.rounds.flatMap((round) => round.matchups),
+                ...(playoffRuntime.bracket.thirdPlaceMatchup ? [playoffRuntime.bracket.thirdPlaceMatchup] : []),
+                ...(playoffRuntime.bracket.consolationRounds ?? []).flatMap((round) => round.matchups),
+              ]}
+              rosterId={selectedRosterId}
+              nameOf={(rosterId) =>
+                playoffRuntime.teams.find((team) => team.rosterId === rosterId)?.displayName ?? (rosterId ? rosterId.slice(0, 6) : '')
+              }
+            />
+          ) : null}
+
+          {myWeekGames.length > 1 ? (
+            <nav aria-label="This week's games" data-testid="redraft-week-games" className="rounded-2xl border border-white/10 bg-[#0a1220] p-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">This week&apos;s games ({myWeekGames.length})</p>
+              <ul className="mt-2 grid gap-2">
+                {myWeekGames.map((game, index) => {
+                  const home = game.homeRosterId === selectedRosterId
+                  const opponent = home ? game.awayRoster : game.homeRoster
+                  const mine = home ? game.homeScore : game.awayScore
+                  const theirs = home ? game.awayScore : game.homeScore
+                  const open = game.id === visibleMatchup?.id
+                  return (
+                    <li key={game.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGameId(game.id)}
+                        aria-pressed={open}
+                        data-testid={`redraft-week-game-${index + 1}`}
+                        className={`flex min-h-[44px] w-full flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-[13px] ${open ? 'border-[#ff9ec0]/60 bg-[#ff3d81]/10 font-semibold text-white' : 'border-white/10 text-white/80'}`}
+                      >
+                        <span>Game {index + 1} · vs {opponent?.teamName?.trim() || opponent?.ownerName || 'Opponent'}</span>
+                        <span className="tabular-nums">
+                          {mine != null && theirs != null
+                            ? `${mine.toFixed(1)} – ${theirs.toFixed(1)} · ${mine > theirs ? 'Win' : mine < theirs ? 'Loss' : 'Tie'}`
+                            : 'Not final'}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </nav>
+          ) : null}
+
           <MatchupView
             matchup={visibleMatchup}
             liveMatchup={visibleLiveMatchup}
             selectedRosterId={selectedRosterId}
             sport={sport}
+            extraMatchup={extraMatchup}
           />
 
           <MatchupPremiumShells

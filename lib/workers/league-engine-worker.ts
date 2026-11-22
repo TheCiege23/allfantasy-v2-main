@@ -226,6 +226,18 @@ async function processLeagueEngineJob(
   }
 }
 
+/**
+ * Run one league-engine job in this process, now.
+ *
+ * ⚠ NOTHING CONSUMES THE LEAGUE_ENGINE QUEUE IN PRODUCTION: both Railway services run Next only and
+ * nothing runs `scripts/start-worker.ts` (lib/integrity/runIntegrityJob.ts). Callers that need the
+ * work done (the admin recovery buttons) run it here instead; the body is the worker's own, so the
+ * telemetry and dead-letter logging are identical. Only `id`, `data` and `attemptsMade` are read.
+ */
+export function runLeagueEngineJobNow(data: LeagueEngineJobPayload, jobId: string): Promise<LeagueEngineWorkerResult> {
+  return processLeagueEngineJob({ id: jobId, data, attemptsMade: 0 } as unknown as Job<LeagueEngineJobPayload, LeagueEngineWorkerResult>)
+}
+
 export function startLeagueEngineWorker(): Worker<LeagueEngineJobPayload, LeagueEngineWorkerResult> | null {
   if (!isRedisConfigured()) {
     console.warn('[league-engine-worker] Redis not configured. Worker disabled.')

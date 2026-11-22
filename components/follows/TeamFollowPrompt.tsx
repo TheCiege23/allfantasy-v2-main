@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useHomePromptTurn } from '@/components/core-app/HomePromptSlot'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { dismissTeamFollowPrompt, sportLabelKey, useTeamFollows } from '@/components/follows/useTeamFollows'
 
@@ -19,7 +20,9 @@ import { dismissTeamFollowPrompt, sportLabelKey, useTeamFollows } from '@/compon
 export function TeamFollowPrompt({ eligible, initialSport }: { eligible: boolean; initialSport?: string }) {
   const [open, setOpen] = useState(eligible)
   useEffect(() => setOpen(eligible), [eligible])
-  if (!open) return null
+  // One optional prompt at a time on the /core home (HomePromptSlot).
+  const turn = useHomePromptTurn('team-follow', open)
+  if (!turn) return null
   return <TeamFollowPromptDialog onClose={() => setOpen(false)} initialSport={initialSport} />
 }
 

@@ -1,3 +1,4 @@
+import { playServerConfigured } from "@/lib/google-play/billingConfig"
 import {maintainDraftResults} from '@/lib/draft-archive/ingestion/maintenance'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
@@ -11,6 +12,8 @@ import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
 import { runAnnualRenewalReminderPass, type RenewalReminderPassResult } from '@/lib/billing/annualRenewalReminders'
+import { runProWeekEndingReminderPass, type ProWeekReminderPassResult } from '@/lib/referral/proWeekReminders'
+import { runRetentionPasses, type RetentionPassResult } from '@/lib/billing/retentionPasses'
 import {
   runRelationshipRefreshPass,
   type RelationshipRefreshPassResult,
@@ -124,6 +127,13 @@ export async function GET(request: NextRequest) {
   }))
   if (privateRelay.status === 'failed') purgeWarnings.push(`private relay ranges: ${privateRelay.error}`)
 
+  // Play refunds, consumption retries and renewals share this existing hourly slot.
+  // The pass skips immediately until configured; failures remain visible in maintenance warnings.
+  const playBilling = playServerConfigured()
+    ? await import("@/lib/google-play/billingReconciliation").then(m => m.reconcileGooglePlayBilling(30_000)).catch(() => ({ failures: 1, refreshed: 0, voids: 0 }))
+    : { skipped: true, failures: 0, refreshed: 0, voids: 0 }
+  if (playBilling.failures) purgeWarnings.push("Google Play billing reconciliation needs a retry")
+
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
@@ -149,6 +159,27 @@ export async function GET(request: NextRequest) {
    */
   const renewalReminders: RenewalReminderPassResult | { ran: false; reason: string } =
     await runAnnualRenewalReminderPass().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
+
+  /*
+   * "Your free week of AF Pro ends tomorrow" for referral weeks (lib/referral/proWeekReminders) — same
+   * reason to ride here, same shape: small, after the heartbeat, one notice per week keyed on the grant.
+   */
+  const proWeekReminders: ProWeekReminderPassResult | { ran: false; reason: string } =
+    await runProWeekEndingReminderPass().catch((error) => ({
+      ran: false as const,
+      reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+    }))
+
+  /*
+   * Retention (lib/billing/retentionPasses): the day-before "card still failing" notice, the
+   * trial-ending email two days before the first charge, and the win-back note three days after a
+   * cancellation. Same shape: small, after the heartbeat, one notice per case keyed on the row and date.
+   */
+  const retention: RetentionPassResult | { ran: false; reason: string } =
+    await runRetentionPasses().catch((error) => ({
       ran: false as const,
       reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
     }))
@@ -275,7 +306,10 @@ export async function GET(request: NextRequest) {
     cutoff,
     cachePurge,
     privateRelay,
+    playBilling,
     renewalReminders,
+    proWeekReminders,
+    retention,
     tradeAgent,
     tradeLearning,
     tradeCalibration,

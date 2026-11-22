@@ -4,9 +4,7 @@
  * Identifies college-only, pro-only, and overlap windows.
  */
 
-import { prisma } from '@/lib/prisma'
-import type { LeagueScheduleAdapter, FantasyWeekPlan, WeekVolumeProfile, NbaScheduleConfig, FantasyDayEvent, DayVolume } from '../types'
-import { classifyDay } from '../NbaGameVolumeService'
+import type { LeagueScheduleAdapter, FantasyWeekPlan, WeekVolumeProfile, NbaScheduleConfig, FantasyDayEvent } from '../types'
 
 export class C2CScheduleAdapter implements LeagueScheduleAdapter {
   resolveFantasyWeek(
@@ -85,15 +83,3 @@ export class C2CScheduleAdapter implements LeagueScheduleAdapter {
   }
 }
 
-/** Helper: load NCAAB game dates for a fantasy week to pass as context. */
-export async function loadNcaabGameDatesForWeek(season: number, week: number): Promise<string[]> {
-  const games = await prisma.gameSchedule.findMany({
-    where: { sportType: 'NCAAB', season, weekOrRound: week },
-    select: { startTime: true },
-  })
-  const dates = new Set<string>()
-  for (const g of games) {
-    if (g.startTime) dates.add(g.startTime.toISOString().slice(0, 10))
-  }
-  return [...dates].sort()
-}

@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     leagueId?: string
     message?: string
     week?: number
+    commandId?: string
   }
   if (!body.leagueId || !body.message) {
     return NextResponse.json({ error: 'leagueId and message required' }, { status: 400 })
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     ? body.message
     : `@chimmy ${body.message}`
 
-  const result = await handleZombieChimmyAction(body.leagueId, userId, normalizedMessage, week)
+  const result = await handleZombieChimmyAction(body.leagueId, userId, normalizedMessage, week, body.commandId)
 
   return NextResponse.json({
     ...result,

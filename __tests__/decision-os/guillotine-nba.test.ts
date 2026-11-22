@@ -75,11 +75,13 @@ beforeEach(() => {
 })
 
 describe('isGuillotineTradeLeague', () => {
-  it('takes an NBA guillotine league, by type or variant — not another sport, and not survivor_guillotine', () => {
+  it('takes a supported Guilly sport by type or variant, but not survivor_guillotine', () => {
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'nba', leagueType: 'redraft', leagueVariant: 'guillotine' })).toBe(true)
     expect(isGuillotineTradeLeague({ sport: 'NFL', leagueType: 'guillotine' })).toBe(true)
-    expect(isGuillotineTradeLeague({ sport: 'NHL', leagueType: 'guillotine' })).toBe(false)
+    expect(isGuillotineTradeLeague({ sport: 'NHL', leagueType: 'guillotine' })).toBe(true)
+    expect(isGuillotineTradeLeague({ sport: 'MLB', leagueType: 'guillotine' })).toBe(true)
+    expect(isGuillotineTradeLeague({ sport: 'NCAAF', leagueType: 'guillotine' })).toBe(false)
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'survivor_guillotine' })).toBe(false)
     expect(isGuillotineTradeLeague({ sport: 'NBA', leagueType: 'redraft' })).toBe(false)
   })
@@ -162,7 +164,7 @@ describe('loadGuillotineContext — NBA', () => {
       ['Star Guard', 'guillotine_points'],
       ['$40 FAAB', 'guillotine_faab'],
     ])
-    expect(view.basis).toMatch(/^Guillotine value/)
+    expect(view.basis).toMatch(/^Guilly value/)
     expect(view.basis).toMatch(/An NBA week is about 3 games a team/)
   })
 

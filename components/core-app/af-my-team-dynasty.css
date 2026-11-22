@@ -1,0 +1,84 @@
+/* Dynasty roster markers (components/core-app/screens/DynastyRosterMarkers.tsx) — My Team, Waivers,
+ * Player Finder and the player card.
+ *
+ * Mounted only for a dynasty league's rows, so nothing here reaches any other league. The tones are
+ * the Home deck's age gauge in miniature — teal rising, gold prime, ember past the position's usual
+ * peak — so the two screens speak one colour language. Gold reads /core's --accent, which
+ * af-core-dynasty.css points at the measured dynasty gold (dark/AF) or bronze (light).
+ *
+ * ⚠ CONTRAST, MEASURED on /core's --surface and --surface2:
+ *   dark/AF  #5eead4 ≥ 11:1, #f6a27f ≥ 8:1, --accent (#E8C07A) ≥ 10:1 — each on its own 14% tint too.
+ *   light    #0f766e ≥ 5.0:1, #b4441a ≥ 4.9:1, --accent (#7A5310) ≥ 6.1:1 on --surface2.
+ * ⚠ 11px IS THE TYPE FLOOR (__tests__/core-app/type-floor.test.ts).
+ * ⚠ ONE TOP-LEVEL @media BLOCK, NOT NESTED IN ANYTHING (CLAUDE.md). */
+
+.af-mt-dyn{display:inline-flex;align-items:center;gap:5px;margin-left:6px;vertical-align:middle;flex:none}
+/* The name row is a one-line flex box that clips; on a narrow lineup column the name alone fills it and
+ * the markers were pushed past the clip. With markers present the row may wrap, so they drop under the
+ * name instead of disappearing. */
+.af-mt-player-name:has(.af-mt-dyn){flex-wrap:wrap;row-gap:4px}
+/* And the group itself may wrap: "20 PROSPECT" is wider than a desktop bench name column (~90px), so a
+ * group that could not shrink was clipped mid-word. It now takes at most the line and breaks between
+ * chips; each chip keeps its own width. */
+.af-mt-dyn{flex-wrap:wrap;row-gap:4px;max-width:100%}
+.af-mt-dyn > *{flex:none}
+
+/* Prime reads the dynasty shell's own gold (bronze in light) before the screen's --accent: Player Finder
+ * redefines --accent as its cyan, which made a prime chip look like a rising one. On My Team the two
+ * are the same value (af-core-dynasty.css points --accent at --dyn-accent-text). */
+.af-mt-dyn-age{--tone:var(--dyn-accent-text,var(--accent));display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 6px;border-radius:999px;box-sizing:border-box;
+  color:var(--tone);background:color-mix(in srgb,var(--tone) 14%,transparent);border:1px solid color-mix(in srgb,var(--tone) 45%,transparent);
+  font:800 12px/1 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.af-mt-dyn-age[data-tone=rising]{--tone:#5eead4}
+.af-mt-dyn-age[data-tone=aging]{--tone:#f6a27f}
+html[data-mode='light'] .af-mt-dyn-age[data-tone=rising]{--tone:#0f766e}
+html[data-mode='light'] .af-mt-dyn-age[data-tone=aging]{--tone:#b4441a}
+
+/* ROOKIE: a solid gold tab, the one filled mark on the row, so a stash is findable at a glance. */
+.af-mt-dyn-rookie{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--dyn-gold,#D4A24C);color:var(--dyn-ink,#0B0F17);
+  font:800 11px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.08em;text-transform:uppercase}
+/* The dynasty bronze first, as for the prime chip above: Player Finder's --accent is its cyan. */
+html[data-mode='light'] .af-mt-dyn-rookie{background:var(--dyn-accent-text,var(--accent));color:var(--dyn-accent-ink,var(--accent-ink))}
+
+/* PROSPECT (devy / C2C): the same tab as ROOKIE in violet — a college player has not turned pro, which
+ * is a different fact from "no pro season yet", so it gets its own colour, not gold.
+ * ⚠ CONTRAST, MEASURED: #0B0F17 on #a78bfa 7.9:1 (dark/AF); #fff on #6d28d9 7.1:1 (light). */
+.af-mt-dyn-prospect{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:#a78bfa;color:#0B0F17;
+  font:800 11px/1 var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:88%;letter-spacing:.08em;text-transform:uppercase}
+html[data-mode='light'] .af-mt-dyn-prospect{background:#6d28d9;color:#fff}
+
+/* ── The same chips on other surfaces (Waivers "Worth adding", Player Finder results, the player card).
+ * Each wraps the name in a line that only exists when a marker does, so a non-dynasty row's DOM is
+ * untouched. The name truncates; the chips never shrink, and drop under the name when the row is too
+ * narrow for both (My Team's flex-wrap rule, above). */
+.af-dyn-name-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.af-dyn-name-line > :first-child{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-dyn-name-line > .af-mt-dyn{margin-left:0}
+/* The player card's meta line: the chips sit after position · team. */
+.af-pc-meta .af-mt-dyn{margin-left:8px}
+
+/* The key under the Starters heading. */
+.af-mt-dyn-key{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:2px 0 10px;color:var(--muted);font-size:12px;line-height:1.3}
+.af-mt-dyn-key-label{color:var(--accent);font:800 11px/1.2 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.14em;text-transform:uppercase}
+.af-mt-dyn-key-item{display:inline-flex;align-items:center;gap:6px}
+
+/* The dynasty outlook card picks up the same gold edge as the Home deck's cards. */
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty{position:relative;overflow:hidden;border-color:var(--dyn-accent-line,rgba(212,162,76,.42))}
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--dyn-gold,#D4A24C),color-mix(in srgb,var(--dyn-gold,#D4A24C) 20%,transparent))}
+.af-core.af-shell[data-dynasty-background=true] .af-mt-dynasty .af-label{color:var(--accent)}
+
+@media (max-width:720px){
+  /* Phone: the name line is narrow, so the markers drop under the name rather than squeeze it. */
+  .af-mt-dyn{margin-left:0}
+  .af-mt-dyn-key{gap:6px 10px}
+}
+
+/* Above the phone layout, dynasty only: the shared grid keeps a 104px status track from when the chip read
+ * "QUESTIONABLE"; it is now a fixed 34px chip of at most three characters. With the right-hand column open the
+ * roster is 542px wide at 1440, so those 70 idle px left the name 89px: 11 of 15 names wrapped and the age chip
+ * dropped under every one. Measured with this rule: no name wraps, rows 144px -> 114px on average. It starts at
+ * 861px because af-my-team.css switches to its three-column tablet grid at 860px and below.
+ * __tests__/dynasty/dynastyMyTeamRows.test.ts */
+@media (min-width:861px){
+  .af-core.af-shell[data-dynasty-background=true] .af-mt-row{grid-template-columns:46px minmax(0,1fr) 44px auto}
+}

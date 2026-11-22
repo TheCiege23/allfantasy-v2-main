@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
+import { messagesFor } from '@/lib/i18n/messages'
 
 /**
  * "Add Puka Nacua (WR, +6.1 pts) in Guillotine League 26" — the triage card's free-agent button, upgraded
@@ -29,7 +32,7 @@ const CACHE_MS = 5 * 60_000
 type BoardCandidate = { sleeperId?: string | null; name: string; position: string | null; gain: number }
 type Board = { state?: string; candidates?: BoardCandidate[] }
 
-export type BestAdd =
+type BestAdd =
   | { kind: 'add'; sleeperId: string | null; name: string; position: string | null; gain: number }
   | { kind: 'none' }
 
@@ -43,13 +46,26 @@ export function bestAddFrom(board: Board | null | undefined): BestAdd | null {
 
 /** The button's words: the add itself, nobody worth adding, or the plain search it started as. */
 export function bestAddCtaText(add: BestAdd | null, leagueName: string, es: boolean): string {
-  if (!add) return es ? `Buscar agentes libres en ${leagueName}` : `Find free agents in ${leagueName}`
+  const m = messagesFor(coreTriageMessages, langFromFlag(es))
+  if (!add) return m.bestAddSearch(leagueName)
   if (add.kind === 'none') {
-    return es ? `Ningún agente libre mejora tu alineación en ${leagueName}` : `No free agent beats your lineup in ${leagueName}`
+    return m.bestAddNone(leagueName)
   }
   const pts = `+${add.gain.toFixed(1)} pts`
   const detail = add.position ? `${add.position}, ${pts}` : pts
-  return es ? `Añadir a ${add.name} (${detail}) en ${leagueName}` : `Add ${add.name} (${detail}) in ${leagueName}`
+  return m.bestAddAdd(add.name, detail, leagueName)
+}
+
+/**
+ * The same words without the league, for a button that already sits in that league's row. Paired
+ * with `bestAddInLeague` it rebuilds `bestAddCtaText` exactly — see the compact render below.
+ */
+function bestAddLeadText(add: BestAdd | null, es: boolean): string {
+  const m = messagesFor(coreTriageMessages, langFromFlag(es))
+  if (!add) return m.bestAddSearchLead
+  if (add.kind === 'none') return m.bestAddNoneLead
+  const pts = `+${add.gain.toFixed(1)} pts`
+  return m.bestAddAddLead(add.name, add.position ? `${add.position}, ${pts}` : pts)
 }
 
 /** The Waivers deep link: that league, the player highlighted, priced with the injured starter at zero. */
@@ -71,6 +87,7 @@ export function TriageFreeAgentCta({
   injuredId,
   auto,
   es,
+  compact = false,
 }: {
   leagueId: string
   leagueName: string
@@ -81,6 +98,8 @@ export function TriageFreeAgentCta({
   /** One of the capped few that may ask (see BEST_ADD_AUTO_LIMIT). */
   auto: boolean
   es: boolean
+  /** Inside a row that already names the league: show the lead, keep the league for screen readers. */
+  compact?: boolean
 }) {
   const key = `${leagueId}|${injuredId ?? ''}`
   const hit = cache.get(key)
@@ -117,9 +136,15 @@ export function TriageFreeAgentCta({
       href={bestAddHref(baseHref, add, injuredId)}
       onClick={() => sendProductAnalyticsBeacon('product.triage.free_agent_clicked', { kind: add?.kind ?? 'search' })}
     >
-      {bestAddCtaText(add, leagueName, es)}
+      {compact ? (
+        <>
+          {bestAddLeadText(add, es)}
+          <span className="af-sr-only">{messagesFor(coreTriageMessages, langFromFlag(es)).bestAddInLeague(leagueName)}</span>
+        </>
+      ) : (
+        bestAddCtaText(add, leagueName, es)
+      )}
     </Link>
   )
 }
 
-export default TriageFreeAgentCta

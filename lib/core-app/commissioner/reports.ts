@@ -22,7 +22,10 @@ import {
   waiverParticipationChart,
   type ActivityRow,
   type HubChart,
+  type ManagerRef,
 } from './charts'
+import { participation, transactionMix, weeklyActivitySeries, type MixSlice, type Participation, type WeekPoint } from './healthCharts'
+import { commissionerHealthChartsMessages } from '../messages/commissionerHealthCharts'
 import {
   collapseQuietSyncs,
   fromAuditLog,
@@ -35,6 +38,8 @@ import {
   type TimelineEntry,
 } from './timeline'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { messagesFor } from '@/lib/i18n/messages'
+import { commissionerBuildersMessages } from '../messages/commissionerBuilders'
 
 /**
  * Imported activity for this league, in either id space.
@@ -76,7 +81,43 @@ export type ActivityCharts = SectionState<{
   trades: HubChart
   waivers: HubChart | null
   newest: string | null
+  /**
+   * The redesign's charts and the three activity bars of the health breakdown (healthCharts.ts).
+   * `seasonRows` and `managers` stay server-side: the screen joins them with member activity.
+   */
+  health: {
+    weeks: WeekPoint[]
+    mix: MixSlice[]
+    seasonRows: ActivityRow[]
+    managers: ManagerRef[]
+    waivers: Participation
+    trades: Participation
+    chat: Participation
+    /** Any imported move at all, ever in the window — a league with none is "not measured", not 0. */
+    hasMoves: boolean
+  }
 }>
+
+/**
+ * Linked managers who posted in league chat in the last seven days, out of linked managers.
+ * A team is matched by the AllFantasy account that claimed it; a league where nobody has linked
+ * an account cannot be measured this way, and says so.
+ */
+async function chatParticipation(grant: CommissionerGrant, now: Date, language: string): Promise<Participation> {
+  const m = messagesFor(commissionerHealthChartsMessages, language)
+  const linked = new Set(grant.teams.map((t) => t.claimedByUserId).filter((id): id is string => !!id))
+  if (linked.size === 0) return { unmeasured: m.noLinkedManagers }
+  try {
+    const posters = await prisma.leagueChatMessage.findMany({
+      where: { leagueId: grant.leagueId, createdAt: { gte: new Date(now.getTime() - 7 * 86_400_000) }, userId: { in: [...linked] } },
+      select: { userId: true },
+      distinct: ['userId'],
+    })
+    return { participants: posters.length, managers: linked.size }
+  } catch {
+    return { unmeasured: m.chatUnread }
+  }
+}
 
 export async function loadActivityCharts(
   grant: CommissionerGrant,
@@ -99,6 +140,11 @@ export async function loadActivityCharts(
     const managers = grant.teams
       .filter((t) => t.platformUserId)
       .map((t) => ({ key: t.platformUserId as string, name: t.name }))
+    const hm = messagesFor(commissionerHealthChartsMessages, language)
+    const noManagers = { unmeasured: hm.noNamedManagers }
+    const noMoves = { unmeasured: hm.noMovesImported }
+    const moveShare = (kind: 'waiver' | 'trade'): Participation =>
+      rows.length === 0 ? noMoves : managers.length === 0 ? noManagers : participation(thisSeason, managers, kind)
 
     return {
       available: true,
@@ -107,12 +153,22 @@ export async function loadActivityCharts(
         trades: tradesChart(rows, now, language),
         waivers: managers.length > 0 ? waiverParticipationChart(thisSeason, managers, language) : null,
         newest: rows[0]?.occurredAt.toISOString() ?? null,
+        health: {
+          weeks: weeklyActivitySeries(rows, now, seasonStart(grant.season, now), language),
+          mix: transactionMix(thisSeason),
+          seasonRows: thisSeason,
+          managers,
+          waivers: moveShare('waiver'),
+          trades: moveShare('trade'),
+          chat: await chatParticipation(grant, now, language),
+          hasMoves: rows.length > 0,
+        },
       },
     }
   } catch {
     return {
       available: false,
-      reason: language === 'es' ? 'No se pudo leer la actividad de la liga en este momento.' : 'League activity couldn’t be read just now.',
+      reason: messagesFor(commissionerBuildersMessages, language).reportsActivityUnread,
     }
   }
 }

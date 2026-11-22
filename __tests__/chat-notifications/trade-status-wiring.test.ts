@@ -161,14 +161,14 @@ describe('redraft trade center — every answer posts under the offer card', () 
         tradeId: 'p-1',
         status: 'accepted',
         actorUserId: 'u-receiver',
-        detail: 'It goes to commissioner review before it processes.',
+        detail: 'It goes to commissioner review, and goes through when the review window ends unless the commissioner vetoes it.',
       }),
     )
 
     h.status.mockReset()
     h.proposal = pendingRedraft({ vetoMode: 'league_vote' })
     await vote({ proposalId: 'p-1', action: 'accept' })
-    expect(h.status).toHaveBeenCalledWith(expect.objectContaining({ detail: 'It goes to a league vote before it processes.' }))
+    expect(h.status).toHaveBeenCalledWith(expect.objectContaining({ detail: 'It goes to a league vote, and goes through when the review window ends unless the league vetoes it.' }))
   })
 
   it('an offer that ran out of time → "expired"', async () => {

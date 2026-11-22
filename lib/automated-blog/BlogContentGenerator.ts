@@ -40,11 +40,11 @@ function generateDeterministicFallbackDraft(input: BlogDraftInput): GeneratedDra
   const topic = (input.topicHint ?? "").trim()
   const titleBase = CATEGORY_FALLBACK_TITLES[input.category] ?? "Fantasy Insights"
   const title = topic ? `${titleBase}: ${topic}` : `${sport} ${titleBase}`
-  const excerpt = `Quick ${sport} ${input.category.replace(/_/g, " ")} draft generated while AI providers are unavailable.`
+  const excerpt = `Quick ${sport} ${input.category.replace(/_/g, " ")} draft generated while Chimmy providers are unavailable.`
   const body = [
     `# ${title}`,
     "",
-    `This draft is generated with deterministic fallback content because AI providers are currently unavailable.`,
+    `This draft is generated with deterministic fallback content because Chimmy providers are currently unavailable.`,
     "",
     "## Key takeaways",
     "- Focus on recent usage trends and role stability.",
@@ -54,7 +54,7 @@ function generateDeterministicFallbackDraft(input: BlogDraftInput): GeneratedDra
     "## Action plan",
     "1. Review your roster needs by position and schedule.",
     "2. Compare waiver, trade, and matchup options using AllFantasy tools.",
-    "3. Re-run AI generation later for expanded analysis and narrative polish.",
+    "3. Re-run Chimmy generation later for expanded analysis and narrative polish.",
   ].join("\n")
 
   return {

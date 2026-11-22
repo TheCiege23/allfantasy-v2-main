@@ -7,6 +7,7 @@
 
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { boundMap } from '@/lib/ttl-memo'
 import { isIdpLeague } from '@/lib/idp'
 import { leagueSportToSportType } from '@/lib/multi-sport/SportConfigResolver'
 import type { SportType } from '@/lib/multi-sport/sport-types'
@@ -149,6 +150,8 @@ function resolveFormatTypeForLeague(params: {
 
 const TEMPLATE_MEMO_TTL_MS = 20_000
 const effectiveTemplateMemo = new Map<string, { at: number; value: EffectiveLeagueRosterTemplate }>()
+// One entry per league ever touched; bounded so leagues nobody reopens do not stay forever.
+const TEMPLATE_MEMO_MAX_ENTRIES = 1000
 
 /** Bust after commissioner roster save or tests; also used by `invalidateLeagueDraftCaches`. */
 export function clearEffectiveLeagueRosterTemplateCache(leagueId: string): void {
@@ -220,6 +223,7 @@ export async function getEffectiveLeagueRosterTemplate(leagueId: string): Promis
     superflexSlotNames,
     hasPersistedRosterSchema,
   }
+  boundMap(effectiveTemplateMemo, (e) => Date.now() - e.at >= TEMPLATE_MEMO_TTL_MS, TEMPLATE_MEMO_MAX_ENTRIES)
   effectiveTemplateMemo.set(leagueId, { at: Date.now(), value: result })
   return result
 }

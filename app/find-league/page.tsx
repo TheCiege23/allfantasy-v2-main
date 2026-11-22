@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import Link from "next/link"
+import { FindLeagueHero } from "@/components/find-league/FindLeagueHero"
 import { FindLeagueClient } from "./FindLeagueClient"
 
 export const dynamic = "force-dynamic"
@@ -22,20 +22,8 @@ export default function FindLeaguePage() {
   return (
     <div className="min-h-screen mode-surface mode-readable">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <Link
-          href="/"
-          className="text-sm font-medium mb-6 inline-block"
-          style={{ color: "var(--muted)" }}
-        >
-          ← Home
-        </Link>
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: "var(--text)" }}>
-          Find a league
-        </h1>
-        <p className="text-sm mb-8" style={{ color: "var(--muted)" }}>
-          Discover leagues across all supported sports. Filter by sport, league type, draft type,
-          team count, entry fee, and more. Join with one click.
-        </p>
+        {/* The board's header: eyebrow, title and intro, translated (2026-11-05). */}
+        <FindLeagueHero />
         <FindLeagueClient />
       </div>
     </div>

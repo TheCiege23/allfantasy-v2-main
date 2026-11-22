@@ -1,10 +1,19 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
+import type { WaiverPick } from '@/lib/core-app/waiversGuide'
+import '@/components/core-app/waivers/af-waivers-guide.css'
 import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
-import { ResponsiveDetails } from '@/components/core-app/ResponsiveDetails'
+import { OrphanAuctionBids } from '@/components/core-app/OrphanAuctionBids'
+import { TaxiStealCard } from '@/components/core-app/TaxiStealCard'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip, type StatItem } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-waivers.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
@@ -14,6 +23,8 @@ import { platformLabel, verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiversMessages } from '@/lib/core-app/messages/waivers'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import type { HelpTopicId } from '@/lib/core-app/helpTopics'
 
@@ -47,51 +58,96 @@ export function waiverRuleText(english: string, language: string): string {
   }).join(' · ')
 }
 
-function Tile({
+/**
+ * The share of the league's FAAB budget still left, 0–1, or null when it cannot be drawn honestly: no
+ * budget on file, a zero budget, or a remaining figure above the budget (a commissioner top-up the
+ * budget column does not reflect — a bar pinned at 100% would hide that). Exported for tests.
+ */
+export function faabTrack(remaining: number | null | undefined, budget: number | null | undefined): number | null {
+  if (remaining == null || budget == null || !Number.isFinite(remaining) || !Number.isFinite(budget)) return null
+  if (budget <= 0 || remaining < 0 || remaining > budget) return null
+  return remaining / budget
+}
+
+type TileOut = { value: string; of?: string; sub?: string; track?: number | null }
+
+/**
+ * One header tile, as a StatStrip item (components/core-app/primitives). The tile keeps its
+ * `af-wv-tile` class and `data-tile` hook for the redraft stylesheet (af-core-redraft-waivers-finder.css)
+ * and the tests; layout and type are the shared strip's.
+ */
+function tileItem({
   label,
   state,
   render,
   sub,
   help,
+  tile,
+  copy,
 }: {
   label: string
   state: SectionState<unknown>
-  render?: (d: never) => { value: string; sub?: string }
+  /** `track`, 0–1: a share of a known total, drawn as a bar (see below). */
+  render?: (d: never) => TileOut
   sub?: string
   /** A "?" beside the label (lib/core-app/helpTopics.ts). */
   help?: HelpTopicId
-}) {
-  const { language } = useOptionalLanguage()
-  const copy = (english: string) => coreUiCopy(english, language)
-  if (!state.available) {
-    return (
-      <div className="af-wv-tile" data-missing="true">
-        <div className="af-wv-tile-value af-num">—</div>
-        <div className="af-label">
-          {copy(label)}
-          {help ? <> <TopicTip topic={help} /></> : null}
-        </div>
-        <div className="af-wv-tile-why">{copy(state.reason)}</div>
-      </div>
-    )
-  }
-  const out = render ? render(state.data as never) : { value: String(state.data), sub }
-  return (
-    <div className="af-wv-tile">
-      <div className="af-wv-tile-value af-num">{out.value}</div>
-      <div className="af-label">
-        {copy(label)}
-        {help ? <> <TopicTip topic={help} /></> : null}
-      </div>
-      {out.sub ? <div className="af-wv-tile-sub">{copy(out.sub)}</div> : null}
-    </div>
+  /** Which tile this is, for the redraft stylesheet (af-core-redraft-waivers-finder.css). */
+  tile: string
+  copy: (english: string) => string
+}): StatItem {
+  const labelNode = (
+    <>
+      {copy(label)}
+      {help ? <> <TopicTip topic={help} /></> : null}
+    </>
   )
+  const base = { key: tile, className: 'af-wv-tile', data: { tile }, label: labelNode }
+  if (!state.available) {
+    return { ...base, value: null, missing: true, reason: copy(state.reason) }
+  }
+  const out: TileOut = render ? render(state.data as never) : { value: String(state.data), sub }
+  return {
+    ...base,
+    value: (
+      <>
+        {out.value}
+        {/* "/ $100" — the denominator, only when it is a real figure (the FAAB tile's league budget). */}
+        {out.of ? <span className="af-wv-tile-of"> {out.of}</span> : null}
+      </>
+    ),
+    sub: out.sub ? copy(out.sub) : undefined,
+    /*
+      A decorative bar for a share the screen already states in text (the tile's "$63", the rules'
+      "$100 budget"). aria-hidden: the figure is already read out above.
+    */
+    extra:
+      out.track != null ? (
+        <span className="af-wv-track" aria-hidden="true" data-testid="waiver-faab-track">
+          <span className="af-wv-track-fill" style={{ width: `${Math.round(out.track * 100)}%` }} />
+        </span>
+      ) : null,
+  }
 }
 
 export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiversMessages)
+  const guide = useMessages(waiversGuideMessages)
   const copy = (english: string) => coreUiCopy(english, language)
+  /*
+   * The headline is the answer people open this page for — who to pick up — read from the "Worth
+   * adding" board's own top row once it loads (WaiverLineupBoard `onPick`), so there is one read.
+   */
+  const [pick, setPick] = useState<WaiverPick>({ kind: 'pending' })
+  const headline =
+    pick.kind === 'best'
+      ? guide.headBest(pick.name, pick.gain.toFixed(1), pick.perGame)
+      : pick.kind === 'none'
+        ? pick.perGame
+          ? guide.headNonePerGame
+          : guide.headNone
+        : guide.headPending(data.league.name)
   /** A league AllFantasy runs takes its claims (and its free-agent board) here; any other is only read. */
   const claimsHere = data.league.platform !== 'manual' && platformLabel(data.league.platform) === 'AllFantasy'
   const providerClaim = verifiedHandoff(
@@ -99,7 +155,20 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
     'waivers',
   )
   const isFaab = data.waiverType.available && data.waiverType.data.kind === 'faab'
+  /* The league's starting budget, when it was read — the denominator of the FAAB bar. */
+  const faabBudget = isFaab && data.waiverType.available ? data.waiverType.data.budget : null
   const schedule = data.processTime.available ? data.processTime.data.schedule : null
+  /*
+   * A league KNOWN not to bid has no FAAB tile: "Your FAAB — this league does not use FAAB bidding"
+   * was a card spent saying nothing applies. An unread waiver type keeps the tile and its reason.
+   */
+  const showFaabTile = !(data.waiverType.available && data.waiverType.data.kind !== 'faab')
+  /*
+   * The next run is the sticky line above whenever there is a schedule; the tile said the same
+   * instant a second time in the same view. It stays only when there is no line — then it carries
+   * the loader's own sentence about why no day is shown.
+   */
+  const showNextRunTile = !schedule
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
     data.waiverType.available ? copy(data.waiverType.data.label) : null,
@@ -116,7 +185,18 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       width — a container query — because the core shell's rail takes a slice of the viewport.
     */
     <div className="af-wv" data-details-scope>
-      <h1 className="af-display">{copy('Waivers')}</h1>
+      {/*
+        2026-11-13 guide: the title said only "Waivers". It now says who to pick up, and one line says what
+        the page is for — the "Priced for this league" box that sat in the side column is that line's
+        last sentence.
+      */}
+      <PageHeader
+        className="af-wv-head"
+        titleClassName="af-wv-title"
+        eyebrow={guide.eyebrow(data.league.name)}
+        title={<span data-testid="waiver-headline" aria-live="polite">{headline}</span>}
+      />
+      {/* The intro ("Find a free agent who'd improve your starting lineup…") is gone (2026-11-14): the headline says it. */}
       {/*
         The deadline first, when there is a real one: a manager opening this tab is usually checking
         it. Only leagues whose schedule we actually imported — a Sleeper league's is not on file and
@@ -127,69 +207,102 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <span className="af-label">
             {copy('Next waiver run')} <TopicTip topic="waiverRun" />
           </span>{' '}
-          <WaiverRunClock schedule={schedule} yourTime={es ? ' (tu hora)' : ' your time'} />
+          <WaiverRunClock schedule={schedule} yourTime={m.yourTime} />
         </p>
       ) : null}
       <div className="af-wv-layout">
         <div className="af-wv-area-tiles">
           {/* ── Tiles ───────────────────────────────────────────────────── */}
-          <div className="af-wv-tiles">
-            <Tile
-              label="Your FAAB"
-              help="faab"
-              state={data.budget}
-              render={(d: never) => {
-                const b = d as unknown as {
-                  faabRemaining: number
-                  rankByBudget: number | null
-                  rostersWithBudget: number
-                }
-                return {
-                  value: `$${b.faabRemaining}`,
-                  sub:
-                    b.rankByBudget != null
-                      ? es ? `${b.rankByBudget} de ${b.rostersWithBudget} por presupuesto restante` : `${b.rankByBudget} of ${b.rostersWithBudget} by budget left`
-                      : undefined,
-                }
-              }}
-            />
-
-            <Tile
-              label="Waiver priority"
-              help="waiverPriority"
-              state={data.waiverPriority}
-              render={(d: never) => {
-                const w = d as unknown as { priority: number; leagueRosters: number }
-                return { value: `#${w.priority}`, sub: es ? `de ${w.leagueRosters} equipos` : `of ${w.leagueRosters} rosters` }
-              }}
-            />
-
-            <Tile
-              label="Players held"
-              state={data.rosterLoad}
-              render={(d: never) => {
-                const r = d as unknown as { playersHeld: number; starters: number; bench: number; reserve: number }
-                return {
-                  value: String(r.playersHeld),
-                  sub: es ? `${r.starters} titulares · ${r.bench} suplentes${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}` : `${r.starters} starting · ${r.bench} bench${r.reserve > 0 ? ` · ${r.reserve} IR/taxi` : ''}`,
-                }
-              }}
-            />
-
-            <Tile
-              label="Claims queued"
-              help="claimsQueued"
-              state={data.claimsQueued}
-              render={(d: never) => {
-                const c = d as unknown as { count: number }
-                return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : undefined }
-              }}
-            />
-          </div>
+          {/*
+            The strip holds 3–5 tiles (FAAB only where the league bids, the next run only where there is
+            no sticky line) and lays out by that count, so it always fills its row (af-primitives.css).
+          */}
+          <StatStrip
+            className="af-wv-tiles"
+            order="value-first"
+            items={[
+              ...(showFaabTile
+                ? [
+                    tileItem({
+                      label: 'Your FAAB',
+                      help: 'faab',
+                      tile: 'faab',
+                      state: data.budget,
+                      copy,
+                      render: (d: never) => {
+                        const b = d as unknown as {
+                          faabRemaining: number
+                          rankByBudget: number | null
+                          rostersWithBudget: number
+                        }
+                        return {
+                          value: `$${b.faabRemaining}`,
+                          of: faabTrack(b.faabRemaining, faabBudget) != null ? `/ $${faabBudget}` : undefined,
+                          sub: b.rankByBudget != null ? m.budgetRank(b.rankByBudget, b.rostersWithBudget) : undefined,
+                          track: faabTrack(b.faabRemaining, faabBudget),
+                        }
+                      },
+                    }),
+                  ]
+                : []),
+              tileItem({
+                label: 'Waiver priority',
+                help: 'waiverPriority',
+                tile: 'priority',
+                state: data.waiverPriority,
+                copy,
+                render: (d: never) => {
+                  const w = d as unknown as { priority: number; leagueRosters: number }
+                  return { value: `#${w.priority}`, sub: m.ofRosters(w.leagueRosters) }
+                },
+              }),
+              /*
+                With a schedule the next run is the sticky line above, so it is not said again here. With
+                none, this tile is the only place it appears: the loader's own sentence, never a guessed day.
+              */
+              ...(showNextRunTile ? [tileItem({ label: 'Next waiver run', tile: 'next-run', state: data.processTime, copy })] : []),
+              /*
+                Claims queued only when the count is REAL (a league AllFantasy runs). For an imported league
+                it was a dash and a sentence saying it cannot be counted — a tile spent saying nothing
+                (2026-11-13 guide). "Players held" went the same day: it helps no pickup decision.
+              */
+              ...(data.claimsQueued.available
+                ? [
+                    tileItem({
+                      label: 'Claims queued',
+                      help: 'claimsQueued',
+                      tile: 'claims',
+                      state: data.claimsQueued,
+                      copy,
+                      render: (d: never) => {
+                        const c = d as unknown as { count: number }
+                        return { value: String(c.count), sub: c.count === 0 ? copy('nothing pending') : m.claimsPending(c.count) }
+                      },
+                    }),
+                  ]
+                : []),
+            ]}
+          />
 
         </div>
 
         <div className="af-wv-area-main">
+          {/*
+            ── Orphan auction ──────────────────────────────────────────────
+
+            First while one is open: an abandoned team's players and picks for sealed FAAB bids, with
+            a closing time (lib/orphan-auction). Renders nothing when the league has no auction.
+          */}
+          <OrphanAuctionBids leagueId={data.league.id} />
+
+          {/*
+            ── Taxi stealing ───────────────────────────────────────────────
+
+            Claims on your taxi players first — they have a deadline — then claims you can make
+            (lib/taxi/taxiStealing.ts). Renders nothing when the league does not run the rule.
+          */}
+          <TaxiStealCard leagueId={data.league.id} />
+
           {/*
             ── Worth adding ─────────────────────────────────────────────────
 
@@ -210,6 +323,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 ? data.waiverPriority.data
                 : null
             }
+            onPick={setPick}
           />
 
           {/*
@@ -228,26 +342,6 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             does not weaken the honesty rule the withheld panel was protecting.
           */}
           {isFaab ? <WaiverIntel leagueId={data.league.id} surface="core" /> : null}
-
-          {/*
-            ── Competitive Edge ─────────────────────────────────────────────
-
-            After the bid pricing, because it answers the next question: who can outbid you. Every
-            other manager's FAAB left and what they have actually won this season — counts, never a
-            label (lib/competitive-edge/waiverEdge.ts).
-          */}
-          <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
-
-          {/*
-            ── Chimmy's recommendations ─────────────────────────────────────
-
-            Plan-gated at the route, not here: the panel renders its own locked
-            state from the API's response rather than this screen deciding who may
-            see it. A client-side entitlement check is a suggestion, not a gate.
-          */}
-          <section className="af-wv-ai">
-            <AIWaiverRecommendationsPanel leagueId={data.league.id} surface="core" />
-          </section>
 
           <div className="af-wv-actions">
             {/*
@@ -283,19 +377,40 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             */}
             {providerClaim ? (
               <a className="af-btn af-wv-browse" href={providerClaim.href} target="_blank" rel="noopener noreferrer">
-                {es ? `Reclamar en ${providerClaim.platformLabel}` : `Claim on ${providerClaim.platformLabel}`} ↗
+                {m.claimOn(providerClaim.platformLabel)} ↗
               </a>
             ) : null}
 
           </div>
-          {/* A league AllFantasy runs takes its claims here; an imported one is only read. */}
-          <p className="af-wv-footnote">
-            {data.league.platform === 'manual'
-              ? copy('Claims are made on your platform. AllFantasy only reads your league.')
-              : claimsHere
-                ? copy('Claims for this league are made here, on AllFantasy.')
-                : es ? `Los reclamos se hacen en ${platformLabel(data.league.platform)}. AllFantasy solo lee tu liga.` : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
-          </p>
+          {/*
+            Where claims are made is the button above and the banner over every league tab (2026-11-14).
+            The line that said it again here — "AllFantasy only reads your league" — contradicted that banner.
+          */}
+
+          {/*
+            2026-11-13 guide: decide (Worth adding, bid pricing) → act (the claim button above) → then the
+            context — Chimmy's take and who wins claims here. The claim button used to sit below both.
+          */}
+          {/*
+            ── Chimmy's recommendations ─────────────────────────────────────
+
+            Plan-gated at the route, not here: the panel renders its own locked
+            state from the API's response rather than this screen deciding who may
+            see it. A client-side entitlement check is a suggestion, not a gate.
+          */}
+          <section className="af-wv-ai">
+            <AIWaiverRecommendationsPanel leagueId={data.league.id} surface="core" />
+          </section>
+
+          {/*
+            ── Competitive Edge ─────────────────────────────────────────────
+
+            After the bid pricing, because it answers the next question: who can outbid you. Every
+            other manager's FAAB left and what they have actually won this season — counts, never a
+            label (lib/competitive-edge/waiverEdge.ts).
+          */}
+          <WaiverCompetitiveEdge access={edgeAccess} edge={edge} />
+
         </div>
 
         <aside className="af-wv-area-side" aria-label={copy('How this league runs')}>
@@ -304,16 +419,16 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
             Reference, not action: in the side column on a wide page, and folded to ONE LINE on a phone
             (it was four rows of rules — ~260px — between the tiles and the first thing to act on).
             The summary carries the two facts people check most, so folding hides nothing urgent.
+
+            2026-11-20: the page's one "More detail" fold (MoreDetail.tsx), same class and test id, with
+            the old summary as its note. On a phone the side column comes after the main one, so it is the
+            bottom of the page there. Chimmy's picks and Competitive Edge stay OPEN in the main column:
+            they are what a paid plan buys, and folding them would hide the reason to have it.
           */}
-          <ResponsiveDetails
+          <MoreDetail
             className="af-card af-wv-section af-wv-rules-box"
             testId="waiver-rules"
-            summary={
-              <>
-                <span className="af-label">{copy('How waivers run here')}</span>
-                {rulesSummary ? <span className="af-wv-rules-summary">{rulesSummary}</span> : null}
-              </>
-            }
+            note={`${copy('How waivers run here')}${rulesSummary ? `: ${rulesSummary}` : ''}`}
           >
             <ul className="af-wv-rules">
               <li>
@@ -356,23 +471,26 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                     */}
                     {data.processTime.data.observedRuns != null ? (
                       <span className="af-wv-rule-observed">
-                        {es
-                          ? `según las últimas ${data.processTime.data.observedRuns} ejecuciones de esta liga`
-                          : `seen over this league's last ${data.processTime.data.observedRuns} runs`}
+                        {m.observedRuns(data.processTime.data.observedRuns)}
                       </span>
                     ) : data.processTime.data.fromSleeperSetting ? (
                       <span className="af-wv-rule-observed">
-                        {es ? 'según la configuración de Sleeper de esta liga' : "from this league's Sleeper settings"}
+                        {m.fromSleeperSettings}
                       </span>
                     ) : null}
-                    {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
-                    <span className="af-wv-rule-local">
-                      <WaiverRunClock
-                        schedule={data.processTime.data.schedule}
-                        yourTime={es ? ' (tu hora)' : ' your time'}
-                        localOnly
-                      />
-                    </span>
+                    {/*
+                      The same instant in the reader's own timezone. Not when the "Next waiver run" line
+                      above is showing — it says exactly this, and the page said it twice (2026-11-13).
+                    */}
+                    {schedule ? null : (
+                      <span className="af-wv-rule-local">
+                        <WaiverRunClock
+                          schedule={data.processTime.data.schedule}
+                          yourTime={m.yourTime}
+                          localOnly
+                        />
+                      </span>
+                    )}
                   </span>
                 ) : (
                   <span className="af-wv-rule-why">{copy(data.processTime.reason)}</span>
@@ -399,15 +517,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 )}
               </li>
             </ul>
-          </ResponsiveDetails>
-          {/* ── Pricing context ─────────────────────────────────────────── */}
-          <div className="af-wv-context">
-            <span className="af-label">{copy('Priced for this league')}</span>
-            <p className="af-wv-context-body">
-              {es ? 'Las ofertas y recomendaciones se calculan para ' : 'Bids and targets are priced against '}<strong>{data.league.name}</strong>
-              {data.league.format ? ` — ${data.league.format}` : ''}. {es ? 'Un mismo jugador puede valer distinto en otra liga.' : 'The same player is worth a different amount in a different league.'}
-            </p>
-          </div>
+          </MoreDetail>
 
         </aside>
       </div>

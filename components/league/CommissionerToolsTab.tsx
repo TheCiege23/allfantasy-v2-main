@@ -1,196 +1,209 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { Input } from '@/components/ui/input'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
-import { AlertTriangle, Lock, UserPlus, Calendar, Trophy, Shield, Edit3 } from 'lucide-react'
+import { ArrowRight, Lock, Shield, UserCog } from 'lucide-react'
+import { CommissionerControlPanel } from '@/components/league-settings/CommissionerControlPanel'
+import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import {
+  HOLD_FLAGGED_TRADES_LABELS,
+  HOLD_FLAGGED_TRADES_MODES,
+  holdModeFromResponse,
+  type HoldFlaggedTradesMode,
+} from '@/lib/integrity/holdFlaggedTradesMode'
+import { describeCollusionSensitivity, INTEGRITY_SENSITIVITIES, normalizeSensitivity, type IntegritySensitivity } from '@/lib/integrity/sensitivity'
 
 interface CommissionerToolsTabProps {
   leagueId: string
   hasAfCommissionerSub: boolean
 }
 
-function SectionHeader({ icon: Icon, label }: { icon: typeof Calendar; label: string }) {
+function SectionHeader({ icon: Icon, label, locked }: { icon: typeof Shield; label: string; locked?: boolean }) {
   return (
-    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/70 uppercase tracking-wide">
-      <Icon className="h-4 w-4" />{label}
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-white/70">
+      <Icon className="h-4 w-4" />
+      {label}
+      {locked ? <Lock className="h-3 w-3 text-amber-400/60" aria-label="AF Commissioner" /> : null}
     </h3>
   )
 }
 
-function ToolRow({ label, children, gated, hasSubscription }: {
-  label: string; children: React.ReactNode; gated?: boolean; hasSubscription?: boolean
-}) {
-  const locked = gated && !hasSubscription
+/**
+ * Commissioner tab of the Survivor league settings (the only caller: app/survivor/[leagueId]/SurvivorAppShell.tsx).
+ *
+ * ⚠ THIS TAB USED TO BE A MOCKUP. Every switch was `<Switch defaultChecked={false} />` with no handler
+ * (so it could not even flip), every button POSTed to /api/commissioner/leagues/:id, which only
+ * accepts PATCH (a silent 405), and the schedule/bracket inputs were never saved. The paid
+ * "Competitive Integrity" rows had been locked for everyone until 2026-10 because of a wrong flag; the
+ * moment subscribers could reach them, they were five switches that did nothing.
+ *
+ * Now every control is a real one:
+ *  - league controls (lineups, co-commissioners, roster locks, schedule) are the same working panel
+ *    League Settings uses;
+ *  - anti-tanking and collusion sensitivity read and write LeagueIntegritySettings through
+ *    /api/leagues/:id/integrity, which checks the plan and the commissioner itself;
+ *  - lineup neglect is the lineup-integrity monitor's report;
+ *  - flags are reviewed on the integrity page.
+ *  - suspicious trade alerts switch the commissioner's notification for a flagged trade
+ *    (lib/integrity/tradeAlerts.ts);
+ *  - hold flagged trades sends a flagged trade to commissioner review before it executes
+ *    (lib/integrity/holdFlaggedTrades.ts).
+ */
+export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: CommissionerToolsTabProps) {
   return (
-    <div className={`flex items-center justify-between gap-4 py-2.5 border-b border-white/5 last:border-0 ${locked ? 'opacity-50' : ''}`}>
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-white/80">{label}</span>
-        {locked && <Lock className="h-3 w-3 text-amber-400/60" />}
-      </div>
-      <div className="flex-shrink-0">
-        {locked ? (
-          <span className="text-xs text-amber-300/60">Pro</span>
-        ) : children}
-      </div>
+    <div className="space-y-6">
+      <section>
+        <SectionHeader icon={UserCog} label="League controls" />
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-2">
+          <CommissionerControlPanel leagueId={leagueId} />
+        </div>
+      </section>
+
+      <section data-testid="survivor-integrity-tools">
+        <SectionHeader icon={Shield} label="Competitive integrity" locked={!hasAfCommissionerSub} />
+        {hasAfCommissionerSub ? (
+          <IntegrityControls leagueId={leagueId} />
+        ) : (
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-white/70" data-testid="survivor-integrity-locked">
+            Anti-tanking detection, collusion checks on every trade and lineup-neglect reports are part of AF Commissioner.{' '}
+            <Link href="/commissioner-upgrade" className="font-semibold text-amber-200 underline">Upgrade</Link>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
 
-function DangerButton({ label, onConfirm }: { label: string; onConfirm: () => void }) {
-  const [confirming, setConfirming] = useState(false)
-  if (confirming) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-red-300">Confirm?</span>
-        <Button size="sm" variant="destructive" onClick={() => { onConfirm(); setConfirming(false) }}>Yes</Button>
-        <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>No</Button>
-      </div>
-    )
-  }
-  return (
-    <Button size="sm" variant="outline" onClick={() => setConfirming(true)}>
-      <AlertTriangle className="h-3 w-3 mr-1" />{label}
-    </Button>
-  )
+type IntegrityState = {
+  tankingMonitorEnabled: boolean
+  collusionSensitivity: IntegritySensitivity
+  tradeAlertsEnabled: boolean
+  holdFlaggedTradesMode: HoldFlaggedTradesMode
 }
 
-/**
- * Commissioner Tools Tab — schedule changes, co-commissioners,
- * playoff bracket, roster locks, matchup score edits, etc.
- * Commissioner-only (never shown to regular members).
- */
-export function CommissionerToolsTab({ leagueId, hasAfCommissionerSub }: CommissionerToolsTabProps) {
-  const [saving, setSaving] = useState(false)
+function IntegrityControls({ leagueId }: { leagueId: string }) {
+  const [value, setValue] = useState<IntegrityState | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+  const url = `/api/leagues/${encodeURIComponent(leagueId)}/integrity`
 
-  const apiAction = useCallback(async (action: string, data?: Record<string, unknown>) => {
-    setSaving(true)
-    await fetch(`/api/commissioner/leagues/${leagueId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...data }),
-    }).catch(() => {})
-    setSaving(false)
-  }, [leagueId])
+  useEffect(() => {
+    let cancelled = false
+    fetch(url, { credentials: 'include', cache: 'no-store' })
+      .then(async (r) => ({ ok: r.ok, d: await r.json().catch(() => null) }))
+      .then(({ ok, d }) => {
+        if (cancelled) return
+        if (!ok || !d?.settings) {
+          setStatus(d?.error ?? 'Could not load the integrity settings.')
+          return
+        }
+        setValue({
+          tankingMonitorEnabled: Boolean(d.settings.tankingMonitorEnabled),
+          collusionSensitivity: normalizeSensitivity(d.settings.collusionSensitivity),
+          tradeAlertsEnabled: d.settings.tradeAlertsEnabled !== false,
+          holdFlaggedTradesMode: holdModeFromResponse(d.settings),
+        })
+      })
+      .catch(() => { if (!cancelled) setStatus('Could not load the integrity settings.') })
+    return () => { cancelled = true }
+  }, [url])
+
+  const save = async (patch: Partial<IntegrityState>) => {
+    if (!value) return
+    const previous = value
+    setValue({ ...value, ...patch })
+    setStatus('Saving…')
+    try {
+      const r = await fetch(url, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      if (!r.ok) throw new Error(String(r.status))
+      setStatus('Saved.')
+    } catch {
+      setValue(previous)
+      setStatus('Could not save. Try again.')
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      {saving && <div className="text-xs text-cyan-300 animate-pulse">Saving...</div>}
-
-      {/* Co-Commissioners */}
-      <section>
-        <SectionHeader icon={UserPlus} label="Co-Commissioners" />
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Add Co-Commissioner">
-            <div className="flex items-center gap-2">
-              <Input placeholder="Username or email" className="w-48" />
-              <Button size="sm" onClick={() => apiAction('add_co_commissioner')}>Add</Button>
-            </div>
-          </ToolRow>
+    <div className="space-y-3">
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Anti-tanking detection</span>
+            <span className="block text-xs text-white/45">Flags a team that benches healthy starters or stops setting lineups.</span>
+          </div>
+          <Switch
+            checked={value?.tankingMonitorEnabled ?? false}
+            disabled={!value}
+            onCheckedChange={(checked) => void save({ tankingMonitorEnabled: checked })}
+            aria-label="Anti-tanking detection"
+            data-testid="survivor-integrity-tanking"
+          />
         </div>
-      </section>
-
-      {/* Schedule */}
-      <section>
-        <SectionHeader icon={Calendar} label="Schedule" />
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Regular Season Weeks">
-            <Input type="number" min={1} max={18} className="w-20 text-right" defaultValue={14} />
-          </ToolRow>
-          <ToolRow label="Playoff Start Week">
-            <Input type="number" min={10} max={18} className="w-20 text-right" defaultValue={15} />
-          </ToolRow>
-          <ToolRow label="Playoff Weeks Per Round">
-            <Input type="number" min={1} max={3} className="w-20 text-right" defaultValue={1} />
-          </ToolRow>
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Suspicious trade alerts</span>
+            <span className="block text-xs text-white/45">Get a notification when the collusion check flags a trade. Off: flags still show on the review page.</span>
+          </div>
+          <Switch
+            checked={value?.tradeAlertsEnabled ?? true}
+            disabled={!value}
+            onCheckedChange={(checked) => void save({ tradeAlertsEnabled: checked })}
+            aria-label="Suspicious trade alerts"
+            data-testid="survivor-integrity-trade-alerts"
+          />
         </div>
-      </section>
-
-      {/* Playoff Bracket */}
-      <section>
-        <SectionHeader icon={Trophy} label="Playoff Bracket" />
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Playoff Teams">
-            <Input type="number" min={2} max={8} className="w-20 text-right" defaultValue={6} />
-          </ToolRow>
-          <ToolRow label="Seeding Rule">
-            <select className="rounded bg-white/5 border border-white/10 px-2 py-1 text-sm text-white">
-              <option value="record">Record</option>
-              <option value="points_for">Points For</option>
-              <option value="manual">Manual</option>
-            </select>
-          </ToolRow>
-          {/* Free: an odd bracket seeds with byes exactly like the free 6-team one. */}
-          <ToolRow label="Odd Number of Playoff Teams">
-            <Switch defaultChecked={false} />
-          </ToolRow>
-          <ToolRow label="Lower Bracket (Consolation)">
-            <Switch defaultChecked={false} />
-          </ToolRow>
-          <ToolRow label="Edit Playoff Bracket">
-            <Button size="sm" variant="outline" onClick={() => apiAction('edit_bracket')}>
-              <Edit3 className="h-3 w-3 mr-1" />Edit
-            </Button>
-          </ToolRow>
+        <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2.5">
+          <div>
+            <span className="block text-sm text-white/80">Hold flagged trades</span>
+            <span className="block text-xs text-white/45">{HOLD_FLAGGED_TRADES_LABELS[value?.holdFlaggedTradesMode ?? 'severe'].detail}</span>
+          </div>
+          <select
+            value={value?.holdFlaggedTradesMode ?? 'severe'}
+            disabled={!value}
+            onChange={(e) => void save({ holdFlaggedTradesMode: e.target.value as HoldFlaggedTradesMode })}
+            aria-label="Hold flagged trades"
+            data-testid="survivor-integrity-hold-trades"
+            className="rounded-lg border border-white/15 bg-transparent px-2 py-1 text-xs text-white/80"
+          >
+            {HOLD_FLAGGED_TRADES_MODES.map((m) => (
+              <option key={m} value={m}>
+                {HOLD_FLAGGED_TRADES_LABELS[m].label}
+              </option>
+            ))}
+          </select>
         </div>
-      </section>
-
-      {/* Roster Controls */}
-      <section>
-        <SectionHeader icon={Shield} label="Roster Controls" />
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Lock All Rosters">
-            <DangerButton label="Lock Rosters" onConfirm={() => apiAction('lock_all_rosters')} />
-          </ToolRow>
-          <ToolRow label="Lock All Moves (trades + waivers)">
-            <DangerButton label="Lock Moves" onConfirm={() => apiAction('lock_all_moves')} />
-          </ToolRow>
-          <ToolRow label="Force Player to Bench">
-            <Button size="sm" variant="outline" onClick={() => {}}>Select Player</Button>
-          </ToolRow>
+        <div className="flex items-center justify-between gap-4 py-2.5">
+          <div className="min-w-0">
+            <span className="block text-sm text-white/80">Collusion checks</span>
+            <span className="block text-xs text-white/45">
+              Every trade is checked. {value ? describeCollusionSensitivity(value.collusionSensitivity) : ''}
+            </span>
+          </div>
+          <select
+            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-sm text-white"
+            value={value?.collusionSensitivity ?? 'medium'}
+            disabled={!value}
+            onChange={(e) => void save({ collusionSensitivity: e.target.value as IntegritySensitivity })}
+            aria-label="Collusion sensitivity"
+            data-testid="survivor-integrity-collusion"
+          >
+            {INTEGRITY_SENSITIVITIES.map((s) => (
+              <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
+            ))}
+          </select>
         </div>
-      </section>
+      </div>
+      {status ? <p role="status" className="text-xs text-white/60">{status}</p> : null}
 
-      {/* Matchup Edits */}
-      <section>
-        <SectionHeader icon={Edit3} label="Matchup & Score Edits" />
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Edit Matchup Scores">
-            <Button size="sm" variant="outline" onClick={() => apiAction('edit_scores')}>
-              <Edit3 className="h-3 w-3 mr-1" />Edit Scores
-            </Button>
-          </ToolRow>
-          <ToolRow label="Override Weekly Result">
-            <DangerButton label="Override" onConfirm={() => apiAction('override_result')} />
-          </ToolRow>
-          <ToolRow label="Extended Scoring Corrections" gated hasSubscription={hasAfCommissionerSub}>
-            <Switch defaultChecked={false} />
-          </ToolRow>
-        </div>
-      </section>
+      <LineupIntegrity leagueId={leagueId} />
 
-      {/* Anti-Competitive (Gated) */}
-      <section>
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/70 uppercase tracking-wide">
-          <Shield className="h-4 w-4" />Competitive Integrity
-          {!hasAfCommissionerSub && <Lock className="h-3 w-3 text-amber-400/60" />}
-        </h3>
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4">
-          <ToolRow label="Anti-Tanking Detection" gated hasSubscription={hasAfCommissionerSub}>
-            <Switch defaultChecked={false} />
-          </ToolRow>
-          <ToolRow label="Anti-Collusion Monitoring" gated hasSubscription={hasAfCommissionerSub}>
-            <Switch defaultChecked={false} />
-          </ToolRow>
-          <ToolRow label="Suspicious Trade Alerts" gated hasSubscription={hasAfCommissionerSub}>
-            <Switch defaultChecked={false} />
-          </ToolRow>
-          <ToolRow label="Lineup Neglect Warnings" gated hasSubscription={hasAfCommissionerSub}>
-            <Switch defaultChecked={false} />
-          </ToolRow>
-        </div>
-      </section>
+      <Link
+        href={`/league/${encodeURIComponent(leagueId)}/commissioner/integrity`}
+        className="inline-flex items-center gap-1 text-sm font-semibold text-cyan-300 underline"
+        data-testid="survivor-integrity-review"
+      >
+        Review integrity flags <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+      </Link>
     </div>
   )
 }

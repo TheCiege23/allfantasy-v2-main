@@ -28,6 +28,7 @@ describe('public trade decision receipt', () => {
       missingEvidence: [], reason: null, assetValuesVerified: true, projectionsVerified: true,
       outcomeVerified: true, outcomeMetric: 'survival', beforePct: 62, afterPct: 71, deltaPct: 9,
       valueSource: 'FantasyCalc · redraft · 1QB', projectionSource: 'league-scored feed · week 2',
+      lineupBasis: null, lineupCoverage: [],
       participantOutcomes: [
         { rosterId: 'r1', beforePct: 62, afterPct: 71, deltaPct: 9 },
         { rosterId: 'r2', beforePct: 75, afterPct: 66, deltaPct: -9 },

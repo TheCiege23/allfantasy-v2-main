@@ -1,0 +1,446 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-26T02:22:22Z",
+    "source": "https://www.fantrax.com/fxea/general/{getLeagueInfo,getTeamRosters,getStandings,getDraftPicks,getDraftResults}?leagueId=<public league, id withheld>",
+    "note": "Public pre-draft NBA league, no credentials (fxea/general is unauthenticated). Captured with the owner's consent. League id, league name, team ids and team names replaced with placeholders; playerInfo trimmed to 20 of 1287 pool entries; scoring, roster and playoff settings verbatim."
+  },
+  "info": {
+    "seasonYear": 2026,
+    "startDate": "2026-10-26",
+    "endDate": "2027-03-28",
+    "draftType": "snake",
+    "rosterInfo": {
+      "positionConstraints": {
+        "C": {
+          "maxActive": 1
+        },
+        "Flx": {
+          "maxActive": 5
+        },
+        "F": {
+          "maxActive": 2
+        },
+        "G": {
+          "maxActive": 2
+        }
+      },
+      "maxTotalPlayers": 14,
+      "maxTotalActivePlayers": 10
+    },
+    "scoringSystem": {
+      "scoringCategories": {
+        "PLAYER": {
+          "BLK": {
+            "Default": "points2"
+          },
+          "ST": {
+            "Default": "points2"
+          },
+          "AST": {
+            "Default": "points1.5"
+          },
+          "TO": {
+            "Default": "points-1"
+          },
+          "PTS": {
+            "Default": "points1"
+          },
+          "REB": {
+            "Default": "points1.25"
+          }
+        }
+      },
+      "scoringCategorySettings": [
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS",
+                "name": "Assists",
+                "id": "1250",
+                "shortName": "AST"
+              },
+              "points": 1.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKS",
+                "name": "Blocks",
+                "id": "1260",
+                "shortName": "BLK"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_POINTS",
+                "name": "Points",
+                "id": "1390",
+                "shortName": "PTS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_REBOUNDS",
+                "name": "Rebounds",
+                "id": "1400",
+                "shortName": "REB"
+              },
+              "points": 1.25
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_STEALS",
+                "name": "Steals",
+                "id": "1410",
+                "shortName": "ST"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TURNOVERS",
+                "name": "Turnovers",
+                "id": "1460",
+                "shortName": "TO"
+              },
+              "points": -1.0
+            }
+          ],
+          "group": {
+            "code": "BASKETBALL_PLAYER",
+            "name": "Player",
+            "id": "3010",
+            "shortName": "Plyr"
+          }
+        }
+      ],
+      "type": "HEAD_TO_HEAD_POINTS_BASED"
+    },
+    "playoffs": {
+      "lastRegularSeasonPeriod": 19,
+      "numPlayoffTeams": 4,
+      "firstPlayoffPeriod": 20,
+      "mergePlayoffPeriods": false,
+      "used": true
+    },
+    "draftSettings": {
+      "draftType": "snake"
+    },
+    "poolSettings": {
+      "duplicatePlayerType": "NONE",
+      "playerSourceType": "ALL_TEAMS"
+    },
+    "leagueName": "Public NBA league",
+    "scoringPeriods": [
+      {
+        "number": 1,
+        "endDate": "2026-11-02T18:59:59.0-0500",
+        "startDate": "2026-10-26T19:00:00.0-0400"
+      },
+      {
+        "number": 2,
+        "endDate": "2026-11-09T18:59:59.0-0500",
+        "startDate": "2026-11-02T19:00:00.0-0500"
+      }
+    ],
+    "teamInfo": {
+      "team01": {
+        "id": "team01",
+        "name": "Team 01"
+      },
+      "team02": {
+        "id": "team02",
+        "name": "Team 02"
+      },
+      "team03": {
+        "id": "team03",
+        "name": "Team 03"
+      },
+      "team04": {
+        "id": "team04",
+        "name": "Team 04"
+      },
+      "team05": {
+        "id": "team05",
+        "name": "Team 05"
+      },
+      "team06": {
+        "id": "team06",
+        "name": "Team 06"
+      },
+      "team07": {
+        "id": "team07",
+        "name": "Team 07"
+      },
+      "team08": {
+        "id": "team08",
+        "name": "Team 08"
+      },
+      "team09": {
+        "id": "team09",
+        "name": "Team 09"
+      }
+    },
+    "playerInfo": {
+      "06mkb": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "0722e": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "06mkc": {
+        "eligiblePos": "G,F,Flx",
+        "status": "FA"
+      },
+      "07apr": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "06mka": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "07aps": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "05wah": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "06mjy": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "07apl": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "06mjz": {
+        "eligiblePos": "C,Flx",
+        "status": "FA"
+      },
+      "07apm": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "06mjw": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "07apj": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "06mjx": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "07apk": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "06mju": {
+        "eligiblePos": "C,F,Flx",
+        "status": "FA"
+      },
+      "07aph": {
+        "eligiblePos": "F,Flx",
+        "status": "FA"
+      },
+      "06mjv": {
+        "eligiblePos": "G,Flx",
+        "status": "FA"
+      },
+      "07api": {
+        "eligiblePos": "C,Flx",
+        "status": "FA"
+      },
+      "07apf": {
+        "eligiblePos": "C,Flx",
+        "status": "FA"
+      }
+    }
+  },
+  "rosters": {
+    "period": 1,
+    "rosters": {
+      "team01": {
+        "teamName": "Team 01",
+        "rosterItems": []
+      },
+      "team02": {
+        "teamName": "Team 02",
+        "rosterItems": []
+      },
+      "team03": {
+        "teamName": "Team 03",
+        "rosterItems": []
+      },
+      "team04": {
+        "teamName": "Team 04",
+        "rosterItems": []
+      }
+    }
+  },
+  "standings": [
+    {
+      "teamName": "Team 03",
+      "totalPointsFor": 0.0,
+      "teamId": "team03",
+      "gamesBack": 0.0,
+      "rank": 1,
+      "points": "0-0-0",
+      "winPercentage": 0.0
+    },
+    {
+      "teamName": "Team 07",
+      "totalPointsFor": 0.0,
+      "teamId": "team07",
+      "gamesBack": 0.0,
+      "rank": 1,
+      "points": "0-0-0",
+      "winPercentage": 0.0
+    },
+    {
+      "teamName": "Team 06",
+      "totalPointsFor": 0.0,
+      "teamId": "team06",
+      "gamesBack": 0.0,
+      "rank": 1,
+      "points": "0-0-0",
+      "winPercentage": 0.0
+    }
+  ],
+  "draftPicks": {
+    "futureDraftPicks": [],
+    "currentDraftPicks": [
+      {
+        "round": 1,
+        "pick": 1,
+        "teamId": "team02"
+      },
+      {
+        "round": 2,
+        "pick": 9,
+        "teamId": "team02"
+      },
+      {
+        "round": 3,
+        "pick": 9,
+        "teamId": "team02"
+      },
+      {
+        "round": 4,
+        "pick": 1,
+        "teamId": "team02"
+      },
+      {
+        "round": 5,
+        "pick": 9,
+        "teamId": "team02"
+      }
+    ]
+  },
+  "draftResults": {
+    "draftDate": "2026-10-25T20:30:00.0-0400",
+    "draftPicks": [
+      {
+        "round": 1,
+        "pick": 1,
+        "teamId": "team02",
+        "time": 1792973635404,
+        "pickInRound": 1
+      },
+      {
+        "round": 1,
+        "pick": 2,
+        "teamId": "team01",
+        "time": 1792973635404,
+        "pickInRound": 2
+      },
+      {
+        "round": 1,
+        "pick": 3,
+        "teamId": "team05",
+        "time": 1792973635404,
+        "pickInRound": 3
+      },
+      {
+        "round": 1,
+        "pick": 4,
+        "teamId": "team09",
+        "time": 1792973635404,
+        "pickInRound": 4
+      },
+      {
+        "round": 1,
+        "pick": 5,
+        "teamId": "team03",
+        "time": 1792973635404,
+        "pickInRound": 5
+      }
+    ],
+    "draftState": "running",
+    "draftOrder": [
+      "team02",
+      "team01",
+      "team05",
+      "team09",
+      "team03"
+    ],
+    "draftType": "snake"
+  },
+  "counts": {
+    "poolSize": 1287,
+    "teams": 9,
+    "poolInNbaMap": 1287,
+    "poolInNhlMap": 0
+  }
+}

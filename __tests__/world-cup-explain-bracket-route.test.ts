@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const ownedEntryMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/prisma", () => ({ prisma: { worldCupBracketEntry: { findFirst: ownedEntryMock } } }))
+
 const requireUserMock = vi.hoisted(() => vi.fn())
 const getAdminStateMock = vi.hoisted(() => vi.fn())
 const hasAiMock = vi.hoisted(() => vi.fn())
@@ -55,6 +58,7 @@ const params = { params: { challengeId: "c1", entryId: "e1" } }
 describe("POST /api/brackets/world-cup/[challengeId]/entries/[entryId]/explain", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    ownedEntryMock.mockResolvedValue({ id: "e1" })
     cookiesGetMock.mockReturnValue(undefined)
     getAdminStateMock.mockResolvedValue(false)
     resolveTierMock.mockReturnValue("pro")
@@ -283,4 +287,13 @@ describe("POST /api/brackets/world-cup/[challengeId]/entries/[entryId]/explain",
       expect.objectContaining({ locale: "en" })
     )
   })
+})
+
+it('rejects a former entry owner before requesting or replaying a paid result', async () => {
+ vi.clearAllMocks()
+ requireUserMock.mockResolvedValue({ok:true,user:{id:'user-1',email:'owner@example.com'}})
+ ownedEntryMock.mockResolvedValueOnce(null)
+ const {POST}=await import('@/app/api/brackets/world-cup/[challengeId]/entries/[entryId]/explain/route')
+ expect((await POST(request() as any, params)).status).toBe(404)
+ expect(prepareTokenFallbackMock).not.toHaveBeenCalled()
 })

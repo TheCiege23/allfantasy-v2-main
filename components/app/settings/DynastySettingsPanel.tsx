@@ -1,6 +1,8 @@
 'use client'
 
+import { DEFAULT_ROOKIE_AUCTION_SETTINGS, type RookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { normalizeRookieOrderMethod } from '@/lib/draft-lottery/rookieOrderMethod'
 import { LotteryReveal } from '@/components/draft/LotteryReveal'
 import type {
   LotteryEligibilityMode,
@@ -21,6 +23,7 @@ type Effective = {
   useMaxPfForNonPlayoff: boolean
   rookieDraftRounds: number
   rookieDraftType: string
+  rookieAuction?: RookieAuctionSettings
   divisionsEnabled: boolean
   tradeDeadlineWeek: number | null
   waiverTypeRecommended: string
@@ -35,6 +38,11 @@ type Effective = {
   taxiScoringOn?: boolean
   taxiDeadlineWeek?: number | null
   taxiPromotionDeadlineWeek?: number | null
+  rookieDraftAutoOpen?: boolean
+  rookieDraftAutoOpenSource?: 'commissioner' | 'plan_default' | 'plan_default_predates' | 'free_default'
+  rookieDraftCustomOpenDate?: string | null
+  rookieDraftAutoStartDays?: 3 | 7 | 14 | null
+  rookieDraftWindowLabel?: string | null
 }
 
 type Presets = {
@@ -78,6 +86,7 @@ export default function DynastySettingsPanel({
   const [saving, setSaving] = useState(false)
   const [patch, setPatch] = useState<Record<string, unknown>>({})
   const [lotteryConfig, setLotteryConfig] = useState<WeightedLotteryConfig | null>(null)
+  const [lotteryDirty, setLotteryDirty] = useState(false)
   const [lotteryPreview, setLotteryPreview] = useState<LotteryEligibleTeam[] | null>(null)
   const [lotteryLoading, setLotteryLoading] = useState(false)
   const [lotteryResult, setLotteryResult] = useState<WeightedLotteryResult | null>(null)
@@ -111,7 +120,7 @@ export default function DynastySettingsPanel({
   const effectiveRookiePickOrder = useMemo(() => {
     const p = patch.rookiePickOrderMethod
     if (typeof p === 'string' && p.length > 0) return p
-    return data?.effective?.rookiePickOrderMethod ?? ''
+    return normalizeRookieOrderMethod(data?.effective?.rookiePickOrderMethod ?? '')
   }, [patch.rookiePickOrderMethod, data?.effective?.rookiePickOrderMethod])
 
   useEffect(() => {
@@ -176,7 +185,7 @@ export default function DynastySettingsPanel({
   }
 
   const save = useCallback(async () => {
-    if (!leagueId || !isCommissioner || Object.keys(patch).length === 0) return
+    if (!leagueId || !isCommissioner || (Object.keys(patch).length === 0 && !lotteryDirty)) return
     setSaving(true)
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/dynasty-settings`, {
@@ -187,12 +196,18 @@ export default function DynastySettingsPanel({
       if (res.ok) {
         const method = patch.rookiePickOrderMethod ?? data?.effective?.rookiePickOrderMethod
         if (method === 'weighted_lottery' && lotteryConfig) {
-          await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft-lottery/config`, {
+          const configResponse = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft-lottery/config`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lotteryConfig }),
-          }).catch(() => {})
+          })
+          if (!configResponse.ok) {
+            const configError = await configResponse.json().catch(() => ({}))
+            setError(configError?.error ?? 'Lottery settings could not be saved')
+            return
+          }
         }
+        setLotteryDirty(false)
         setPatch({})
         await load()
       } else {
@@ -204,7 +219,7 @@ export default function DynastySettingsPanel({
     } finally {
       setSaving(false)
     }
-  }, [leagueId, isCommissioner, patch, load, lotteryConfig, data?.effective?.rookiePickOrderMethod])
+  }, [leagueId, isCommissioner, patch, load, lotteryConfig, lotteryDirty, data?.effective?.rookiePickOrderMethod])
 
   if (loading) {
     return (
@@ -234,6 +249,8 @@ export default function DynastySettingsPanel({
   }
 
   const effective = data.effective
+  const rookieAuction = (patch.rookieAuction as RookieAuctionSettings | undefined) ?? effective?.rookieAuction ?? DEFAULT_ROOKIE_AUCTION_SETTINGS
+  const rookieDraftType = typeof patch.rookieDraftType === 'string' ? patch.rookieDraftType : effective?.rookieDraftType
   const presets = data.presets
   const constants = data.constants
 
@@ -330,48 +347,73 @@ export default function DynastySettingsPanel({
         <div>
           <h4 className="text-xs font-medium text-white/80">Rookie draft order</h4>
           <p className="mt-1 text-xs text-white/65">
-            Method: <span className="text-white/90">{effective.rookiePickOrderMethod}</span>
-            {effective.useMaxPfForNonPlayoff && ' (non-playoff: reverse Max PF)'} · Rounds: {effective.rookieDraftRounds} · Type: {effective.rookieDraftType}
+            Rounds: {effective.rookieDraftRounds} · Type: {effective.rookieDraftType}
+          </p>
+          <p className="mt-1 text-xs text-white/65">
+            Set automatic order by standings or Max PF in Draft Settings. A weighted lottery takes precedence when enabled.
           </p>
           {isCommissioner && (
             <div className="mt-2 flex flex-wrap gap-2">
               <select
                 className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effectiveRookiePickOrder || effective.rookiePickOrderMethod}
+                aria-label="Rookie draft order source"
+                value={effectiveRookiePickOrder === 'weighted_lottery' ? 'weighted_lottery' : 'commissioner'}
                 onChange={(e) => setPatch((p) => ({ ...p, rookiePickOrderMethod: e.target.value }))}
               >
-                {constants.rookiePickOrderMethods.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                {constants.rookiePickOrderMethods.filter((m) => m.value === 'commissioner' || m.value === 'weighted_lottery').map((m) => (
+                  <option key={m.value} value={m.value}>{m.value === 'commissioner' ? 'Use Draft Settings order' : m.label}</option>
                 ))}
+                {effectiveRookiePickOrder === 'weighted_lottery' && !constants.rookiePickOrderMethods.some((m) => m.value === 'weighted_lottery') && <option value="weighted_lottery">Weighted lottery</option>}
               </select>
               <select
                 className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effective.rookieDraftType}
+                value={rookieDraftType}
                 onChange={(e) => setPatch((p) => ({ ...p, rookieDraftType: e.target.value }))}
               >
                 <option value="linear">Linear</option>
                 <option value="snake">Snake</option>
+                <option value="auction">Auction</option>
               </select>
               <input
                 type="number"
                 min={1}
                 max={10}
                 className="w-14 rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white"
-                value={effective.rookieDraftRounds}
+                value={typeof patch.rookieDraftRounds === 'number' ? patch.rookieDraftRounds : effective.rookieDraftRounds}
                 onChange={(e) => setPatch((p) => ({ ...p, rookieDraftRounds: Number(e.target.value) || 4 }))}
               />
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input
-                  type="checkbox"
-                  checked={effective.useMaxPfForNonPlayoff}
-                  onChange={(e) => setPatch((p) => ({ ...p, useMaxPfForNonPlayoff: e.target.checked }))}
-                />
-                Max PF for non-playoff
-              </label>
             </div>
           )}
 
-          {(effectiveRookiePickOrder === 'weighted_lottery' || effective?.rookiePickOrderMethod === 'weighted_lottery') && (
+          {isCommissioner && rookieDraftType === 'auction' && (
+            <div className="mt-3 space-y-3 rounded-lg border border-white/15 p-3 text-xs text-white/80">
+              <label className="block">Auction budget per team
+                <input aria-label="Rookie auction budget per team" type="number" min={1} max={100000} value={rookieAuction.budgetPerTeam}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, budgetPerTeam: Number(e.target.value) } }))}
+                  className="ml-2 w-24 rounded border border-white/20 bg-black/40 p-1 text-white" />
+              </label>
+              <label className="block">Traded rookie picks
+                <select aria-label="Traded rookie pick treatment" value={rookieAuction.policy}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, policy: e.target.value as RookieAuctionSettings['policy'] } }))}
+                  className="ml-2 rounded border border-white/20 bg-black/40 p-1 text-white">
+                  <option value="block">Require commissioner resolution (default)</option>
+                  <option value="budget">Convert picks to auction budget</option>
+                  <option value="nominations">Convert picks to nomination turns</option>
+                </select>
+              </label>
+              <p>Require resolution: the auction cannot open until traded picks are resolved. Budget: transfer the set round value from the original team to the pick owner. Nomination turns: the pick owner receives the original team’s turn for that round.</p>
+              {rookieAuction.policy === 'budget' && Array.from({ length: Math.max(1, Math.min(12, Number(patch.rookieDraftRounds ?? effective.rookieDraftRounds) || 1)) }, (_, index) => {
+                const round = String(index + 1)
+                return <label key={round} className="mr-3 inline-block">Round {round} value
+                  <input aria-label={`Round ${round} auction value`} type="number" min={0} max={100000} value={rookieAuction.valuesByRound[round] ?? 0}
+                    onChange={(e) => setPatch((p) => ({ ...p, rookieAuction: { ...rookieAuction, valuesByRound: { ...rookieAuction.valuesByRound, [round]: Number(e.target.value) } } }))}
+                    className="ml-1 w-20 rounded border border-white/20 bg-black/40 p-1 text-white" />
+                </label>
+              })}
+            </div>
+          )}
+
+          {(effectiveRookiePickOrder === 'weighted_lottery' || normalizeRookieOrderMethod(effective?.rookiePickOrderMethod ?? '') === 'weighted_lottery') && (
             <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-base">🎱</span>
@@ -380,8 +422,7 @@ export default function DynastySettingsPanel({
 
               {data.lotteryEligibility?.isStartupLeague && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                  ⚠️ Weighted lottery is only available for established dynasty leagues (year 2+). This appears to
-                  be a startup league.
+                  These settings apply to future rookie drafts. The startup draft does not use a weighted lottery.
                 </div>
               )}
 
@@ -401,13 +442,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.lotteryTeamCount ?? 6}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, lotteryTeamCount: Number(e.target.value) }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, lotteryTeamCount: Number(e.target.value) }
                         )
-                      }
+                      }}
                     >
                       {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
                         <option key={n} value={n}>
@@ -422,13 +464,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.lotteryPickCount ?? 6}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, lotteryPickCount: Number(e.target.value) }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, lotteryPickCount: Number(e.target.value) }
                         )
-                      }
+                      }}
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                         <option key={n} value={n}>
@@ -443,13 +486,14 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.weightingMode ?? 'inverse_standings'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, weightingMode: e.target.value as LotteryWeightingMode }
                             : { ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, weightingMode: e.target.value as LotteryWeightingMode }
                         )
-                      }
+                      }}
                     >
                       <option value="inverse_standings">Inverse standings (standard)</option>
                       <option value="inverse_points_for">Inverse points scored</option>
@@ -462,7 +506,8 @@ export default function DynastySettingsPanel({
                     <select
                       className="rounded border border-white/20 bg-black/40 px-2 py-1 text-white"
                       value={lotteryConfig.eligibilityMode ?? 'non_playoff'}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setLotteryDirty(true)
                         setLotteryConfig((c) =>
                           c
                             ? { ...c, eligibilityMode: e.target.value as LotteryEligibilityMode }
@@ -471,7 +516,7 @@ export default function DynastySettingsPanel({
                                 eligibilityMode: e.target.value as LotteryEligibilityMode,
                               }
                         )
-                      }
+                      }}
                     >
                       <option value="non_playoff">Non-playoff teams only</option>
                       <option value="bottom_n">Bottom N teams</option>
@@ -552,6 +597,75 @@ export default function DynastySettingsPanel({
         </div>
       )}
 
+      {/* Rookie draft calendar: auto-open on the sport's window (lib/dynasty-core/rookieDraftCalendar.ts) */}
+      {effective && (
+        <div>
+          <h4 className="text-xs font-medium text-white/80">Rookie draft calendar</h4>
+          <p className="mt-1 text-xs text-white/65">
+            {effective.rookieDraftWindowLabel
+              ? <>Default window: <span className="text-white/90">{effective.rookieDraftWindowLabel}</span>, after the real draft. </>
+              : null}
+            {effective.rookieDraftAutoOpen
+              ? effective.rookieDraftCustomOpenDate
+                ? `Opens automatically on ${effective.rookieDraftCustomOpenDate}.`
+                : 'Opens automatically when the window opens.'
+              : effective.rookieDraftAutoOpenSource === 'plan_default_predates'
+                ? 'Auto-open is off for this offseason, which started before AF Commissioner opened rookie drafts automatically. Turn it on below.'
+                : 'Created by the commissioner (auto-open is off).'}
+            {effective.rookieDraftAutoOpenSource === 'plan_default' && ' Included with AF Commissioner.'}
+            {' '}
+            {effective.rookieDraftAutoOpen && effective.rookieDraftAutoStartDays
+              ? `It then starts by itself ${effective.rookieDraftAutoStartDays} days later, at 8 pm Eastern, and members are told the time when it opens.`
+              : 'An opened draft waits in pre-draft until the commissioner starts it.'}
+          </p>
+          {isCommissioner && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                <input
+                  type="checkbox"
+                  checked={typeof patch.rookieDraftAutoOpen === 'boolean' ? patch.rookieDraftAutoOpen : Boolean(effective.rookieDraftAutoOpen)}
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftAutoOpen: e.target.checked }))}
+                />
+                Open the rookie draft automatically
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Custom open date
+                <input
+                  type="date"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={
+                    typeof patch.rookieDraftCustomOpenDate === 'string'
+                      ? patch.rookieDraftCustomOpenDate
+                      : patch.rookieDraftCustomOpenDate === null
+                        ? ''
+                        : effective.rookieDraftCustomOpenDate ?? ''
+                  }
+                  onChange={(e) => setPatch((p) => ({ ...p, rookieDraftCustomOpenDate: e.target.value || null }))}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-white/80">
+                Then start it
+                <select
+                  data-testid="rookie-draft-auto-start-days"
+                  className="rounded border border-white/20 bg-black/40 px-2 py-0.5 text-xs text-white"
+                  value={String(
+                    patch.rookieDraftAutoStartDays !== undefined ? patch.rookieDraftAutoStartDays ?? '' : effective.rookieDraftAutoStartDays ?? '',
+                  )}
+                  onChange={(e) =>
+                    setPatch((p) => ({ ...p, rookieDraftAutoStartDays: e.target.value ? (Number(e.target.value) as 3 | 7 | 14) : null }))
+                  }
+                >
+                  <option value="">when I press Start</option>
+                  <option value="3">by itself 3 days after it opens</option>
+                  <option value="7">by itself 7 days after it opens</option>
+                  <option value="14">by itself 14 days after it opens</option>
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Taxi squad (PROMPT 3/5) */}
       {effective && (effective.taxiSlots != null || effective.taxiEligibilityYears != null) && (
         <div>
@@ -563,30 +677,11 @@ export default function DynastySettingsPanel({
             {effective.taxiScoringOn && ' · Scoring on taxi'}
             {(effective.taxiDeadlineWeek ?? effective.taxiPromotionDeadlineWeek) != null && ` · Deadlines: ${effective.taxiDeadlineWeek ?? '—'}/${effective.taxiPromotionDeadlineWeek ?? '—'}`}
           </p>
-          {isCommissioner && constants?.taxiEligibilityYearsOptions && constants?.taxiLockBehaviorOptions && (
-            <div className="mt-2 flex flex-wrap gap-2 items-center">
-              <label className="text-xs text-white/80">
-                Slots: <input type="number" min={0} max={20} className="w-12 rounded border border-white/20 bg-black/40 px-1 py-0.5 text-white" value={effective.taxiSlots ?? 4} onChange={(e) => setPatch((p) => ({ ...p, taxiSlots: Number(e.target.value) || 0 }))} />
-              </label>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiEligibilityYears ?? 1} onChange={(e) => setPatch((p) => ({ ...p, taxiEligibilityYears: Number(e.target.value) }))}>
-                {constants.taxiEligibilityYearsOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <select className="rounded border border-white/20 bg-black/40 px-2 py-1 text-xs text-white" value={effective.taxiLockBehavior ?? 'once_promoted_no_return'} onChange={(e) => setPatch((p) => ({ ...p, taxiLockBehavior: e.target.value }))}>
-                {constants.taxiLockBehaviorOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiInSeasonMoves ?? true} onChange={(e) => setPatch((p) => ({ ...p, taxiInSeasonMoves: e.target.checked }))} />
-                In-season moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiPostseasonMoves ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiPostseasonMoves: e.target.checked }))} />
-                Postseason moves
-              </label>
-              <label className="flex items-center gap-1 text-xs text-white/80">
-                <input type="checkbox" checked={effective.taxiScoringOn ?? false} onChange={(e) => setPatch((p) => ({ ...p, taxiScoringOn: e.target.checked }))} />
-                Scoring on taxi
-              </label>
-            </div>
+          {/* Taxi editing is consolidated in Commissioner settings → Roster → Taxi squad. */}
+          {isCommissioner && (
+            <p className="mt-2 text-xs text-white/50" data-testid="dynasty-taxi-moved-note">
+              Edit taxi squad settings in Commissioner settings → Roster → Taxi squad.
+            </p>
           )}
         </div>
       )}
@@ -633,7 +728,7 @@ export default function DynastySettingsPanel({
         </div>
       )}
 
-      {isCommissioner && Object.keys(patch).length > 0 && (
+      {isCommissioner && (Object.keys(patch).length > 0 || lotteryDirty) && (
         <div className="flex gap-2">
           <button
             type="button"
@@ -645,7 +740,11 @@ export default function DynastySettingsPanel({
           </button>
           <button
             type="button"
-            onClick={() => setPatch({})}
+            onClick={() => {
+              setPatch({})
+              setLotteryDirty(false)
+              setLotteryConfig({ ...DEFAULT_WEIGHTED_LOTTERY_CONFIG, ...(data.weightedLotterySettings?.lotteryConfig ?? {}) })
+            }}
             className="rounded border border-white/20 px-3 py-1.5 text-xs text-white/80"
           >
             Reset

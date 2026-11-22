@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
 
 /**
  * One league, read once per render: the row, and which team in it is the viewer's.
@@ -59,6 +60,8 @@ export const LEAGUE_CONTEXT_SELECT = {
   isDynasty: true,
   starters: true,
   settings: true,
+  // A native league's playoff field (readPlayoffFormat reads it for native leagues only).
+  playoffTeams: true,
   status: true,
   lifecycleState: true,
   guillotineMode: true,
@@ -100,7 +103,8 @@ export type LeagueContext = {
   league(): Promise<LeagueContextRow | null>
   /**
    * The viewer's claimed team in this league — the same unordered `findFirst` every loader ran,
-   * now run once, so two sections of one screen cannot land on different teams.
+   * now run once, so two sections of one screen cannot land on different teams. With several
+   * claimed teams it is the one the viewer last switched to.
    */
   claimedTeam(): Promise<ClaimedTeamRow | null>
   /** Every team in this league the viewer has claimed. */
@@ -117,10 +121,25 @@ export function createLeagueContext(leagueId: string, userId: string): LeagueCon
     league: () =>
       (league ??= prisma.league.findUnique({ where: { id: leagueId }, select: LEAGUE_CONTEXT_SELECT })),
     claimedTeam: () =>
-      (claimedTeam ??= prisma.leagueTeam.findFirst({
-        where: { leagueId, claimedByUserId: userId },
-        select: CLAIMED_TEAM_SELECT,
-      })),
+      (claimedTeam ??= (async () => {
+        /*
+         * A manager who runs several teams in one league sees the one they switched to in the league
+         * header (the active-team cookie; a native team's `externalId` is its roster id). The extra
+         * read only happens when such a choice is on the request; everyone else gets the read as before.
+         */
+        const active = await rememberedActiveTeamIds()
+        if (active.length > 0) {
+          const chosen = await prisma.leagueTeam.findFirst({
+            where: { leagueId, claimedByUserId: userId, externalId: { in: active } },
+            select: CLAIMED_TEAM_SELECT,
+          })
+          if (chosen) return chosen
+        }
+        return prisma.leagueTeam.findFirst({
+          where: { leagueId, claimedByUserId: userId },
+          select: CLAIMED_TEAM_SELECT,
+        })
+      })()),
     claimedTeams: () =>
       (claimedTeams ??= prisma.leagueTeam.findMany({
         where: { leagueId, claimedByUserId: userId },

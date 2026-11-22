@@ -102,15 +102,15 @@ describe('buildGuillotineWarRoomContextForChimmy', () => {
   })
 
   it('returns null when the context build is not ok (non-guillotine / forbidden)', async () => {
-    mocks.buildContext.mockResolvedValue({ ok: false, status: 404, error: 'Not a guillotine league' })
+    mocks.buildContext.mockResolvedValue({ ok: false, status: 404, error: 'Not a Guilly league' })
     expect(await buildGuillotineWarRoomContextForChimmy('lg1', 'u1')).toBeNull()
   })
 
-  it('grounds a guillotine league with survival-first rules, standings, and weekly plan', async () => {
+  it('grounds a Guilly league with survival-first rules, standings, and weekly plan', async () => {
     const out = await buildGuillotineWarRoomContextForChimmy('lg1', 'u1')
     expect(out).toBeTruthy()
     const text = out as string
-    expect(text).toMatch(/GUILLOTINE AF WAR ROOM CONTEXT/)
+    expect(text).toMatch(/GUILLY AF WAR ROOM CONTEXT/)
     expect(text.toUpperCase()).toContain('SURVIVAL-FIRST')
     expect(text.toLowerCase()).toContain('do not invent eliminated teams')
     expect(text).toMatch(/SURVIVAL STANDINGS/)

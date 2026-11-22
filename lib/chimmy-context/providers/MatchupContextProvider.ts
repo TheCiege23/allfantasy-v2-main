@@ -18,13 +18,15 @@
  * Rules:
  *   - DB-first (Prisma only — no external APIs, no projections this batch).
  *   - Never throws; returns `{ data: null }` or a safe partial on any miss.
- *   - Default-off impact: chat route is gated by `CHIMMY_CONTEXT_ENGINE_INJECT`.
+ *   - Imported leagues have no `TeamWeekResult` rows; their week comes from
+ *     `WeeklyMatchup` instead (`loadImportedMatchup`).
  *   - Projections + opponent-strength + urgency are scaffolded but intentionally
  *     not wired into the slice (formulas not yet finalized — see
  *     `lib/chimmy-context/intel/opponentStrength.ts` and `urgency.ts`).
  */
 
 import { prisma } from "@/lib/prisma"
+import { nativeWeeklyLeague } from "@/lib/core-app/weeklyCapabilities"
 import { resolveLeagueIdentity } from "@/lib/chimmy-context/providers/_helpers/leagueIdentity"
 import { resolveCurrentWeekFromRequest } from "@/lib/chimmy-context/providers/_helpers/currentWeek"
 import {
@@ -121,6 +123,70 @@ async function loadProjectionTotals(args: {
   return totals
 }
 
+type ImportedMatchup = {
+  yourActualPoints: number | null
+  opponentActualPoints: number | null
+  opponentTeamId: string | null
+  opponentTeamName: string | null
+}
+
+/**
+ * An IMPORTED league's week, from `WeeklyMatchup` — the schedule the sync stores for it.
+ *
+ * Imports never get `TeamWeekResult` rows (the weekly processor writes those for AllFantasy-hosted
+ * leagues only), so the canonical path above always came back empty for them and Chimmy answered
+ * "no matchup" in every imported league. The rows are keyed the way `matchupPreviewGrounding` reads
+ * them: the platform's league id, and the platform's team id (`LeagueTeam.externalId`), paired on
+ * `matchupId`. Exactly two rows or nothing — a bye or an unsynced week is not an opponent.
+ * Never throws.
+ */
+async function loadImportedMatchup(args: {
+  leagueId: string
+  teamId: string | null
+  season: number
+  week: number
+}): Promise<ImportedMatchup | null> {
+  try {
+    if (!args.teamId) return null
+    const [league, team] = await Promise.all([
+      prisma.league.findUnique({
+        where: { id: args.leagueId },
+        select: { platform: true, platformLeagueId: true },
+      }),
+      prisma.leagueTeam.findFirst({
+        where: { id: args.teamId, leagueId: args.leagueId },
+        select: { externalId: true },
+      }),
+    ])
+    if (!league?.platformLeagueId || nativeWeeklyLeague(league) || !team?.externalId) return null
+    const rows = await prisma.weeklyMatchup.findMany({
+      where: {
+        leagueId: league.platformLeagueId,
+        seasonYear: args.season,
+        week: args.week,
+        matchupId: { not: null },
+      },
+      select: { rosterId: true, matchupId: true, pointsFor: true },
+    })
+    const mine = rows.find((r) => r.rosterId === team.externalId)
+    const pair = mine ? rows.filter((r) => r.matchupId === mine.matchupId) : []
+    const opponent = pair.length === 2 ? pair.find((r) => r.rosterId !== team.externalId) : undefined
+    if (!mine || !opponent) return null
+    const oppTeam = await prisma.leagueTeam.findFirst({
+      where: { leagueId: args.leagueId, externalId: opponent.rosterId },
+      select: { id: true, teamName: true },
+    })
+    return {
+      yourActualPoints: roundPoints(mine.pointsFor),
+      opponentActualPoints: roundPoints(opponent.pointsFor),
+      opponentTeamId: oppTeam?.id ?? null,
+      opponentTeamName: oppTeam?.teamName ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export class MatchupContextProvider
   implements ChimmyContextProvider<MatchupContextSlice>
 {
@@ -146,7 +212,44 @@ export class MatchupContextProvider
 
       const week = await resolveCurrentWeekFromRequest(request, identity.leagueId)
 
+      /* An imported league's week, used wherever the canonical rows come back empty. */
+      const importedResult = async (): Promise<ProviderResult<MatchupContextSlice> | null> => {
+        if (week.week == null) return null
+        const imported = await loadImportedMatchup({
+          leagueId: identity.leagueId,
+          teamId: identity.teamId,
+          season: week.season,
+          week: week.week,
+        })
+        if (!imported) return null
+        return {
+          ok: true,
+          data: {
+            leagueId: identity.leagueId,
+            week: week.week,
+            yourTeamId: identity.teamId,
+            opponentTeamId: imported.opponentTeamId,
+            yourProjectedPoints: null,
+            opponentProjectedPoints: null,
+            // The stored schedule carries no game state, so the week is not called final here.
+            status: "unknown",
+            season: week.season,
+            yourActualPoints: imported.yourActualPoints,
+            opponentActualPoints: imported.opponentActualPoints,
+            opponentTeamName: imported.opponentTeamName,
+            playoffStartWeek: week.playoffStartWeek,
+            isPlayoffWeek: week.isPlayoffWeek,
+            weeksUntilPlayoffs: week.weeksUntilPlayoffs,
+            currentWeekSource: week.source,
+          },
+          fetchedAt,
+          durationMs: Date.now() - startedAt,
+        }
+      }
+
       if (!identity.platformUserId) {
+        const imported = await importedResult()
+        if (imported) return imported
         return {
           ok: true,
           data: {
@@ -184,6 +287,8 @@ export class MatchupContextProvider
         .catch(() => null)
 
       if (!viewerRoster) {
+        const imported = await importedResult()
+        if (imported) return imported
         return {
           ok: true,
           data: {
@@ -229,6 +334,8 @@ export class MatchupContextProvider
       const opponentRosterId = viewerRow?.opponentRosterId ?? null
 
       if (!opponentRosterId) {
+        const imported = await importedResult()
+        if (imported) return imported
         return {
           ok: true,
           data: {

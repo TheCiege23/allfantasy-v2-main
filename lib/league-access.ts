@@ -1,7 +1,9 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId, coOwnerTableMissing } from '@/lib/team-coowners/access'
 
 /** Which populated column proved membership. Useful in tests and logs. */
-export type LeagueMembershipVia = 'owner' | 'redraft' | 'roster' | 'claim'
+export type LeagueMembershipVia = 'owner' | 'redraft' | 'roster' | 'claim' | 'coowner'
 
 export interface LeagueAccessResult {
   leagueId: string
@@ -83,7 +85,7 @@ export async function resolveLeagueMembership(
   }
 
   const rosterCount = await prisma.roster.count({
-    where: { leagueId, platformUserId: userId },
+    where: managedRosterWhere(leagueId, userId),
   })
   if (rosterCount > 0) {
     return {
@@ -116,6 +118,10 @@ export async function resolveLeagueMembership(
     }
   }
 
+  if (await acceptedCoOwnerRosterId(leagueId, userId)) {
+    return { ok: true, access: { ...base, isCommissioner: false, isMember: true, isOwner: false, via: 'coowner' } }
+  }
+
   return { ok: false, reason: 'not_member', status: 403 }
 }
 
@@ -142,14 +148,21 @@ export async function memberLeaguePlatformIdsFor(userId: string | undefined | nu
       OR: [
         { userId },
         { redraftMembers: { some: { userId } } },
-        { rosters: { some: { platformUserId: userId } } },
+        { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
         { teams: { some: { claimedByUserId: userId } } },
       ],
     },
     select: { platformLeagueId: true },
   })
 
-  return [...new Set(rows.map((r) => r.platformLeagueId).filter((id): id is string => Boolean(id)))]
+  const invitations = await prisma.teamCoOwner?.findMany({
+    where: { userId, acceptedAt: { not: null } },
+    select: { leagueId: true, league: { select: { platformLeagueId: true } } },
+  }).catch((error: unknown) => { if (coOwnerTableMissing(error)) return []; throw error }) ?? []
+  const verified = await Promise.all(invitations.map(async (invitation) =>
+    await acceptedCoOwnerRosterId(invitation.leagueId, userId) ? invitation.league.platformLeagueId : null,
+  ))
+  return [...new Set([...rows.map((r) => r.platformLeagueId), ...verified].filter((id): id is string => Boolean(id)))]
 }
 
 /**

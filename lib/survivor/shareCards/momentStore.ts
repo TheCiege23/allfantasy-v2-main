@@ -13,6 +13,7 @@ import {
   type ShareMomentRecord,
   type ShareMomentType,
 } from './types'
+import { createSurvivorChatMessage } from '../survivorChatBridge'
 
 /**
  * Persistence for Survivor share moments. Every read degrades to "no moments" when the table has
@@ -99,6 +100,8 @@ export async function loadPublicShareMoment(leagueSlug: string, momentId: string
 }
 
 export interface NewShareMoment {
+  /** A fixed id (the week recap's is derived from its council); otherwise the database picks one. */
+  id?: string
   leagueId: string
   type: ShareMomentType
   week: number
@@ -118,6 +121,7 @@ export async function createShareMomentOnce(input: NewShareMoment): Promise<{ cr
     if (existing) return { created: false, id: existing.id }
     const row = await prisma.survivorShareMoment.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         leagueId: input.leagueId,
         type: input.type,
         week: input.week,
@@ -174,7 +178,7 @@ export async function listOfferedMoments(leagueId: string, viewer: ViewerFacts):
   if (!viewer.userId) return []
   try {
     const rows = await prisma.survivorShareMoment.findMany({
-      where: { leagueId, final: true, OR: [{ subjectUserId: viewer.userId }, { type: 'champ' }] },
+      where: { leagueId, final: true, OR: [{ subjectUserId: viewer.userId }, { type: { in: ['champ', 'recap'] } }] },
       orderBy: [{ week: 'desc' }, { createdAt: 'desc' }],
       take: 50,
     })
@@ -208,7 +212,7 @@ export async function postShareMomentToLeagueChat(moment: ShareMomentRecord, sha
   if (!channel) return { ok: false, error: 'League chat is not ready yet.' }
   const content = buildShareCardContent(moment.type, moment.week, moment.payload)
   const pageUrl = absoluteSiteUrl(shareMomentPagePath(moment))
-  await prisma.survivorChatMessage.create({
+  await createSurvivorChatMessage(prisma, {
     data: {
       leagueId: moment.leagueId,
       channelId: channel.id,

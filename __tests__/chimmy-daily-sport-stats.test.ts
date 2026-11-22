@@ -182,6 +182,47 @@ function logDb(opts: { registry: unknown[]; rows: unknown[]; sportLatest?: Date;
 const OHTANI_REG = [{ id: 'pim-ohtani', canonicalName: 'Shohei Ohtani', position: 'TWP', currentTeam: 'LAD' }]
 
 describe('get_player_game_log — daily sports', () => {
+  it('SOCCER: reads stored match boxes without claiming full-season totals', async () => {
+    const { db } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: '20260922-ars-che:fielders', providerGameId: '20260922-ars-che',
+        opponent: 'Chelsea', map: { group: 'fielders', seasonType: 'regular', position: 'Forward',
+          stats: { goals: 2, assists: 1, shots_on_goal: 3, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'soccer' }, db)
+    expect(out).toContain('SOCCER per-game box-score lines')
+    expect(out).toContain('2 goals, 1 assists, 3 shots on target, 90 minutes')
+    expect(await buildPlayerSeasonStatsContext({ playerName: 'Alex Striker', sport: 'soccer' }, db))
+      .toContain('Verified soccer season totals are not stored')
+  })
+
+  it('uses a season window for a winter game played after the calendar year changed', async () => {
+    const { db, calls } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: '20270201-ars-che:fielders', providerGameId: '20270201-ars-che',
+        season: 2027, gameDate: new Date('2027-02-01T05:00:00Z'), map: { group: 'fielders',
+          seasonType: 'regular', stats: { goals: 1, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'SOCCER', season: 2026 }, db)
+    expect(out).toContain('- 2027-02-01')
+    const query = calls.find((call) => call.text.includes('FROM player_game_stats') && call.text.includes('ORDER BY game_date'))!
+    expect(query.text).toContain('game_date >=')
+    expect(query.text).toContain('game_date <')
+    expect(query.text).not.toContain('AND season =')
+  })
+
+  it('labels an older soccer year as a partial tagged-year history when its opener is unknown', async () => {
+    const { db, calls } = logDb({
+      registry: [{ id: 'pim-soccer', canonicalName: 'Alex Striker', position: 'Forward', currentTeam: 'Arsenal' }],
+      rows: [game({ gameId: 'old:fielders', season: 2024, map: { group: 'fielders',
+        seasonType: 'regular', stats: { goals: 1, minutes_played: 90 } } })],
+    })
+    const out = await buildPlayerGameLogContext({ playerName: 'Alex Striker', sport: 'SOCCER', season: 2024 }, db)
+    expect(out).toContain('only stored games tagged year 2024')
+    expect(out).toContain('1 goals')
+    const query = calls.find((call) => call.text.includes('FROM player_game_stats') && call.text.includes('ORDER BY game_date'))!
+    expect(query.text).toContain('AND season =')
+  })
   it('MLB: merges a two-way game into ONE line, pitching decision included', async () => {
     const { db } = logDb({
       registry: OHTANI_REG,

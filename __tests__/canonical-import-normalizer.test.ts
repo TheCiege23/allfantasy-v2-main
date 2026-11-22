@@ -93,4 +93,41 @@ describe('buildCanonicalImportBundle', () => {
     )
     expect(b.derivedFlags.devy).toBe(true)
   })
+
+  it('uses a custom Fantrax league\'s actual reception and IDP rules', () => {
+    const league = { ...baseNormalized().league, scoring: 'custom', rosterSize: 38, roster_positions: [] }
+    const b = buildCanonicalImportBundle(baseNormalized({
+      source: { source_provider: 'fantrax', source_league_id: 'nfl-public', imported_at: new Date().toISOString() },
+      league,
+      scoring: {
+        scoring_format: 'custom',
+        rules: [
+          { stat_key: 'rec', points_value: 1 },
+          { stat_key: 'idp_tkl', points_value: 0.5 },
+        ],
+      },
+    }))
+    expect(b.scoringPresetId).toBe('fb_ppr')
+    expect(b.derivedFlags.idp).toBe(true)
+    expect(b.settingsSnapshot.scoringSettings?.rules).toMatchObject({ rec: 1, idp_tkl: 0.5 })
+    expect(b.warnings.some((warning) => warning.code === 'scoring_preset_inferred')).toBe(false)
+  })
+
+  it('uses the NBA points preset and preserves a Fantrax league\'s actual stat weights', () => {
+    const b = buildCanonicalImportBundle(baseNormalized({
+      source: { source_provider: 'fantrax', source_league_id: 'nba-public', imported_at: new Date().toISOString() },
+      league: { ...baseNormalized().league, sport: 'NBA', scoring: 'HEAD_TO_HEAD_POINTS_BASED', rosterSize: 14 },
+      scoring: {
+        scoring_format: 'HEAD_TO_HEAD_POINTS_BASED',
+        rules: [
+          { stat_key: 'pts', points_value: 1 },
+          { stat_key: 'reb', points_value: 1.25 },
+          { stat_key: 'ast', points_value: 1.5 },
+        ],
+      },
+    }))
+    expect(b.scoringPresetId).toBe('nba_points')
+    expect(b.settingsSnapshot.scoringSettings?.rules).toMatchObject({ pts: 1, reb: 1.25, ast: 1.5 })
+    expect(b.warnings.some((warning) => warning.code === 'scoring_preset_inferred')).toBe(false)
+  })
 })

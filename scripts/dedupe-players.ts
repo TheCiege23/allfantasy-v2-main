@@ -21,6 +21,7 @@
  * Run with no flag for a dry run. `--apply` writes, inside one transaction.
  */
 import { prisma } from '../lib/prisma'
+import { PROVIDERS_ALLOWED_TWICE, planCrosswalkMerges, planDuplicatePlayerMerges } from '../lib/canonical/duplicatePlayerMerge'
 
 const APPLY = process.argv.includes('--apply')
 
@@ -35,10 +36,35 @@ const APPLY = process.argv.includes('--apply')
  *              rows differing only by position spelling (Grady Jarrett DE vs DT)
  *              or by a stale team (Joe Cardona LAR vs MIA) — which is exactly the
  *              residue the first pass left behind.
+ * `birthday` — NFL only. A row with no Sleeper id folded into the ONE Sleeper-backed row with
+ *              the same normalized name AND birthday. This catches what neither scope above
+ *              can: TheSportsDB copies that differ in position label (`OT` vs `OL`) or team, and
+ *              share no provider id with the Sleeper row. Measured 2026-11-09: 479 such rows,
+ *              454 mergeable, 25 refused for a provider clash. The rule and its refusals live
+ *              in `lib/canonical/duplicatePlayerMerge.ts`, which the canonical backfill also
+ *              reads so a re-run cannot rebuild the copy. The SURVIVOR IS FIXED to the
+ *              Sleeper-backed row rather than picked by `pickSurvivor`: the backfill keys NFL
+ *              players by Sleeper id, so any other survivor would be rebuilt beside it.
+ * `crosswalk` — NFL only. A row whose ONLY identity is a Rolling Insights id, folded into the
+ *              player that `PlayerIdentityMap` links that id to through a Sleeper id. Evidence
+ *              is an id chain, not a name; a stated birthday on both sides must agree, and a
+ *              target already holding a different Rolling Insights id is refused. Measured
+ *              2026-11-09: 402 such rows, 372 linked to exactly one player. Rule in
+ *              `planCrosswalkMerges`; the backfill follows the same link. Survivor fixed, as
+ *              for `birthday`.
  */
 const SCOPE = (process.argv.find((a) => a.startsWith('--scope='))?.split('=')[1] ?? 'name') as
   | 'name'
   | 'provider'
+  | 'birthday'
+  | 'crosswalk'
+
+/*
+ * The crosswalk scope's stored-id check ignores the backfill's own `backfill` key. That key is
+ * bookkeeping (a source id or a `name:` tag), and a copy and its survivor routinely disagree on
+ * it. The Rolling Insights id itself is checked strictly by `planCrosswalkMerges`.
+ */
+const CROSSWALK_JSON_IGNORED: ReadonlySet<string> = new Set(['backfill'])
 
 type Row = {
   id: string
@@ -61,11 +87,16 @@ function pidKeys(p: Record<string, string> | null): string[] {
  * different people who happen to share a name, position and team, and merging
  * them would fuse two athletes into one. Matching name/position/team is
  * suggestive; a contradicting provider id is proof, and proof wins.
+ *
+ * The `birthday` scope alone passes `PROVIDERS_ALLOWED_TWICE`. Its rows are already matched on
+ * name AND birthday, and TheSportsDB is known to hold two records for one athlete; see
+ * `duplicatePlayerMerge.ts`. The name and provider scopes stay strict for every provider.
  */
-function providerIdsConflict(a: Row, b: Row): string | null {
+function providerIdsConflict(a: Row, b: Row, allowedTwice: ReadonlySet<string> = new Set()): string | null {
   const pa = a.providerIds ?? {}
   const pb = b.providerIds ?? {}
   for (const k of Object.keys(pa)) {
+    if (allowedTwice.has(k)) continue
     if (pb[k] != null && String(pb[k]) !== String(pa[k])) {
       return `${k}: ${pa[k]} vs ${pb[k]}`
     }
@@ -136,7 +167,59 @@ async function main() {
      JOIN "Player" p ON p.id = i.player_id
      ORDER BY gkey, p.id`
 
-  const rows = await prisma.$queryRawUnsafe<any[]>(SCOPE === 'provider' ? PROVIDER_SQL : NAME_SQL)
+  /* gkey -> the row that must survive. Set only by the `birthday` and `crosswalk` scopes. */
+  const fixedSurvivor = new Map<string, string>()
+  const birthdayRefusals: string[] = []
+
+  let rows: any[]
+  if (SCOPE === 'birthday' || SCOPE === 'crosswalk') {
+    const players = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT p.id, p.name, p.position, p.sport, p.team, p.provider_ids AS "providerIds",
+              to_char(p.birth_date, 'YYYY-MM-DD') AS "birthDate",
+              (SELECT COUNT(*) FROM sports_core_player_provider_identities i WHERE i.player_id = p.id)::int AS "identityCount",
+              (SELECT COUNT(*) FROM sports_core_player_images im WHERE im.player_id = p.id)::int AS "imageCount"
+       FROM "Player" p WHERE p.sport = 'NFL'`
+    )
+    const identities = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT i.player_id AS "playerId", i.provider, i.provider_player_id AS "providerPlayerId"
+       FROM sports_core_player_provider_identities i JOIN "Player" p ON p.id = i.player_id
+       WHERE p.sport = 'NFL'`
+    )
+    const links =
+      SCOPE === 'crosswalk'
+        ? await prisma.$queryRawUnsafe<any[]>(
+            `SELECT "rollingInsightsId", "sleeperId" FROM "PlayerIdentityMap"
+             WHERE sport = 'NFL' AND "rollingInsightsId" IS NOT NULL AND "sleeperId" IS NOT NULL`
+          )
+        : []
+    const birthdayPlan =
+      SCOPE === 'crosswalk'
+        ? { ...planCrosswalkMerges(players, identities, links), noTwin: 0, noEvidence: 0 }
+        : { ...planDuplicatePlayerMerges(players, identities), noLink: 0 }
+    const byId = new Map(players.map((p) => [p.id, p]))
+    rows = []
+    const added = new Set<string>()
+    for (const m of birthdayPlan.merges) {
+      fixedSurvivor.set(m.keepId, m.keepId)
+      for (const id of [m.keepId, m.dupId]) {
+        if (added.has(id)) continue
+        added.add(id)
+        rows.push({ ...byId.get(id), gkey: m.keepId })
+      }
+    }
+    console.log(
+      SCOPE === 'crosswalk'
+        ? `crosswalk plan: ${birthdayPlan.merges.length} copies to fold, ${birthdayPlan.skipped.length} refused, ` +
+            `${birthdayPlan.noLink} with no identity-map link`
+        : `birthday plan: ${birthdayPlan.merges.length} copies to fold, ${birthdayPlan.skipped.length} refused, ` +
+            `${birthdayPlan.noTwin} with no Sleeper-backed twin, ${birthdayPlan.noEvidence} with no name or birthday`
+    )
+    for (const s of birthdayPlan.skipped.slice(0, 8)) {
+      birthdayRefusals.push(`${byId.get(s.dupId)?.name} ${s.dupId} — ${s.reason}${s.providers ? ` (${s.providers.join(', ')})` : ''}`)
+    }
+  } else {
+    rows = await prisma.$queryRawUnsafe<any[]>(SCOPE === 'provider' ? PROVIDER_SQL : NAME_SQL)
+  }
 
   const groups = new Map<string, Row[]>()
   for (const r of rows) {
@@ -165,12 +248,17 @@ async function main() {
       if (conflicts.length < 8) conflicts.push(`${gkey} — spans sports: ${[...new Set(rs.map((r) => r.sport))].join('/')}`)
       continue
     }
-    const survivor = pickSurvivor(rs)
+    const fixedId = fixedSurvivor.get(gkey)
+    const survivor = (fixedId ? rs.find((r) => r.id === fixedId) : undefined) ?? pickSurvivor(rs)
     const losers = rs.filter((r) => r.id !== survivor.id)
 
     const bad = losers
       .map((l) => {
-        const c = providerIdsConflict(survivor, l)
+        const c = providerIdsConflict(
+          survivor,
+          l,
+          SCOPE === 'birthday' ? PROVIDERS_ALLOWED_TWICE : SCOPE === 'crosswalk' ? CROSSWALK_JSON_IGNORED : undefined
+        )
         return c ? `${gkey} — ${c}` : null
       })
       .filter(Boolean) as string[]
@@ -196,7 +284,17 @@ async function main() {
     plan.push({ survivor, losers, mergedPids })
   }
 
-  console.log(`\ngroups considered (same name+position+sport+team): ${groups.size}`)
+  const groupRule = {
+    name: 'same name+position+sport+team',
+    provider: 'one provider id on several rows',
+    birthday: 'NFL copy with no Sleeper id -> its Sleeper-backed twin by name+birthday',
+    crosswalk: 'NFL Rolling Insights-only row -> the player its identity-map link names',
+  }[SCOPE]
+  console.log(`\ngroups considered (${groupRule}): ${groups.size}`)
+  if (birthdayRefusals.length) {
+    console.log(`\n  sample ${SCOPE}-scope refusals (left alone):`)
+    birthdayRefusals.forEach((c) => console.log(`    ${c}`))
+  }
   console.log(`  mergeable:                 ${merged}`)
   console.log(`  refused (provider clash):  ${skippedConflict}`)
   console.log(`  Player rows to delete:     ${losersToDelete}`)

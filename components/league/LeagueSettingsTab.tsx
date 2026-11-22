@@ -26,6 +26,8 @@ interface LeagueInfo {
   playoffTeams: number
   playoffStartWeek: number
   medianGame: boolean
+  /** `settings.median_game_in_playoffs` — off unless the commissioner turned it on. */
+  medianGameInPlayoffs?: boolean
   timezone: string
   [key: string]: unknown
 }
@@ -113,6 +115,19 @@ export function LeagueSettingsTab({ leagueId, canEdit }: LeagueSettingsTabProps)
               <span className="text-white/50">{league.medianGame ? 'Yes' : 'No'}</span>
             )}
           </SettingRow>
+          {league.medianGame ? (
+            <SettingRow label="League median in playoffs" editable={canEdit}>
+              {canEdit ? (
+                <Switch
+                  aria-label="League median in playoffs. Off: playoff weeks are win-or-go-home only."
+                  checked={league.medianGameInPlayoffs === true}
+                  onCheckedChange={(v) => save('medianGameInPlayoffs', v)}
+                />
+              ) : (
+                <span className="text-white/50">{league.medianGameInPlayoffs === true ? 'Yes' : 'No — win or go home'}</span>
+              )}
+            </SettingRow>
+          ) : null}
         </div>
       </section>
 

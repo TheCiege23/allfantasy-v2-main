@@ -4,16 +4,9 @@
 import type { ZombieBoardEntry, ZombieTurnMoment } from '@/lib/zombie/zombieHomeSummary'
 import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
-export type { ZombieBoardEntry, ZombieTurnMoment, ZombieMatchupView }
+export type { ZombieBoardEntry, ZombieTurnMoment }
 
-export type ZombieView =
-  | 'home'
-  | 'resources'
-  | 'ambush'
-  | 'weekly-board'
-  | 'ai'
-
-export interface ZombieSummaryConfig {
+interface ZombieSummaryConfig {
   whispererSelection: string
   infectionLossToWhisperer: boolean
   infectionLossToZombie: boolean
@@ -82,6 +75,7 @@ export interface ZombieSummary {
     axeMargin: number
     /** Serums a Zombie needs to revive (`serumEngine`'s check). */
     reviveSerums: number
+    winningsPolicy?: 'beta_2025' | 'legacy_score'
     bashShare: number
     maulShare: number
   }

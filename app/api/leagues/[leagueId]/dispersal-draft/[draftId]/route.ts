@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
+import { canAccessLeagueDraft, canSubmitDispersalPickForUser } from '@/lib/live-draft-engine/auth'
 import {
   getRosterIdForLeagueUser,
   requireDispersalDraftForLeague,
@@ -67,8 +67,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can start the draft.' }, { status: 403 })
       }
       try {
@@ -114,6 +113,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
       }
     }
 
+    // Any member's page may nudge a pick whose clock has run out; the server reads the expiry from the
+    // draft itself (DispersalDraftEngine.advanceExpiredPick), so asking early does nothing.
+    if (action === 'advance_expired') {
+      const state = (await DispersalDraftEngine.advanceExpiredPick(draftId)) ?? (await DispersalDraftEngine.getDraftState(draftId))
+      const detail = await getDispersalDraftDetail(leagueId, draftId)
+      return NextResponse.json({ state, detail })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err: unknown) {
     const e = err instanceof Error ? err : new Error(String(err))
@@ -135,7 +142,7 @@ type PostBody = {
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: string; draftId: string }> }) {
   try {
-    const dispersalDraftClient = (prisma as any).dispersalDraft
+    const dispersalDraftClient = prisma.dispersalDraft
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -152,17 +159,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const body = (await req.json().catch(() => ({}))) as PostBody
     const action = body.action
 
-    const rosterIdToUse =
-      typeof body.rosterId === 'string' && body.rosterId.trim()
-        ? body.rosterId.trim()
-        : await getRosterIdForLeagueUser(leagueId, userId)
+    const ownRosterId = await getRosterIdForLeagueUser(leagueId, userId)
+    const namedRosterId = typeof body.rosterId === 'string' && body.rosterId.trim() ? body.rosterId.trim() : null
+    const rosterIdToUse = namedRosterId ?? ownRosterId
+    /*
+     * 🛑 A NAMED ROSTER MUST BE THE CALLER'S OWN. This took `body.rosterId` as given, so any member of the league
+     * could pick, pass or auto-pick for another team by naming its roster. A roster other than the caller's own
+     * team now has to pass the pick route's rule (`canSubmitDispersalPickForUser`).
+     */
+    if (
+      (action === 'make_pick' || action === 'pass' || action === 'auto_pick') &&
+      namedRosterId &&
+      namedRosterId !== ownRosterId &&
+      !(await canSubmitDispersalPickForUser(leagueId, userId, namedRosterId))
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     if (action === 'start') {
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can start the draft.' }, { status: 403 })
       }
       const state = await DispersalDraftEngine.startDraft(draftId, uid)
@@ -194,12 +212,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       return NextResponse.json(state)
     }
 
+    if (action === 'advance_expired') {
+      const state = (await DispersalDraftEngine.advanceExpiredPick(draftId)) ?? (await DispersalDraftEngine.getDraftState(draftId))
+      return NextResponse.json(state)
+    }
+
     if (action === 'complete') {
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can force complete.' }, { status: 403 })
       }
       await dispersalDraftClient.update({

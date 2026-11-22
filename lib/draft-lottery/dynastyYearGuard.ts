@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DynastyLotteryEligibility = {
   eligible: boolean
@@ -21,24 +23,42 @@ export function isDynastyLeagueRow(league: {
   )
 }
 
+/** Legacy draft routes also serve other formats, whose lottery behavior stays unchanged. */
+export async function legacyDraftLotteryRestriction(leagueId: string, draftId?: string): Promise<string | null> {
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { isDynasty: true, leagueVariant: true },
+  })
+  if (!league) return 'League not found'
+  if (!isDynastyLeagueRow(league)) return null
+  const draft = await prisma.draftSession.findFirst({
+    where: { leagueId, ...(draftId ? { id: draftId } : {}) }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { draftModeLabel: true, status: true },
+  })
+  if (draftId && !draft) return 'Draft not found'
+  if (String(draft?.draftModeLabel ?? '').toLowerCase() === 'startup' && !['completed', 'complete', 'post_draft'].includes(String(draft?.status ?? '').toLowerCase())) {
+    return 'Weighted lottery is only available for future rookie drafts, not the startup draft.'
+  }
+  const eligibility = await checkDynastyLotteryEligibility(leagueId)
+  return eligibility.eligible ? null : eligibility.reason
+}
+
 /**
  * Weighted rookie draft lottery is only valid for dynasty leagues in year 2+
  * (established league with prior season / completed draft data — not the founding startup year).
  */
-export async function checkDynastyLotteryEligibility(leagueId: string): Promise<DynastyLotteryEligibility> {
+export async function checkDynastyLotteryEligibility(leagueId: string, targetSeason?: number): Promise<DynastyLotteryEligibility> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {
       isDynasty: true,
       leagueVariant: true,
+      sport: true,
       season: true,
       createdAt: true,
       settings: true,
-      _count: {
-        select: {
-          redraftDrafts: { where: { status: 'completed' } },
-        },
-      },
+      // The league's FIRST season — see `foundingSeason` below.
+      redraftSeasons: { select: { season: true }, orderBy: { season: 'asc' }, take: 1 },
     },
   })
 
@@ -64,19 +84,25 @@ export async function checkDynastyLotteryEligibility(leagueId: string): Promise<
   const currentSeason = typeof league.season === 'number' ? league.season : null
   const startupSeason =
     typeof settings.startup_season === 'number' ? settings.startup_season : undefined
-  const completedDrafts = league._count.redraftDrafts
-  const createdYear = new Date(league.createdAt).getFullYear()
+  /*
+   * 🛑 THE FOUNDING SEASON, NOT THE YEAR THE ROW WAS CREATED. This compared against
+   * `createdAt.getFullYear()`, but a league is stamped with the season it will PLAY
+   * (`resolveLeagueCreationSeason`): an MLB league created in November 2026 is season 2027, so in
+   * its startup year `2027 <= 2026` was false and the weighted lottery was allowed in a startup
+   * league. The mirror case: an NBA league created in February 2027 joins the in-progress season
+   * 2026, so the createdAt year (2027) would stretch its "startup" into year 2 and refuse the lottery
+   * there. The league's earliest RedraftSeason IS its first season, however it was stamped; without
+   * one, re-derive what creation stamps from `createdAt`.
+   */
+  const foundingSeason =
+    league.redraftSeasons?.[0]?.season ??
+    resolveLeagueCreationSeason(String(league.sport ?? ''), new Date(league.createdAt))
 
-  let isStartupLeague = false
-  if (startupSeason != null && currentSeason != null && currentSeason === startupSeason) {
-    isStartupLeague = true
-  } else if (completedDrafts === 0 && currentSeason != null) {
-    if (startupSeason == null) {
-      isStartupLeague = currentSeason <= createdYear
-    } else {
-      isStartupLeague = currentSeason <= startupSeason
-    }
-  }
+  const draftSeason = Number.isInteger(targetSeason) ? targetSeason! : currentSeason
+  const firstSeason = startupSeason ?? foundingSeason
+  if (draftSeason == null) return { eligible: false, reason: 'The draft season is unavailable.', currentSeason, isStartupLeague: false }
+  // A completed startup does not turn its first season into a future rookie draft.
+  const isStartupLeague = draftSeason != null && draftSeason <= firstSeason
 
   if (isStartupLeague) {
     return {

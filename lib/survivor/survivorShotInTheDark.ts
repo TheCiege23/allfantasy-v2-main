@@ -4,8 +4,15 @@ import { randomInt } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { loadCouncilContext } from './survivorCouncilService'
 import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
+import { SURVIVOR_SHOT_IN_THE_DARK_ODDS, type SurvivorShotInTheDarkOdds } from './survivorSettings'
 
 const ACTION = 'shot_in_the_dark_played'
+
+/** The league's odds (1 in 4, 5 or 6; owner's default 6). Tolerates a context without settings. */
+export function shotInTheDarkOdds(settings: { shotInTheDarkOdds?: number | null } | null | undefined): SurvivorShotInTheDarkOdds {
+  const value = settings?.shotInTheDarkOdds
+  return (SURVIVOR_SHOT_IN_THE_DARK_ODDS as readonly number[]).includes(value as number) ? value as SurvivorShotInTheDarkOdds : 6
+}
 
 function recordId(leagueId: string, userId: string): string {
   return `survivor-shot:${leagueId}:${userId}`
@@ -33,11 +40,15 @@ export async function getShotInTheDarkStatus(leagueId: string, userId: string) {
     used: Boolean(used),
     success: used ? shotResult(used.data) : null,
     councilId: used?.relatedEntityId ?? ctx?.council.id ?? null,
+    odds: shotInTheDarkOdds(ctx?.settings),
   }
 }
 
-/** One use per manager per league; the draw and forfeited vote are committed together. */
-export async function playShotInTheDark(leagueId: string, userId: string, roll: () => number = () => randomInt(6) + 1) {
+/**
+ * One use per manager per league; the draw and forfeited vote are committed together. The draw is
+ * 1 in the league's configured odds; `roll(odds)` returns 1..odds and 1 is safe.
+ */
+export async function playShotInTheDark(leagueId: string, userId: string, roll: (odds: number) => number = (odds) => randomInt(odds) + 1) {
   return withSurvivorSetupTransaction(leagueId, async tx => {
     const ctx = await loadCouncilContext(leagueId, undefined, tx)
     if (!ctx || ctx.council.status !== 'voting_open' || ctx.council.isRevealed ||
@@ -63,14 +74,15 @@ export async function playShotInTheDark(leagueId: string, userId: string, roll: 
       (play.powerType === 'extra_vote' || play.powerType === 'vote_steal') && play.extraTargetUserId)) {
       return { ok: false as const, status: 409 as const, error: 'You have already cast an additional idol vote at this council.' }
     }
-    const draw = roll()
-    if (!Number.isInteger(draw) || draw < 1 || draw > 6) throw new Error('Invalid Shot in the Dark draw')
+    const odds = shotInTheDarkOdds(ctx.settings)
+    const draw = roll(odds)
+    if (!Number.isInteger(draw) || draw < 1 || draw > odds) throw new Error('Invalid Shot in the Dark draw')
     const success = draw === 1
     await tx.survivorAuditEntry.create({ data: {
       id: recordId(leagueId, userId), leagueId, week: ctx.council.week,
       category: 'tribal', action: ACTION, actorUserId: userId, targetUserId: userId,
       relatedEntityId: ctx.council.id, relatedEntityType: 'council',
-      data: { draw, success, forfeitedVote: true },
+      data: { draw, odds, success, forfeitedVote: true },
       isVisibleToCommissioner: false, isVisibleToPublic: false,
     } })
     return { ok: true as const, success, councilId: ctx.council.id,

@@ -1,6 +1,8 @@
 'use client'
 
 import React from 'react'
+import { ChimmyAnalysisPreview } from './ChimmyAnalysisPreview'
+import { readDeepAnalysisPreview } from '@/lib/chimmy/deepAnalysisPreview'
 import { Volume2, Square, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 import { SuggestedActionRenderer } from '@/lib/chimmy-chat/SuggestedActionRenderer'
@@ -12,10 +14,15 @@ import { buildSmartFollowUpChips, type ChimmyFollowUpChip } from '@/lib/chimmy-c
 import ChimmyResponseStructure from './ChimmyResponseStructure'
 import { ChimmyOrchestrationPanel } from './ChimmyOrchestrationPanel'
 import ChimmyTrustPanel from './ChimmyTrustPanel'
+import { BracketEvidenceCard } from './BracketEvidenceCard'
+import { ChimmyPortfolioCard } from './ChimmyPortfolioCard'
+import { readPortfolioEvidence } from '@/lib/chimmy/portfolio/types'
 
 export type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 
 export interface ChimmyMessageBubbleProps {
+  onAnalysisUnlock?: () => void
+  analysisBusy?: boolean
   messageId?: string
   role: 'user' | 'assistant'
   content: string
@@ -69,6 +76,8 @@ function renderContentWithLinks(text: string) {
 
 export default function ChimmyMessageBubble({
   messageId,
+  onAnalysisUnlock,
+  analysisBusy,
   role,
   content,
   imageUrl,
@@ -116,6 +125,11 @@ export default function ChimmyMessageBubble({
       limit: 5,
     })
   }, [meta?.answerContract?.followUps, meta?.orchestration?.followUps, followUpChips])
+
+  const analysisPreview = !isUser ? readDeepAnalysisPreview(meta?.analysisPreview) : null
+  if (analysisPreview) return <div className="max-w-full sm:max-w-[80%]">
+    <ChimmyAnalysisPreview preview={analysisPreview} onUnlock={onAnalysisUnlock} busy={analysisBusy} />
+  </div>
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -201,6 +215,8 @@ export default function ChimmyMessageBubble({
           </div>
         )}
 
+        {!isUser && meta?.bracketEvidence && <BracketEvidenceCard evidence={meta.bracketEvidence} />}
+        {!isUser && readPortfolioEvidence(meta?.portfolio) && <ChimmyPortfolioCard evidence={readPortfolioEvidence(meta?.portfolio)!} onAsk={(prompt, portfolioState) => onFollowUpClick?.({ label: prompt, prompt, portfolioState, origin: 'fallback' })} />}
         {!isUser && meta && showTrustPanel && (
           <ChimmyTrustPanel
             confidencePct={meta.confidencePct}

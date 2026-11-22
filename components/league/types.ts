@@ -4,30 +4,22 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
-export type LeaguePlayersSubtab = 'search' | 'trend' | 'available' | 'leaders' | 'trade'
+type LeagueVariantMode = 'standard' | 'devy' | 'c2c'
 
-export type LeagueVariantMode = 'standard' | 'devy' | 'c2c'
-
-export type LeagueRecord = {
+type LeagueRecord = {
   wins: number
   losses: number
   ties: number
 }
 
-export type LeagueLifecycleSnapshot = {
+type LeagueLifecycleSnapshot = {
   state: string
   locked: boolean
   emergencyPaused: boolean
   allowedActions: string[]
 }
 
-/** Authoritative role flags from GET `/api/leagues/:id/lifecycle` (preferred over SSR `leagueRole` when present). */
-export type LeagueLifecyclePermissions = {
-  isElevatedCommissioner: boolean
-  isHeadCommissioner: boolean
-}
-
-export type LeagueHeaderInfo = {
+type LeagueHeaderInfo = {
   id: string
   name: string
   sport: string
@@ -59,7 +51,7 @@ export type LeagueTeamRow = {
   isCurrentUser: boolean
 }
 
-export type LeagueScoringRow = {
+type LeagueScoringRow = {
   id: string
   label: string
   value: string
@@ -172,6 +164,18 @@ export type LeagueTradeAsset = {
   team?: string | null
   teamLogoUrl?: string | null
   accent: 'teal' | 'blue' | 'orange' | 'slate'
+  /**
+   * A draft pick's year, round and original team, read from the pick's own id
+   * (`lib/dynasty-core/dynastyDetails.ts`). Absent on every non-pick asset, and on a pick whose row
+   * names no round. The dynasty trade screen draws it as a pick chip; `label` is unchanged.
+   */
+  pick?: { season: number | null; round: number; originalRosterId: string | null; fromRosterId: string | null }
+  /**
+   * Survivor: this player holds a player-bound idol that moves with him in the trade
+   * (lib/survivor/playerBoundIdolTransfer.ts). Set only when the idol is public, or the viewer holds it —
+   * a secret idol is never revealed to the other side by a trade card.
+   */
+  idol?: boolean
 }
 
 export type LeagueTradeHistoryItem = {
@@ -218,6 +222,21 @@ export type LeagueTradeHistoryItem = {
   viewerIsProposer?: boolean
   /** Viewer belongs to any side of a multi-team trade. Display-only; it grants no action. */
   viewerIsParticipant?: boolean
+  /** The roster that proposed the trade — the team a detail pane marks as "Proposed". */
+  proposerRosterId?: string
+  /** The viewer's roster in this league, or null when they hold none (a commissioner-only view). */
+  viewerRosterId?: string | null
+  /** When an open offer lapses on its own (`AfLeagueTrade.expiresAt`). Null: no expiry recorded. */
+  expiresAt?: string | null
+  /** Rosters that have accepted so far (`metadata.acceptedRosterIds`) — the per-team status in a multi-team deal. */
+  acceptedRosterIds?: string[]
+  /**
+   * The league veto vote, for a trade in `awaiting_votes`: tallies, how many veto votes end it (the
+   * rule stored with the trade, as `castAfTradeVetoVote` reads it), and the viewer's own vote.
+   */
+  votes?: { veto: number; allow: number; needed: number; viewerVote: 'veto' | 'allow' | null } | null
+  /** The viewer holds a roster, is not a trading party, and the trade is in its veto window. */
+  viewerCanVote?: boolean
   decisionAction?: 'accept' | 'counter' | 'decline' | 'review'
   decisionRecommendation?: string | null
   decisionCoveragePct?: number | null
@@ -281,7 +300,7 @@ export type LeagueTradesData = {
   history: LeagueTradeHistoryItem[]
 }
 
-export type LeagueSearchDefenseItem = {
+type LeagueSearchDefenseItem = {
   id: string
   name: string
   teamCode: string | null
@@ -389,7 +408,7 @@ export type LeagueBracketRound = {
   matchups: LeagueBracketMatchup[]
 }
 
-export type LeaguePlayoffBracketData = {
+type LeaguePlayoffBracketData = {
   rounds: LeagueBracketRound[]
 }
 

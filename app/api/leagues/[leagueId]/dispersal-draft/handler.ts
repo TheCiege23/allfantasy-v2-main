@@ -2,11 +2,11 @@
  * GET: Active dispersal draft for league, or null.
  * POST: Create dispersal draft (commissioner + entitlement + dynasty + orphans).
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { getOrphanRosterIdsForLeague, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
   try {
-    const dispersalDraftClient = (prisma as any).dispersalDraft
+    const dispersalDraftClient = prisma.dispersalDraft
     const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -68,8 +68,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-    const role = await getLeagueRole(leagueId, commissionerUserId)
-    if (role !== 'commissioner' && role !== 'co_commissioner') {
+    if (!(await canCommissionerAct(leagueId, commissionerUserId, 'league'))) {
       return NextResponse.json({ error: 'Only the commissioner or co-commissioner can create a dispersal draft.' }, { status: 403 })
     }
 

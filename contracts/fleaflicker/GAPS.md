@@ -15,7 +15,7 @@
 | `G-02` | Does `FetchLeagueScoreboard` exist, under that name? | **RESOLVED 2026-09-03** — yes. Confirmed via Fleaflicker's own published Swagger docs (`https://www.fleaflicker.com/api-docs/index.html`), which is reading documentation, not probing the live data API — no league_id was needed for this half. Params: `sport, league_id, season, scoring_period`. A second endpoint, `FetchLeagueBoxscore` (per-matchup detail, keyed by `fantasy_game_id`), was found at the same time — see `ENDPOINTS.yaml`, not currently needed. | — | Resolved; do not re-check. |
 | `G-03` | Is the scoreboard scoped by week/period, and what is that param called? | **RESOLVED 2026-09-03** — yes, `scoring_period` (integer), confirmed from the same Swagger docs as G-02. **Further confirmed by the real probe**: it is OPTIONAL (omitting it defaults to the current period — see `ENDPOINTS.yaml` param_types), and `value`/`ordinal` both start at `1` for the season's first week (1-indexed), matching `schedulePeriod`/`eligibleSchedulePeriods` in the real fixture. | — | Resolved; do not re-check. Whether playoff weeks continue the same ordinal sequence or use a different numbering is still open — fold into G-01's remaining half. |
 | `G-04` | Team identity on a matchup row — is it the same integer `id` `FetchLeagueStandings`/`FetchLeagueRosters` already use, or a different one? | **RESOLVED 2026-09-11 — SAME ID SPACE** | Joining a matchup row back to the `LeagueTeam` rows the standings/rosters import already wrote | Proven by JOIN, not by the shapes looking alike, which is what this row explicitly asked for. All 16 scoreboard team sides from league 206154 / **2021** / week 1 were matched against that same league's own `FetchLeagueStandings` response on **id AND name**: 16/16, zero mismatches. So a WeeklyMatchup writer may join `games[].home.id` / `games[].away.id` directly to `LeagueTeam`. The MFL-style two-id-space trap this row was written to guard against does not apply to Fleaflicker. ⚠ Re-measured 2026-09-11 after the season-label correction: team ids are **stable across seasons** (2019 and 2021 share all 16), and the same sides join 16/16 to BOTH seasons' standings — so this join proves a shared id space but canNOT date a payload. Only `schedulePeriod.low.season` can. |
-| `G-05` | What does an unplayed (future) week's scoreboard entry look like — absent, zero-filled, or `null` scores? | **(a) RESOLVED · (b) STILL UNOBSERVED, AND NOT OBSERVABLE FROM LEAGUE 206154** | Placeholder-row convention; the "has this league drafted yet" check | (a) No generated schedule at all ⇒ **no `games` key whatsoever** (`fixtures/scoreboard.NFL.json`). (b) 🛑 **THE 2026-09-11 PROBE DID NOT ANSWER THIS, AND THE FIRST WRITE-UP OF IT WAS WRONG ABOUT WHY.** It said league 206154 "season 2025 week 1" was simply a completed week. The truth is worse: 206154's LAST SEASON IS 2021, every one of its 16 periods is final, and a request for any later season is silently clamped to 2021 — so **no future week of this league can ever be probed, in any season, by anyone.** A follow-up probe of "2026 week 15" returned 2021 week 15. Resolving (b) requires a DIFFERENT league that is mid-season. | 
+| `G-05` | What does an unplayed (future) week's scoreboard entry look like — absent, zero-filled, or `null` scores? | **(a) RESOLVED · (b) NARROWED 2026-11-21: an IN-PROGRESS week is observed (`fixtures/scoreboard.NFL.2026.live.json` — `isInProgress: true`, no `isFinalScore`, a scoreless side is `score: {formatted: "0"}` with no `value`); a week that has NOT STARTED is still unobserved, and not observable from league 206154** | Placeholder-row convention; the "has this league drafted yet" check | (a) No generated schedule at all ⇒ **no `games` key whatsoever** (`fixtures/scoreboard.NFL.json`). (b) 🛑 **THE 2026-09-11 PROBE DID NOT ANSWER THIS, AND THE FIRST WRITE-UP OF IT WAS WRONG ABOUT WHY.** It said league 206154 "season 2025 week 1" was simply a completed week. The truth is worse: 206154's LAST SEASON IS 2021, every one of its 16 periods is final, and a request for any later season is silently clamped to 2021 — so **no future week of this league can ever be probed, in any season, by anyone.** A follow-up probe of "2026 week 15" returned 2021 week 15. Resolving (b) requires a DIFFERENT league that is mid-season. | 
 | `G-05b-inferred` | What the pending shape is EXPECTED to be, marked as inference so nobody cites it as observation | **INFERRED, NOT OBSERVED — do not promote without a fixture** | — | From the proven false-omission rule (see G-01): an unplayed game should carry **no `isFinalScore` key at all**, rather than `isFinalScore: false`. Whether its `homeScore`/`awayScore` are absent, `{}`, or zero-valued is **genuinely unknown** and is NOT derivable from the omission rule, because `0` is itself a default that may be omitted. `lib/import-os/collector/fleaflickerMatchupParity.ts` is written to be correct under all three readings — see its header. |
 | `G-06` | Bye weeks / odd team counts — how does a team with no opponent that week appear? | **STILL UNVERIFIED** — and the 2026-09-11 probe could not answer it | Correctness of any writer, so a bye isn't miscounted as a 0-0 loss | League 206154 has **16 teams playing 8 games**: every team has an opponent, so no bye can appear. Needs a league with an ODD team count, or a real bye structure. ⚠ Recorded rather than left to look answered-by-association because the same probe resolved G-01 and G-04 — a fixture resolving some gaps does not resolve the ones it happens not to contain. |
 
@@ -238,3 +238,85 @@ two unknowns turned out to need different sources. The accepted VALUE (`SPORTRAD
 in the vendor's Swagger enum after all, on a second read. The BEHAVIOUR could not come
 from the docs at all: they say `{ type, id }`, and the wire says `{ id }`. Reading the
 schema would have produced a reader that matches nothing. Only the probe could say so.
+
+### `G-12` — do MLB/NHL leagues carry a `TAXI` roster position the way NFL does?
+
+**Status: OPEN — no MLB/NHL capture.** Recorded 2026-10-26, without probing.
+
+`rules.NFL.json` carries `{ label: 'TAXI', group: 'TAXI', start: 3 }`, and
+`fleaflickerTaxiSlots` (lib/league-import/fleaflicker/fleaflickerScoringRules.ts) now
+reads the taxi slot count from it for every sport — `FetchLeagueRules` is one response
+shape across sports. Whether an MLB or NHL league exposes its minors/taxi squad as a
+`TAXI` group (rather than another label, or not at all) is not captured. Until it is, a
+league without a `TAXI`/`group: TAXI` position imports with no taxi slot count (null,
+not 0), and the taxi PLAYERS come only from `FetchRoster`'s `TAXI` group, as before.
+
+**Needed:** `FetchLeagueRules` + one `FetchRoster` from a public MLB or NHL dynasty league
+that uses a taxi/minors squad, via `scripts/probe.sh`, committed with the change that
+reads it.
+
+### `G-13` — the trade parser runs on an UNCAPTURED response, so its trades cannot back a collusion flag
+
+**Status: OPEN, blocked on `G-07`.** Recorded 2026-10-27, without probing.
+
+`FetchLeagueTransactions` is uncaptured (`G-07`), but production code already calls it:
+`FleaflickerLeagueFetchService` pages it during import and sync, and
+`normalizeFleaflickerTransactions` (lib/league-import/fleaflicker/fleaflickerTransactions.ts)
+turns it into trades written to `LeagueTrade`. That parser was built from the vendor's
+Swagger types, not from a response. Two consequences, before anyone builds on it:
+
+- It records only where each asset WENT (`adds`, and a pick's `toRosterId`). It has no
+  `drops`, so where a player came from is unknown, and a traded pick's original owner is
+  never recorded.
+- Whether real responses even match that shape has never been checked.
+
+That is why the collusion check for imported leagues stays Sleeper-only for Fleaflicker
+(see docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md). A collusion flag names two managers, and
+it should not rest on a guessed shape.
+
+**Needed:** the `G-07` decision (whose league's activity this public repo may publish),
+then one `FetchLeagueTransactions` capture with a completed trade via `scripts/probe.sh`.
+Commit it with the parser fix that reads it.
+
+---
+
+## `G-08` (live league) — a LIVE, in-season league's scoreboard was refused as "season unknown" (RESOLVED 2026-11-21)
+
+⚠ This shares the id `G-08` with the older entry above about which endpoints reject `season`. They
+are unrelated; this is the one production notes and PR #3973 call `G-08`. #3973 landed it as
+UNVERIFIED on 2026-11-20; this entry replaces that text with what the capture showed.
+
+**What was wrong.** The one Fleaflicker league in production (`344624`, NFL, season 2026, in season)
+had zero `WeeklyMatchup` rows. `runFleaflickerMatchupParity` skipped it every run with
+`provider returned unknown (silently clamped)`, because `fetchFleaflickerScoreboard` required
+`schedulePeriod.low.season === season`.
+
+**OBSERVED** — one capture, `scripts/probe.sh scoreboard NFL 344624 2026`, 2026-11-21, committed as
+`fixtures/scoreboard.NFL.2026.live.json` (the owner approved the capture; team names, initials and
+logo URLs are replaced with `Team N` / `TN` / an `example.invalid` URL, ids, scores, flags and the
+key set are as captured):
+
+- `schedulePeriod` is `{ordinal: 11, value: 11, containsNow: true, low: {ordinal: 11, startEpochMilli, isNow: true}}`.
+  **There is no `season` key** — not there, and not on any of the 17 `eligibleSchedulePeriods`.
+- `eligibleSchedulePeriods[0].low.startEpochMilli` is `1788861600000` (2026-09-08).
+- 6 games, all `isInProgress: true`, none with `isFinalScore` — see `G-05`.
+
+So the inference recorded when this entry was opened is now observed for this league: the current
+season is omitted from `low`. The clamp case (206154) carries `season: 2021` on every period, so the
+two are separable.
+
+**The rule now in `fetchFleaflickerScoreboard`.** A stated season must equal the request (unchanged:
+the clamp case is still refused and still reports 2021). A body that states none is accepted only
+when its EARLIEST period starts in the requested year, so a request for 2027 answered with this same
+2026 body is still refused. Guarded by `__tests__/league-import/fleaflicker-live-season-guard.test.ts`,
+which reads this fixture and `scoreboard.NFL.2021.week1.json`.
+
+**Still open, none of it blocking:**
+
+- What a live league returns for a season past its current one, and whether a requested PAST week of
+  a live league carries `season`. Neither was captured (one capture was approved). The rule is
+  correct under either answer, because it reads dates when the key is absent.
+- NBA/NHL seasons span two calendar years and their numbering is unobserved. A mismatch refuses.
+- `resolveFleaflickerServedSeason` (the import path) keeps the REQUESTED season when a key-less
+  body's dates disagree. In January and February a live NFL league imported with the default season
+  (the calendar year) is therefore still labelled with the new year. Unchanged by this fix.

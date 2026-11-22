@@ -22,7 +22,7 @@ describe('join alert seat count', () => {
     m.leagueTeam.count.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => (where.claimedByUserId ? 3 : 16))
     m.userProfile.findFirst.mockResolvedValue({ displayName: 'Steve', sleeperUsername: null })
   })
-  it('uses the seats the remaining season supports for a guillotine league', async () => {
+  it('uses the seats the remaining season supports for a Guilly league', async () => {
     m.effective.mockResolvedValue(15)
     await notifyCommissionerOfJoin({ leagueId: 'L1', joinerUserId: 'steve' })
     expect(m.dispatch).toHaveBeenCalledWith(expect.objectContaining({ body: '3/15 spots filled.', meta: expect.objectContaining({ size: 15 }) }))

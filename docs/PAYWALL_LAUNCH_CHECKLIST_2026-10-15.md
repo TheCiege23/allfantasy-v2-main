@@ -113,7 +113,7 @@ These gate through `requireEntitlement` / `FeatureGateService` / `requireFeature
 - **AF Legacy (War Room):**
   - `draft_prep` (`draft/recommend`)
   - `war_room_draft_strategy` (the 5 `*-war-room/[action]` routes)
-  - `/api/draft-war-room` accepts Pro's `pro_draft_ai` too
+  - `/api/draft-war-room` accepted Pro's `pro_draft_ai` too — retired 2026-11-14 (answers 410; nothing in the app called it)
 - **Supreme:** no Supreme-only gate found (UNVERIFIED as exhaustive).
 
 ## 5. Owner-only tasks

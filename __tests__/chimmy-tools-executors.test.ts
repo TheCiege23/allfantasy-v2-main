@@ -58,8 +58,16 @@ describe('tool specs', () => {
     const names = CHIMMY_TOOL_SPECS.map((t) => t.function.name)
     expect(names).toEqual([
       // Authorized archive read only; no model-selected league or write action.
+      'get_my_brackets',
+      'get_bracket_entry',
       'get_draft_analysis',
       'get_league_trade_activity',
+      /*
+       * A leaguemate's record as FACTS (lib/chimmy/managerRecordGrounding.ts, 2026-11-16): the same
+       * Competitive Edge record the manager card and the commissioner's screen read. SELECT-only over the
+       * membership-proven league; without the plan it returns a lock note and no history at all.
+       */
+      'get_manager_record',
       /*
        * ⚠ ADDED WHEN THE TOOL WAS. This list is hardcoded and ordered, so
        * shipping `find_league_by_name` turned it red — the assertion's job is to
@@ -70,10 +78,16 @@ describe('tool specs', () => {
        */
       'find_league_by_name',
       /*
+       * Find a League search: public listings with open seats, the same discovery read the page
+       * uses. Reads no league of the user's and takes no id — only their words.
+       */
+      'find_open_leagues',
+      /*
        * Reads the user's OWN team, resolved through LeagueTeam.claimedByUserId
        * from the session — no id crosses the model boundary. Read-only, and it
        * returns roster facts with no projections attached.
        */
+      'get_my_rosters',
       'get_my_roster',
       /*
        * Subtracts the league's own rosters from our published value set. Reads
@@ -122,6 +136,16 @@ describe('tool specs', () => {
        * the read and never name a league.
        */
       'get_league_trade_history',
+      'get_current_draft_board',
+      // AF Pro: reads the board and the room's rankings; writes nothing.
+      'get_draft_pick_outlook',
+      /*
+       * 🛑 ON THIS LIST ONLY BECAUSE IT WRITES NOTHING, like the other propose tools: it returns prose and
+       * a confirm card; the queue is saved only by /api/chimmy/actions/confirm after the user's tap.
+       */
+      'propose_draft_queue_change',
+      'get_selected_league_rules',
+      'get_real_game_results',
       'get_upcoming_games',
       /*
        * The ONLY tool here that spans every league at once, and the only one
@@ -159,6 +183,12 @@ describe('tool specs', () => {
       'compare_start_options',
       'evaluate_trade',
       /*
+       * Counters for ONE offer already waiting on the user (lib/chimmy-trade/pendingCounterOffers.ts): the
+       * Trade Center's own counter engine, AF Pro depth. Returns prose; sends nothing — the user counters
+       * themselves in the Trade Center or on Sleeper.
+       */
+      'suggest_counter_offer',
+      /*
        * Trade IDEAS across the league in scope (lib/chimmy/tradeFinderGrounding.ts): every roster
        * priced as the player card prices it, partners and packages from the deterministic finder.
        * Proposes nothing to anyone — it returns prose, like evaluate_trade.
@@ -167,6 +197,10 @@ describe('tool specs', () => {
       'evaluate_waiver_move',
       'get_playoff_outlook',
       'get_my_matchup',
+      /* Current fantasy score in the session's selected league; read-only and membership scoped. */
+      'get_live_fantasy_matchup',
+      /* Played fantasy results from the signed-in manager's claimed team across stored seasons. */
+      'get_fantasy_matchup_history',
       /*
        * League chat and the waiver wire (2026-09-25). Both SELECT-only and gated on the proven
        * league: the chat tool reads ONLY the public league channel of `LeagueChatMessage` (never a
@@ -183,6 +217,13 @@ describe('tool specs', () => {
        */
       'propose_lineup_change',
       'propose_trade',
+      'propose_automation_change',
+      // Writes nothing: a settings confirm card; the save is the confirm route's, behind the commissioner's tap.
+      'propose_league_rule_change',
+      // Writes nothing: a music card; the user's browser plays it only when they tap.
+      'play_music',
+      // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
+      'recall_past_chats',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

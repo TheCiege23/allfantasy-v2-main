@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 /** Owner, team commissioner / co-commissioner, or tournament co-commissioner (no team needed). */
 function canManageLeague(leagueId: string, userId: string): Promise<boolean> {
-  return hasLeagueCommissionerRights(leagueId, userId)
+  return hasLeagueCommissionerRights(leagueId, userId, 'league')
 }
 
 function statusFromCode(code: string): 'no_bracket' | 'no_final_round' | 'final_round_incomplete' | 'no_winner' {

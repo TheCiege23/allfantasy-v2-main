@@ -71,7 +71,7 @@ describe('commissioner-ai-draft-manager', () => {
       now: new Date(),
     })
     expect(r.allowed).toBe(false)
-    expect(r.reason).toMatch(/AI teams cannot trade/i)
+    expect(r.reason).toMatch(/Chimmy teams cannot trade/i)
   })
 
   it('canAiProposeTrade allows human receiver when AI proposes', () => {

@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
       sport: normalizeToSupportedSport(sport),
       category,
       slug: draft.slug,
+      seoTitle: draft.seoTitle,
+      seoDescription: draft.seoDescription,
     })
     const internalLinks = suggestInternalLinks({
       sport: normalizeToSupportedSport(sport),

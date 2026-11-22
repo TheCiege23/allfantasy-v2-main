@@ -101,14 +101,14 @@ async function openWarRoom(page: Page) {
   try {
     await Promise.race([panel.waitFor({ state: 'visible', timeout: 60_000 }), errorBox.waitFor({ state: 'visible', timeout: 60_000 })])
   } catch {
-    throw new Error('Guillotine War Room panel never resolved.')
+    throw new Error('Guilly War Room panel never resolved.')
   }
   return stateResponsePromise
 }
 
-test.describe('@db Guillotine War Room runtime', () => {
+test.describe('@db Guilly War Room runtime', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 })
-  test.skip(!hasRuntimeEnv, 'Guillotine War Room runtime E2E requires DATABASE_URL and NEXTAUTH_SECRET/AUTH_SECRET.')
+  test.skip(!hasRuntimeEnv, 'Guilly War Room runtime E2E requires DATABASE_URL and NEXTAUTH_SECRET/AUTH_SECRET.')
 
   test.beforeAll(() => {
     if (databaseUrl && !process.env.DATABASE_URL) process.env.DATABASE_URL = databaseUrl

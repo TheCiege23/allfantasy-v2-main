@@ -56,7 +56,7 @@ export function SettingsRow({
   )
 }
 
-export function FaqButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function FaqButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { t } = useLanguage()
   return (
     <button
@@ -101,12 +101,14 @@ export function Toggle({
 }
 
 export function Select({
+  'aria-label': ariaLabel,
   value,
   onChange,
   children,
   className = '',
   disabled,
 }: {
+  'aria-label'?: string
   value: string | number
   onChange: (v: string) => void
   children: React.ReactNode
@@ -115,6 +117,7 @@ export function Select({
 }) {
   return (
     <select
+      aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}

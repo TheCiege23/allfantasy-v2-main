@@ -1,7 +1,7 @@
+import { preparePaidToolCharge, replayPaidToolRequest } from '@/lib/tokens/paidToolBilling'
 import "server-only"
 import { NextResponse } from "next/server"
 import {
-  TokenInsufficientBalanceError,
   TokenSpendRuleNotFoundError,
   TokenSpendService,
   type TokenLedgerEntryView,
@@ -35,26 +35,12 @@ export type WorldCupAiTokenAccess =
       response: NextResponse
     }
 
-function tokenConfirmationResponse(preview: TokenSpendPreview, upgradePath: string) {
-  return NextResponse.json(
-    {
-      error: "Token spend confirmation required.",
-      code: "token_confirmation_required",
-      message: `Use ${preview.tokenCost} token${preview.tokenCost === 1 ? "" : "s"} for this World Cup AI action.`,
-      upgrade: true,
-      upgradePath,
-      preview,
-    },
-    { status: 409 }
-  )
-}
-
 function insufficientTokenResponse(preview: TokenSpendPreview, upgradePath: string) {
   return NextResponse.json(
     {
       error: "Insufficient token balance",
       code: "insufficient_token_balance",
-      message: `Need ${preview.tokenCost} token${preview.tokenCost === 1 ? "" : "s"} for this one-time World Cup AI action.`,
+      message: `Need ${preview.tokenCost} token${preview.tokenCost === 1 ? "" : "s"} for this one-time World Cup Chimmy action.`,
       upgrade: true,
       upgradePath,
       preview,
@@ -66,7 +52,7 @@ function insufficientTokenResponse(preview: TokenSpendPreview, upgradePath: stri
 function missingRuleResponse(ruleCode: string, upgradePath: string) {
   return NextResponse.json(
     {
-      error: "Token fallback is temporarily unavailable for this World Cup AI action.",
+      error: "Token fallback is temporarily unavailable for this World Cup Chimmy action.",
       code: "token_spend_rule_missing",
       ruleCode,
       upgrade: true,
@@ -89,6 +75,8 @@ export async function prepareWorldCupAiTokenFallback(input: {
   metadata?: Record<string, unknown>
   upgradePath: string
 }): Promise<WorldCupAiTokenAccess> {
+  const replay = await replayPaidToolRequest(input.userId)
+  if (replay) return { ok: false, response: replay }
   if (input.entitled) {
     return { ok: true, mode: "subscription", tokenPreview: null, commitTokenSpend: null }
   }
@@ -112,36 +100,9 @@ export async function prepareWorldCupAiTokenFallback(input: {
     return { ok: false, response: insufficientTokenResponse(preview, input.upgradePath) }
   }
 
-  if (!input.confirmTokenSpend) {
-    return { ok: false, response: tokenConfirmationResponse(preview, input.upgradePath) }
-  }
-
-  return {
-    ok: true,
-    mode: "tokens",
-    tokenPreview: preview,
-    commitTokenSpend: async () => {
-      try {
-        return await tokenSpendService.spendTokensForRule({
-          userId: input.userId,
-          ruleCode: input.ruleCode,
-          confirmed: true,
-          sourceType: input.sourceType,
-          sourceId: input.sourceId,
-          idempotencyKey: input.idempotencyKey,
-          description: input.description,
-          metadata: input.metadata ?? null,
-          userEmail: input.userEmail ?? null,
-        })
-      } catch (error) {
-        if (error instanceof TokenSpendRuleNotFoundError) {
-          throw new Error(`World Cup token rule missing: ${input.ruleCode}`)
-        }
-        if (error instanceof TokenInsufficientBalanceError) {
-          throw new Error("Insufficient token balance")
-        }
-        throw error
-      }
-    },
-  }
+  const prepared = await preparePaidToolCharge({
+    ...input, confirmed: input.confirmTokenSpend === true, preview,
+  })
+  if (!prepared.ok) return prepared
+  return { ok: true, mode: "tokens", tokenPreview: preview, commitTokenSpend: prepared.commit }
 }

@@ -67,3 +67,19 @@ export function applyTradedPickUIMeta(
     ...(options.showNewOwnerInRed != null && { showNewOwnerInRed: options.showNewOwnerInRed }),
   }
 }
+
+/**
+ * The on-the-clock pick with a traded slot's NEW owner applied — the one rule the server snapshot
+ * (`buildSessionSnapshot`) and the client's repair of a snapshot that arrived without `currentPick`
+ * (`repairDraftSessionAuthority`) share. Before 2026-10-26 the client repair inferred the clock from
+ * `slotOrder` alone, so after a pick trade it could put the ORIGINAL owner back on the clock.
+ */
+export function applyTradedOwnerToCurrentPick<T extends { round: number; slot: number; rosterId: string; displayName: string }>(
+  currentPick: T | null,
+  slotOrder: { slot: number; rosterId: string; displayName: string }[],
+  tradedPicks: TradedPickRecord[] | null | undefined,
+): T | null {
+  if (!currentPick || !tradedPicks?.length) return currentPick
+  const resolved = resolvePickOwner(currentPick.round, currentPick.slot, slotOrder, tradedPicks)
+  return resolved ? { ...currentPick, rosterId: resolved.rosterId, displayName: resolved.displayName } : currentPick
+}

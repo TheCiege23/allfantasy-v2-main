@@ -224,7 +224,7 @@ describe('an unknown imported keeper rule remains unknown', () => {
   })
 })
 
-describe('Survivor All-Stars Guillotine is traced to mechanics, not to its name', () => {
+describe('Survivor All-Stars Guilly is traced to mechanics, not to its name', () => {
   const entry = getConceptById('survivor_guillotine')
 
   it('exists as its own entry', () => {

@@ -14,8 +14,9 @@ export async function getMovementProjections(
   universeId: string,
   season?: number
 ): Promise<{ rosterId: string; leagueId: string; currentLevelId: string; projectedLevelId: string; reason: string }[]> {
+  const selectedSeason = season ?? (await prisma.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } }))._max.season
   const rows = await prisma.zombieMovementProjection.findMany({
-    where: { universeId, ...(season != null ? { season } : {}) },
+    where: { universeId, ...(selectedSeason != null ? { season: selectedSeason } : {}) },
     select: { rosterId: true, leagueId: true, currentLevelId: true, projectedLevelId: true, reason: true },
   })
   return rows.map((r) => ({

@@ -2,35 +2,62 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
+import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
 import { verificationAge, type LineupVerification as Verification } from '@/lib/core-app/lineupVerification'
 
-export function LineupVerification({ verification }: { verification: Verification | null | undefined }) {
+/**
+ * When AllFantasy last checked the lineup against the platform.
+ *
+ * `compact` (My team's team card, 2026-11-14) is one line — "Checked just now with Sleeper · Refresh
+ * lineup" — where the card took three: a title, "Starter, bench, IR and taxi placement verified." and
+ * "This checks lineup placement. Injury news and projections may update separately."
+ */
+export function LineupVerification({
+  verification,
+  compact = false,
+  platform = 'Sleeper',
+}: {
+  verification: Verification | null | undefined
+  compact?: boolean
+  platform?: string
+}) {
   const router = useRouter()
   const [refreshing, startRefresh] = useTransition()
   const [now, setNow] = useState<number | null>(null)
   /* Every sentence here was English under a Spanish screen (language audit, 2026-10-03). */
-  const es = useOptionalLanguage().language === 'es'
+  const { language } = useOptionalLanguage()
+  const m = useMessages(coreTriageMessages)
+  const g = useMessages(myTeamGuideMessages)
   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer) }, [verification?.checkedAt])
   const stale = verification && now != null && now - Date.parse(verification.checkedAt) >= 300000
-  const t = es
-    ? {
-        section: 'Verificación de la alineación', week: 'Semana', checked: 'Alineación revisada',
-        stale: ' · Actualiza antes de decidir la alineación.', fresh: ' · Titulares, banquillo, IR y taxi verificados.',
-        none: 'No se pudo verificar la alineación. Los consejos de alineación quedan en pausa hasta una actualización correcta.',
-        note: 'Esto revisa dónde está cada jugador en la alineación. Las noticias de lesiones y las proyecciones pueden actualizarse por separado.',
-        checking: 'Revisando Sleeper…', refresh: 'Actualizar alineación',
-      }
-    : {
-        section: 'Lineup verification', week: 'Week', checked: 'Lineup checked',
-        stale: ' · Refresh before making a lineup decision.', fresh: ' · Starter, bench, IR and taxi placement verified.',
-        none: 'Lineup could not be verified. Lineup advice is paused until a successful refresh.',
-        note: 'This checks lineup placement. Injury news and projections may update separately.',
-        checking: 'Checking Sleeper…', refresh: 'Refresh lineup',
-      }
-  return <section aria-label={t.section} className="af-frame af-lv">
-    <strong className="af-lv-title">Sleeper{verification?.week != null ? ` · ${t.week} ${verification.week}` : ''}</strong>
-    <p role="status" className="af-lv-status">{verification ? <><time dateTime={verification.checkedAt} title={verification.checkedAt}>{now == null ? t.checked : verificationAge(verification.checkedAt, now, es ? 'es' : 'en')}</time>{stale ? t.stale : t.fresh}</> : t.none}</p>
-    <p className="af-lv-note">{t.note}</p>
-    <button type="button" className="af-btn af-lv-refresh" disabled={refreshing} onClick={() => startRefresh(() => router.refresh())}>{refreshing ? t.checking : t.refresh}</button>
+  const refresh = (
+    <button type="button" className={compact ? 'af-lv-refresh-link' : 'af-btn af-lv-refresh'} disabled={refreshing} onClick={() => startRefresh(() => router.refresh())}>
+      {refreshing ? m.verifyChecking : m.verifyRefresh}
+    </button>
+  )
+  if (compact) {
+    return (
+      <p className="af-lv-line" role="status" aria-label={m.verifySection} data-testid="my-team-checked">
+        {verification ? (
+          <>
+            <time dateTime={verification.checkedAt} title={verification.checkedAt}>
+              {g.checkedWith(now == null ? m.verifyChecked : verificationAge(verification.checkedAt, now, language), platform)}
+            </time>
+            {stale ? m.verifyStale : null}
+          </>
+        ) : (
+          m.verifyNone
+        )}{' '}
+        · {refresh}
+      </p>
+    )
+  }
+  return <section aria-label={m.verifySection} className="af-frame af-lv">
+    <strong className="af-lv-title">Sleeper{verification?.week != null ? ` · ${m.verifyWeek} ${verification.week}` : ''}</strong>
+    <p role="status" className="af-lv-status">{verification ? <><time dateTime={verification.checkedAt} title={verification.checkedAt}>{now == null ? m.verifyChecked : verificationAge(verification.checkedAt, now, language)}</time>{stale ? m.verifyStale : m.verifyFresh}</> : m.verifyNone}</p>
+    <p className="af-lv-note">{m.verifyNote}</p>
+    {refresh}
   </section>
 }

@@ -5,6 +5,7 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { Dash34Data, Dash34League } from '@/components/core-app/screens/Dashboard34'
 /* Client-safe by construction (no 'server-only', no prisma) — see its header. */
 import { kickoffClock } from '@/lib/core-app/lineupLock'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /**
  * ONE URGENCY VOICE for the /core home.
@@ -192,8 +193,8 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
         platform: l.platform,
         deadline: null,
         action: {
-          label: 'Open Draft HQ',
-          href: `/core/draft-hq?league=${encodeURIComponent(l.id)}`,
+          label: 'Open draft room',
+          href: draftRoomHref(l.id),
           external: false,
         },
         parts: { kind: 'drafting', leagueName: l.name, platform: titleCasePlatform(l.platform) },

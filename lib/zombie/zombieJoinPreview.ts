@@ -58,7 +58,7 @@ export async function getZombieJoinPreview(leagueId: string): Promise<ZombieJoin
     lossToZombieInfects: config?.infectionLossToZombie !== false,
     bashingMargin: rules.bashingThreshold,
     maulingMargin: rules.maulingThreshold,
-    reviveSerums: rules.reviveThreshold,
+    reviveSerums: String(league.sport).toUpperCase() === 'NFL' ? 2 : config?.serumReviveCount ?? rules.reviveThreshold,
     bashShare: BASH_TRANSFER_SHARE,
     maulShare: MAUL_TRANSFER_SHARE,
   }

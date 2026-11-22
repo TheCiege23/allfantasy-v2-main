@@ -65,7 +65,7 @@ const ROSTER_EXPANSION_EFFECTS: ScheduledRuleEffect[] = LINEUP_SCHEDULE.filter(
 export const SURVIVOR_ALL_STARS_GUILLOTINE_V1: LeagueTemplateDefinition = {
   id: 'survivor_all_stars_guillotine',
   version: '1.0.0',
-  label: 'Survivor All-Stars Guillotine',
+  label: 'Survivor All-Stars Guilly',
   description:
     'Twenty-two managers in two tribes of eleven. One team is eliminated per week, two per week during the Gauntlet, and their roster hits waivers. No trades, one $1000 FAAB budget for the whole season, and a starting lineup that grows on a published schedule.',
   /**
@@ -185,7 +185,7 @@ export const SURVIVOR_ALL_STARS_GUILLOTINE_V1: LeagueTemplateDefinition = {
       {
         id: 'merged_guillotine',
         label: 'Merged guillotine (weeks 14-16)',
-        summary: 'Standard Guillotine. Lowest scorer in the league leaves; their roster hits waivers.',
+        summary: 'Standard Guilly. Lowest scorer in the league leaves; their roster hits waivers.',
         fromWeek: 14,
         toWeek: 16,
         capabilityIds: ['elimination.guillotine'],
@@ -277,7 +277,7 @@ export const SURVIVOR_ALL_STARS_GUILLOTINE_V1: LeagueTemplateDefinition = {
       effect: 'RELEASE_ROSTER',
       at: { kind: 'phase_entry', phaseId: 'merged_guillotine' },
       params: { destination: 'waiver_pool' },
-      description: 'Eliminated rosters return to the waiver pool, as in standard Guillotine.',
+      description: 'Eliminated rosters return to the waiver pool, as in standard Guilly.',
     },
     {
       id: 'sasg.announce_final_three',

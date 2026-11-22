@@ -1,5 +1,8 @@
 "use client"
 
+import { isPushAndInAppOnly } from "@/lib/notification-settings/NotificationPreferenceResolver"
+import { isSmsCategory } from "@/lib/notifications/channelPolicy"
+
 import { ChevronDown, ChevronRight } from "lucide-react"
 import type { NotificationCategoryId, NotificationChannelPrefs } from "@/lib/notification-settings"
 import { NOTIFICATION_CATEGORY_LABELS, NOTIFICATION_CATEGORY_LABEL_KEYS } from "@/lib/notification-settings"
@@ -8,7 +11,7 @@ import { isPushCategory } from "@/lib/push-notifications/categories"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { tOr } from "@/lib/i18n/tInterpolate"
 
-export interface NotificationCategoryRendererProps {
+interface NotificationCategoryRendererProps {
   categoryId: NotificationCategoryId
   prefs: NotificationChannelPrefs
   deliveryAvailability: DeliveryMethodAvailability
@@ -118,7 +121,7 @@ export function NotificationCategoryRenderer({
                 <span style={{ color: "var(--text)" }}>{delivery.push}</span>
               </label>
             )}
-            {deliveryAvailability.email && (
+            {!isPushAndInAppOnly(categoryId) && deliveryAvailability.email && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -131,7 +134,7 @@ export function NotificationCategoryRenderer({
                 <span style={{ color: "var(--text)" }}>{delivery.email}</span>
               </label>
             )}
-            {deliveryAvailability.sms && (
+            {!isPushAndInAppOnly(categoryId) && deliveryAvailability.sms && isSmsCategory(categoryId) && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

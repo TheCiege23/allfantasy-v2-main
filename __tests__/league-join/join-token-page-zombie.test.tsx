@@ -56,7 +56,9 @@ describe('/join/[token] for a Zombie league', () => {
     // One league-name heading: the hero's, not the card's as well.
     expect(screen.getAllByText('Tip-Off Outbreak')).toHaveLength(1)
     expect(screen.getAllByText('Open Team 4').length).toBeGreaterThan(0)
-    expect(screen.getByText(/lose by 211\+ and 50% goes, by 128\+ and 25%/)).toBeTruthy()
+    expect(screen.getByText(/Survivor win by 128\+ is a bashing; a Zombie win by 211\+ is a mauling/)).toBeTruthy()
+    expect(screen.getByText(/Survivor wins earn 2, 4 or 6 winnings units/)).toBeTruthy()
+    expect(screen.queryByText(/50% goes|25% goes/)).toBeNull()
     // The league's own config: only the Whisperer infects here.
     expect(screen.getByText('Lose to the Whisperer and you join the horde. Zombies keep playing.')).toBeTruthy()
   })

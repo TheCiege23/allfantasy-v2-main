@@ -227,3 +227,27 @@ describe('POST /api/leagues/[leagueId]/draft/autopick/me', () => {
     expect(draftAutopickSettingUpsertMock).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /draft/autopick/me — draft like me (AF Pro, phase 6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
+    canAccessLeagueDraftMock.mockResolvedValue(true)
+    draftSessionFindUniqueMock.mockResolvedValue({ id: 'session-1' })
+  })
+
+  it('refuses draft_as_me without AF Pro and saves it with AF Pro', async () => {
+    entitlementResolveForUserMock.mockResolvedValue({ hasAccess: false })
+    const refused = await POST(makeRequest({ enabled: true, mode: 'draft_as_me' }), makeCtx())
+    expect(refused.status).toBe(403)
+    expect((await refused.json()).error).toMatch(/draft like you/)
+    expect(setViewerAutopickPreferenceMock).not.toHaveBeenCalled()
+
+    entitlementResolveForUserMock.mockResolvedValue({ hasAccess: true })
+    setViewerAutopickPreferenceMock.mockResolvedValue({ enabled: true, mode: 'draft_as_me', isProEligible: true, updatedAt: null })
+    const ok = await POST(makeRequest({ enabled: true, mode: 'draft_as_me' }), makeCtx())
+    expect(ok.status).toBe(200)
+    expect(entitlementResolveForUserMock).toHaveBeenCalledWith('user-1', 'pro_draft_ai')
+    expect(setViewerAutopickPreferenceMock).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, mode: 'draft_as_me' }))
+  })
+})

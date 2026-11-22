@@ -17,7 +17,7 @@ import type { MoveTone } from './playerMoves'
  * Pure, client-safe.
  */
 
-export type StripState = 'start' | 'bench' | 'ir' | 'taxi' | 'other' | 'free' | 'unknown'
+type StripState = 'start' | 'bench' | 'ir' | 'taxi' | 'other' | 'free' | 'unknown'
 
 export type StripChip = {
   leagueId: string

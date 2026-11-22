@@ -10,39 +10,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { leagueChatThreadLinkRefusalInPatch } from '@/lib/league/leagueChatThreadLink'
-
-type EditableFeederLeagueSettings = {
-  scoring: string
-  rosterSize: number
-  benchSize: number
-  waiverType: string
-  faabBudget: number
-  faabResetByRound: boolean
-  tradeDeadlineWeek: number
-  tradeLockHours: number
-}
-
-function normalizeEditableLeagueSettings(raw: unknown): EditableFeederLeagueSettings {
-  const settings = raw && typeof raw === 'object' && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : {}
-
-  const asNumber = (value: unknown, fallback: number): number => {
-    const numberValue = typeof value === 'number' ? value : Number(value)
-    return Number.isFinite(numberValue) ? Math.floor(numberValue) : fallback
-  }
-
-  return {
-    scoring: typeof settings.scoring === 'string' ? settings.scoring : 'PPR',
-    rosterSize: asNumber(settings.rosterSize, 15),
-    benchSize: asNumber(settings.benchSize, 7),
-    waiverType: typeof settings.waiverType === 'string' ? settings.waiverType : 'FAAB',
-    faabBudget: asNumber(settings.faabBudget, 100),
-    faabResetByRound: settings.faabResetByRound !== false,
-    tradeDeadlineWeek: asNumber(settings.tradeDeadlineWeek, 12),
-    tradeLockHours: asNumber(settings.tradeLockHours, 0),
-  }
-}
+import { feederSettingsSnapshot, normalizeEditableLeagueSettings, unknownFeederSettingsKeys } from '@/lib/tournament/feederLeagueSettings'
+import { diffRuleSnapshots } from '@/lib/league-rules-explainer/changeKeys'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 
 async function resolveTournamentOwnerId(tournamentId: string): Promise<string | null> {
   const [legacy, shell] = await Promise.all([
@@ -159,6 +129,11 @@ export async function PATCH(
   if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
     return NextResponse.json({ error: 'Missing or invalid changes' }, { status: 400 })
   }
+  // Only the editor's own fields (lib/tournament/feederLeagueSettings.ts FEEDER_EDITABLE_KEYS).
+  const unknownKeys = unknownFeederSettingsKeys(changes)
+  if (unknownKeys.length) {
+    return NextResponse.json({ error: 'These settings cannot be changed here.', fields: unknownKeys }, { status: 400 })
+  }
 
   try {
     const ownerId = await resolveTournamentOwnerId(tournamentId)
@@ -188,6 +163,13 @@ export async function PATCH(
     await prisma.league.update({
       where: { id: leagueId },
       data: { settings: newSettings },
+    })
+
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: 'tournament-feeder',
+      changes: diffRuleSnapshots(feederSettingsSnapshot(oldSettings), feederSettingsSnapshot(newSettings)),
     })
 
     // Create audit log entry

@@ -1,3 +1,4 @@
+import { draftQueueKeyForSession } from '@/lib/league/teamScopedKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -7,6 +8,7 @@ import { getDraftPreparationData, unavailablePreparation, type DraftPreparationD
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
+import { normalizeIdentitySport, resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { checkDynastyLotteryEligibility, isDynastyLeagueRow } from '@/lib/draft-lottery/dynastyYearGuard'
 import { readDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { previewLotteryOdds } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
@@ -15,8 +17,6 @@ import {
   normalizeDraftedNameSet,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine/queue-utils'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
-import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
 import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -24,6 +24,9 @@ import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './l
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
 import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
+import type { RookieDraftRoom } from './draftHqRookieRoom'
+import { loadRookieDraftRoom } from './draftHqRookieRoomLoad'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -84,6 +87,8 @@ export type LotteryOdds = {
   playoffTeamCount: number
   /** How the picks after the drawn ones are ordered, in words. */
   fallbackOrder: string
+  /** The same, as the stored setting (`reverse_standings`, `reverse_max_pf`, `manual`), for a screen that words it itself. */
+  fallbackMode: string
   alreadyRunAt: string | null
   teams: Array<{
     rosterId: string
@@ -224,10 +229,14 @@ export type DraftHqData = {
   queue: SectionState<PreparedQueue>
   preparation?: DraftPreparationData
   keepers: SectionState<KeeperList>
+  /**
+   * A dynasty league's draft room — the rookie draft band, its board, your picks and taxi room
+   * (draftHqRookieRoom.ts). Absent for every other league, so their Draft HQ is unchanged.
+   */
+  rookieRoom?: RookieDraftRoom | null
 }
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
-
 
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
@@ -240,10 +249,12 @@ const PLATFORM_LABEL: Record<string, string> = {
 /** How many queued players the screen lists; the count says how many more there are. */
 const QUEUE_SHOWN = 10
 
+/** What the engine does with each fallback (lib/draft-lottery/WeightedDraftLotteryEngine.ts `buildFullSlotOrder`). */
 const FALLBACK_ORDER_TEXT: Record<string, string> = {
   reverse_standings: 'reverse order of finish',
-  reverse_max_pf: 'reverse order of max points for',
-  manual: 'an order the commissioner sets',
+  reverse_max_pf: 'reverse order of max points for outside the playoffs, then the playoff teams in reverse order of finish',
+  // The engine has no commissioner order to read, so a `manual` fallback seats by finish.
+  manual: 'reverse order of finish',
 }
 
 /**
@@ -298,6 +309,7 @@ async function loadLottery(
       pickCount: lotteryConfig.lotteryPickCount,
       playoffTeamCount: preview.playoffTeamCount,
       fallbackOrder: FALLBACK_ORDER_TEXT[lotteryConfig.fallbackOrder] ?? 'the league’s fallback order',
+      fallbackMode: String(lotteryConfig.fallbackOrder ?? ''),
       alreadyRunAt: lotteryLastRunAt,
       teams: preview.eligible.map((t) => ({
         rosterId: t.rosterId,
@@ -322,7 +334,7 @@ async function loadPreparedQueue(sessionId: string, userId: string): Promise<Sec
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const row = await prisma.draftQueue.findUnique({
-    where: { sessionId_userId: { sessionId, userId } },
+    where: { sessionId_userId: { sessionId, userId: await draftQueueKeyForSession(sessionId, userId) } },
     select: { order: true },
   })
   const order = row?.order
@@ -440,6 +452,7 @@ async function loadImportedKeepers(
   const names = await resolvePlayerNames(
     kept.map((k) => k.playerId),
     platform,
+    (await lc.league().catch(() => null))?.sport,
   )
   return {
     available: true,
@@ -579,6 +592,40 @@ export async function resolvePlayerNames(
       imageUrl: p.imageUrl,
     })
   }
+  /*
+   * ⚠ FANTRAX IDS LIVE ON `PlayerIdentityMap.fantraxId`, NOT IN `PlayerProviderIdentity` — which
+   * nothing fills for Fantrax, so every Fantrax pick read "(not yet mapped)". Same registry, same
+   * one-to-one guard as the Fantrax roster (`resolveFantraxIdentities`); scoped to the sport when
+   * the caller passes one, and refusing an id two sports share when it does not.
+   */
+  if (scoped === 'fantrax') {
+    const fantraxSport = sport ? normalizeIdentitySport(sport) : null
+    const fantrax = await resolveFantraxIdentities(fantraxSport, playerIds).catch(() => new Map())
+    /*
+     * NFL identity rows are Sleeper-keyed, so an NFL pick's face is on `SportsPlayer.sleeperId` —
+     * composed exactly like the Sleeper board above. Only when the sport is KNOWN to be NFL: a
+     * baseball or hockey row carries no Sleeper id, and an unknown sport is not guessed at.
+     */
+    const linkedSleeperIds = fantraxSport === 'NFL'
+      ? [...new Set([...fantrax.values()].map((p) => p.sleeperId).filter((id): id is string => Boolean(id)))]
+      : []
+    const portraits = linkedSleeperIds.length
+      ? composePlayerIdentities(await prisma.sportsPlayer
+          .findMany({
+            where: { sport: 'NFL', sleeperId: { in: linkedSleeperIds } },
+            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
+          })
+          .catch(() => []))
+      : new Map()
+    for (const [id, p] of fantrax) {
+      if (p.name && !out.has(id)) {
+        out.set(id, {
+          name: p.name, position: p.position, team: p.team,
+          imageUrl: (p.sleeperId ? portraits.get(p.sleeperId)?.imageUrl : null) ?? null,
+        })
+      }
+    }
+  }
   for (const i of identities) {
     if (i.displayName && !out.has(i.providerPlayerId)) {
       // Name only — see `ResolvedDraftPlayer.imageUrl` for why there is no face.
@@ -714,14 +761,16 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
       .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
       .catch(() => []),
     lc.claimedTeams().catch(() => []),
-    resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
+    resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? '', boardLeague?.sport),
   ])
 
   /* AllFantasy's own projection for every player on the board — one read. */
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: boardLeague?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: boardLeague?.settings,
+    sport: boardLeague?.sport,
   })
 
   const teamCount = teams.length
@@ -854,11 +903,14 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
   const byPlayerId = await resolvePlayerNames(
     rows.map((r) => r.playerId),
     league?.platform ?? '',
+    league?.sport,
   )
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: league?.platform,
     playerIds: rows.map((r) => r.playerId),
     leagueSettings: league?.settings,
+    sport: league?.sport,
   })
 
   return {
@@ -898,6 +950,20 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
       }
     }),
   }
+}
+
+/**
+ * The lottery section alone, for a screen that shows the odds without the rest of Draft HQ (the
+ * dynasty standings). The same `loadLottery`, so the two can never disagree.
+ */
+export async function getDraftLotteryOdds(leagueId: string, userId: string): Promise<SectionState<LotteryOdds> | null> {
+  const lc = leagueContextFor(leagueId, userId)
+  const league = await lc.league()
+  if (!league) return null
+  return loadLottery(lc, league).catch(() => ({
+    available: false as const,
+    reason: 'the lottery odds could not be worked out for this league right now',
+  }))
 }
 
 export async function getDraftHqData(
@@ -948,7 +1014,7 @@ export async function getDraftHqData(
     /* Session and slots genuinely do not exist — this app is not running a draft here,
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    const [madePicks, board, grades, keepers] = await Promise.all([
+    const [madePicks, board, grades, keepers, rookieRoom] = await Promise.all([
       loadImportedDraftPicks(lc).catch(() => none),
       loadCompletedDraftBoard(lc).catch(() => none),
       loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(() => none),
@@ -956,6 +1022,12 @@ export async function getDraftHqData(
         available: false as const,
         reason: 'keepers could not be read for this league right now',
       })),
+      // Dynasty only — no other league reads its claimed team here.
+      usesDynastyBackground(league)
+        ? lc.claimedTeam()
+            .then((claimedTeam) => loadRookieDraftRoom({ league, userId, claimedTeam, session: null }))
+            .catch(() => null)
+        : Promise.resolve(null),
     ])
     // A queue belongs to a draft AllFantasy runs; with none there is nothing to queue for.
     const queue = {
@@ -989,7 +1061,7 @@ export async function getDraftHqData(
         }
       : none
 
-    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, ...(rookieRoom ? { rookieRoom } : {}), preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
   }
 
   const myTeam = await lc.claimedTeam()
@@ -1096,11 +1168,14 @@ export async function getDraftHqData(
   const madeFaces = await resolvePlayerNames(
     [...new Set(made.map((p) => p.playerId).filter((id): id is string => Boolean(id)))],
     String(league.platform ?? '').toLowerCase(),
+    league.sport,
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
   const madeAfs = await loadDraftAfProjections({
+    leagueId,
     platform: league.platform,
     playerIds: made.map((p) => p.playerId),
     leagueSettings: league.settings,
+    sport: league.sport,
   })
 
   const madePicks: SectionState<MadePick[]> =
@@ -1151,6 +1226,25 @@ export async function getDraftHqData(
   )
   const keepers = keepersFromSession(session, myRosterIds)
 
-  const preparation = await getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error'))
-  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation }
+  const [preparation, rookieRoom] = await Promise.all([
+    getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error')),
+    loadRookieDraftRoom({
+      league,
+      userId,
+      claimedTeam: myTeam,
+      session: {
+        status: session.status,
+        draftType: session.draftType,
+        rounds: session.rounds,
+        teamCount: session.teamCount,
+        thirdRoundReversal: Boolean(session.thirdRoundReversal),
+        modeLabel: session.draftModeLabel ?? null,
+        slotOrder,
+        tradedPicks,
+        myRosterId: mySlotEntry?.rosterId != null ? String(mySlotEntry.rosterId) : null,
+      },
+      syncNote: pickSlots.available ? pickSlots.data.note : null,
+    }).catch(() => null),
+  ])
+  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation, ...(rookieRoom ? { rookieRoom } : {}) }
 }

@@ -29,3 +29,8 @@ export function shouldApplyIncomingView(
   if (!key) return false
   return key !== lastSyncedView
 }
+
+/** A pending external tab must reach React state before the old tab may write the URL. */
+export function shouldMirrorActiveView(activeTab: string, pendingIncomingTab: string | null): boolean {
+  return pendingIncomingTab == null || activeTab === pendingIncomingTab
+}

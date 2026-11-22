@@ -7,6 +7,8 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
+import { useMessages } from '@/components/i18n/useMessages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /**
  * League-first phone: the league's chat, one tap (or one swipe up) away, pinned above the tab bar.
@@ -30,6 +32,7 @@ export function LeagueChatBar({
   const touchStartY = useRef<number | null>(null)
   const suppressClick = useRef(false)
   const { language } = useOptionalLanguage()
+  const m = useMessages(corePartsMessages)
 
   const open = () => {
     const detail: CommsOpenDetail = { tab: 'league', leagueId }
@@ -40,7 +43,7 @@ export function LeagueChatBar({
     <button
       type="button"
       className="af-lf-chatbar"
-      aria-label={language === 'es' ? `Abrir chat de ${leagueName ?? 'la liga'}` : `Open ${leagueName ?? 'league'} chat`}
+      aria-label={m.openLeagueChat(leagueName)}
       onClick={() => {
         // iOS sends a click after touchend. A swipe must open the drawer once.
         if (suppressClick.current) {

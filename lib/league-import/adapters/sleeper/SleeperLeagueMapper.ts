@@ -1,7 +1,7 @@
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
-import type { NormalizedLeagueSettings } from '../../types'
 import type { SleeperImportPayload } from './types'
 import { readSleeperDivisions, STANDINGS_DIVISIONS_KEY } from '../../standingsDivisions'
+import { receptionScoringLabel } from '../../receptionScoringLabel'
 
 /**
  * Tier 0 helpers — Sleeper stores most settings as numbers (0/1 flags, week ints,
@@ -72,7 +72,10 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const ppr = league.scoring_settings?.rec ?? 0
     const superflex = rosterPositions.filter((p: string) => p === 'SUPER_FLEX').length > 0
     const tep = league.scoring_settings?.bonus_rec_te ?? 0
-    const scoring = [ppr > 0 && 'PPR', superflex && 'Superflex', tep > 0 && 'TEP'].filter(Boolean).join(' ') || 'Standard'
+    // ⚠ THE LABEL FOLLOWS THE RATE. `ppr > 0 && 'PPR'` stored a 0.5-a-catch league as "PPR", and the
+    // free-text readers of `League.scoring` (e.g. Chimmy's waiver board) then priced it at a full point.
+    const pprLabel = receptionScoringLabel(ppr)
+    const scoring = [pprLabel, superflex && 'Superflex', tep > 0 && 'TEP'].filter(Boolean).join(' ') || 'Standard'
 
     // Tier 0 — every field below was audit-verified as previously dropped by this
     // mapper. Each now flows through the normalizer + persistence via the type
@@ -156,6 +159,30 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       max_keepers: maxKeepers,
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
+      /*
+       * Sleeper's `settings.type` itself (0 redraft, 1 keeper, 2 dynasty), stored raw. `isDynasty` and
+       * `is_keeper` above are both `false` when the type is ABSENT, so neither can say "redraft"; this
+       * can. Read by lib/league-media/redraftIdentity.ts (`isImportedRedraftLeague`) and nothing else.
+       */
+      sleeper_league_type: toIntOrUndef(type),
+      /*
+       * Sleeper's weekly median game (1 = every week is also a game against the league median).
+       * Dropped at import until 2026-10-29, so Season Outlook and the public standings ignored it;
+       * `lib/core-app/medianGame.ts` reads it, and falls back to the platform records for leagues
+       * imported before. contracts/sleeper/GAPS.md S-10.
+       */
+      league_average_match: toIntOrUndef(settings.league_average_match),
+      /*
+       * Sleeper's first scoring week (2026-11-14). Dropped at import until now, so a league
+       * started mid-season looked like a full-season league and the draft engine could not tell
+       * that a bye already played costs nothing. Kept only as a real NFL week (1–18). The name
+       * comes from code already in the repo (lib/league-import/sleeper/survivalEvidence.ts), not
+       * from a fixture — contracts/sleeper/GAPS.md S-11.
+       */
+      start_week: (() => {
+        const w = toIntOrUndef(settings.start_week)
+        return w != null && w >= 1 && w <= 18 ? w : undefined
+      })(),
       /*
        * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW — AND ONLY ONE OF THEM IS INTERPRETED.
        *

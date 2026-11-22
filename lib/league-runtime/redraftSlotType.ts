@@ -11,11 +11,11 @@
  * Pure and dependency-free (moved out of materializeRedraftRosterPlayers.ts, 2026-09-27).
  */
 
-export function asRecord(v: unknown): Record<string, unknown> {
+function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-export function idOf(entry: unknown): string {
+function idOf(entry: unknown): string {
   if (typeof entry === 'string') return entry
   const r = asRecord(entry)
   return String(r.id ?? r.player_id ?? '')
@@ -74,6 +74,9 @@ export function slotTypeFor(playerData: unknown, playerId: string, position: str
     if (s === 'taxi') return 'taxi'
     if (s === 'ir') return 'ir'
     if (s === 'devy') return 'devy'
+    // C2C campus starters (lib/c2c/campusLineup.ts) are college players: devy to every generic reader,
+    // so pro scoring never counts them. Only the C2C campus scorer adds their points.
+    if (s === 'campus') return 'devy'
     return s
   }
 
@@ -89,7 +92,7 @@ export function slotTypeFor(playerData: unknown, playerId: string, position: str
   return 'bench'
 }
 
-export type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
+type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 /**
  * What a slot MEANS to the engines — the unit the save path compares, so a starter already stored
@@ -100,8 +103,8 @@ export type SlotCategory = 'starter' | 'bench' | 'ir' | 'taxi' | 'devy'
 export function slotCategory(slotType: string | null | undefined): SlotCategory {
   const s = String(slotType ?? '').trim().toLowerCase()
   if (s === 'bench' || s === 'bn') return 'bench'
-  if (s === 'ir' || s === 'reserve') return 'ir'
-  if (s === 'taxi') return 'taxi'
+  if (s === 'ir' || s === 'reserve' || s === 'il' || s === 'il_plus' || s === 'na') return 'ir'
+  if (s === 'taxi' || s === 'prospect' || s === 'rights' || s === 'minors') return 'taxi'
   if (s === 'devy') return 'devy'
   return 'starter'
 }

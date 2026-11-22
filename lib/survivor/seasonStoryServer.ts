@@ -21,7 +21,7 @@ import {
  * Votes, ballots, idol holdings and audit rows are never read.
  */
 
-export interface SeasonStoryView {
+interface SeasonStoryView {
   leagueName: string
   sport: string
   season: number
@@ -47,7 +47,8 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 
 export function momentRowToStory(row: Parameters<typeof toShareMomentRecord>[0]): SeasonStoryMoment | null {
   const record = toShareMomentRecord(row)
-  if (!record) return null
+  // A week recap is the league's own summary of a council the story already shows, not a moment.
+  if (!record || record.type === 'recap') return null
   const p = record.payload
   return {
     id: record.id,

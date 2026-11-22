@@ -42,7 +42,10 @@ describe('SportRulesEngine', () => {
     expect(isDraftTypeAllowedForSport('NFL', 'devy_snake')).toBe(true)
     expect(isDraftTypeAllowedForSport('NFL', 'c2c_auction')).toBe(true)
     expect(isDraftTypeAllowedForSport('NFL', 'offline')).toBe(true)
-    expect(isDraftTypeAllowedForSport('NFL', 'mock_draft')).toBe(false)
+    // 595959f64 made mock_draft a redraft draft type on purpose (buildDraftOptionRules still
+    // refuses it as a DEFAULT); an unknown id is what must be rejected.
+    expect(isDraftTypeAllowedForSport('NFL', 'mock_draft')).toBe(true)
+    expect(isDraftTypeAllowedForSport('NFL', 'not_a_draft_type')).toBe(false)
   })
 
   it('returns scoring and player pool rules for soccer', () => {

@@ -16,9 +16,12 @@ import { getAllPlayBoard } from '@/lib/core-app/allPlay'
 
 const ARGS = { leagueId: 'af-uuid', platformLeagueId: '998877', seasonYear: 2026 }
 
-/** rosterId, week, own points, opponent points, win flag. */
-function row(rosterId: string, week: number, pf: number, pa: number, win: number) {
-  return { rosterId, week, pointsFor: pf, pointsAgainst: pa, win }
+/**
+ * rosterId, week, own points, opponent points, win flag, matchup id. Unless stated, rosters 1 and 2
+ * meet each other and so do 3 and 4.
+ */
+function row(rosterId: string, week: number, pf: number, pa: number, win: number | null, matchupId?: number | null) {
+  return { rosterId, week, pointsFor: pf, pointsAgainst: pa, win, matchupId: matchupId === undefined ? (rosterId === '1' || rosterId === '2' ? 1 : 2) : matchupId }
 }
 
 beforeEach(() => {
@@ -136,7 +139,7 @@ describe('getAllPlayBoard', () => {
       // Week 1: roster 4 is bottom.
       row('1', 1, 150, 140, 1), row('2', 1, 140, 150, 0), row('3', 1, 100, 70, 1), row('4', 1, 70, 100, 0),
       // Week 2: roster 4 posts the top score by a distance.
-      row('1', 2, 60, 200, 0), row('2', 2, 70, 90, 0), row('3', 2, 90, 70, 1), row('4', 2, 200, 60, 1),
+      row('1', 2, 60, 200, 0, 1), row('2', 2, 70, 90, 0, 2), row('3', 2, 90, 70, 1, 2), row('4', 2, 200, 60, 1, 1),
     ])
     const b = await getAllPlayBoard(ARGS)
     const climber = b!.rows.find((r) => r.rosterId === '4')!
@@ -154,6 +157,35 @@ describe('getAllPlayBoard', () => {
     expect(tied.losses).toBe(0)
     // And they tie each other on the all-play board too.
     expect(tied.allPlayTies).toBe(1)
+  })
+
+  /*
+   * 🛑 THE HEAD-TO-HEAD RECORD COMES FROM THE PAIRED SCORES, NEVER FROM THE STORED `win` FLAG
+   * (headToHeadRecords.ts). Rows written before the Sleeper fix store a roster with no opponent as
+   * `win = 1, pointsAgainst = 0`, and a flag can disagree with the scores beside it.
+   */
+  it('🛑 a roster alone in its matchup has no head-to-head result, whatever its stored flag says', async () => {
+    matchupFindMany.mockResolvedValue([
+      row('1', 1, 100, 0, 1, 1), // a stale "win" with no opponent
+      row('2', 1, 90, 80, 1, 2), row('3', 1, 80, 90, 0, 2),
+    ])
+    const b = await getAllPlayBoard(ARGS)
+    const alone = b!.rows.find((r) => r.rosterId === '1')!
+    expect(alone.wins + alone.losses + alone.ties).toBe(0)
+    // All-play still counts the score against everyone else that week.
+    expect(alone.allPlayWins).toBe(2)
+    expect(b!.rows.find((r) => r.rosterId === '2')).toMatchObject({ wins: 1, losses: 0 })
+  })
+
+  it('🛑 the higher paired score wins even when the stored flag says otherwise', async () => {
+    matchupFindMany.mockResolvedValue([
+      row('1', 1, 120, 100, 0), row('2', 1, 100, 120, 1),
+      row('3', 1, 90, 90, 0), row('4', 1, 90, 90, 0),
+    ])
+    const b = await getAllPlayBoard(ARGS)
+    expect(b!.rows.find((r) => r.rosterId === '1')).toMatchObject({ wins: 1, losses: 0, ties: 0 })
+    expect(b!.rows.find((r) => r.rosterId === '2')).toMatchObject({ wins: 0, losses: 1, ties: 0 })
+    expect(b!.rows.find((r) => r.rosterId === '3')).toMatchObject({ wins: 0, losses: 0, ties: 1 })
   })
 
   it('returns null when no week has been played, rather than an empty board', async () => {

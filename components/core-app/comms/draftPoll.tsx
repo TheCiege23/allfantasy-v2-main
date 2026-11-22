@@ -17,7 +17,7 @@ import { MessagePoll } from './MessagePoll'
  * Option ids here are `idx-<n>` so a vote can be turned back into the index the route wants.
  */
 
-export const DRAFT_POLL_OPTION_PREFIX = 'idx-'
+const DRAFT_POLL_OPTION_PREFIX = 'idx-'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -60,11 +60,14 @@ export function readDraftPoll(
     closedByHand: metadata.closed === true,
     allowMultiple: false,
     anonymous: false,
+    resultsAfterClose: false,
+    resultsHidden: false,
+    prediction: null,
   }
 }
 
 /** `idx-2` → 2. Null for anything else — never guess an index. */
-export function draftPollOptionIndex(optionId: string): number | null {
+function draftPollOptionIndex(optionId: string): number | null {
   if (!optionId.startsWith(DRAFT_POLL_OPTION_PREFIX)) return null
   const n = Number(optionId.slice(DRAFT_POLL_OPTION_PREFIX.length))
   return Number.isInteger(n) && n >= 0 ? n : null

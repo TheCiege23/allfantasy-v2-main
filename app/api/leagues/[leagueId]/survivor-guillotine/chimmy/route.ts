@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, context: Context) {
   if (typeof body?.message !== 'string' || body.message.length > 1000) return NextResponse.json({ error: 'A short Chimmy command is required' }, { status: 400 })
   try {
     const result = await activateSGLivePower(leagueId, userId, body.message)
-    if (!result) return NextResponse.json({ error: 'No Survivor Guillotine action found' }, { status: 400 })
+    if (!result) return NextResponse.json({ error: 'No Survivor Guilly action found' }, { status: 400 })
     return NextResponse.json(result)
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Activation failed' }, { status: 409 })

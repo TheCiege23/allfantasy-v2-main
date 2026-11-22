@@ -12,6 +12,7 @@ import {
   DEFAULT_AUTOMATION_SETTINGS,
   DEFAULT_PRIVACY_SETTINGS,
 } from '@/lib/league-creation-wizard/types'
+import { AF_OWNED_LEAGUE_SETTINGS_KEYS } from '@/lib/league/afOwnedLeagueSettings'
 
 interface LeagueRow {
   id: string
@@ -25,14 +26,46 @@ interface LeagueRow {
   settings: unknown
 }
 
-const TEMPLATE_SETTINGS_BLACKLIST = new Set<string>([
-  'inviteCode',
-  'inviteLink',
-  'inviteExpiresAt',
+/**
+ * Keys that belong to ONE league and must never ride into a template. It started as seven keys, so a
+ * template carried the source league's dues ledger, manager ratings, orphan requests, lottery result,
+ * change log and more. Every AllFantasy-owned key (lib/league/afOwnedLeagueSettings.ts) is league state
+ * EXCEPT the few that are genuinely rules, listed in TEMPLATE_RULE_KEYS; the rest are season and import
+ * bookkeeping.
+ */
+const TEMPLATE_RULE_KEYS = new Set<string>([
+  'draft_order_mode',
+  'draft_lottery_config',
+  'concept_rules_overlay',
+  'devy_league_config',
+  'c2cTaxiLockMode',
+  'rookie_devy_lock',
+])
+
+export const TEMPLATE_SETTINGS_BLACKLIST = new Set<string>([
+  ...AF_OWNED_LEAGUE_SETTINGS_KEYS.filter((k) => !TEMPLATE_RULE_KEYS.has(k)),
   'league_password_hash',
   'source_tracking',
   'identity_mappings',
   'league_import_last_summary',
+  'metadata',
+  // Season state written by renew / rollover.
+  'renewal_completed_for_season',
+  'dynastySeasonPhase',
+  'season_phase',
+  'dispersal_draft_eligible',
+  'orphan_count_at_renewal',
+  // This league's own schedule and media.
+  'draftDate',
+  'draftTime',
+  'draftDateUtc',
+  'introVideoUrl',
+  'introPosterUrl',
+  // Commissioner tools' per-league state.
+  'draft_day_show',
+  'commissioner_reputation_public',
+  'constitution_amendments',
+  'weekly_recap_review',
 ])
 
 function sanitizeTemplateSettingsOverrides(raw: unknown): Record<string, unknown> {

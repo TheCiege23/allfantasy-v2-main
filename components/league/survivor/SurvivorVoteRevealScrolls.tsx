@@ -154,6 +154,7 @@ export function SurvivorVoteRevealScrolls({
       <span className={styles.out}>{eliminatedName}</span>
       <span className={styles.margin}>{theirs} {theirs === 1 ? 'vote' : 'votes'} to {nextBest}</span>
       {tiePhase === 'season_points_decided' && <span className={styles.margin}>Tie broken on season points</span>}
+      {tiePhase === 'stones_decided' && <span className={styles.margin}>Tie broken by the stones</span>}
       {exileEnabled && <span className={styles.exile}>
         <img src="/survivor/exile/token-icon.svg" alt="" width={20} height={20} />
         Heads to Exile Island with {exileStartingTokens} {exileStartingTokens === 1 ? 'token' : 'tokens'}

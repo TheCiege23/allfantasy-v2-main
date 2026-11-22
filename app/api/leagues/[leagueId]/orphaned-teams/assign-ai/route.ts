@@ -2,13 +2,14 @@
  * POST: commissioner — assign AI manager to an orphan roster slot.
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
+import { applyChimmyAutopilot } from '@/lib/inactive-manager/inactiveManagerService'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -53,12 +54,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
 
-  const aiPlatformUserId = `ai-manager-${rosterId}`
+  /*
+   * Chimmy as a manager (2026-10-31). The seat stays an ordinary empty seat (`orphan-…`) and Chimmy is
+   * handed it through the one switch every engine reads (lib/inactive-manager): the draft picks for it,
+   * the hourly runs set its lineup and fill its starters, and it ends when a real manager takes the team.
+   * This used to rewrite the owner to `ai-manager-…`, which the draft no longer recognised as an empty
+   * seat — so Chimmy stopped drafting for exactly the teams assigned to it here.
+   */
+  const chimmy = await applyChimmyAutopilot(leagueId, userId, rosterId, undefined)
+  if (!chimmy.ok) return NextResponse.json({ error: chimmy.error }, { status: chimmy.status })
 
   await prisma.roster.update({
     where: { id: rosterId },
     data: {
-      platformUserId: aiPlatformUserId,
       settings: mergeRosterSettings(roster.settings, {
         aiManaged: true,
         aiManagerType,
@@ -74,7 +82,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     },
     data: {
       externalId: rosterId,
-      ownerName: 'AI Manager',
+      ownerName: 'Chimmy Manager',
       isOrphan: false,
     },
   })
@@ -84,5 +92,5 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     data: { isActive: false },
   })
 
-  return NextResponse.json({ updated: true })
+  return NextResponse.json({ updated: true, chimmyManages: true })
 }

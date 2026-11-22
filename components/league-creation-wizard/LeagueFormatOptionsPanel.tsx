@@ -16,7 +16,7 @@ import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mod
 import { FEEDER_LEAGUES_BY_POOL, TOURNAMENT_TEAMS_PER_LEAGUE } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 import { StepHeader } from './StepHelp'
 import { ZOMBIE_UNIVERSE_TIER_LABELS } from '@/lib/zombie/zombie-universe-tier'
-import { SURVIVOR_PAID_CREATION_ENABLED } from '@/lib/survivor/survivorCreationAvailability'
+import { SURVIVOR_DUES_OFF_APP_NOTE } from '@/lib/survivor/survivorCreationAvailability'
 
 const CHECKBOX_CLASS = 'mt-0.5 shrink-0 size-5 rounded border border-white/30 bg-[#020817] accent-cyan-400'
 
@@ -81,6 +81,37 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
         helpTitle="Why we ask"
         help={<>Specialty formats need a few extra inputs so defaults, hubs, and social layers match your concept.</>}
       />
+
+      {leagueType === 'pirate' && (
+        <div className="space-y-4 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-[#14233a] via-[#0b1729] to-[#06111e] p-5 shadow-[0_16px_45px_rgba(0,0,0,.28)]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[.2em] text-amber-300">The captain's code</p>
+            <h4 className="mt-1 text-xl font-black text-white">Protect your crew. Win the booty.</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-300">Each scoring period, managers lock players before the first game. A matchup winner may claim one unlocked player from the loser.</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Protection slots
+              <Select value={String(v.pirateProtectionLimit)} onValueChange={(x) => onChange({ pirateProtectionLimit: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[1, 2, 3, 4, 5, 6].map((n) => <SelectItem key={n} value={String(n)}>{n} players</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1.5 text-sm font-medium text-white">
+              Automatic claim deadline
+              <Select value={String(v.pirateClaimHours)} onValueChange={(x) => onChange({ pirateClaimHours: Number(x) })}>
+                <SelectTrigger className="min-h-[44px] border-white/20 bg-[#071323] text-white"><SelectValue /></SelectTrigger>
+                <SelectContent>{[12, 24, 36, 48, 72].map((n) => <SelectItem key={n} value={String(n)}>{n} hours</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+          </div>
+          <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white">
+            <input type="checkbox" checked={v.piratePlayoffClaims} onChange={(e) => onChange({ piratePlayoffClaims: e.target.checked })} className={CHECKBOX_CLASS} />
+            Allow steals during playoffs
+          </label>
+          <p className="text-xs leading-5 text-amber-100/70">Unused protection slots expire at lock. More than the limit, or a change after lock, voids all protection for that period.</p>
+        </div>
+      )}
 
       {leagueType === 'tournament' && (
         <div
@@ -148,7 +179,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="app_generated">App-generated names</SelectItem>
-                <SelectItem value="ai_themed">AI-themed names</SelectItem>
+                <SelectItem value="ai_themed">Chimmy-themed names</SelectItem>
                 <SelectItem value="commissioner_custom">I will name each league (one per line below)</SelectItem>
               </SelectContent>
             </Select>
@@ -183,18 +214,14 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 {sportBrandLabel(sport)} {survivorSeasonPhrase(sport)} into phases; choose tribe identities below and let the
                 app label them. Exile Island is provisioned after create.
               </p>
-              <p className="mt-2 max-w-[60ch] text-xs leading-relaxed text-amber-200/85">
-                NBA Survivor is in preview. Invite friends to explore and test the league; unattended full-season hosting
-                is still being certified.
-              </p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-white/85">League buy-in</Label>
-            <p className="text-[11px] text-white/45">Pilot leagues are free. Paid entry can be added after full-season hosting is certified.</p>
+            <Label className="text-white/85">League dues</Label>
+            <p className="text-[11px] text-white/45">{SURVIVOR_DUES_OFF_APP_NOTE}</p>
             <div className="flex flex-wrap gap-2">
-              {(SURVIVOR_PAID_CREATION_ENABLED ? ['free', 'paid'] as const : ['free'] as const).map((mode) => {
+              {(['free', 'paid'] as const).map((mode) => {
                 const active = (v.survivorEntryFeeMode ?? 'free') === mode
                 return (
                   <button
@@ -218,9 +245,9 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 )
               })}
             </div>
-            {SURVIVOR_PAID_CREATION_ENABLED && (v.survivorEntryFeeMode ?? 'free') === 'paid' && (
+            {(v.survivorEntryFeeMode ?? 'free') === 'paid' && (
               <div className="space-y-1.5 pt-1">
-                <Label className="text-white/80">Buy-in per manager (USD)</Label>
+                <Label className="text-white/80">Dues per manager (USD, optional)</Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -240,7 +267,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                   className="max-w-[220px] border-white/15 bg-[#050f1f]/90 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                   data-testid="wizard-survivor-fee-amount"
                 />
-                <p className="text-[11px] text-white/45">You can adjust payment collection and rules later in league settings.</p>
+                <p className="text-[11px] text-white/45">For your records only. Mark managers paid later in League Dues.</p>
               </div>
             )}
           </div>
@@ -439,7 +466,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
       {leagueType === 'guillotine' && (
         <div className="space-y-3 rounded-2xl border border-red-500/30 bg-red-950/15 p-4">
           <p className="text-xs text-white/65">
-            Guillotine: lowest scorers are eliminated each period until one team remains. Chop timing and correction
+            Guilly: lowest scorers are eliminated each period until one team remains. Chop timing and correction
             windows are tuned after create.
           </p>
           <label
@@ -507,6 +534,27 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                 <option value="when_remaining">When X houseguests remain</option>
                 <option value="fixed_week">Fixed week number</option>
               </select>
+              {/* The number the mode needs; without it the game falls back (lib/big-brother/bigBrotherSetupRules.ts). */}
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                inputMode="numeric"
+                value={v.bigBrotherJuryValue ?? ''}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  onChange({ bigBrotherJuryValue: e.target.value === '' || !Number.isFinite(n) || n < 1 ? null : Math.floor(n) })
+                }}
+                placeholder={
+                  (v.bigBrotherJuryMode ?? 'after_eliminations') === 'fixed_week'
+                    ? 'Week the jury starts (required)'
+                    : (v.bigBrotherJuryMode ?? 'after_eliminations') === 'when_remaining'
+                      ? 'Houseguests left (default 9)'
+                      : 'Evictions before the jury (default 7)'
+                }
+                aria-label="Jury start number"
+                className="border-white/20 bg-[#030a20] text-white"
+              />
             </div>
           </div>
 
@@ -521,7 +569,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               >
                 <option value="deterministic_score">Fantasy score (highest weekly score wins)</option>
                 <option value="hybrid">Hybrid (score + challenge factor)</option>
-                <option value="ai_theme">AI-themed challenges</option>
+                <option value="ai_theme">Chimmy-themed challenges</option>
               </select>
             </div>
             <div className="space-y-1.5">

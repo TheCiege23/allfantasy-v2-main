@@ -19,6 +19,8 @@ type ContextPayload = {
   league: { keeperCount: number | null }
   session: SessionRow | null
   viewerRoster: { id: string; seasonId: string } | null
+  /** The viewer's team in the season just played: the players listed here come from it. */
+  sourceRoster?: { id: string; seasonId: string } | null
 }
 
 type RosterPlayer = {
@@ -37,6 +39,35 @@ type EligRow = {
   yearsKept: number
 }
 
+type KeeperValue = { marketRank: number; pickSlot: number; surplus: number }
+type ValueReport = { available: true; values: Record<string, KeeperValue> } | { available: false; reason: string }
+
+/** "+92 value · market #10, costs pick ~#102" — the keeper value report line for one player. */
+export function keeperValueLine(v: KeeperValue): string {
+  const head = v.surplus > 0 ? `+${v.surplus} value` : v.surplus === 0 ? 'Even value' : `Worth ${-v.surplus} picks less than his cost`
+  return `${head} · market #${v.marketRank}, costs pick ~#${v.pickSlot}`
+}
+
+/**
+ * Why a player could not be kept, in words. The save answered with the engine's own codes
+ * ("duplicate_round_5; rejected_by_commissioner"), which is what the manager was shown.
+ */
+export function keeperRefusalText(conflict: { playerIds?: string[]; reason: string }, nameOf: (playerId: string) => string): string {
+  const names = (conflict.playerIds ?? []).map(nameOf).filter(Boolean).join(' and ') || 'This player'
+  const many = (conflict.playerIds ?? []).length > 1
+  const round = /^duplicate_round_(\d+)$/.exec(conflict.reason)?.[1]
+  if (round) return `${names} ${many ? 'both cost' : 'costs'} a round ${round} pick. Keep one, or ask your commissioner how the league settles it.`
+  switch (conflict.reason) {
+    case 'rejected_by_commissioner': return `${names}: your commissioner rejected this keeper.`
+    case 'not_on_roster': return `${names} ${many ? 'are' : 'is'} not on your roster.`
+    case 'max_years_reached': return `${names} ${many ? 'have' : 'has'} been kept the most seasons your league allows.`
+    case 'not_drafted': return `${names}: your league only allows keeping players who were drafted.`
+    case 'above_round_floor': return `${names} ${many ? 'were' : 'was'} drafted too early to keep under your league's rules.`
+    case 'no_pick_available': return `${names}: you have no draft pick left to pay for this keeper.`
+    default: return `${names} ${many ? 'are' : 'is'} not eligible to be kept.`
+  }
+}
+
 type KeeperRec = {
   id: string
   playerId: string
@@ -51,6 +82,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
   const [ctx, setCtx] = useState<ContextPayload | null>(null)
   const [players, setPlayers] = useState<RosterPlayer[]>([])
   const [eligibility, setEligibility] = useState<EligRow[]>([])
+  const [valueReport, setValueReport] = useState<ValueReport | null>(null)
   const [records, setRecords] = useState<KeeperRec[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -84,7 +116,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
           `/api/keeper/eligibility?leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(c.session.seasonId)}&rosterId=${encodeURIComponent(c.viewerRoster.id)}`,
           { credentials: 'include' },
         ),
-        fetch(`/api/redraft/roster?rosterId=${encodeURIComponent(c.viewerRoster.id)}&week=1`, {
+        // Keepers come FROM last season's team; `viewerRoster` is next season's empty shell they land on.
+        fetch(`/api/redraft/roster?rosterId=${encodeURIComponent(c.sourceRoster?.id ?? c.viewerRoster.id)}&week=1`, {
           credentials: 'include',
         }),
         fetch(
@@ -96,8 +129,10 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
       const eligJson = await eligRes.json().catch(() => ({}))
       if (eligRes.ok && Array.isArray(eligJson.raw)) {
         setEligibility(eligJson.raw as EligRow[])
+        setValueReport(eligJson.valueReport && typeof eligJson.valueReport === 'object' ? (eligJson.valueReport as ValueReport) : null)
       } else {
         setEligibility([])
+        setValueReport(null)
       }
 
       const rosterJson = await rosterRes.json().catch(() => ({}))
@@ -187,7 +222,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
       }
       if (Array.isArray(j.conflicted) && j.conflicted.length > 0) {
         toast.message('Some players could not be kept', {
-          description: j.conflicted.map((c: { reason: string }) => c.reason).join('; '),
+          description: j.conflicted.map((c: { playerIds?: string[]; reason: string }) => keeperRefusalText(c, (id) => players.find((p) => p.playerId === id)?.playerName ?? '')).join(' '),
         })
       } else {
         toast.success('Keeper declaration saved')
@@ -257,8 +292,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
             }`}
           >
             <p>
-              <span className="font-semibold text-white">Status:</span> {session.status}
-              {locked ? ' — editing disabled' : ''}
+              <span className="font-semibold text-white">Status:</span> {locked ? 'Locked' : 'Open'}
+              {locked ? ' — editing disabled' : ` · ${selected.size} of ${maxKeepers} selected`}
             </p>
             <p className="mt-1">
               Deadline: {new Date(session.deadline).toLocaleString()}
@@ -271,9 +306,16 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
             </p>
           </div>
 
+          {valueReport?.available ? (
+            <p className="text-[11px] text-white/50" data-testid="keeper-value-note">
+              Keeper value: each player&apos;s market rank against the overall pick his keeper costs. Positive means he is worth more than the pick.
+            </p>
+          ) : null}
+
           <div className="space-y-2">
             {players.length === 0 ? (
-              <p className="text-[12px] text-white/45">No players on your roster for this season yet.</p>
+              // The roster arrives after the window does: say "loading" until it has, not that there is no team.
+              <p className="text-[12px] text-white/45">{loading ? 'Loading your roster…' : 'No players on your roster for this season yet.'}</p>
             ) : (
               players.map((p) => {
                 const e = eligByPlayer.get(p.playerId)
@@ -284,6 +326,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                     key={p.playerId}
                     type="button"
                     disabled={locked || deadlinePassed || Boolean(ineligible)}
+                    aria-pressed={sel}
+                    data-testid={`keeper-select-${p.playerId}`}
                     onClick={() => toggle(p.playerId)}
                     className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                       sel
@@ -291,7 +335,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                         : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15'
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    <span className="mt-0.5 text-amber-300/90">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
+                    <span className="mt-0.5 text-amber-300/90" aria-hidden="true">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[14px] font-semibold text-white">{p.playerName}</span>
                       <span className="text-[11px] text-white/45">
@@ -303,6 +347,14 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                           Projected cost:{' '}
                           {e.projectedCost ??
                             (e.projectedCostRound != null ? `Round ${e.projectedCostRound}` : '—')}
+                        </span>
+                      ) : null}
+                      {valueReport?.available && valueReport.values[p.playerId] ? (
+                        <span
+                          className={`mt-0.5 block text-[11px] ${valueReport.values[p.playerId].surplus > 0 ? 'text-emerald-300/85' : 'text-white/45'}`}
+                          data-testid="keeper-value"
+                        >
+                          {keeperValueLine(valueReport.values[p.playerId])}
                         </span>
                       ) : null}
                       {ineligible ? (

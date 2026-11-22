@@ -72,13 +72,9 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // tournament_shell_grants was here until 2026-09-13, when `TournamentShellGrant` was modelled from
   // production's own information_schema. Removed rather than left in: the stale-entry test below
   // would fail on it, which is that test doing its job.
-  // All five from 20260410143800_fix_schema_drift, which created tables to match a schema that
-  // has since moved on. Predate this guard; nothing reads them.
-  supplemental_drafts: 'pre-existing, 20260410143800_fix_schema_drift',
-  supplemental_draft_picks: 'pre-existing, 20260410143800_fix_schema_drift',
-  dispersal_draft_rosters: 'pre-existing, 20260410143800_fix_schema_drift',
-  dispersal_asset_pool: 'pre-existing, 20260410143800_fix_schema_drift',
-  dispersal_draft_participants: 'pre-existing, 20260410143800_fix_schema_drift',
+  // The five dispersal draft tables from 20260410143800_fix_schema_drift were here until 2026-10-27,
+  // listed as "nothing reads them". The dispersal draft engine reads all five; their models were
+  // missing, so it threw on every call. Modelled from that migration, statement for statement.
   draft_intro_views: 'pre-existing, 20260510120000_draft_intro_view_foundation',
 }
 

@@ -16,6 +16,7 @@ const nav = vi.hoisted(() => ({
     throw new Error(`NEXT_REDIRECT ${url}`)
   }),
 }))
+vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('next/navigation', () => ({
   useSearchParams: () => nav.search,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
@@ -143,10 +144,12 @@ describe('locks that used to send buyers to /settings', () => {
 
   it('every locked survivor tile goes to the checkout for its own plan', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
-    render(<SurvivorPremiumCommandCenterPanel leagueId="lg-1" plan={null} tokensRemaining={null} />)
+    render(<SurvivorPremiumCommandCenterPanel leagueId="lg-1" plan={null} tokensRemaining={null} isCommissioner />)
     const hrefs = screen.getAllByRole('link', { name: 'Upgrade' }).map((a) => a.getAttribute('href'))
-    const expected = SURVIVOR_PREMIUM_COMMAND_TILES.map((t) => upgradePathForPlan(t.requiredPlan))
+    // Only built tiles sell anything: a "coming next" tile shows no lock and no upgrade link.
+    const expected = SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status === 'live').map((t) => upgradePathForPlan(t.requiredPlan))
     expect(hrefs).toEqual(expected)
     expect(new Set(hrefs).size).toBeGreaterThan(1)
+    expect(screen.queryAllByText('Coming next')).toHaveLength(SURVIVOR_PREMIUM_COMMAND_TILES.filter((t) => t.status !== 'live').length)
   })
 })

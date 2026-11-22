@@ -184,7 +184,7 @@ describe('degenerate inputs', () => {
 describe('weight normalisation', () => {
   it('returns fractions, including on the all-zero path', () => {
     const zero = normalizeBlendWeights({ api: 0, app: 0, ai: 0, custom: 0 })
-    const total = zero.api + zero.app + zero.ai + zero.custom
+    const total = zero.api + zero.app + zero.ai + zero.imported + zero.custom
     expect(total).toBeCloseTo(1, 10)
     // The old local copy returned 40/35/25 here — unnormalised, a different scale from every
     // other league's weights.
@@ -195,11 +195,14 @@ describe('weight normalisation', () => {
     const pct = normalizeBlendWeights({ api: 40, app: 35, ai: 25, custom: 0 })
     const frac = normalizeBlendWeights({ api: 0.4, app: 0.35, ai: 0.25, custom: 0 })
     expect(pct.api).toBeCloseTo(frac.api, 10)
+    // A missing `imported` scales with the caller's own units, so it agrees across both forms too.
+    expect(pct.imported).toBeCloseTo(frac.imported, 10)
+    expect(pct.imported).toBeCloseTo(30 / 130, 10)
   })
 
   it('ignores a negative weight rather than subtracting evidence', () => {
     const r = normalizeBlendWeights({ api: 40, app: -100, ai: 25, custom: 0 })
     expect(r.app).toBe(0)
-    expect(r.api + r.ai).toBeCloseTo(1, 10)
+    expect(r.api + r.ai + r.imported).toBeCloseTo(1, 10)
   })
 })

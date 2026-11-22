@@ -823,7 +823,7 @@ describe('Receipts', () => {
 
 const LEAGUES: Dash34League[] = [
   { id: 'a', name: 'Ice Kings', platform: 'sleeper', href: '/core', formatLabel: '2026 · 12-team · Dynasty · PPR Superflex', isCommissioner: true },
-  { id: 'b', name: 'Oficina FC', platform: 'espn', href: '/core', formatLabel: '2026 · 10-team · Guillotine · Half PPR' },
+  { id: 'b', name: 'Oficina FC', platform: 'espn', href: '/core', formatLabel: '2026 · 10-team · Guilly · Half PPR' },
   { id: 'c', name: null as unknown as string, platform: 'yahoo', href: '/core', formatLabel: null },
 ]
 
@@ -832,14 +832,17 @@ describe('My leagues', () => {
     lang.language = 'es'
     for (const [leagues, total] of [[LEAGUES, 3], [LEAGUES, 63], [[], 0]] as const) {
       const { container, unmount } = render(<Dash3ALeagues leagues={[...leagues]} totalLeagues={total} />)
-      expectSpanish(cardText(container).replace(/Half PPR|PPR Superflex/g, ''), String(total))
+      // "PPR Superflex" is a format name Spanish keeps; the scoring part of a label is translated
+      // (the owner's ruling, __tests__/spanish-wording-rulings.test.tsx §9), so "Half PPR" must not survive.
+      expectSpanish(cardText(container).replace(/PPR Superflex/g, ''), String(total))
+      expect(cardText(container)).not.toMatch(/Half PPR/)
       unmount()
     }
     const { container } = render(<Dash3ALeagues leagues={LEAGUES} totalLeagues={63} />)
     expect([...container.querySelectorAll('.af3a-league-body em')].map((e) => e.textContent)).toEqual([
-      '2026 · 12 equipos · Dynasty · PPR Superflex',
-      '2026 · 10 equipos · Guillotina · Half PPR',
-      'Liga importada',
+      'sleeper · 2026 · 12 equipos · Dynasty · PPR Superflex',
+      'espn · 2026 · 10 equipos · Guilly · Medio PPR',
+      'yahoo',
     ])
     expect(container.querySelector('.af3a-note')?.textContent).toBe('3 de 63')
     expect(container.querySelector('.af3a-cardlink')?.textContent).toBe('Ver las 63 →')
@@ -849,9 +852,9 @@ describe('My leagues', () => {
     const { container } = render(<Dash3ALeagues leagues={LEAGUES} totalLeagues={3} />)
     expect(container.querySelector('.af3a-note')?.textContent).toBe('3 total')
     expect([...container.querySelectorAll('.af3a-league-body em')].map((e) => e.textContent)).toEqual([
-      '2026 · 12-team · Dynasty · PPR Superflex',
-      '2026 · 10-team · Guillotine · Half PPR',
-      'Imported league',
+      'sleeper · 2026 · 12-team · Dynasty · PPR Superflex',
+      'espn · 2026 · 10-team · Guilly · Half PPR',
+      'yahoo',
     ])
     expect(container.textContent).toContain('Untitled league')
   })

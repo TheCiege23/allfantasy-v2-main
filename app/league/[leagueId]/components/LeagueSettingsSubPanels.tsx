@@ -1,5 +1,7 @@
 'use client'
 
+import { TeamCoOwnerPanel } from './settings/TeamCoOwnerPanel'
+
 import {
   ArrowLeft,
   CalendarDays,
@@ -28,24 +30,11 @@ import { leagueJoinUrl } from '@/lib/league/league-invite-link'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DiscordLeagueSyncPanel } from './DiscordLeagueSyncPanel'
+import { TournamentPlayoffsNote, tournamentRunsPlayoffs } from '@/components/league-settings/TournamentLeagueNotes'
 import { PlayoffSettingsEditor as PlayoffSettingsEditorLazy } from '@/components/league-settings/PlayoffSettingsEditor'
 import { RosterSettingsEditor as RosterSettingsEditorLazy } from '@/components/league-settings/RosterSettingsEditor'
-import {
-  detectScoringFlavor,
-  getDivisionCount,
-  getDraftIdFromSettings,
-  getScoringSettings,
-  getSleeperLikeBundle,
-  getSettingsRecord,
-  groupRosterSlotCounts,
-  initialsFromName,
-  leagueAvatarSrc,
-  sleeperAvatarUrl,
-  waiverTypeText,
-} from './league-settings-modal-utils'
+import { detectScoringFlavor, getDivisionCount, getDraftIdFromSettings, getScoringSettings, getSleeperLikeBundle, getSettingsRecord, groupRosterSlotCounts, initialsFromName, sleeperAvatarUrl, waiverTypeText } from './league-settings-modal-utils'
 import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
-import { IDPScoringPanel } from '@/app/idp/components/settings/IDPScoringPanel'
-import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
@@ -58,11 +47,14 @@ import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoring
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
 import { MlbScoringSettingsPanel } from '@/components/league-settings/MlbScoringSettingsPanel'
 import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoringSettingsPanel'
+import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import { DraftSettingsCommissionerPanel } from '@/components/league-settings/DraftSettingsCommissionerPanel'
 import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
+import { LeagueDuesTrackerPanel as DuesTrackerPanel } from '@/components/league-settings/LeagueDuesTrackerPanel'
 import { PlanRefusalNotice } from '@/components/monetization/PlanRefusalNotice'
 import { currentPathForReturn, readPlanRefusal, type PlanRefusal } from '@/lib/monetization/planRefusal'
 
@@ -90,6 +82,8 @@ export type SubPanelContext = {
   onGoToDraftTab: () => void
   /** From `/api/league/settings` when available - powers IDP Intelligence panel gating. */
   hasAfCommissionerSub?: boolean
+  /** The Commissioner Hub asked for one of CommissionerControlPanel's views ('edit-schedule', …). */
+  commissionerToolsView?: string | null
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -114,22 +108,6 @@ function SleeperLink({ href, children }: { href: string; children: React.ReactNo
       className="mt-3 inline-flex text-[13px] font-semibold text-[#ff3d81]/95 underline-offset-2 hover:text-[#ff9ec0]"
     >
       {children}
-    </a>
-  )
-}
-
-function CommishLinkRow({ href, label }: { href: string; label: string }) {
-  const testId = `commish-menu-${label.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}`
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between gap-2 border-b border-white/[0.06] py-3.5 first:pt-0 last:border-0"
-      data-testid={testId}
-    >
-      <span className="text-[14px] font-medium text-white/95">{label}</span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-white/40" aria-hidden />
     </a>
   )
 }
@@ -739,7 +717,7 @@ export function SettingsSubPanelBody({
 
   switch (panelId) {
     case 'discord-sync':
-      return <DiscordLeagueSyncPanel ctx={ctx} />
+      return <DiscordLeagueSyncPanel leagueId={ctx.league.id} isLeagueOwner={ctx.league.userId === ctx.userId} />
     case 'my-team':
       return <MyTeamPanel ctx={ctx} />
     case 'general-info':
@@ -777,6 +755,8 @@ export function SettingsSubPanelBody({
         </div>
       )
     case 'playoffs':
+      // A tournament conference league has no league playoffs (lib/tournament/divisions/conferenceSeasonPlan.ts).
+      if (tournamentRunsPlayoffs(ctx.league.settings)) return <TournamentPlayoffsNote settings={ctx.league.settings} />
       return (
         <>
           <PlayoffSettingsReadonlyPanel ctx={ctx} />
@@ -826,7 +806,11 @@ export function SettingsSubPanelBody({
               isCommissioner={ctx.isCommissioner}
             />
           )}
-          {ctx.league.sport === 'NHL' && (
+          {/* NHL category leagues have no point weights: show the stored categories, as NBA's panel does. */}
+          {ctx.league.sport === 'NHL' && nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
+            <ScoringSettingsPanel leagueId={ctx.league.id} />
+          )}
+          {ctx.league.sport === 'NHL' && !nativeCategoryScoringContext(ctx.league.settings, 'NHL') && (
             <NhlScoringSettingsPanel
               leagueId={ctx.league.id}
               isCommissioner={ctx.isCommissioner}
@@ -913,11 +897,7 @@ export function SettingsSubPanelBody({
     case 'ai-trash':
       return <AiFeaturePanel panelId={panelId} ctx={ctx} />
     case 'idp_roster':
-      return <IDPRosterPanel />
-    case 'idp_scoring':
-      return <IDPScoringPanel />
-    case 'idp_display':
-      return <IDPDisplayPanel />
+      return <IDPRosterPanel leagueId={ctx.league.id} canEdit={ctx.isCommissioner} />
     case 'idp_ai':
       return (
         <IDPAIPanel
@@ -1054,6 +1034,8 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
             : t('lsPanel.team.importedHint').replace('{{platform}}', importedPlatformLabel(ctx.league.platform) ?? t('lsPanel.team.itsPlatform'))}
         </p>
       </div>
+
+      {native && ctx.userTeam.claimedByUserId === ctx.userId && ctx.userTeam.externalId && <TeamCoOwnerPanel leagueId={ctx.league.id} rosterId={ctx.userTeam.externalId} />}
 
       {error ? (
         <p role="alert" className="text-[12px] text-[#fda4af]">
@@ -1351,62 +1333,21 @@ function CommishGeneralPanel({
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-[11px] text-white/45">{t('lsPanel.leagueName')}</label>
+        <label className="text-[11px] text-secondary">{t('lsPanel.leagueName')}</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white"
+          className="mt-1 w-full rounded-xl border border-subtle bg-[#1a1f3a] px-3 py-2 text-[13px] text-primary"
         />
-        <p className="mt-1 text-[11px] text-white/35">{t('lsPanel.cg.mirrorNote')}</p>
+        <p className="mt-1 text-[11px] text-secondary">{t('lsPanel.cg.mirrorNote')}</p>
       </div>
       <label className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
-        <span className="text-[12px] text-white/85">{t('lsPanel.cg.public')}</span>
+        <span className="text-[12px] text-primary">{t('lsPanel.cg.public')}</span>
         <input type="checkbox" className="h-4 w-4 accent-[#ff3d81]" />
       </label>
       {sleeperSettingsHref ? (
         <SleeperLink href={sleeperSettingsHref}>{t('lsPanel.cg.openInSleeper')}</SleeperLink>
       ) : null}
-    </div>
-  )
-}
-
-function MembersCommishPanel({ ctx }: { ctx: SubPanelContext }) {
-  const sleeperSettingsHref = ctx.sleeperLeagueId
-    ? `https://sleeper.com/leagues/${ctx.sleeperLeagueId}/settings`
-    : null
-
-  return (
-    <div className="space-y-4">
-      <p className="text-[12px] leading-relaxed text-white/55">
-        Assign members to different rosters. Unassigned members remain in the league. Member moves happen in your host
-        commissioner tools.
-      </p>
-      {sleeperSettingsHref ? (
-        <div className="-mx-0.5 rounded-xl border border-white/[0.06] bg-[#0a1228]/50 px-0.5">
-          <CommishLinkRow href={sleeperSettingsHref} label="Assign members to rosters" />
-          <CommishLinkRow href={sleeperSettingsHref} label="Remove members from league" />
-        </div>
-      ) : (
-        <p className="text-[12px] text-white/45">Connect a Sleeper league to open member management on the host.</p>
-      )}
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/38">Rosters</p>
-        <ul className="space-y-2">
-          {ctx.league.teams.map((t, i) => (
-            <li
-              key={t.id}
-              className="rounded-xl border border-white/[0.06] bg-[#0a1228]/80 px-3 py-2.5"
-              data-testid={`member-roster-preview-${i}`}
-            >
-              <p className="text-[13px] font-semibold text-white">
-                <span className="text-white/45">{i + 1}. </span>
-                {t.teamName}
-              </p>
-              <p className="text-[11px] text-white/40">{t.ownerName}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   )
 }
@@ -1800,6 +1741,8 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               leagueId={ctx.league.id}
               currentUserId={ctx.userId}
               leagueOwnerUserId={ctx.league.userId}
+          platform={ctx.league.platform}
+          leagueName={ctx.league.name}
             />
           </div>
         </div>
@@ -1808,65 +1751,15 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
   )
 }
 
+/**
+ * The league settings modal's dues card is the real tracker.
+ *
+ * 🛑 IT USED TO BE A BROWSER-ONLY TOGGLE. This card saved "track dues" to localStorage ("saved on this
+ * device") and nothing else, so a commissioner who set dues up here believed they were tracked while no
+ * member, no reminder and no other device ever saw it. It now renders the same panel as everywhere else.
+ */
 function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
-  const { t } = useLanguage()
-  const storageKey = `af-league-dues-track-${ctx.league.id}`
-  const [track, setTrack] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    try {
-      const v = typeof window !== 'undefined' ? window.localStorage.getItem(storageKey) : null
-      setTrack(v === '1')
-    } catch {
-      /* ignore */
-    }
-    setLoaded(true)
-  }, [storageKey])
-
-  const save = () => {
-    try {
-      window.localStorage.setItem(storageKey, track ? '1' : '0')
-      toast.success(t('lsPanel.dues.savedDevice'))
-    } catch {
-      toast.error(t('lsPanel.dues.saveFailed'))
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-[15px] font-bold text-white">{t('lsModal.card.leagueDues')}</h3>
-        <p className="mt-1 text-[12px] text-sky-200/55">{t('lsPanel.dues.subtitle')}</p>
-      </div>
-      <label className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#0a1228]/80 px-3 py-3">
-        <span className="text-[13px] font-medium text-white/90">{t('lsPanel.dues.track')}</span>
-        <input
-          type="checkbox"
-          className="h-5 w-5 accent-[#ff3d81]"
-          checked={track}
-          disabled={!loaded}
-          onChange={(e) => setTrack(e.target.checked)}
-          data-testid="league-dues-track-toggle"
-        />
-      </label>
-      <p className="text-[11px] leading-relaxed text-sky-200/45">
-        {t('lsPanel.dues.note')}
-      </p>
-      <button
-        type="button"
-        onClick={() => save()}
-        disabled={!loaded}
-        className="w-full rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/15 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:cursor-not-allowed disabled:opacity-40"
-        data-testid="league-dues-save"
-      >
-        {t('lsPanel.save')}
-      </button>
-      <p className="text-[11px] text-white/35">
-        {t('lsPanel.dues.localNote')}
-      </p>
-    </div>
-  )
+  return <DuesTrackerPanel leagueId={ctx.league.id} />
 }
 
 function parseNameList(raw: string): { name: string }[] {

@@ -28,8 +28,13 @@ export function GlobalModeToggle() {
    *  This toggle sits at fixed bottom-4 right-4 z-40 — same coordinates, lower
    *  z-index — so the AF/light-dark button visually overlaps the War Room
    *  trigger and steals user clicks at narrow widths. The draft route has its
-   *  own theme controls in DraftTopBar; the global toggle is redundant here. */
-  if (pathname?.startsWith("/draft/") || pathname?.startsWith("/draft-room/")) return null
+   *  own theme controls in DraftTopBar; the global toggle is redundant here.
+   *  Include the canonical plural live route and mock room: their stacked mobile
+   *  navigation otherwise sits under this pill and taps can change the theme. */
+  if (
+    pathname.startsWith("/draft/") || pathname.startsWith("/draft-room/") ||
+    pathname.startsWith("/drafts/") || pathname === "/mock-draft" || pathname.startsWith("/mock-draft/")
+  ) return null
 
   /** /chimmy/chat is the chat drawer's Chimmy tab at full screen, and like the drawer it is always
    *  dark (af-comms.css scopes its own tokens), so a light/dark switch there changes nothing on
@@ -89,8 +94,17 @@ export function GlobalModeToggle() {
   const stacked = !createLeagueRoute && !marketingLanding
 
   return (
+    /*
+     * `data-hide-in-ios-app`: inside the native iOS app this floating pill is web chrome, not app
+     * chrome. Measured 2026-11-20 at 375x667 with the app's User-Agent: on `/` it sat over the
+     * landing card's "WAIVER" badge and over the footer beside the back-to-top button, and on
+     * `/vpn-blocked` over the instructions. Signed-in screens already carry the real switch (the
+     * /core top bar and Settings › Preferences), so nothing is lost in the app. The browser is
+     * unchanged — the globals.css rule only matches `html[data-ios-app]`.
+     */
     <div
       data-af-mode-toggle=""
+      data-hide-in-ios-app=""
       className={
         createLeagueRoute
           ? 'fixed right-4 top-4 z-40 sm:top-5'

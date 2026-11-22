@@ -140,7 +140,7 @@ export async function GET(req: Request) {
     const saved = normalizeSavedRecord(row.contentJson)
     const fallbackOutput: SavedOutputPayload = {
       evidence: [],
-      aiExplanation: toStringValue(row.contentText, 12_000) ?? 'Saved AI result',
+      aiExplanation: toStringValue(row.contentText, 12_000) ?? 'Saved Chimmy result',
       actionPlan: null,
       confidence: row.confidence != null ? Math.round(Number(row.confidence) * 100) : null,
       confidenceLabel: null,
@@ -198,7 +198,7 @@ export async function POST(req: Request) {
       {
         code: 'invalid_payload',
         message: 'tool, sport, and output.aiExplanation are required.',
-        userMessage: 'Could not save this AI result because required fields are missing.',
+        userMessage: 'Could not save this Chimmy result because required fields are missing.',
       },
       { status: 400 }
     )

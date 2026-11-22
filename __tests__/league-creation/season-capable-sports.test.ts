@@ -1,11 +1,10 @@
 /**
  * Which sports can actually run a season.
  *
- * 🛑 THE WIZARD OFFERS SEVEN SPORTS AND TWO OF THEM WORK. A league in any other
- * sport can be created, drafted and scheduled, and then nothing ever happens to
- * it: its matchups never finalize, so `advance_week` refuses forever, so it never
- * reaches playoffs, a champion or an offseason. Nothing goes red — the league just
- * sits at week 1.
+ * 🛑 EACH WIZARD SPORT NEEDS A COMPLETE SEASON PATH. A league can otherwise be
+ * created and drafted but never advance past an unscorable week. The capability
+ * list is updated only after the stat, schedule, lock, playoff and rollover paths
+ * have been verified for that sport.
  *
  * That is the same silent dead end the whole season-lifecycle effort exists to
  * remove, except this one is reached by a user following the happy path.
@@ -42,19 +41,14 @@ import {
 
 describe('canRunSeasonForSport', () => {
   it('is the set whose stat path AND finalizer were both measured', () => {
-    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF'])
+    expect([...SEASON_CAPABLE_SPORTS]).toEqual(['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF', 'SOCCER'])
     expect(canRunSeasonForSport('MLB')).toBe(true)
     expect(canRunSeasonForSport('NCAAF')).toBe(true)
     expect(canRunSeasonForSport('NFL')).toBe(true)
     expect(canRunSeasonForSport('NHL')).toBe(true)
     expect(canRunSeasonForSport('NBA')).toBe(true)
-  })
-
-  it('refuses every sport that cannot yet run one', () => {
-    // Soccer remains outside the general season-capability gate.
-    for (const sport of ['SOCCER']) {
-      expect(canRunSeasonForSport(sport), `${sport} must not claim season capability`).toBe(false)
-    }
+    expect(canRunSeasonForSport('SOCCER', 2026)).toBe(true)
+    expect(canRunSeasonForSport('SOCCER', 2027)).toBe(false)
   })
 
   it('is case-insensitive and safe on absent input', () => {
@@ -74,6 +68,6 @@ describe('canRunSeasonForSport', () => {
     for (const sport of SUPPORTED_SPORTS) {
       expect(typeof canRunSeasonForSport(sport)).toBe('boolean')
     }
-    expect(SEASON_CAPABLE_SPORTS.length).toBeLessThan(SUPPORTED_SPORTS.length)
+    expect(new Set(SEASON_CAPABLE_SPORTS)).toEqual(new Set(SUPPORTED_SPORTS))
   })
 })

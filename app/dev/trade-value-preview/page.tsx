@@ -115,7 +115,7 @@ const EDGE = snapshot([
       sources: { ...NO_SOURCES, projectionValue: 310 },
       internalValue: 7410, valuationBasis: 'projection',
       formatFit: {
-        formatId: 'guillotine', label: 'Guillotine',
+        formatId: 'guillotine', label: 'Guilly',
         fit: { multiplier: 0.53, reason: '10 of 18 teams left. Assuming an even chance of being chopped, you can expect about 4.5 more weeks — so a trade is worth roughly 53% of what the same trade was worth in week one.' },
         legality: { ok: false, reason: 'Trades closed after week 11. There is no offseason here — the format ends with one team standing, so this does not reopen.' },
       },

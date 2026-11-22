@@ -1,3 +1,4 @@
+import {sgAutomationAllowed,recordSGAutomation} from './commissionerRuntime'
 import 'server-only'
 
 import { randomInt, randomUUID } from 'node:crypto'
@@ -6,8 +7,13 @@ import { prisma } from '@/lib/prisma'
 import { createPlatformNotification } from '@/lib/platform/notification-service'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { buildSGSchedule } from './config'
+import { sgEligibleChampions, sgMatchupStage, validateSGSelectionStages } from './seasonRules'
+import { buildSGNflCalendar, sgOrderStages, validateSGOrderChoice } from './calendar'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { matchedStarterCount } from '@/lib/redraft/nativeDraftRosterTemplate'
+import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { sgGameWindow } from './gameWindow'
 import { resolveSGPeriod } from './competition'
-import { loadCappedGameScores } from './capped-scoring'
 import { executeSGLiveChop, readSGPeriodState, readSGTribes, seedSGLiveDraftPowers } from './live'
 import { configureSGLivePeriod } from './live'
 import type { SGTribeMember, SGLivePeriod } from './live'
@@ -32,6 +38,10 @@ export async function getSGManagerRoster(leagueId: string, userId: string) {
 
 /** Draft-completion hook; idempotent and safe to retry after roster finalization. */
 export async function bootstrapSGAfterDraft(leagueId: string) {
+  // Draft completion calls this hook for every format. Read the shared discriminator
+  // before touching optional specialty tables, which may not be installed.
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant !== 'survivor_guillotine') return { status: 'not_applicable' as const }
   const season = await prisma.survivorGuillotineLeague.findUnique({ where: { leagueId } })
   if (!season || season.status !== 'setup') return { status: 'not_applicable' as const }
   const draft = await prisma.draftSession.findFirst({ where: { leagueId, status: 'completed' },
@@ -46,8 +56,8 @@ export async function bootstrapSGAfterDraft(leagueId: string) {
   const drafted = new Set(rosters.flatMap(roster => getRosterPlayerIds(roster.playerData)))
   const playerIds = [...new Set(picks.map(p => p.playerId).filter((id): id is string => !!id && drafted.has(id)))]
   if (!playerIds.length) throw new Error('The completed draft has no player IDs for hidden idols.')
-  if (!await prisma.survivorGuillotinePower.count({ where: { leagueId } })) {
-    await seedSGLiveDraftPowers(leagueId, playerIds, Math.min(3, playerIds.length))
+  if (buildSGSchedule(config).periods.find(p => p.mode === 'merged')?.period !== 1 && !await prisma.survivorGuillotinePower.count({ where: { leagueId } })) {
+    await seedSGLiveDraftPowers(leagueId, playerIds, config.enabledPowers?.length === 1 ? 1 : Math.min(3, playerIds.length))
   }
   if (config.tribeFormation === 'random' && !readSGTribes(season.tribes).length) {
     const shuffled = [...rosters]
@@ -76,6 +86,7 @@ export async function setSGTribes(leagueId: string, members: SGTribeMember[], de
   if (deadlineAt && !Number.isFinite(deadline!.getTime())) throw new Error('Invalid captain voting deadline.')
   const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
     data: { tribes: members.map(m => ({ rosterId: m.rosterId, tribeId: m.tribeId, captain: false })) as Prisma.InputJsonValue,
+      tribeDraftState: {},
       captainElectionDeadlineAt: deadline, revision: { increment: 1 } } })
   if (saved.count !== 1) throw new Error('Tribe assignments changed; reload and retry.')
   return { tribes: members.length }
@@ -187,6 +198,7 @@ export async function submitSGPeriodChoice(leagueId: string, userId: string, cho
   if (!commissioner && (config.submissionMode === 'commissioner' || config.submissionMode === 'tribe_vote' ||
       (config.submissionMode === 'captain' && !actor?.captain))) throw new Error('This league requires a commissioner or tribe vote to resolve the choice.')
   const next = { ...state, matchups: [...state.matchups], champions: [...state.champions], sitOuts: [...state.sitOuts] }
+  if (choice.kind === 'matchup' && state.orderChoice && !state.orderChoice.selected) throw new Error('The choosing tribe must select bookends or middle before matchup picks begin.')
   if (choice.kind === 'sit_out') {
     if (mode !== 'match_play') throw new Error('Sit-outs apply to Match Play.')
     const member = members.find(m => m.rosterId === choice.rosterId)
@@ -199,6 +211,9 @@ export async function submitSGPeriodChoice(leagueId: string, userId: string, cho
     if (mode !== 'tribe_champion') throw new Error('Champion submissions apply to Tribe Champion periods.')
     const nominee = members.find(m => m.rosterId === choice.rosterId)
     if (!nominee || (!commissioner && nominee.tribeId !== actor?.tribeId)) throw new Error('Nominate an active member of your tribe.')
+    const stage = state.selectionStages?.find(row => row.tribeId === nominee.tribeId)
+    if (!commissioner && stage && Date.now() >= Date.parse(stage.deadlineAt)) throw new Error('Your tribe’s champion deadline passed.')
+    if (!sgEligibleChampions(config, state.period, members, nominee.tribeId, season.periodHistory).includes(nominee.rosterId)) throw new Error('Every active tribe member must serve as champion before a repeat nomination.')
     if (next.champions.some(id => members.some(m => m.rosterId === id && m.tribeId === nominee.tribeId))) throw new Error('This tribe already has a champion.')
     next.champions.push(nominee.rosterId)
   } else {
@@ -209,7 +224,10 @@ export async function submitSGPeriodChoice(leagueId: string, userId: string, cho
     const used = new Set([...state.sitOuts, ...state.matchups.flatMap(m => [m.team1, m.team2])])
     if (!first || !second || first.tribeId === second.tribeId || used.has(first.rosterId) || used.has(second.rosterId)) throw new Error('Choose two unused, non-sitting managers from different tribes.')
     const order = state.selectionOrder?.length ? state.selectionOrder : [...new Set(members.map(m => m.tribeId))]
-    const turn = order[Math.floor(next.matchups.length / config.matchupBatchSize) % order.length]
+    const stage = sgMatchupStage(state.selectionStages, next.matchups.length)
+    if (state.selectionStages?.length && !stage) throw new Error('All staged matchups have been selected.')
+    if (!commissioner && stage && Date.now() >= Date.parse(stage.deadlineAt)) throw new Error('This matchup batch deadline passed; commissioner or fallback resolution is required.')
+    const turn = stage?.tribeId ?? order[Math.floor(next.matchups.length / config.matchupBatchSize) % order.length]
     if (!commissioner && (actor?.tribeId !== turn || first.tribeId !== turn)) throw new Error(`It is ${turn}'s selection turn; choose one of its managers as Team 1.`)
     next.matchups.push({ team1: first.rosterId, team2: second.rosterId })
   }
@@ -238,7 +256,10 @@ export async function voteSGPeriodChoice(leagueId: string, userId: string,
       choice.kind === 'sit_out' && mode !== 'match_play') throw new Error('This choice is unavailable in the current format.')
   const order = state.selectionOrder?.length ? state.selectionOrder : [...new Set(members.map(m => m.tribeId))]
   if (choice.kind === 'matchup' && config.matchupOrder === 'commissioner') throw new Error('The commissioner controls matchup order in this league.')
-  if (choice.kind === 'matchup' && actor.tribeId !== order[Math.floor(state.matchups.length / config.matchupBatchSize) % order.length]) throw new Error('It is another tribe’s selection turn.')
+  const stage = choice.kind === 'matchup' ? sgMatchupStage(state.selectionStages, state.matchups.length)
+    : state.selectionStages?.find(row => row.tribeId === actor.tribeId)
+  if (stage && Date.now() >= Date.parse(stage.deadlineAt)) throw new Error('This tribe selection deadline passed.')
+  if (choice.kind === 'matchup' && actor.tribeId !== (stage?.tribeId ?? order[Math.floor(state.matchups.length / config.matchupBatchSize) % order.length])) throw new Error('It is another tribe’s selection turn.')
   const slotKey = choice.kind === 'matchup' ? `matchup:${state.matchups.length}` :
     choice.kind === 'champion' ? `champion:${actor.tribeId}` :
       `sit_out:${actor.tribeId}:${state.sitOuts.filter(id => members.some(m => m.rosterId === id && m.tribeId === actor.tribeId)).length}`
@@ -267,6 +288,50 @@ export async function submitSGTribeChoice(leagueId: string, userId: string,
     : submitSGPeriodChoice(leagueId, userId, choice)
 }
 
+export async function previewSGCalendar(leagueId: string) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true, settings: true } })
+  const config = season.config as unknown as SGConfig
+  const games = await prisma.sportsGame.findMany({ where: { sport: 'NFL', season: league.season,
+    startTime: { not: null }, week: { gte: 1, lte: config.championshipPeriod } }, select: { week: true, startTime: true, seasonType: true } })
+  const preview = buildSGNflCalendar(config, games.filter(game => game.startTime && !/pre|post|playoff/i.test(game.seasonType ?? ''))
+    .map(game => ({ week: game.week!, startTime: game.startTime! })))
+  const calendar = readSGCalendar(season.periodCalendar)
+  return { calendar: { ...calendar, ...Object.fromEntries(Object.entries(preview).filter(([period]) => Number(period) > season.currentPeriod)) } }
+}
+
+export async function chooseSGMatchupOrder(leagueId: string, userId: string, selected: 'bookends' | 'middle', commissioner = false) {
+  if (!['bookends', 'middle'].includes(selected)) throw new Error('Choose bookends or middle.')
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const state = readSGPeriodState(season.periodState), config = season.config as unknown as SGConfig
+  const choice = state?.orderChoice
+  if (!state || state.ceremonyStarted || state.matchups.length || !choice || choice.selected) throw new Error('The matchup order choice is closed.')
+  const members = readSGTribes(season.tribes)
+  if (!commissioner) {
+    const roster = await getSGManagerRoster(leagueId, userId)
+    const actor = members.find(m => m.rosterId === roster.id)
+    if (!actor || actor.tribeId !== choice.tribeId || Date.now() >= Date.parse(choice.deadlineAt)) throw new Error('Only the choosing tribe may decide before its deadline.')
+    if (config.submissionMode === 'commissioner' || config.submissionMode === 'captain' && !actor.captain) throw new Error('This league requires its configured tribe decision authority.')
+    if (config.submissionMode === 'tribe_vote') {
+      await prisma.survivorGuillotineChoiceVote.upsert({ where: { leagueId_period_slotKey_voterRosterId: {
+        leagueId, period: state.period, slotKey: 'matchup_order', voterRosterId: roster.id } },
+        create: { leagueId, period: state.period, slotKey: 'matchup_order', tribeId: actor.tribeId,
+          voterRosterId: roster.id, choice: { selected } }, update: { choice: { selected } } })
+      const ballots = await prisma.survivorGuillotineChoiceVote.findMany({ where: { leagueId, period: state.period,
+        slotKey: 'matchup_order', tribeId: actor.tribeId }, select: { choice: true } })
+      const votesForChoice = ballots.filter(row => (row.choice as { selected?: string })?.selected === selected).length
+      const votesNeeded = Math.floor(members.filter(m => m.tribeId === actor.tribeId).length / 2) + 1
+      if (votesForChoice < votesNeeded) return { votesForChoice, votesNeeded }
+    }
+  }
+  const stages = sgOrderStages(choice, [...new Set(members.map(m => m.tribeId))], selected)
+  const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+    data: { periodState: { ...state, orderChoice: { ...choice, selected }, selectionStages: stages } as unknown as Prisma.InputJsonValue,
+      revision: { increment: 1 } } })
+  if (saved.count !== 1) throw new Error('The order choice changed; reload and retry.')
+  return { selected, stages }
+}
+
 export async function saveSGCommissionerTie(leagueId: string, decision: NonNullable<SGLivePeriod['commissionerTie']>) {
   const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
   const state = readSGPeriodState(season.periodState)
@@ -274,6 +339,8 @@ export async function saveSGCommissionerTie(leagueId: string, decision: NonNulla
   if (!decision || (decision.immuneTribeId !== null && typeof decision.immuneTribeId !== 'string') ||
       !Array.isArray(decision.choppedTeamIds) || decision.choppedTeamIds.some(id => typeof id !== 'string') ||
       !Array.isArray(decision.placements) || decision.placements.some(id => typeof id !== 'string') ||
+      (decision.rewardWinnerId !== undefined && typeof decision.rewardWinnerId !== 'string') ||
+      (decision.matchupWinners !== undefined && (!decision.matchupWinners || typeof decision.matchupWinners !== 'object' || Array.isArray(decision.matchupWinners) || Object.values(decision.matchupWinners).some(id => typeof id !== 'string'))) ||
       typeof decision.reason !== 'string' || !decision.reason.trim()) throw new Error('A complete, reasoned tie decision is required.')
   const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
     data: { periodState: { ...state, commissionerTie: decision } as unknown as Prisma.InputJsonValue,
@@ -296,7 +363,7 @@ export async function saveSGDailyLineup(leagueId: string, userId: string, period
       gameDay > easternDay(new Date(new Date(state.scoringEndsAt!).getTime() - 1))) {
     throw new Error('Choose a day inside this scoring period.')
   }
-  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true } })
+  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true, settings: true } })
   const schedule = await prisma.gameSchedule.findMany({ where: { sportType: 'NBA', season: league.season,
     startTime: { gte: new Date(day.getTime() - 7 * 3600_000), lt: new Date(day.getTime() + 31 * 3600_000) } },
     select: { startTime: true } })
@@ -306,9 +373,13 @@ export async function saveSGDailyLineup(leagueId: string, userId: string, period
   const roster = await getSGManagerRoster(leagueId, userId)
   const owned = new Set(getRosterPlayerIds(roster.playerData))
   if (!playerIds.length || new Set(playerIds).size !== playerIds.length || playerIds.some(id => !owned.has(id))) throw new Error('Select distinct players currently on your roster.')
-  const maxStarters = await prisma.afRosterLineupAssignment.count({ where: { leagueId, rosterId: roster.id,
-    season: league.season, week: period, section: 'starters' } })
-  if (maxStarters && playerIds.length > maxStarters) throw new Error(`This league allows ${maxStarters} starters.`)
+  if (!roster.redraftRosterId) throw new Error('Link the scoring roster before submitting NBA starters.')
+  const rosterConfig = resolveRedraftRosterConfig('NBA', league.settings)
+  const slots = [...rosterConfig.starterCapacities].flatMap(([slot, count]) => Array.from({ length: count }, () => ({ allowedPositions: allowedPositionsForSlot('NBA', slot) })))
+  const available = await prisma.redraftRosterPlayer.findMany({ where: { rosterId: roster.redraftRosterId,
+    droppedAt: null, playerId: { in: playerIds } }, select: { playerId: true, position: true, slotType: true } })
+  const eligible = available.filter(row => !['IR', 'RESERVE', 'TAXI', 'DEVY'].includes(row.slotType.toUpperCase()))
+  if (eligible.length !== playerIds.length || playerIds.length > slots.length || matchedStarterCount(eligible.map(row => row.position), slots) < playerIds.length) throw new Error('Choose active players that fit the league’s actual NBA starting slots.')
   await prisma.survivorGuillotineDailyLineup.upsert({ where: { leagueId_period_rosterId_gameDay: {
     leagueId, period, rosterId: roster.id, gameDay: day } },
     create: { leagueId, period, rosterId: roster.id, gameDay: day, playerIds },
@@ -318,10 +389,13 @@ export async function saveSGDailyLineup(leagueId: string, userId: string, period
 
 export type SGCalendarEntry = { ceremonyAt: string; scoringStartsAt?: string | null;
   scoringEndsAt?: string | null; selectionDeadlineAt?: string | null; auctionClosesAt?: string | null;
-  tribes?: SGTribeMember[] }
+  draftDeadlineAt?: string | null;
+  selectionStages?: import('./types').SGSelectionStage[]; orderChoice?: import('./types').SGOrderChoice;
+  gauntletIdolPlayerId?: string | null; tribes?: SGTribeMember[] }
 
 export type SGTribeDraftState = { status: 'active' | 'complete'; leaders: { tribeId: string; rosterId: string }[];
-  pickIndex: number; deadlineAt: string | null }
+  pickIndex: number; deadlineAt: string | null; phase?: 'starting' | 'gauntlet'; period?: number;
+  pickMode?: 'snake' | 'alternating' | 'commissioner' }
 
 export function readSGTribeDraftState(value: unknown): SGTribeDraftState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -332,6 +406,9 @@ export function readSGTribeDraftState(value: unknown): SGTribeDraftState | null 
     !!leader && typeof leader === 'object' && typeof leader.tribeId === 'string' && typeof leader.rosterId === 'string')
   if (leaders.length !== row.leaders.length) return null
   return { status: row.status, leaders, pickIndex: Number(row.pickIndex),
+    phase: row.phase === 'gauntlet' ? 'gauntlet' : 'starting',
+    period: Number.isInteger(row.period) ? Number(row.period) : undefined,
+    pickMode: row.pickMode === 'alternating' || row.pickMode === 'commissioner' ? row.pickMode : 'snake',
     deadlineAt: typeof row.deadlineAt === 'string' ? row.deadlineAt : null }
 }
 
@@ -368,30 +445,105 @@ export async function pickSGCaptainDraft(leagueId: string, userId: string, selec
   const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
   const config = season.config as unknown as SGConfig
   const draft = readSGTribeDraftState(season.tribeDraftState)
-  if (config.tribeFormation !== 'captain_draft' || season.currentPeriod !== 0 || draft?.status !== 'active') throw new Error('Captain draft is closed.')
+  const gauntlet = draft?.phase === 'gauntlet'
+  if (draft?.status !== 'active' || (gauntlet ? draft.period !== season.currentPeriod + 1 || !readSGPeriodState(season.periodState)?.ceremonyStarted
+    : config.tribeFormation !== 'captain_draft' || season.currentPeriod !== 0)) throw new Error('Captain draft is closed.')
+  if (gauntlet && (!draft.deadlineAt || Date.now() >= Date.parse(draft.deadlineAt))) throw new Error('The Gauntlet draft deadline passed; review the season before resuming play.')
   const members = readSGTribes(season.tribes)
   const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true } })
-  if (!rosters.some(r => r.id === selectedRosterId) || members.some(m => m.rosterId === selectedRosterId)) throw new Error('Choose an undrafted league manager.')
-  const ceiling = Math.ceil(config.teamCount / config.tribeCount)
+  const eliminated = gauntlet ? new Set((await prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null }, select: { rosterId: true } })).map(r => r.rosterId)) : new Set<string>()
+  if (!rosters.some(r => r.id === selectedRosterId) || eliminated.has(selectedRosterId) || members.some(m => m.rosterId === selectedRosterId)) throw new Error('Choose an undrafted, active league manager.')
+  const total = gauntlet ? rosters.filter(r => !eliminated.has(r.id)).length : config.teamCount
+  const tribeCount = gauntlet ? 2 : config.tribeCount
+  const ceiling = Math.ceil(total / tribeCount)
+  const turnFor = (index: number) => gauntlet && draft.pickMode !== 'snake' ? index % tribeCount : draftTurn(index, tribeCount)
   let turn = draft.pickIndex
-  while (members.filter(m => m.tribeId === draft.leaders[draftTurn(turn, config.tribeCount)].tribeId).length >= ceiling) turn++
-  const leader = draft.leaders[draftTurn(turn, config.tribeCount)]
+  while (members.filter(m => m.tribeId === draft.leaders[turnFor(turn)].tribeId).length >= ceiling) turn++
+  const leader = draft.leaders[turnFor(turn)]
   if (!commissioner) {
+    if (draft.pickMode === 'commissioner') throw new Error('The commissioner controls this tribe draft.')
     if (draft.deadlineAt && Date.now() >= Date.parse(draft.deadlineAt)) throw new Error('Captain draft deadline passed; commissioner must resolve the pick.')
     const own = await getSGManagerRoster(leagueId, userId)
     if (own.id !== leader.rosterId) throw new Error(`It is ${leader.tribeId}'s captain pick.`)
   }
   const nextMembers = [...members, { rosterId: selectedRosterId, tribeId: leader.tribeId, captain: false }]
-  const complete = nextMembers.length === config.teamCount
+  const complete = nextMembers.length === total
   let nextTurn = turn + 1
-  if (!complete) while (nextMembers.filter(m => m.tribeId === draft.leaders[draftTurn(nextTurn, config.tribeCount)].tribeId).length >= ceiling) nextTurn++
+  if (!complete) while (nextMembers.filter(m => m.tribeId === draft.leaders[turnFor(nextTurn)].tribeId).length >= ceiling) nextTurn++
   const nextDraft: SGTribeDraftState = { ...draft, pickIndex: nextTurn, status: complete ? 'complete' : 'active' }
   const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
     data: { tribes: nextMembers as Prisma.InputJsonValue,
+      ...(gauntlet && complete ? { periodCalendar: { ...readSGCalendar(season.periodCalendar),
+        [draft.period!]: { ...readSGCalendar(season.periodCalendar)[draft.period!], tribes: nextMembers } } as Prisma.InputJsonValue } : {}),
       tribeDraftState: nextDraft as unknown as Prisma.InputJsonValue, revision: { increment: 1 } } })
   if (saved.count !== 1) throw new Error('Captain draft changed; reload and retry.')
   return { pickedRosterId: selectedRosterId, tribeId: leader.tribeId, complete,
-    nextTribeId: complete ? null : draft.leaders[draftTurn(nextTurn, config.tribeCount)].tribeId }
+    nextTribeId: complete ? null : draft.leaders[turnFor(nextTurn)].tribeId }
+}
+
+/** Captains actually choose managers; a score-sorted auto assignment is not a tribe draft. */
+export async function startSGGauntletDraft(leagueId: string, captainRosterIds: string[] = [], deadlineAt?: string | null) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig
+  const period = buildSGSchedule(config).periods.find(p => p.mode === 'gauntlet')?.period
+  if (!period || period !== season.currentPeriod + 1 || !readSGPeriodState(season.periodState)?.ceremonyStarted) throw new Error('Complete the last tribal ceremony before starting the Gauntlet draft.')
+  if (readSGTribeDraftState(season.tribeDraftState)?.phase === 'gauntlet') throw new Error('The Gauntlet draft already exists.')
+  const calendar = readSGCalendar(season.periodCalendar)
+  if (!calendar[period]?.scoringStartsAt) throw new Error('Save the Gauntlet calendar before opening its draft.')
+  const eliminated = new Set((await prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null }, select: { rosterId: true } })).map(r => r.rosterId))
+  const rosters = (await prisma.roster.findMany({ where: { leagueId }, select: { id: true } })).filter(r => !eliminated.has(r.id))
+  const expected = buildSGSchedule(config).periods.find(p => p.period === period)!.teamsEntering
+  if (rosters.length !== expected || expected % 2) throw new Error('The Gauntlet needs its complete, even surviving field.')
+  let ids = captainRosterIds
+  if (config.gauntletCaptains === 'previous_period_top_two') {
+    const history = season.scoreHistory as Record<string, Record<string, number>>
+    const scores = history[String(season.currentPeriod)] ?? {}
+    if (rosters.some(r => !Number.isFinite(scores[r.id]))) throw new Error('Finalized previous-period scores are required to select captains.')
+    const ranked = [...rosters].sort((a, b) => scores[b.id] - scores[a.id])
+    const tie = scores[ranked[0].id] === scores[ranked[1].id] || (ranked.length > 2 && scores[ranked[1].id] === scores[ranked[2].id])
+    if (!tie) {
+      const expectedIds = ranked.slice(0, 2).map(r => r.id)
+      if (ids.length && ids.join('|') !== expectedIds.join('|')) throw new Error('The two highest scorers must captain in score order.')
+      ids = expectedIds
+    } else {
+      if (ids.length !== 2 || ids.some(id => !Number.isFinite(scores[id])) ||
+          scores[ids[0]] !== scores[ranked[0].id] || scores[ids[1]] < scores[ranked[1].id]) throw new Error('Captain scoring tie: select two eligible top scorers in order.')
+    }
+  }
+  if (ids.length !== 2 || new Set(ids).size !== 2 || ids.some(id => !rosters.some(r => r.id === id))) throw new Error('Choose two distinct active captains.')
+  const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId }, select: { season: true } })
+  const firstGame = await prisma.gameSchedule.findFirst({ where: { sportType: config.sport, season: league.season,
+    ...sgGameWindow(config.sport, period, calendar[period].scoringStartsAt, calendar[period].scoringEndsAt) }, orderBy: { startTime: 'asc' }, select: { startTime: true } })
+  if (!firstGame?.startTime) throw new Error('Verify the Gauntlet’s first game before opening its draft.')
+  const deadline = deadlineAt ?? calendar[period].draftDeadlineAt ?? firstGame.startTime.toISOString()
+  if (!Number.isFinite(Date.parse(deadline)) || Date.parse(deadline) <= Date.now()) throw new Error('Choose a future draft deadline before scoring starts.')
+  if (Date.parse(deadline) > firstGame.startTime.getTime()) throw new Error('Finish the Gauntlet draft before the first game.')
+  const leaders = ids.map((rosterId, i) => ({ rosterId, tribeId: `gauntlet-${i + 1}` }))
+  const draft: SGTribeDraftState = { status: 'active', leaders, phase: 'gauntlet', period,
+    pickMode: config.gauntletDraft, pickIndex: 0, deadlineAt: deadline }
+  const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+    data: { tribeDraftState: draft as unknown as Prisma.InputJsonValue,
+      tribes: leaders.map(m => ({ ...m, captain: true })) as Prisma.InputJsonValue, revision: { increment: 1 } } })
+  if (saved.count !== 1) throw new Error('The season changed; reload and retry the draft.')
+  return { leaders, nextTribeId: leaders[0].tribeId }
+}
+
+export async function shuffleSGTribes(leagueId: string) {
+  const season = await prisma.survivorGuillotineLeague.findUniqueOrThrow({ where: { leagueId } })
+  const config = season.config as unknown as SGConfig, period = season.currentPeriod + 1
+  if (!config.shufflePeriods.includes(period) || !readSGPeriodState(season.periodState)?.ceremonyStarted) throw new Error('A shuffle is available only after the prior ceremony at a scheduled shuffle period.')
+  const calendar = readSGCalendar(season.periodCalendar)
+  if (!calendar[period]) throw new Error('Save the shuffle period calendar first.')
+  if (calendar[period].tribes?.length) throw new Error('This shuffle already has saved assignments.')
+  const eliminated = new Set((await prisma.survivorGuillotineChop.findMany({ where: { leagueId, reversedAt: null }, select: { rosterId: true } })).map(r => r.rosterId))
+  const active = (await prisma.roster.findMany({ where: { leagueId }, select: { id: true } })).filter(r => !eliminated.has(r.id))
+  for (let i = active.length - 1; i > 0; i--) { const j = randomInt(i + 1); [active[i], active[j]] = [active[j], active[i]] }
+  const tribes = active.map((r, i) => ({ rosterId: r.id, tribeId: `tribe-${i % config.tribeCount}`, captain: false }))
+  const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
+    data: { tribes: tribes as Prisma.InputJsonValue, periodCalendar: { ...calendar,
+      [period]: { ...calendar[period], tribes } } as Prisma.InputJsonValue, revision: { increment: 1 } } })
+  if (saved.count !== 1) throw new Error('Season changed; reload before shuffling.')
+  return { period, tribes, captainVoteRequired: true }
 }
 
 export function readSGCalendar(value: unknown): Record<number, SGCalendarEntry> {
@@ -415,6 +567,10 @@ export async function saveSGCalendar(leagueId: string, calendar: Record<number, 
           !Number.isFinite(Date.parse(row.scoringEndsAt)) || Date.parse(row.scoringStartsAt) >= Date.parse(row.scoringEndsAt) ||
           Date.parse(row.ceremonyAt) < Date.parse(row.scoringEndsAt))) throw new Error(`Period ${period} needs scoring dates before its ceremony.`)
     if (row.selectionDeadlineAt && !Number.isFinite(Date.parse(row.selectionDeadlineAt))) throw new Error(`Invalid selection deadline in period ${period}.`)
+    validateSGSelectionStages(row.selectionStages, schedule.periods.find(p => p.period === period)!.mode, row.selectionDeadlineAt)
+    validateSGOrderChoice(row.orderChoice, row.selectionDeadlineAt)
+    if (row.orderChoice && schedule.periods.find(p => p.period === period)?.mode !== 'match_play') throw new Error('Bookends/middle choices apply only to Match Play.')
+    if (row.gauntletIdolPlayerId != null && (typeof row.gauntletIdolPlayerId !== 'string' || !row.gauntletIdolPlayerId.trim() || schedule.periods.find(p => p.period === period)?.mode !== 'gauntlet')) throw new Error('Retired-player idol IDs belong only to Gauntlet periods.')
     if (['match_play', 'tribe_champion'].includes(schedule.periods.find(p => p.period === period)?.mode ?? '') &&
         !row.selectionDeadlineAt) throw new Error(`Period ${period} needs a tribe selection cutoff.`)
     if (row.auctionClosesAt && !Number.isFinite(Date.parse(row.auctionClosesAt))) throw new Error(`Invalid auction deadline in period ${period}.`)
@@ -434,7 +590,7 @@ export async function saveSGCalendar(leagueId: string, calendar: Record<number, 
       dated[i - 1].end! > dated[i].start!) throw new Error('Scoring periods cannot overlap.')
   const merge = schedule.periods.find(p => p.mode === 'merged')?.period ?? config.championshipPeriod
   const oldRewards = Array.isArray(season.rewardPeriods) ? season.rewardPeriods.filter((p): p is number => Number.isInteger(p)) : []
-  if (new Set(rewardPeriods).size !== rewardPeriods.length || rewardPeriods.some(p => !Number.isInteger(p) || p < season.currentPeriod || p < 1 || p >= merge - 1 ||
+  if (new Set(rewardPeriods).size !== rewardPeriods.length || rewardPeriods.some(p => !Number.isInteger(p) || (p < season.currentPeriod && !oldRewards.includes(p)) || p < 1 || p >= merge - 1 ||
       schedule.periods.find(row => row.period === p)?.mode === 'off')) throw new Error('Choose distinct, active reward periods before the merge.')
   const effectiveRewards = [...new Set([...oldRewards, ...rewardPeriods])].sort((a, b) => a - b)
   const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId, revision: season.revision },
@@ -442,22 +598,6 @@ export async function saveSGCalendar(leagueId: string, calendar: Record<number, 
       revision: { increment: 1 } } })
   if (saved.count !== 1) throw new Error('Calendar changed; reload and retry.')
   return { periods: Object.keys(calendar).length, rewardsAdded: rewardPeriods.length }
-}
-
-function automaticGauntletTribes(rosters: string[], previousScores: Record<string, number>, config: SGConfig): SGTribeMember[] {
-  if (rosters.length % 2) throw new Error('The Gauntlet requires an even number of active managers.')
-  const ranked = [...rosters].sort((a, b) => (previousScores[b] ?? 0) - (previousScores[a] ?? 0) || a.localeCompare(b))
-  const [first, second, ...pool] = ranked
-  const result: SGTribeMember[] = [
-    { rosterId: first, tribeId: 'gauntlet-1', captain: true },
-    { rosterId: second, tribeId: 'gauntlet-2', captain: true },
-  ]
-  for (const rosterId of pool) {
-    const index = result.length - 2
-    const captain = config.gauntletDraft === 'snake' ? [0, 1, 1, 0][index % 4] : index % 2
-    result.push({ rosterId, tribeId: captain === 0 ? 'gauntlet-1' : 'gauntlet-2' })
-  }
-  return result
 }
 
 function selectionOrder(tribes: SGTribeMember[], random: boolean): string[] {
@@ -480,9 +620,7 @@ export async function advanceSGPeriod(leagueId: string, now = new Date()) {
   const previous = readSGPeriodState(season.periodState)
   if (season.currentPeriod > 0 && !previous?.ceremonyStarted) return { advanced: false, reason: 'previous_ceremony_pending' }
   const priorHistory = (season.periodHistory as Record<string, { hostedCeremony?: { stage: number } }>)[String(season.currentPeriod)]
-  if (priorHistory?.hostedCeremony && priorHistory.hostedCeremony.stage < 3) {
-    return { advanced: false, reason: 'hosted_ceremony_in_progress' }
-  }
+  if (priorHistory?.hostedCeremony && priorHistory.hostedCeremony.stage < 3) return { advanced: false, reason: 'hosted_ceremony_in_progress' }
   const calendar = readSGCalendar(season.periodCalendar)[nextPeriod]
   if (!calendar) return { advanced: false, reason: 'calendar_missing' }
   if (calendar.scoringStartsAt && Date.parse(calendar.scoringStartsAt) > now.getTime()) return { advanced: false, reason: 'not_started' }
@@ -510,9 +648,7 @@ export async function advanceSGPeriod(leagueId: string, now = new Date()) {
   }
   else if (row.mode === 'merged' || row.mode === 'final_three') tribes = active.map(rosterId => ({ rosterId, tribeId: 'merged' }))
   else if (row.mode === 'gauntlet' && schedule.periods.find(p => p.mode === 'gauntlet')?.period === nextPeriod) {
-    if (config.gauntletCaptains === 'commissioner' || config.gauntletDraft === 'commissioner') return { advanced: false, reason: 'gauntlet_draft_pending' }
-    const history = season.scoreHistory as Record<string, Record<string, number>>
-    tribes = automaticGauntletTribes(active, history[String(nextPeriod - 1)] ?? {}, config)
+    return { advanced: false, reason: 'gauntlet_draft_pending' }
   } else tribes = oldTribes
   if (tribes.length !== active.length || new Set(tribes.map(m => m.rosterId)).size !== active.length ||
       tribes.some(m => !active.includes(m.rosterId))) throw new Error('Next period tribe assignments are incomplete.')
@@ -532,6 +668,9 @@ export async function advanceSGPeriod(leagueId: string, now = new Date()) {
     scoringStartsAt: calendar.scoringStartsAt ?? null, scoringEndsAt: calendar.scoringEndsAt ?? null,
     selectionDeadlineAt: calendar.selectionDeadlineAt ?? null,
     selectionOrder: selectionOrder(tribes, config.matchupOrder === 'random'),
+    selectionStages: calendar.selectionStages,
+    orderChoice: calendar.orderChoice,
+    gauntletIdolPlayerId: calendar.gauntletIdolPlayerId ?? null,
     immunityDeadlineAt: config.immunityDeadline === 'custom' ? config.customImmunityDeadline : calendar.ceremonyAt,
     playerPowerDeadlineAt: config.playerPowerDeadline === 'custom' ? config.customPlayerPowerDeadline : null,
     ceremonyStarted: false }
@@ -544,7 +683,7 @@ export async function submitSGGauntletBid(leagueId: string, userId: string, amou
   const config = season.config as unknown as SGConfig
   const period = buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)
   const close = readSGCalendar(season.periodCalendar)[season.currentPeriod]?.auctionClosesAt
-  if (!config.gauntletIdolAuction || period?.mode !== 'gauntlet' || !close || now >= new Date(close)) {
+    if (config.gauntletIdolMode === 'retired_player' || !config.gauntletIdolAuction || period?.mode !== 'gauntlet' || !close || now >= new Date(close)) {
     throw new Error('No open Gauntlet idol auction.')
   }
   if (!Number.isInteger(amount) || amount < 1) throw new Error('Bid a positive whole FAAB amount.')
@@ -565,7 +704,7 @@ export async function settleSGGauntletAuction(leagueId: string, now = new Date()
   const config = season.config as unknown as SGConfig
   const period = buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)
   const close = readSGCalendar(season.periodCalendar)[season.currentPeriod]?.auctionClosesAt
-  if (!config.gauntletIdolAuction || period?.mode !== 'gauntlet' || !close || now < new Date(close)) return { settled: false, reason: 'not_due' }
+  if (config.gauntletIdolMode === 'retired_player' || !config.gauntletIdolAuction || period?.mode !== 'gauntlet' || !close || now < new Date(close)) return { settled: false, reason: 'not_due' }
   const bids = await prisma.survivorGuillotineAuctionBid.findMany({ where: { leagueId, period: season.currentPeriod, status: 'sealed' },
     orderBy: [{ amount: 'desc' }, { createdAt: 'asc' }, { rosterId: 'asc' }] })
   if (!bids.length) return { settled: false, reason: 'no_bids' }
@@ -607,7 +746,7 @@ export async function settleSGGauntletAuction(leagueId: string, now = new Date()
     await tx.survivorGuillotineAuctionBid.update({ where: { id: winner.id }, data: { status: 'won' } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   await createPlatformNotification({ userId: owner.claimedByUserId, leagueId, type: 'survivor_guillotine_reward',
-    title: 'Your sealed Gauntlet bid won', body: 'Your private idol is available in Survivor Guillotine powers.',
+    title: 'Your sealed Gauntlet bid won', body: 'Your private idol is available in Survivor Guilly powers.',
     sourceKey: `survivor-guillotine:${leagueId}:auction:${season.currentPeriod}:${winner.rosterId}` })
   return { settled: true, period: season.currentPeriod }
 }
@@ -625,8 +764,8 @@ export async function runSGDueAuctions(now = new Date(), limit = 10) {
     for (const season of batch) {
       const config = season.config as unknown as SGConfig
       const close = readSGCalendar(season.periodCalendar)[season.currentPeriod]?.auctionClosesAt
-      if (config.gauntletIdolAuction && close && Date.parse(close) <= now.getTime() &&
-          buildSGSchedule(config).periods.some(p => p.period === season.currentPeriod && p.mode === 'gauntlet')) due.push(season)
+      if (config.gauntletIdolMode !== 'retired_player' && config.gauntletIdolAuction && close && Date.parse(close) <= now.getTime() &&
+          buildSGSchedule(config).periods.some(p => p.period === season.currentPeriod && p.mode === 'gauntlet') && await sgAutomationAllowed(season.leagueId,'auctions')) due.push(season)
       if (due.length >= limit) break
     }
     if (batch.length < 250) break
@@ -634,9 +773,11 @@ export async function runSGDueAuctions(now = new Date(), limit = 10) {
   }
   const results: { leagueId: string; status: string; error?: string }[] = []
   for (const season of due) {
-    try { const result = await settleSGGauntletAuction(season.leagueId, now)
+    try { if(!await sgAutomationAllowed(season.leagueId,'auctions'))continue
+      const result = await settleSGGauntletAuction(season.leagueId, now)
+      await recordSGAutomation(season.leagueId,'auctions','completed')
       results.push({ leagueId: season.leagueId, status: 'reason' in result ? String(result.reason) : 'settled' }) }
-    catch (error) { results.push({ leagueId: season.leagueId, status: 'failed',
+    catch (error) { await recordSGAutomation(season.leagueId,'auctions','held').catch(()=>{}); results.push({ leagueId: season.leagueId, status: 'failed',
       error: error instanceof Error ? error.message : 'Auction settlement failed' }) }
   }
   return { scanned, due: due.length, results }
@@ -645,22 +786,27 @@ export async function runSGDueAuctions(now = new Date(), limit = 10) {
 /** At the saved cutoff, leagues that opted into random fallback fill only missing legal choices. */
 export async function runSGSelectionDeadlines(now = new Date(), limit = 10) {
   const due: { leagueId: string; currentPeriod: number; config: Prisma.JsonValue; tribes: Prisma.JsonValue;
-    periodState: Prisma.JsonValue; revision: number }[] = []
+    periodState: Prisma.JsonValue; periodHistory: Prisma.JsonValue; revision: number }[] = []
   let scanned = 0
   let cursor: string | undefined
   while (due.length < limit && scanned < 5000) {
     const batch = await prisma.survivorGuillotineLeague.findMany({ where: { status: 'active' },
       select: { id: true, leagueId: true, currentPeriod: true, config: true, tribes: true, periodState: true,
-        revision: true }, orderBy: { id: 'asc' }, take: 250,
+        periodHistory: true, revision: true }, orderBy: { id: 'asc' }, take: 250,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) })
     scanned += batch.length
     for (const season of batch) {
       const config = season.config as unknown as SGConfig
       const state = readSGPeriodState(season.periodState)
-      if (config.missingSubmission === 'random' && state?.selectionDeadlineAt &&
-          Date.parse(state.selectionDeadlineAt) <= now.getTime() && !state.ceremonyStarted &&
+      const mode = buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)?.mode
+      const members = readSGTribes(season.tribes)
+      const pendingStage = mode === 'match_play' ? sgMatchupStage(state?.selectionStages, state?.matchups.length ?? 0)
+        : state?.selectionStages?.find(stage => !state.champions.some(id => members.some(m => m.rosterId === id && m.tribeId === stage.tribeId)))
+      const dueAt = state?.orderChoice && !state.orderChoice.selected ? state.orderChoice.deadlineAt : pendingStage?.deadlineAt ?? state?.selectionDeadlineAt
+      if (config.missingSubmission === 'random' && state && dueAt &&
+          Date.parse(dueAt) <= now.getTime() && !state.ceremonyStarted &&
           !state.selectionFallbackAppliedAt &&
-          ['match_play', 'tribe_champion'].includes(buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)?.mode ?? '')) due.push(season)
+          ['match_play', 'tribe_champion'].includes(buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)?.mode ?? '') && await sgAutomationAllowed(season.leagueId,'selections')) due.push(season)
       if (due.length >= limit) break
     }
     if (batch.length < 250) break
@@ -669,19 +815,29 @@ export async function runSGSelectionDeadlines(now = new Date(), limit = 10) {
   const results: { leagueId: string; status: string; error?: string }[] = []
   for (const season of due) {
     try {
+      if(!await sgAutomationAllowed(season.leagueId,'selections'))continue
       const config = season.config as unknown as SGConfig
       const state = readSGPeriodState(season.periodState)!
       const members = readSGTribes(season.tribes)
       const tribeIds = [...new Set(members.map(m => m.tribeId))]
       const mode = buildSGSchedule(config).periods.find(p => p.period === season.currentPeriod)?.mode
       const next = { ...state, champions: [...state.champions], sitOuts: [...state.sitOuts],
-        matchups: [...state.matchups], selectionFallbackAppliedAt: now.toISOString() }
+        matchups: [...state.matchups] }
+      if (next.orderChoice && !next.orderChoice.selected) {
+        const selected = randomInt(2) ? 'bookends' as const : 'middle' as const
+        next.selectionStages = sgOrderStages(next.orderChoice, tribeIds, selected)
+        next.orderChoice = { ...next.orderChoice, selected }
+      }
       if (mode === 'tribe_champion') {
         for (const id of tribeIds) if (!next.champions.some(rosterId => members.some(m => m.rosterId === rosterId && m.tribeId === id))) {
-          const options = members.filter(m => m.tribeId === id)
+          const deadline = state.selectionStages?.find(stage => stage.tribeId === id)?.deadlineAt ?? state.selectionDeadlineAt
+          if (deadline && Date.parse(deadline) > now.getTime()) continue
+          const eligible = sgEligibleChampions(config, state.period, members, id, season.periodHistory)
+          const options = members.filter(m => eligible.includes(m.rosterId))
+          if (!options.length) throw new Error('No eligible champion remains; commissioner review required.')
           next.champions.push(options[randomInt(options.length)].rosterId)
         }
-      } else {
+      } else if (!sgMatchupStage(next.selectionStages, next.matchups.length) || Date.parse(sgMatchupStage(next.selectionStages, next.matchups.length)!.deadlineAt) <= now.getTime()) {
         const targetSize = Math.min(...tribeIds.map(id => members.filter(m => m.tribeId === id).length))
         for (const id of tribeIds) {
           const needed = members.filter(m => m.tribeId === id).length - targetSize -
@@ -694,18 +850,28 @@ export async function runSGSelectionDeadlines(now = new Date(), limit = 10) {
         const used = new Set([...next.sitOuts, ...next.matchups.flatMap(pair => [pair.team1, pair.team2])])
         const groups = new Map(tribeIds.map(id => [id, members.filter(m => m.tribeId === id && !used.has(m.rosterId)).map(m => m.rosterId)]))
         while ([...groups.values()].some(list => list.length)) {
+          const stage = sgMatchupStage(next.selectionStages, next.matchups.length)
+          if (stage && Date.parse(stage.deadlineAt) > now.getTime()) break
+          if (next.selectionStages?.length && !stage) throw new Error('The staged matchup counts do not cover the active field.')
           const ordered = [...groups].filter(([, list]) => list.length).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
           if (ordered.length < 2) throw new Error('Unpairable Match Play field needs commissioner resolution.')
-          const first = ordered[0][1].splice(randomInt(ordered[0][1].length), 1)[0]
-          const second = ordered[1][1].splice(randomInt(ordered[1][1].length), 1)[0]
+          const firstGroup = stage ? ordered.find(([id]) => id === stage.tribeId) : ordered[0]
+          const secondGroup = ordered.find(([id]) => id !== firstGroup?.[0])
+          if (!firstGroup || !secondGroup) throw new Error('This selection stage has no legal cross-tribe matchup.')
+          const first = firstGroup[1].splice(randomInt(firstGroup[1].length), 1)[0]
+          const second = secondGroup[1].splice(randomInt(secondGroup[1].length), 1)[0]
           next.matchups.push({ team1: first, team2: second })
         }
       }
+      const complete = mode === 'tribe_champion' ? next.champions.length === tribeIds.length
+        : new Set([...next.sitOuts, ...next.matchups.flatMap(pair => [pair.team1, pair.team2])]).size === members.length
+      if (complete) next.selectionFallbackAppliedAt = now.toISOString()
       const saved = await prisma.survivorGuillotineLeague.updateMany({ where: { leagueId: season.leagueId,
         revision: season.revision }, data: { periodState: next as unknown as Prisma.InputJsonValue,
           revision: { increment: 1 } } })
+      await recordSGAutomation(season.leagueId,'selections',saved.count===1?'completed':'held')
       results.push({ leagueId: season.leagueId, status: saved.count === 1 ? 'resolved' : 'stale' })
-    } catch (error) { results.push({ leagueId: season.leagueId, status: 'failed',
+    } catch (error) { await recordSGAutomation(season.leagueId,'selections','held').catch(()=>{}); results.push({ leagueId: season.leagueId, status: 'failed',
       error: error instanceof Error ? error.message : 'Selection fallback failed' }) }
   }
   return { scanned, due: due.length, results }
@@ -743,12 +909,12 @@ export async function advanceSGHostedCeremony(leagueId: string, actorUserId: str
     const protectedTeamIds = Array.isArray(entry.protectedTeamIds) ? entry.protectedTeamIds as string[] : []
     const choppedTeamIds = Array.isArray(entry.choppedTeamIds) ? entry.choppedTeamIds as string[] : []
     const message = stage === 1 ? (immuneTribeId
-      ? `Survivor Guillotine period ${period}: ${immuneTribeId} won tribe immunity.`
-      : `Survivor Guillotine period ${period}: no tribe won immunity.`)
+      ? `Survivor Guilly period ${period}: ${immuneTribeId} won tribe immunity.`
+      : `Survivor Guilly period ${period}: no tribe won immunity.`)
       : stage === 2 ? (protectedTeamIds.length
-        ? `Survivor Guillotine period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
-        : `Survivor Guillotine period ${period}: no immunity idol was played.`)
-        : `Survivor Guillotine period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
+        ? `Survivor Guilly period ${period}: immunity idols were played for ${protectedTeamIds.join(', ')}. ${savedTeamIds.length ? `Saved: ${savedTeamIds.join(', ')}.` : 'No idol changed the chop.'}`
+        : `Survivor Guilly period ${period}: no immunity idol was played.`)
+        : `Survivor Guilly period ${period} chop: ${choppedTeamIds.join(', ')} eliminated. Their players enter waivers.`
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
       message,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_advanced', period, stage } } })
@@ -776,7 +942,7 @@ export async function restartSGHostedCeremony(leagueId: string, actorUserId: str
         periodState: { ...resetState, ceremonyStarted: false } as unknown as Prisma.InputJsonValue } })
     if (saved.count !== 1) throw new Error('Ceremony changed; reload and retry.')
     await tx.leagueChatMessage.create({ data: { leagueId, userId: actorUserId, type: 'system',
-      message: `Survivor Guillotine period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
+      message: `Survivor Guilly period ${period} hosted ceremony was restarted. Earlier reveal stages are superseded; no roster was chopped.`,
       metadata: { survivorGuillotine: true, event: 'hosted_ceremony_restarted', period } } })
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
   return { period, restarted: true }
@@ -809,10 +975,8 @@ export async function auditSGHistoricalCorrections(leagueId: string) {
       week: periodNumber, status: 'final', rosterId: { in: ids } }, select: { rosterId: true, totalPoints: true } })
     if (final.length !== ids.length) { changes.push({ period: periodNumber, changedRosterIds: [], result: 'awaiting_final_scores' }); continue }
     const row = calendar[periodNumber]
-    const scores = config.sport === 'NBA' && config.nbaScoring === 'capped_games' && row?.scoringStartsAt && row.scoringEndsAt
-      ? await loadCappedGameScores({ leagueId, season: league.season, period: periodNumber,
-        rosterIds: ids, cap: config.nbaGameCap, startsAt: row.scoringStartsAt, endsAt: row.scoringEndsAt })
-      : new Map(final.map(s => [s.rosterId, s.totalPoints]))
+    // Survivor scoring has already applied the game cap to these finalized historical totals.
+    const scores = new Map(final.map(s => [s.rosterId, s.totalPoints]))
     const correctedScores = Object.fromEntries([...scores].sort(([a], [b]) => a.localeCompare(b)))
     const review = (entry as typeof entry & { correctionReview?: { decision: string; reason: string;
       reviewedAt: string; scoreFingerprint: string; originalScores?: Record<string, number>;

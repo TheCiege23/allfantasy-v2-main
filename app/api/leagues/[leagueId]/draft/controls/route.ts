@@ -2,6 +2,8 @@
  * POST: Commissioner controls — start, pause, resume, reset_timer, undo_pick, force_autopick, complete, etc.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -49,7 +51,6 @@ import {
   notifyDraftIntelPostDraftRecap,
   notifyDraftIntelQueueReady,
   notifyDraftIntelTierBreak,
-  notifyDraftStartingSoon,
 } from '@/lib/draft-notifications'
 import {
   publishDraftIntelForUpcomingManagers,
@@ -62,7 +63,10 @@ import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAu
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { isLoggedCommissionerDraftAction, recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
+import { forfeitDraftPick } from '@/lib/live-draft-engine/commissioner/forfeitDraftPick'
+import { skipForfeitedPicksOnClock } from '@/lib/live-draft-engine/forfeitedPickSkips'
 import { CUSTOM_TIMER_MAX_SECONDS, CUSTOM_TIMER_MIN_SECONDS, decideCommissionerTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 
 export const dynamic = 'force-dynamic'
@@ -108,6 +112,7 @@ const ALLOWED_ACTIONS = [
   'reset_draft',
   'swap_manager',
   'create_next_draft',
+  'forfeit_pick',
 ]
 
 type AutoPickCandidate = {
@@ -158,7 +163,32 @@ async function loadFallbackCandidates(leagueId: string, sport: string): Promise<
   }))
 }
 
+/**
+ * Every commissioner control that succeeds is written to the league log with who did it
+ * (lib/draft-room/commissionerDraftActions.ts). Timer ticks are automation and are not.
+ */
 export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const peek = (await req.clone().json().catch(() => ({}))) as Record<string, unknown> | null
+  const res = await handleDraftControl(req, ctx)
+  const action = String(peek?.action ?? '').toLowerCase()
+  if (res.status < 300 && isLoggedCommissionerDraftAction(action)) {
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+    const { leagueId } = await ctx.params
+    const seconds = action === 'set_timer_seconds' ? Number(peek?.seconds ?? peek?.timerSeconds) : NaN
+    if (session?.user?.id && leagueId) {
+      await recordCommissionerDraftAction(leagueId, session.user.id, action, {
+        ...(Number.isFinite(seconds) ? { seconds } : {}),
+        source: 'draft/controls',
+      })
+    }
+  }
+  return res
+}
+
+async function handleDraftControl(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
@@ -181,12 +211,23 @@ export async function POST(
   if (!gate.ok) {
     return NextResponse.json({ error: gate.err.error, code: gate.err.code }, { status: gate.err.status })
   }
+  // The gate above passes ANY co-commissioner. Running the draft is league setup; wiping it is the head
+  // commissioner's alone — the reset on the settings screen already was, and this one was open to every
+  // co-commissioner (2026-11-16).
+  const refused = await commissionerAccessResponse(leagueId, userId, action === 'reset_draft' ? 'head' : 'league')
+  if (refused) return refused
 
   if (!ALLOWED_ACTIONS.includes(action)) {
     return NextResponse.json(
       { error: `Invalid action. Use one of: ${ALLOWED_ACTIONS.join(', ')}` },
       { status: 400 }
     )
+  }
+  // Sleeper rewrites a mirrored draft on every sync, so a change made here would be silently undone.
+  // Next season's draft is a new AF draft, and the timer ticks are no-ops there, so those stay open.
+  if (action !== 'create_next_draft' && isLoggedCommissionerDraftAction(action)) {
+    const mirrored = await refuseIfSleeperMirrored(leagueId)
+    if (mirrored) return NextResponse.json(mirrored.body, { status: mirrored.status })
   }
   const tournamentLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   if (seasonSetupBlocked(tournamentLeague?.settings)) {
@@ -241,12 +282,11 @@ export async function POST(
         if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
           return NextResponse.json(rosterConfigurationIncompleteBody({ leagueId }), { status: 409 })
         }
-        if (started.reason === 'SURVIVOR_CAST_INCOMPLETE') {
+        if ((started.reason === 'SURVIVOR_CAST_INCOMPLETE' || started.reason === 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE')) {
           return NextResponse.json({ code: started.reason, error: started.error }, { status: 409 })
         }
         return NextResponse.json({ error: 'Cannot start draft' }, { status: 400 })
       }
-      void notifyDraftStartingSoon(leagueId)
       await runKeeperAutomationTick(leagueId).catch(() => {})
       await runSlowDraftAutomationTick(leagueId).catch(() => {})
       const snapshot = await buildSessionSnapshot(leagueId)
@@ -295,8 +335,6 @@ export async function POST(
       const _pauseStart = Date.now()
       const ok = await pauseDraftSession(leagueId, userId)
       if (!ok) return NextResponse.json({ error: 'Cannot pause draft' }, { status: 400 })
-      const { notifyDraftPaused } = await import('@/lib/draft-notifications')
-      notifyDraftPaused(leagueId).catch(() => {})
       // skipRepair: repair/reconcile not needed for a status-only transition.
       // No withViewerSession: viewer-scoped fields are unchanged on pause;
       // client mergeDraftSessionSnapshot preserves them from the prior state.
@@ -320,8 +358,8 @@ export async function POST(
       }
       const ok = await resumeDraftSession(leagueId)
       if (!ok) return NextResponse.json({ error: 'Cannot resume draft' }, { status: 400 })
-      const { notifyDraftResumed } = await import('@/lib/draft-notifications')
-      notifyDraftResumed(leagueId).catch(() => {})
+      // A pick forfeited while paused may be the one on the clock; skip it now rather than sit on it.
+      await skipForfeitedPicksOnClock(leagueId, submitPick).catch((err) => console.error('[draft] forfeit skip on resume failed', err))
       // skipRepair: repair/reconcile not needed for a status-only transition.
       const snapshot = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
       console.info('[draft-perf] resume controls total', { leagueId, ms: Date.now() - _resumeStart })
@@ -361,6 +399,27 @@ export async function POST(
       }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({ ok: true, action: 'undo_pick', session: await withViewerSession(leagueId, userId, snapshot) })
+    }
+    if (action === 'forfeit_pick') {
+      // Penalty: the team's pick in that round is skipped when the draft reaches it (2026-11-19).
+      const round = Number(body.round)
+      const rosterId = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
+      const reason = typeof body.reason === 'string' ? body.reason.slice(0, 100) : ''
+      if (!Number.isInteger(round) || !rosterId) {
+        return NextResponse.json({ error: 'round and rosterId are required', code: 'BAD_REQUEST' }, { status: 400 })
+      }
+      const result = await forfeitDraftPick({ leagueId, round, originalRosterId: rosterId, reason })
+      if (!result.ok) {
+        const status = result.code === 'NO_SESSION' ? 404 : result.code === 'PICK_ALREADY_MADE' || result.code === 'INVALID_STATUS' ? 409 : 400
+        return NextResponse.json({ error: result.error, code: result.code }, { status })
+      }
+      const snapshot = await buildSessionSnapshot(leagueId)
+      return NextResponse.json({
+        ok: true,
+        action: 'forfeit_pick',
+        overall: result.overall,
+        session: await withViewerSession(leagueId, userId, snapshot),
+      })
     }
     if (action === 'swap_manager') {
       // Slice 5 — swap two slots' managers. Affects future picks only; past DraftPick rows untouched.
@@ -490,7 +549,7 @@ export async function POST(
         select: { platformUserId: true },
       })
       const queueUserId =
-        onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
+        onClockRoster?.platformUserId && !isSeatPlaceholderUserId(String(onClockRoster.platformUserId))
           ? String(onClockRoster.platformUserId)
           : null
       let useAiQueueMode = false
@@ -650,7 +709,7 @@ export async function POST(
       void notifyAutoPickFired(leagueId, onClockRosterId, selectedCandidate.playerName)
       void notifyDraftIntelPickConfirmation(leagueId, onClockRosterId, selectedCandidate.playerName).catch(() => {})
       void notifyDraftIntelOrphanTeamPick(leagueId, selectedCandidate.playerName).catch(() => {})
-      void notifyOnTheClockAfterPick(leagueId)
+      await notifyOnTheClockAfterPick(leagueId)
       const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)
       void (async () => {
         const states = await publishDraftIntelForUpcomingManagers({

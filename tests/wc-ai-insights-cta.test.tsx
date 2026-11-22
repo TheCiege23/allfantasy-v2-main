@@ -83,11 +83,7 @@ function makeProps(
 function mockFetch(body: unknown, ok = true) {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({
-      ok,
-      status: ok ? 200 : 500,
-      json: async () => body,
-    })
+    vi.fn().mockImplementation(async () => Response.json(body, { status: ok ? 200 : 500 }))
   )
 }
 
@@ -237,13 +233,9 @@ describe("WorldCupAiInsightsCTA — card action (commissioner)", () => {
   })
 
   it("clicking Rooting Guide calls /commissioner-brain with rooting_guide_card action", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        card: { kind: "rooting_guide", title: "Test Guide", data: {} },
-      }),
-    })
+    const fakeFetch = vi.fn().mockImplementation(async () => Response.json({
+      card: { kind: "rooting_guide", title: "Test Guide", data: {} },
+    }))
     vi.stubGlobal("fetch", fakeFetch)
 
     render(<WorldCupAiInsightsCTA {...makeProps()} />)
@@ -276,11 +268,7 @@ describe("WorldCupAiInsightsCTA — card action (commissioner)", () => {
   })
 
   it("sends entryId in payload for card actions when an entry is selected", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ card: { kind: "pool_swing", title: "Swing", data: {} } }),
-    })
+    const fakeFetch = vi.fn().mockImplementation(async () => Response.json({ card: { kind: "pool_swing", title: "Swing", data: {} } }))
     vi.stubGlobal("fetch", fakeFetch)
 
     render(
@@ -305,14 +293,9 @@ describe("WorldCupAiInsightsCTA — text action (commissioner)", () => {
   })
 
   it("clicking Post Hype calls commissioner-brain with hype action", async () => {
-    const fakeFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        lines: ["Great game today!", "Your bracket is alive!"],
-        posted: false,
-      }),
-    })
+    const fakeFetch = vi.fn().mockImplementation(async () => Response.json({
+      lines: ["Great game today!", "Your bracket is alive!"], posted: false,
+    }))
     vi.stubGlobal("fetch", fakeFetch)
 
     render(<WorldCupAiInsightsCTA {...makeProps()} />)

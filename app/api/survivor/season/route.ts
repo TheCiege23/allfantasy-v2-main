@@ -1,3 +1,4 @@
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -13,6 +14,7 @@ import { survivorPublicCouncil } from '@/lib/survivor/survivorPublicCouncil'
 import { survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import { resolveTribeEmblem } from '@/lib/survivor/survivorTribeIdentity'
+import { canSeeExileMembership, exileMembershipHidden, exileSafePlayerState } from '@/lib/survivor/survivorExileSecrecy'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,11 +32,15 @@ export async function POST(req: NextRequest) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : ''
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const hostDenied = await survivorHostGuard(leagueId, userId)
   if (hostDenied) return hostDenied
+  // 🛑 Survivor setup skipped the settings lock and the league log (2026-11-15): tribes could be redrawn in a
+  // locked league and nothing said so.
+  const locked = await formatRulesLockedResponse(leagueId)
+  if (locked) return locked
 
   await prisma.league.update({
     where: { id: leagueId },
@@ -76,6 +82,7 @@ export async function POST(req: NextRequest) {
     await seedIdolsAfterDraft(leagueId, 'random').catch(() => {})
   }
 
+  await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: Object.keys(body).filter((k) => k !== 'leagueId') })
   return NextResponse.json({ ok: true })
 }
 
@@ -112,7 +119,8 @@ export async function GET(req: NextRequest) {
   })
   const challenge = await prisma.survivorChallenge.findFirst({
     where: { leagueId, status: { in: ['open', 'locked'] } },
-    orderBy: { week: 'desc' },
+    // The slate (challenge 1 or 2) first; the weekly call (3) has its own card on the challenges page.
+    orderBy: [{ week: 'desc' }, { challengeNumber: 'asc' }],
   })
   const exile = await prisma.exileIsland.findUnique({ where: { leagueId } })
   const jury = await prisma.jurySession.findUnique({ where: { leagueId } })
@@ -131,7 +139,10 @@ export async function GET(req: NextRequest) {
     access.isParticipatingCommissioner ||
     Boolean(settingsJson.survivor_commissioner_fair_play_limited_visibility && access.isParticipant)
 
+  // Exiles and a commissioner who is NOT playing may see who is on Exile; everyone else may not.
+  const canSeeExile = canSeeExileMembership({ hidden: exileMembershipHidden(league?.settings), viewerState: me?.playerState, nonPlayingCommissioner: Boolean(access.isNonParticipatingCommissionerHost) })
   const payload = {
+    exileMembershipHidden: !canSeeExile,
     phase: league?.survivorPhase,
     mode: league?.survivorMode,
     visualThemeId: readSurvivorVisualThemeId((await prisma.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { engineSpecV2: true } }))?.engineSpecV2, leagueId),
@@ -139,9 +150,12 @@ export async function GET(req: NextRequest) {
       const emblem = resolveTribeEmblem(tribe, String(league?.sport ?? 'NFL'))
       return { ...tribe, emoji: extractLeadingTribeIcon(tribe.name), logoUrl: emblem.crestUrl, markUrl: emblem.markUrl, mascot: emblem.mascot }
     }),
-    players: access.decisions.canSeeHiddenIdolAssignments ? players : players.map(p => ({
+    players: access.decisions.canSeeHiddenIdolAssignments
+      ? players.map(p => (canSeeExile ? p : { ...p, playerState: exileSafePlayerState(p.playerState, false) }))
+      : players.map(p => ({
       id: p.id, userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl,
-      tribeId: p.tribeId, playerState: p.playerState, eliminatedWeek: p.eliminatedWeek,
+      // Exile secrecy: someone not on Exile sees an exiled castaway as simply eliminated.
+      tribeId: p.tribeId, playerState: exileSafePlayerState(p.playerState, canSeeExile), eliminatedWeek: p.eliminatedWeek,
       isJuryMember: p.isJuryMember, isFinalist: p.isFinalist,
       hasImmunityThisWeek: p.hasImmunityThisWeek,
     })),
@@ -149,6 +163,7 @@ export async function GET(req: NextRequest) {
     currentChallenge: access.decisions.canSeeHiddenIdolAssignments ? challenge : challenge && {
       id: challenge.id, week: challenge.week, title: challenge.title, description: challenge.description,
       instructions: challenge.instructions, scope: challenge.scope, status: challenge.status,
+      submissionMode: challenge.submissionMode, challengeType: challenge.challengeType,
       locksAt: challenge.locksAt, lockAt: challenge.lockAt, closesAt: challenge.closesAt,
       rewardType: challenge.rewardType, rewardAmount: challenge.rewardAmount,
       resultSummary: challenge.status === 'resolved' ? challenge.resultSummary : null,

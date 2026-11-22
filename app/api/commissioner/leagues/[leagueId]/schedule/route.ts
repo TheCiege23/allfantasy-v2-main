@@ -1,9 +1,11 @@
+import { GAMES_PER_WEEK_SETTINGS_KEY, MAX_GAMES_PER_WEEK, isValidGamesPerWeek, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConfigResolver'
+import { regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key)
@@ -15,11 +17,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'view')
+  if (refused) return refused
 
   const type = req.nextUrl.searchParams?.get('type') || 'settings'
   if (type !== 'settings') {
@@ -28,7 +27,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
   const config = await getScheduleConfigForLeague(params.leagueId)
   if (!config) return NextResponse.json({ error: 'League or schedule config not found' }, { status: 404 })
-  return NextResponse.json(config)
+  const stored = await prisma.league.findUnique({ where: { id: params.leagueId }, select: { settings: true } })
+  return NextResponse.json({ ...config, games_per_week: readGamesPerWeek(stored?.settings) })
 }
 
 export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
@@ -37,20 +37,34 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  try {
-    await assertCommissioner(params.leagueId, userId)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(params.leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const league = await (prisma as any).league.findUnique({
     where: { id: params.leagueId },
-    select: { settings: true },
+    select: { settings: true, leagueType: true, sport: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
   const settings = (league.settings as Record<string, unknown>) ?? {}
+  /*
+   * A redraft or keeper regular season is at most 24 weeks (lib/redraft/regularSeasonCap.ts). Compared
+   * with what GET shows — the panel sends every field back — so a value re-saved unchanged is not
+   * refused, even where it is a sport default the league never stored (NHL's 28-week season length).
+   */
+  if (regularSeasonCapApplies(league) && (hasOwn(body, 'regularSeasonLength') || hasOwn(body, 'playoffTransitionPoint'))) {
+    const shown = await getScheduleConfigForLeague(params.leagueId)
+    const refusal = settingsMergeCapRefusal(
+      {
+        ...(hasOwn(body, 'regularSeasonLength') ? { regular_season_length: body.regularSeasonLength } : {}),
+        ...(hasOwn(body, 'playoffTransitionPoint') ? { schedule_playoff_transition_point: body.playoffTransitionPoint } : {}),
+      },
+      { regular_season_length: shown?.regular_season_length, schedule_playoff_transition_point: shown?.playoff_transition_point },
+      league.sport,
+    )
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
+  }
   const nextSettings: Record<string, unknown> = { ...settings }
 
   const map: Array<[string, string]> = [
@@ -68,6 +82,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     ['lockTimeBehavior', 'lock_time_behavior'],
   ]
 
+  if (hasOwn(body, 'gamesPerWeek')) {
+    if (!isValidGamesPerWeek(body.gamesPerWeek)) {
+      return NextResponse.json({ error: `Games per week must be a whole number from 1 to ${MAX_GAMES_PER_WEEK}.` }, { status: 400 })
+    }
+    nextSettings[GAMES_PER_WEEK_SETTINGS_KEY] = body.gamesPerWeek
+  }
+
   for (const [incoming, target] of map) {
     if (hasOwn(body, incoming)) {
       nextSettings[target] = body[incoming] as unknown
@@ -80,5 +101,5 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
   })
 
   const config = await getScheduleConfigForLeague(params.leagueId)
-  return NextResponse.json(config ?? { ok: true })
+  return NextResponse.json(config ? { ...config, games_per_week: readGamesPerWeek(nextSettings) } : { ok: true })
 }

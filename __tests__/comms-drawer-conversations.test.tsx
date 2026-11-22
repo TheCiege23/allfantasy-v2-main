@@ -32,11 +32,19 @@ function json(body: unknown, status = 200) {
   return { ok: status < 400, status, json: async () => body } as Response
 }
 
+/* Whether `/pinned` says this viewer runs the league's chat (commissioner or co-commissioner). */
+let canPin = true
+/* What `/chat/moves` returns: the league's recent transactions, drawn as cards between messages. */
+let moves: unknown[] = []
+
 beforeEach(() => {
+  canPin = true
+  moves = []
   sessionStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url)
+    if (u.startsWith('/api/app/leagues/l0/chat/moves')) return json({ moves })
     if (u.startsWith('/api/app/leagues/l0/chat')) {
       return json({
         viewerUserId: 'me',
@@ -48,7 +56,7 @@ beforeEach(() => {
         ],
       })
     }
-    if (u.includes('/pinned')) return json({ pinned: [] })
+    if (u.includes('/pinned')) return json({ pinned: [], canPin })
     if (u.includes('league%3Al0/typing') && (!init || init.method !== 'POST')) {
       return json({ typing: [{ userId: 'jo', name: 'Jo' }] })
     }
@@ -130,11 +138,42 @@ describe('League tab', () => {
     expect(calls((u) => u.includes('league%3Al0/search?q=RB1')).length).toBeGreaterThan(0)
   })
 
-  it('keeps pin in league chat', async () => {
+  it('keeps pin in league chat, for whoever runs the league', async () => {
     openLeague()
     await screen.findByText('who wants my RB1')
+    // Pin waits for /pinned to say this viewer may pin; it is not offered on a guess.
+    await waitFor(() => expect(calls((u) => u.includes('/pinned')).length).toBeGreaterThan(0))
     fireEvent.keyDown(screen.getAllByRole('article')[0]!, { key: 'Enter' })
-    expect(screen.getByRole('button', { name: /Pin for the league/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Pin for the league/ })).toBeTruthy()
+  })
+
+  /*
+   * League transactions as cards between messages (2026-10-31): read once per league, drawn with no
+   * actions, and not counted among the messages a viewer can act on.
+   */
+  it('draws the league’s recent moves as cards in the conversation', async () => {
+    moves = [{
+      id: 'mv1', kind: 'waiver', occurredAt: new Date(Date.now() - 3600_000).toISOString(), teamName: 'Sam’s Squad', managerName: 'Sam',
+      avatarUrl: null, involvedTeams: ['Sam’s Squad'], bid: 7, picks: [],
+      adds: [{ id: 'p1', name: 'Bucky Irving', position: 'RB', team: 'TB', imageUrl: null, to: null }], drops: [],
+    }]
+    openLeague()
+    const card = await screen.findByRole('group', { name: /Sam’s Squad made a waiver claim/ })
+    expect(within(card).getByText('Bucky Irving')).toBeTruthy()
+    expect(within(card).getByText('$7')).toBeTruthy()
+    // Still three messages to act on; the card is not one of them.
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    expect(calls((u) => u.includes('/chat/moves'))).toHaveLength(1)
+  })
+
+  /* Only the commissioner and co-commissioners pin (2026-10-31); a member is not offered it. */
+  it('does not offer a member Pin', async () => {
+    canPin = false
+    openLeague()
+    await screen.findByText('who wants my RB1')
+    await waitFor(() => expect(calls((u) => u.includes('/pinned')).length).toBeGreaterThan(0))
+    fireEvent.keyDown(screen.getAllByRole('article')[0]!, { key: 'Enter' })
+    expect(screen.queryByRole('button', { name: /Pin for the league/ })).toBeNull()
   })
 })
 

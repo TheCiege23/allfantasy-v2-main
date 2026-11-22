@@ -44,7 +44,11 @@ function apply(store: Store, id: string, data: FaabData) {
  *   concurrent transaction that read before another committed.
  */
 function makeTx(store: Store, opts: { movedCount?: number; readSnapshot?: Store } = {}) {
-  const calls = { playerUpdates: [] as Array<{ where: unknown; data: unknown }> }
+  const calls = {
+    playerUpdates: [] as Array<{ where: unknown; data: unknown }>,
+    // lib/league/faabMirror.ts copies each settled faabBalance onto the linked generic roster.
+    genericFaab: {} as Record<string, number>,
+  }
   const reads = () => opts.readSnapshot ?? store
   const tx = {
     redraftRosterPlayer: {
@@ -53,7 +57,15 @@ function makeTx(store: Store, opts: { movedCount?: number; readSnapshot?: Store 
         return { count: opts.movedCount ?? 1 }
       }),
     },
+    roster: {
+      updateMany: vi.fn(async ({ where, data }: { where: { redraftRosterId: string }; data: { faabRemaining: number } }) => {
+        calls.genericFaab[where.redraftRosterId] = data.faabRemaining
+        return { count: 1 }
+      }),
+    },
     redraftRoster: {
+      findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.filter((id) => id in store).map((id) => ({ id, faabBalance: store[id] }))),
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ faabBalance: reads()[where.id] ?? null })),
       update: vi.fn(async ({ where, data }: { where: { id: string }; data: FaabData }) => {
         apply(store, where.id, data)
@@ -102,7 +114,7 @@ describe('settleRedraftTradeAssets', () => {
 
   it('transfers FAAB from sender to receiver using metadata.amount', async () => {
     const store: Store = { [PROPOSER]: 100, [RECEIVER]: 50 }
-    const { tx } = makeTx(store)
+    const { tx, calls } = makeTx(store)
     const res = await settleRedraftTradeAssets(tx, {
       proposerRosterId: PROPOSER,
       receiverRosterId: RECEIVER,
@@ -110,6 +122,8 @@ describe('settleRedraftTradeAssets', () => {
     })
     expect(res.faabTransferred).toBe(30)
     expect(store).toEqual({ [PROPOSER]: 70, [RECEIVER]: 80 })
+    // The native waiver engine bids with Roster.faabRemaining, so it must see the trade too.
+    expect(calls.genericFaab).toEqual({ [PROPOSER]: 70, [RECEIVER]: 80 })
   })
 
   it('throws on insufficient FAAB, and moves nothing', async () => {

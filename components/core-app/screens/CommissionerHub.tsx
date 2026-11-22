@@ -1,10 +1,19 @@
 import CommissionerActionQueue from '@/components/core-app/CommissionerActionQueue'
 import CommissionerWeeklyPlan from '@/components/core-app/CommissionerWeeklyPlan'
 import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
+import { InactiveManagerCommissioner } from '@/components/core-app/InactiveManagerCommissioner'
 import Link from 'next/link'
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, type CSSProperties, type ReactNode } from 'react'
+/*
+ * The action queue, weekly plan and automation panels below are `.af-tw` panels. Their styles were
+ * reaching this screen only because /core's page also imports LeagueMoves, which imports this
+ * file — so anywhere the hub renders on its own, every one of those panels came out unstyled.
+ * Imported first so the hub's own sheets still win where they overlap, as they do on /core.
+ */
+import '@/components/core-app/af-team-workspace.css'
 import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
+import '@/components/core-app/af-core-redraft-standings.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { CommissionerOsActionsSummary } from '@/components/league-hub/CommissionerOsActionsSummary'
@@ -29,19 +38,43 @@ import {
   AuditTimeline,
   AuditTimelineFallback,
   ChartsFallback,
+  HealthBreakdown,
+  HealthBreakdownStatic,
   OperationalCharts,
   RecentChanges,
   RecentChangesFallback,
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
+import { FantraxTradeHistoryUpload } from '@/components/core-app/commissioner/FantraxTradeHistoryUpload'
+import { WaiverBudgetControl } from '@/components/core-app/commissioner/WaiverBudgetControl'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
+import { LineupIntegrity } from '@/components/core-app/commissioner/LineupIntegrity'
+import { EliminatedLineups } from '@/components/core-app/commissioner/EliminatedLineups'
+import { FillEmptyStarters } from '@/components/core-app/commissioner/FillEmptyStarters'
+import { AutomationOverview } from '@/components/core-app/commissioner/AutomationOverview'
+import { OffseasonCalendar } from '@/components/core-app/commissioner/OffseasonCalendar'
+import { IrAutoMove } from '@/components/core-app/commissioner/IrAutoMove'
+import { OrphanAuction } from '@/components/core-app/commissioner/OrphanAuction'
+import { FindLeagueListingCard } from '@/components/core-app/commissioner/FindLeagueListingCard'
+import { ExternalListingCard } from '@/components/core-app/commissioner/ExternalListingCard'
+import { JoinRequestsCard } from '@/components/core-app/commissioner/JoinRequestsCard'
+import { DeadlineAutopilot } from '@/components/core-app/commissioner/DeadlineAutopilot'
+import { StorylineStudio } from '@/components/core-app/commissioner/StorylineStudio'
+import { WeeklyRecapReview } from '@/components/core-app/commissioner/WeeklyRecapReview'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { WeeklyChecklist } from '@/components/core-app/commissioner/WeeklyChecklist'
+import { RolloverWizard } from '@/components/core-app/commissioner/RolloverWizard'
 import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
+import { DynastyFormatCard } from '@/components/core-app/commissioner/DynastyFormatCard'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { DisputeDesk } from '@/components/disputes/DisputeDesk'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsBody } from '@/components/core-app/standings/WeekLineupsTable'
 import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
+import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
+import { HubFold } from '@/components/core-app/commissioner/HubFold'
+import { HubFoldOpener } from '@/components/core-app/commissioner/HubFoldOpener'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -78,7 +111,7 @@ import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
  * carry exactly these counts; the band's art is the league's own format loop.
  */
 
-export type CommissionerHubProps = {
+type CommissionerHubProps = {
   data: CommissionerHubResult
   /**
    * This week's lineups, projected — AllFantasy's engine (AF) beside the provider's (API) — for
@@ -143,33 +176,55 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
   const activity = depthOpen ? loadActivityCharts(data.grant, now, language) : null
   const platformName = platformLabel(league.platform)
   const quiet = data.quietManagers
+  const healthRing = healthRingPct(data.health.score)
+  /*
+   * 2026-11-14: the headline is the answer — how many things need you — where it was the league's name over
+   * a paragraph listing everything the page holds. The count is the task cards' own (the "Needs you" tile
+   * it replaces read the same number), so the headline and the cards under it cannot disagree.
+   */
+  const taskCount = data.tasks.cards.length + data.tasks.overflow.length
+  const headline = unread
+    ? t('This league hasn’t synced yet')
+    : taskCount === 0
+      ? t('Nothing needs you right now')
+      : t(taskCount === 1 ? '1 thing needs you' : `${taskCount} things need you`)
+  /* The tiles the headline and the lines under them already say: "Needs you" and "Claimed teams". */
+  const shownTiles = tiles.filter((tile) => tile.key !== 'needs-you' && tile.key !== 'claimed')
+  /* The score the health card leads with, on its fold — the same clamp the score ring uses. */
+  const healthNote = healthRing == null ? null : `${healthRing}/100`
 
   return (
     <div className="af-ch afh" data-format="all" data-testid="commissioner-league-hub">
-      <Link className="afh-back" href="/core/commissioner">
-        {t('← All leagues you run')}
-      </Link>
+      <HubFoldOpener />
+      <div className="af-ch-back-row">
+        <Link className="afh-back" href="/core/commissioner">
+          {t('← All leagues you run')}
+        </Link>
+        {/* A small link beside the way back (2026-11-14), not a full-width button above the cockpit. */}
+        <Link className="af-ch-back-more" href="/tournament-hub">
+          {t('Multi-league tournaments and weekly reports →')}
+        </Link>
+      </div>
 
       <header className="afh-head">
         <div className="afh-title">
           <div className="afh-label">
-            {t('Core · Commissioner')}
+            {t('Core · Commissioner')} · {league.name}
             {art.label ? ` · ${t(art.label)}` : ''}
           </div>
           <div className="afh-title-row">
             <span className="afh-badge" aria-hidden>
               ⚑
             </span>
-            <h1>{league.name}</h1>
+            <h1 data-testid="commissioner-headline">{headline}</h1>
             <span className="af-ch-role af-label" data-role={role}>
               {role === 'commissioner' ? t('Commissioner') : t('Co-commissioner')}
             </span>
           </div>
-          <p className="afh-desc">
-            {league.native
-              ? t('Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change.')
-              : t(`Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change. AllFantasy reads ${platformName} — rules and rulings are still applied there.`)}
-          </p>
+          {/*
+            No "Everything it takes to run this league…" paragraph (2026-11-14): the page shows it. That an
+            imported league's rulings are applied on its platform is said once, in the footer.
+          */}
         </div>
         {data.viewerCanBroadcast ? (
           <div className="afh-head-actions">
@@ -178,9 +233,15 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         ) : null}
       </header>
 
-      <Link className="afh-btn" href="/tournament-hub">
-        {t('Multi-league tournaments and weekly reports →')}
-      </Link>
+      {depth && !depth.unlocked ? (
+        <CoreDepthLock
+          access={depth}
+          what={t('Season reports and automation')}
+          benefit={t('Monitor league activity and health and automate weekly commissioner work.')}
+          source="lock_commissioner_season"
+          lang={language}
+        />
+      ) : null}
 
       {/* ── Cockpit (item 1) — the tiles, carried by the key-art band ─────── */}
       <section
@@ -201,17 +262,14 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
             {t('This league right now')} <TopicTip topic="commissionerTiles" />
           </div>
           <div className="afh-tiles">
-            {tiles.map((tile) => (
+            {shownTiles.map((tile) => (
               <Tile key={tile.key} tile={tile} t={t} />
             ))}
           </div>
-          {/* The names are the part a commissioner acts on — the count is already a tile. */}
-          {quiet.length > 0 ? (
-            <p className="afh-hero-note">
-              {t('Gone quiet:')} {quiet.slice(0, 4).join(', ')}
-              {quiet.length > 4 ? t(` and ${quiet.length - 4} more`) : ''}. <a href="#ch-members">{t('Member activity')}</a>
-            </p>
-          ) : null}
+          {/*
+            No "Gone quiet: …" line (2026-11-14): the "Needs you now" card names the same managers, with the
+            button that deals with it, and Member activity lists them.
+          */}
           {data.unclaimedTeams > 0 ? (
             <p className="afh-hero-note">
               {t(
@@ -243,17 +301,58 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         </div>
       ) : null}
 
+      {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
+      {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
+      {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
+      {/* A private league's "Ask to join" requests from Find a League; renders nothing when there are none to show. */}
+      {league.native && data.role === 'commissioner' ? <JoinRequestsCard leagueId={league.id} /> : null}
+
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
       {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
-      {data.role === 'commissioner' && <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />}
-      {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
+      {/*
+        ── EVERYTHING BELOW "NEEDS YOU NOW" IS FOLDED (2026-11-14) ─────────────────────────────────
+        Each section is one row — its title and, where there is one, the fact worth seeing closed — and
+        opens in place (HubFold). The jump chips and in-page links open the fold they point into
+        (HubFoldOpener). Nothing inside a section changed.
+      */}
+      {data.role === 'commissioner' ? (
+        <HubFold id="ch-weekly" title={t('Turn this week into league action')}>
+          <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />
+        </HubFold>
+      ) : null}
+      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+      {data.role === 'commissioner' ? (
+        <HubFold id="ch-find-players" title={t('Find players for your league')}>
+          {league.native ? <FindLeagueListingCard leagueId={league.id} /> : <ExternalListingCard leagueId={league.id} />}
+        </HubFold>
+      ) : null}
+      {/*
+        The AllFantasy-run league's settings cards, under ONE fold: most hide themselves when they do not
+        apply, so a fold each would leave empty rows. AutoSubs always draws, so this fold is never empty.
+        Their own headings stay visible inside it — there are several, and the summary names none of them.
+      */}
+      {league.native && data.role === 'commissioner' ? (
+        <HubFold id="ch-native-settings" title={t('Lineup and roster autopilot')}>
+          <AutomationOverview leagueId={league.id} />
+          <OffseasonCalendar leagueId={league.id} />
+          <NativeAutoSubsCommissioner leagueId={league.id} />
+          <InactiveManagerCommissioner leagueId={league.id} />
+          <FillEmptyStarters leagueId={league.id} />
+          <EliminatedLineups leagueId={league.id} />
+          <IrAutoMove leagueId={league.id} />
+          <OrphanAuction leagueId={league.id} />
+        </HubFold>
+      ) : null}
 
-      <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
-        <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
-        <CommissionerChimmy leagueId={league.id} />
-      </HubSection>
+      <HubFold id="ch-intelligence" title={t('Commissioner intelligence')}>
+        <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
+          <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
+          <CommissionerChimmy leagueId={league.id} />
+        </HubSection>
+      </HubFold>
 
+      <HubFold id="ch-format-ops" title={t('Format operations')}>
       <HubSection id="ch-format-ops" title={t('Format operations')}>
         {data.network && (
           <p className="af-ch-muted">
@@ -262,13 +361,17 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         )}
         {data.formatCards.length ? (
           <ul className="af-ch-areas">
-            {data.formatCards.map((card) => (
-              <li key={card.key}>
-                <strong>{t(card.title)}</strong>
-                <p>{t(card.detail)}</p>
-                <Link href={card.href}>{t(card.action)} →</Link>
-              </li>
-            ))}
+            {data.formatCards.map((card) =>
+              card.tone === 'dynasty' ? (
+                <DynastyFormatCard key={card.key} card={card} />
+              ) : (
+                <li key={card.key}>
+                  <strong>{t(card.title)}</strong>
+                  <p>{t(card.detail)}</p>
+                  <Link href={card.href}>{t(card.action)} →</Link>
+                </li>
+              ),
+            )}
           </ul>
         ) : (
           <p className="af-ch-muted">
@@ -278,7 +381,9 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         {/* The owner's statement of how the league is really run, which no platform publishes. */}
         {data.formatTemplate ? <FormatTemplateControl leagueId={league.id} template={data.formatTemplate} /> : null}
       </HubSection>
+      </HubFold>
 
+      <HubFold id="ch-history" title={t('Trades and draft archive')}>
       <HubSection id="ch-history" title={t('Trades and draft archive')}>
         <h3>{t('Latest trades')}</h3>
         {data.history.trades.length ? (
@@ -296,6 +401,10 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
         )}
         <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
+        {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
+        {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
+        {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
+        {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
         {data.history.drafts.length ? (
           data.history.drafts.map((draft) => (
@@ -323,38 +432,100 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               </ol>
             </details>
           ))
-        ) : (
+        ) : data.history.importedDrafts?.length ? null : (
           <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
         )}
+        {/* An imported draft is shown pick by pick in the Draft HQ archive; here it is one line that opens it. */}
+        {data.history.importedDrafts?.length ? (
+          <ul className="af-ch-areas">
+            {data.history.importedDrafts.map((draft) => (
+              <li key={draft.key}>
+                <strong>{draft.season ?? t('Season unknown')} · {t('Imported draft')}</strong>
+                <p><Link href={draft.href}>{t('Open in the draft archive')}</Link></p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <p className="af-ch-muted">{t(data.history.draftNote)}</p>
+        {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
+        {data.history.lotteries?.length ? (
+          <>
+            <h3>{t('Weighted lottery history')}</h3>
+            <p className="af-ch-muted">{t('Recorded AllFantasy draws; older or imported results may be missing.')}</p>
+            {data.history.lotteries.map((draw) => (
+              <details key={draw.id}>
+                <summary>{draw.season != null ? `${draw.season} · ` : ''}{new Date(draw.at).toLocaleDateString(hubDateLocale(language))}</summary>
+                <ol>
+                  {draw.slots.map((slot) => (
+                    <li key={slot.slot}>{t('Pick')} {slot.slot}: {slot.team}{slot.odds != null ? ` · ${slot.odds.toLocaleString(hubDateLocale(language), { maximumFractionDigits: 2 })}% ${t('odds at pick 1')}` : ''}</li>
+                  ))}
+                </ol>
+              </details>
+            ))}
+          </>
+        ) : null}
       </HubSection>
+      </HubFold>
 
-      {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
-      <div className="af-ch-split">
-        <Suspense fallback={<RecentChangesFallback language={language} />}>
-          <RecentChanges timeline={timeline} language={language} />
-        </Suspense>
+      {/* Recent changes moved into the audit log's fold (2026-11-14): both listed the same syncs. */}
+      <HubFold
+        id="ch-members"
+        title={t('Member activity')}
+        note={quiet.length > 0 ? t(quiet.length === 1 ? '1 gone quiet' : `${quiet.length} gone quiet`) : null}
+      >
         <HubDepthGate depth={depth} id="ch-members" what={t('Member activity')} language={language}>
           <MemberActivity data={data} language={language} />
         </HubDepthGate>
-      </div>
+      </HubFold>
 
       {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
-      <HealthPanel data={data} language={language} />
+      {/*
+        The health panel inside a `display: contents` wrapper: it changes no layout anywhere, and carries the
+        engine score as `--rdc-health` for the redraft identity's score ring (af-core-redraft-standings.css).
+        No score, no variable and no ring — lib/core-app/redraftCoreRace.ts healthRingPct.
+      */}
+      <HubFold id="ch-health" title={t('League health')} note={healthNote}>
+      <div
+        className="af-rdc-health"
+        style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
+        data-ring={healthRing == null ? undefined : 'true'}
+      >
+        <HealthPanel
+          data={data}
+          language={language}
+          breakdown={
+            activity ? (
+              <Suspense fallback={<HealthBreakdownStatic data={data} reason="loading" language={language} />}>
+                <HealthBreakdown data={data} activity={activity} language={language} />
+              </Suspense>
+            ) : (
+              <HealthBreakdownStatic data={data} reason="locked" language={language} />
+            )
+          }
+        />
+      </div>
+      </HubFold>
 
       {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}
-      <HubCalendar data={data} language={language} />
+      <HubFold id="ch-calendar" title={t('League calendar')}>
+        <HubCalendar data={data} language={language} />
+      </HubFold>
 
       {/* ── 5 · Guides (item 4) ───────────────────────────────────────── */}
-      <HubSection id="ch-workflows" title={t('Step-by-step guides')}>
-        <GuidedWorkflows workflows={data.workflows} />
-      </HubSection>
+      <HubFold id="ch-workflows" title={t('Step-by-step guides')}>
+        <HubSection id="ch-workflows" title={t('Step-by-step guides')}>
+          <GuidedWorkflows workflows={data.workflows} />
+        </HubSection>
+      </HubFold>
 
       {/* ── 6 · Every league area (item 2) ────────────────────────────── */}
-      <LeagueAreas data={data} language={language} />
+      <HubFold id="ch-areas" title={t('Every part of the league')}>
+        <LeagueAreas data={data} language={language} />
+      </HubFold>
 
       {/* ── This week's lineups, projected (AF beside API, 2026-09-30) ── */}
       {lineups ? (
+        <HubFold id="ch-lineups" title={t('This week’s lineups, projected')} note={t(`week ${lineups.week}`)}>
         <HubSection
           id="ch-lineups"
           title={t('This week’s lineups, projected')}
@@ -363,14 +534,19 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         >
           <WeekLineupsBody lineups={lineups} caveat={t('nothing here changes a standing or a ruling.')} />
         </HubSection>
+        </HubFold>
       ) : null}
 
       {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
-      <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')} language={language}>
-        {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
-      </HubDepthGate>
+      {data.waivers || depth?.unlocked === false ? (
+        <HubFold id="ch-waivers" title={t('Waiver oversight')}>
+          <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')} language={language}>
+            {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
+          </HubDepthGate>
+        </HubFold>
+      ) : null}
 
-      <div className="af-ch-split">
+      <HubFold id="ch-rules" title={t('How this league runs')} note={league.season != null ? String(league.season) : null}>
         {/* ── How the league runs ────────────────────────────────────── */}
         <HubSection
           id="ch-rules"
@@ -403,8 +579,28 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
               <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>{t('Open integrity monitor →')}</Link>
             )}
           </div>
-        </HubSection>
 
+          {/* Filed disputes: managers file, the commissioner rules. Works for imported leagues too. */}
+          <div className="af-ch-dispute-desk" style={{ marginTop: 16 }}>
+            <DisputeDesk leagueId={league.id} />
+            <p className="af-ch-setting-why">
+              <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
+            </p>
+          </div>
+
+          {/* The constitution: written from these settings, changed by league vote. */}
+          <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
+            <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
+          </p>
+
+          {/* The league log: every commissioner action, readable by the league unless set commish-only. */}
+          <p className="af-ch-setting-why">
+            <Link href={`/league/${encodeURIComponent(league.id)}/log`}>{t('League log: who can see your actions →')}</Link>
+          </p>
+        </HubSection>
+      </HubFold>
+
+      <HubFold id="ch-access" title={t('Who can run this league')} note={t(access.length === 1 ? '1 person' : `${access.length} people`)}>
         {/* ── Access ────────────────────────────────────────────────── */}
         <HubSection
           id="ch-access"
@@ -475,33 +671,82 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
             </p>
           ) : null}
         </HubSection>
-      </div>
+      </HubFold>
 
       {/* ── 7 · Charts (item 5) — large, so below the working sections ─── */}
-      <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')} language={language}>
-        {activity ? (
-          <Suspense fallback={<ChartsFallback language={language} />}>
-            <OperationalCharts data={data} activity={activity} language={language} />
-          </Suspense>
-        ) : null}
-      </HubDepthGate>
+      <HubFold id="ch-reports" title={t('League at a glance')}>
+        <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')} language={language}>
+          {activity ? (
+            <Suspense fallback={<ChartsFallback language={language} />}>
+              <OperationalCharts data={data} activity={activity} language={language} />
+            </Suspense>
+          ) : null}
+        </HubDepthGate>
+      </HubFold>
 
       {/* ── 8 · Automations (item 8) ──────────────────────────────────── */}
-      <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')} language={language}>
-        <HubSection id="ch-recipes" title={t('Automations')}>
-          <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
+      <HubFold id="ch-recipes" title={t('Automations')}>
+        <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')} language={language}>
+          <HubSection id="ch-recipes" title={t('Automations')}>
+            <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
+          </HubSection>
+        </HubDepthGate>
+      </HubFold>
+
+      {/* Lineup integrity — free for the latest week; the card names what the plan adds. ESPN reads the kickoff capture. */}
+      {league.native || league.platform === 'sleeper' || league.platform === 'espn' ? (
+        <HubFold id="ch-lineup-integrity" title={t('Lineup integrity')}>
+          <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
+            <LineupIntegrity leagueId={league.id} />
+          </HubSection>
+        </HubFold>
+      ) : null}
+
+      {/*
+        Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
+        and the card itself says which part is the Commissioner plan (the route enforces it).
+      */}
+      <HubFold id="ch-deadlines" title={t('Deadline autopilot')}>
+        <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
+          <DeadlineAutopilot leagueId={league.id} />
         </HubSection>
-      </HubDepthGate>
+      </HubFold>
+
+      {/*
+        Storyline Studio — outside the depth gate: the card reads the AF Commissioner plan itself and
+        shows the upsell without it (the route enforces the plan). Every league: an AllFantasy league
+        can post and auto-post; an imported one gets Copy, shaped for its own platform's chat.
+      */}
+      <HubFold id="ch-storylines" title={t('Storyline Studio')}>
+        <HubSection id="ch-storylines" title={t('Storyline Studio')}>
+          <StorylineStudio leagueId={league.id} />
+        </HubSection>
+      </HubFold>
+
+      {/*
+        Weekly recap review — outside the depth gate: editing the league's own recap before it posts
+        is a free commissioner control. Only where a recap runs at all (Sleeper and AllFantasy-run).
+      */}
+      {league.native || league.platform === 'sleeper' ? (
+        <HubFold id="ch-recap" title={t('Weekly recap')}>
+          <HubSection id="ch-recap" title={t('Weekly recap')}>
+            <WeeklyRecapReview leagueId={league.id} />
+          </HubSection>
+        </HubFold>
+      ) : null}
 
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
-      <CommunityLinks
-        data={data}
-        language={language}
-        announce={data.viewerCanBroadcast ? <AnnounceButton leagueId={league.id} /> : null}
-      />
+      <HubFold id="ch-communities" title={t('Connections')}>
+        <CommunityLinks
+          data={data}
+          language={language}
+          announce={data.viewerCanBroadcast ? <AnnounceButton leagueId={league.id} /> : null}
+        />
+      </HubFold>
 
       {/* ── Public standings ────────────────────────────────────────── */}
-      <section className="af-card af-ch-section af-ch-publish" data-on={publicStandings.enabled}>
+      <HubFold id="ch-public" title={t('Public standings')} note={publicStandings.enabled ? t('Published') : t('Private')}>
+      <section id="ch-public" className="af-card af-ch-section af-ch-publish" data-on={publicStandings.enabled}>
         <header className="af-ch-section-head">
           <h2 className="af-label">{t('Public standings')}</h2>
           <span className="af-ch-section-note" data-on={publicStandings.enabled}>
@@ -539,13 +784,23 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         */}
         <PublishStandingsToggle leagueId={league.id} enabled={publicStandings.enabled} url={publicStandings.url} />
       </section>
+      </HubFold>
 
-      {/* ── 10 · Audit log (item 6) — the longest table, so last ────────── */}
-      <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')} language={language}>
-        <Suspense fallback={<AuditTimelineFallback language={language} />}>
-          <AuditTimeline timeline={timeline} language={language} />
+      {/*
+        ── 10 · Audit log (item 6) — the longest table, so last ────────────────────────────────────
+        Recent changes lives here now (2026-11-14): it and the log listed the same syncs, in two places.
+        It stays free; only the full log is behind the depth lock, as before.
+      */}
+      <HubFold id="ch-timeline" title={t('Audit log')}>
+        <Suspense fallback={<RecentChangesFallback language={language} />}>
+          <RecentChanges timeline={timeline} language={language} />
         </Suspense>
-      </HubDepthGate>
+        <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')} language={language}>
+          <Suspense fallback={<AuditTimelineFallback language={language} />}>
+            <AuditTimeline timeline={timeline} language={language} />
+          </Suspense>
+        </HubDepthGate>
+      </HubFold>
 
       <footer className="afh-foot">
         <p>

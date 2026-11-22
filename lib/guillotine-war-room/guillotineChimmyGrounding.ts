@@ -36,7 +36,7 @@ export async function buildGuillotineWarRoomContextForChimmy(leagueId: string, u
   const grounded = buildGuillotineWarRoomPrompt({ context, survival, rosterRisk, faab, weeklyPlan })
 
   return [
-    '## GUILLOTINE AF WAR ROOM CONTEXT (deterministic, league-specific)',
+    '## GUILLY AF WAR ROOM CONTEXT (deterministic, league-specific)',
     'When answering for THIS league, follow these rules and cite the facts below:',
     GUILLOTINE_WAR_ROOM_SYSTEM_RULES,
     '',

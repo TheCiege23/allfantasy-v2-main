@@ -2373,7 +2373,7 @@
     "leagueType": "guillotine",
     "category": "playoffs",
     "question": "When do the playoffs start in a guillotine league?",
-    "idealAnswer": "Guillotine doesn't have head-to-head playoffs. Teams are eliminated one at a time over the season, and the last surviving team wins. The 'endgame' is simply the final weeks when only a few teams remain.",
+    "idealAnswer": "Guilly doesn't have head-to-head playoffs. Teams are eliminated one at a time over the season, and the last surviving team wins. The 'endgame' is simply the final weeks when only a few teams remain.",
     "mustSay": [
       "no head-to-head playoffs",
       "last surviving team wins"
@@ -2423,7 +2423,7 @@
     "leagueType": "guillotine",
     "category": "rules",
     "question": "What week do eliminations start in my guillotine league?",
-    "idealAnswer": "That's a league setting. Guillotine leagues configure an elimination start week and end week, so eliminations may begin in week 1 or later depending on your commissioner. Check your league's elimination window.",
+    "idealAnswer": "That's a league setting. Guilly leagues configure an elimination start week and end week, so eliminations may begin in week 1 or later depending on your commissioner. Check your league's elimination window.",
     "mustSay": [
       "depends on the league's elimination start and end week settings"
     ],
@@ -2642,7 +2642,7 @@
     "id": "sag-001",
     "leagueType": "survivor_guillotine",
     "category": "rules",
-    "question": "How is Survivor All-Stars Guillotine different from a regular Survivor league?",
+    "question": "How is Survivor All-Stars Guilly different from a regular Survivor league?",
     "idealAnswer": "It borrows tribes from Survivor but eliminates like guillotine: you go out by being the lowest scorer on your tribe (or in the league once merged), never by a vote. Eliminated rosters go to waivers, there are no trades, and FAAB is the only way to add players. It also has a starting lineup that grows on a published schedule during the season.",
     "mustSay": [
       "eliminated by lowest score, never by vote",
@@ -2660,7 +2660,7 @@
     "id": "sag-002",
     "leagueType": "survivor_guillotine",
     "category": "lineup",
-    "question": "How does the starting lineup change during a Survivor All-Stars Guillotine season?",
+    "question": "How does the starting lineup change during a Survivor All-Stars Guilly season?",
     "idealAnswer": "It grows on a published schedule. Weeks 1–6 start eight players (QB, 2 RB, 2 WR, TE, 2 WR/RB/TE flex); week 7 adds a flex, week 9 adds a SUPERFLEX, week 11 adds another flex, and week 14 adds a final flex for twelve starters. That means bench players you can't start early become starters later.",
     "mustSay": [
       "starts at 8 starters",
@@ -2678,7 +2678,7 @@
     "id": "sag-003",
     "leagueType": "survivor_guillotine",
     "category": "strategy",
-    "question": "Why would I want a second quarterback early in Survivor All-Stars Guillotine?",
+    "question": "Why would I want a second quarterback early in Survivor All-Stars Guilly?",
     "idealAnswer": "Because the SUPERFLEX slot arrives in week 9, turning a second QB from an unstartable bench player into a weekly starter. Everyone can see that date coming, so bidding on quarterbacks tends to rise before the slot opens. Adding one earlier can be cheaper — as long as you survive until week 9 to use him.",
     "mustSay": [
       "SUPERFLEX arrives in week 9",
@@ -2696,7 +2696,7 @@
     "id": "sag-004",
     "leagueType": "survivor_guillotine",
     "category": "trades",
-    "question": "Can I trade in Survivor All-Stars Guillotine?",
+    "question": "Can I trade in Survivor All-Stars Guilly?",
     "idealAnswer": "No — this format has no trades. The only way to acquire players is FAAB bidding, with a $1,000 budget for the whole season (not per week), which makes timing your bids the key skill.",
     "mustSay": [
       "no trades",
@@ -2714,7 +2714,7 @@
     "id": "sag-005",
     "leagueType": "survivor_guillotine",
     "category": "rules",
-    "question": "When do idols expire in Survivor All-Stars Guillotine?",
+    "question": "When do idols expire in Survivor All-Stars Guilly?",
     "idealAnswer": "Standard idols can't be played after week 10, and Gauntlet idols can't be played after week 13. An idol is also lost if you're eliminated while still holding it, so saving it too long can waste it two different ways.",
     "mustSay": [
       "standard idols: after week 10",

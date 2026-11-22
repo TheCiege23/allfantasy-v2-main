@@ -152,4 +152,4 @@ async function main() {
     await prisma.$disconnect()
   }
 }
-main().catch((e) => { console.error('Guillotine season-end smoke failed:', e.code ?? e.message); process.exitCode = 1 })
+main().catch((e) => { console.error('Guilly season-end smoke failed:', e.code ?? e.message); process.exitCode = 1 })

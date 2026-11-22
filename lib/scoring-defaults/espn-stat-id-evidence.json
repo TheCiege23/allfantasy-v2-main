@@ -1,5 +1,5 @@
 {
-  "derivedAt": "2026-08-28T13:26:01.787Z",
+  "derivedAt": "2026-11-17T16:13:26.494Z",
   "seasons": [
     2025,
     2024
@@ -9,11 +9,12 @@
     "minAgreeingPlayerSeasons": 25,
     "maxContradictions": 0
   },
-  "playerSeasonsJoined": 1277,
+  "playerSeasonsJoined": 1384,
   "playerSeasonsByYear": {
-    "2024": 638,
-    "2025": 639
+    "2024": 682,
+    "2025": 702
   },
+  "teamDefenseSeasonsJoined": 64,
   "namesDroppedAsNonUnique": 8,
   "mappings": {
     "0": {
@@ -38,15 +39,15 @@
     },
     "15": {
       "sleeperKey": "pass_td_40p",
-      "agreeingPlayerSeasons": 72
+      "agreeingPlayerSeasons": 71
     },
     "16": {
       "sleeperKey": "pass_td_50p",
-      "agreeingPlayerSeasons": 56
+      "agreeingPlayerSeasons": 55
     },
     "17": {
       "sleeperKey": "bonus_pass_yd_300",
-      "agreeingPlayerSeasons": 60
+      "agreeingPlayerSeasons": 62
     },
     "19": {
       "sleeperKey": "pass_2pt",
@@ -54,75 +55,75 @@
     },
     "20": {
       "sleeperKey": "pass_int",
-      "agreeingPlayerSeasons": 116
+      "agreeingPlayerSeasons": 115
     },
     "23": {
       "sleeperKey": "rush_att",
-      "agreeingPlayerSeasons": 607
+      "agreeingPlayerSeasons": 627
     },
     "24": {
       "sleeperKey": "rush_yd",
-      "agreeingPlayerSeasons": 594
+      "agreeingPlayerSeasons": 614
     },
     "25": {
       "sleeperKey": "rush_td",
-      "agreeingPlayerSeasons": 246
+      "agreeingPlayerSeasons": 260
     },
     "26": {
       "sleeperKey": "rush_2pt",
-      "agreeingPlayerSeasons": 28
+      "agreeingPlayerSeasons": 27
     },
     "35": {
       "sleeperKey": "rush_td_40p",
-      "agreeingPlayerSeasons": 44
+      "agreeingPlayerSeasons": 48
     },
     "36": {
       "sleeperKey": "rush_td_50p",
-      "agreeingPlayerSeasons": 30
+      "agreeingPlayerSeasons": 31
     },
     "37": {
       "sleeperKey": "bonus_rush_yd_100",
-      "agreeingPlayerSeasons": 70
+      "agreeingPlayerSeasons": 75
     },
     "41": {
       "sleeperKey": "rec",
-      "agreeingPlayerSeasons": 861
+      "agreeingPlayerSeasons": 898
     },
     "42": {
       "sleeperKey": "rec_yd",
-      "agreeingPlayerSeasons": 861
+      "agreeingPlayerSeasons": 897
     },
     "43": {
       "sleeperKey": "rec_td",
-      "agreeingPlayerSeasons": 481
+      "agreeingPlayerSeasons": 503
     },
     "44": {
       "sleeperKey": "rec_2pt",
-      "agreeingPlayerSeasons": 62
+      "agreeingPlayerSeasons": 66
     },
     "46": {
       "sleeperKey": "rec_td_50p",
-      "agreeingPlayerSeasons": 75
+      "agreeingPlayerSeasons": 81
     },
     "53": {
       "sleeperKey": "rec",
-      "agreeingPlayerSeasons": 861
+      "agreeingPlayerSeasons": 898
     },
     "56": {
       "sleeperKey": "bonus_rec_yd_100",
-      "agreeingPlayerSeasons": 142
+      "agreeingPlayerSeasons": 151
     },
     "64": {
       "sleeperKey": "pass_sack",
-      "agreeingPlayerSeasons": 134
+      "agreeingPlayerSeasons": 135
     },
     "68": {
       "sleeperKey": "fum",
-      "agreeingPlayerSeasons": 415
+      "agreeingPlayerSeasons": 431
     },
     "72": {
       "sleeperKey": "fum_lost",
-      "agreeingPlayerSeasons": 288
+      "agreeingPlayerSeasons": 300
     },
     "74": {
       "sleeperKey": "fgm_50p",
@@ -160,13 +161,61 @@
       "sleeperKey": "xpmiss",
       "agreeingPlayerSeasons": 51
     },
+    "90": {
+      "sleeperKey": "pts_allow_1_6",
+      "agreeingPlayerSeasons": 30
+    },
+    "91": {
+      "sleeperKey": "pts_allow_7_13",
+      "agreeingPlayerSeasons": 56
+    },
+    "95": {
+      "sleeperKey": "int",
+      "agreeingPlayerSeasons": 63
+    },
+    "97": {
+      "sleeperKey": "blk_kick",
+      "agreeingPlayerSeasons": 46
+    },
     "114": {
       "sleeperKey": "kr_yd",
-      "agreeingPlayerSeasons": 258
+      "agreeingPlayerSeasons": 272
+    },
+    "129": {
+      "sleeperKey": "yds_allow_100_199",
+      "agreeingPlayerSeasons": 36
+    },
+    "130": {
+      "sleeperKey": "yds_allow_200_299",
+      "agreeingPlayerSeasons": 64
+    },
+    "131": {
+      "sleeperKey": "yds_allow_300_349",
+      "agreeingPlayerSeasons": 63
+    },
+    "132": {
+      "sleeperKey": "yds_allow_350_399",
+      "agreeingPlayerSeasons": 64
+    },
+    "133": {
+      "sleeperKey": "yds_allow_400_449",
+      "agreeingPlayerSeasons": 58
+    },
+    "134": {
+      "sleeperKey": "yds_allow_450_499",
+      "agreeingPlayerSeasons": 36
     },
     "158": {
       "sleeperKey": "kick_pts",
       "agreeingPlayerSeasons": 84
+    },
+    "189": {
+      "sleeperKey": "pts_allow_1_6",
+      "agreeingPlayerSeasons": 30
+    },
+    "190": {
+      "sleeperKey": "pts_allow_7_13",
+      "agreeingPlayerSeasons": 56
     },
     "198": {
       "sleeperKey": "fgm_50_59",
@@ -177,5 +226,989 @@
       "agreeingPlayerSeasons": 66
     }
   },
-  "ambiguousNotAccepted": {}
+  "ambiguousNotAccepted": {},
+  "teamDefense": {
+    "method": "stated tier for ESPN D/ST rows only: absent read as 0 over every joined team-season; a pairing passes when exact on >= 90% of team-seasons, every miss is within +/-1, >= 3 team-seasons are non-zero, and it is the only key that passes. Sums are declared hypotheses, tested. Points-allowed bucket edges are searched over every [lo, hi] against Sleeper weekly pts_allow.",
+    "thresholds": {
+      "minExactShare": 0.9,
+      "maxMiss": 1,
+      "minNonZeroTeamSeasons": 3
+    },
+    "singles": {
+      "89": {
+        "sleeperKey": "pts_allow_0",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 10,
+        "of": 64,
+        "passes": true
+      },
+      "90": {
+        "sleeperKey": "pts_allow_1_6",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 30,
+        "of": 64,
+        "passes": true
+      },
+      "91": {
+        "sleeperKey": "pts_allow_7_13",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 56,
+        "of": 64,
+        "passes": true
+      },
+      "93": {
+        "sleeperKey": "misc_td",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 10,
+        "of": 64,
+        "passes": true
+      },
+      "94": {
+        "sleeperKey": "def_td",
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 49,
+        "of": 64,
+        "passes": true
+      },
+      "95": {
+        "sleeperKey": "int",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 63,
+        "of": 64,
+        "passes": true
+      },
+      "97": {
+        "sleeperKey": "blk_kick",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 46,
+        "of": 64,
+        "passes": true
+      },
+      "98": {
+        "sleeperKey": "safe",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 24,
+        "of": 64,
+        "passes": true
+      },
+      "99": {
+        "sleeperKey": "sack",
+        "exact": 62,
+        "missByOne": 2,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      "114": {
+        "sleeperKey": "def_kr_yd",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      "115": {
+        "sleeperKey": "def_pr_yd",
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      "123": {
+        "sleeperKey": "pts_allow_28_34",
+        "exact": 62,
+        "missByOne": 2,
+        "worse": 0,
+        "nonzero": 60,
+        "of": 64,
+        "passes": true
+      },
+      "128": {
+        "sleeperKey": "yds_allow_0_100",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 4,
+        "of": 64,
+        "passes": true
+      },
+      "129": {
+        "sleeperKey": "yds_allow_100_199",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 36,
+        "of": 64,
+        "passes": true
+      },
+      "130": {
+        "sleeperKey": "yds_allow_200_299",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      "131": {
+        "sleeperKey": "yds_allow_300_349",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 63,
+        "of": 64,
+        "passes": true
+      },
+      "132": {
+        "sleeperKey": "yds_allow_350_399",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      "133": {
+        "sleeperKey": "yds_allow_400_449",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 58,
+        "of": 64,
+        "passes": true
+      },
+      "134": {
+        "sleeperKey": "yds_allow_450_499",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 36,
+        "of": 64,
+        "passes": true
+      },
+      "135": {
+        "sleeperKey": "yds_allow_500_549",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 13,
+        "of": 64,
+        "passes": true
+      },
+      "136": {
+        "sleeperKey": "yds_allow_550p",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 8,
+        "of": 64,
+        "passes": true
+      },
+      "188": {
+        "sleeperKey": "pts_allow_0",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 10,
+        "of": 64,
+        "passes": true
+      },
+      "189": {
+        "sleeperKey": "pts_allow_1_6",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 30,
+        "of": 64,
+        "passes": true
+      },
+      "190": {
+        "sleeperKey": "pts_allow_7_13",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 56,
+        "of": 64,
+        "passes": true
+      },
+      "194": {
+        "sleeperKey": "pts_allow_28_34",
+        "exact": 62,
+        "missByOne": 2,
+        "worse": 0,
+        "nonzero": 60,
+        "of": 64,
+        "passes": true
+      },
+      "205": {
+        "sleeperKey": "def_2pt",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 3,
+        "of": 64,
+        "passes": true
+      },
+      "206": {
+        "sleeperKey": "def_2pt",
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 3,
+        "of": 64,
+        "passes": true
+      }
+    },
+    "ambiguous": {},
+    "sums": [
+      {
+        "espn": [
+          "96"
+        ],
+        "sleeper": [
+          "fum_rec",
+          "def_st_fum_rec"
+        ],
+        "exact": 60,
+        "missByOne": 4,
+        "worse": 0,
+        "nonzero": 64,
+        "of": 64,
+        "passes": true
+      },
+      {
+        "espn": [
+          "93",
+          "101",
+          "102"
+        ],
+        "sleeper": [
+          "def_st_td"
+        ],
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 30,
+        "of": 64,
+        "passes": true
+      },
+      {
+        "espn": [
+          "103",
+          "104"
+        ],
+        "sleeper": [
+          "def_td"
+        ],
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 49,
+        "of": 64,
+        "passes": true
+      },
+      {
+        "espn": [
+          "124",
+          "125"
+        ],
+        "sleeper": [
+          "pts_allow_35p"
+        ],
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 55,
+        "of": 64,
+        "passes": true
+      }
+    ],
+    "ranges": {
+      "89": {
+        "best": [
+          {
+            "lo": 0,
+            "hi": 0,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 0,
+            "hi": 1,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 0,
+            "hi": 2,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "90": {
+        "best": [
+          {
+            "lo": 1,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 2,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 3,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "91": {
+        "best": [
+          {
+            "lo": 7,
+            "hi": 13,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 56,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 8,
+            "hi": 13,
+            "exact": 47,
+            "missByOne": 15,
+            "worse": 2,
+            "nonzero": 56,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 9,
+            "hi": 13,
+            "exact": 44,
+            "missByOne": 17,
+            "worse": 3,
+            "nonzero": 56,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "92": {
+        "best": [
+          {
+            "lo": 14,
+            "hi": 17,
+            "exact": 63,
+            "missByOne": 1,
+            "worse": 0,
+            "nonzero": 58,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 14,
+            "hi": 18,
+            "exact": 41,
+            "missByOne": 21,
+            "worse": 2,
+            "nonzero": 59,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 15,
+            "hi": 17,
+            "exact": 36,
+            "missByOne": 21,
+            "worse": 7,
+            "nonzero": 58,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "121": {
+        "best": [
+          {
+            "lo": 18,
+            "hi": 21,
+            "exact": 63,
+            "missByOne": 1,
+            "worse": 0,
+            "nonzero": 63,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 19,
+            "hi": 21,
+            "exact": 41,
+            "missByOne": 21,
+            "worse": 2,
+            "nonzero": 63,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 18,
+            "hi": 22,
+            "exact": 39,
+            "missByOne": 20,
+            "worse": 5,
+            "nonzero": 64,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "122": {
+        "best": [
+          {
+            "lo": 22,
+            "hi": 27,
+            "exact": 63,
+            "missByOne": 1,
+            "worse": 0,
+            "nonzero": 63,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 23,
+            "hi": 27,
+            "exact": 40,
+            "missByOne": 18,
+            "worse": 6,
+            "nonzero": 63,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 22,
+            "hi": 28,
+            "exact": 39,
+            "missByOne": 21,
+            "worse": 4,
+            "nonzero": 64,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "123": {
+        "best": [
+          {
+            "lo": 28,
+            "hi": 34,
+            "exact": 62,
+            "missByOne": 2,
+            "worse": 0,
+            "nonzero": 60,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 28,
+            "hi": 35,
+            "exact": 46,
+            "missByOne": 17,
+            "worse": 1,
+            "nonzero": 62,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 28,
+            "hi": 36,
+            "exact": 39,
+            "missByOne": 23,
+            "worse": 2,
+            "nonzero": 62,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "124": {
+        "best": [
+          {
+            "lo": 35,
+            "hi": 45,
+            "exact": 63,
+            "missByOne": 1,
+            "worse": 0,
+            "nonzero": 54,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 35,
+            "hi": 46,
+            "exact": 63,
+            "missByOne": 1,
+            "worse": 0,
+            "nonzero": 54,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 35,
+            "hi": 44,
+            "exact": 61,
+            "missByOne": 3,
+            "worse": 0,
+            "nonzero": 54,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "125": {
+        "best": [
+          {
+            "lo": 46,
+            "hi": 52,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 9,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 46,
+            "hi": 53,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 9,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 46,
+            "hi": 54,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 9,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "188": {
+        "best": [
+          {
+            "lo": 0,
+            "hi": 0,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 0,
+            "hi": 1,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 0,
+            "hi": 2,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 10,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "189": {
+        "best": [
+          {
+            "lo": 1,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 2,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 3,
+            "hi": 6,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 30,
+            "of": 64,
+            "passes": true
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "190": {
+        "best": [
+          {
+            "lo": 7,
+            "hi": 13,
+            "exact": 64,
+            "missByOne": 0,
+            "worse": 0,
+            "nonzero": 56,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 8,
+            "hi": 13,
+            "exact": 47,
+            "missByOne": 15,
+            "worse": 2,
+            "nonzero": 56,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 9,
+            "hi": 13,
+            "exact": 44,
+            "missByOne": 17,
+            "worse": 3,
+            "nonzero": 56,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      },
+      "194": {
+        "best": [
+          {
+            "lo": 28,
+            "hi": 34,
+            "exact": 62,
+            "missByOne": 2,
+            "worse": 0,
+            "nonzero": 60,
+            "of": 64,
+            "passes": true
+          },
+          {
+            "lo": 28,
+            "hi": 35,
+            "exact": 46,
+            "missByOne": 17,
+            "worse": 1,
+            "nonzero": 62,
+            "of": 64,
+            "passes": false
+          },
+          {
+            "lo": 28,
+            "hi": 36,
+            "exact": 39,
+            "missByOne": 23,
+            "worse": 2,
+            "nonzero": 62,
+            "of": 64,
+            "passes": false
+          }
+        ],
+        "teamSeasons": 64
+      }
+    },
+    "ladder": {
+      "89": {
+        "lo": 0,
+        "hi": 0,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 10,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "90": {
+        "lo": 1,
+        "hi": 6,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 30,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "91": {
+        "lo": 7,
+        "hi": 13,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 56,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "92": {
+        "lo": 14,
+        "hi": 17,
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 58,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "121": {
+        "lo": 18,
+        "hi": 21,
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 63,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "122": {
+        "lo": 22,
+        "hi": 27,
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 63,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "123": {
+        "lo": 28,
+        "hi": 34,
+        "exact": 62,
+        "missByOne": 2,
+        "worse": 0,
+        "nonzero": 60,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "124": {
+        "lo": 35,
+        "hi": 45,
+        "exact": 63,
+        "missByOne": 1,
+        "worse": 0,
+        "nonzero": 54,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "125": {
+        "lo": 46,
+        "hi": null,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 9,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "188": {
+        "lo": 0,
+        "hi": 0,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 10,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "189": {
+        "lo": 1,
+        "hi": 6,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 30,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "190": {
+        "lo": 7,
+        "hi": 13,
+        "exact": 64,
+        "missByOne": 0,
+        "worse": 0,
+        "nonzero": 56,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      },
+      "194": {
+        "lo": 28,
+        "hi": 34,
+        "exact": 62,
+        "missByOne": 2,
+        "worse": 0,
+        "nonzero": 60,
+        "of": 64,
+        "passes": true,
+        "matchesBestFound": true
+      }
+    },
+    "espnIdsObserved": [
+      "89",
+      "90",
+      "91",
+      "92",
+      "93",
+      "94",
+      "95",
+      "96",
+      "97",
+      "98",
+      "99",
+      "100",
+      "101",
+      "102",
+      "103",
+      "104",
+      "105",
+      "106",
+      "107",
+      "108",
+      "109",
+      "110",
+      "111",
+      "112",
+      "113",
+      "114",
+      "115",
+      "116",
+      "117",
+      "118",
+      "119",
+      "120",
+      "121",
+      "122",
+      "123",
+      "124",
+      "125",
+      "127",
+      "128",
+      "129",
+      "130",
+      "131",
+      "132",
+      "133",
+      "134",
+      "135",
+      "136",
+      "155",
+      "156",
+      "187",
+      "188",
+      "189",
+      "190",
+      "191",
+      "192",
+      "193",
+      "194",
+      "195",
+      "196",
+      "205",
+      "206",
+      "210"
+    ],
+    "teamSeasons": 64
+  }
 }

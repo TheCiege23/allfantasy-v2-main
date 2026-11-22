@@ -75,11 +75,11 @@ export const WAIVERS_TOPICS = {
   worthAdding: {
     en: {
       title: 'Worth adding',
-      body: 'Free agents ranked by what each would add to your best starting lineup, under this league’s scoring: +N is the projected points he gains over the starter named in “over …”. Late in the week it switches to next week’s projections once they are out. AF is AllFantasy’s own projection; the ranking uses the provider’s.',
+      body: 'Free agents ranked by what each would add to your best starting lineup, under this league’s scoring: +N is the projected points he gains over the starter he replaces. Late in the week it switches to next week’s projections once they are out. Hover a projection to see AllFantasy’s own figure; the ranking uses the provider’s.',
     },
     es: {
       title: 'Vale la pena agregar',
-      body: 'Agentes libres ordenados por lo que cada uno sumaría a tu mejor alineación titular, con la puntuación de esta liga: +N son los puntos proyectados que gana sobre el titular que aparece en “over …”. Al final de la semana pasa a las proyecciones de la siguiente cuando ya salieron. AF es la proyección propia de AllFantasy; el orden usa la del proveedor.',
+      body: 'Agentes libres ordenados por lo que cada uno sumaría a tu mejor alineación titular, con la puntuación de esta liga: +N son los puntos proyectados que gana sobre el titular al que reemplaza. Al final de la semana pasa a las proyecciones de la siguiente cuando ya salieron. Pasa el cursor sobre una proyección para ver la cifra propia de AllFantasy; el orden usa la del proveedor.',
     },
   },
   lineupGain: {

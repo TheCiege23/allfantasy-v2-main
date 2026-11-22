@@ -140,6 +140,13 @@ export async function resolveManagerCommandCenterSnapshot(
   now: Date = new Date(),
   /** Accepted as a promise so the caller can start the career read beside this one. */
   careerInput: ManagerCommandCenterCareerInput | Promise<ManagerCommandCenterCareerInput | null> | null = null,
+  /**
+   * League-format signals the caller already read — ONE argument for every Survivor source
+   * (`lib/survivor/survivorFormatSignals.ts`: reward ledger `survivorPrizeSignals.ts`, finale/Tribal
+   * deadlines `survivorFinaleSignals.ts`, open challenges `survivorChallengeSignals.ts`). Joined before
+   * the sort and cap like career signals; admitted only for leagues in this snapshot's scope. Absent = none.
+   */
+  formatSignals: readonly DecisionOsAttentionSignal[] | Promise<readonly DecisionOsAttentionSignal[]> | null = null,
 ): Promise<ManagerCommandCenterSnapshot> {
   if (leagueIds.length === 0) {
     return emptySnapshot(now, ['no_leagues_specified'])
@@ -237,6 +244,8 @@ export async function resolveManagerCommandCenterSnapshot(
   const career = await Promise.resolve(careerInput).catch(() => null)
   const scope = new Set(leagueIds)
   if (career) attentionSignals.push(...career.signals.filter((s) => scope.has(s.leagueId)))
+  const format = await Promise.resolve(formatSignals).catch(() => null)
+  if (format) attentionSignals.push(...format.filter((s) => scope.has(s.leagueId)))
   const attentionQueue = sortAttentionSignals(attentionSignals).slice(0, ATTENTION_QUEUE_CAP)
 
   return {

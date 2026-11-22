@@ -12,7 +12,7 @@ const NOW = new Date('2026-09-26T12:00:00Z')
 const at = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3600_000)
 
 const h = vi.hoisted(() => ({
-  dm: { total: 2, mentions: 1, mutedUnread: 0 },
+  dm: { total: 2, mentions: 1, mutedUnread: 0, byThreadType: { dm: 1, group: 1 } },
   teams: [] as Array<{ leagueId: string }>,
   owned: [] as Array<{ id: string }>,
   marks: [] as Array<{ cacheKey: string; data: unknown }>,
@@ -55,7 +55,7 @@ import { getChatBadge, markChimmyProactiveSeen } from '@/lib/chat-core/chatBadge
 import { markLeagueChatRead } from '@/lib/chat-core/leagueChatRead'
 
 beforeEach(() => {
-  h.dm = { total: 2, mentions: 1, mutedUnread: 0 }
+  h.dm = { total: 2, mentions: 1, mutedUnread: 0, byThreadType: { dm: 1, group: 1 } }
   h.teams = [{ leagueId: 'L1' }]
   h.owned = [{ id: 'L2' }]
   h.marks = [{ cacheKey: 'league-chat-read:v1:u1:L1', data: { readAt: at(5).toISOString() } }]
@@ -73,7 +73,7 @@ beforeEach(() => {
 describe('getChatBadge', () => {
   it('adds league chat since you last read it and Chimmy’s weekly checks to your DMs', async () => {
     const b = await getChatBadge('u1', NOW)
-    expect(b).toEqual({ total: 2 + 2 + 1, mentions: 1 + 1, dm: 2, league: 2, chimmy: 1, byLeague: { L1: 1, L2: 1 } })
+    expect(b).toEqual({ total: 2 + 2 + 1, mentions: 1 + 1, dm: 2, league: 2, chimmy: 1, byLeague: { L1: 1, L2: 1 }, byThreadType: { dm: 1, group: 1 } })
   })
 
   it('league chat: never your own, never draft-only rows, never someone else’s private row, and a bounded window', async () => {
@@ -95,7 +95,7 @@ describe('getChatBadge', () => {
     expect((await getChatBadge(null, NOW)).total).toBe(0)
     h.teams = [] // no leagues → league part is simply zero
     h.owned = []
-    expect(await getChatBadge('u1', NOW)).toEqual({ total: 3, mentions: 1, dm: 2, league: 0, chimmy: 1, byLeague: {} })
+    expect(await getChatBadge('u1', NOW)).toEqual({ total: 3, mentions: 1, dm: 2, league: 0, chimmy: 1, byLeague: {}, byThreadType: { dm: 1, group: 1 } })
   })
 })
 

@@ -8,8 +8,8 @@ const cells = [1, 2].map((overall) => ({ overall, round: 1, pickInRound: overall
 describe('Draft HQ board', () => {
   it('keeps both picks when one manager acquires another pick in the same round', () => {
     render(<Board columns={columns} cells={cells} rounds={3} draftType="snake" thirdRoundReversal={false} />)
-    expect(screen.getByText('Player 1')).toBeTruthy()
-    expect(screen.getByText('Player 2')).toBeTruthy()
+    expect(screen.getByTestId('draft-board-cell-1')).toHaveTextContent('Player 1')
+    expect(screen.getByTestId('draft-board-cell-2')).toHaveTextContent('Player 2')
     const firstRound = screen.getByText('R1').closest('tr')!
     expect(within(firstRound.children[2] as HTMLElement).getByText('Traded · Alpha')).toBeTruthy()
     expect(screen.getByText('R3')).toBeTruthy()
@@ -17,8 +17,8 @@ describe('Draft HQ board', () => {
   it('shows the future board before any selections are made', () => {
     render(<Board columns={columns} cells={[]} rounds={3} draftType="snake" thirdRoundReversal={true} />)
     const thirdRound = screen.getByText('R3').closest('tr')!
-    expect(thirdRound.children[1].textContent).toBe('3.02')
-    expect(thirdRound.children[2].textContent).toBe('3.01')
+    expect(thirdRound.children[1].textContent).toBe('3.2')
+    expect(thirdRound.children[2].textContent).toBe('3.1')
   })
   it('keeps auction selections in a list instead of placing bids in a snake grid', () => {
     render(<Board columns={columns} cells={cells} rounds={3} draftType="auction" thirdRoundReversal={false} />)

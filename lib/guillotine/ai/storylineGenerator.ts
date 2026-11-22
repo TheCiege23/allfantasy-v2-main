@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type DynastyStoryline = { headline: string; body: string; tags?: string[] }
+type DynastyStoryline = { headline: string; body: string; tags?: string[] }
 
 export async function generateWeeklyGuillotineRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
   const [season, eliminations, dangerLogs] = await Promise.all([
@@ -24,7 +24,7 @@ export async function generateWeeklyGuillotineRecap(seasonId: string, scoringPer
 
   const choppedNames = eliminations.map((e) => e.eliminatedTeamName).filter(Boolean)
   const dangerRosterIds = dangerLogs.map((l) => l.rosterId)
-  const leagueName = season?.league?.name ?? 'Guillotine League'
+  const leagueName = season?.league?.name ?? 'Guilly League'
 
   return {
     headline: `The Blade Falls — Week ${scoringPeriod}`,
@@ -68,13 +68,13 @@ export async function generateEliminationPage(eliminationId: string): Promise<Dy
       `${Math.abs(elimination.marginBelowSafe).toFixed(2)} points separated them from safety.`,
       elimination.aiCollapseReason
         ? `Collapse reason: ${elimination.aiCollapseReason}`
-        : 'No AI collapse reason was recorded.',
+        : 'No Chimmy collapse reason was recorded.',
     ].join(' '),
     tags: ['guillotine', 'elimination'],
   }
 }
 
-export async function generateWaiverWarRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
+export async function generateChopWeekWaiverRecap(seasonId: string, scoringPeriod: number): Promise<DynastyStoryline> {
   const releases = await prisma.guillotineWaiverRelease.findMany({
     where: { seasonId, scoringPeriod },
     orderBy: [{ winningBid: 'desc' }],

@@ -108,3 +108,38 @@ export function normalizeRenewalModalType(raw: string): 'redraft' | 'keeper' | '
 export function shouldResetRostersForRenewal(kind: RenewalKind): boolean {
   return kind === 'redraft_reset'
 }
+
+/**
+ * POST /renew already moved this league INTO `season`, and that season has not been played since.
+ *
+ * `renewal_completed_for_season` alone cannot say so: it is still `season` when that season ends and
+ * the next renewal is legitimate. So the marker counts only while nothing has happened after
+ * `renewal_completed_at` — no lifecycle transition stamped later (drafting, completing and entering
+ * offseason all stamp `lastTransitionAt`), and no status/phase reporting the season over again
+ * (renewal resets both to pre-season). A marker without a timestamp predates this guard and cannot
+ * be ordered against anything, so it does not block.
+ */
+export function isAlreadyRenewedIntoSeason(args: {
+  season: number
+  status?: string | null
+  settings?: Record<string, unknown> | null
+  lifecycleMetadata?: unknown
+}): boolean {
+  const settings = args.settings ?? {}
+  if (settings.renewal_completed_for_season !== args.season) return false
+  const renewedAt = typeof settings.renewal_completed_at === 'string' ? Date.parse(settings.renewal_completed_at) : NaN
+  if (!Number.isFinite(renewedAt)) return false
+
+  const meta = args.lifecycleMetadata && typeof args.lifecycleMetadata === 'object' && !Array.isArray(args.lifecycleMetadata)
+    ? (args.lifecycleMetadata as Record<string, unknown>)
+    : {}
+  const movedAt = typeof meta.lastTransitionAt === 'string' ? Date.parse(meta.lastTransitionAt) : NaN
+  if (Number.isFinite(movedAt) && movedAt > renewedAt) return false
+
+  // Lifecycle deliberately left out: renewal does not move it, so a stale `offseason` proves nothing.
+  return !isSeasonOverForRenewal({
+    status: args.status,
+    dynastySeasonPhase: settings.dynastySeasonPhase as string | undefined,
+    seasonPhase: settings.season_phase as string | undefined,
+  })
+}

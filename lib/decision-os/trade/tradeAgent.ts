@@ -16,6 +16,7 @@ import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { loadLeagueForTrade } from '@/lib/trade-value-console/league-loader'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { findPackages, findPartners, type DiscoveryRoster, type PackageAsset, type TradePackage } from '@/lib/trade-discovery/redraftTradeDiscovery'
+import { tradeBanReason } from '@/lib/league-rules/tradeLegality'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
@@ -23,6 +24,7 @@ import { createLeagueTradeGrader, type LeagueTradeGrader } from './leagueTradeGr
 import { marketLetterOf, marketView } from './tradeGrade'
 import {
   agentLeagueRefusal,
+  survivorTradeGroups,
   dealKeyOf,
   qualifyDeal,
   rankSuggestions,
@@ -98,8 +100,10 @@ export async function runTradeAgentForLeague(leagueId: string, runDate: string, 
   if (!league) return { ...result, skipped: 'the league could not be read' }
   const leagueType = leagueTypeBasis({ settings: league.settings, leagueType: league.leagueType, platform: league.platform ?? null })
   const concept = readFormatRules({ leagueType: league.leagueType, leagueVariant: league.leagueVariant, isDynasty: league.isDynasty, settings: league.settings }).concept
-  const refusal = agentLeagueRefusal({ sport: league.sport, leagueType: leagueType.type, concept })
+  const tradeBan = tradeBanReason({ leagueType: league.leagueType, isDynasty: league.isDynasty, settings: league.settings })
+  const refusal = agentLeagueRefusal({ sport: league.sport, leagueType: leagueType.type, concept, tradeBan })
   if (refusal) return { ...result, skipped: refusal }
+  const survivorGroups = concept === 'survivor' ? await readSurvivorTradeGroups(leagueId) : null
 
   const rows = await readLeagueTradeRows(leagueId)
   const managers = rows.teams.filter((t) => t.claimedByUserId).map((t) => t.claimedByUserId as string)
@@ -112,7 +116,7 @@ export async function runTradeAgentForLeague(leagueId: string, runDate: string, 
 
   const tradable = rows.rosters.filter((r) => r.platformUserId && !OPEN_ROSTER.test(r.platformUserId))
   const ids = [...new Set(tradable.flatMap(tradeRosterPlayerIds))].slice(0, MAX_LEAGUE_PLAYER_IDS)
-  const byId = await readTradePlayerRows(ids)
+  const byId = await readTradePlayerRows(ids, league.sport)
   const shape = { leagueSize, rosterSlots: rosterSlotsOf(league.settings) }
   const discovery = new Map<string, DiscoveryRoster>()
   for (const r of tradable) {
@@ -122,6 +126,12 @@ export async function runTradeAgentForLeague(leagueId: string, runDate: string, 
     )
   }
   const rosterOf = new Map<string, LeagueTradeRoster>(tradable.map((r) => [r.platformUserId, r]))
+  // Survivor: the group (tribe, or everyone after the merge) each roster's manager may trade inside.
+  const groupOf = (r: LeagueTradeRoster): string | null => {
+    if (!survivorGroups) return 'all'
+    const owner = teamForTradeRoster(rows.teams, r)?.claimedByUserId
+    return (owner && survivorGroups.get(owner)) ?? null
+  }
 
   const grader: LeagueTradeGrader | null = await (deps.createGrader ?? createLeagueTradeGrader)({ leagueId, leagueRow: league, leagueNormCtx: null }).catch(() => null)
   if (!grader) return { ...result, skipped: 'the league’s values could not be loaded' }
@@ -132,9 +142,14 @@ export async function runTradeAgentForLeague(leagueId: string, runDate: string, 
     const { myRoster } = callerTradeSeat(rows, userId)
     const me = myRoster ? discovery.get(myRoster.platformUserId) : undefined
     if (!myRoster || !me || me.players.length === 0) continue
+    const myGroup = groupOf(myRoster)
+    if (!myGroup) continue
     result.managers += 1
 
-    const others = [...discovery.values()].filter((r) => r.rosterId !== me.rosterId && r.players.length > 0)
+    const others = [...discovery.values()].filter((r) => {
+      const roster = rosterOf.get(r.rosterId)
+      return r.rosterId !== me.rosterId && r.players.length > 0 && roster != null && groupOf(roster) === myGroup
+    })
     const partners = findPartners({ myRoster: me, otherRosters: others, sport: 'NFL' }).slice(0, PARTNERS_PER_MANAGER)
     const found: AgentSuggestion[] = []
     let stopped = false
@@ -198,4 +213,13 @@ export async function tradeAgentLeagueIds(): Promise<string[]> {
     })
     .catch(() => [] as Array<{ id: string }>)
   return rows.map((r) => r.id)
+}
+
+/** Survivor managers still in the game, grouped by who they may trade with (see `survivorTradeGroups`). */
+async function readSurvivorTradeGroups(leagueId: string): Promise<Map<string, string>> {
+  const [seats, game] = await Promise.all([
+    prisma.survivorPlayer.findMany({ where: { leagueId }, select: { userId: true, playerState: true, tribeId: true } }),
+    prisma.survivorGameState.findUnique({ where: { leagueId }, select: { mergeTriggeredAt: true } }),
+  ])
+  return survivorTradeGroups(seats, Boolean(game?.mergeTriggeredAt))
 }

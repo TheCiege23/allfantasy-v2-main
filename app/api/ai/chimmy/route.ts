@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 /**
  * POST /api/ai/chimmy — Chimmy chat via unified orchestration (tool=chimmy_chat).
  * Same request contract; tool is chimmy_chat. For dedicated Chimmy UI use /api/chimmy (preferred client alias).
@@ -92,7 +93,7 @@ function attachSportsDebugTrace(
   }
 }
 
-export async function POST(req: Request) {
+async function paidToolPost(req: Request) {
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string; email?: string | null }
   } | null
@@ -365,3 +366,5 @@ export async function POST(req: Request) {
     ...(sportsContext ? { sportsContext } : {}),
   })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

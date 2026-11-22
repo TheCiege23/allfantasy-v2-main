@@ -18,8 +18,12 @@ import {
   type SupportedSport,
 } from "@/lib/sport-scope";
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
+import { scoringFormatText } from "@/lib/core-app/scoringFormatText";
 import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
 import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { buildDynastyRoadmapRequest } from "@/lib/rankings-engine/dynastyRoadmapRequest";
+import { readPlanRefusal } from "@/lib/monetization/planRefusal";
 
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
@@ -270,12 +274,10 @@ interface TeamRanking {
   dynastyRoadmap?: DynastyRoadmap;
 }
 
+/** The action in flight: a rankings reload, or one team's roadmap request. */
 interface ActiveJob {
-  jobId: string;
   kind: JobKind;
   rosterId?: number;
-  progress: number;
-  status: string;
 }
 
 const PLATFORM_LABELS: Record<
@@ -290,7 +292,7 @@ const PLATFORM_LABELS: Record<
 };
 
 /** Where this panel lives now — the old /power-rankings URL redirects here. */
-export const POWER_PANEL_HREF = "/core/rankings?scope=league&panel=power";
+const POWER_PANEL_HREF = "/core/rankings?scope=league&panel=power";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -543,7 +545,7 @@ function mapTeamSummary(raw: RawTeam): TeamRanking {
     strength:
       positiveDriver != null
         ? humanizeKey(positiveDriver.id)
-        : `Starter value ${Math.round(raw.starterValue).toLocaleString()}`,
+        : `Starter value ${Math.round(raw.starterValue).toLocaleString(getAppIntlLocale())}`,
     risk:
       negativeDriver != null
         ? humanizeKey(negativeDriver.id)
@@ -656,7 +658,7 @@ function LoadingCard() {
 }
 
 function LoginRequiredState() {
-  const { t, tInterpolate } = useLanguage();
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
@@ -689,7 +691,7 @@ function LeagueGate({
   error: string | null;
   onSelect: (league: UserLeague) => void;
 }) {
-  const { t, tInterpolate } = useLanguage();
+  const { t, tInterpolate, language } = useLanguage();
 
   /*
    * TWO LAYERS, AND THEY DO DIFFERENT JOBS.
@@ -799,7 +801,7 @@ function LeagueGate({
                   <div className="mt-2 text-sm text-white/45">
                     {tInterpolate("powerRankingsPage.leagueTeamsLine", {
                       n: league.teamCount,
-                      scoring: league.scoring,
+                      scoring: scoringFormatText(league.scoring, language),
                       season: league.season,
                     })}
                   </div>
@@ -1013,7 +1015,7 @@ function ExpandedTeamDetail({
             <CollapsibleCard
               title={t("powerRankingsPage.detail.forwardOdds")}
               badge={tInterpolate("powerRankingsPage.forwardOdds.sims", {
-                n: team.forwardOdds.simCount.toLocaleString(),
+                n: team.forwardOdds.simCount.toLocaleString(getAppIntlLocale()),
               })}
             >
               <div className="space-y-3">
@@ -1160,11 +1162,11 @@ function ExpandedTeamDetail({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-white/8 bg-[#0c0c1e] p-3 text-sm text-white/65">
                   {t("powerRankingsPage.position.starterValue")}{" "}
-                  <span className="font-bold text-white">{team.positionValues.starterValue.toLocaleString()}</span>
+                  <span className="font-bold text-white">{team.positionValues.starterValue.toLocaleString(getAppIntlLocale())}</span>
                 </div>
                 <div className="rounded-xl border border-white/8 bg-[#0c0c1e] p-3 text-sm text-white/65">
                   {t("powerRankingsPage.position.benchDepth")}{" "}
-                  <span className="font-bold text-white">{team.positionValues.benchDepth.toLocaleString()}</span>
+                  <span className="font-bold text-white">{team.positionValues.benchDepth.toLocaleString(getAppIntlLocale())}</span>
                 </div>
               </div>
             </CollapsibleCard>
@@ -1223,22 +1225,6 @@ function ExpandedTeamDetail({
                   : t("powerRankingsPage.coach.generatePlan")}
               </button>
             </div>
-
-            {roadmapLoading && currentJob ? (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-xs text-white/45">
-                  <span>
-                    {tInterpolate("powerRankingsPage.job.label", {
-                      kind: t("powerRankingsPage.job.roadmap"),
-                    })}
-                  </span>
-                  <span>{currentJob.progress}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-                  <div className="h-full rounded-full bg-cyan-500 transition-all duration-300" style={{ width: `${currentJob.progress}%` }} />
-                </div>
-              </div>
-            ) : null}
 
             {team.dynastyRoadmap ? (
               <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
@@ -1314,7 +1300,7 @@ function TeamRow({
   onRoadmap: (team: TeamRanking) => void;
   kickerValuation: KickerValuationView | null;
 }) {
-  const { t, tInterpolate } = useLanguage();
+  const { t } = useLanguage();
   const avatarUrl = buildAvatarUrl(team.avatar);
   const phaseLabel = t(phaseTranslationKey(team.phase));
 
@@ -1452,8 +1438,8 @@ export default function PowerRankingsPanel({
   /** The hub's selected league (`League.id`), preselected once the list loads. */
   initialLeagueId?: string | null;
 } = {}) {
-  const { data: session, status } = useSession();
-  const { t, tInterpolate } = useLanguage();
+  const { status } = useSession();
+  const { t, tInterpolate, language } = useLanguage();
   const [leagues, setLeagues] = useState<UserLeague[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [leagueError, setLeagueError] = useState<string | null>(null);
@@ -1474,16 +1460,6 @@ export default function PowerRankingsPanel({
 
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
-  const pollRef = useRef<number | null>(null);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
 
   const loadRankings = useCallback(async (league: UserLeague) => {
     setRankingsLoading(true);
@@ -1637,116 +1613,22 @@ export default function PowerRankingsPanel({
     return { champion, strongest, marketLeader, marketInsight };
   }, [displayedTeams, rankingsMeta]);
 
-  const pollJob = useCallback(
-    async (jobId: string, kind: JobKind, rosterId?: number) => {
-      const response = await fetch(
-        `/api/power-rankings/worker?jobId=${encodeURIComponent(jobId)}`,
-        { cache: "no-store" }
-      );
-      const payload = (await response.json().catch(() => ({}))) as {
-        status?: string;
-        progress?: number;
-        result?: {
-          roadmap?: unknown;
-        };
-        failedReason?: string | null;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to read job status.");
-      }
-
-      const nextStatus = payload.status ?? "waiting";
-      const nextProgress = payload.progress ?? 0;
-
-      setActiveJob((current) =>
-        current && current.jobId === jobId
-          ? { ...current, status: nextStatus, progress: nextProgress }
-          : current
-      );
-
-      if (nextStatus === "completed") {
-        stopPolling();
-
-        if (kind === "refresh" && selectedLeague) {
-          await loadRankings(selectedLeague);
-        }
-
-        if (kind === "roadmap" && rosterId != null && payload.result?.roadmap) {
-          setTeams((current) =>
-            current.map((team) =>
-              team.rosterId === rosterId
-                ? { ...team, dynastyRoadmap: payload.result?.roadmap as DynastyRoadmap }
-                : team
-            )
-          );
-        }
-
-        setActiveJob(null);
-      }
-
-      if (nextStatus === "failed") {
-        stopPolling();
-        setActiveJob(null);
-        throw new Error(payload.failedReason ?? "Background job failed.");
-      }
-    },
-    [loadRankings, selectedLeague, stopPolling]
-  );
-
-  const startJob = useCallback(
-    async (kind: JobKind, body: { jobType: string; leagueId: string; rosterId?: number; managerName?: string }) => {
-      stopPolling();
-      setJobError(null);
-
-      const response = await fetch("/api/power-rankings/worker", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        jobId?: string;
-        error?: string;
-      };
-
-      if (!response.ok || !payload.jobId) {
-        throw new Error(payload.error ?? "Failed to queue job.");
-      }
-
-      setActiveJob({
-        jobId: payload.jobId,
-        kind,
-        rosterId: body.rosterId,
-        progress: 0,
-        status: "queued",
-      });
-
-      const tick = () => {
-        void pollJob(payload.jobId as string, kind, body.rosterId).catch((error) => {
-          stopPolling();
-          setActiveJob(null);
-          setJobError(error instanceof Error ? error.message : "Background job failed.");
-        });
-      };
-
-      tick();
-      pollRef.current = window.setInterval(tick, 2000);
-    },
-    [pollJob, stopPolling]
-  );
-
+  /*
+   * 🛑 BOTH ACTIONS RUN IN THE BROWSER, UNDER THE VIEWER'S SESSION. They used to queue BullMQ jobs that
+   * nothing in production consumed (no process runs scripts/start-worker.ts), so the buttons sat at
+   * "queued" for good — and a worker could not have run them anyway: league-v2 is member-gated and the
+   * roadmap endpoint is session- and plan-gated, and a worker has no session to send.
+   */
   const refreshRankings = useCallback(async () => {
     if (!selectedLeague) return;
+    setJobError(null);
+    setActiveJob({ kind: "refresh" });
     try {
-      await startJob("refresh", {
-        jobType: "refresh-rankings",
-        leagueId: getTargetLeagueId(selectedLeague),
-      });
-    } catch (error) {
-      setJobError(error instanceof Error ? error.message : "Failed to queue rankings refresh.");
+      await loadRankings(selectedLeague);
+    } finally {
+      setActiveJob(null);
     }
-  }, [selectedLeague, startJob]);
+  }, [loadRankings, selectedLeague]);
 
   const loadTeamDetail = useCallback(
     async (team: TeamRanking) => {
@@ -1801,22 +1683,45 @@ export default function PowerRankingsPanel({
   const requestRoadmap = useCallback(
     async (team: TeamRanking) => {
       if (!selectedLeague) return;
+      setJobError(null);
+      setActiveJob({ kind: "roadmap", rosterId: team.rosterId });
       try {
-        await startJob("roadmap", {
-          jobType: "dynasty-roadmap",
-          leagueId: getTargetLeagueId(selectedLeague),
-          rosterId: team.rosterId,
-          managerName: team.managerName,
+        const response = await fetch("/api/rankings/dynasty-roadmap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            buildDynastyRoadmapRequest(team.raw, {
+              sport: selectedLeague.sport,
+              isDynasty: rankingsMeta?.isDynasty,
+              isSuperFlex: rankingsMeta?.isSuperFlex,
+              leagueName: rankingsMeta?.leagueName,
+            })
+          ),
         });
+        const payload = (await response.json().catch(() => null)) as
+          | { roadmap?: DynastyRoadmap; error?: string }
+          | null;
+        if (!response.ok || !payload?.roadmap) {
+          throw new Error(
+            readPlanRefusal(response.status, payload)?.message ?? payload?.error ?? "Failed to generate the plan."
+          );
+        }
+        const roadmap = payload.roadmap;
+        setTeams((current) =>
+          current.map((entry) =>
+            entry.rosterId === team.rosterId ? { ...entry, dynastyRoadmap: roadmap } : entry
+          )
+        );
       } catch (error) {
-        setJobError(error instanceof Error ? error.message : "Failed to queue roadmap job.");
+        setJobError(error instanceof Error ? error.message : "Failed to generate the plan.");
+      } finally {
+        setActiveJob(null);
       }
     },
-    [selectedLeague, startJob]
+    [rankingsMeta, selectedLeague]
   );
 
   const resetLeague = useCallback(() => {
-    stopPolling();
     setSelectedLeague(null);
     setRankingsMeta(null);
     setTeams([]);
@@ -1824,7 +1729,7 @@ export default function PowerRankingsPanel({
     setActiveJob(null);
     setJobError(null);
     setRankingsError(null);
-  }, [stopPolling]);
+  }, []);
 
   if (status === "loading") {
     return <div className="min-h-screen bg-[#07071a]" />;
@@ -1863,7 +1768,7 @@ export default function PowerRankingsPanel({
               <div className="text-xs font-bold text-white">{selectedLeague.name}</div>
               <div className="text-[11px] text-white/40">
                 {t(`powerRankingsPage.sport.${selectedLeague.sport}`)} ·{" "}
-                {t(`powerRankingsPage.format.${selectedLeague.format}`)} · {selectedLeague.scoring}
+                {t(`powerRankingsPage.format.${selectedLeague.format}`)} · {scoringFormatText(selectedLeague.scoring, language)}
               </div>
             </div>
 
@@ -1919,17 +1824,6 @@ export default function PowerRankingsPanel({
             </div>
           </div>
 
-          {activeJob?.kind === "refresh" ? (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-xs text-white/45">
-                <span>{t("powerRankingsPage.backgroundRefresh")}</span>
-                <span>{activeJob.progress}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full rounded-full bg-amber-400 transition-all duration-300" style={{ width: `${activeJob.progress}%` }} />
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -2004,7 +1898,7 @@ export default function PowerRankingsPanel({
                 detail={tInterpolate("powerRankingsPage.hero.strongestDetail", {
                   value: Math.round(
                     heroData.strongest.raw.starterValue + heroData.strongest.raw.benchValue
-                  ).toLocaleString(),
+                  ).toLocaleString(getAppIntlLocale()),
                 })}
                 accent="border-emerald-500/20 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.15),transparent_45%),#0c0c1e]"
               />
@@ -2047,7 +1941,7 @@ export default function PowerRankingsPanel({
                           week: String(rankingsMeta.week),
                           updated: rankingsMeta.computedAt
                             ? tInterpolate("powerRankingsPage.updatedPrefix", {
-                                time: new Date(rankingsMeta.computedAt).toLocaleString(),
+                                time: new Date(rankingsMeta.computedAt).toLocaleString(getAppIntlLocale()),
                               })
                             : t("powerRankingsPage.freshLoad"),
                         })

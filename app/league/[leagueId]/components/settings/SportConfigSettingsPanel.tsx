@@ -12,6 +12,7 @@ import {
 import { SettingsSection } from './ui'
 import { ScoringCategoryEditor } from './ScoringCategoryEditor'
 import { RosterSlotEditor } from './RosterSlotEditor'
+import { GamesCountSettingControl } from './GamesCountSettingControl'
 
 const SECTION_ORDER = ['scoring', 'roster', 'schedule', 'advanced'] as const
 
@@ -240,6 +241,9 @@ export function SportConfigSettingsPanel({
       <p className="border-b border-white/[0.06] px-6 py-4 text-[12px] text-white/50">
         {fullConfig.displayName} — defaults from sport config. Changes save automatically.
       </p>
+
+      {/* NBA/NHL/MLB only; renders nothing for any other sport. */}
+      <GamesCountSettingControl sport={sport} sportConfig={local} onPatch={patch} disabled={disabled} />
 
       {SECTION_ORDER.map((section) => {
         if (omitSections?.[section]) return null

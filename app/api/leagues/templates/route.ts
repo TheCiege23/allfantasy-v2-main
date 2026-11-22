@@ -1,5 +1,5 @@
 /**
- * GET  /api/leagues/templates — list current user's templates
+ * GET  /api/leagues/templates — list current user's templates (?scope=public: the shared library)
  * POST /api/leagues/templates — create template (body: name, description?, payload)
  */
 
@@ -8,9 +8,20 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import type { LeagueTemplatePayload } from '@/lib/league-templates/types'
+import { listPublicTemplates } from '@/lib/rule-templates/templateService'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  // ?scope=public — the shared library (lib/rule-templates). Readable signed out: it lists names,
+  // tags and use counts only, never a payload.
+  if (req.nextUrl.searchParams.get('scope') === 'public') {
+    const sp = req.nextUrl.searchParams
+    const templates = await listPublicTemplates(session?.user?.id ?? null, {
+      sport: sp.get('sport'),
+      sort: sp.get('sort') === 'new' ? 'new' : 'popular',
+    })
+    return NextResponse.json({ templates })
+  }
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -56,7 +67,8 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       name,
       description: description || undefined,
-      payload: payload as LeagueTemplatePayload,
+      // Sharing state is written only by the share toggle and use counting, never by a raw payload.
+      payload: { ...(payload as Record<string, unknown>), share: { public: false, uses: 0, usedBy: [] } } as unknown as LeagueTemplatePayload,
     },
     select: { id: true, name: true, description: true, payload: true, createdAt: true, updatedAt: true },
   })

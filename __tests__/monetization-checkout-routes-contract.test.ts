@@ -20,12 +20,33 @@ vi.mock("@/lib/monetization/stripeCustomerForUser", () => ({
   duplicatePlanReason: vi.fn().mockReturnValue(null),
 }))
 
+/*
+ * Checkout moved from Stripe Payment Links (STRIPE_CHECKOUT_LINK_*) to server-created Checkout
+ * Sessions priced from the catalog (STRIPE_PRICE_*), so charged == displayed price. The suite
+ * still configured payment links, so both happy paths returned 503 and sat in the baseline. The
+ * Stripe client is doubled at its boundary, so the REAL session builder runs and these assert
+ * what is actually sent to Stripe.
+ */
+const sessionCreateMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/stripe-client", () => ({
+  getStripeClient: () => ({ checkout: { sessions: { create: sessionCreateMock } } }),
+}))
+
+const switchMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/monetization/supremeSwitch", () => ({ switchToSupreme: switchMock }))
+
+// Never let a unit test reach Meta CAPI (an irreversible conversion) or the analytics table.
+vi.mock("@/lib/meta-capi", () => ({
+  trackMetaServerEvent: vi.fn().mockResolvedValue(null),
+}))
+
 describe("Monetization checkout routes", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1", email: "user@test.dev" } })
-    process.env.STRIPE_CHECKOUT_LINK_AF_PRO_MONTHLY = "https://buy.stripe.com/test_pro_monthly"
-    process.env.STRIPE_CHECKOUT_LINK_AF_TOKENS_10 = "https://buy.stripe.com/test_tokens_10"
+    process.env.STRIPE_PRICE_AF_PRO_MONTHLY = "price_test_pro_monthly"
+    process.env.STRIPE_PRICE_AF_TOKENS_10 = "price_test_tokens_10"
+    sessionCreateMock.mockResolvedValue({ id: "cs_test_1", url: "https://checkout.stripe.com/c/pay/cs_test_1" })
   })
 
   it("resolves subscription checkout link for valid subscription sku", async () => {
@@ -43,13 +64,17 @@ describe("Monetization checkout routes", () => {
       sku: "af_pro_monthly",
       purchaseType: "subscription",
     })
-    const checkoutUrl = new URL(String(payload.url))
-    expect(checkoutUrl.origin + checkoutUrl.pathname).toBe("https://buy.stripe.com/test_pro_monthly")
-    expect(checkoutUrl.searchParams.get("prefilled_email")).toBe("user@test.dev")
-    expect(checkoutUrl.searchParams.get("af_return_path")).toBe("/pricing?from=upgrade")
-    const clientReference = parseStripeCheckoutClientReferenceId(
-      checkoutUrl.searchParams.get("client_reference_id")
-    )
+    expect(payload.url).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
+    expect(sessionCreateMock).toHaveBeenCalledTimes(1)
+    const params = sessionCreateMock.mock.calls[0][0]
+    expect(params).toMatchObject({
+      mode: "subscription",
+      line_items: [{ price: "price_test_pro_monthly", quantity: 1 }],
+      customer_email: "user@test.dev",
+      metadata: { userId: "user-1", sku: "af_pro_monthly", purchaseType: "subscription" },
+    })
+    expect(params.success_url).toContain("/pricing?from=upgrade&checkout=success")
+    const clientReference = parseStripeCheckoutClientReferenceId(params.client_reference_id)
     expect(clientReference).toMatchObject({
       userId: "user-1",
       sku: "af_pro_monthly",
@@ -85,11 +110,16 @@ describe("Monetization checkout routes", () => {
       tokenAmount: 600,
       purchaseType: "tokens",
     })
-    const checkoutUrl = new URL(String(payload.url))
-    expect(checkoutUrl.origin + checkoutUrl.pathname).toBe("https://buy.stripe.com/test_tokens_10")
-    const clientReference = parseStripeCheckoutClientReferenceId(
-      checkoutUrl.searchParams.get("client_reference_id")
-    )
+    expect(payload.url).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
+    const params = sessionCreateMock.mock.calls[0][0]
+    expect(params).toMatchObject({
+      mode: "payment",
+      line_items: [{ price: "price_test_tokens_10", quantity: 1 }],
+    })
+    // An off-site returnPath must never become the post-checkout redirect.
+    expect(params.success_url).not.toContain("malicious.example.com")
+    expect(params.cancel_url).not.toContain("malicious.example.com")
+    const clientReference = parseStripeCheckoutClientReferenceId(params.client_reference_id)
     expect(clientReference).toMatchObject({
       sku: "af_tokens_10",
       userId: "user-1",
@@ -149,8 +179,8 @@ describe("Monetization checkout routes", () => {
     })
   })
 
-  it("fails safely when checkout link mapping is missing", async () => {
-    delete process.env.STRIPE_CHECKOUT_LINK_AF_PRO_MONTHLY
+  it("fails safely when the catalog price id is missing", async () => {
+    delete process.env.STRIPE_PRICE_AF_PRO_MONTHLY
     const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
     const req = createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
       method: "POST",
@@ -162,5 +192,69 @@ describe("Monetization checkout routes", () => {
     await expect(res.json()).resolves.toMatchObject({
       error: expect.stringContaining("temporarily unavailable"),
     })
+    expect(sessionCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("🛑 a Pro member buying Supreme is SWITCHED in place — never sent to a second Checkout", async () => {
+    const { findLiveStripePlanFamiliesForUser } = await import("@/lib/monetization/stripeCustomerForUser")
+    vi.mocked(findLiveStripePlanFamiliesForUser).mockResolvedValueOnce(new Set(["af_pro"]))
+    switchMock.mockResolvedValueOnce({ kind: "switched", stripeSubscriptionId: "sub_pro", fromSku: "af_pro_monthly", cancelledSubscriptionIds: [] })
+    const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
+    const res = await POST(createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { sku: "af_supreme_monthly", returnPath: "/upgrade?plan=supreme&from=pro", entrySource: "supreme_spotlight", confirmSwitch: true },
+    }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ url: "/upgrade?plan=supreme&from=pro&checkout=success&switched=1", sku: "af_supreme_monthly", purchaseType: "subscription", switched: true })
+    expect(switchMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", supremeSku: "af_supreme_monthly" }))
+    expect(sessionCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("🛑 the switch charges the card on file, so it is never done unconfirmed: the first request only asks", async () => {
+    const { findLiveStripePlanFamiliesForUser } = await import("@/lib/monetization/stripeCustomerForUser")
+    vi.mocked(findLiveStripePlanFamiliesForUser).mockResolvedValueOnce(new Set(["af_pro"]))
+    const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
+    const res = await POST(createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { sku: "af_supreme_monthly", returnPath: "/upgrade" },
+    }))
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      code: "confirm_switch",
+      message: "Switch your AF Pro plan to AF Supreme? Your card on file is charged the difference for the rest of this billing period today, then $19.99/month. You won't be billed for both.",
+    })
+    expect(switchMock).not.toHaveBeenCalled()
+    expect(sessionCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("a declined switch is reported, and nothing else is tried", async () => {
+    const { findLiveStripePlanFamiliesForUser } = await import("@/lib/monetization/stripeCustomerForUser")
+    vi.mocked(findLiveStripePlanFamiliesForUser).mockResolvedValueOnce(new Set(["af_commissioner"]))
+    switchMock.mockResolvedValueOnce({ kind: "failed", status: 402, code: "payment_failed", error: "Your card was declined, so the switch to AF Supreme did not go through. Nothing changed." })
+    const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
+    const res = await POST(createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { sku: "af_supreme_monthly", returnPath: "/upgrade", confirmSwitch: true },
+    }))
+    expect(res.status).toBe(402)
+    expect(await res.json()).toMatchObject({ code: "payment_failed" })
+    expect(sessionCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("Supreme with no Pro or Commissioner is an ordinary checkout", async () => {
+    process.env.STRIPE_PRICE_AF_SUPREME_MONTHLY = "price_test_supreme_monthly"
+    const { POST } = await import("@/app/api/monetization/checkout/subscription/route")
+    const res = await POST(createMockNextRequest("http://localhost/api/monetization/checkout/subscription", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: { sku: "af_supreme_monthly", returnPath: "/upgrade" },
+    }))
+    expect(res.status).toBe(200)
+    expect(switchMock).not.toHaveBeenCalled()
+    expect(sessionCreateMock).toHaveBeenCalledTimes(1)
   })
 })
+

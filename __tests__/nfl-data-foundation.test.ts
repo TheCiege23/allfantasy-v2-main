@@ -259,7 +259,10 @@ describe('NFL data foundation', () => {
      * covered and states the choice, so nobody "restores" the foundation wiring believing an
      * omission was an accident.
      */
-    expect(waiverRoute).toContain('getPlayerPoolForLeague')
+    // The NBA eligibility wrapper delegates all sports to the same pool resolver.
+    const waiverPool = fs.readFileSync(path.join(root, 'lib/waiver-wire/current-nba-player-pool.ts'), 'utf8')
+    expect(waiverRoute).toContain('loadLeagueWaiverPlayerPool')
+    expect(waiverPool).toContain('getPlayerPoolForLeague(league.id, league.sport,')
     expect(waiverRoute).not.toContain('nfl-data-foundation')
     expect(tradeContext).toContain('weeklyProjectionDelta')
     expect(tradeContext).toContain('fantasyCalcValue')

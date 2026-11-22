@@ -1,4 +1,7 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
+import { withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
+import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
+import { benchCapacityWithEmptyStarters } from '@/lib/roster/benchCapacity'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -12,7 +15,8 @@ function toPlayerId(raw: unknown): string | null {
   return null
 }
 
-function normalizeLineupSection(section: unknown): Array<Record<string, unknown>> {
+/** `keepSlotIndex`: only STARTER rows keep a lineup slot position (lib/league/lineupSlotPositions.ts). */
+function normalizeLineupSection(section: unknown, keepSlotIndex = false): Array<Record<string, unknown>> {
   if (!Array.isArray(section)) return []
   const out: Array<Record<string, unknown>> = []
   const seen = new Set<string>()
@@ -21,11 +25,12 @@ function normalizeLineupSection(section: unknown): Array<Record<string, unknown>
     if (!id || seen.has(id)) continue
     seen.add(id)
     const obj = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
-    out.push({
+    const row = {
       ...obj,
       id,
       position: String(obj.position ?? 'UTIL').toUpperCase(),
-    })
+    }
+    out.push(keepSlotIndex ? row : withoutSlotIndex(row))
   }
   return out
 }
@@ -54,7 +59,7 @@ export function getNormalizedLineupSections(
       : {}
 
   return {
-    starters: normalizeLineupSection(rawSections.starters),
+    starters: normalizeLineupSection(rawSections.starters, true),
     bench: normalizeLineupSection(rawSections.bench),
     ir: normalizeLineupSection(rawSections.ir),
     taxi: normalizeLineupSection(rawSections.taxi),
@@ -86,8 +91,22 @@ function getStarterAllowedSet(template: RosterTemplateDto): Set<string> {
 /** Persist lineup_sections + legacy starters/bench fields after AutoCoach or manual edits. */
 export function buildPlayerDataFromSections(
   existingPlayerData: unknown,
-  sections: Record<RosterSectionKey, Array<Record<string, unknown>>>
+  rawSections: Record<RosterSectionKey, Array<Record<string, unknown>>>
 ): Record<string, unknown> {
+  /*
+   * Rows written as bare ids by the old waiver helper (`syncLineupSections`) are still stored in live
+   * leagues. Read them as `{ id }` — as a string, `withoutSlotIndex` threw ("Cannot use 'in' operator")
+   * and `String(p.id)` named the player "undefined".
+   */
+  const asRows = (rows: unknown): Array<Record<string, unknown>> =>
+    (Array.isArray(rows) ? rows : []).map((r) => (typeof r === 'string' ? { id: r } : (r as Record<string, unknown>))).filter((r) => r && typeof r === 'object')
+  const sections = {
+    starters: asRows(rawSections.starters),
+    bench: asRows(rawSections.bench),
+    ir: asRows(rawSections.ir),
+    taxi: asRows(rawSections.taxi),
+    devy: asRows(rawSections.devy),
+  } as Record<RosterSectionKey, Array<Record<string, unknown>>>
   const base =
     existingPlayerData && typeof existingPlayerData === 'object' && !Array.isArray(existingPlayerData)
       ? (existingPlayerData as Record<string, unknown>)
@@ -100,6 +119,16 @@ export function buildPlayerDataFromSections(
     ...sections.devy.map((p) => String(p.id)),
   ]
   const players = [...new Set(allIds)]
+  // A slot position belongs to a starter; a player moved off the lineup does not take one with him.
+  const stored: Record<RosterSectionKey, Array<Record<string, unknown>>> = {
+    starters: sections.starters,
+    bench: sections.bench.map(withoutSlotIndex),
+    ir: sections.ir.map(withoutSlotIndex),
+    taxi: sections.taxi.map(withoutSlotIndex),
+    devy: sections.devy.map(withoutSlotIndex),
+  }
+  // A C2C team's campus starters (lib/c2c/campusLineup.ts) survive an AutoCoach or manual rebuild.
+  const campus = campusStartersAfterSave({ saved: base, devyIds: sections.devy.map((p) => String(p.id)) })
   return {
     ...base,
     players,
@@ -107,7 +136,7 @@ export function buildPlayerDataFromSections(
     reserve: sections.ir.map((p) => p.id),
     taxi: sections.taxi.map((p) => p.id),
     devy: sections.devy.map((p) => p.id),
-    lineup_sections: sections,
+    lineup_sections: campus.length ? { ...stored, [CAMPUS_SECTION]: campus } : stored,
     lineup_updated_at: new Date().toISOString(),
   }
 }
@@ -128,7 +157,10 @@ export function collectTemplateSectionIssues(
   const slotLimits = getSlotLimitsFromTemplate(template)
   const issues: TemplateSectionIssue[] = []
   for (const section of Object.keys(sections) as RosterSectionKey[]) {
-    const max = slotLimits[section]
+    // A bench holds one extra for each starting slot left empty; the total limit below still holds.
+    const max = section === 'bench'
+      ? benchCapacityWithEmptyStarters({ benchSlots: slotLimits.bench, starterSlots: slotLimits.starters, startersFilled: sections.starters.length })
+      : slotLimits[section]
     if (sections[section].length > max) {
       issues.push({
         code: 'SECTION_OVERFLOW',

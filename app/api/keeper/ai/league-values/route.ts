@@ -1,7 +1,7 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzeLeagueKeeperValues } from '@/lib/keeper/ai/keeperValueAnalyzer'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
-import { getLeagueRole } from '@/lib/league/permissions'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
@@ -20,8 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'leagueId and outgoingSeasonId required' }, { status: 400 })
   }
 
-  const role = await getLeagueRole(body.leagueId, gate)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(body.leagueId, gate, 'rosters'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 

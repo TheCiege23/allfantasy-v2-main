@@ -2,25 +2,10 @@
  * [NEW] lib/dynasty-core/constants.ts
  * Dynasty roster, scoring, playoff constants. Shared base for standard Dynasty, Devy, C2C.
  */
+import { DAILY_SPORT_SEASON_SHAPE, regularSeasonWeeksFor, type DailySeasonSport } from '@/lib/sportConfig/dailySportSeasonShape'
 
 /** Supported league team sizes for dynasty. */
 export const DYNASTY_SUPPORTED_TEAM_SIZES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32] as const
-export type DynastyTeamSize = (typeof DYNASTY_SUPPORTED_TEAM_SIZES)[number]
-
-/** Bench count range by team size band. [min, max] for commissioner guidance. */
-export const DYNASTY_BENCH_BY_TEAM_SIZE: Record<string, [number, number]> = {
-  '4': [8, 12],
-  '6': [8, 12],
-  '8': [8, 12],
-  '10': [12, 16],
-  '12': [12, 16],
-  '14': [16, 22],
-  '16': [16, 22],
-  '18': [20, 28],
-  '20': [20, 30],
-  '24': [20, 30],
-  '32': [20, 30],
-}
 
 /** Default bench for 12-team dynasty (recommended preset). */
 export const DYNASTY_DEFAULT_12_BENCH = 14
@@ -66,21 +51,29 @@ export const DYNASTY_PLAYOFF_PRESETS = [
   { playoffTeamCount: 10, label: '10-team playoffs' },
 ] as const
 
-/** Default regular season weeks (avoid Week 18 title). */
-export const DYNASTY_REGULAR_SEASON_WEEKS_OPTIONS = [13, 14] as const
-export const DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS = 14
+const DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS = 14
+
+/**
+ * The regular-season length a dynasty league gets when nobody chose one.
+ *
+ * 🛑 A FLAT 14 BROKE EVERY NBA/NHL/MLB DYNASTY LEAGUE THAT REACHED IT. `resolveCreatedSeasonWeeks`
+ * sizes the season from this value (14 + 3 playoff rounds = 17 weeks — mid-February for the NBA)
+ * while `League.playoffStartWeek` came from the sport default (NBA 23), so the playoff start lay
+ * past the season's end. The daily sports read `dailySportSeasonShape.ts`, the one table their
+ * season length lives in; football and the sports that table does not list keep 14.
+ */
+export function dynastyDefaultRegularSeasonWeeksFor(sport: string | null | undefined): number {
+  const key = String(sport ?? '').trim().toUpperCase()
+  return key in DAILY_SPORT_SEASON_SHAPE
+    ? regularSeasonWeeksFor(key as DailySeasonSport)
+    : DYNASTY_DEFAULT_REGULAR_SEASON_WEEKS
+}
 
 /** Rookie draft order methods. */
 export const ROOKIE_PICK_ORDER_METHODS = [
   { value: 'max_pf', label: 'Reverse Max PF (anti-tank)' },
   { value: 'reverse_standings', label: 'Reverse standings' },
   { value: 'commissioner', label: 'Commissioner override' },
-] as const
-
-/** Rookie draft type. */
-export const ROOKIE_DRAFT_TYPES = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'snake', label: 'Snake' },
 ] as const
 
 export const DYNASTY_DEFAULT_ROOKIE_DRAFT_ROUNDS = 4

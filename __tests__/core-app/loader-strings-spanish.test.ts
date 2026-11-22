@@ -116,6 +116,26 @@ describe('Waivers "Worth adding" notes, in Spanish', () => {
       BASIS,
       'not each league\'s own rules, which are written in a stat vocabulary the projection engine does not read yet. ',
     ],
+    [
+      "Values from this league's own NBA value board — the one its trade grades use — as per-game fantasy points under this league's own scoring. A season rate, not a projection for this week.",
+      BASIS,
+      "value board — the one its trade grades use — as ${scoring}. ",
+    ],
+    [
+      "Values from this league's own NBA value board — the one its trade grades use — as per-game category score under this league's categories (PTS, REB, AST and TO). A season rate, not a projection for this week.",
+      BASIS,
+      "per-game category score under this league's categories (${board.categoryList})",
+    ],
+    [
+      "This league's own NBA value board is not available (Only 40% of the board clears the sample bar), so the wire is priced on the basis below instead.",
+      RATE_BOARD,
+      'value board is not available (',
+    ],
+    [
+      'Values still lean on the 2025-26 season while this one has few games; each add shows what its value rests on.',
+      RATE_BOARD,
+      'season while this one has few games; each add shows what its value rests on.',
+    ],
   ]
 
   it.each(cases)('"%s" has Spanish, and the loader still writes it', (english, source, fragment) => {

@@ -1,3 +1,5 @@
+import { ActingTeamRefused, actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -16,6 +18,7 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { getLeagueRole } from "@/lib/league/permissions"
 import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+import { LINEUP_WARNING_CODE, lineupWarningConfirmed, loadLineupFillWarning } from "@/lib/waiver-wire/lineup-fill-warning"
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedWaiverIntegrationService } from '@/lib/sports-evidence/waiverIntegration'
 import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
@@ -50,9 +53,11 @@ function waiverClaimError(message: string, status: number) {
   return NextResponse.json({ error: message, code: waiverClaimErrorCode(message) }, { status })
 }
 
-async function resolveClaimRoster(leagueId: string, userId: string) {
-  const direct = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId } })
-  if (direct) return direct
+async function resolveClaimRoster(leagueId: string, userId: string, requestedRosterId: string | null) {
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterId)
+  if (acting.ok) return prisma.roster.findFirst({ where: { id: acting.rosterId, leagueId } })
+  if (acting.code !== 'NO_TEAM') throw new ActingTeamRefused(acting)
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
   if (league?.leagueVariant !== 'survivor_guillotine') return null
   const team = await prisma.leagueTeam.findFirst({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
@@ -66,10 +71,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const [leagueAsOwner, rosterAsMember] = await Promise.all([
-    (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
-    resolveClaimRoster(leagueId, userId),
-  ])
+  let leagueAsOwner: { id: string } | null
+  let rosterAsMember: Awaited<ReturnType<typeof resolveClaimRoster>>
+  try {
+    ;[leagueAsOwner, rosterAsMember] = await Promise.all([
+      (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
+      resolveClaimRoster(leagueId, userId, requestedRosterIdFrom(req)),
+    ])
+  } catch (error) {
+    if (error instanceof ActingTeamRefused) return actingTeamRefusal(error.result)
+    throw error
+  }
   if (!leagueAsOwner && !rosterAsMember) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const type = req.nextUrl.searchParams?.get("type") || "pending"
@@ -83,8 +95,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
   const wantsLeagueScope = scope === "league" || !rosterAsMember
   if (wantsLeagueScope) {
-    const role = await getLeagueRole(leagueId, userId)
-    if (!leagueAsOwner && role !== "commissioner" && role !== "co_commissioner") {
+    if (!leagueAsOwner && !(await canCommissionerAct(leagueId, userId, 'view'))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
     const pending = await getPendingClaims(leagueId)
@@ -103,7 +114,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const roster = await resolveClaimRoster(leagueId, userId)
+  let roster: Awaited<ReturnType<typeof resolveClaimRoster>>
+  try {
+    roster = await resolveClaimRoster(leagueId, userId, requestedRosterIdFrom(req))
+  } catch (error) {
+    if (error instanceof ActingTeamRefused) return actingTeamRefusal(error.result)
+    throw error
+  }
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -199,14 +216,23 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       typeof body.commissionerOverrides === "object" &&
       !Array.isArray(body.commissionerOverrides)
     ) {
-      const role = await getLeagueRole(leagueId, userId)
-      if (role === "commissioner" || role === "co_commissioner") {
+      if ((await canCommissionerAct(leagueId, userId, 'league'))) {
         const co = body.commissionerOverrides as Record<string, unknown>
         const patch: Parameters<typeof mergeCommissionerOverrides>[1] = { setByUserId: userId }
         if (typeof co.bypassInsufficientFaab === "boolean") patch.bypassInsufficientFaab = co.bypassInsufficientFaab
         if (typeof co.bypassWeeklyDropLimit === "boolean") patch.bypassWeeklyDropLimit = co.bypassWeeklyDropLimit
         if (typeof co.note === "string") patch.note = co.note
         metadataForCreate = mergeCommissionerOverrides(metadataForCreate ?? null, patch)
+      }
+    }
+
+    // A claim whose drop would leave a starting slot unfillable is confirmed once by the manager
+    // (lib/waiver-wire/lineup-fill-warning.ts) — a warning, never a block.
+    const claimDropId = body.dropPlayerId ?? body.drop_player_id ?? null
+    if (claimDropId && !lineupWarningConfirmed(body)) {
+      const warning = await loadLineupFillWarning({ leagueId, rosterId: roster.id, addPlayerId: String(addPlayerId), dropPlayerId: String(claimDropId) })
+      if (warning) {
+        return NextResponse.json({ error: warning.message, code: LINEUP_WARNING_CODE, warning }, { status: 409 })
       }
     }
 
@@ -238,7 +264,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     const eff = await getEffectiveLeagueWaiverSettings(leagueId)
     let fcfsProcessWarning: string | undefined
-    if (eff.normalizedWaiverType === "fcfs") {
+    // During the post-draft roster lock a claim QUEUES for the first waiver run; processing it
+    // immediately here would be a free-agent pickup through the back door.
+    const queuedForFirstWaiverRun = gate.postDraftLock?.locked === true
+    if (eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun) {
       try {
         const { processWaiverClaimsForLeague } = await import("@/lib/waiver-wire/process-engine")
         await processWaiverClaimsForLeague(leagueId, {
@@ -257,7 +286,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     return NextResponse.json({
       claim,
-      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
+      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !queuedForFirstWaiverRun && !fcfsProcessWarning,
+      ...(queuedForFirstWaiverRun ? { queuedForFirstWaiverRun: true } : {}),
       writeAuthority,
       ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
       ...(sportsDataDecision ? { sportsDataDecision } : {}),
@@ -295,7 +325,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       message.includes("starter is locked") ||
       message.includes("bench player is locked") ||
       message.includes("All roster moves are locked") ||
-      message.includes("Weekly drop limit")
+      message.includes("Weekly drop limit") ||
+      // NHL dynasty prospects (lib/waiver-wire/nhlProspectFreeAgency.ts): a refused id is a 400, not a 500.
+      message.includes("is unavailable") ||
+      message.includes("already on another roster")
     ) {
       return waiverClaimError(message, 400)
     }

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /*
- * Injury push alerts resolve recipients through RI-keyed lookups (`ownersByPlayerId`,
- * `headshotsByRiId`). Only rows whose playerId IS a Rolling Insights id may reach them — measured
- * 2026-10-12, every `sleeper_live` Out row whose id collided with an RI id belonged to someone else.
+ * Importing mixed-provider injuries must not pass their ids into RI-only recipient lookups.
+ * The synced injury service owns source-aware resolution (covered in engagement-alerts/injury-alerts).
+ * Both importer branches delegate there after persistence.
  */
 
 const apiChainFetch = vi.fn()
@@ -11,6 +11,8 @@ const sportsInjuryFindMany = vi.fn()
 const ownersByPlayerId = vi.fn()
 const headshotsByRiId = vi.fn()
 const ingest = vi.fn()
+const notifySyncedInjuries = vi.fn()
+vi.mock('@/lib/engagement-alerts/injuryAlerts', () => ({ notifySyncedInjuries: (...args: unknown[]) => notifySyncedInjuries(...args) }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -46,7 +48,7 @@ function legacy(over: Record<string, unknown>) {
   }
 }
 
-describe('runInjuryImporter — alerts only for Rolling Insights ids', () => {
+describe('runInjuryImporter — source-aware injury alert delegation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Every id "has" an owner, so any id that reaches the lookup would produce an alert.
@@ -54,7 +56,7 @@ describe('runInjuryImporter — alerts only for Rolling Insights ids', () => {
     headshotsByRiId.mockResolvedValue(new Map())
   })
 
-  it('legacy branch: only rolling_insights rows with a playerId reach the RI lookups', async () => {
+  it('legacy branch delegates to the source-aware synced injury service instead of RI-only lookups', async () => {
     apiChainFetch.mockResolvedValue({ data: [], source: 'cache' })
     sportsInjuryFindMany.mockResolvedValue([
       legacy({ playerId: '7408', playerName: 'Bijan Robinson', source: 'rolling_insights' }),
@@ -64,10 +66,9 @@ describe('runInjuryImporter — alerts only for Rolling Insights ids', () => {
     const { runInjuryImporter } = await import('@/lib/workers/injury-importer')
     await runInjuryImporter({ sports: ['NFL'], week: 6 })
 
-    expect(ownersByPlayerId).toHaveBeenCalledTimes(1)
-    expect(ownersByPlayerId.mock.calls[0]![0]).toEqual(['7408'])
-    expect(ingest).toHaveBeenCalledTimes(1)
-    expect((ingest.mock.calls[0]![0] as { userIds: string[] }).userIds).toEqual(['user-of-7408'])
+    expect(ownersByPlayerId).not.toHaveBeenCalled()
+    expect(ingest).not.toHaveBeenCalled()
+    expect(notifySyncedInjuries).toHaveBeenCalledWith('NFL')
   })
 
   it('legacy branch reads live rows only', async () => {
@@ -92,14 +93,15 @@ describe('runInjuryImporter — alerts only for Rolling Insights ids', () => {
     expect(ingest).not.toHaveBeenCalled()
   })
 
-  it('live branch: an answer from Rolling Insights itself does alert', async () => {
+  it('live branch delegates alerts to the synced injury service', async () => {
     apiChainFetch.mockResolvedValue({
       source: 'rolling_insights',
       data: [{ playerId: '7408', playerName: 'Bijan Robinson', team: 'ATL', status: 'Out' }],
     })
     const { runInjuryImporter } = await import('@/lib/workers/injury-importer')
     await runInjuryImporter({ sports: ['NFL'], week: 6 })
-    expect(ownersByPlayerId.mock.calls[0]![0]).toEqual(['7408'])
-    expect(ingest).toHaveBeenCalledTimes(1)
+    expect(ownersByPlayerId).not.toHaveBeenCalled()
+    expect(ingest).not.toHaveBeenCalled()
+    expect(notifySyncedInjuries).toHaveBeenCalledWith('NFL')
   })
 })

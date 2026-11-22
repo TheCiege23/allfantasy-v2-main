@@ -72,7 +72,7 @@ async function getJsonNoCache(url: string): Promise<unknown | null> {
 }
 
 /** Rolling Insights game ids for fixtures being played right now. */
-export async function inProgressRiGameIds(now: Date = new Date()): Promise<string[]> {
+export async function inProgressRiGameIds(now: Date = new Date(), trackedGames: ReadonlySet<string> = new Set()): Promise<string[]> {
   const from = new Date(now.getTime() - 4 * 3_600_000)
   const to = new Date(now.getTime() + 30 * 60_000)
   const rows = await prisma.sportsGame
@@ -83,15 +83,40 @@ export async function inProgressRiGameIds(now: Date = new Date()): Promise<strin
         source: 'rolling_insights',
         startTime: { gte: from, lte: to },
       },
-      select: { externalId: true, status: true },
+      select: { externalId: true, status: true, startTime: true },
       take: 40,
     })
     .catch(() => [])
 
   return rows
-    .filter((r) => normaliseStatus(r.status ?? undefined) === 'in_progress')
+    .filter((r) => isPollable(r, now, trackedGames))
     .map((r) => r.externalId)
     .filter(Boolean)
+}
+
+const CALLED_OFF = /postpon|cancel|suspend|delay/i
+
+/**
+ * Should this game's play-by-play be read now?
+ *
+ * 🛑 KICKOFF, NOT THE STORED STATUS (2026-10-25). The row's status is written by the slower schedule
+ * sync, not by the live tick, so it can say "scheduled" long after kickoff. On 2026-10-25 the London
+ * game (PIT at NO, 13:30 UTC) read "scheduled" until 16:17 UTC: every tick skipped it as
+ * "no-live-games", and every starter play from the first three quarters went out in one burst at
+ * 16:18. So a game whose kickoff has passed is polled unless it is final or called off. The window
+ * (4h after kickoff) bounds a status that never catches up, and a final game is still read once more
+ * while it has a cursor, so its last plays are not lost.
+ */
+export function isPollable(
+  row: { externalId: string; status: string | null; startTime: Date | null },
+  now: Date,
+  trackedGames: ReadonlySet<string>,
+): boolean {
+  const status = normaliseStatus(row.status ?? undefined)
+  if (status === 'final') return trackedGames.has(row.externalId)
+  if (status === 'in_progress') return true
+  if (CALLED_OFF.test(row.status ?? '')) return false
+  return row.startTime != null && row.startTime.getTime() <= now.getTime()
 }
 
 type Cursor = Record<string, number>
@@ -140,14 +165,14 @@ export type FeedRefreshResult = {
 export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<FeedRefreshResult> {
   const { token, base } = riCredentials()
 
-  const gameIds = await inProgressRiGameIds(now)
+  const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
+  const gameIds = await inProgressRiGameIds(now, new Set(Object.keys(cursor)))
 
   if (!token) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, alertsSent: 0, skipped: 'no-token' }
 
   if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, alertsSent: 0, skipped: 'no-live-games' }
 
 
-  const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
   const feed = (await readCache<LiveEvent[]>(FEED_KEY)) ?? []
   const fresh: LiveEvent[] = []
   let idpWritten = 0
@@ -158,7 +183,10 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
   for (const gameId of gameIds) {
     const url = `${base}/play-by-play/NFL?RSC_token=${encodeURIComponent(token)}&game_id=${encodeURIComponent(gameId)}`
     const payload = await getJsonNoCache(url)
-    if (!payload) continue
+    if (!payload) {
+      console.warn('[play-feed] game unavailable; retaining its cursor', gameId)
+      continue
+    }
 
     for (const game of parsePlayByPlay(payload)) {
       const since = cursor[game.gameId] ?? -1
@@ -199,8 +227,9 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
    * the only correct input here.
    */
   if (fresh.length > 0) {
-    const notified = await notifyBigPlays(fresh).catch(() => null)
-    alertsSent += notified?.notificationsSent ?? 0
+    const notified = await notifyBigPlays(fresh)
+    if (notified.failed) throw new Error('Play notifications failed; cursor retained for retry')
+    alertsSent += notified.notificationsSent
   }
 
   if (fresh.length > 0) {

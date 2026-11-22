@@ -59,13 +59,6 @@ type AiReview = {
   summary: string
 } | null
 
-type StoryResponse = {
-  ok: boolean
-  story?: {
-    narrative: string
-  }
-}
-
 function BracketIntelligenceInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -75,7 +68,7 @@ function BracketIntelligenceInner() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [sim, setSim] = useState<SimulationResponse | null>(null)
   const [aiReview, setAiReview] = useState<AiReview>(null)
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [story, setStory] = useState<string | null>(null)
 

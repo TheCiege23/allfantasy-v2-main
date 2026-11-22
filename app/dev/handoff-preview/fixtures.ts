@@ -72,9 +72,9 @@ export const TILE_STATES: LeagueTileModel[] = [
   },
   {
     id: 'preview-league-0004',
-    name: 'Preview Guillotine',
+    name: 'Preview Guilly',
     platform: 'sleeper',
-    formatLine: '2026 · 18-team · Guillotine',
+    formatLine: '2026 · 18-team · Guilly',
     status: {
       kind: 'upcoming',
       label: 'Week 12',
@@ -110,9 +110,9 @@ export const TILE_STATES: LeagueTileModel[] = [
  */
 export const COLLIDING_TILES: LeagueTileModel[] = Array.from({ length: 6 }, (_, i) => ({
   id: `preview-collide-${1000 + i * 137}`,
-  name: 'Guillotine League Season Six',
+  name: 'Guilly League Season Six',
   platform: 'sleeper',
-  formatLine: '2026 · 18-team · Guillotine',
+  formatLine: '2026 · 18-team · Guilly',
   status: {
     kind: 'upcoming' as const,
     label: 'Week 12',
@@ -168,7 +168,7 @@ export const PREVIEW_ISSUES: CoreIssue[] = [
     title: 'Waivers process tonight',
     meta: 'Sleeper › Waivers · 8h 00m',
     leagueId: 'preview-league-0004',
-    leagueName: 'Preview Guillotine',
+    leagueName: 'Preview Guilly',
     platform: 'sleeper',
     deadline: new Date(NOW.getTime() + 480 * 60_000),
     action: { label: 'Queue it', href: '/core/waivers', external: false },

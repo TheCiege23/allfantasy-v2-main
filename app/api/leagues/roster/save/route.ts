@@ -1,3 +1,6 @@
+import { actingTeamRefusal, chooseActingTeam, listHeldTeams, requestedRosterIdFrom } from '@/lib/league/viewerTeams'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -11,6 +14,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import { prisma } from '@/lib/prisma'
 import { validateAiActionExecution } from '@/lib/ai/action-validation'
 import { persistRosterLineupWithEngine } from '@/lib/roster-lineup-engine/lineupService'
+import { lineupVersionOf } from '@/lib/roster/lineupVersion'
 import { applyStarterSwap } from '@/lib/roster/starterSwap'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -113,16 +117,24 @@ export async function POST(req: NextRequest) {
       ? Math.max(1, Math.floor(editingWeekRaw))
       : weekFromLeagueSettings(league.settings)
 
-  const memberRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
-  const canActAsCommissioner = league.userId === userId
-  if (!memberRoster && !canActAsCommissioner) {
+  // Every team this manager holds (lib/league/viewerTeams.ts); a co-owned team only when they hold none.
+  const heldTeams = await listHeldTeams(leagueId, userId)
+  const coOwnerRosterId = heldTeams.length > 0 ? null : await acceptedCoOwnerRosterId(leagueId, userId)
+  const ownRosterIds = new Set<string>([...heldTeams.map((team) => team.rosterId), ...(coOwnerRosterId ? [coOwnerRosterId] : [])])
+  const canActAsCommissioner = (await canCommissionerAct(leagueId, userId, 'rosters'))
+  if (ownRosterIds.size === 0 && !canActAsCommissioner) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let targetRosterId = rosterIdInput ?? memberRoster?.id ?? null
+  // The body's `rosterId` names the team (it always has); the header / query may name it too.
+  const namedRosterId = rosterIdInput ?? requestedRosterIdFrom(req)
+  // Several teams and none named: refused, never a guess at which lineup this is.
+  if (!namedRosterId && heldTeams.length > 1) {
+    const refusal = chooseActingTeam(heldTeams, null)
+    if (!refusal.ok) return actingTeamRefusal(refusal)
+  }
+
+  let targetRosterId = namedRosterId ?? heldTeams[0]?.rosterId ?? coOwnerRosterId ?? null
   if (!targetRosterId && canActAsCommissioner) {
     const firstRoster = await (prisma as any).roster.findFirst({
       where: { leagueId },
@@ -135,7 +147,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (!canActAsCommissioner && memberRoster && targetRosterId !== memberRoster.id) {
+  if (!canActAsCommissioner && !ownRosterIds.has(targetRosterId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -243,10 +255,11 @@ export async function POST(req: NextRequest) {
     source: 'user_save',
     skipLockCheck: false,
     expectedStarters: Array.isArray(body.expectedStarters) ? body.expectedStarters.map(String) : undefined,
+    expectedLineupVersion: typeof body.expectedLineupVersion === 'string' && body.expectedLineupVersion ? body.expectedLineupVersion : undefined,
   })
 
   if (!persisted.ok) {
-    return NextResponse.json({ error: persisted.error }, { status: persisted.status ?? 400 })
+    return NextResponse.json({ error: persisted.error, ...(persisted.code ? { code: persisted.code } : {}) }, { status: persisted.status ?? 400 })
   }
 
   const prevStarters = extractStarterIds({}, currentRoster.playerData)
@@ -303,6 +316,8 @@ export async function POST(req: NextRequest) {
     ok: true,
     rosterId: targetRosterId,
     writeAuthority,
+    // The version the next save from this screen is built on, so a second move needs no reload first.
+    lineupVersion: lineupVersionOf(nextPlayerData),
     ...(sportsDataDecision ? { sportsDataDecision } : {}),
   })
 }

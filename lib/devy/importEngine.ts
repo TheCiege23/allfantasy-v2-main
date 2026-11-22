@@ -3,15 +3,6 @@ import { prisma } from '@/lib/prisma'
 import type { SleeperPlayer } from '@/lib/sleeper-client'
 import { getLeagueInfo, getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
 
-function abortAfter(ms: number): AbortSignal {
-  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal && typeof AbortSignal.timeout === 'function') {
-    return AbortSignal.timeout(ms)
-  }
-  const c = new AbortController()
-  setTimeout(() => c.abort(), ms)
-  return c.signal
-}
-
 export async function createImportSession(leagueId: string, commissionerId: string): Promise<DevyImportSession> {
   return prisma.devyImportSession.create({
     data: {
@@ -28,14 +19,50 @@ type ConnectionData = Record<string, unknown> & {
   headers?: string[]
 }
 
-async function fetchSleeperPlayerNames(playerIds: string[]): Promise<Record<string, string>> {
+type SleeperNameDeps = {
+  findIdentities: (sleeperIds: string[]) => Promise<Array<{ sleeperId: string | null; canonicalName: string }>>
+  loadSleeperPlayers: () => Promise<Record<string, SleeperPlayer>>
+}
+
+const defaultSleeperNameDeps: SleeperNameDeps = {
+  findIdentities: (sleeperIds) =>
+    prisma.playerIdentityMap.findMany({
+      where: { sleeperId: { in: sleeperIds } },
+      select: { sleeperId: true, canonicalName: true },
+    }),
+  loadSleeperPlayers: () => getPlayersBySport('nfl'),
+}
+
+/**
+ * A Sleeper league's rostered player ids → display names, for EVERY rostered player.
+ *
+ * DB-first: our identity registry (`PlayerIdentityMap.sleeperId`) names most of them. Only the ids it
+ * does not know fall back to Sleeper's player map, and that map is fetched only when at least one id
+ * is missing. A failed registry read falls back to the map for all ids; an id neither knows reads
+ * "Player <id>", as before.
+ *
+ * ⚠ THIS USED TO STOP AT 120 PLAYERS (`slice(0, 120)`) after loading Sleeper's whole player map anyway,
+ * so the cap saved nothing — and a 12-team league rosters ~300, leaving every player after the 120th
+ * unnamed and therefore unmatched in the import wizard.
+ */
+export async function resolveSleeperPlayerNames(
+  playerIds: string[],
+  deps: SleeperNameDeps = defaultSleeperNameDeps,
+): Promise<Record<string, string>> {
+  const unique = [...new Set(playerIds.filter((id) => typeof id === 'string' && id.trim() !== ''))]
   const out: Record<string, string> = {}
-  const unique = [...new Set(playerIds)].slice(0, 120)
-  const playersById = await getPlayersBySport('nfl').catch((): Record<string, SleeperPlayer> => ({}))
-  for (const id of unique) {
-    const p = playersById[id]
-    const name = p?.full_name || [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() || `Player ${id}`
-    out[id] = name
+  if (unique.length === 0) return out
+  const rows = await deps.findIdentities(unique).catch(() => [])
+  for (const row of rows) {
+    if (row.sleeperId && row.canonicalName?.trim()) out[row.sleeperId] = row.canonicalName.trim()
+  }
+  const missing = unique.filter((id) => !out[id])
+  if (missing.length > 0) {
+    const playersById = await deps.loadSleeperPlayers().catch((): Record<string, SleeperPlayer> => ({}))
+    for (const id of missing) {
+      const p = playersById[id]
+      out[id] = p?.full_name || [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() || `Player ${id}`
+    }
   }
   return out
 }
@@ -53,7 +80,7 @@ async function buildSleeperBundle(leagueId: string): Promise<Record<string, unkn
     const rec = r as { players?: string[] }
     if (Array.isArray(rec.players)) playerIds.push(...rec.players)
   }
-  const names = await fetchSleeperPlayerNames(playerIds)
+  const names = await resolveSleeperPlayerNames(playerIds)
 
   const usersById: Record<string, { user_id?: string; display_name?: string; username?: string }> = {}
   for (const u of Array.isArray(users) ? users : []) {

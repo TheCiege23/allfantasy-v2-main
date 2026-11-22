@@ -3,6 +3,8 @@
  * Sport-aware defaults per PROMPT 331 / sport-scope.
  */
 
+import { nativeGuillotineState } from '@/lib/league/nativeFormatPatch'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -45,20 +47,16 @@ function parseTiebreakerOrder(raw: unknown): TiebreakStep[] {
   return [...DEFAULT_TIEBREAKER_ORDER]
 }
 
-/**
- * Returns true if the league is configured as a guillotine league.
- */
 export async function isGuillotineLeague(leagueId: string): Promise<boolean> {
-  const config = await prisma.guillotineLeagueConfig.findUnique({
-    where: { leagueId },
-    select: { id: true },
-  })
-  if (config) return true
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { leagueVariant: true },
+    select: { platform: true, leagueType: true, leagueVariant: true, guillotineMode: true },
   })
-  return league?.leagueVariant === GUILLOTINE_VARIANT
+  if (!league) return false
+  const native = nativeGuillotineState(league)
+  if (native !== null) return native
+  const config = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
+  return Boolean(config) || league.leagueVariant === GUILLOTINE_VARIANT
 }
 
 /**
@@ -70,11 +68,15 @@ export async function getGuillotineConfig(leagueId: string): Promise<GuillotineC
     select: {
       id: true,
       sport: true,
+      platform: true,
+      leagueType: true,
+      guillotineMode: true,
       leagueVariant: true,
       settings: true,
     },
   })
   if (!league) return null
+  if (nativeGuillotineState(league) === false) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
 
   const row = await prisma.guillotineLeagueConfig.findUnique({
@@ -141,9 +143,12 @@ export async function upsertGuillotineConfig(
 ): Promise<GuillotineConfig | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true },
+    select: { sport: true, platform: true },
   })
   if (!league) return null
+  // 🛑 No config row for an imported league: that row is what lets the chop engine run on it
+  // (./importedLeagueGuard.ts). Its rules live on the provider.
+  if (!isNativePlatform(league.platform)) return null
   const sport = normalizeToSupportedSport(league.sport) as LeagueSport
   const defaultEnd = DEFAULT_END_WEEK_BY_SPORT[sport] ?? 18
 

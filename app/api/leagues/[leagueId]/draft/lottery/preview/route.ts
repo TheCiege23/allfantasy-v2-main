@@ -10,6 +10,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { getDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { previewLotteryOdds } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
 import type { WeightedLotteryConfig } from '@/lib/draft-lottery/types'
+import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,9 @@ export async function GET(
 
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
+  if (lotteryRestriction) return NextResponse.json({ error: lotteryRestriction }, { status: 403 })
 
   const { lotteryConfig } = await getDraftOrderModeAndLotteryConfig(leagueId)
   const config: WeightedLotteryConfig = { ...lotteryConfig, enabled: true }
@@ -59,6 +63,9 @@ export async function POST(
 
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
+  if (lotteryRestriction) return NextResponse.json({ error: lotteryRestriction }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const { lotteryConfig: configOverride } = await getDraftOrderModeAndLotteryConfig(leagueId)

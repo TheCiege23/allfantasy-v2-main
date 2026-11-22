@@ -18,8 +18,11 @@ export type StandingsPresentation =
     }
   | {
       mode: 'guillotine'
-      /** AF `LeagueTeam.id` -> danger tier */
-      dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe'>
+      /**
+       * AF `LeagueTeam.id` -> danger tier. `chopped` comes only from an imported league, whose chops are read
+       * from the provider's scores (lib/guillotine/importedGuillyView.ts `importedGuillyTiers`).
+       */
+      dangerByTeamId: Record<string, 'chop_zone' | 'danger' | 'safe' | 'chopped'>
     }
   | {
       mode: 'survivor'

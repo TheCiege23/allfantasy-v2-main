@@ -13,6 +13,18 @@ import {
   type TradeInterestItem,
   type RedraftRosterPlayerClient,
 } from '@/lib/redraft/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tOr } from '@/lib/i18n/tInterpolate'
+import { localizeTradeReason, serverErrorText } from '@/lib/i18n/trade-center-server-text'
+
+/** The one grade's five labels (`tradeGradeLabel`), arriving from the server in English. */
+const GRADE_LABEL_KEY: Record<string, string> = {
+  'Major win (you)': 'tradeCenter.block.gradeLabel.majorWin',
+  'Slightly favors you': 'tradeCenter.block.gradeLabel.slightlyYou',
+  Even: 'tradeCenter.block.gradeLabel.even',
+  'Slightly favors opponent': 'tradeCenter.block.gradeLabel.slightlyOpponent',
+  'Major overpay': 'tradeCenter.block.gradeLabel.majorOverpay',
+}
 
 /**
  * THE grade on a league block card (2026-09-28): the suggested offer from your roster for that player
@@ -20,21 +32,22 @@ import {
  * See lib/trade-block/tradeBlockOffers.ts.
  */
 export function BlockOfferLine({ offer }: { offer: TradeBlockItem['suggestedOffer'] }) {
+  const { t, tInterpolate, language } = useOptionalLanguage()
   if (!offer) return null
   const g = offer.grade
   return (
     <div className="mt-1 text-[11px] leading-snug text-white/65" data-testid="block-offer">
       <span>
-        Suggested offer: send {offer.gives.join(' + ')} for {offer.receives.join(' + ')}
+        {tInterpolate('tradeCenter.block.offer', { gives: offer.gives.join(' + '), receives: offer.receives.join(' + ') })}
       </span>
       {g?.graded ? (
         <span className="block font-semibold text-white/85" data-testid="block-offer-grade">
-          Grade: You {g.letter} · Them {g.partnerLetter}
-          {g.label ? <span className="font-normal text-white/55"> — {g.label}</span> : null}
+          {tInterpolate('tradeCenter.block.grade', { letter: g.letter, partnerLetter: g.partnerLetter })}
+          {g.label ? <span className="font-normal text-white/55"> — {tOr(t, GRADE_LABEL_KEY[g.label], g.label)}</span> : null}
         </span>
       ) : g ? (
         <span className="block text-amber-200/80" data-testid="block-offer-grade-withheld">
-          Not graded: {g.reason}
+          {tInterpolate('tradeCenter.block.notGraded', { reason: localizeTradeReason(g.reason, language) })}
         </span>
       ) : null}
     </div>
@@ -57,6 +70,10 @@ export function TradeBlockPanel({
   currentWeek: number
   onBuildProposal: (partnerRosterId: string) => void
 }) {
+  const { t, language } = useOptionalLanguage()
+  /** An interest with no player or position shows its type: the catalog's label (English is the raw code, as before). */
+  const interestLabel = (it: TradeInterestItem) =>
+    it.playerName ?? it.position ?? tOr(t, `tradeCenter.block.interestType.${it.interestType}`, it.interestType)
   const [open, setOpen] = useState(false)
   const [leagueBlock, setLeagueBlock] = useState<TradeBlockItem[]>([])
   const [myInterests, setMyInterests] = useState<TradeInterestItem[]>([])
@@ -78,11 +95,11 @@ export function TradeBlockPanel({
       setMyInterests(interests.interests)
       setMyPlayers(roster?.players ?? [])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load trade block')
+      setError(e instanceof Error ? serverErrorText(e as Error & { code?: string | null }, e.message, t, language) : t('tradeCenter.block.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [leagueId, myRosterId, currentWeek])
+  }, [leagueId, myRosterId, currentWeek, t, language])
 
   useEffect(() => {
     if (open && !loading && leagueBlock.length === 0 && myInterests.length === 0 && myPlayers.length === 0) void load()
@@ -97,7 +114,7 @@ export function TradeBlockPanel({
       await fn()
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Action failed')
+      setError(e instanceof Error ? serverErrorText(e as Error & { code?: string | null }, e.message, t, language) : t('tradeCenter.block.actionFailed'))
     } finally {
       setBusy(false)
     }
@@ -111,17 +128,17 @@ export function TradeBlockPanel({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-violet-100"
       >
-        <span>Trade Block &amp; Interests</span>
+        <span>{t('tradeCenter.block.toggle')}</span>
         <span className="text-violet-200/70">{open ? '▾' : '▸'}</span>
       </button>
 
       {open ? (
         <div className="space-y-3 border-t border-violet-300/15 px-3 py-2 text-[11px]">
-          {loading ? <p className="text-white/50">Loading…</p> : null}
+          {loading ? <p className="text-white/50">{t('tradeCenter.block.loading')}</p> : null}
           {error ? <p className="text-rose-300">{error}</p> : null}
 
           <section>
-            <p className="text-[11px] font-semibold text-white">My Trade Block</p>
+            <p className="text-[11px] font-semibold text-white">{t('tradeCenter.block.mine')}</p>
             <div className="mt-1 grid gap-1 sm:grid-cols-2">
               {myPlayers.map((p) => {
                 const on = myBlockPlayerIds.has(p.playerId)
@@ -143,7 +160,7 @@ export function TradeBlockPanel({
                       }
                       className={`rounded px-1.5 py-0.5 text-[11px] ${on ? 'border border-rose-400/40 text-rose-200' : 'bg-violet-500/80 text-black'}`}
                     >
-                      {on ? 'Remove' : 'Add to block'}
+                      {on ? t('tradeCenter.block.remove') : t('tradeCenter.block.add')}
                     </button>
                   </div>
                 )
@@ -152,9 +169,9 @@ export function TradeBlockPanel({
           </section>
 
           <section>
-            <p className="text-[11px] font-semibold text-white">League Trade Block</p>
+            <p className="text-[11px] font-semibold text-white">{t('tradeCenter.block.league')}</p>
             {leagueBlock.filter((i) => i.rosterId !== myRosterId).length === 0 ? (
-              <p className="mt-0.5 text-white/45">No players listed by other managers yet.</p>
+              <p className="mt-0.5 text-white/45">{t('tradeCenter.block.leagueEmpty')}</p>
             ) : (
               <div className="mt-1 space-y-1">
                 {leagueBlock.filter((i) => i.rosterId !== myRosterId).map((i) => (
@@ -166,10 +183,10 @@ export function TradeBlockPanel({
                       <div className="flex gap-1">
                         <button type="button" disabled={busy} data-testid={`mark-interest-${i.playerId}`}
                           onClick={() => act(() => addTradeInterest({ leagueId, interestType: 'player_interest', targetRosterId: i.rosterId, playerId: i.playerId, playerName: i.playerName, position: i.position }))}
-                          className="rounded border border-white/20 px-1.5 py-0.5 text-[11px] text-white/80">Mark interest</button>
+                          className="rounded border border-white/20 px-1.5 py-0.5 text-[11px] text-white/80">{t('tradeCenter.block.markInterest')}</button>
                         <button type="button" data-testid={`block-build-${i.rosterId}`}
                           onClick={() => onBuildProposal(i.rosterId)}
-                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[11px] font-semibold text-black">Build proposal</button>
+                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[11px] font-semibold text-black">{t('tradeCenter.block.buildProposal')}</button>
                       </div>
                     </div>
                     <BlockOfferLine offer={i.suggestedOffer} />
@@ -181,15 +198,15 @@ export function TradeBlockPanel({
           </section>
 
           <section>
-            <p className="text-[11px] font-semibold text-white">My Interests</p>
+            <p className="text-[11px] font-semibold text-white">{t('tradeCenter.block.interests')}</p>
             {myInterests.length === 0 ? (
-              <p className="mt-0.5 text-white/45">You haven’t marked any interests yet.</p>
+              <p className="mt-0.5 text-white/45">{t('tradeCenter.block.interestsEmpty')}</p>
             ) : (
               <ul className="mt-1 space-y-0.5">
                 {myInterests.map((it) => (
                   <li key={it.id} className="flex items-center justify-between gap-2 text-[11px] text-white/70">
-                    <span>{it.playerName ?? it.position ?? it.interestType} <span className="text-white/40">({it.visibility})</span></span>
-                    <button type="button" disabled={busy} onClick={() => act(() => removeTradeInterest(it.id))} className="text-rose-300/80">remove</button>
+                    <span>{interestLabel(it)} <span className="text-white/40">({tOr(t, `tradeCenter.block.visibility.${it.visibility}`, it.visibility)})</span></span>
+                    <button type="button" disabled={busy} onClick={() => act(() => removeTradeInterest(it.id))} className="text-rose-300/80">{t('tradeCenter.block.removeInterest')}</button>
                   </li>
                 ))}
               </ul>

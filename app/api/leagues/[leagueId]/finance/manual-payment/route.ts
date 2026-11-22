@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { leagueMoneyRefusal } from '@/lib/monetization/leagueEntryFeeKillSwitch'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { requireCommissionerRole } from '@/lib/league/permissions'
@@ -16,8 +17,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
   const { leagueId } = await ctx.params
 
+  const moneyOff = leagueMoneyRefusal('in-app treasury payments')
+  if (moneyOff) return NextResponse.json({ error: moneyOff.error, code: moneyOff.code }, { status: moneyOff.status })
+
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'money')
   } catch (e) {
     if (e instanceof Response) {
       const body = await e.json().catch(() => ({}))

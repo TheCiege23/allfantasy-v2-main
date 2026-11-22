@@ -11,7 +11,13 @@
 import type { FantraxLeagueInfo } from './fantraxApi'
 
 /** Stored `FantraxLeague.sport` values whose season spans two calendar years. */
-const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl'])
+const SPLIT_SEASON_SPORTS = new Set(['nba', 'nhl', 'ncaab'])
+
+/** Imports that retain Fantrax’s period calendar on the canonical league. */
+export function usesFantraxPeriodCalendar(sport: string | null | undefined): boolean {
+  const key = String(sport ?? '').trim().toLowerCase()
+  return key === 'soccer' || key === 'ncaab'
+}
 
 export function isFantraxSplitSeasonSport(sport: string | null | undefined): boolean {
   return SPLIT_SEASON_SPORTS.has(String(sport ?? '').trim().toLowerCase())
@@ -48,7 +54,7 @@ function earliestLeagueDate(info: Pick<FantraxLeagueInfo, 'startDate' | 'scoring
  *      basketball/hockey, so it is used only when there is no calendar to check it against;
  *   4. the season in progress on `now`.
  */
-export function fantraxSplitSeasonStartYear(
+function fantraxSplitSeasonStartYear(
   info: Pick<FantraxLeagueInfo, 'seasonYear' | 'startDate' | 'scoringPeriods'>,
   now: Date = new Date(),
 ): number {
@@ -74,6 +80,13 @@ export function fantraxImportSeason(
   now: Date = new Date(),
 ): number {
   if (isFantraxSplitSeasonSport(sport)) return fantraxSplitSeasonStartYear(info, now)
+  if (String(sport ?? '').trim().toLowerCase() === 'soccer') {
+    const range = String(info.seasonYear ?? '').trim().match(/^(\d{4})\s*[-/–]\s*(\d{2}|\d{4})$/)
+    if (range) return Number(range[1])
+    // Soccer leagues can start in either half of the year. Use the source calendar year.
+    const start = earliestLeagueDate(info)
+    if (start) return start.getUTCFullYear()
+  }
   return Number(info.seasonYear) || now.getFullYear()
 }
 
@@ -115,11 +128,19 @@ const record = (value: unknown): Record<string, unknown> =>
  * IR and minors limits are not in any capture and are not invented here.
  */
 export function mapFantraxRosterSlots(
-  sport: 'NBA' | 'NHL',
+  sport: 'NBA' | 'NHL' | 'NCAAB',
+  rosterInfo: unknown,
+): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
+  // College basketball uses the basketball slot codes (G, F, C, G/F, F/C, Flx).
+  return mapSlots(SLOT_CODES[sport === 'NCAAB' ? 'NBA' : sport], sport, rosterInfo)
+}
+
+function mapSlots(
+  codes: Record<string, string>,
+  sport: string,
   rosterInfo: unknown,
 ): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
   const info = record(rosterInfo)
-  const codes = SLOT_CODES[sport]
   const counts = new Map<string, number>()
   const gaps: string[] = []
   for (const [code, raw] of Object.entries(record(info.positionConstraints))) {
@@ -136,7 +157,73 @@ export function mapFantraxRosterSlots(
     }
     counts.set(key, (counts.get(key) ?? 0) + count)
   }
-  const bench = info.maxTotalReservePlayers
-  if (counts.size > 0 && typeof bench === 'number' && Number.isSafeInteger(bench) && bench > 0) counts.set('BN', bench)
+  /*
+   * The captured NBA league sends no `maxTotalReservePlayers` at all — only 14 total and 10 active —
+   * so its 4 bench seats were dropped. Total minus active is the same remainder the MLB capture
+   * states outright (22 + 8 = 30), so it stands in when the reserve count is absent.
+   */
+  const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
+  const bench = isCount(info.maxTotalReservePlayers)
+    ? info.maxTotalReservePlayers
+    : isCount(info.maxTotalPlayers) && isCount(info.maxTotalActivePlayers)
+      ? info.maxTotalPlayers - info.maxTotalActivePlayers
+      : null
+  if (counts.size > 0 && bench != null && bench > 0) counts.set('BN', bench)
   return { slots: Array.from(counts, ([position, count]) => ({ position, count })), gaps }
+}
+
+/**
+ * Fantrax football / baseball slot code → the token our importers store in `roster_positions`
+ * (the vocabulary `lib/league/importedLineupTemplate.ts` reads, and ESPN's adapter writes).
+ *
+ * Football: positional codes map to themselves; `RWT` / `SFX` are Fantrax's RB/WR/TE flex and
+ * superflex (already treated as slots by `importedPlayerMetadata.ts`); `ID` is the IDP flex — the NFL
+ * capture's `playerInfo.eligiblePos` lists it for DL, LB and DB players alike (`ID,DL`, `LB,ID`,
+ * `DB,ID`). ⚠ `ER` (in that same capture, on a DL player) is deliberately absent: which of our
+ * positions it accepts is not established, so it is reported rather than guessed.
+ *
+ * Baseball: the captured MLB codes (`C` … `UT`, `CI`, `MI`, `P`), `UT` spelled as our `UTIL`, plus the
+ * split outfield (`LF`, `CF`, `RF`) and `DH`, which are slots in our own baseball table
+ * (lib/core-app/sportSlotEligibility.ts).
+ */
+const FOOTBALL_SLOT_CODES: Record<string, string> = {
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF', DST: 'DST', 'D/ST': 'D/ST',
+  RWT: 'FLEX', SFX: 'SUPER_FLEX',
+  DL: 'DL', DE: 'DE', DT: 'DT', LB: 'LB', DB: 'DB', CB: 'CB', S: 'S', ID: 'IDP_FLEX',
+}
+const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB' | 'SOCCER', Record<string, string>> = {
+  NFL: FOOTBALL_SLOT_CODES,
+  NCAAF: FOOTBALL_SLOT_CODES,
+  SOCCER: { G: 'GKP', D: 'DEF', M: 'MID', F: 'FWD' },
+  MLB: {
+    C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', LF: 'LF', CF: 'CF', RF: 'RF', DH: 'DH', CI: 'CI', MI: 'MI',
+    SP: 'SP', RP: 'RP', P: 'P', UT: 'UTIL', UTIL: 'UTIL',
+  },
+}
+
+export function fantraxSoccerPosition(position: string): string {
+  return LINEUP_SLOT_CODES.SOCCER[position] ?? position
+}
+
+/**
+ * A Fantrax league's starting lineup, as `SLOT:COUNT` entries.
+ *
+ * 🛑 ALL OR NOTHING, unlike the NBA/NHL mapper. These slots feed `importedLineupTemplateSlots`, which
+ * trusts a pair list as the whole lineup — so a lineup with one seat dropped would be a smaller lineup
+ * that looks real. Any unmapped code, or starters that do not add up to the league's own
+ * `maxTotalActivePlayers`, yields no slots and a named gap, and the caller keeps its old "no stated
+ * lineup" resolution.
+ */
+export function mapFantraxLineupSlots(
+  sport: 'NFL' | 'NCAAF' | 'MLB' | 'SOCCER',
+  rosterInfo: unknown,
+): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
+  const mapped = mapSlots(LINEUP_SLOT_CODES[sport], sport, rosterInfo)
+  const active = record(rosterInfo).maxTotalActivePlayers
+  const starters = mapped.slots.filter((s) => s.position !== 'BN').reduce((sum, s) => sum + s.count, 0)
+  const gaps = [...mapped.gaps]
+  if (gaps.length === 0 && starters > 0 && typeof active === 'number' && active !== starters) {
+    gaps.push(`Fantrax lineup slots add up to ${starters}, but the league starts ${active}`)
+  }
+  return gaps.length > 0 ? { slots: [], gaps } : mapped
 }

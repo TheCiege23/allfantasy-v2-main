@@ -29,10 +29,13 @@ export default function BroadcastModal({
   onClose,
   /** Pre-check the league the commissioner opened the composer from. */
   defaultLeagueId,
+  /** A drafted message to start from (e.g. the rollover wizard's announcement); still editable. */
+  defaultMessage,
 }: {
   open: boolean
   onClose: () => void
   defaultLeagueId?: string
+  defaultMessage?: string
 }) {
   const [leagues, setLeagues] = useState<PickerLeague[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -48,6 +51,7 @@ export default function BroadcastModal({
     setLoading(true)
     setError('')
     setResults(null)
+    if (defaultMessage) setMessage(defaultMessage.slice(0, MESSAGE_LIMIT))
     fetch('/api/commissioner/leagues')
       .then((r) => r.json().catch(() => ({})))
       .then((data) => {
@@ -67,7 +71,7 @@ export default function BroadcastModal({
     return () => {
       cancelled = true
     }
-  }, [open, defaultLeagueId])
+  }, [open, defaultLeagueId, defaultMessage])
 
   // Escape closes, matching every other dismissible surface in the product.
   useEffect(() => {

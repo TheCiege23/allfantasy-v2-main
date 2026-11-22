@@ -13,9 +13,14 @@ import type { RivalRow } from '@/lib/core-app/dash3aPanels'
 import type { LeagueHomeData } from '@/lib/core-app/leagueHome'
 
 const lang = vi.hoisted(() => ({ language: 'en' }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({
-  useOptionalLanguage: () => ({ language: lang.language }),
-}))
+vi.mock('@/components/i18n/LanguageProviderClient', async () => {
+  // The real catalog: CustomizeLeagueLink reads its label through `t`.
+  const { translations: dict } = await import('@/lib/i18n/translations')
+  const { interpolateTemplate } = await import('@/lib/i18n/interpolate')
+  const t = (k: string) => dict[lang.language]?.[k] ?? dict.en[k] ?? k
+  const tInterpolate = (k: string, v: Record<string, string | number> = {}) => interpolateTemplate(t(k), v)
+  return { useOptionalLanguage: () => ({ language: lang.language, t, tInterpolate }) }
+})
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ prefetch() {}, push() {}, replace() {}, refresh() {} }),
   usePathname: () => '/core',
@@ -162,5 +167,11 @@ describe('League Home loader — leagueRivalRows', () => {
       lastResult: 'beat you by 10.0', lastParts: { kind: 'lost', margin: 10 },
     })
     expect(out[0]!.lastParts).toEqual({ kind: 'tie', margin: 0 })
-  })
+    /*
+     * ⚠ THE IMPORT IS THE WHOLE COST. It loads leagueHome's full module graph unmocked: measured
+     * 18.6s alone on main and 20.8s with a fresh transform (2026-11-14), against the 30s default —
+     * so a loaded box or a busy CI shard timed it out with nothing wrong. Same budget as the
+     * league-context loader test, which pulls in the same graph.
+     */
+  }, 60_000)
 })

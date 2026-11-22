@@ -19,11 +19,12 @@ const ROUTE = '../app/api/shared/chat/threads/[threadId]/messages/[messageId]/cl
 const ctx = { params: { threadId: 'league:l1', messageId: 'm1' } } as never
 const req = new Request('http://localhost/close', { method: 'POST' }) as never
 
-function row(senderUserId: string | null) {
+/** `LeagueChatMessage` stores its author as `userId` — there is no `senderUserId` column. */
+function row(userId: string | null) {
   return {
     id: 'm1',
     leagueId: 'l1',
-    senderUserId,
+    userId,
     metadata: { poll: { question: 'Q', options: [{ id: 'a', text: 'x', votes: [] }] } },
   }
 }
@@ -111,7 +112,7 @@ describe('closing a league poll', () => {
     prismaMock.leagueChatMessage.findUnique.mockResolvedValue({
       id: 'm1',
       leagueId: 'l1',
-      senderUserId: 'u1',
+      userId: 'u1',
       metadata: {},
     })
 
@@ -133,5 +134,16 @@ describe('closing a league poll', () => {
 
     expect(res.status).toBe(200)
     expect(closePollMessageMock).toHaveBeenCalledWith('u1', 'thread-abc', 'm1')
+  })
+})
+
+describe('the row it reads', () => {
+  it('selects the author by the column the table has (userId), not senderUserId', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(row('u1'))
+    await POST(req, ctx)
+    const select = prismaMock.leagueChatMessage.findUnique.mock.calls[0][0].select
+    expect(select.userId).toBe(true)
+    expect(select.senderUserId).toBeUndefined()
   })
 })

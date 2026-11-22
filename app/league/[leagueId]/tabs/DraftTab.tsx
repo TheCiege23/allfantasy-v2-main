@@ -1,5 +1,7 @@
 'use client'
 
+import { buildAIChatHref } from '@/lib/chimmy-chat/AIContextRouter'
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LeagueInviteShare } from '@/components/league/invite/LeagueInviteShare'
 import { countClaimedSeats, leagueJoinUrl } from '@/lib/league/league-invite-link'
@@ -13,14 +15,17 @@ import { LeagueRecentActivity } from '@/app/league/[leagueId]/components/LeagueR
 import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { StandingsPresentation } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getDraftIdFromSettings, getSleeperLikeBundle } from '@/app/league/[leagueId]/components/league-settings-modal-utils'
-import { IDPDraftFilters } from '@/app/idp/components/IDPDraftFilters'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { openDraftFromEmbeddedLeague } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo } from '@/lib/league/ncaaf-beta-guard'
 import { NcaafBetaDataBanner } from '@/components/NcaafBetaDataBanner'
 import { DraftPremiumShells } from '@/components/redraft-premium'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { RedraftDraftBoard } from '@/components/league/native/redraft/RedraftDraftBoard'
+import { RedraftDraftGrades } from '@/components/league/native/redraft/RedraftDraftGrades'
+import '@/components/league/native/redraft-home.css'
 
-export type DraftTabProps = {
+type DraftTabProps = {
   league: UserLeague
   teams: UserLeagueTeam[]
   isOwner: boolean
@@ -478,9 +483,27 @@ export function DraftTab({
   }, [cap, isCommissioner, isOwner, league.id])
 
   const ncaafBetaInfo = getNcaafBetaBannerInfo(getNcaafBetaStatus(league))
+  /*
+   * Redraft identity (batch A1): Draft HQ for a native redraft league draws its board in the season-race
+   * tokens and adds the persisted post-draft grades once the draft is complete. Draft mode only — the
+   * League tab (`mode="league"`) and every other format keep the card below unchanged.
+   */
+  const redraft = !isLeagueHome ? resolveRedraftIdentity(league) : null
+  const redraftSeason = league.season != null && String(league.season).trim() ? String(league.season) : null
 
   return (
-    <div className={isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}>
+    <div className={`${isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}${redraft ? ' rdh-draft' : ''}`}>
+      <Link
+        className="inline-block rounded-lg border border-white/20 px-3 py-2 text-sm text-white"
+        href={buildAIChatHref({
+          leagueId: league.id,
+          source: 'draft_tool',
+          insightType: 'draft',
+          prompt: 'Who should I draft next in this league? Use the current draft board, my roster, and league scoring. Give me a backup pick.',
+        })}
+      >
+        Ask Chimmy who to draft
+      </Link>
       {ncaafBetaInfo ? <NcaafBetaDataBanner info={ncaafBetaInfo} /> : null}
       {/*
         ⚠ UNMOUNTED DELIBERATELY — THIS RENDERED A FABRICATED BOARD TO PEOPLE MID-DRAFT.
@@ -539,7 +562,32 @@ export function DraftTab({
         </section>
       ) : null}
 
-      {!isLeagueHome ? (
+      {redraft ? (
+        <RedraftDraftBoard
+          phase={draftCompleted ? 'done' : liveDraft ? 'live' : 'pre'}
+          sportLabel={redraft.sportLabel}
+          scoringLabel={typeof league.scoring === 'string' && league.scoring.trim() ? league.scoring.replace(/_/g, ' ') : 'Redraft'}
+          draftDateLabel={draftDateLabel}
+          timer={timer}
+          hasDraftTime={hasDraftTime}
+          filled={filled}
+          cap={cap}
+          isFull={isFull}
+          draftTypeLabel={draftTypeLabel}
+          pickTimerLabel={pickTimerLabel}
+          sleeperDraftId={sleeperDraftId ? String(sleeperDraftId) : null}
+          canSetDraftTime={canSetDraftTime}
+          canEnterDraftRoom={canEnterDraftRoom}
+          onDraftRoom={() => void handleDraftRoom()}
+          onSettings={openSettingsDraft}
+          onMock={() => void handleMockDrafts()}
+        />
+      ) : null}
+      {redraft && draftCompleted && redraftSeason ? (
+        <RedraftDraftGrades leagueId={league.id} season={redraftSeason} teams={displayTeams} userTeamId={null} />
+      ) : null}
+
+      {!isLeagueHome && !redraft ? (
       <section
         className="relative overflow-hidden rounded-[22px] text-white shadow-lg shadow-black/30"
         style={{

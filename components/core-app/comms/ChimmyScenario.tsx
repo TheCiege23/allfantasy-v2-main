@@ -9,6 +9,7 @@ import {
   type ScenarioPlayer,
 } from '@/lib/chimmy/tradeScenarioTypes'
 import { tradeDecisionRecommendation } from '@/lib/chimmy/tradeDecisionRecommendation'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * A scenario's before/after, rendered under the answer that discussed it — a trade, a waiver
@@ -32,12 +33,10 @@ import { tradeDecisionRecommendation } from '@/lib/chimmy/tradeDecisionRecommend
  * survives a monochrome render.
  */
 
-
 const label = (p: ScenarioPlayer) => (p.position ? `${p.name} (${p.position})` : p.name)
-const names = (ps: ScenarioPlayer[]) => ps.map(label).join(', ')
 
 function fmt(n: number | null | undefined, digits: number): string {
-  return n == null ? '—' : n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  return n == null ? '—' : n.toLocaleString(getAppIntlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
 const unitLabel = (unit: string | undefined, week?: number) =>

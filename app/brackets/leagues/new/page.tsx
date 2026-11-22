@@ -9,6 +9,9 @@ import { getRoundPointsSummary } from "@/lib/bracket-challenge"
 import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerFanCredSetupNotice"
 import { BracketChallengeHeroMedia } from "@/components/brackets/BracketChallengeHeroMedia"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
+import { roundPointsTable } from "@/lib/playoffs/playoffScoring"
+import { roundLabel } from "@/lib/playoffs/playoffBracketGraph"
+import { useEntitlement } from "@/hooks/useEntitlement"
 import { indefiniteArticleFor } from "@/lib/text/indefiniteArticle"
 import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "@/lib/playoffs/playoffChallengeConfig"
 
@@ -20,11 +23,12 @@ const SCORING_OPTIONS = [
 ] as const
 
 const SPORT_LABELS: Record<string, string> = {
-  NFL: "NFL",
+  NFL: "NFL Playoffs",
   NHL: "NHL",
   NBA: "NBA",
   MLB: "MLB",
-  NCAAF: "NCAA Football",
+  NCAAF: "College Football Playoff",
+  NBA_CUP: "NBA Cup",
   NCAAB: "NCAA Basketball",
   SOCCER: "Soccer",
 }
@@ -55,7 +59,7 @@ export default function NewBracketLeaguePage() {
   const [sport, setSport] = useState<string>("NCAAB")
   const [challengeType, setChallengeType] = useState<ChallengeType>("playoff_challenge")
   const [isPublic, setIsPublic] = useState(false)
-  const [maxUsers, setMaxUsers] = useState(50)
+  const [maxUsers, setMaxUsers] = useState("50")
   const [lockRule, setLockRule] = useState("series_start")
   const [scoringMode, setScoringMode] = useState<string>("momentum")
   const [maxEntriesPerUser, setMaxEntriesPerUser] = useState(1)
@@ -79,16 +83,22 @@ export default function NewBracketLeaguePage() {
    * app/api/brackets/playoffs/route.ts — they are the same decision written
    * twice, and only the API one is enforced.
    */
-  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB"]
+  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB", "NCAAF", "NBA_CUP", "NFL"]
   const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
-  const isAfCommissioner = isAfCommissionerSubscriber(session?.user)
+  const isSingleGamePool = isPlayoffPool && (sport === "NCAAF" || sport === "NBA_CUP" || sport === "NFL")
+  // The real AF Commissioner plan (the same feature the server checks at create), plus AllFantasy's
+  // own test accounts. The allowlist alone locked these options for every paying commissioner.
+  const commissionerPlan = useEntitlement("commissioner_ai_tools")
+  const isAfCommissioner = isAfCommissionerSubscriber(session?.user) || commissionerPlan.featureAccess
 
   useEffect(() => {
     const requestedSport = searchParams?.get("sport")
     const requestedType = searchParams?.get("challengeType")
 
     if (requestedSport) {
-      const normalized = normalizeToSupportedSport(requestedSport)
+      const normalized = requestedSport.toUpperCase() === "NBA_CUP"
+        ? "NBA_CUP"
+        : normalizeToSupportedSport(requestedSport)
       if (normalized === "SOCCER") {
         // Soccer pools live in the World Cup product, not the legacy BracketLeague stack.
         router.replace("/brackets/world-cup/create")
@@ -106,6 +116,10 @@ export default function NewBracketLeaguePage() {
   }, [searchParams, router])
 
   useEffect(() => {
+    setMaxEntriesPerUser(isSingleGamePool ? 5 : 1)
+  }, [isSingleGamePool])
+
+  useEffect(() => {
     if (sport !== "NCAAB" && challengeType === "mens_ncaa") {
       setChallengeType("playoff_challenge")
     }
@@ -113,8 +127,12 @@ export default function NewBracketLeaguePage() {
 
   const sportLabel = useMemo(() => SPORT_LABELS[sport] ?? sport, [sport])
   const scoringSummary = useMemo(
-    () => getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
-    [challengeType],
+    () => isSingleGamePool
+      ? sport === "NCAAF" ? "First round 1 · Quarterfinals 2 · Semifinals 4 · Championship 8"
+        : sport === "NFL" ? roundPointsTable("nfl").map(({ round, points }) => `${roundLabel("nfl", round)} ${points}`).join(" · ")
+        : roundPointsTable("nba_cup").map(({ round, points }) => `${roundLabel("nba_cup", round)} ${points}`).join(" · ")
+      : getRoundPointsSummary(challengeType === "playoff_challenge" ? { 1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32 } : undefined),
+    [challengeType, isSingleGamePool, sport],
   )
 
   async function handleConfirmAge() {
@@ -138,20 +156,33 @@ export default function NewBracketLeaguePage() {
   async function submitPool() {
     setError(null)
     setShowAgeConfirm(false)
+    const participantLimit = Number(maxUsers)
+    if (name.trim().length < 2 || name.trim().length > 80) {
+      setError("Enter a pool name between 2 and 80 characters.")
+      return
+    }
+    if (!maxUsers.trim() || !Number.isInteger(participantLimit) || participantLimit < 2 || participantLimit > 500) {
+      setError("Enter a participant limit from 2 to 500.")
+      return
+    }
+    if (!Number.isInteger(season) || season < 2024 || season > defaultSeason + 1) {
+      setError(`Enter a tournament year from 2024 to ${defaultSeason + 1}.`)
+      return
+    }
     setLoading(true)
 
     const returnTo = `/brackets/leagues/new?sport=${encodeURIComponent(sport)}&challengeType=${encodeURIComponent(challengeType)}`
 
     try {
       if (isPlayoffPool) {
-        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb"
+        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb" | "ncaaf" | "nba_cup" | "nfl"
         const config = sanitizePlayoffChallengeConfig(
           defaultPlayoffChallengeConfig({
             visibility: isPublic ? "public" : "private",
-            maxParticipants: maxUsers,
+            maxParticipants: participantLimit,
             maxEntriesPerParticipant: maxEntriesPerUser,
-            scoringStyle: scoringMode,
-            lockRule,
+            scoringStyle: isSingleGamePool ? "round_points" : scoringMode,
+            lockRule: isSingleGamePool ? "series_start" : lockRule,
           }),
           { afCommissionerEnabled: isAfCommissioner },
         )
@@ -161,10 +192,10 @@ export default function NewBracketLeaguePage() {
           seasonYear: season,
           isTestMode: false,
           visibility: isPublic ? "public" : "private",
-          maxUsers,
+          maxUsers: participantLimit,
           bracketsPerUser: maxEntriesPerUser,
-          scoringStyle: scoringMode,
-          lockRule,
+          scoringStyle: isSingleGamePool ? "round_points" : scoringMode,
+          lockRule: isSingleGamePool ? "series_start" : lockRule,
           config,
         })
         router.push(result.redirectUrl)
@@ -217,7 +248,6 @@ export default function NewBracketLeaguePage() {
 
   async function createPool(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
     await submitPool()
   }
 
@@ -234,14 +264,14 @@ export default function NewBracketLeaguePage() {
 
         <h1 className="text-xl font-bold text-center mb-2">Create Bracket Pool</h1>
         <p className="text-center text-xs mb-8 mode-muted">
-          Build {indefiniteArticleFor(sportLabel)} {sportLabel}{" "}
-          {challengeType === "playoff_challenge" ? "Playoff Challenge" : "Classic NCAA"} pool.
+          {sport === "NCAAF" ? "Build a College Football Playoff pool." : <>Build {indefiniteArticleFor(sportLabel)} {sportLabel}{" "}
+          {challengeType === "playoff_challenge" ? "Playoff Challenge" : "Classic NCAA"} pool.</>}
         </p>
 
         {/* Renders nothing for a sport with no shipped clip — see bracketChallengeMedia. */}
         <BracketChallengeHeroMedia sport={sport} />
 
-        <form onSubmit={createPool} className="space-y-6 pb-24 sm:pb-0" data-testid="bracket-create-form">
+        <form onSubmit={createPool} noValidate className="space-y-6 pb-24 sm:pb-0" data-testid="bracket-create-form">
           <div>
             <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Pool Name</label>
             <input
@@ -261,7 +291,7 @@ export default function NewBracketLeaguePage() {
               Sport
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {SUPPORTED_SPORTS.map((sportOption) => {
+              {[...SUPPORTED_SPORTS, "NBA_CUP"].map((sportOption) => {
                 const active = sport === sportOption
                 return (
                   <button
@@ -274,6 +304,7 @@ export default function NewBracketLeaguePage() {
                         return
                       }
                       setSport(sportOption)
+                      if (sportOption !== "NCAAB") setChallengeType("playoff_challenge")
                     }}
                     disabled={loading}
                     className="rounded-lg px-3 py-2 text-xs font-semibold text-left transition"
@@ -297,7 +328,7 @@ export default function NewBracketLeaguePage() {
             <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
               Challenge Type
             </label>
-            {CHALLENGE_TYPE_OPTIONS.map((opt) => {
+            {CHALLENGE_TYPE_OPTIONS.filter((opt) => sport !== "NCAAF" || opt.id === "playoff_challenge").map((opt) => {
               const disabled = opt.id === "mens_ncaa" && sport !== "NCAAB"
               const active = challengeType === opt.id
               return (
@@ -319,13 +350,17 @@ export default function NewBracketLeaguePage() {
                 >
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     {opt.id === "playoff_challenge" ? <Goal className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
-                    <span>{opt.label}</span>
+                    <span>{sport === "NCAAF" ? "Classic CFP Playoff Board" : opt.label}</span>
                   </div>
-                  <p className="mt-1 text-[11px] mode-muted">{opt.description}</p>
+                  <p className="mt-1 text-[11px] mode-muted">{sport === "NCAAF" ? "The official 12-team College Football Playoff bracket." : opt.description}</p>
                 </button>
               )
             })}
           </div>
+
+          {sport === "NCAAF" && season === 2026 ? <p className="rounded-xl border p-3 text-xs mode-muted" style={{ borderColor: "var(--border)" }}>
+            The official 2026 CFP field and matchups are scheduled to be announced on December 6. The board uses confirmed teams once published; rankings are not playoff selections.
+          </p> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -345,7 +380,7 @@ export default function NewBracketLeaguePage() {
 
             <div>
               <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Scoring System</label>
-              <select
+              {isSingleGamePool ? <p className="mt-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", color: "var(--text)" }}>Round points · fixed for this tournament</p> : <select
                 className="mt-2 w-full rounded-lg px-3 py-2 text-sm"
                 style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)", color: "var(--text)" }}
                 value={scoringMode}
@@ -358,7 +393,7 @@ export default function NewBracketLeaguePage() {
                     {opt.label}
                   </option>
                 ))}
-              </select>
+              </select>}
             </div>
           </div>
 
@@ -384,7 +419,7 @@ export default function NewBracketLeaguePage() {
                 <div className="text-left">
                   <div className="text-sm font-semibold" style={{ color: !isPublic ? "var(--text)" : "var(--muted)" }}>Private</div>
                   <div className="text-[11px] mt-0.5" style={{ color: !isPublic ? "var(--muted)" : "var(--muted2)" }}>
-                    Invite only via code
+                    {sport === "NCAAF" ? "Share the pool link with participants" : "Invite only via code"}
                   </div>
                 </div>
               </button>
@@ -407,6 +442,7 @@ export default function NewBracketLeaguePage() {
                 </div>
               </button>
             </div>
+            {sport === "NCAAF" ? <p className="mt-2 text-xs mode-muted">Private pools require a commissioner’s invite to join. Finalized brackets also appear on the universal standings.</p> : null}
           </div>
 
           <div className="mode-panel-soft rounded-xl p-3.5">
@@ -418,15 +454,16 @@ export default function NewBracketLeaguePage() {
               className="mt-2 w-full rounded-lg border px-3 py-2 text-sm bg-transparent"
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
               value={maxUsers}
-              onChange={(e) => setMaxUsers(Number(e.target.value) || 50)}
+              onChange={(e) => setMaxUsers(e.target.value)}
               disabled={loading}
               data-testid="bracket-create-max-users-input"
             />
+            <p className="mt-2 text-xs mode-muted">Choose between 2 and 500 participants.</p>
           </div>
 
           <div className="mode-panel-soft rounded-xl p-3.5">
             <label className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Lock Rule</label>
-            <select
+            {isSingleGamePool ? <p className="mt-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", color: "var(--text)" }}>{sport === "NCAAF" || sport === "NFL" ? "All picks lock when the first playoff game starts" : "Lock each game at its published start time"}</p> : <select
               className="mt-2 w-full rounded-lg px-3 py-2 text-sm"
               style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)", color: "var(--text)" }}
               value={lockRule}
@@ -437,9 +474,9 @@ export default function NewBracketLeaguePage() {
               <option value="series_start">Lock each series at start</option>
               <option value="pool_start">Lock all picks at pool start</option>
               <option value="none">No lock / test late picks</option>
-            </select>
+            </select>}
             <p className="mt-2 text-[11px] mode-muted">
-              No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks.
+              {sport === "NCAAF" || sport === "NFL" ? "Picks open after the official field and game schedule are published. Every bracket locks when the first game starts." : sport === "NBA_CUP" ? "Each game locks at its published start time." : "No-lock mode is for commissioner testing and late-pick pools. Standard pools should keep series start locks."}
             </p>
           </div>
 
@@ -449,7 +486,7 @@ export default function NewBracketLeaguePage() {
               <input
                 type="range"
                 min={1}
-                max={10}
+                max={isSingleGamePool ? 5 : 10}
                 value={maxEntriesPerUser}
                 onChange={(e) => setMaxEntriesPerUser(Number(e.target.value))}
                 disabled={loading}
@@ -458,6 +495,7 @@ export default function NewBracketLeaguePage() {
               />
               <span className="w-8 text-sm font-semibold mode-text">{maxEntriesPerUser}</span>
             </div>
+            {isSingleGamePool && <p className="mt-2 text-xs mode-muted">A pool can allow up to five entries per person. Each user gets one free bracket per tournament season; active AF subscriptions allow up to five total across leagues. Extra capacity is never a stake or entry fee.</p>}
           </div>
 
           <details
@@ -465,12 +503,19 @@ export default function NewBracketLeaguePage() {
             data-testid="af-commissioner-options"
           >
             <summary className="cursor-pointer text-sm font-bold mode-text">
-              AF Commissioner Options {isAfCommissioner ? "" : "(Locked Preview)"}
+              {sport === "NCAAF" ? "CFP Commissioner Options" : `AF Commissioner Options ${isAfCommissioner ? "" : "(Locked Preview)"}`}
             </summary>
-            <p className="mt-2 text-xs mode-muted">
-              Premium controls are prepared for pool setup. AI tools flag issues for commissioner review only; they do not accuse, punish, remove, or ban users.
-            </p>
-            <div className="mt-3 grid gap-2 text-xs mode-muted">
+            {sport !== "NCAAF" ? <p className="mt-2 text-xs mode-muted">
+              Premium controls are prepared for pool setup. Chimmy tools flag issues for commissioner review only; they do not accuse, punish, remove, or ban users.
+            </p> : null}
+            {sport === "NCAAF" ? (
+              <div className="mt-3 grid gap-2 text-xs mode-muted">
+                <p>The pool invite code and link are available after creation. These visibility settings are available to all commissioners.</p>
+                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={!isPublic} onChange={() => setIsPublic(false)} disabled={loading} />Private pool · invite required</label>
+                <label className="flex items-center gap-2"><input type="radio" name="cfp-privacy" checked={isPublic} onChange={() => setIsPublic(true)} disabled={loading} />Public pool · open to join</label>
+                <p>Approval-required and password-protected entry are unavailable. CFP uses fixed round points and a championship score tiebreaker.</p>
+              </div>
+            ) : <div className="mt-3 grid gap-2 text-xs mode-muted">
               {[
                 "Include NBA Play-In Tournament",
                 "Exact series score picks",
@@ -479,12 +524,12 @@ export default function NewBracketLeaguePage() {
                 "Spread prediction",
                 "Over/Under prediction",
                 "Custom scoring values",
-                "AI Anti-Collusion Monitor",
+                "Chimmy Anti-Collusion Monitor",
                 "Duplicate Entry Detection",
-                "AI Pool Health Report",
-                "AI Scoring Explainer",
-                "AI Dispute Assistant",
-                "AI Bracket Integrity Check",
+                "Chimmy Pool Health Report",
+                "Chimmy Scoring Explainer",
+                "Chimmy Dispute Assistant",
+                "Chimmy Bracket Integrity Check",
                 "Auto-remind incomplete brackets",
                 "Auto-lock entries at deadline",
                 "Auto-recalculate after provider sync",
@@ -501,8 +546,8 @@ export default function NewBracketLeaguePage() {
                   <span>{label}</span>
                 </label>
               ))}
-            </div>
-            {!isAfCommissioner ? (
+            </div>}
+            {!isAfCommissioner && sport !== "NCAAF" ? (
               <a
                 href="/pricing"
                 className="mt-3 inline-flex rounded-lg border px-3 py-2 text-xs font-semibold"
@@ -520,15 +565,15 @@ export default function NewBracketLeaguePage() {
               <label className="flex items-center gap-2 text-sm mode-muted">
                 <input
                   type="checkbox"
-                  checked={tiebreakerEnabled}
+                  checked={isSingleGamePool || tiebreakerEnabled}
                   onChange={(e) => setTiebreakerEnabled(e.target.checked)}
-                  disabled={loading}
+                  disabled={isSingleGamePool || loading}
                   data-testid="bracket-create-tiebreak-toggle"
                 />
                 Enable championship total points tiebreaker
               </label>
               <select
-                disabled={!tiebreakerEnabled || loading}
+                disabled={isSingleGamePool || !tiebreakerEnabled || loading}
                 value={tiebreakerType}
                 onChange={(e) => setTiebreakerType(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm mode-text" style={{ border: "1px solid var(--border)", background: "color-mix(in srgb, var(--panel2) 88%, transparent)" }}
@@ -539,7 +584,8 @@ export default function NewBracketLeaguePage() {
             </div>
           </div>
 
-          <CommissionerFanCredSetupNotice dataTestId="bracket-create-paid-boundary-copy" />
+          {isSingleGamePool && <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm font-bold text-amber-100">AllFantasy offers no prizes, gambling, betting, bracket entry fees, or in-app payouts. Any external commissioner arrangements are outside AllFantasy.</p>}
+          {isSingleGamePool ? <p className="rounded-xl border border-white/15 p-3 text-xs mode-muted">Commissioners may coordinate optional external arrangements independently, subject to AllFantasy terms. They must use third-party services for any funds or prizes; AllFantasy never collects, holds, tracks, or distributes them.</p> : <CommissionerFanCredSetupNotice dataTestId="bracket-create-paid-boundary-copy" />}
 
           {showAgeConfirm && (
             <div className="rounded-xl p-4 space-y-3" style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}>
@@ -567,7 +613,7 @@ export default function NewBracketLeaguePage() {
           )}
 
           {error && (
-            <div className="rounded-xl p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--accent-red-strong) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-red-strong) 38%, transparent)', color: 'var(--accent-red)' }}>
+            <div role="alert" className="rounded-xl p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--accent-red-strong) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-red-strong) 38%, transparent)', color: 'var(--accent-red)' }}>
               {error}
             </div>
           )}
@@ -575,7 +621,7 @@ export default function NewBracketLeaguePage() {
           <div className="fixed bottom-0 left-0 right-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:static sm:p-0">
             <button
               type="submit"
-              disabled={!name.trim() || loading}
+              disabled={loading}
               className="w-full rounded-xl px-4 py-3.5 text-sm font-bold uppercase tracking-wider text-black disabled:opacity-40 transition"
               style={{ background: "var(--accent)" }}
               data-testid="bracket-create-submit-button"

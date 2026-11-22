@@ -1,12 +1,13 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * POST: Run weighted lottery (commissioner). Body: { seed?: string; confirm: boolean }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import {
   getDraftOrderModeAndLotteryConfig,
@@ -16,6 +17,7 @@ import { runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngi
 import { checkDynastyLotteryEligibility } from '@/lib/draft-lottery/dynastyYearGuard'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { logAction } from '@/server/services/auditService'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +35,7 @@ export async function POST(
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const lotteryEligibility = await checkDynastyLotteryEligibility(leagueId)
@@ -90,6 +92,12 @@ export async function POST(
       },
     })
   }
+
+  // Keep the actual draw rather than reconstructing it from a later draft or standings.
+  await logAction({
+    leagueId, userId, actionType: 'draft_lottery_run', entityType: 'league', entityId: leagueId,
+    afterState: { seed, runAt: result.runAt, lotteryDraws: result.lotteryDraws, slotOrder: result.slotOrder, oddsSnapshot: result.oddsSnapshot, trigger: 'commissioner' } as unknown as Prisma.InputJsonValue,
+  }).catch(() => null)
 
   return NextResponse.json({
     ...result,

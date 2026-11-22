@@ -11,8 +11,8 @@ describe('injurySmsEnabled', () => {
 
 describe('finalCallSms', () => {
   it('says the call, the fix and the link', () => {
-    expect(finalCallSms({ title: 'Jeremiyah Love is Out and still starting', body: 'Guillotine League 26: start Tyler Allgeier.' }, 'https://allfantasy.ai/core/players?q=x')).toBe(
-      'Final call: Jeremiyah Love is Out and still starting. Guillotine League 26: start Tyler Allgeier. Fix: https://allfantasy.ai/core/players?q=x',
+    expect(finalCallSms({ title: 'Jeremiyah Love is Out and still starting', body: 'Guilly League 26: start Tyler Allgeier.' }, 'https://allfantasy.ai/core/players?q=x')).toBe(
+      'Final call: Jeremiyah Love is Out and still starting. Guilly League 26: start Tyler Allgeier. Fix: https://allfantasy.ai/core/players?q=x',
     )
   })
 

@@ -71,7 +71,7 @@ describe('leagueTypeConfident — does the concept rest on anything?', () => {
   })
 
   it('is true when a name signal matches', () => {
-    expect(confidenceOf({ name: 'Gridiron Guillotine' })).toBe(true)
+    expect(confidenceOf({ name: 'Gridiron Guilly' })).toBe(true)
     expect(confidenceOf({ name: 'Survivor Classic' })).toBe(true)
   })
 

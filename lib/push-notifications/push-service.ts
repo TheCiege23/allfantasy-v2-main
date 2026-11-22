@@ -1,3 +1,4 @@
+import { gameAlertDeadline, pushRetentionSeconds } from "@/lib/notifications/gameAlertFreshness"
 /**
  * Push notification service — store subscriptions, send via web-push (VAPID).
  */
@@ -9,14 +10,25 @@ import { getBaseUrl } from "@/lib/get-base-url"
 import type { PushSubscriptionInput, PushPayload, SendPushResult } from "./types"
 import { IOS_ENDPOINT_PREFIX, isIosEndpoint, isValidDeviceToken, sendApns } from "./apns"
 
+import { resolvePushDevices } from "@/lib/notification-settings/NotificationPreferenceResolver"
+import type { NotificationPreferences } from "@/lib/notification-settings/types"
+
 let vapidConfigured = false
 
 /** Conversation alerts: a new one on the same tag should buzz, not silently replace. */
 const CHAT_PUSH_TYPES: ReadonlySet<string> = new Set(["direct_message", "huddle_message", "mention", "league_chat_message"])
 
+/**
+ * Live game alerts share ONE tag per game so they replace rather than stack (gamePushTag,
+ * bigPlayNotifier). A replaced touchdown must still buzz, or grouping would silence every play
+ * after the first.
+ */
+const GROUPED_GAME_TAG = /^(game|live-play):/
+
 /** Whether a web push should alert again when it replaces a notification with the same tag. PURE. */
 export function shouldRenotify(type: string | null | undefined, tag: string | null | undefined): boolean {
-  return Boolean(tag) && CHAT_PUSH_TYPES.has(String(type))
+  if (!tag) return false
+  return CHAT_PUSH_TYPES.has(String(type)) || GROUPED_GAME_TAG.test(tag)
 }
 
 function ensureVapid() {
@@ -79,13 +91,13 @@ export async function removePushSubscription(
 }
 
 /** Get all subscriptions for a user. */
-export async function getPushSubscriptions(userId: string, strict = false): Promise<
-  { id: string; endpoint: string; p256dh: string; auth: string }[]
+export async function getPushSubscriptions(userId: string, strict = true): Promise<
+  { id: string; endpoint: string; p256dh: string; auth: string; userAgent?: string | null }[]
 > {
   const rows = await (prisma as any).webPushSubscription
     .findMany({
       where: { userId },
-      select: { id: true, endpoint: true, p256dh: true, auth: true },
+      select: { id: true, endpoint: true, p256dh: true, auth: true, userAgent: true },
     })
     .catch((error: unknown) => { if(strict)throw error;return [] })
   return rows
@@ -138,6 +150,7 @@ async function sendToSubscription(
      */
     ...(shouldRenotify(payload.type, payload.tag) ? { renotify: true } : {}),
     type: payload.type ?? "notification",
+    expiresAt: payload.expiresAt,
     leagueId: payload.leagueId ?? null,
     // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
     image: payload.imageUrl ?? undefined,
@@ -154,7 +167,7 @@ async function sendToSubscription(
   }
 
   try {
-    await webpush.sendNotification(pushSubscription, payloadStr)
+    await webpush.sendNotification(pushSubscription, payloadStr, { urgency: 'high', timeout: 8000, TTL: pushRetentionSeconds(payload.type) })
     return { ok: true }
   } catch (e: unknown) {
     const err = e as { statusCode?: number; body?: string }
@@ -165,20 +178,34 @@ async function sendToSubscription(
   }
 }
 
+function pushDevice(subscription: { endpoint: string; userAgent?: string | null }): 'mobile' | 'desktop' {
+  return isIosEndpoint(subscription.endpoint) || /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(subscription.userAgent ?? '')
+    ? 'mobile'
+    : 'desktop'
+}
+
 /**
- * Send push notification to all subscriptions for a user.
+ * Send push notification to eligible subscriptions for a user.
  * Call from dispatcher when category is ai_alerts, chat_mentions, or league-related.
  */
 export async function sendPushToUser(
   userId: string,
   input: PushPayload,
-  options?: { strictSubscriptionRead?: boolean }
+  options?: { strictSubscriptionRead?: boolean; devices?: ReturnType<typeof resolvePushDevices> }
 ): Promise<SendPushResult[]> {
-  const all = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
+  const subscriptions = await getPushSubscriptions(userId, options?.strictSubscriptionRead)
+  if (subscriptions.length === 0) return []
+  const devices = options?.devices ?? resolvePushDevices(
+    (await prisma.userProfile.findUnique({ where: { userId }, select: { notificationPreferences: true } }))?.notificationPreferences as NotificationPreferences | null,
+  )
+  const all = subscriptions.filter((subscription) => devices[pushDevice(subscription)])
   if (all.length === 0) return []
   // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
+  const deadline = gameAlertDeadline(input.type, new Date(), input.expiresAt)
+  if (deadline !== undefined && deadline <= Date.now()) return []
   const payload: PushPayload = {
     ...input,
+    expiresAt: deadline === undefined ? undefined : new Date(deadline).toISOString(),
     imageUrl: absolutePushImageUrl(input.imageUrl),
     iconUrl: absolutePushImageUrl(input.iconUrl),
   }
@@ -201,7 +228,7 @@ export async function sendPushToUser(
     )
     for (let i = 0; i < ios.length; i += 1) {
       const r = sent[i]
-      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id } : { ok: false, error: r.error, subscriptionId: ios[i].id })
+      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id, device: "mobile" } : { ok: false, error: r.expired ? 'Subscription expired' : r.error, subscriptionId: ios[i].id, device: "mobile" })
       if (!r.ok && r.expired) {
         await (prisma as any).webPushSubscription
           .deleteMany({ where: { endpoint: ios[i].endpoint } })
@@ -214,12 +241,12 @@ export async function sendPushToUser(
   try {
     ensureVapid()
   } catch {
-    return [...results, ...subs.map(() => ({ ok: false, error: "VAPID not configured" }))]
+    return [...results, ...subs.map((sub) => ({ ok: false, error: "VAPID not configured", subscriptionId: sub.id, device: pushDevice(sub) }))]
   }
 
-  for (const sub of subs) {
+  await Promise.all(subs.map(async sub => {
     const result = await sendToSubscription(sub, payload)
-    results.push({ ...result, subscriptionId: sub.id })
+    results.push({ ...result, subscriptionId: sub.id, device: pushDevice(sub) })
     if (!result.ok && result.error === "Subscription expired") {
       try {
         await (prisma as any).webPushSubscription.deleteMany({
@@ -229,7 +256,7 @@ export async function sendPushToUser(
         // ignore
       }
     }
-  }
+  }))
   return results
 }
 

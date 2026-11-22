@@ -256,109 +256,6 @@ export type LeagueDifficultyContextSlice = {
   rating: LeagueDifficultyRating | null
 }
 
-// ─── Phase 2C Batch 4 Sub-batch E: derived intelligence (additive) ────────
-/**
- * Recommendation severity ladder. Derived (for now) from urgency level via
- * `SEVERITY_TUNABLES`. Will switch to `recommendationPriority` once that
- * formula is finalized.
- */
-export type RecommendationSeverity =
-  | "CRITICAL"
-  | "HIGH"
-  | "MODERATE"
-  | "LOW"
-  | "WATCHLIST"
-
-/**
- * Unified strategic intelligence slice. NOT loaded by a provider — derived
- * on-the-fly from the rest of the bundle. Safe to omit; consumers must
- * treat `null` as "no intel surfaced".
- */
-export type IntelligenceContextSlice = {
-  urgencyLevel:
-    | "critical"
-    | "high"
-    | "moderate"
-    | "low"
-    | "none"
-    | "unknown"
-  urgencyScore: number | null
-  recommendationPriority:
-    | "critical"
-    | "important"
-    | "optional"
-    | "watchlist"
-    | "unknown"
-  recommendationSeverity: RecommendationSeverity
-  /** Identity hint sourced from `RosterContextSlice.teamIdentityHint`. */
-  teamIdentity:
-    | "contender"
-    | "rebuild"
-    | "boom_bust"
-    | "depth_heavy"
-    | "injury_prone"
-    | "youth_focused"
-    | "unknown"
-  /** Short tag list (e.g. `["bye_conflict","injury_exposure"]`). */
-  strategicRisks: string[]
-  /** Short coaching hint slugs (e.g. `["address_wr_depth"]`). */
-  coachingHints: string[]
-  /** One-line playoff status summary; `null` when no playoff data. */
-  playoffOutlook: string | null
-  /** One-line roster summary; `null` when no roster intel. */
-  rosterOutlook: string | null
-  /** One-line competitive context summary; `null` when fully unknown. */
-  competitiveContextSummary: string | null
-  /**
-   * Phase 3A.1 — Adaptive intelligence surface (additive, optional).
-   * Populated when `computeStrategicRisks` and `adaptCoachingHints` are
-   * wired through `buildIntelligenceBundle`. Consumers must treat these
-   * as optional and tolerate `null`/`[]` for fail-safe behavior.
-   *
-   * Slim structural types are used here to avoid a circular module import
-   * with the intel/* synthesizers; the canonical types live in
-   * `intel/strategicRisk.ts` and `intel/coachingAdaptation.ts`.
-   */
-  strategicRiskScores?: {
-    roster: number
-    injury: number
-    volatility: number
-    playoff: number
-    matchup: number
-    structural: number
-    composite: number
-    signals: Record<
-      "roster" | "injury" | "volatility" | "playoff" | "matchup" | "structural",
-      string[]
-    >
-  } | null
-  /** Top 3 risk dimensions, sorted desc by score (zero-score dims dropped). */
-  topRisks?: Array<{
-    dimension:
-      | "roster"
-      | "injury"
-      | "volatility"
-      | "playoff"
-      | "matchup"
-      | "structural"
-    score: number
-  }>
-  /** Coaching hints ordered desc by adaptive relevance score. */
-  adaptiveCoachingHints?: Array<{
-    slug: string
-    theme:
-      | "stance"
-      | "injury"
-      | "schedule"
-      | "roster"
-      | "playoff"
-      | "matchup"
-      | "unknown"
-    score: number
-    rationale: string[]
-  }>
-}
-
 export type ImportedHistorySlice = {
   source: "sleeper" | "espn" | "yahoo" | "fantrax" | "mfl" | "fleaflicker" | "unknown" | null
   totalLeagues: number
@@ -417,12 +314,11 @@ export type ReplayInsightSlice = {
  * Reserved hook for future vector-store memory retrieval.
  * Phase 2A: always empty array. Phase 3+: top-K retrieved summaries.
  */
-export type MemoryRef = {
+type MemoryRef = {
   type: "matchup" | "trade" | "draft" | "season_summary" | "user_note"
   id: string
   summary: string
 }
-
 
 /**
  * Devy / college prospect grounding.
@@ -486,6 +382,17 @@ export type DevyContextSlice = {
 }
 
 /** Final aggregated bundle handed to consumers (chat route, debug endpoints). */
+/**
+ * The commissioner tools as the viewer may see them (LeagueOfficeContextProvider): weekly prizes,
+ * trades in review, stat corrections, inactive manager mode, the latest league log. Prompt-ready
+ * prose. Null outside leagues AllFantasy runs, or when there is nothing to say.
+ */
+export type LeagueOfficeContextSlice = {
+  leagueId: string
+  viewerRole: 'commissioner' | 'member'
+  summary: string
+}
+
 export type ChimmyContextBundle = {
   user: UserContextSlice | null
   aiAccess: SubscriptionContextSlice | null
@@ -502,6 +409,8 @@ export type ChimmyContextBundle = {
   replayInsights: ReplayInsightSlice | null
   /** Devy/college prospect board. Null when the pool is empty or unrankable. */
   devy: DevyContextSlice | null
+  /** The commissioner tools as this viewer may see them. Null outside native leagues. */
+  leagueOffice: LeagueOfficeContextSlice | null
   /** Future memory retrieval hook (vector store). Phase 2A: []. */
   memoryRefs: MemoryRef[]
   /** Provenance: which providers ran, succeeded, failed, were cached. */
@@ -518,7 +427,3 @@ export type ChimmyContextBundle = {
   }
 }
 
-/** Free-form recommendation context — reserved for Phase 2B. */
-export type RecommendationsContextSlice = {
-  hints: string[]
-}

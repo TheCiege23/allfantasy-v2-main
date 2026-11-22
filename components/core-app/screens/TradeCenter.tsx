@@ -2,9 +2,19 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { summarizeTrades, tradesChips, tradesHeadline, type TradesChip } from '@/lib/core-app/tradesGuide'
+import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
+import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
+import { sleeperOfferEntryHref } from '@/components/trades/SleeperOffersNotice'
+import '@/components/core-app/home/af-home-guide.css'
+import '@/components/core-app/trades/af-trades-guide.css'
+import '@/components/core-app/trades/af-trades-league-guide.css'
 import Link from 'next/link'
 import type { TradeRecord } from '@/lib/core-app/trades'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { holdUnsavedWork } from '@/lib/core-app/unsavedWork'
 import { decodeTradeDraft, tradeDeviceDraftKey } from './tradeDeviceDraft'
 import { valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
@@ -12,17 +22,15 @@ import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
 import {
   RosterPlayerRow,
+  positionGlyph,
+  positionTone,
   StockMark,
   TradeAssetPicker,
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { readPickPreviewValue } from '@/lib/trade-value-console/pickPreview'
-import {
-  analysisUnpricedReason,
-  pickUnpricedReason,
-  pricedOnAnalysisReason,
-} from '@/lib/trade-value/unpricedReason'
+import { analysisUnpricedReason, pricedOnAnalysisReason } from '@/lib/trade-value/unpricedReason'
 /*
  * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
  * team-logo functions (`getTeamLogo`, three separate `getTeamLogoUrl`s, and
@@ -35,6 +43,10 @@ import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { GenericTradeAnalyzer } from '@/components/core-app/screens/GenericTradeAnalyzer'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
+import { TradeCenterPanel } from '@/components/core-app/screens/TradeCenterPanel'
+import { ProposeTradeFlow, ProposeTradeLaunch } from '@/components/core-app/screens/ProposeTradeFlow'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradePartnerSelectMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
@@ -45,12 +57,17 @@ import {
   suggestionToPickedAssets,
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
+import { RebuildPlanCard } from '@/components/core-app/screens/RebuildPlanCard'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
-import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { coreDepthLockCopy, lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeMarketEvidence } from './TradeMarketEvidence'
 import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
@@ -65,6 +82,10 @@ import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import { usePlayerCard } from '../player-card/PlayerCardProvider'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
+import { matchMultiTeamOffer, offerTeamCount, type MultiOfferRefusal } from '@/lib/trade-screenshot/matchMultiOffer'
+import { MultiTeamTradeBuilder } from '@/components/core-app/screens/MultiTeamTradeBuilder'
+import { multiTeamTradeMessages } from '@/lib/core-app/messages/multiTeamTrade'
+import type { MultiAsset } from '@/lib/trade-intel/multiTeamGrade'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
 import { tradeExplainPrompt } from '@/lib/core-app/tradeExplainPrompt'
@@ -73,9 +94,19 @@ import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tradeCenterMessages } from '@/lib/core-app/messages/tradeCenter'
+import { PickTradeDeadlineChip, useTradeDeadlineCountdownText } from '@/components/core-app/TradeDeadlineCountdown'
+import { tradesLeagueHeadline } from '@/lib/core-app/tradesLeagueGuide'
+import { tradesLeagueGuideMessages } from '@/lib/core-app/messages/tradesLeagueGuide'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import type { TradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineCountdown'
+import type { PickTradeDeadlineView } from '@/lib/trade-deadline/pickTradeDeadline'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { isBlockingFormatNote } from '@/lib/trade-intel/formatNoteBlocking'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { DynastyPickCapitalPanel, pickDealKey } from './DynastyPickCapitalPanel'
+import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 
 /**
  * Screen 36a — Trade Center.
@@ -128,47 +159,6 @@ function assetTypesFor(leagueType: string | null | undefined): { types: typeof A
   /* Picks exist only where there is a future draft to send them into. */
   if (type === 'dynasty' || type === 'keeper') keys.add('pick')
   return { types: ASSET_TYPES.filter((a) => keys.has(a.key)), scoped: true }
-}
-
-/** Single letter for a platform mark, matching the rail's PLATFORM_MARK. */
-const PLATFORM_MARK: Record<string, string> = {
-  sleeper: 'S',
-  espn: 'E',
-  yahoo: 'Y',
-  cbs: 'C',
-  mfl: 'M',
-  fantrax: 'F',
-  fleaflicker: 'L',
-}
-function platformMark(platform: string): string {
-  return PLATFORM_MARK[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase()
-}
-
-/**
- * Position colour, the same assignment the league Trades tab uses for its
- * trade-block cards, so a WR reads the same colour on every trade surface.
- */
-const POSITION_TONE: Record<string, string> = {
-  QB: 'qb',
-  RB: 'rb',
-  WR: 'wr',
-  TE: 'te',
-  DL: 'dl',
-  DE: 'dl',
-  DT: 'dl',
-  NT: 'dl',
-  LB: 'lb',
-  DB: 'db',
-  CB: 'db',
-  S: 'db',
-  SS: 'db',
-  FS: 'db',
-  K: 'k',
-  DEF: 'def',
-  DST: 'def',
-}
-function positionTone(position: string): string {
-  return POSITION_TONE[position.toUpperCase()] ?? 'other'
 }
 
 type Line = {
@@ -296,7 +286,7 @@ type AnalyzeResult = {
  * cannot price is not worthless, and rendering 0 would say he is.
  */
 function money(v: number | null | undefined): string {
-  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(getAppIntlLocale()) : '—'
 }
 
 /**
@@ -305,15 +295,6 @@ function money(v: number | null | undefined): string {
  */
 function valueOf(l: Line): number | null | undefined {
   return l.leagueValue !== undefined ? l.leagueValue : l.marketValue
-}
-
-/** Sum that ignores unpriced lines rather than treating them as zero. */
-function totalOf(lines: Line[]): string {
-  const priced = lines
-    .map(valueOf)
-    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-  if (priced.length === 0) return '—'
-  return priced.reduce((a, b) => a + b, 0).toLocaleString()
 }
 
 /**
@@ -327,7 +308,7 @@ function afWeekTotal(lines: Line[]): number | null {
   return Math.round(pts.reduce((a, b) => a + b, 0) * 10) / 10
 }
 
-/** The same sum as a number, null when nothing on the side is priced. */
+/** Sum that ignores unpriced lines rather than treating them as zero; null when nothing on the side is priced. */
 function pricedTotal(lines: Line[]): number | null {
   const priced = lines
     .map(valueOf)
@@ -386,31 +367,236 @@ const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string
   { key: 'byeNotes', tone: 'bye', title: 'Bye-week collisions' },
 ]
 
+/** "NFL · 18 teams" → 18. The strip's meta is display text, so anything unreadable is null, never a guess. */
+function teamCountFromMeta(meta: string | null | undefined): number | null {
+  const match = /(\d+)\s+teams?\b/i.exec(meta ?? '')
+  return match ? Number(match[1]) : null
+}
+
+/** "NFL · 18 teams" → "NFL", only when the first token is a sport this app grades. */
+function sportFromMeta(meta: string | null | undefined): string | null {
+  const first = (meta ?? '').split('·')[0]?.trim().toUpperCase() ?? ''
+  return ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'].includes(first) ? first : null
+}
+
+/**
+ * The league trade evaluator on its own: a league picker, then that league's builder with Team A as
+ * you and Team B a manager dropdown — or, for an offer from somewhere AllFantasy cannot see, the
+ * no-league analyzer. The Trades hub renders it in its evaluator section; Home renders it inside a
+ * folded card (HomeTradeEvaluatorCard). One component, so the two cannot drift apart.
+ */
+export function LeagueTradeEvaluator(props: {
+  leagues: StripLeague[]
+  viewerId?: string | null
+  /** The trades guide: say, in one line, how to grade an offer Sleeper has not shared yet. */
+  offerHint?: boolean
+}) {
+  const guide = useMessages(tradesGuideMessages)
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  /*
+   * The evaluator's league. Defaults to the first connected league, so Team A — your roster and
+   * picks there — is on screen without a click. OUTSIDE is the no-league analyzer, kept for an offer
+   * from somewhere AllFantasy cannot see.
+   */
+  const OUTSIDE = 'outside'
+  const [evalLeagueId, setEvalLeagueId] = useState<string>(props.leagues[0]?.id ?? OUTSIDE)
+  const evalLeague = props.leagues.find((league) => league.id === evalLeagueId) ?? null
+  return (
+    <>
+      <label className="af-tc-hub-league-select">
+        <span>{copy('League')}</span>
+        <select value={evalLeagueId} onChange={(event) => setEvalLeagueId(event.target.value)}>
+          {props.leagues.map((league) => (
+            <option key={league.id} value={league.id}>
+              {league.name}{league.meta ? ` · ${league.meta}` : ''}
+            </option>
+          ))}
+          <option value={OUTSIDE}>{copy('Outside offer — no league')}</option>
+        </select>
+      </label>
+      {evalLeague ? (
+        <>
+          <p className="af-tc-row-sub">{copy('Team A is your roster and picks in this league. Choose the manager for Team B.')}</p>
+          {/*
+            Replaces the long "Trade offers still waiting in Sleeper" box on the all-leagues page with the
+            one thing it was for: Sleeper shares a trade only once accepted, so a pending offer is graded
+            from a screenshot (SleeperOffersNotice, `?enter=offer`).
+          */}
+          {props.offerHint && evalLeague.platform.toLowerCase() === 'sleeper' ? (
+            <p className="af-tg-hint">
+              {guide.sleeperHint}{' '}
+              <Link href={sleeperOfferEntryHref(evalLeague.id)}>{guide.sleeperHintLink}</Link>
+            </p>
+          ) : null}
+          {/*
+            The league's own Trade Center builder, keyed by league so switching leagues starts a
+            clean deal instead of carrying one team's players into another league.
+          */}
+          <TradeCenter
+            key={evalLeague.id}
+            embedded
+            viewerId={props.viewerId}
+            league={{ id: evalLeague.id, name: evalLeague.name, format: null, teamCount: teamCountFromMeta(evalLeague.meta) }}
+            platform={evalLeague.platform}
+            sport={sportFromMeta(evalLeague.meta)}
+          />
+        </>
+      ) : (
+        <GenericTradeAnalyzer viewerId={props.viewerId} />
+      )}
+    </>
+  )
+}
+
+/** One headline chip, the same markup and tones as the home, week and live guides. */
+function TradesChipView({ chip, guide }: { chip: TradesChip; guide: (typeof tradesGuideMessages)['en'] }) {
+  const label =
+    chip.key === 'offers' ? guide.chipOffers : chip.key === 'new' ? guide.chipNew : chip.key === 'deadlines' ? guide.chipDeadlines : guide.chipOpen
+  // af-hg tones: warn = red, info = accent, ok = muted.
+  const tone = chip.tone === 'bad' ? 'warn' : chip.tone === 'plain' ? 'ok' : 'info'
+  const body = (
+    <>
+      <b>{chip.value}</b>
+      <span>{label}</span>
+    </>
+  )
+  return chip.href ? (
+    <a className="af-hg-chip" data-tone={tone} data-chip={chip.key} href={chip.href}>
+      {body}
+    </a>
+  ) : (
+    <span className="af-hg-chip af-tg-chip" data-tone={tone} data-chip={chip.key}>
+      {body}
+    </span>
+  )
+}
+
+/**
+ * The all-leagues Trades page (2026-11-13, owner: "simplify and make sure that users know what it's
+ * supposed to be used for"). It used to open on sixteen "None visible" offer tiles, then a full builder,
+ * then the market, then a second "Trades" page title, then an 82-league grid. Now, in the order a
+ * manager needs it:
+ *
+ *   1. one headline (offers waiting › new trades › quiet week) and up to four chips
+ *   2. offers waiting — a tile only for a league that has one, a plain line otherwise
+ *   3. Check a trade — the builder, with the Sleeper screenshot route said in one line
+ *   4. Trades in your leagues — TradesBoard `embedded` (no second h1)
+ *   5. Who's rising and falling — the market, below your own leagues
+ *   6. All your leagues — the grid, folded
+ */
+/** How many leagues the switcher lists before "Show all". */
+export const SWITCH_LIST_PREVIEW = 12
+
+/**
+ * Switch league, as a list (2026-11-13): one line per league — its name and what it is — and a link to
+ * its Trades tab. The page you are on is marked, not linked.
+ */
+export function TradeLeagueSwitchList({ leagues, activeLeagueId }: { leagues: StripLeague[]; activeLeagueId: string | null }) {
+  const lg = useMessages(tradesLeagueGuideMessages)
+  const { copy } = useTradeVisualCopy()
+  const [all, setAll] = useState(false)
+  const shown = all ? leagues : leagues.slice(0, SWITCH_LIST_PREVIEW)
+  return (
+    <div className="af-tlg-switch">
+      <ul className="af-tlg-switch-list">
+        {shown.map((l) => {
+          const active = l.id === activeLeagueId
+          const body = (
+            <>
+              <span className="af-tc-mark af-platform" data-platform={l.platform.toLowerCase()} aria-hidden>
+                {copy(l.mark)}
+              </span>
+              <span className="af-tlg-switch-name">{l.name}</span>
+              {l.meta ? <span className="af-tlg-switch-meta">{copy(l.meta)}</span> : null}
+              {active ? <span className="af-tlg-switch-here">{lg.current}</span> : null}
+            </>
+          )
+          return (
+            <li key={l.id}>
+              {active ? (
+                <span className="af-tlg-switch-row" aria-current="page">{body}</span>
+              ) : (
+                <Link className="af-tlg-switch-row" href={`/core/trades?league=${encodeURIComponent(l.id)}`}>{body}</Link>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {leagues.length > SWITCH_LIST_PREVIEW && !all ? (
+        <button type="button" className="af-tlg-switch-more" onClick={() => setAll(true)}>
+          {lg.showAllLeagues(leagues.length)}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
   board?: ReactNode
+  /** The same TradesBoard data the board renders — the headline and chips are read from it. */
+  boardData?: TradesBoardData | null
   viewerId?: string | null
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
+  const guide = useMessages(tradesGuideMessages)
   const [query, setQuery] = useState('')
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
     ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
     : props.leagues
+  const summary = summarizeTrades(props.boardData)
+  const head = tradesHeadline(summary)
+  const chips = tradesChips(summary)
+  const title =
+    head.kind === 'offers'
+      ? guide.headOffers(head.n)
+      : head.kind === 'new'
+        ? guide.headNew(head.n)
+        : head.kind === 'quiet'
+          ? guide.headQuiet
+          : guide.headUnknown
 
   return (
-    <div className="af-tc af-tc--hub">
-      <header className="af-tc-head af-tc-hub-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade command center')}</h1>
-        <p className="af-tc-lede">{copy('See what needs attention across your leagues, then open one league to review, counter or build a deal.')}</p>
-      </header>
+    <div className="af-tc af-tc--hub af-tg">
+      <section className="af-hg-head af-tg-head" aria-labelledby="af-tg-h1">
+        <PageHeader
+          className="af-tc-head af-tc-hub-head"
+          eyebrowClassName="af-hg-eyebrow"
+          titleClassName="af-hg-title"
+          // Not `af-tc-lede`: that class is hidden under 720px, and this line is what the page is for.
+          subClassName="af-hg-intro"
+          eyebrow={guide.eyebrow(props.leagues.length)}
+          title={<span id="af-tg-h1">{title}</span>}
+          sub={guide.intro}
+        />
+        {chips.length > 0 ? (
+          <ul className="af-hg-chips">
+            {chips.map((chip) => (
+              <li key={chip.key}>
+                <TradesChipView chip={chip} guide={guide} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
-      <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
+      <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
 
-      <GenericTradeAnalyzer viewerId={props.viewerId} />
+      <section className="af-tc-hub-evaluator af-tg-check" aria-labelledby="af-tg-check-h">
+        <div className="af-tg-sec-head">
+          <h2 id="af-tg-check-h">{guide.checkTitle}</h2>
+          <p>{guide.checkSub}</p>
+        </div>
+        <LeagueTradeEvaluator leagues={props.leagues} viewerId={props.viewerId} offerHint />
+        <p className="af-tg-teach">
+          <b>{guide.why}</b> {guide.checkTeach}
+        </p>
+      </section>
+
       {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
       {props.valueActions.length > 0 ? (
@@ -442,17 +628,28 @@ function AllLeaguesTradeHub(props: {
         </section>
       ) : null}
 
-      <section className="af-tc-hub-leagues">
-        <div className="af-tc-hub-section-head">
-          <div>
-            <div className="af-label">{copy('All connected leagues')}</div>
-            <h2>{copy('Choose where you want to trade')}</h2>
-          </div>
-          <label className="af-tc-hub-search">
-            <span className="af-sr-only">{copy('Search leagues')}</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
-          </label>
-        </div>
+      {/* Your leagues were listed three times (the offer tiles, the builder's picker and this grid); the grid folds. */}
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, its old
+        summary as the `note`. The market board ("Who's rising and falling") is about every player, not
+        your teams, so it moved in here unchanged; the offers board, the evaluator and your value moves
+        stay on screen.
+      */}
+      <MoreDetail
+        className="af-tc-hub-leagues af-tg-all"
+        note={<><b>{guide.allLeagues(props.leagues.length)}</b> · {guide.allLeaguesSub}</>}
+        testId="trades-hub-more"
+      >
+        <section className="af-tg-market" aria-label={guide.marketTitle}>
+          <TradeMarketMovers limit={5} heading={guide.marketTitle} testId="trade-hub-market" />
+          <p className="af-tg-teach">
+            <b>{guide.why}</b> {guide.marketTeach}
+          </p>
+        </section>
+        <label className="af-tc-hub-search">
+          <span className="af-sr-only">{copy('Search leagues')}</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy('Search league or platform')} />
+        </label>
         <div className="af-tc-hub-league-grid">
           {visibleLeagues.map((league) => (
             <Link key={league.id} href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-tc-hub-league">
@@ -463,7 +660,7 @@ function AllLeaguesTradeHub(props: {
           ))}
         </div>
         {visibleLeagues.length === 0 ? <p className="af-tc-timeline-empty">{copy('No connected league matches that search.')}</p> : null}
-      </section>
+      </MoreDetail>
     </div>
   )
 }
@@ -476,37 +673,17 @@ function AllLeaguesTradeHub(props: {
  * make the most common search result unusable.
  */
 /**
- * The phone builder's three steps.
+ * ── THE PHONE LAYOUT IS A CALCULATOR, NOT A WIZARD (2026-10-31) ─────────────────────────────────
  *
- * ── WHY STEPS, AND WHY ONLY ON A PHONE ───────────────────────────────────────────────────────────
+ * Guap, after building a deal on a phone: "clunky and complicated", with KeepTradeCut's calculator
+ * as the bar. The four-step flow (Offers / Send / Get / Review) showed one side of the deal per tab
+ * and put the inbox, drafts and partner ideas ahead of the builder, so a manager scrolled past
+ * seven blocks before adding a single player.
  *
- * At 390px the two team cards stack, each with its own roster list, so "what am I sending" and
- * "what am I getting" sit several screens apart and the verdict is further still. One team per step
- * keeps the deal on one screen at a time; the review step puts both sides and the verdict together.
- *
- * ⚠ CSS DOES THE HIDING, NOT CONDITIONAL RENDERING. Every section stays mounted and is tagged with
- * the steps it belongs to (`data-mstep`), and the stylesheet hides the rest only below 720px. So a
- * desktop render is byte-for-byte the page it was, a rotate or resize never loses picker or
- * analyser state, and nothing depends on knowing the viewport before hydration.
+ * Now both sides are on screen together — "You get" above "You send" on a phone — under a sticky
+ * balance bar that grades the deal, and everything that is not the deal folds into two
+ * disclosures below the builder. Desktop takes the same order with its existing two-card layout.
  */
-export type MobileStep = 'offers' | 'give' | 'get' | 'review'
-
-/*
- * ⚠ OFFERS IS A STEP OF ITS OWN (2026-09-24). The inbox, its timeline, the value alerts and the
- * league's trade history used to be untagged, so they rendered on EVERY step: a manager building a
- * deal on a phone scrolled past the whole inbox to reach the roster on each of the three steps, and
- * the history block below the builder repeated the inbox a second time. Guap: "the trade system
- * feels clunky on PC and mobile". Reading offers and building a deal are two jobs; on a phone each
- * now gets the screen to itself. Desktop is untouched — the tags only act below 720px.
- *
- * The labels are short because four tabs share 390px.
- */
-const MOBILE_STEPS: Array<{ key: MobileStep; label: string }> = [
-  { key: 'offers', label: 'Offers' },
-  { key: 'give', label: 'Send' },
-  { key: 'get', label: 'Get' },
-  { key: 'review', label: 'Review' },
-]
 
 /**
  * Can the verdict value this asset?
@@ -542,6 +719,33 @@ function toInput(a: PickedAsset) {
   return { kind: 'faab' as const, amount: a.amount }
 }
 
+/**
+ * `completedHistory` as a list, whether the caller passed one or a promise of one.
+ *
+ * ⚠ RESOLVED INTO STATE, NOT `use()`d. Suspending on it would hold the whole Trade Center — header,
+ * builder and all — behind the one read it was split out to stop waiting for. Until a promise lands
+ * the offers and timeline render without the imported rows (the timeline's own native rows are read
+ * client-side regardless), and `ready` stays false so nothing decides "this trade is not in the
+ * history" on a list that has not arrived. A rejected promise counts as an empty list.
+ */
+export function useCompletedHistory(
+  source: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]> | undefined,
+): { ready: boolean; list: readonly TradeRecord[] | undefined } {
+  const pending = source != null && typeof (source as PromiseLike<unknown>).then === 'function'
+  const [landed, setLanded] = useState<{ from: unknown; list: readonly TradeRecord[] } | null>(null)
+  useEffect(() => {
+    if (!pending) return
+    let live = true
+    Promise.resolve(source as PromiseLike<readonly TradeRecord[]>).then(
+      (list) => { if (live) setLanded({ from: source, list }) },
+      () => { if (live) setLanded({ from: source, list: [] }) },
+    )
+    return () => { live = false }
+  }, [source, pending])
+  if (!pending) return { ready: true, list: source as readonly TradeRecord[] | undefined }
+  return landed && landed.from === source ? { ready: true, list: landed.list } : { ready: false, list: undefined }
+}
+
 export function TradeCenter(props: {
   /** Authenticated account identity, supplied by the server for device draft isolation. */
   viewerId?: string | null
@@ -549,10 +753,21 @@ export function TradeCenter(props: {
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
   deadlineLabel?: string | null
+  /** The import snapshot's deadline week — the headline's fallback when there is no countdown verdict. */
+  deadlineWeek?: number | null
+  /** The enforced deadline as a countdown ("Trade deadline in 3d 4h" / "Trades closed"). Wins over `deadlineLabel`. */
+  deadlineCountdown?: TradeDeadlineCountdown | null
+  /** A dynasty league's separate rule for pick-only trades; null when pick trades follow the deadline. */
+  pickTradeDeadline?: PickTradeDeadlineView | null
   /** Source platform id (sleeper, espn, …) — drives the platform marks. */
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
   leagueType?: string | null
+  /**
+   * A dynasty league (lib/core-app/coreShellDynasty.ts — the rule the shell's gold identity uses).
+   * Shows "Your draft capital" above the builder (DynastyPickCapitalPanel.tsx). Absent: nothing.
+   */
+  dynasty?: boolean
   sport?: string | null
   /** Raw `League.leagueVariant` (zombie, survivor, …) — adds that format's asset classes. */
   leagueVariant?: string | null
@@ -561,6 +776,8 @@ export function TradeCenter(props: {
   /** Portfolio-wide value changes, already scoped to rosters owned by this manager. */
   valueActions?: CrossLeagueValueAction[] | null
   board?: ReactNode
+  /** All-leagues only: the TradesBoard data behind `board`, for the guide's headline and chips. */
+  boardData?: TradesBoardData | null
   /**
    * Where to actually send the finished trade — the platform's own trade page.
    * Null for a native league, or when the resolver could not verify a host.
@@ -578,7 +795,17 @@ export function TradeCenter(props: {
    * trailing every step.
    */
   history?: ReactNode
-  completedHistory?: readonly TradeRecord[]
+  /**
+   * League activity — adds, drops and claims — streamed under the history (2026-11-14). It is what the
+   * Moves tab had that Trades did not; Moves is gone and /core/moves lands here (next.config.js).
+   */
+  activity?: ReactNode
+  /**
+   * The league's completed Sleeper trades, merged into the offers fold and the timeline. A promise
+   * when the page streams them (`/core/trades`: the history read is the slow one, so the Trade Center
+   * paints without it and merges them in when they land); a list when the caller already has them.
+   */
+  completedHistory?: readonly TradeRecord[] | PromiseLike<readonly TradeRecord[]>
   /**
    * Competitive Edge (AF Pro and the War Room plan): the chosen partner's own trade record, bound to
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
@@ -589,8 +816,20 @@ export function TradeCenter(props: {
    * (`components/trades/SleeperOffersNotice.tsx`, `?enter=offer`). Applied once, on arrival.
    */
   startWithOfferEntry?: boolean
+  /**
+   * Rendered inside another page (the all-leagues hub's evaluator) rather than as the league's own
+   * Trade Center. Drops what belongs to that page — its header and league line, the ranked partner
+   * chips, trade ideas, offers and drafts, the proposal panels, value alerts, the trade list and the
+   * finder — and keeps the deal: Team A, Team B, the balance, Analyze and the verdict.
+   */
+  embedded?: boolean
 }) {
   const language = useOptionalLanguage().language
+  const tcm = useMessages(tradeCenterMessages)
+  const depthCopy = coreDepthLockCopy(language)
+  const lg = useMessages(tradesLeagueGuideMessages)
+  /* The live "Trade deadline in 3d 4h" text, for a deadline with a close time; the headline uses it as is. */
+  const liveDeadline = useTradeDeadlineCountdownText(props.deadlineCountdown)
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
@@ -620,6 +859,9 @@ export function TradeCenter(props: {
   // this form and discard an unsaved proposal or its in-flight analysis.
   const editingProposal = busy || picking !== null || giveAssets.length > 0 || getAssets.length > 0
   useEffect(() => editingProposal ? claimRouteRefresh() : undefined, [editingProposal])
+  // And no deploy reload while building: after a deploy the page reloads when it goes into the
+  // background, which threw a half-built trade away the moment a manager checked another app.
+  useEffect(() => editingProposal ? holdUnsavedWork() : undefined, [editingProposal])
   const [draftNote, setDraftNote] = useState<string | null>(null)
   const [recoverableDraft, setRecoverableDraft] = useState<ReturnType<typeof decodeTradeDraft>>(null)
   const [draftTouched, setDraftTouched] = useState(false)
@@ -631,60 +873,63 @@ export function TradeCenter(props: {
   const [countering, setCountering] = useState<{ tradeId: string; label: string } | null>(null)
   /** Bumped after a send lands, so the inbox refetches what the write changed. */
   const [inboxReloadToken, setInboxReloadToken] = useState(0)
+  // The guided propose flow (ProposeTradeFlow): every roster as a column, then assets, then send.
+  const [proposeOpen, setProposeOpen] = useState(false)
+  /* An action in the trade center changed a trade: the inbox above re-reads too. */
+  const bumpInboxReload = useCallback(() => setInboxReloadToken((n) => n + 1), [])
+  const partnerSelectCopy = useMessages(tradePartnerSelectMessages)
 
-  /* Phone-only step state; see MobileStep. Ignored by the desktop layout. */
-  const [mobileStep, setMobileStep] = useState<MobileStep>('give')
   const isPhone = usePhoneViewport()
-  const stepAnchorRef = useRef<HTMLDivElement | null>(null)
   const verdictRef = useRef<HTMLElement | null>(null)
-  /** Offers waiting on this manager, reported by the inbox; badges the Offers tab. */
+  /** Offers waiting on this manager, reported by the inbox; badges the folded Offers section. */
   const [needsYou, setNeedsYou] = useState<number | null>(null)
 
   /*
-   * A trade email or push links to `?trade=<id>`. Pending offers live on Offers; completed imported
-   * trades now live below the builder on Review. Select the matching step before the focus hook
-   * scrolls, so a history link does not target hidden phone content.
+   * Offers, drafts and alerts fold away below the builder. A trade email or push links to
+   * `?trade=<id>`: a pending offer is inside that fold, so the link opens it; a completed trade is
+   * in the history further down, which is never folded. Read after mount so the server and client
+   * agree on the first paint, and before the focus hook scrolls.
    */
+  const [offersOpen, setOffersOpen] = useState(false)
+  /* The "More ways to find a trade" fold. A link to `#trade-finder` (the Tools hub) opens it on arrival. */
+  const [moreOpen, setMoreOpen] = useState(false)
   useEffect(() => {
+    if (window.location.hash !== '#trade-finder') return
+    setMoreOpen(true)
+    requestAnimationFrame(() => document.getElementById('trade-finder')?.scrollIntoView({ block: 'start' }))
+  }, [])
+  const completedHistory = useCompletedHistory(props.completedHistory)
+  useEffect(() => {
+    // ⚠ Not before a streamed history has landed: "not in the history" is unknowable until then.
+    if (!completedHistory.ready) return
     const tradeId = new URLSearchParams(window.location.search).get('trade')
     if (!tradeId) return
-    setMobileStep(props.completedHistory?.some((trade) => trade.transactionId === tradeId) ? 'review' : 'offers')
-  }, [props.completedHistory])
-  /* The "+ Add asset" button that opened the phone sheet — where focus returns on close. */
+    if (!completedHistory.list?.some((trade) => trade.transactionId === tradeId)) setOffersOpen(true)
+  }, [completedHistory.ready, completedHistory.list])
+  /* The control that opened the phone sheet — where focus returns on close. */
   const sheetOpenerRef = useRef<HTMLElement | null>(null)
 
-  /**
-   * Change step, and bring the step's content into view.
-   *
-   * ⚠ SCROLLED ONLY ON A PHONE, and only when the anchor is ABOVE the viewport. A step switch
-   * changes the page's height under the manager's thumb; without this, choosing "You get" from the
-   * sticky bar halfway down a long inbox leaves them looking at the inbox with no sign anything
-   * happened. A switch made while the builder is already on screen must not jump the page.
-   */
-  const goToStep = useCallback((step: MobileStep) => {
-    setMobileStep(step)
-    const anchor = stepAnchorRef.current
-    if (!anchor || typeof window === 'undefined') return
-    if (anchor.getBoundingClientRect().top < 0) {
-      anchor.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    }
+  /** Open one side's asset picker — a sheet on a phone, inline in the card on a desktop. */
+  const openPicker = useCallback((side: 'give' | 'get', opener: HTMLElement | null) => {
+    sheetOpenerRef.current = opener
+    setPicking(side)
   }, [])
 
   /**
    * Bring the builder into view after something LOADED it — an offer, a screenshot, hand entry.
    *
-   * 🛑 "NOTHING HAPPENED" (field report, 2026-09-30). `goToStep` scrolls only when its anchor is ABOVE
+   * 🛑 "NOTHING HAPPENED" (field report, 2026-09-30). The old step switcher scrolled only when its anchor was ABOVE
    * the viewport, and on a desktop that anchor sits in the phone-only step bar, which is hidden. The
    * Sleeper note and the inbox sit ABOVE the builder, so every button there filled a builder the
    * manager could not see and the page did not move: "Upload a screenshot" read an offer and loaded
    * it, and "Grade a Sleeper offer" cleared the board — both invisibly.
    *
-   * Phones are left to `goToStep`: there the step bar swaps the visible step instead.
+   * Phones too, since the calculator layout (2026-10-31): the inbox, screenshot import and trade
+   * ideas that load the builder now sit BELOW it at every width.
    */
   const builderTopRef = useRef<HTMLDivElement | null>(null)
   const revealBuilder = useCallback(() => {
     if (typeof window === 'undefined') return
-    if (window.matchMedia?.('(max-width: 720px)').matches) return
     const el = builderTopRef.current
     if (!el) return
     const top = el.getBoundingClientRect().top
@@ -886,7 +1131,7 @@ export function TradeCenter(props: {
       .sort((a, b) => (rankOf.get(a.r.rosterId) ?? Infinity) - (rankOf.get(b.r.rosterId) ?? Infinity) || a.i - b.i)
       .map(({ r }) => r)
   })()
-  const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
+  const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? copy('Their team')
   const valueActions = props.valueActions ?? []
 
   /*
@@ -947,10 +1192,8 @@ export function TradeCenter(props: {
        * looking at.
        */
       setCountering(null)
-      /* A loaded offer is a whole deal — on a phone, show both sides of it at once. */
-      goToStep('review')
     },
-    [goToStep, revealBuilder],
+    [revealBuilder],
   )
 
   /**
@@ -970,9 +1213,8 @@ export function TradeCenter(props: {
     setResult(null)
     setError(null)
     setDraftNote('Entering an offer from Sleeper: pick the manager who sent it, add what you would send and what you would get exactly as Sleeper shows it, then analyze.')
-    goToStep('give')
     revealBuilder()
-  }, [goToStep, revealBuilder])
+  }, [revealBuilder])
 
   /* Arrived from the Sleeper offers notice: open the hand-entry builder, once. */
   const startedOfferEntry = useRef(false)
@@ -994,6 +1236,14 @@ export function TradeCenter(props: {
    */
   /* `done` says what loaded, beside the button that did it — the builder may be off screen. */
   const [screenshotRead, setScreenshotRead] = useState<{ busy: boolean; error: string | null; done?: string | null }>({ busy: false, error: null })
+  /*
+   * 2 teams (the full analyzer) or 3–4 teams (MultiTeamTradeBuilder, graded on league value only),
+   * 2026-11-14. A 3–4 team screenshot switches to the second and loads into it; `key` remounts it so it
+   * starts from what was read.
+   */
+  const [tradeMode, setTradeMode] = useState<'two' | 'multi'>('two')
+  const [multiLoad, setMultiLoad] = useState<{ key: number; initial: { teamIds: string[]; assets: MultiAsset[] } | null }>({ key: 0, initial: null })
+  const mt = useMessages(multiTeamTradeMessages)
   const readOfferScreenshot = useCallback(
     async (file: File) => {
       const leagueId = props.league?.id
@@ -1012,6 +1262,35 @@ export function TradeCenter(props: {
           setScreenshotRead({ busy: false, error: j?.error ?? 'We could not read that screenshot. Enter the offer by hand.' })
           return
         }
+        /* 3 or 4 teams: the multi-team matcher and builder. Two teams: unchanged, below. */
+        if (offerTeamCount(j.read) >= 3) {
+          const mm = matchMultiTeamOffer({ read: j.read, rosters: rosterData.rosters, viewerRosterId: rosterData.viewerTeamRosterId })
+          if (!mm.ok) {
+            const r: MultiOfferRefusal = mm.reason
+            setScreenshotRead({
+              busy: false,
+              error:
+                r.code === 'team_count'
+                  ? mt.refusedTeamCount(r.count)
+                  : r.code === 'unplaced'
+                    ? mt.refusedUnplaced
+                    : r.code === 'duplicate'
+                      ? mt.refusedDuplicate
+                      : mt.refusedUnreadable,
+            })
+            return
+          }
+          setMultiLoad((prev) => ({ key: prev.key + 1, initial: { teamIds: mm.teamIds, assets: mm.assets } }))
+          setTradeMode('multi')
+          const notes = [
+            mt.loaded(mm.teamIds.length, mm.assets.length),
+            mm.unmatched.length > 0 ? mt.notPlaced(mm.unmatched.join(', ')) : null,
+            mm.faabLeftOut.length > 0 ? mt.faabLeftOut(mm.faabLeftOut.map((n) => `$${n}`).join(', ')) : null,
+          ]
+          setScreenshotRead({ busy: false, error: null, done: notes.filter(Boolean).join(' ') })
+          revealBuilder()
+          return
+        }
         const m = matchOfferToRosters({ read: j.read, rosters: rosterData.rosters, viewerRosterId: rosterData.viewerTeamRosterId })
         if (!m.ok) {
           setScreenshotRead({ busy: false, error: m.reason })
@@ -1028,13 +1307,12 @@ export function TradeCenter(props: {
         setError(null)
         setDraftNote(screenshotDraftNote(m))
         setScreenshotRead({ busy: false, error: null, done: screenshotLoadedLine(m) })
-        goToStep('review')
         revealBuilder()
       } catch {
         setScreenshotRead({ busy: false, error: 'The screenshot did not upload. Check your connection and try again.' })
       }
     },
-    [props.league?.id, rosterData, goToStep, revealBuilder],
+    [props.league?.id, rosterData, revealBuilder, mt],
   )
 
   /**
@@ -1057,13 +1335,9 @@ export function TradeCenter(props: {
       setPartnerRosterId(input.partnerRosterId)
       setCountering({ tradeId: input.tradeId, label: input.label })
       setDraftNote(`Countering ${input.label} — change it, analyse it, then send it back.`)
-      /*
-       * A counter starts by CHANGING the deal, and what a manager usually changes is what they ask
-       * for — so the phone lands on "You get" rather than on a review of a deal they mean to alter.
-       */
-      goToStep('get')
+      revealBuilder()
     },
-    [goToStep],
+    [revealBuilder],
   )
 
   /**
@@ -1077,7 +1351,8 @@ export function TradeCenter(props: {
    * different one.
    */
   const startSuggestedDeal = useCallback(
-    (p: PartnerRecommendation) => {
+    // Only the partner and the two sides are read, so a rebuild-plan package loads through here too.
+    (p: Pick<PartnerRecommendation, 'rosterId' | 'ownerName' | 'suggestion'>) => {
       if (!p.suggestion || !rosterData) return
       setDraftTouched(true)
       setRecoverableDraft(null)
@@ -1095,9 +1370,9 @@ export function TradeCenter(props: {
           ? `Started from a suggested deal with ${p.ownerName ?? 'that manager'}, without ${dropped.join(', ')} — that asset could not be rebuilt.`
           : `Started from a suggested deal with ${p.ownerName ?? 'that manager'} — adjust it, then analyse it.`,
       )
-      goToStep('review')
+      revealBuilder()
     },
-    [rosterData, goToStep],
+    [rosterData, revealBuilder],
   )
 
   /*
@@ -1387,9 +1662,21 @@ export function TradeCenter(props: {
    * the feed cannot price as zero would tilt the bar against whichever side
    * holds him — the same rule as the em dash on his row.
    */
+  /*
+   * THE GRADE'S ROSTER-SPOT CREDIT, ADDED TO THE SAME SIDE THE GRADE ADDED IT TO
+   * (`lib/trade-value/rosterSpotCharge.ts`). Without it the bar read Get 8,433 / +1,679 while the
+   * grade and every counter sentence on the same screen measured 8,485 / 1,731 — the 52 the side
+   * receiving fewer players earns for its open spot (reported 2026-11-11). Safe to read off the
+   * result: any change to the assets clears it, so a grade on screen is always this deal's.
+   */
+  const spotCredit = serverGrade?.graded && serverGrade.rosterSpot ? serverGrade.rosterSpot : null
+  const sideTotal = (lines: Line[], side: 'give' | 'get'): number | null => {
+    const t = pricedTotal(lines)
+    return t != null && spotCredit?.side === side ? t + spotCredit.value : t
+  }
   const balance = (() => {
-    const g = pricedTotal(give)
-    const k = pricedTotal(get)
+    const g = sideTotal(give, 'give')
+    const k = sideTotal(get, 'get')
     if (g == null && k == null) return null
     if (g == null || k == null || g + k === 0) {
       return { give: g, get: k, givePct: null as number | null, diff: null as number | null, pct: null as number | null }
@@ -1413,22 +1700,22 @@ export function TradeCenter(props: {
     ),
   )
   const yourIncentive = noSignal
-    ? 'The complete proposal value is unavailable. Review the priced assets and your roster before deciding.'
+    ? 'We couldn’t value the whole trade. Check the players we could value and your roster before deciding.'
     : intel?.contenderRecommendation ?? intel?.why ??
     (balance?.diff != null && balance.diff >= 0
-      ? `You receive about ${money(balance.diff)} more in current league value.`
-      : 'The deal may improve your roster construction even when the raw market total is close.')
+      ? `You get about ${money(balance.diff)} more in value.`
+      : 'It could still help your roster even if the values are close.')
   const theirIncentive = balance?.diff != null && balance.diff <= 0
-    ? `They receive about ${money(Math.abs(balance.diff))} more in current league value.`
-    : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
+    ? `They get about ${money(Math.abs(balance.diff))} more in value.`
+    : `They get ${give.length} asset${give.length === 1 ? '' : 's'} that may fit their plans or fill a need.`
   const agreementBlocker = noSignal
-    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'The complete proposal could not be valued.'
+    ? serverGrade && !serverGrade.graded ? serverGrade.reason : 'We couldn’t value the whole trade.'
     : intel?.tradeWarnings?.[0] ??
     (balance?.diff != null && balance.diff > 0
-      ? `The displayed league value favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      ? `You come out ${money(balance.diff)} ahead, so they may ask for more.`
       : unpricedCount([...give, ...get]) > 0
-        ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
-        : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
+        ? 'Some players have no value yet, so this grade is less certain.'
+        : 'They might still say no because of their roster, their plans, or personal preference.')
 
   /*
    * Hand the deal to Chimmy.
@@ -1495,7 +1782,7 @@ export function TradeCenter(props: {
       myLetter: letter(yourGrade),
       theirLetter: letter(theirGrade),
       score: typeof result.fairnessScore === 'number' ? Math.max(0, Math.min(100, result.fairnessScore)) : null,
-      language: language === 'es' ? 'es' : 'en',
+      language: coreLang(language),
       verdict: clip(copy(result.labels?.fairnessLabel ?? 'Graded')),
       basis: (result.valueBasis?.label ?? result.grade?.basis ?? 'League value').slice(0, 100),
       asOf: result.evaluationReceipt?.status === 'saved' ? result.evaluationReceipt.evaluatedAt : analyzedAt ?? new Date().toISOString(),
@@ -1510,7 +1797,7 @@ export function TradeCenter(props: {
   }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade, analyzedAt, language, copy])
 
   if (!props.league) {
-    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} board={props.board} viewerId={props.viewerId} />
+    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} board={props.board} boardData={props.boardData} viewerId={props.viewerId} />
   }
 
   const hasAssets = giveAssets.length > 0 || getAssets.length > 0
@@ -1540,6 +1827,7 @@ export function TradeCenter(props: {
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
         pickCoverage={rosterData?.pickCoverage}
+        pickPolicy={rosterData?.pickPolicy ?? null}
         /*
           Same rule as the picks directly above, for the same reason: each column sends
           from its OWN roster. Offering a player from the wrong side builds an asset the
@@ -1560,141 +1848,154 @@ export function TradeCenter(props: {
   }
 
   /*
-   * What the persistent button does right now.
+   * What the balance bar's button does right now.
    *
-   * ⚠ ON REVIEW, AN EMPTY SIDE SENDS YOU TO IT RATHER THAN TO THE ANALYSER. The analyze route
-   * refuses a one-sided deal ("Add at least one asset on each side."), measured on the phone flow:
-   * a manager who added only what they want got an error box after a network round trip. Naming
-   * the missing step is the same information a turn earlier, as a control instead of a complaint.
+   * ⚠ AN EMPTY SIDE OPENS THAT SIDE'S SEARCH RATHER THAN THE ANALYSER. The analyze route refuses a
+   * one-sided deal ("Add at least one asset on each side."), so a manager who added only what they
+   * want would get an error box after a network round trip. Naming the missing side is the same
+   * information a turn earlier, as a control instead of a complaint — and never a dead button.
+   * "You get" is checked first because it is the side shown first.
    */
   /*
-   * ⚠ ON A BUILDING STEP IT POINTS AT WHAT IS STILL MISSING, AND ANALYSES ONCE NOTHING IS. It used
-   * to say "Review trade" on both building steps, so a manager who added what they send was sent to
-   * Review, told "Add what you get", and sent back — two wasted taps on every deal, measured as the
-   * clunkiest part of the phone flow in the 2026-09-24 audit. Now: the empty side is the next
-   * step, and a deal with both sides goes straight to Review WITH the analysis running, because
-   * that is the only thing anyone does on arrival there.
+   * ON A PHONE EACH ROSTER STARTS FOLDED. Both teams' full lists open at once meant scrolling past
+   * every one of your players before Team B's card began. Search still reaches every asset, and
+   * "Browse roster" opens the list. Read once at mount: after that the manager's toggle owns it.
+   * `matchMedia` is absent under jsdom and on the server, which both read as "not a phone".
    */
+  const [rostersOpenAtStart] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 720px)').matches,
+  )
   const bothSides = giveAssets.length > 0 && getAssets.length > 0
-  const analyzeLabel = busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade'
-  const primary: { label: string; disabled: boolean; run: () => void } =
-    mobileStep === 'offers'
-      ? hasAssets
-        ? { label: 'Back to your trade', disabled: false, run: () => goToStep('review') }
-        : { label: 'Build a trade', disabled: false, run: () => goToStep('give') }
-      : mobileStep !== 'review'
-        ? bothSides
-          ? {
-              label: result ? 'See the verdict' : analyzeLabel,
-              disabled: busy,
-              run: () => {
-                goToStep('review')
-                if (!result) void analyze()
-              },
-            }
-          : mobileStep === 'give'
-            ? giveAssets.length === 0 && getAssets.length > 0
-              ? { label: 'Add what you send', disabled: true, run: () => undefined }
-              : { label: 'Next: what you get', disabled: false, run: () => goToStep('get') }
-            : getAssets.length === 0 && giveAssets.length > 0
-              ? { label: 'Add what you get', disabled: true, run: () => undefined }
-              : { label: 'Next: what you send', disabled: false, run: () => goToStep('give') }
-        : giveAssets.length === 0 && getAssets.length > 0
-          ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
-          : getAssets.length === 0 && giveAssets.length > 0
-            ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
-            : {
-                label: analyzeLabel,
-                disabled: !hasAssets || busy,
-                run: () => void analyze(),
-              }
+  const analyzeLabel = busy ? 'Grading…' : result ? 'Grade again' : 'Grade with AF'
+  const primary: { label: string; disabled: boolean; run: (opener: HTMLElement) => void } = bothSides
+    ? { label: analyzeLabel, disabled: busy, run: () => void analyze() }
+    : getAssets.length === 0
+      ? { label: 'Add what you get', disabled: false, run: (opener) => openPicker('get', opener) }
+      : { label: 'Add what you send', disabled: false, run: (opener) => openPicker('give', opener) }
+
+  /*
+   * Where the deal leans, in words. Under 5% apart is called even — the same band the partner
+   * suggestions use for "a realistic opening" — rather than declaring a winner over rounding noise.
+   */
+  const lean =
+    balance?.diff == null || balance.pct == null
+      ? null
+      : balance.pct <= 5
+        ? { tone: 'even', text: 'Even trade' }
+        : balance.diff > 0
+          ? { tone: 'good', text: 'Leans your way' }
+          : { tone: 'bad', text: "You're paying more" }
+
+  /* The snapshot week; a caller that passes only the old "Deadline · week 11" label still gets its week read. */
+  const snapshotWeek = props.deadlineWeek ?? (Number(props.deadlineLabel?.match(/week\s*(\d+)/i)?.[1]) || null)
+  const headline = tradesLeagueHeadline(props.deadlineCountdown, snapshotWeek)
+  const headlineText =
+    headline.kind === 'weeks'
+      ? lg.headWeeks(headline.week, headline.weeksLeft)
+      : headline.kind === 'counting'
+        ? liveDeadline ?? lg.headBuild
+        : headline.kind === 'closed'
+          ? lg.headClosed(headline.week)
+          : headline.kind === 'scheduled'
+            ? lg.headScheduled(headline.week)
+            : headline.kind === 'deadline'
+              ? lg.headDeadline(headline.week)
+            : headline.kind === 'open'
+              ? lg.headOpen
+              : lg.headBuild
 
   return (
-    <div className="af-tc" data-mobile-step={mobileStep}>
+    <div className="af-tc">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
-      <header className="af-tc-head">
-        <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
-        <h1>{copy('Trade Center')}</h1>
-        <p className="af-tc-lede">
-          {copy('Choose a league, add what you send and get, then review the grade. The grade compares market value for this league’s format and scoring; roster fit and lineup change are shown beside it.')}
-        </p>
-        {/*
-          🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
-          AllFantasy is read-only on every connected platform — Sleeper's API has
-          no write endpoint at all — so a deal built here does not exist until it
-          is re-entered on the source platform. My Team and Matchup have carried a
-          `sourceLink` for that reason since they shipped; the trade builder, the
-          one screen whose entire output is an action the user must take
-          somewhere else, did not. The flow dead-ended on a verdict.
+      {props.embedded ? null : (
+      <PageHeader
+        className="af-tc-head"
+        subClassName="af-tc-lede"
+        /*
+          2026-11-13: the headline is the trade deadline — the one fact about trading here that changes
+          what to do this week — said once (lib/core-app/tradesLeagueGuide.ts). It used to read "Trade
+          Center" over two sentences, with the deadline repeated in a chip, a row under the builder and
+          on every league tile.
+        */
+        eyebrow={props.league ? lg.eyebrow(props.league.name) : copy('Trades')}
+        title={headlineText}
+        sub={lg.intro(props.sourceLink ? platformLabel(props.platform) : null)}
+        actions={
+          /*
+            🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
+            AllFantasy is read-only on every connected platform — Sleeper's API has
+            no write endpoint at all — so a deal built here does not exist until it
+            is re-entered on the source platform. My Team and Matchup have carried a
+            `sourceLink` for that reason since they shipped; the trade builder, the
+            one screen whose entire output is an action the user must take
+            somewhere else, did not. The flow dead-ended on a verdict.
 
-          `screen: 'trade'` lands on the platform's own trade page (Sleeper
-          /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
-          home, and renders nothing at all for a native league or an unresolved
-          host — never a guessed href.
-        */}
-        {props.sourceLink ? (
-          <div className="af-tc-handoff">
-            <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
-            <span className="af-tc-handoff-note">
-              {copy('AllFantasy never sends a trade for you — build it here, then send it there.')}
-            </span>
-          </div>
-        ) : null}
-      </header>
+            `screen: 'trade'` lands on the platform's own trade page (Sleeper
+            /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
+            home, and renders nothing at all for a native league or an unresolved
+            host — never a guessed href.
+          */
+          props.sourceLink ? (
+            <div className="af-tc-handoff">
+              <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
+            </div>
+          ) : null
+        }
+      />
+      )}
 
-      {/* Every league at a glance, before this one's context — see the strip's own header. */}
-      {props.leagues && props.leagues.length > 0 ? (
-        <details className="af-tc-switcher" data-mstep="offers">
-          <summary>{copy('Switch league')} <span>{props.leagues.length} {copy('connected')}</span></summary>
-          <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+      {/*
+        2026-11-14: no longer the league's name, format and team count — the eyebrow and the top bar say
+        those. The row stays only for what nothing else says: the opponent chip and a dynasty's separate
+        pick-trade deadline.
+      */}
+      {props.league && !props.embedded && (props.opponentLabel || props.pickTradeDeadline) ? (
+        <div className="af-tc-context">
+          {props.opponentLabel ? <span className="af-tc-chip">{props.opponentLabel}</span> : null}
+          {/* The trade deadline is the headline now; only a dynasty's separate pick-trade rule stays here. */}
+          <PickTradeDeadlineChip view={props.pickTradeDeadline} className="af-tc-chip af-tc-chip--deadline" />
+        </div>
+      ) : null}
+      {/*
+        Redraft /core shell only (batch B4) drew the deadline as a bar here. The headline says it now
+        (2026-11-13), so the bar is omitted rather than saying it a second time.
+      */}
+
+      {/* Dynasty only: every pick you hold, by draft year; a tap puts it on your side of the deal. */}
+      {props.dynasty && props.league && myRoster ? (
+        <DynastyPickCapitalPanel
+          picks={myRoster.picks ?? []}
+          coverage={rosterData?.pickCoverage}
+          leagueId={props.league.id}
+          book={rosterData?.pickPreviewBook}
+          inDeal={new Set(giveAssets.flatMap((a) => (a.kind === 'pick' ? [pickDealKey(a)] : [])))}
+          onAdd={(asset) => addAsset('give', asset)}
+        />
+      ) : null}
+
+      {/* Every league at a glance — folded to one line; see the strip's own header. */}
+      {/* Inside a league the top bar switches leagues (2026-11-14); the fold stays on the all-leagues page. */}
+      {props.leagues && props.leagues.length > 0 && !props.league ? (
+        <details className="af-tc-switcher">
+          <summary>{lg.switchLeague} <span>{lg.leaguesConnected(props.leagues.length)}</span></summary>
+          {/*
+            2026-11-13: one line per league. The full strip drew a tile for every league, each saying
+            "None visible · open offers live in Sleeper · No recent offer in this feed · Check source
+            offers" — the same non-answer 82 times. Offers waiting still get a tile (`waitingOnly`), and
+            the Sleeper note is said once there.
+          */}
+          {/* Only drawn with no league selected, so there is no active league to mark. */}
+          <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} waitingOnly />
+          <TradeLeagueSwitchList leagues={props.leagues} activeLeagueId={null} />
         </details>
       ) : null}
 
-      {props.league ? (
-        <div className="af-tc-context">
-          {props.platform ? (
-            <span
-              className="af-tc-mark af-platform"
-              data-platform={props.platform.toLowerCase()}
-              aria-hidden
-            >
-              {platformMark(props.platform)}
-            </span>
-          ) : null}
-          <span className="af-tc-context-name">{props.league.name}</span>
-          <span className="af-tc-context-meta">
-            {[props.league.format, props.league.teamCount ? `${props.league.teamCount} ${copy('teams')}` : null]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-          <span className="af-tc-spacer" />
-          {props.opponentLabel ? <span className="af-tc-chip">{props.opponentLabel}</span> : null}
-          {props.deadlineLabel ? (
-            <span className="af-tc-chip af-tc-chip--deadline">{props.deadlineLabel}</span>
-          ) : null}
-        </div>
-      ) : null}
-
+      {/* Dynasty only — the board is measured on the dynasty chart. Folded so the builder still leads. */}
       {/*
-        The asset vocabulary this LEAGUE can trade, shown regardless of what this
-        deal contains. Scoped by the league's type when the caller knows it; the
-        full six otherwise, because an unknown type must not read as a rule.
+        "What real trades say" (market risers and fallers) is gone from a league's Trades tab (2026-11-14):
+        it is the whole market, not this league, and it sat between the headline and the builder.
       */}
-      <details className="af-tc-disclosure" data-mstep="offers">
-        <summary>{legend.types.length} {copy('asset types you can add here')} <span>{copy('View supported assets')}</span></summary>
-        <div className="af-tc-legend">
-          <span className="af-tc-legend-label">
-            {copy(legend.scoped ? 'Available in this builder for this format' : 'Supported by this builder')}
-          </span>
-          {legend.types.map((a) => (
-            <span key={a.key} className="af-tc-asset-pill">
-              <span className="af-tc-glyph" style={{ background: a.color }}>{a.glyph}</span>
-              {copy(a.label)}
-            </span>
-          ))}
-        </div>
-      </details>
 
       {/*
         ⚠ FORMAT BLOCKERS LEAD THE PAGE. This is a correctness statement rather
@@ -1702,10 +2003,10 @@ export function TradeCenter(props: {
         note cards below.
       */}
       {blocked ? (
-        <div className="af-tc-banner af-tc-banner--blocked" data-mstep="review">
+        <div className="af-tc-banner af-tc-banner--blocked">
           <span className="af-tc-banner-glyph">{copy("!")}</span>
           <div>
-            <p className="af-tc-banner-title">{copy('This trade can’t be evaluated as shown')}</p>
+            <p className="af-tc-banner-title">{copy('We can’t grade this trade as it is')}</p>
             {(result?.formatNotes ?? []).map((n) => (
               <p key={n}>{n}</p>
             ))}
@@ -1713,158 +2014,126 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {props.league?.id ? (
-        <div className="af-tc-draft" data-mstep="offers review">
-          <span>{copy('Saved drafts go to your account, so a deal you start on a phone is here on a laptop.')}</span>
-          {workingDraftKey ? <span className="af-tc-row-sub">{copy(deviceDraftAvailable === false
-            ? 'Device recovery is unavailable. Use Save draft to save to your account.'
-            : 'Unfinished proposals can be resumed on this device. Use Save draft to sync across devices.')}</span> : null}
-          <span className="af-tc-spacer" />
-          <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
-            {copy('Restore draft')}
-          </button>
-          {recoverableDraft && (recoverableDraft.give.length > 0 || recoverableDraft.get.length > 0) ? (
-            <button type="button" className="af-btn af-btn--ghost" onClick={() => {
-              setDraftTouched(true)
-              setGiveAssets(recoverableDraft.give)
-              setGetAssets(recoverableDraft.get)
-              setPartnerRosterId(recoverableDraft.partnerRosterId ?? null)
-              setRecoverableDraft(null)
-              setResult(null)
-              setDraftNote('Resumed the unfinished proposal from this device. Analyze it again for current values.')
-              goToStep('review')
-            }}>{copy('Resume unfinished proposal')}</button>
-          ) : null}
-          <button type="button" className="af-btn af-btn--ghost" onClick={() => {
-            setDraftTouched(true)
-            setRecoverableDraft(null)
-            setGiveAssets([])
-            setGetAssets([])
-            setPartnerRosterId(null)
-            setCountering(null)
-            setPicking(null)
-            setResult(null)
-            setError(null)
-            setDraftNote('Started a new trade. Your account-saved draft is still available through Restore draft.')
-            goToStep('give')
-          }}>{copy('Start new trade')}</button>
-          {draftNote ? <span className="af-tc-row-sub">{copy(draftNote)}</span> : null}
-        </div>
-      ) : null}
-
       {/*
-        Inbox and Sent sit ABOVE the builder because that is the order of the
-        job: read what was offered, then price it. Below the builder they would
-        be a footnote to a deal the manager had already hand-built.
-      */}
-      <div className="af-tc-mstep-wrap" data-mstep="offers">
-        <TradeInbox
-          view="offers"
-          leagueId={props.league?.id ?? null}
-          onLoad={loadOffer}
-          onEnterByHand={enterOfferByHand}
-          onScreenshot={readOfferScreenshot}
-          screenshotBusy={screenshotRead.busy}
-          screenshotError={screenshotRead.error}
-          screenshotDone={screenshotRead.done ?? null}
-          onCounter={startCounter}
-          reloadToken={inboxReloadToken}
-          importedHistory={props.completedHistory}
-          onNeedsYouCount={setNeedsYou}
-        />
-      </div>
+        ── PHONE BALANCE BAR ───────────────────────────────────────────────────────────────────────
+        🛑 STUCK TO THE TOP, BECAUSE THE BOTTOM IS TAKEN. On /core the bottom of the viewport is the
+        shell's: its tab bar (z 40), the league pill (z 60) and the Comms launcher (z 59). Measured at
+        390px, a bottom-stuck row had "Analyze this trade" under the league pill. The top of the
+        viewport is the one edge the shell leaves free.
 
-      {/*
-        ── PHONE STEP BAR ─────────────────────────────────────────────────────────────────────────
-        🛑 STUCK TO THE TOP, BECAUSE THE BOTTOM IS TAKEN. The action row used to stick to the
-        viewport bottom, and on /core that is where the shell draws its tab bar (z 40), the league
-        pill (z 60) and the Comms launcher (z 59). Measured at 390px: the tab bar covered the lower
-        half of the row, the league pill sat on "Analyze this trade" and the launcher on "Save
-        draft" — the two controls that finish the task were the two nobody could press. The top of
-        the viewport is the one edge the shell leaves free.
-
-        Hidden above 720px by the stylesheet; the desktop page never sees it.
+        Both totals, a meter of where the deal leans, and the one button that finishes the job.
+        Hidden above 720px by the stylesheet; the desktop page has its own balance and actions.
       */}
-      <div ref={stepAnchorRef} className="af-tc-step-anchor" aria-hidden />
+      {tradeMode === 'two' ? (
       <div className="af-tc-stepbar">
-        <nav className="af-tc-steps" aria-label={copy('Trade builder steps')}>
-          {MOBILE_STEPS.map((s, i) => {
-            const count =
-              s.key === 'give'
-                ? giveAssets.length
-                : s.key === 'get'
-                  ? getAssets.length
-                  : s.key === 'offers'
-                    ? needsYou || null // no badge for zero or unknown; a "0" reads as a read we may not have
-                    : null
-            return (
-              <button
-                key={s.key}
-                type="button"
-                className="af-tc-step"
-                data-on={mobileStep === s.key}
-                aria-current={mobileStep === s.key ? 'step' : undefined}
-                onClick={() => goToStep(s.key)}
-              >
-                <span className="af-tc-step-num" aria-hidden>{i + 1}</span>
-                <span className="af-tc-step-label">{copy(s.label)}</span>
-                {count != null ? <span className="af-tc-step-count af-num">{count}</span> : null}
-              </button>
-            )
-          })}
-        </nav>
         <div className="af-tc-stepbar-row">
           {/*
             ⚠ THE SAME PRICED-ONLY TOTALS AS THE VALUE RAIL, AND THE SAME EM DASH. A side with
             nothing priced reads "—", never "0", for the reason every other total here gives.
           */}
           <span className="af-tc-stepbar-totals af-num" aria-live="polite">
-            <span>{copy('Send')} <b>{totalOf(give)}</b></span>
-            <span>{copy('Get')} <b>{totalOf(get)}</b></span>
+            <span>{copy('Get')} <b>{balance?.get != null ? balance.get.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
+            <span>{copy('Send')} <b>{balance?.give != null ? balance.give.toLocaleString(getAppIntlLocale()) : '—'}</b></span>
             {balance?.diff != null && balance.diff !== 0 ? (
               <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
                 {balance.diff > 0 ? '+' : '−'}
-                {Math.abs(balance.diff).toLocaleString()}
+                {Math.abs(balance.diff).toLocaleString(getAppIntlLocale())}
               </span>
             ) : null}
           </span>
-          {/*
-            The persistent review control. On the building steps it moves to Review; on Review it
-            runs the analysis. Disabled on an empty deal for the same reason Analyze always was.
-          */}
           <button
             type="button"
             className="af-btn af-tc-stepbar-primary"
             disabled={primary.disabled}
-            onClick={primary.run}
+            onClick={(e) => primary.run(e.currentTarget)}
           >
             {copy(primary.label)}
           </button>
         </div>
+        {/*
+          The meter fills with the GET side's share, so a bar past the middle is a deal in your
+          favour. Only drawn when both sides are priced; half a comparison is not a lean.
+        */}
+        {balance?.givePct != null && lean ? (
+          <div className="af-tc-meter" data-tone={lean.tone}>
+            <span className="af-tc-meter-track" aria-hidden>
+              <span className="af-tc-meter-fill" style={{ width: `${100 - balance.givePct}%` }} />
+            </span>
+            <span className="af-tc-meter-label">{copy(lean.text)}</span>
+          </div>
+        ) : null}
       </div>
+      ) : null}
 
       {/*
         Naming the other side is not decoration. It is what turns on the whole
         counterparty half of the ledger, and what lets each column offer the
-        picks that roster actually holds.
+        picks that roster actually holds. The pick itself is the dropdown in Team B's
+        card; this row is the ranked shortcut to the same choice, on the league page only.
       */}
       <div ref={builderTopRef} aria-hidden />
-      {otherRosters.length > 0 ? (
-        <div className="af-tc-partner" data-mstep="get">
-          {/* Item #8: who is worth trading with, and a deal to start from. */}
-          {depthAccess && depthLocked ? (
-            <CoreDepthLock access={depthAccess} what={lockSubjectText('Who to trade with', language)} lang={language} />
+      {/*
+        ── CREATE A TRADE (2026-11-14) ─────────────────────────────────────────────────────────────
+        The builder gets a heading, and the screenshot upload sits beside it. It used to live only in the
+        inbox's Sleeper note, inside "Offers, drafts and alerts", inside "More ways to find a trade": two
+        folds deep, so nobody found it. Same reader (readOfferScreenshot), same result: both sides filled
+        in, ready to analyze.
+      */}
+      {props.league?.id && !props.embedded ? (
+        <div className="af-tc-create" data-testid="trade-create">
+          <div className="af-tc-create-head">
+            <h2 className="af-tc-create-title">{lg.createTitle}</h2>
+            <label className="af-btn af-btn--ghost af-tc-create-upload" aria-disabled={screenshotRead.busy || undefined}>
+              {screenshotRead.busy ? lg.readingShot : lg.uploadShot}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="sr-only"
+                disabled={screenshotRead.busy}
+                data-testid="trade-create-screenshot-input"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0]
+                  // Cleared so choosing the same file again still fires.
+                  e.currentTarget.value = ''
+                  if (file) readOfferScreenshot(file)
+                }}
+              />
+            </label>
+          </div>
+          {screenshotRead.error ? (
+            <p className="af-tc-create-note" role="alert">{copy(screenshotRead.error)}</p>
+          ) : screenshotRead.done ? (
+            <p className="af-tc-create-note" role="status">{copy(screenshotRead.done)}</p>
           ) : (
-            <TradePartnerSuggestions
-              ranking={partnerRanking}
-              selectedRosterId={partnerRosterId}
-              onChoose={(rosterId) => {
-                setPartnerRosterId(rosterId)
-                setResult(null)
-              }}
-              onStartWith={startSuggestedDeal}
-            />
+            <p className="af-tc-create-note">{lg.uploadHint}</p>
           )}
+          {(rosterData?.rosters.length ?? 0) >= 3 ? (
+            <div className="af-tc-seg af-tc-create-mode" role="radiogroup" aria-label={mt.modeLabel} data-testid="trade-create-mode">
+              <button type="button" role="radio" aria-checked={tradeMode === 'two'} onClick={() => setTradeMode('two')}>
+                {mt.modeTwo}
+              </button>
+              <button type="button" role="radio" aria-checked={tradeMode === 'multi'} onClick={() => setTradeMode('multi')}>
+                {mt.modeMulti}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {tradeMode === 'multi' && rosterData && !props.embedded ? (
+        <div className="af-tc-mstep-wrap">
+          <MultiTeamTradeBuilder
+            key={multiLoad.key}
+            rosters={rosterData.rosters}
+            viewerRosterId={rosterData.viewerTeamRosterId}
+            sendHref={props.sourceLink?.href ?? null}
+            platformLabel={props.sourceLink?.providerLabel ?? null}
+            initial={multiLoad.initial}
+          />
+        </div>
+      ) : (
+      <>
+      {otherRosters.length > 0 && !props.embedded ? (
+        <div className="af-tc-partner">
           <span className="af-label">{copy('Trading with')}</span>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
@@ -1895,9 +2164,9 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      <div className="af-tc-builder" data-mstep="give get">
+      <div className="af-tc-builder">
         {([
-          { side: 'give' as const, label: copy('Your team'), handle: '@you', isYou: true, lines: give },
+          { side: 'give' as const, label: myRoster?.ownerName ?? copy('Your team'), handle: '@you', isYou: true, lines: give },
           {
             side: 'get' as const,
             label: theirLabel,
@@ -1906,25 +2175,80 @@ export function TradeCenter(props: {
             lines: get,
           },
         ]).map((side) => (
-          <div key={side.side} className="af-tc-team" data-mstep={side.side}>
+          <div key={side.side} className="af-tc-team" data-side={side.side}>
             <div className="af-tc-team-head">
-              <span className="af-tc-team-name">{side.label}</span>
-              {side.handle ? <span className="af-tc-team-handle">{side.handle}</span> : null}
-              {side.isYou ? <span className="af-tc-you">{copy('YOU')}</span> : null}
-              {props.platform ? (
-                <>
-                  <span className="af-tc-spacer" />
-                  <span
-                    className="af-tc-mark af-tc-mark--sm af-platform"
-                    data-platform={props.platform.toLowerCase()}
-                    aria-hidden
-                  >
-                    {platformMark(props.platform)}
+              {/*
+                The manager's league image beside their name, so the two teams read as two people
+                before anything is added. Only once that roster is known: an unpicked "You get" side
+                has no manager to show, and a placeholder face would claim one.
+              */}
+              {(() => {
+                const r = side.isYou ? myRoster : partnerRoster
+                if (!r) return null
+                const initial = (r.ownerName ?? '?').slice(0, 1).toUpperCase()
+                return (
+                  <span className="af-tc-manager-avatar af-tc-team-avatar" aria-hidden="true">
+                    {r.avatarUrl ? (
+                      <FallbackImg
+                        src={r.avatarUrl}
+                        alt=""
+                        loading="lazy"
+                        fallback={<span className="af-tc-headshot-fallback">{initial}</span>}
+                      />
+                    ) : (
+                      <span className="af-tc-headshot-fallback">{initial}</span>
+                    )}
                   </span>
-                </>
-              ) : null}
+                )
+              })()}
+              {/*
+                TEAM B'S NAME IS THE DROPDOWN. Every other manager in the league, in name order, and
+                never you — `otherRosters` already excludes the viewer's own team. Choosing one loads
+                that manager's players and picks below, under their name and league image. It used to
+                be a second control under a heading that said the same name; one is enough.
+              */}
+              {!side.isYou && otherRosters.length > 0 ? (
+                <label className="af-tc-partner-select af-tc-team-picker">
+                  <span className="sr-only">{partnerSelectCopy.allManagers}</span>
+                  <select
+                    value={partnerRosterId ?? ''}
+                    onChange={(e) => {
+                      setPartnerRosterId(e.target.value || null)
+                      /* The verdict belonged to the previous counterparty. */
+                      setResult(null)
+                    }}
+                  >
+                    <option value="">{partnerSelectCopy.chooseManager}</option>
+                    {[...otherRosters]
+                      .sort((a, b) => (a.ownerName ?? '').localeCompare(b.ownerName ?? ''))
+                      .map((r) => (
+                        <option key={r.rosterId} value={r.rosterId}>
+                          {r.ownerName ?? copy('Another manager')} ({partnerSelectCopy.record(r.wins, r.losses, r.ties)})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : (
+                <span className="af-tc-team-name">{side.label}</span>
+              )}
+              {side.isYou ? <span className="af-tc-you">{copy('YOU')}</span> : null}
             </div>
-            <span className="af-tc-sends">{copy('Sends')}</span>
+            {/*
+              The side's label and running total in one bar, KTC-style, so the two numbers being
+              compared sit at the top of each side instead of below a roster list.
+            */}
+            <div className="af-tc-total af-tc-side-bar">
+              <span>
+                {copy(side.isYou ? 'You send' : 'You get')}
+                {unpricedCount(side.lines) > 0 ? (
+                  <span className="af-tc-total-note">{copy(" · ")}{unpricedCount(side.lines)}{copy(" unpriced")}</span>
+                ) : null}
+                {spotCredit?.side === side.side ? (
+                  <span className="af-tc-total-note" data-testid="trade-side-roster-spot">{copy(" · ")}{copy(spotCredit.spots === 1 ? 'incl. open roster spot' : 'incl. open roster spots')} {money(spotCredit.value)}</span>
+                ) : null}
+              </span>
+              <b className="af-num">{(() => { const t = sideTotal(side.lines, side.side); return t == null ? '—' : t.toLocaleString(getAppIntlLocale()) })()}</b>
+            </div>
 
             {side.lines.length === 0 ? (
               <p className="af-tc-row-sub">{copy('Nothing added yet.')}</p>
@@ -1953,6 +2277,11 @@ export function TradeCenter(props: {
                           </span>
                         }
                       />
+                    </span>
+                  ) : kindOf(l) === 'player' && l.position ? (
+                    /* A player with no headshot reads the same here as in the roster list: position, in its colour. */
+                    <span className="af-tc-headshot" aria-hidden="true" data-pos={positionTone(l.position)}>
+                      <span className="af-tc-headshot-fallback">{positionGlyph(l.position, l.name)}</span>
                     </span>
                   ) : (
                     <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
@@ -2030,11 +2359,11 @@ export function TradeCenter(props: {
                 type="button"
                 className="af-tc-add"
                 aria-haspopup={isPhone ? 'dialog' : undefined}
-                onClick={(e) => {
-                  sheetOpenerRef.current = e.currentTarget
-                  setPicking(side.side)
-                }}
-              >{copy(" + Add asset ")}</button>
+                onClick={(e) => openPicker(side.side, e.currentTarget)}
+              >
+                <span className="af-tc-add-icon" aria-hidden>⌕</span>
+                {copy(side.isYou ? 'Search your players, picks or FAAB' : 'Search their players or picks')}
+              </button>
             )}
             {picking === side.side && isPhone && typeof document !== 'undefined'
               ? createPortal(
@@ -2095,12 +2424,15 @@ export function TradeCenter(props: {
                 )
               }
               return (
-                <details className="af-tc-roster" open>
+                <details className="af-tc-roster" open={rostersOpenAtStart}>
                   <summary className="af-tc-roster-head">
-                    <span className="af-label">
-                      {copy(r.ownerName ? `${r.ownerName}'s roster` : 'On this roster')}{copy(" · ")}{players.length}
+                    <span className="af-label af-tc-roster-label">
+                      {/* "Gridiron Ghosts' roster", not "Gridiron Ghosts's roster". */}
+                      {copy(r.ownerName ? `${r.ownerName}${/s$/i.test(r.ownerName) ? "'" : "'s"} roster` : 'On this roster')}{copy(" · ")}{players.length}
                     </span>
-                    <span className="af-tc-row-sub">{copy("Tap a player to add them")}</span>
+                    <span className="af-tc-row-sub af-tc-roster-hint">{copy("Tap a player to add them")}</span>
+                    <span className="af-tc-row-sub af-tc-roster-browse">{copy('Browse roster')}</span>
+                    <span className="af-tc-roster-chev" aria-hidden="true" />
                   </summary>
                   {/*
                     Capped and scrollable: two full rosters open at once would push the verdict —
@@ -2134,13 +2466,6 @@ export function TradeCenter(props: {
               )
             })()}
 
-            <div className="af-tc-total">
-              <span>{copy(" Total ")}{unpricedCount(side.lines) > 0 ? (
-                  <span className="af-tc-total-note">{copy(" · ")}{unpricedCount(side.lines)}{copy(" unpriced")}</span>
-                ) : null}
-              </span>
-              <b className="af-num">{totalOf(side.lines)}</b>
-            </div>
             {/* This week's AllFantasy points on this side, beside the value total. Not part of the grade. */}
             {/*
               The explanation was a `title` on this row — hover-only, so a phone never showed it. It is
@@ -2165,73 +2490,8 @@ export function TradeCenter(props: {
         verdict is: a bar under a "this cannot happen" banner still gets read as
         a comparison.
       */}
-      {/*
-        ── PHONE REVIEW: BOTH SIDES ON ONE SCREEN ───────────────────────────────────────────────
-        The builder cards are hidden on this step, so the deal is restated compactly with an Edit
-        control per side. Read-only on purpose: removing an asset belongs to the step that shows the
-        roster it came from. Hidden above 720px, where both cards are already side by side.
-      */}
-      <section className="af-tc-review" data-mstep="review" aria-label={copy('Trade summary')}>
-        {([
-          { side: 'give' as const, title: copy('You send'), lines: give },
-          { side: 'get' as const, title: `${copy('You get')}${partnerRoster ? ` · ${language === 'es' ? 'de' : 'from'} ${theirLabel}` : ''}`, lines: get },
-        ]).map((s) => (
-          <div key={s.side} className="af-tc-review-side">
-            <div className="af-tc-review-head">
-              <span className="af-label">{s.title}</span>
-              <span className="af-tc-spacer" />
-              <button type="button" className="af-tc-review-edit" onClick={() => goToStep(s.side)}>
-                {copy('Edit')}
-              </button>
-            </div>
-            {s.lines.length === 0 ? (
-              <p className="af-tc-row-sub">{copy('Nothing added yet.')}</p>
-            ) : (
-              <ul className="af-tc-review-list">
-                {s.lines.map((l, i) => (
-                  <li key={`${s.side}-${l.name}-${i}`}>
-                    <span className="af-tc-review-name">{l.name}</span>
-                    {l.position ? (
-                      <span className="af-tc-pos" data-pos={positionTone(l.position)}>{l.position}</span>
-                    ) : null}
-                    <span className="af-tc-spacer" />
-                    <span
-                      className="af-num"
-                      data-unpriced={valueOf(l) == null ? 'true' : undefined}
-                      title={l.marketValue == null && l.unpricedWhy ? copy(l.unpricedWhy) : undefined}
-                      aria-label={
-                        l.marketValue == null && l.unpricedWhy ? `${copy('No value:')} ${copy(l.unpricedWhy)}` : undefined
-                      }
-                    >
-                      {money(valueOf(l))}
-                      <LeagueMove line={l} />
-                    </span>
-                    {/*
-                      Said in text, not only in `title`: a tooltip needs a hover, and a phone has none.
-                      Without this the review shows an em dash with no way to learn why.
-                    */}
-                    {l.marketValue == null && l.unpricedWhy ? (
-                      <span className="af-tc-review-why">{copy(l.unpricedWhy)}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="af-tc-total">
-              <span>
-                {copy('Total')}
-                {unpricedCount(s.lines) > 0 ? (
-                  <span className="af-tc-total-note">{copy(" · ")}{unpricedCount(s.lines)} {copy('unpriced')}</span>
-                ) : null}
-              </span>
-              <b className="af-num">{totalOf(s.lines)}</b>
-            </div>
-          </div>
-        ))}
-      </section>
-
       {balance && !blocked ? (
-        <div className="af-tc-balance" data-mstep="review">
+        <div className="af-tc-balance">
           <div className="af-tc-balance-head">
             <span className="af-label">{copy('Value balance')}</span>
             <TopicTip topic="tradeValueBalance" />
@@ -2247,13 +2507,21 @@ export function TradeCenter(props: {
                 ? copy('Nothing priced on one side')
                 : balance.diff === 0
                   ? copy('Even on priced value')
-                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString()} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
+                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString(getAppIntlLocale())} ${copy('to you')} · ${balance.pct}% ${copy('apart')}`}
             </span>
           </div>
-          {balance.givePct != null ? (
-            <div className="af-tc-balance-bar" aria-hidden>
-              <span className="af-tc-balance-give" style={{ width: `${balance.givePct}%` }} />
-              <span className="af-tc-balance-get" style={{ width: `${100 - balance.givePct}%` }} />
+          {/*
+            ONE BAR, THE PHONE METER'S READING. It was two colours meeting where the sides split —
+            red for what you send, green for what you get — which read as bad and good rather than
+            as a lean. Now the fill is your GET share against a middle tick, coloured by where the
+            deal leans, with the same words the phone bar uses.
+          */}
+          {balance.givePct != null && lean ? (
+            <div className="af-tc-meter af-tc-balance-meter" data-tone={lean.tone}>
+              <span className="af-tc-meter-track" aria-hidden>
+                <span className="af-tc-meter-fill" style={{ width: `${100 - balance.givePct}%` }} />
+              </span>
+              <span className="af-tc-meter-label">{copy(lean.text)}</span>
             </div>
           ) : null}
           <div className="af-tc-balance-ends af-num">
@@ -2263,7 +2531,43 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {error ? <p className="af-tc-nosignal" data-mstep="review">{error}</p> : null}
+      {error ? <p className="af-tc-nosignal">{error}</p> : null}
+
+      <div className="af-tc-actions">
+        <p className="af-tc-caption">{copy(" Grades here are projected, not realized — they price the deal as it stands today rather than how it turns out. ")}</p>
+        {/*
+          Hidden at phone width by the stylesheet: there the pinned balance bar carries the one
+          button that grades the deal, and a second one down here read as a different action.
+        */}
+        <button
+          type="button"
+          className="af-btn af-tc-actions-analyze"
+          onClick={analyze}
+          disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
+        >
+          {copy(busy ? 'Analyzing…' : 'Analyze this trade')}
+        </button>
+        <button
+          type="button"
+          className="af-btn af-btn--ghost"
+          onClick={() => void saveDraft()}
+          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
+        >{copy(" Save draft ")}</button>
+        <button type="button" className="af-btn af-btn--ghost" onClick={askChimmy}>{copy(" Ask Chimmy to explain ")}</button>
+        {result && !noSignal && give.length > 0 && get.length > 0 ? (
+          <button type="button" className="af-btn af-btn--ghost" onClick={shareProposalCard} disabled={cardState === 'working'}>
+            {cardState === 'working'
+              ? 'Building card…'
+              : cardState === 'downloaded'
+                ? 'Card saved ✓'
+                : cardState === 'shared'
+                  ? 'Shared ✓'
+                  : cardState === 'failed'
+                    ? 'Retry share card'
+                    : 'Share card'}
+          </button>
+        ) : null}
+      </div>
 
       {/*
         ⚠ THE VERDICT IS SUPPRESSED WHEN THE FORMAT BLOCKS THE DEAL. A score
@@ -2275,7 +2579,7 @@ export function TradeCenter(props: {
         page looked idle. The slot the verdict will fill says what is happening instead.
       */}
       {busy && !result ? (
-        <section className="af-tc-verdict af-tc-verdict--pending" data-mstep="review" aria-busy="true" aria-live="polite">
+        <section className="af-tc-verdict af-tc-verdict--pending" aria-busy="true" aria-live="polite">
           <span className="af-label af-tc-verdict-eyebrow">{copy('The verdict')}</span>
           <p className="af-tc-verdict-pending-copy">
             {copy('Pricing this deal against your league’s values and rosters — usually 5 to 15 seconds.')}
@@ -2285,11 +2589,11 @@ export function TradeCenter(props: {
       ) : null}
 
       {result && !blocked ? (
-        <section ref={verdictRef} className="af-tc-verdict" data-mstep="review">
+        <section ref={verdictRef} className="af-tc-verdict">
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">{copy('The verdict')}</span>
             <span className="af-tc-row-sub">
-              {copy('trade value today — roster fit and realized production are separate')}
+              {copy('value today — not roster fit or future points')}
             </span>
             <TopicTip topic="tradeGrade" />
           </div>
@@ -2309,8 +2613,8 @@ export function TradeCenter(props: {
             <summary>{copy('How this was graded')}</summary>
             <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
             <p>{copy(serverGrade?.graded && serverGrade.letterBasis === 'your_team'
-              ? 'Your grade compares trade value adjusted for your roster. Acceptance and realized production are separate.'
-              : 'The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
+              ? 'Your grade compares value, adjusted for your roster. It doesn’t predict whether they’ll accept or how players will score.'
+              : 'The grade compares value only. Roster fit, whether they’ll accept, and how players score are separate.')}</p>
             {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p> : null}
             {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}{copy(": ")}{line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}
               {/* The roster-spot credit is already inside the totals (`rosterSpotCharge.ts`); shown so they add up. */}
@@ -2337,24 +2641,26 @@ export function TradeCenter(props: {
               <span>{copy(serverGrade.letterBasis === 'your_team' ? 'Their grade, on the market' : 'Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span>
             </div>
           ) : null}
+          {/* Why the values moved, measured from completed trades — verbatim from the grade, as Chimmy cites it. */}
+          <TradeMarketEvidence grade={serverGrade} copy={copy} />
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
               {copy(serverGrade.letterBasis === 'your_team'
-                ? 'Your grade is for your team: league value adjusted for your roster — an open starting slot you cannot fill off waivers raises a player, surplus depth lowers one. The market letter is the same deal on league value alone, which is what trade history and the other manager see. Your team’s place in the standings does not change the letter. Refreshed market values can change a later evaluation.'
-                : 'This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Refreshed market values can change a later evaluation.')}
+                ? 'Your grade is for your team: league value, adjusted for your roster. A player who fills an empty starting spot counts for more; extra depth counts for less. The market grade is the same trade on league value alone — that’s what the other manager and trade history see. Your place in the standings doesn’t change it. Values change over time, so a later grade can differ.'
+                : 'This grade uses the same rules as your trade history and emails. Values change over time, so a later grade can differ.')}
             </p>
           ) : null}
-          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved evaluation')}</Link>{copy(" · ")}{copy('Original values preserved at')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
-            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved grade')}</Link>{copy(" · ")}{copy('Values saved')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('We couldn’t save this grade. Take a screenshot if you want to keep it.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
-              <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'Your roster fit · what your grade is taken on' : 'Your roster fit')} <TopicTip topic="tradeRosterFit" /></div>
-              <p>{copy('Personal utility:')} {money(serverGrade.rosterFit.giveValue)} {copy('given,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
-                {' '}{copy('This is a roster-fit estimate, not a win probability.')}</p>
+              <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'How it fits your roster · used for your grade' : 'How it fits your roster')} <TopicTip topic="tradeRosterFit" /></div>
+              <p>{copy('Value to your team:')} {money(serverGrade.rosterFit.giveValue)} {copy('sent,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
+                {' '}{copy('This shows how the trade fits your roster. It doesn’t predict who wins the trade.')}</p>
               {serverGrade.rosterFit.moves.map((move, index) => (
                 <p key={`${move.side}:${move.name}:${index}`}>
-                  {move.name}{copy(": ")}{money(move.base)} {copy('base →')} {money(move.leagueValue)} {copy('personal utility.')} {move.reasons.map(reason=>copy(reason)).join('; ')}{copy(". ")}</p>
+                  {move.name}{copy(": ")}{money(move.base)} {copy('market →')} {money(move.leagueValue)} {copy('for your team.')} {move.reasons.map(reason=>copy(reason)).join('; ')}{copy(". ")}</p>
               ))}
             </div>
           ) : null}
@@ -2376,7 +2682,7 @@ export function TradeCenter(props: {
                       <span className="af-tc-row-sub">{copy("Your commitments ")}{money(y.fromCapHit)}{copy(" / cap ")}{money(y.fromCap)}{copy(" · Their commitments ")}{money(y.toCapHit)}{copy(" / cap ")}{money(y.toCap)}{copy(" · ")}{copy(y.fromLegal && y.toLegal ? 'Passes configured rules' : 'Fails cap or floor rules')}</span>
                     </li>)}
                   </ul>
-                  <p className="af-tc-row-sub">{copy("Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.")}</p>
+                  <p className="af-tc-row-sub">{copy("Includes current contracts and dead money, but not unsigned rookies or future moves. It’s checked again when the trade is accepted.")}</p>
                 </>
               )}
             </div>
@@ -2475,11 +2781,11 @@ export function TradeCenter(props: {
           {!noSignal && serverGrade?.graded ? <div className="af-tc-partner-summary">
             <div><strong>{copy("Why ")}{theirLabel}{copy(" might accept")}</strong><p>{copy(theirIncentive)}</p></div>
             <p>{copy(agreementBlocker)}</p>
-            <small>{copy("Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.")}</small>
+            <small>{copy("A fair trade isn’t always an accepted one. Their needs and preferences matter too.")}</small>
             {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
-              <strong>{copy("Closer value package: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
-              <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`}{copy(" after regrading the package.")}</span>
+              <strong>{copy("Make it more even: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
+              <span>{result.counterOffers[0].balanced ? copy('About even') : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% ${copy('apart')}`}{copy(" once it’s added.")}</span>
               <button type="button" className="af-btn af-btn-ghost" onClick={() => {
                 const counter = result.counterOffers?.[0]
                 if (!counter) return
@@ -2487,7 +2793,7 @@ export function TradeCenter(props: {
                   playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
                   providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
                   position: counter.position, team: null, value: counter.marketValue })
-              }}>{copy("Try this package")}</button>
+              }}>{copy("Try this deal")}</button>
             </div> : null}
           </div> : null}
 
@@ -2518,17 +2824,17 @@ export function TradeCenter(props: {
           ) : null}
 
           {!noSignal && (result.counterOffers ?? []).length > 0 ? (
-            <div className="af-tc-moves">
-              <div className="af-label">{copy('Re-evaluated counteroffers')}</div>
-              <p className="af-tc-row-sub">{copy('Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.')}</p>
+            <div className="af-tc-moves af-tc-counters">
+              <div className="af-label">{copy('Ways to even it out')}</div>
+              <p className="af-tc-row-sub">{copy('Each idea is graded the same way as your trade. Grades compare value only — they don’t predict whether the other manager will accept.')}</p>
               <ul>
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
                     {serverGrade ? <p className="af-tc-row-sub">{copy(counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost,language}))}</p> : null}
-                    <span className="af-tc-row-sub">{copy('Base value')} {money(counter.marketValue)}{copy(" · ")}{copy('League value in this package')} {money(counter.assetLeagueValue)}</span>
+                    <span className="af-tc-row-sub">{copy('Market value')} {money(counter.marketValue)}{copy(" · ")}{copy('Value in your league')} {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
-                      {copy('You')} {counter.grade.letter}{copy(" / ")}{theirLabel} {counter.grade.partnerLetter}{copy(" · ")}{counter.balanced ? copy('Within the even-value band') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`}{copy(" · ")}{money(counter.remainingGap)} {copy('value gap remaining')}
+                      {copy('You')} {counter.grade.letter}{copy(" / ")}{theirLabel} {counter.grade.partnerLetter}{copy(" · ")}{counter.balanced ? copy('About even') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`}{copy(" · ")}{money(counter.remainingGap)} {copy('gap left')}
                     </span>
                     <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
                       playerId: counter.asset.kind === 'player'
@@ -2565,7 +2871,9 @@ export function TradeCenter(props: {
         Wrapped rather than tagged: the panel owns its own root element. `display: contents` on the
         wrapper (stylesheet) keeps it out of the page's flex gap on every width.
       */}
-      <div className="af-tc-mstep-wrap" data-mstep="review">
+      {props.embedded ? null : (
+        <>
+      <div className="af-tc-mstep-wrap">
       <TradeProposePanel
         leagueId={props.league?.id ?? null}
         give={giveAssets}
@@ -2589,10 +2897,12 @@ export function TradeCenter(props: {
         }}
       />
       </div>
+        </>
+      )}
 
       {/* Additive context. Never merged with the verdict above. */}
       {result ? (
-        <details className="af-tc-analysis-fold" data-mstep="review">
+        <details className="af-tc-analysis-fold">
           <summary>{copy("Schedule, roster, and format notes")}</summary>
           <div className="af-tc-notes">
           {NOTE_GROUPS.map((g) => {
@@ -2613,14 +2923,35 @@ export function TradeCenter(props: {
         </details>
       ) : null}
 
-      {result && depthAccess && depthLocked ? (
-        <div className="af-tc-mstep-wrap" data-mstep="review">
-          <CoreDepthLock access={depthAccess} what={lockSubjectText('The full trade breakdown', language)} lang={language} />
+      {result && depthAccess && depthLocked && !blocked && !noSignal ? (
+        <div className="af-tc-mstep-wrap">
+          <CoreDepthLock
+            access={depthAccess}
+            what={lockSubjectText('The full trade breakdown', language)}
+            benefit={depthCopy.tradeBreakdownBenefit}
+            source="lock_trade_breakdown"
+            lang={language}
+          >
+            <TradeReviewLink
+              draft={{
+                give: giveAssets.filter(valuedByVerdict),
+                get: getAssets.filter(valuedByVerdict),
+                leagueId: props.league?.id,
+                format: props.dynasty ? 'dynasty' : props.leagueType === 'keeper' ? 'keeper' : 'redraft',
+                sport: normalizeToSupportedSport(props.sport),
+              }}
+              source="lock_trade_breakdown"
+              viewerId={props.viewerId}
+              storageError={depthCopy.tradeDraftStorageError}
+            >
+              {depthCopy.tradeReviewWithTokens}
+            </TradeReviewLink>
+          </CoreDepthLock>
         </div>
-      ) : intel ? (
-        <details className="af-tc-analysis-fold" data-mstep="review">
+      ) : !depthLocked && intel ? (
+        <details className="af-tc-analysis-fold">
         <summary>{copy("Deeper trade strategy and partner context")}</summary>
-        <section className="af-tc-dos" data-mstep="review">
+        <section className="af-tc-dos" data-section="breakdown">
           {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
           <div className="af-label">{copy('This deal')}</div>
           {depthAccess ? <FreeUntilNote access={depthAccess} lang={language} /> : null}
@@ -2728,7 +3059,7 @@ export function TradeCenter(props: {
 
       {/* Competitive Edge: the partner's own trade record, once there is a deal with them to read it against. */}
       {result && partnerRoster ? (
-        <div className="af-tc-mstep-wrap" data-mstep="review">
+        <div className="af-tc-mstep-wrap">
           <TradeCompetitiveEdge
             access={props.edgeAccess ?? null}
             edge={result.competitiveEdge}
@@ -2737,92 +3068,252 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {/*
-        The finder answers "who should I trade with", which is the question of the "You get" step.
-        ⚠ Its root reuses `.af-tc-dos`, the same class as the Decision OS section above — which is
-        exactly why steps are keyed on `data-mstep` and never on a class name.
-      */}
-      <div className="af-tc-mstep-wrap" data-mstep="get">
-        <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
-          <TradeFinderPanel leagueId={props.league?.id ?? null} />
-        </CoreDepthGate>
-      </div>
+      </>
+      )}
 
-      <div className="af-tc-actions" data-mstep="review">
-        <p className="af-tc-caption">{copy(" Grades here are projected, not realized — they price the deal as it stands today rather than how it turns out. ")}</p>
-        <button
-          type="button"
-          className="af-btn"
-          onClick={analyze}
-          disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
+      {/*
+        ── EVERYTHING ELSE, IN ONE FOLD (2026-11-13) ───────────────────────────────────────────────
+        Trade ideas, offers and drafts, the trade finder, value alerts and the propose flow each used to
+        be its own block between the builder and its Analyze button. They are one fold now, under the
+        verdict; its summary says when an offer is waiting on you, so folding hides nothing urgent. A
+        `?trade=` link (offersOpen) or a `#trade-finder` link opens it. Children stay mounted while
+        closed, so the inbox still loads and still reports its count.
+      */}
+      {/*
+        2026-11-20 — that fold is now the page's one "More detail" (MoreDetail.tsx), same class, same open
+        rule; its old summary line ("Trade ideas, offers and drafts…", or the offers-waiting count) is the
+        `note`. The Rebuild plan, which sat just above it as a second page-level fold, moved inside
+        unchanged. The trade center panel, the history and the league activity below stay on screen.
+        Its `onToggle` keeps the same open-state sync the bare <details> had.
+      */}
+      {props.embedded ? null : (
+        <MoreDetail
+          id="af-tc-more"
+          className="af-tc-fold af-tlg-more"
+          open={moreOpen || offersOpen}
+          onToggle={(open) => {
+            setMoreOpen(open)
+            if (!open) setOffersOpen(false)
+          }}
+          note={needsYou ? <span className="af-tc-fold-badge af-num">{lg.moreWaiting(needsYou)}</span> : lg.moreNote}
+          testId="trades-more"
         >
-          {busy ? 'Analyzing…' : 'Analyze this trade'}
-        </button>
-        <button
-          type="button"
-          className="af-btn af-btn--ghost"
-          onClick={() => void saveDraft()}
-          disabled={!props.league?.id || (giveAssets.length === 0 && getAssets.length === 0)}
-        >{copy(" Save draft ")}</button>
-        <button type="button" className="af-btn af-btn--ghost" onClick={askChimmy}>{copy(" Ask Chimmy to explain ")}</button>
-        {result && !noSignal && give.length > 0 && get.length > 0 ? (
-          <button type="button" className="af-btn af-btn--ghost" onClick={shareProposalCard} disabled={cardState === 'working'}>
-            {cardState === 'working'
-              ? 'Building card…'
-              : cardState === 'downloaded'
-                ? 'Card saved ✓'
-                : cardState === 'shared'
-                  ? 'Shared ✓'
-                  : cardState === 'failed'
-                    ? 'Retry share card'
-                    : 'Share card'}
-          </button>
+        {/*
+          The rebuild plan (lib/trade-intel/rebuildAdvisor.ts) — the healthy alternative to tanking, for a
+          team out of the race or rebuilding by choice in a dynasty or keeper league. Open by default for a
+          team that is out: that is the moment it matters. AF Pro, behind the same lock as the trade ideas.
+        */}
+        {(rosterData?.rebuildPlan || rosterData?.rebuildPlanLocked) && !props.embedded ? (
+          /* Folded by default (2026-11-14): open, it pushed your offers and the trade history a screen down. */
+          <details className="af-tc-fold af-tc-rebuild-fold">
+            <summary>
+              <span>{copy('Rebuild plan')}</span>
+              <span className="af-tc-fold-note">{copy('What to sell, what to keep, who to target')}</span>
+            </summary>
+            {rosterData?.rebuildPlanLocked && depthAccess ? (
+              <CoreDepthLock access={depthAccess} what={lockSubjectText('Your rebuild plan', language)} lang={language} />
+            ) : (
+              <RebuildPlanCard
+                plan={rosterData?.rebuildPlan ?? null}
+                onStartWith={(pkg) =>
+                  startSuggestedDeal({ rosterId: pkg.rosterId, ownerName: pkg.ownerName, suggestion: { give: pkg.give, get: pkg.get, percentApart: pkg.percentApart } })
+                }
+              />
+            )}
+          </details>
         ) : null}
-      </div>
 
-      {/*
-        Construction and analysis lead the page after pending offers. The unified timeline and
-        imported history follow the builder, including below the verdict on the phone's Review step.
-      */}
-      {valueActions.length > 0 ? (
-        <details className="af-tc-value-actions" data-mstep="review">
-          <summary><span>{copy("Value change alerts")}</span><b>{valueActions.length}{copy(" players across your leagues")}</b></summary>
-          {/* Not in the <summary>: a tap there toggles the panel. */}
-          <p className="af-tc-row-sub af-tc-value-actions-how">{copy('How these moves are measured')} <TopicTip topic="tradeValueAlerts" /></p>
-          <div className="af-tc-value-action-list">
-            {valueActions.map((player) => (
-              <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
-                <div>
-                  <strong>{player.name}</strong>
-                  <span>{player.position ?? 'Player'}{copy(" · ")}{player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`}{copy(" over 30 days")}</span>
-                  <span className="af-tc-value-leagues">
-                    {player.affectedLeagues.map((league, index) => (
-                      <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
-                    ))}
-                  </span>
-                </div>
-                <b>{player.advice}</b>
-              </div>
+        {otherRosters.length > 0 && !props.embedded ? (
+          <details className="af-tc-fold af-tc-ideas">
+            <summary>
+              <span>{copy('Trade ideas')}</span>
+              <span className="af-tc-fold-note">{copy('Who has what you need')}</span>
+            </summary>
+            {/* Item #8: who is worth trading with, and a deal to start from. */}
+            {depthAccess && depthLocked ? (
+              <CoreDepthLock access={depthAccess} what={lockSubjectText('Who to trade with', language)} lang={language} />
+            ) : (
+              <TradePartnerSuggestions
+                ranking={partnerRanking}
+                selectedRosterId={partnerRosterId}
+                onChoose={(rosterId) => {
+                  setPartnerRosterId(rosterId)
+                  setResult(null)
+                }}
+                onStartWith={startSuggestedDeal}
+              />
+            )}
+          </details>
+        ) : null}
+
+        {props.embedded ? null : (
+        <details
+          className="af-tc-fold af-tc-offers"
+          open={offersOpen}
+          onToggle={(e) => setOffersOpen(e.currentTarget.open)}
+        >
+          <summary>
+            <span>{copy('Offers, drafts and alerts')}</span>
+            {needsYou ? (
+              <span className="af-tc-fold-badge af-num">{needsYou} {copy('waiting on you')}</span>
+            ) : (
+              <span className="af-tc-fold-note">{copy('Inbox, saved drafts, screenshot import')}</span>
+            )}
+          </summary>
+          {props.league?.id ? (
+            <div className="af-tc-draft">
+              <span>{copy('Saved drafts go to your account, so a deal you start on a phone is here on a laptop.')}</span>
+              {workingDraftKey ? <span className="af-tc-row-sub">{copy(deviceDraftAvailable === false
+                ? 'Device recovery is unavailable. Use Save draft to save to your account.'
+                : 'Unfinished proposals can be resumed on this device. Use Save draft to sync across devices.')}</span> : null}
+              <span className="af-tc-spacer" />
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
+                {copy('Restore draft')}
+              </button>
+              {recoverableDraft && (recoverableDraft.give.length > 0 || recoverableDraft.get.length > 0) ? (
+                <button type="button" className="af-btn af-btn--ghost" onClick={() => {
+                  setDraftTouched(true)
+                  setGiveAssets(recoverableDraft.give)
+                  setGetAssets(recoverableDraft.get)
+                  setPartnerRosterId(recoverableDraft.partnerRosterId ?? null)
+                  setRecoverableDraft(null)
+                  setResult(null)
+                  setDraftNote('Resumed the unfinished proposal from this device. Analyze it again for current values.')
+                  revealBuilder()
+                }}>{copy('Resume unfinished proposal')}</button>
+              ) : null}
+              <button type="button" className="af-btn af-btn--ghost" onClick={() => {
+                setDraftTouched(true)
+                setRecoverableDraft(null)
+                setGiveAssets([])
+                setGetAssets([])
+                setPartnerRosterId(null)
+                setCountering(null)
+                setPicking(null)
+                setResult(null)
+                setError(null)
+                setDraftNote('Started a new trade. Your account-saved draft is still available through Restore draft.')
+                revealBuilder()
+              }}>{copy('Start new trade')}</button>
+              {draftNote ? <span className="af-tc-row-sub">{copy(draftNote)}</span> : null}
+            </div>
+          ) : null}
+
+          <div className="af-tc-mstep-wrap">
+            <TradeInbox
+              view="offers"
+              leagueId={props.league?.id ?? null}
+              onLoad={loadOffer}
+              onEnterByHand={enterOfferByHand}
+              onScreenshot={readOfferScreenshot}
+              screenshotBusy={screenshotRead.busy}
+              screenshotError={screenshotRead.error}
+              screenshotDone={screenshotRead.done ?? null}
+              onCounter={startCounter}
+              reloadToken={inboxReloadToken}
+              importedHistory={completedHistory.list}
+              onNeedsYouCount={setNeedsYou}
+            />
+          </div>
+          {/*
+            The asset vocabulary this LEAGUE can trade, shown regardless of what this
+            deal contains. Scoped by the league's type when the caller knows it; the
+            full six otherwise, because an unknown type must not read as a rule.
+          */}
+          <div className="af-tc-legend">
+            <span className="af-tc-legend-label">
+              {copy(legend.scoped ? 'Available in this builder for this format' : 'Supported by this builder')}
+            </span>
+            {legend.types.map((a) => (
+              <span key={a.key} className="af-tc-asset-pill">
+                <span className="af-tc-glyph" style={{ background: a.color }}>{a.glyph}</span>
+                {copy(a.label)}
+              </span>
             ))}
           </div>
         </details>
-      ) : null}
-      <div className="af-tc-mstep-wrap" data-mstep="review">
-        <TradeInbox
-          view="timeline"
-          leagueId={props.league?.id ?? null}
-          onLoad={loadOffer}
-          onCounter={startCounter}
-          reloadToken={inboxReloadToken}
-          importedHistory={props.completedHistory}
+        )}
+
+        {/*
+          The finder answers "who should I trade with", which is the question of the "You get" step.
+          ⚠ Its root reuses `.af-tc-dos`, the same class as the Decision OS section above, which is
+          why that section carries `data-section="breakdown"` and neither is selected by class alone.
+        */}
+        {props.embedded ? null : (
+          /* `#trade-finder`: where the Tools hub and the retired /trade-finder page land (2026-11-12). */
+          <div className="af-tc-mstep-wrap" id="trade-finder">
+            <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
+              <TradeFinderPanel leagueId={props.league?.id ?? null} />
+            </CoreDepthGate>
+          </div>
+        )}
+
+        {/*
+          Construction and analysis lead the page after pending offers. The unified timeline and
+          imported history follow the builder, including below the verdict on the phone's Review step.
+        */}
+        {valueActions.length > 0 && !props.embedded ? (
+          <details className="af-tc-value-actions">
+            <summary><span>{copy("Value change alerts")}</span><b>{valueActions.length}{copy(" players across your leagues")}</b></summary>
+            {/* Not in the <summary>: a tap there toggles the panel. */}
+            <p className="af-tc-row-sub af-tc-value-actions-how">{copy('How these moves are measured')} <TopicTip topic="tradeValueAlerts" /></p>
+            <div className="af-tc-value-action-list">
+              {valueActions.map((player) => (
+                <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
+                  {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                  <div>
+                    <strong>{player.name}</strong>
+                    <span>{player.position ?? 'Player'}{copy(" · ")}{player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`}{copy(" over 30 days")}</span>
+                    <span className="af-tc-value-leagues">
+                      {player.affectedLeagues.map((league, index) => (
+                        <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
+                      ))}
+                    </span>
+                  </div>
+                  <b>{player.advice}</b>
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : null}
+        {props.league?.id && !props.embedded ? (
+          <ProposeTradeLaunch rosterData={rosterData} onOpen={() => setProposeOpen(true)} />
+        ) : null}
+        </MoreDetail>
+      )}
+      {proposeOpen && !props.embedded && props.league?.id && rosterData?.viewerRosterId ? (
+        <ProposeTradeFlow
+          leagueId={props.league.id}
+          rosters={rosterData.rosters}
+          viewerRosterId={rosterData.viewerRosterId}
+          onClose={() => setProposeOpen(false)}
+          onSent={bumpInboxReload}
         />
+      ) : null}
+      <div className="af-tc-mstep-wrap">
+        {/*
+          The trade center: Active · Review · History, one card per trade and a per-team detail pane with
+          the engine's own accept / decline / counter / cancel and veto-vote routes. History is the
+          unified timeline this slot used to render on its own.
+        */}
+        {props.league?.id && !props.embedded ? (
+          <TradeCenterPanel
+            leagueId={props.league.id}
+            onLoad={loadOffer}
+            onCounter={startCounter}
+            reloadToken={inboxReloadToken}
+            onChanged={bumpInboxReload}
+            importedHistory={completedHistory.list}
+            sport={props.sport}
+          />
+        ) : null}
       </div>
       {props.history ? (
-        <div className="af-tc-mstep-wrap" data-mstep="review">
+        <div className="af-tc-mstep-wrap">
           {props.history}
         </div>
       ) : null}
+      {props.activity ? <div className="af-tc-mstep-wrap">{props.activity}</div> : null}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { withSurvivorSetupTransaction } from './survivorSetupTransaction'
 import type { Prisma } from '@prisma/client'
 import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
 import { buildSurvivorIntroAnnouncement, buildSurvivorIntroSummary, type SurvivorIntroContext } from './survivorPromptTemplates'
+import { createSurvivorChatMessage } from './survivorChatBridge'
 
 const HOST_USER_ID = 'survivor-host-chimmy'
 const HOST_NAME = 'Chimmy (Host)'
@@ -84,7 +85,7 @@ export async function postSurvivorIntroAnnouncement(
     return { ok: true, posted: false, pending: false, channelId: channel.id, messageId: existing.id, summary, detail: 'Intro already posted (idempotent).' }
   }
 
-  const message = await db.survivorChatMessage.create({
+  const message = await createSurvivorChatMessage(db, {
     data: {
       leagueId,
       channelId: channel.id,

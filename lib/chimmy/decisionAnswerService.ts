@@ -14,10 +14,13 @@ import { parseTradeTargetQuestion } from './tradeTargetQuestion'
 import { buildTradeTargetVerdict } from './tradeTargetVerdict'
 import { renderTradeTargetVerdict } from './tradeTargetDecision'
 import { buildTradeFinder, readTradeFinderPosition } from './tradeFinderGrounding'
+import { mentionsDraftPicks, readTradeFinderGoal } from './tradeFinderAsk'
+import { requestsPickTradePackage } from './tradeFinderIntent'
 import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { scenarioVerdict, startSitCall, tradeTargetVerdict } from './answerPolishBuild'
 import { answerKey } from './answerPolish'
+import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
 
 const points = (n: number | null) => n == null ? 'not computed' : n.toFixed(1)
 const names = (ps: Array<{ name: string }>) => ps.map(p => p.name).join(', ')
@@ -44,12 +47,14 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
   }
   return [tradeDecisionRecommendation(s),
     `You give ${names(s.give)}; you receive ${names(s.get)} from ${s.partnerTeamName}.`,
-    s.value.grade ? `Trade Center grade: ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}.` : `No trade grade: ${s.value.withheld ?? 'league values are incomplete'}.`,
-    `League value (${s.value.basis ?? 'league chart'}): ${points(s.value.given)} given, ${points(s.value.received)} received. Coverage: ${s.value.coveragePct}%.`,
+    s.value.divisionImpacts ? s.value.withheld ?? '' : s.value.grade ? `Trade Center grade: ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}.` : `No trade grade: ${s.value.withheld ?? 'league values are incomplete'}.`,
+    ...(s.value.divisionImpacts ? [] : [`League value (${s.value.basis ?? 'league chart'}): ${points(s.value.given)} given, ${points(s.value.received)} received. Coverage: ${s.value.coveragePct}%.`]),
+    // The measured evidence behind the values, verbatim from the grade (`marketEvidenceOf`).
+    ...(s.value.marketEvidence ?? []).map((e) => `Measured from completed trades — ${e}.`),
     s.lineup ? `Week ${s.lineupWeek ?? 'unknown'} projected lineup: ${points(s.lineup.before)} before, ${points(s.lineup.after)} after (${points(s.lineup.delta)} point change).` : `Lineup impact unavailable: ${s.lineupUnavailable ?? 'missing projections'}.`,
     ...(s.unpricedExcluded ? [`${s.unpricedExcluded} rostered players have no projection and were excluded from lineup totals.`] : []),
     ...(s.depthChanges ?? []).map(d => `${d.position} roster depth: ${d.before} before, ${d.after} after.`),
-    ...(s.picks ? ['Pick values use round averages; exact draft slots are unknown.'] : []),
+    ...(s.picks && !s.value.divisionImpacts && !s.value.basis?.includes('Campus') ? ['Pick values use round averages; exact draft slots are unknown.'] : []),
     ...(s.competitiveContext ? [`Current competitive position: ${s.competitiveContext.wins}-${s.competitiveContext.losses}-${s.competitiveContext.ties}${s.competitiveContext.rank != null ? `, rank ${s.competitiveContext.rank}` : ''} in the synced standings. This is current standing, not a post-trade playoff probability.`] : []),
     ...tradeFutureStructure(s),
     s.playoffOdds.available ? `Playoff scenario estimate: ${s.playoffOdds.before.toFixed(1)}% before, ${s.playoffOdds.after.toFixed(1)}% after (${s.playoffOdds.delta.toFixed(1)} percentage-point change; ${s.playoffOdds.iterations} paired simulations). ${s.playoffOdds.reason}` : `Playoff effect unavailable: ${s.playoffOdds.reason}`,
@@ -137,13 +142,27 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     if (kind === 'trade') {
       if (!imageTrade.question && /\b(?:find|suggest|recommend|propose)\b.*\btrades?\b|\btrade\s+ideas?\b/i.test(args.question)) {
         const positionWord = args.question.match(/\b(?:QB|RB|WR|TE|quarterback|running back|wide receiver|tight end)\b/i)?.[0]
-        const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord) })
+        /*
+         * 🛑 THE ASK'S OWN TERMS GO TO THE ENGINE. "3 win now trades using my draft picks" reached it as
+         * "find trades" and came back as dynasty-value player swaps with no pick, each a downgrade this
+         * season (2026-10-31). A goal and an offered pick are inputs, not tone.
+         */
+        const goal = readTradeFinderGoal(args.question)
+        const result = await buildTradeFinder({ leagueId: provenLeagueId, userId: args.userId, position: readTradeFinderPosition(positionWord),
+          goal, includePicks: mentionsDraftPicks(args.question), requiresPicks: requestsPickTradePackage(args.question) })
         if (result.status === 'unavailable') return gap('trade_discovery_unavailable', result.reason, 'Sync league settings, rosters and values, then retry.')
         if (result.ideas.length === 0) return gap('no_trade_ideas', result.noIdeasReason ?? 'No supported offers were found.', 'Try a different position or name a specific trade to evaluate.')
         return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'trade_discovery', 'market_values'],
-          answer: [`Trade ideas for ${result.you.teamName}:`, ...result.ideas.map(idea =>
-            `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
-            'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
+          answer: [`${goal === 'win_now' ? 'Win-now trade ideas' : 'Trade ideas'} for ${result.you.teamName}:`, ...result.ideas.map(idea =>
+            `${idea.partnerTeam}: give ${names(idea.give)}, receive ${names(idea.get)}. Market values ${points(idea.giveTotal)} vs ${points(idea.getTotal)}; fairness band: ${idea.fairness}.` +
+            `${idea.nowGive !== undefined ? ` This season: ${points(idea.nowGive ?? null)} given vs ${points(idea.nowGet ?? null)} received.` : ''}` +
+            `${idea.projectedLineupDelta != null ? ` Week ${result.projectionWeek?.week} projected starters ${points(idea.projectedLineupBefore ?? null)} before, ${points(idea.projectedLineupAfter ?? null)} after (+${points(idea.projectedLineupDelta)}).` : ''}` +
+            `${idea.why.length ? ` ${idea.why.join(' ')}` : ''}${!idea.sendable ? ' This package needs review before proposing.' : ''}`),
+            ...(result.pickNote ? [`Draft picks: ${result.pickNote}.`] : []),
+            ...(result.ideas.length < 3 && result.projectionWeek ? [`Only ${result.ideas.length} supported pick offer(s) passed the ownership, market-value and lineup checks.`] : []),
+            result.projectionWeek
+              ? 'These are opening offers using owned picks valued by round average. The lineup gain is for one projected week; acceptance and season outcomes are unknown.'
+              : 'These are engine-generated starting offers from market value and roster fit, not completed trade verdicts. Ask to grade a specific offer for lineup impact; acceptance and playoff effects are unknown.'].join('\n') })
       }
       const target = imageTrade.question ? null : parseTradeTargetQuestion(args.question)
       if (target) {
@@ -157,6 +176,18 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     let scenario = kind === 'trade' ? namedTrade ?? await buildTradeScenario(input)
       : kind === 'waiver' ? await buildWaiverScenario({ ...input, engineClaims: null })
       : await buildStartSitScenario(input)
+    if (kind === 'lineup' && scenario?.status === 'unresolved' &&
+      (scenario.reason === 'sport_not_supported' || scenario.reason === 'roster_ids_unreadable')) {
+      const { buildOtherSportStartSit } = await import('./otherSportStartSit')
+      const comparison = await buildOtherSportStartSit({
+        leagueId: provenLeagueId, userId: args.userId,
+        players: extractPlayerNameCandidates(input.message).slice(0, 2),
+      })
+      return comparison.ready
+        ? decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: comparison.text,
+          sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
+        : gap('other_sport_start_sit_unavailable', comparison.text, 'Check the player names, game schedule and scoring data before making a lineup change.')
+    }
     if (scenario?.status === 'unresolved') {
       const remedy = scenario.reason === 'unavailable_player'
         ? 'Choose an available player whose game has not started. Ask for a full lineup check to compare eligible replacements, then confirm the slot and AutoSubs on your platform.'
@@ -170,6 +201,7 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     }
     if (scenario?.status === 'ready') {
       if ('value' in scenario && imageTrade.assetCount != null && imageTrade.assetCount !== scenario.give.length + scenario.get.length) return gap('screenshot_assets_unresolved', 'I received the screenshot, but not every asset resolved against the league roster. No complete-package verdict was computed.', 'Confirm every player and pick on both sides before deciding.')
+      if ('value' in scenario && scenario.value.divisionImpacts?.length) return gap('separate_standings', scenario.value.withheld ?? 'Campus and Canton standings are measured separately.', 'Review the impact on each division separately.', scenario)
       // A resolved trade with no grade and no impact is still a missing answer, never a paid verdict.
       if ('value' in scenario && !scenario.value.grade && !scenario.lineup) return gap('valuation_missing', scenario.value.withheld ?? 'This trade could not be priced.', 'Sync league values and projections, then retry.')
       if ('value' in scenario && (!scenario.value.grade || !scenario.lineup || scenario.unpricedExcluded)) return gap('trade_impact_incomplete', renderDecisionScenario(scenario), 'This is a partial analysis. Sync league values and complete weekly projections before treating it as an acceptance decision.', scenario)
@@ -196,6 +228,12 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
     }
     if (kind === 'lineup') {
       const result = await buildLineupOptimization({ leagueId: provenLeagueId, userId: args.userId })
+      if (result.status === 'unresolved' && result.reason === 'sport_not_supported') {
+        const { buildBaselineLineupContext } = await import('./lineupOptimizerOtherSports')
+        const baseline = await buildBaselineLineupContext({ leagueId: provenLeagueId, userId: args.userId })
+        return gap('league_scored_weekly_projection_unavailable', baseline,
+          'This is a standard per-game baseline, not a forecast under your league scoring. Check this scoring period\'s games and lineup locks before making changes.')
+      }
       if (result.status === 'unresolved') return gap(result.reason, result.detail, 'Sync your league and check that weekly projections are available, then retry.')
       const call = singleSwapCall(result, provenLeagueId)
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'league_scoring', 'weekly_projections'],
@@ -225,8 +263,16 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
      * engine could not resolve still gets its precise refusal above ("not found", "already
      * rostered"), because that one is a real answer.
      */
-    if (kind === 'waiver') return null
-    return gap('decision_inputs_required', 'I could not resolve a specific move to evaluate.', 'Name what you give and receive, or ask whether to trade for a named player.')
+    /*
+     * ⚠ THE SAME NOW HOLDS FOR A TRADE MESSAGE THAT NAMES NO MOVE. "in these trade I am giving up
+     * scoring players for potential players… u didnt consider a 2 or 3 for my 1st round pick"
+     * (2026-10-31) was a critique of the ideas Chimmy had just given. "trade" plus "for" made it a
+     * trade decision, and it got "I could not resolve a specific move to evaluate." This lane reads
+     * the one message and no conversation; the full answer path reads the last turns and has
+     * `find_trade_ideas` and `evaluate_trade`, whose letters `enforceTradeLetters` still holds to the
+     * engine's. Lineup always returned above, so nothing reaches here with a move to refuse.
+     */
+    return null
   } catch {
     return gap('engine_unavailable', 'The decision engine could not complete this comparison.', 'Try again after syncing your league. No recommendation was computed.')
   }

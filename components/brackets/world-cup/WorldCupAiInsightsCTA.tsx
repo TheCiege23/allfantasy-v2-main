@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
+
 /**
  * WorldCupAiInsightsCTA
  *
@@ -59,7 +61,7 @@ import {
 
 type EntitlementSummary = ReturnType<typeof resolveWorldCupEntitlementSummary>
 
-export type WorldCupAiInsightsCTAProps = {
+type WorldCupAiInsightsCTAProps = {
   challengeId: string
   entitlementSummary: EntitlementSummary
   selectedEntryId: string | null
@@ -332,7 +334,7 @@ export default function WorldCupAiInsightsCTA({
 
   const postCommissionerBrain = useCallback(
     async (payload: Record<string, unknown>, actionKey: string): Promise<{ ok: boolean; data: Record<string, unknown>; cancelled?: boolean }> => {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
+      const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

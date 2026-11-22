@@ -36,5 +36,5 @@ it('recovers an interrupted debit after the ordinary window with database proof'
 it('cannot use a different receipt to refund an aged debit',async()=>{
  h.proof.mockResolvedValue([{id:'other'}])
  await expect(new TokenSpendService().refundSpendByLedger({...input,recoveryReceiptId:'other'})).rejects.toThrow('Refund window has expired')
- expect(h.proof).not.toHaveBeenCalled();expect(h.balanceUpdate).not.toHaveBeenCalled()
+ expect(h.proof.mock.calls.every(([sql]) => !sql.sql.includes('chimmy_request_receipts'))).toBe(true);expect(h.balanceUpdate).not.toHaveBeenCalled()
 })

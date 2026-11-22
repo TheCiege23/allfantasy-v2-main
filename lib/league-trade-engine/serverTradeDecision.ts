@@ -3,8 +3,9 @@ import { evaluateTrade, type EvaluateTradeDeps, type TradeEvaluationReceipt } fr
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import { gradeInputsFromNativeItems } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradeInputsFromNativeItems, type NativeNameLookup } from '@/lib/decision-os/trade/tradeGradeInputs'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { loadNhlHistoricalLineups, type NhlHistoricalLineupCoverage } from './nhlHistoricalLineup'
 
 export type ServerTradeParticipantDecision = {
   rosterId: string
@@ -25,6 +26,7 @@ export type ServerTradeParticipantDecision = {
   gradeLabel?: string | null
   /** Why this side has no letter, when it has none. */
   gradeWithheld?: string | null
+  divisionImpactSummary?: string
 }
 
 export type ServerTradeDecisionResult = {
@@ -39,6 +41,8 @@ export type ServerTradeDecisionResult = {
    * `trade_decision_snapshots` row, in the proposal's transaction — one receipt per trade, one table.
    */
   evaluationReceipt?: TradeEvaluationReceipt | null
+  lineupBasis?: 'historical_points_per_game'
+  lineupCoverage?: NhlHistoricalLineupCoverage[]
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -82,13 +86,13 @@ export async function proposalOneGrade(input: {
   proposerRosterId: string
   proposedByUserId?: string | null
   assets: TradeAssetInput[]
-  /** Names the caller already loaded, so the same items are not queried twice. */
-  nameForId?: (id: string) => string | null
+  /** Names the caller already loaded (`loadNativePlayerNames`, with its `sleeperIdFor`), so the same items are not queried twice. */
+  nameForId?: NativeNameLookup
 }): Promise<TradeGradeView> {
   const items = nativeItems(input.assets)
   const [grader, nameForId, viewer] = await Promise.all([
     createLeagueTradeGrader({ leagueId: input.leagueId, userId: input.proposedByUserId ?? null }).catch(() => null),
-    input.nameForId ? Promise.resolve(input.nameForId) : loadNativePlayerNames(items),
+    input.nameForId ? Promise.resolve(input.nameForId) : loadNativePlayerNames(items, input.leagueId),
     input.proposedByUserId
       ? resolveViewerLeagueRoster(input.leagueId, input.proposedByUserId).catch(() => null)
       : Promise.resolve(null),
@@ -119,8 +123,36 @@ export async function evaluateServerTradeDecision(input: {
   gradeProposal?: typeof proposalOneGrade
   /** Injected in tests; defaults to the engine's own dependencies. */
   engineDeps?: Partial<EvaluateTradeDeps>
+  /** Read-only stored NHL actuals; injectable for boundary tests. */
+  historicalNhl?: typeof loadNhlHistoricalLineups
 }): Promise<ServerTradeDecisionResult> {
   const capturedAt = input.capturedAt ?? new Date().toISOString()
+  const historical = await (input.historicalNhl ?? loadNhlHistoricalLineups)({ ...input, capturedAt })
+    .catch(() => null)
+  const historicalResult = (market?: TradeEvaluationReceipt): ServerTradeDecisionResult => {
+    const reason = 'Market grades withheld: historical NHL lineup evidence does not establish asset values or projections.'
+    return { modelVersion: 'nhl-historical-lineup-v1', capturedAt, scope: 'market',
+      evaluatorSupported: true, reason: market?.grade.graded ? null : reason,
+      evaluationReceipt: market ?? null, lineupBasis: 'historical_points_per_game',
+      lineupCoverage: historical!, participants: historical!.map((row) => {
+        const grade = row.rosterId === input.proposerRosterId ? market?.grade : market?.partnerGrade
+        const base: ServerTradeParticipantDecision = { rosterId: row.rosterId,
+        grade: null, gradeWithheld: reason, action: 'review', recommendation: row.reason ?? reason,
+        valueGiven: null, valueReceived: null, valueDelta: null, fairnessScore: null,
+        confidenceScore: 0, coverageStatus: row.status === 'verified' ? 'partial' as const : 'blocked' as const,
+        coveragePct: row.rosterPlayers ? Math.floor(100 * row.scoredPlayers / row.rosterPlayers) : 0,
+        lineupPointsBefore: row.before, lineupPointsAfter: row.after, lineupPointsDelta: row.delta,
+        }
+        return grade?.graded ? { ...base, grade: grade.letter, gradeLabel: grade.label,
+          gradeWithheld: null, action: grade.action, recommendation: grade.recommendation,
+          valueGiven: grade.giveValue, valueReceived: grade.getValue,
+          valueDelta: grade.getValue - grade.giveValue, coverageStatus: 'complete' as const, coveragePct: 100 }
+          : base
+      }) }
+  }
+  const malformedHistoryRoster = historical?.some((row) => row.reason === 'Stored roster contains malformed player references.')
+  if (historical && (input.participantRosterIds.length !== 2 || malformedHistoryRoster)) return historicalResult()
+  const unavailableHistory = historical?.some((row) => row.reason === 'Stored NHL history is temporarily unavailable.')
   if (input.participantRosterIds.length !== 2) {
     return {
       modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: false,
@@ -129,7 +161,7 @@ export async function evaluateServerTradeDecision(input: {
     }
   }
   const items = nativeItems(input.assets)
-  const nameForId = await loadNativePlayerNames(items).catch(() => (): string | null => null)
+  const nameForId = await loadNativePlayerNames(items, input.leagueId).catch(() => (): string | null => null)
   /*
    * 🛑 THE LETTER ON A RECEIPT IS THE ONE GRADE (2026-09-25). It was `projectedLetterFor` over the
    * canonical engine's values with the gap divided by what was GIVEN — a third rule beside the
@@ -171,42 +203,38 @@ export async function evaluateServerTradeDecision(input: {
         }).catch((): TradeGradeView => ({ graded: false, reason: 'The grade could not be computed when this offer was sent.', basis: null })),
     },
   )
-  if (!receipt.canonical) {
-    return {
-      modelVersion: 'canonical-trade-market-v1', capturedAt, scope: 'market', evaluatorSupported: true,
-      reason: receipt.canonicalError ?? 'Server trade evaluation unavailable.',
-      participants: [],
-      evaluationReceipt: receipt,
-    }
-  }
+  if (historical && (!receipt.canonical || unavailableHistory)) return historicalResult(receipt)
   return {
-    modelVersion: receipt.canonical.participants[0]?.memoVersion ?? 'canonical-trade-market-v1',
+    modelVersion: receipt.canonical?.participants[0]?.memoVersion ?? 'canonical-trade-market-v1',
     capturedAt,
     scope: 'market',
     evaluatorSupported: true,
     reason: null,
     evaluationReceipt: receipt,
-    participants: receipt.canonical.participants.map((evaluation) => {
-      const rosterId = evaluation.rosterId
+    ...(historical ? { lineupBasis: 'historical_points_per_game' as const, lineupCoverage: historical } : {}),
+    participants: input.participantRosterIds.map((rosterId) => {
+      const evaluation = receipt.canonical?.participants.find((participant) => participant.rosterId === rosterId)
+      const history = historical?.find((row) => row.rosterId === rosterId)
       // The receiver's letter is the proposer's grade seen from the other side — the exact mirror.
       const g = rosterId === input.proposerRosterId ? receipt.grade : receipt.partnerGrade
       return {
         rosterId,
         grade: g.graded ? g.letter : null,
-        action: g.graded ? g.action : evaluation.action,
-        recommendation: g.graded ? g.recommendation : evaluation.recommendation,
+        action: g.graded ? g.action : evaluation?.action ?? 'review',
+        recommendation: g.graded ? g.recommendation : evaluation?.recommendation ?? g.reason,
         valueGiven: g.graded ? g.giveValue : null,
         valueReceived: g.graded ? g.getValue : null,
         valueDelta: g.graded ? g.getValue - g.giveValue : null,
-        fairnessScore: evaluation.fairnessScore,
-        confidenceScore: evaluation.confidenceScore,
-        coverageStatus: g.graded ? ('complete' as const) : evaluation.coverageStatus === 'complete' ? ('partial' as const) : evaluation.coverageStatus,
-        coveragePct: g.graded ? 100 : evaluation.coveragePct,
+        fairnessScore: evaluation?.fairnessScore ?? null,
+        confidenceScore: evaluation?.confidenceScore ?? 0,
+        coverageStatus: g.graded ? ('complete' as const) : evaluation?.coverageStatus === 'complete' ? ('partial' as const) : evaluation?.coverageStatus ?? 'blocked',
+        coveragePct: g.graded ? 100 : evaluation?.coveragePct ?? 0,
         gradeLabel: g.graded ? g.label : null,
         gradeWithheld: g.graded ? null : g.reason,
-        lineupPointsBefore: evaluation.rosterImpact?.startingPointsBefore ?? null,
-        lineupPointsAfter: evaluation.rosterImpact?.startingPointsAfter ?? null,
-        lineupPointsDelta: evaluation.rosterImpact?.startingPointsDelta ?? null,
+        ...(!g.graded && g.divisionImpacts ? { divisionImpactSummary: g.reason } : {}),
+        lineupPointsBefore: historical ? history?.before ?? null : evaluation?.rosterImpact?.startingPointsBefore ?? null,
+        lineupPointsAfter: historical ? history?.after ?? null : evaluation?.rosterImpact?.startingPointsAfter ?? null,
+        lineupPointsDelta: historical ? history?.delta ?? null : evaluation?.rosterImpact?.startingPointsDelta ?? null,
       }
     }),
   }

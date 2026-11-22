@@ -25,7 +25,7 @@ const PLATFORM_LABEL: Record<string, string> = {
   af: 'AllFantasy',
 }
 
-export function platformLabel(platform: string | null | undefined): string {
+function platformLabel(platform: string | null | undefined): string {
   const key = (platform ?? '').trim().toLowerCase()
   return PLATFORM_LABEL[key] ?? 'the league\'s host platform'
 }
@@ -49,12 +49,12 @@ export const LINEUP_ACTION_RULES =
   'fixable — say the decision point has passed for this week. Only a starter marked NOT STARTED can be offered as a ' +
   'possible swap, and still subject to the platform.'
 
-export type KickoffState = 'started' | 'not_started' | 'unverified'
+type KickoffState = 'started' | 'not_started' | 'unverified'
 
 /** The shape `checkStartedGames` returns, restated so this module stays pure (no server-only import). */
 export type KickoffCheck = { started: Map<string, string>; unverified: string[] }
 
-export function kickoffStateOf(playerId: string, check: KickoffCheck | null): KickoffState {
+function kickoffStateOf(playerId: string, check: KickoffCheck | null): KickoffState {
   if (!check) return 'unverified'
   if (check.started.has(playerId)) return 'started'
   if (check.unverified.includes(playerId)) return 'unverified'

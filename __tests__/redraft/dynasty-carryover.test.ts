@@ -77,6 +77,27 @@ describe('carryDynastyRostersForward', () => {
     expect(m.rosterFindMany.mock.calls[0]![0].select.players.where).toEqual({ droppedAt: null })
   })
 
+  it('a second pass does not undo offseason moves already recorded on next season', async () => {
+    // Year one is frozen: p1 still on A, p2 still on A. During the offseason A traded p1 to B and
+    // dropped p2 — both recorded on next season's rosters. p5 was never carried (first pass crashed).
+    m.rosterFindMany
+      .mockResolvedValueOnce([
+        { id: 'old-a', ownerId: 'user-a', players: [player('p1'), player('p2'), player('p5')] },
+        { id: 'old-b', ownerId: 'user-b', players: [player('p3')] },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'new-a', ownerId: 'user-a', players: [{ playerId: 'p2' /* dropped */ }] },
+        { id: 'new-b', ownerId: 'user-b', players: [{ playerId: 'p1' }, { playerId: 'p3' }] },
+      ])
+
+    const r = await carryDynastyRostersForward('L1', 'season-1', 'season-2')
+
+    expect(m.playerCreate.mock.calls.map((c) => [c[0].data.rosterId, c[0].data.playerId])).toEqual([['new-a', 'p5']])
+    expect(r).toMatchObject({ playersCopied: 1, playersAlreadyPresent: 3 })
+    // Dropped rows are read on the incoming side, so a drop is seen.
+    expect(m.rosterFindMany.mock.calls[1]![0].select.players).toEqual({ select: { playerId: true } })
+  })
+
   it('recognises the dynasty family, including legacy isDynasty rows', () => {
     expect(isDynastyFamilyLeague({ leagueType: 'dynasty' })).toBe(true)
     expect(isDynastyFamilyLeague({ leagueType: 'Devy' })).toBe(true)

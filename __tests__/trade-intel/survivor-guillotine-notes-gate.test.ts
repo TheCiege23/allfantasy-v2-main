@@ -100,8 +100,8 @@ const WEEK_5 = { leg: 5 }
 const LINEUP = 'You start 8 this week, and a WRT flex arrives in week 7'
 const SUPERFLEX = 'The SUPERFLEX arrives in week 9, 4 weeks away'
 const IDOL = 'Your standard idol can be played for 6 more weeks'
-const NO_TRADES = 'Survivor Guillotine: trades are not allowed in this league.'
-const GUILLOTINE = 'Guillotine: one team is chopped every week'
+const NO_TRADES = 'Survivor Guilly: trades are not allowed in this league.'
+const GUILLOTINE = 'Guilly: one team is chopped every week'
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in this test') }))
@@ -112,7 +112,7 @@ afterEach(() => {
 })
 
 describe('the Survivor All-Stars notes are gated on the confirmed format', () => {
-  it('a plain guillotine league gets the guillotine notes and none of the Survivor All-Stars ones', async () => {
+  it('a plain Guilly league gets the guillotine notes and none of the Survivor All-Stars ones', async () => {
     league('guillotine', { ...WEEK_5 })
     const out = await (await load())(ARGS)
     const text = out.formatNotes.join('\n')
@@ -124,7 +124,7 @@ describe('the Survivor All-Stars notes are gated on the confirmed format', () =>
     }
   })
 
-  it('a confirmed Survivor Guillotine league gets them, with the no-trades note leading', async () => {
+  it('a confirmed Survivor Guilly league gets them, with the no-trades note leading', async () => {
     league('guillotine', { ...WEEK_5, ...confirmed('survivor_guillotine') })
     const out = await (await load())(ARGS)
     const text = out.formatNotes.join('\n')
@@ -161,7 +161,7 @@ describe('a confirmed Pirate league keeps its trade notes whatever the column sa
   })
 })
 
-describe('the rail keeps a confirmed Survivor Guillotine league flagged as an elimination format', () => {
+describe('the rail keeps a confirmed Survivor Guilly league flagged as an elimination format', () => {
   /*
    * `railMatchups.ts` reads `leagueTypeConfirmation.type` before the column in a
    * raw query with no test harness, so the query and the hand-off are pinned by

@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { randomUUID } from "crypto"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
@@ -1049,7 +1050,7 @@ export async function GET(
   return NextResponse.json({ messages, viewerUserId: auth.user.id })
 }
 
-export async function POST(
+async function paidToolPost(
   request: Request,
   context: { params: Promise<{ challengeId: string }> }
 ) {
@@ -1197,7 +1198,7 @@ export async function POST(
         sourceType: "world_cup_chimmy_coaching",
         sourceId: params.data.challengeId,
         idempotencyKey: `chimmy-coaching:${auth.user.id}:${randomUUID()}`,
-        description: "World Cup Chimmy AI coaching answer",
+        description: "World Cup Chimmy coaching answer",
         metadata: { challengeId: params.data.challengeId },
         upgradePath: "/pricing?from=wc-chimmy",
       })
@@ -1373,3 +1374,5 @@ export async function POST(
     messages: chimmyResponseMessage ? [message, chimmyResponseMessage] : [message],
   }, { status: 201 })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

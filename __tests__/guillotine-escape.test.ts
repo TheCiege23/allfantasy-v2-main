@@ -108,7 +108,7 @@ describe('getGuillotineEscapesForUser', () => {
     expect(await getGuillotineEscapesForUser('lg1', 'u1')).toHaveLength(1)
   })
 
-  it('no roster, no guillotine config, or no chops: nothing, and no score read', async () => {
+  it('no roster, no Guilly config, or no chops: nothing, and no score read', async () => {
     h.config.mockResolvedValue({ dangerMarginPoints: 10 })
     h.events.mockResolvedValue([{ metadata: { weekOrPeriod: 5, choppedRosterIds: ['a'] } }])
     h.rosterFind.mockResolvedValue(null)

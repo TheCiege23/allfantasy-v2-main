@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { coreTriageMessages } from '@/lib/core-app/messages/coreTriage'
 
 /**
  * The "?" — one way, everywhere in /core, to explain a term, a number or where a figure comes from.
@@ -51,7 +52,7 @@ export function InfoTip({
   const suppressFocus = useRef(false)
   const [expanded, setExpanded] = useState(false)
   const [interactive, setInteractive] = useState(false)
-  const es = useOptionalLanguage().language === 'es'
+  const m = useMessages(coreTriageMessages)
   const show = (keyboard = false) => {
     const node = popover.current
     if (!node || typeof node.showPopover !== 'function') return
@@ -134,7 +135,7 @@ export function InfoTip({
         {title ? <strong>{title}</strong> : null}
         <span className="af-info-pop-body">{children}</span>
         <button type="button" hidden={!expanded || !interactive} className="af-info-close" onClick={() => { suppressFocus.current = true; hide(); trigger.current?.focus() }}>
-          {es ? 'Cerrar' : 'Close'}
+          {m.infoTipClose}
         </button>
       </span>
     </span>

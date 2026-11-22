@@ -27,12 +27,16 @@ import type {
   PlayerValueLookup,
 } from './fantasycalc'
 import { buildPlayerValuesForNames } from './fantasycalc'
+import { boundMap } from './ttl-memo'
 
 const FANTASYCALC_API_BASE = 'https://api.fantasycalc.com/values/current';
 const FANTASYCALC_PLAYERS_BASE = 'https://api.fantasycalc.com/players';
 
 const cache: Map<string, FantasyCalcCache> = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+// Each entry is a whole FantasyCalc board, keyed by league settings (size, QBs, PPR), so the key
+// space is every league shape ever charted. Bounded; see `boundMap`.
+const CACHE_MAX_ENTRIES = 20;
 
 function getCacheKey(settings: FantasyCalcSettings): string {
   return `${settings.isDynasty}-${settings.numQbs}-${settings.numTeams}-${settings.ppr}`;
@@ -62,6 +66,7 @@ export async function fetchFantasyCalcValues(
 
   const data: FantasyCalcPlayer[] = await response.json();
 
+  boundMap(cache, (e) => Date.now() - e.fetchedAt >= CACHE_TTL, CACHE_MAX_ENTRIES);
   cache.set(cacheKey, {
     data,
     fetchedAt: Date.now(),

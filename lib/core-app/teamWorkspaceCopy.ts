@@ -25,6 +25,7 @@ const ES: Record<string,string> = {
   "No position-eligible bench alternatives found.": "No se encontraron suplentes elegibles para esta posición.",
   "Scoring and lineup rules": "Reglas de puntuación y alineación",
   "League rules are applied to the projected numbers shown here.": "Las proyecciones mostradas aplican las reglas de esta liga.",
+  "League scoring rules are saved; a compatible projection feed is needed for comparisons.": "Las reglas de puntuación de la liga están guardadas; se necesitan proyecciones compatibles para hacer comparaciones.",
   "Scoring rules are unavailable; comparisons may be incomplete.": "Las reglas de puntuación no están disponibles; las comparaciones pueden estar incompletas.",
   "Enabled by this league. Review assigned substitutes and provider lock rules.": "Activado en esta liga. Revisa los sustitutos asignados y los bloqueos de la plataforma.",
   "Disabled by this league.": "Desactivado en esta liga.",

@@ -72,6 +72,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: vi.fn(async () => {
     dispatchedRows.push('sent')
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
   }),
 }))
 
@@ -137,6 +138,7 @@ beforeEach(async () => {
   const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
   ;(dispatchNotification as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
     dispatchedRows.push('sent')
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
   })
 })
 
@@ -259,13 +261,9 @@ describe('dispatchPendingPlayerNewsNotifications — budget', () => {
     expect(updateManyCalls[0].ids).toEqual(['r1', 'r2', 'r3'])
   })
 
-  it('🛑 NEVER STAMPS A ROW IT DID NOT LOOK AT', async () => {
-    /*
-     * The silent-corruption case, and the reason the budget check sits ABOVE `stamped.push`
-     * rather than below it. `notificationDispatchedAt` means "considered"; a row stamped without
-     * being considered is excluded from every future scan, so its notification is not delayed,
-     * it is lost — with nothing red anywhere.
-     */
+  it('batches all scanned same-team injury rows into one dispatch', async () => {
+    // Routing scans all four rows before one team batch is sent. The separate
+    // batch-budget test proves unattempted groups remain retryable.
     newsRows = [row('r1'), row('r2'), row('r3'), row('r4')]
     const clock = clockAt()
     const budget = createRunBudget(240_000)
@@ -274,15 +272,15 @@ describe('dispatchPendingPlayerNewsNotifications — budget', () => {
     ;(dispatchNotification as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
       dispatchedRows.push('sent')
       clock.advance(130_000)
+    return { requested: 1, delivered: 1, suppressed: 0, failed: 0 }
     })
 
     const result = await dispatchPendingPlayerNewsNotifications({ budget })
 
-    expect(result.scanned).toBe(2)
-    expect(result.deferred).toBe(2)
-    expect(updateManyCalls[0].ids).toEqual(['r1', 'r2'])
-    expect(updateManyCalls[0].ids).not.toContain('r3')
-    expect(updateManyCalls[0].ids).not.toContain('r4')
+    expect(result.scanned).toBe(4)
+    expect(result.deferred).toBe(0)
+    expect(dispatchedRows).toHaveLength(1)
+    expect(updateManyCalls[0].ids).toEqual(['r1', 'r2', 'r3', 'r4'])
   })
 
   it('considers nothing and stamps nothing when the budget is already spent', async () => {

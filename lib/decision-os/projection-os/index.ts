@@ -19,7 +19,7 @@ import {
  * league's IDP points for everybody.
  *
  * That is precisely the defect 1.1b spent a change unpicking: `waiverSettingsSource` and
- * `tradeSettingsSource` both declared `level: 'league'` while deriving user-specific facts, and
+ * `tradeSettingsSource` (deleted 2026-11-20) both declared `level: 'league'` while deriving user-specific facts, and
  * nothing caught it because nothing read the league entry. Here it would have been worse, because
  * the app level is shared by every league in the sport.
  *

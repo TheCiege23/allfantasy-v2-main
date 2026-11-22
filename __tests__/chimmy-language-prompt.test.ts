@@ -11,7 +11,7 @@
  * - tryDeterministicAnswer locale param
  * - /api/chimmy cookie read (af_lang)
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -28,6 +28,12 @@ const checkDailyCapMock = vi.fn()
 const incrementDailyCapMock = vi.fn()
 const tryDeterministicAnswerMock = vi.fn()
 const cookiesMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // These fixtures exercise the paid-token path after the two daily answers are used.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock('server-only', () => ({}))
 
@@ -111,7 +117,7 @@ function setupHappyPath() {
   requireFeatureEntitlementMock.mockResolvedValue({
     ok: true,
     decision: { entitlement: { plans: [] } },
-    tokenSpend: null,
+    tokenSpend: { id: 'language-ledger', balanceAfter: 10 },
     response: null,
   })
   checkDailyCapMock.mockResolvedValue({ allowed: true })
@@ -126,6 +132,13 @@ function setupHappyPath() {
 }
 
 // ── /api/chimmy — language cookie → UserContext.language ──────────────────────
+
+// Warm the route's module graph once, before any test. Its first import compiles a large graph — over
+// 10s on an idle machine — and with the other chat and Chimmy suites running alongside it passed 30s,
+// so the FIRST test timed out (and its call, still running, could take the next test's mocks).
+// Paid here, the 30s test limit measures only the test. The warm-up's own limit is generous because this is
+// compile time, not a hang: on a box busy with other type-checks, this one import has taken over 2 minutes.
+beforeAll(async () => { await import('@/app/api/chimmy/route') }, 300_000)
 
 describe('POST /api/chimmy — language cookie passthrough', () => {
   beforeEach(() => {
@@ -338,9 +351,9 @@ describe('POST /api/chimmy — provider fallback and safety invariants', () => {
     expect(body.response).not.toContain('deepseek')
   })
 
-  it('daily cap still enforced regardless of language', async () => {
+  it('abuse rate limits still apply regardless of language', async () => {
     cookiesMock.mockReturnValue(makeCookieStore('es'))
-    checkDailyCapMock.mockResolvedValue({ allowed: false, message: 'Daily cap reached' })
+    runAiProtectionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'Too many requests' }), { status: 429 }))
 
     const { POST } = await import('@/app/api/chimmy/route')
     const req = buildJsonRequest({ message: 'What should I do?' })

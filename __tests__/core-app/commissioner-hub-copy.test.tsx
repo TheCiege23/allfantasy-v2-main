@@ -29,6 +29,8 @@ vi.mock('@/lib/core-app/commissioner/reports', () => ({
 vi.mock('@/components/core-app/commissioner/HubReports', () => ({
   OperationalCharts: () => null,
   ChartsFallback: () => null,
+  HealthBreakdown: () => null,
+  HealthBreakdownStatic: () => null,
   RecentChanges: () => null,
   RecentChangesFallback: () => null,
   AuditTimeline: () => null,
@@ -53,6 +55,7 @@ const FILES = [
   'components/core-app/commissioner/AutomationRecipes.tsx',
   'components/core-app/commissioner/CalendarExportButton.tsx',
   'components/core-app/commissioner/CommissionerChimmy.tsx',
+  'components/core-app/commissioner/FantraxTradeHistoryUpload.tsx',
   'components/core-app/commissioner/FormatTemplateControl.tsx',
   'components/core-app/commissioner/GuidedWorkflows.tsx',
   'components/core-app/commissioner/MemberActivityList.tsx',
@@ -223,6 +226,28 @@ function hub(over: Partial<CommissionerHubData> = {}): CommissionerHubData {
 }
 
 describe('the Commissioner Hub follows en → es → en', () => {
+  it('links an imported draft to the draft archive instead of saying no draft is on file', () => {
+    const history = { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: '', draftNote: '' }
+    const { unmount } = render(<CommissionerHub data={hub({ history })} language="en" />)
+    expect(screen.getByText('No draft sessions on file.')).toBeTruthy()
+    unmount()
+
+    const imported = { ...history, importedDrafts: [{ key: 'imported:abc', season: 2025, href: '/core/draft-hq?league=L1&draft=imported%3Aabc' }, { key: 'legacy:NFL:unknown', season: null, href: '/core/draft-hq?league=L1&draft=legacy%3ANFL%3Aunknown' }] }
+    const es = render(<CommissionerHub data={hub({ history: imported })} language="es" />)
+    expect(screen.queryByText('No hay drafts registrados.')).toBeNull()
+    const links = screen.getAllByRole('link', { name: 'Abrir en el archivo de drafts' })
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(imported.importedDrafts.map((d) => d.href))
+    expect(links[0].closest('li')?.querySelector('strong')?.textContent).toBe('2025 · Draft importado')
+    expect(links[1].closest('li')?.querySelector('strong')?.textContent).toBe('Temporada desconocida · Draft importado')
+    es.unmount()
+  })
+  it('shows recorded lottery order and odds in the commissioner archive', () => {
+    const data = hub({ history: { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: '', draftNote: '', lotteries: [{ id: 'draw', at: '2026-04-01T12:00:00Z', season: 2027, slots: [{ slot: 1, team: 'Alpha', odds: 42.5 }] }] } })
+    render(<CommissionerHub data={data} language="es" />)
+    expect(screen.getByText('Historial de la lotería ponderada')).toBeTruthy()
+    expect(screen.getByText(/Alpha/).textContent).toContain(`${(42.5).toLocaleString('es-US')}% probabilidad de la primera selección`)
+    expect(screen.getByText(/Alpha/).textContent).toContain('Selección 1')
+  })
   it('the server screen through its language prop, the islands through the provider', () => {
     const view = (language: 'en' | 'es') => {
       h.language = language
@@ -234,7 +259,9 @@ describe('the Commissioner Hub follows en → es → en', () => {
 
     rerender(view('es'))
     expect(screen.getByRole('link', { name: '← Todas las ligas que diriges' })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Dynasty Dragons') // the league's own name stays
+    // The headline is the answer now (2026-11-14); a never-synced league says so. The league's own name stays, above it.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Esta liga aún no se ha sincronizado')
+    expect(screen.getByText(/Core · Comisionado · Dynasty Dragons/)).toBeTruthy()
     expect(screen.getByText('Te necesita ahora')).toBeTruthy() // HubSections, a server section
     expect(screen.getByText('Aún sin medir')).toBeTruthy()
     expect(screen.getByText(/3 equipos aún no están conectados/)).toBeTruthy()

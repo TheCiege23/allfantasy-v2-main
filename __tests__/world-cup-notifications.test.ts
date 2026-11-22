@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const createPlatformNotificationMock = vi.hoisted(() => vi.fn())
+const dispatchNotificationMock = vi.hoisted(() => vi.fn())
 const sendSmsMock = vi.hoisted(() => vi.fn())
 const getSettingsProfileMock = vi.hoisted(() => vi.fn())
 const challengeFindUniqueMock = vi.hoisted(() => vi.fn())
@@ -8,6 +9,9 @@ const participantFindManyMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/platform/notification-service", () => ({
   createPlatformNotification: createPlatformNotificationMock,
+}))
+vi.mock("@/lib/notifications/NotificationDispatcher", () => ({
+  dispatchNotification: dispatchNotificationMock,
 }))
 
 vi.mock("@/lib/twilio-client", () => ({
@@ -54,6 +58,7 @@ describe("worldCupNotifications", () => {
     delete process.env.TWILIO_API_KEY
     delete process.env.TWILIO_API_SECRET
     createPlatformNotificationMock.mockResolvedValue(true)
+    dispatchNotificationMock.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
     sendSmsMock.mockResolvedValue(true)
     getSettingsProfileMock.mockResolvedValue(profile())
     challengeFindUniqueMock.mockResolvedValue({ name: "Office Pool" })
@@ -82,6 +87,12 @@ describe("worldCupNotifications", () => {
     })
 
     expect(createPlatformNotificationMock).toHaveBeenCalledTimes(1)
+    expect(dispatchNotificationMock).toHaveBeenCalledWith(expect.objectContaining({
+      category: "bracket_updates",
+      userIds: ["user-2"],
+      actionHref: "/brackets/world-cup/pool-1",
+      skipChannels: { inApp: true, email: true, sms: true },
+    }))
     expect(sendSmsMock).toHaveBeenCalledTimes(1)
     expect(sendSmsMock.mock.calls[0]?.[1]).toContain("You were mentioned in World Cup Pool: Office Pool")
     expect(diagnostics[0]).toMatchObject({ smsEligible: true, smsSent: true, twilioConfigured: true })
@@ -108,6 +119,7 @@ describe("worldCupNotifications", () => {
     })
 
     expect(createPlatformNotificationMock).not.toHaveBeenCalled()
+    expect(dispatchNotificationMock).not.toHaveBeenCalled()
     expect(sendSmsMock).not.toHaveBeenCalled()
     expect(diagnostics[0]).toMatchObject({ smsEligible: false, smsSent: false, skippedReason: "pool_muted" })
   })
@@ -135,6 +147,7 @@ describe("worldCupNotifications", () => {
 
     expect(diagnostics.map((d) => d.userId)).toEqual(["user-2", "user-3"])
     expect(createPlatformNotificationMock).toHaveBeenCalledTimes(1)
+    expect(dispatchNotificationMock).toHaveBeenCalledTimes(1)
     expect(createPlatformNotificationMock.mock.calls[0]?.[0]).toMatchObject({ userId: "user-2" })
     expect(sendSmsMock).toHaveBeenCalledTimes(1)
     // The poster's words and name stay in-app: user-written text is not sent over SMS.
@@ -204,6 +217,12 @@ describe("worldCupNotifications", () => {
       userId: "user-1",
       type: "world_cup_bracketFinalized",
       title: "World Cup bracket finalized",
+    }))
+    expect(dispatchNotificationMock).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ["user-1"],
+      type: "world_cup_bracketFinalized",
+      category: "bracket_updates",
+      skipChannels: { inApp: true, email: true, sms: true },
     }))
   })
 

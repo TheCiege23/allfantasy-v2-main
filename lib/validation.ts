@@ -7,7 +7,7 @@ export const emailSchema = z.object({
 export const questionnaireSchema = z.object({
   email: z.string().email().max(255).transform(s => s.toLowerCase().trim()),
   favoriteSport: z.enum(['NFL', 'NBA', 'MLB']),
-  favoriteLeagueType: z.enum(['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guillotine', 'Survivor', 'Tournament']),
+  favoriteLeagueType: z.enum(['Redraft', 'Dynasty', 'Keeper', 'Best Ball', 'Guilly', 'Survivor', 'Tournament']),
   competitiveness: z.enum(['Casual', 'Competitive', 'Degenerate 😈']),
   draftPreference: z.enum(['Snake', 'Auction', 'Either']),
   painPoint: z.enum(['Drafting', 'Waivers', 'Trades', 'Start/Sit', 'League Management']),

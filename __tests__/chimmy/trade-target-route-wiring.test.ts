@@ -15,7 +15,7 @@ const idx = (needle: string) => {
   return at
 }
 
-const DETERMINISTIC_AT = idx('const deterministic = chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(')
+const DETERMINISTIC_AT = idx('const deterministic = portfolioReport || chimmyDecisionKind(message) ? null : await tryDeterministicAnswerDetailed(')
 const VERDICT_AT = idx('await buildTradeTargetVerdict(')
 const UNRESOLVED_RETURN_AT = idx("if (tradeTargetResult?.status === 'unresolved')")
 const MAIN_SPEND_PREVIEW_AT = idx("tokenPreview = await spendService.previewSpend(userId, 'ai_chimmy_chat_message', userEmail)")

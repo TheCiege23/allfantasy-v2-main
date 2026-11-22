@@ -81,3 +81,24 @@ describe('Chimmy context waits for the read', () => {
     expect(ctx?.votedOutHistory).toEqual([{ rosterId: 'roster-out', week: 6 }])
   })
 })
+
+describe('Chimmy context carries the league idol rules', () => {
+  it('an open council gives the last moment to play, after the commissioner cutoff', async () => {
+    m.db.league.findUnique.mockResolvedValue({ sport: 'NFL', survivorRevealMode: 'standard', settings: { idolPlayCutoffHours: 6 } })
+    const voteDeadlineAt = new Date('2026-10-30T05:00:00Z')
+    m.council.mockResolvedValue({ id: 'c1', week: 6, phase: 'voting', attendingTribeId: null, voteDeadlineAt, closedAt: null, eliminatedRosterId: null, isTie: false })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([])
+    const ctx = await buildSurvivorAIContext({ leagueId: 'l1', currentWeek: 6, userId: 'me' })
+    expect(ctx?.idolRules.playDeadlineAt?.toISOString()).toBe('2026-10-29T23:00:00.000Z')
+    expect(ctx?.idolRules.cutoffText).toBe('Idols must be played at least 6 hours before votes close.')
+    expect(ctx?.idolRules.expiryText).toBeTruthy()
+  })
+
+  it('a closed council has no deadline, and no cutoff reads as none', async () => {
+    m.db.league.findUnique.mockResolvedValue({ sport: 'NFL', survivorRevealMode: 'standard', settings: {} })
+    m.council.mockResolvedValue({ id: 'c1', week: 6, phase: 'closed', attendingTribeId: null, voteDeadlineAt: new Date(), closedAt: new Date(), eliminatedRosterId: null, isTie: false })
+    m.db.survivorTribalCouncil.findMany.mockResolvedValue([])
+    const ctx = await buildSurvivorAIContext({ leagueId: 'l1', currentWeek: 6, userId: 'me' })
+    expect(ctx?.idolRules).toMatchObject({ playDeadlineAt: null, cutoffText: null })
+  })
+})

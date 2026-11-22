@@ -87,7 +87,7 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
 
       <SurvivorShareCardsSetting leagueId={leagueId} canEdit={canEdit} />
 
-      <p className="text-xs text-white/50">Island, tribe, Exile and jury channel access follows each manager’s current game state. Custom chat-permission overrides are not available in the NBA pilot.</p>
+      <p className="text-xs text-white/50">Island, tribe, Exile and jury channel access follows each manager’s current game state. Custom chat-permission overrides are not available yet.</p>
     </div>
   )
 }

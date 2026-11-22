@@ -3,10 +3,17 @@
 import ThreadPanel from './ThreadPanel'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { LeagueScopePicker } from './LeagueScopePicker'
-import { Eye, MessageCircle, MessagesSquare, Radio, Sparkles, Users, X } from 'lucide-react'
+import { Bell, Eye, Hash, Lock, MessageCircle, MessagesSquare, Music, Radio, Sparkles, Users, X } from 'lucide-react'
+import dynamic from 'next/dynamic'
+/*
+ * Loaded only when someone opens the Music tab: most chat opens never touch it, and its module
+ * graph (MusicKit loader, the music engine's exports) has no business in every chat panel.
+ */
+const MusicPanel = dynamic(() => import('@/components/app-music/MusicPanel'), { ssr: false })
 import { LeagueConversation } from './LeagueConversation'
 import { DM_PRIVACY, HUDDLE_PRIVACY } from './privacyCopy'
 import { useCommsKeyboardInset } from './useCommsKeyboardInset'
+import { tabBadgeText, type CommsTabCounts } from './useCommsTabCounts'
 import { readCommsUi, writeCommsUi } from './commsUiMemory'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPanel'
@@ -14,6 +21,8 @@ import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreWidgetsMessages } from '@/lib/core-app/messages/coreWidgets'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
@@ -74,7 +83,13 @@ export type { CommsLeague } from './ChimmyPanel'
  * ./ChimmyPanel, with the rest of the Chimmy tab) rather than retyped per answer.
  */
 
-export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord'
+/*
+ * 'music' (2026-11-15, user's call): the app-wide music controls live here as a tab rather than
+ * as a widget of their own. ⚠ The tab owns NO audio — this drawer is remounted on every /core
+ * screen change, so the player lives in the root layout (components/app-music/AppMusicDock.tsx)
+ * and this tab only drives it. See components/app-music/musicBus.ts.
+ */
+export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord' | 'music'
 
 export type CommsDrawerProps = {
   leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
@@ -121,6 +136,13 @@ export type CommsDrawerProps = {
    * wherever the user happened to be last.
    */
   rememberPlace?: boolean
+  /**
+   * Unread per tab, badged on every tab but the open one. Read by the chat bubble (CommsDock, via
+   * useCommsTabCounts) rather than here, so the drawer itself makes no request just for opening.
+   */
+  tabCounts?: CommsTabCounts
+  /** Told on every tab switch — the bubble re-reads `tabCounts`, since opening a tab is what clears it. */
+  onTabChange?: (tab: CommsTab) => void
 }
 
 /* PUBLIC_ANSWER_NOTICE lives in ./ChimmyPanel beside the answers that carry it; LeaguePanel below uses it too. */
@@ -144,6 +166,8 @@ const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
   { id: 'huddle', label: 'Huddle', audience: 'Only this Huddle’s members' },
   { id: 'dms', label: 'DMs', audience: 'One person' },
   { id: 'discord', label: 'Discord', audience: "Everyone in one league's server" },
+  // Plays on your own device; nothing is shared with anyone.
+  { id: 'music', label: 'Music', audience: 'Just you' },
 ]
 
 const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
@@ -152,6 +176,7 @@ const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
   huddle: Users,
   dms: MessageCircle,
   discord: Radio,
+  music: Music,
 }
 
 // ── League chat panel ──────────────────────────────────────────────────
@@ -259,8 +284,14 @@ function LeaguePanel({
         <>
           <span className="af-cm-scope-label">League</span>
           <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
-          <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
-            @chimmy — ask Chimmy about this league
+          {/* A chip beside Search chat, not a full-width dashed row: the room is for the conversation. */}
+          <button
+            type="button"
+            className="af-cm-summon"
+            onClick={() => setAskChimmy(true)}
+            aria-label="Ask Chimmy about this league"
+          >
+            <Sparkles size={13} aria-hidden /> Ask Chimmy
           </button>
         </>
       }
@@ -375,6 +406,9 @@ function DiscordPanel({
           never used Discord got no idea what the tab is for.
         */}
         <div className="af-cm-empty af-cm-empty--grow">
+          <span className="af-cm-empty-icon" data-kind="discord" aria-hidden="true">
+            <Hash size={28} />
+          </span>
           <p className="af-cm-empty-t">Give your league its own Discord</p>
           <p className="af-cm-empty-b">
             A private server for your league&apos;s trash talk, voice chats and draft nights, run by your
@@ -397,8 +431,6 @@ function DiscordPanel({
         <span className="af-cm-scope-label">League</span>
         <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
       </div>
-
-      <div className="af-cm-privacy">{DISCORD_PRIVACY}</div>
 
       <div className="af-cm-empty af-cm-empty--grow">
         {loading ? (
@@ -480,6 +512,12 @@ function DiscordPanel({
           )
         )}
       </div>
+
+      {/* Contract 5, as fine print under the content rather than a box above it (2026-11-01). */}
+      <div className="af-cm-privacy af-cm-privacy-foot">
+        <Lock size={12} aria-hidden />
+        {DISCORD_PRIVACY}
+      </div>
     </div>
   )
 }
@@ -501,15 +539,30 @@ export function CommsDrawer({
   initialDraft = null,
   openRequest = null,
   rememberPlace = false,
+  tabCounts,
+  onTabChange,
   userId,
 }: CommsDrawerProps) {
   const { language } = useOptionalLanguage()
+  const m = messagesFor(coreWidgetsMessages, language)
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
   const [dismissedLeagueDraft, setDismissedLeagueDraft] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
   const scrimRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const viewport = window.visualViewport
+    const sync = () => {
+      panelRef.current?.style.setProperty('--af-comms-vh', `${viewport?.height ?? window.innerHeight}px`)
+      panelRef.current?.style.setProperty('--af-comms-top', `${viewport?.offsetTop ?? 0}px`)
+    }
+    sync()
+    viewport?.addEventListener('resize', sync)
+    viewport?.addEventListener('scroll', sync)
+    return () => { viewport?.removeEventListener('resize', sync); viewport?.removeEventListener('scroll', sync) }
+  }, [open])
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
@@ -642,6 +695,13 @@ export function CommsDrawer({
   /* The composer must stay above the on-screen keyboard — see the hook. */
   useCommsKeyboardInset(panelRef, open)
 
+  /* The bubble owns the tab counts; it needs to know which tab is open to re-read them. */
+  useEffect(() => {
+    onTabChange?.(tab)
+    // Keyed on the tab alone: a new callback identity is not a tab switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
   if (!open) return null
 
   const scopeName = leagues.find((l) => l.id === scopeId)?.name ?? null
@@ -653,7 +713,7 @@ export function CommsDrawer({
           type="button"
           ref={scrimRef}
           className="af-cm-scrim"
-          aria-label={language === 'es' ? 'Cerrar mensajes' : 'Close communications'}
+          aria-label={m.commsDrawerClose}
           onClick={onClose}
         />
       ) : null}
@@ -667,25 +727,50 @@ export function CommsDrawer({
         aria-modal={mode === 'overlay' ? true : undefined}
         aria-label={coreUiCopy('Communications', language)}
       >
+        {/*
+          2026-11-01 redesign (owner: "when I open it, it looks crowded … as simple as Sleeper or
+          Discord"). A short title with the audience line under it instead of a row of its own, and
+          Notification settings as a bell beside Close instead of a footer on every tab. Both pieces of
+          copy are unchanged; only where they sit moved.
+        */}
         <header className="af-cm-head">
           <div className="af-cm-headtop">
+            {/* 2026-11-12 visual pass: a mark beside the title, so the panel reads as a product and not a form. */}
+            <span className="af-cm-brandmark" aria-hidden="true">
+              <MessagesSquare size={18} strokeWidth={2.2} />
+            </span>
             <span className="af-cm-brand">
-              <MessagesSquare size={15} aria-hidden />
-              <h2 className="af-cm-title">{coreUiCopy('Communications', language)}</h2>
+              <h2 className="af-cm-title">{coreUiCopy('Chat', language)}</h2>
+              {/*
+                Who can see what you type here. The tabs' whole distinction — so it says so, rather than
+                leaving "Just you" floating under the tabs with nothing to say what it answers.
+              */}
+              <p className="af-cm-audience">
+                <Eye size={12} aria-hidden />
+                <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
+              </p>
             </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
-              {scopeName ?? (language === 'es' ? 'TODAS LAS LIGAS' : 'GLOBAL')}
+              {scopeName ?? m.commsDrawerGlobal}
             </span>
+            <Link
+              href="/settings?tab=notifications"
+              className="af-cm-headbtn"
+              aria-label={coreUiCopy('Notification settings', language)}
+              title={coreUiCopy('Notification settings', language)}
+            >
+              <Bell size={18} aria-hidden />
+            </Link>
             <button type="button" className="af-cm-close" onClick={onClose} aria-label={coreUiCopy('Close', language)}>
-              <X size={16} aria-hidden />
+              <X size={18} aria-hidden />
             </button>
           </div>
 
           <nav
             className="af-cm-tabs"
             role="tablist"
-            aria-label={language === 'es' ? 'Canales de mensajes' : 'Message channels'}
+            aria-label={m.commsDrawerChannels}
             onKeyDown={(event) => {
               const current = TABS.findIndex((item) => item.id === tab)
               const next = event.key === 'ArrowRight' ? (current + 1) % TABS.length
@@ -702,6 +787,8 @@ export function CommsDrawer({
           >
             {TABS.map((t) => {
               const Icon = TAB_ICONS[t.id]
+              /* Not on the tab you are already reading: that number is what you are looking at. */
+              const badge = tab === t.id ? null : tabBadgeText(tabCounts?.[t.id])
               return (
                 <button
                   key={t.id}
@@ -710,25 +797,24 @@ export function CommsDrawer({
                   aria-selected={tab === t.id}
                   tabIndex={tab === t.id ? 0 : -1}
                   className="af-cm-tab"
+                  data-tab={t.id}
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  title={coreUiCopy(t.audience, language)}
+                  /* Music is icon-only (af-comms.css), so its tooltip names it rather than its audience. */
+                  title={coreUiCopy(t.id === 'music' ? t.label : t.audience, language)}
+                  aria-label={badge ? `${coreUiCopy(t.label, language)}, ${badge} unread` : undefined}
                 >
                   <Icon size={14} aria-hidden />
                   <span>{coreUiCopy(t.label, language)}</span>
+                  {badge ? (
+                    <b className="af-cm-tabcount" data-testid={`comms-tab-count-${t.id}`} aria-hidden="true">
+                      {badge}
+                    </b>
+                  ) : null}
                 </button>
               )
             })}
           </nav>
-
-          {/*
-            Who can see what you type here. The tabs' whole distinction — so it says so, rather than
-            leaving "Just you" floating under the tabs with nothing to say what it answers.
-          */}
-          <p className="af-cm-audience">
-            <Eye size={12} aria-hidden />
-            <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
-          </p>
         </header>
 
         {tab === 'league' ? (
@@ -767,19 +853,22 @@ export function CommsDrawer({
           <ThreadPanel key="huddle" kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
           <ThreadPanel key="dms" kind="dm" privacy={DM_PRIVACY} />
+        ) : tab === 'music' ? (
+          <MusicPanel />
         ) : (
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}
 
+        {/* Notification settings moved to the header's bell (2026-11-01); only the fine print is left here. */}
         <footer className="af-cm-foot">
-          <Link href="/settings?tab=notifications" className="af-cm-footlink">
-            {coreUiCopy('Notification settings', language)}
-          </Link>
           {/*
             V10: this said "Read-only · AllFantasy never writes to your platform" inside a chat you type
             into. What is true is narrower, and it is the part that matters: we never change your
             league on the platform it lives on.
           */}
+          {/* The support inbox (lib/support): a person answers, in /help and by email. A footLINK, not a
+              footnote: footnotes are hidden on a phone, and this is the one line that must show there. */}
+          <a href="/help" className="af-cm-footlink" data-testid="comms-get-help">{coreUiCopy('Need help? Message us', language)}</a>
           <span className="af-cm-footnote">AllFantasy never changes your league on {availableImportPlatformsPhrase()}.</span>
         </footer>
       </aside>

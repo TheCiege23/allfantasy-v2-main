@@ -43,6 +43,8 @@ export interface PlayerAssetModel {
 
 /** Key stat summary for draft panels (sport-appropriate). */
 export interface PlayerStatSnapshotModel {
+  /** Actual stored season, including a previous-season fallback. */
+  seasonLabel?: string | null
   /** e.g. "ADP 12" or "PPG 22.1" */
   primaryStatLabel?: string | null
   primaryStatValue?: number | null
@@ -58,6 +60,13 @@ export interface PlayerStatSnapshotModel {
   pointsPerGame?: number | null
   reboundsPerGame?: number | null
   minutesPerGame?: number | null
+  assistsPerGame?: number | null
+  stealsPerGame?: number | null
+  blocksPerGame?: number | null
+  threePointersMadePerGame?: number | null
+  fieldGoalPercentage?: number | null
+  freeThrowPercentage?: number | null
+  gamesPlayed?: number | null
   lifetimeValue?: number | null
   /** Rolling Insights numbers when RI did not replace snapshot PPG (supplemental only). */
   rollingInsightsSupplemental?: {
@@ -137,6 +146,15 @@ export interface NormalizedDraftEntry {
   aiAdpSource?: 'exact' | 'cross_size' | null
   /** Cross-size only: the league sizes the projection drew on. */
   aiAdpTeamCounts?: number[] | null
+  /**
+   * AF ADP: market + imported real-league drafts + AllFantasy drafts, each drafted input shrunk by
+   * its sample size (lib/adp/afAdp.ts). Null when no input exists for the player.
+   */
+  afAdp?: number | null
+  /** Share each input contributed to `afAdp`, summing to 1 — lets a surface explain the number. */
+  afAdpContributions?: { market: number; imported: number; af: number } | null
+  afAdpImportedSampleSize?: number | null
+  afAdpOwnSampleSize?: number | null
   injuryStatus?: string | null
   collegeOrPipeline?: string | null
   /** Devy: true when player is from devy/college pool */
@@ -158,6 +176,17 @@ export interface NormalizedDraftEntry {
   yearsExp?: number | null
   /** D.7 — convenience flag derived during normalization (yearsExp === 0 || explicit upstream rookie marker). */
   isRookie?: boolean
+  /**
+   * MLB/NBA/NHL: the pool's rookie verdict from our stored season stats
+   * (`lib/draft-room/seasonStatsRookieStatus.ts`). When ANY entry carries one, an entry without a
+   * rookie flag is `unknown` rather than a veteran (`lib/draft-room/rookieFilterState.ts`).
+   */
+  rookieVerdict?: 'rookie' | 'not_rookie' | 'unknown'
+  /**
+   * NHL rookie drafts: a Fantrax-only prospect — on no NHL roster in our data
+   * (`lib/player-identity/nhlFantraxProspects.ts`). `team` is his NHL org, or null when unsigned.
+   */
+  prospectSource?: 'fantrax'
   /** Identifies how fantasyPointsPerGame was produced. */
   projectionSource?: ProjectionSourceTag | null
   /** Block B.2-C — rookie inference inputs surfaced from the resolver so the

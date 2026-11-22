@@ -5,12 +5,14 @@
  *  - The `out` card is opt-in for the eliminated manager. Nobody else is ever offered it.
  *  - Immunity, idol and exile cards are offered to their subject only.
  *  - The champion card is offered to the champion and to the whole league as a recap.
+ *  - The week recap is offered to the whole league and posted in league chat. It names the manager
+ *    voted out (product call, 2026-10-31); their own `out` card stays theirs alone to share.
  *  - Nothing is public until it is final AND someone allowed to share it has published it.
  *  - A league with `shareCardsEnabled = false` serves nothing, to anyone.
  */
 import type { ShareMomentType } from './types'
 
-export interface MomentAccessFacts {
+interface MomentAccessFacts {
   type: ShareMomentType
   subjectUserId: string
   final: boolean
@@ -25,7 +27,7 @@ export interface ViewerFacts {
 /** May this viewer see the moment in their share UI (and its private preview PNG)? */
 export function isMomentOfferedTo(moment: MomentAccessFacts, viewer: ViewerFacts): boolean {
   if (!viewer.userId || !moment.final) return false
-  if (moment.type === 'champ') return viewer.isLeagueMember
+  if (moment.type === 'champ' || moment.type === 'recap') return viewer.isLeagueMember
   return viewer.userId === moment.subjectUserId
 }
 
@@ -39,7 +41,7 @@ export function isMomentPublic(moment: MomentAccessFacts, shareCardsEnabled: boo
   return shareCardsEnabled && moment.final && moment.publishedAt != null
 }
 
-export type MomentImageAccess = 'public' | 'private' | 'not_found'
+type MomentImageAccess = 'public' | 'private' | 'not_found'
 
 /**
  * The PNG route's decision. `public` is cacheable forever by anyone; `private` is the subject's

@@ -15,8 +15,8 @@ import { expandPlansWithBundle, isActiveOrGraceStatus } from "@/lib/subscription
  * Measured on production 2026-09-24: one entitled account had no flag, and was locked
  * out of every feature gated on one.
  *
- * Same plan semantics as the flags (Supreme counts toward every family), so a gate
- * moved from a flag to this changes only freshness, never who a plan is for.
+ * Supreme includes Pro and Commissioner. Legacy access requires an explicit war_room plan,
+ * including the explicit plans on an owner/admin entitlement snapshot.
  */
 export type LivePlanFlags = {
   pro: boolean
@@ -29,11 +29,10 @@ export const NO_PLAN_FLAGS: LivePlanFlags = Object.freeze({ pro: false, commissi
 export function planFlagsFromSnapshot(snapshot: Pick<EntitlementSnapshot, "plans" | "status">): LivePlanFlags {
   if (!isActiveOrGraceStatus(snapshot.status)) return { ...NO_PLAN_FLAGS }
   const expanded = expandPlansWithBundle(snapshot.plans)
-  const supreme = expanded.includes("supreme")
   return {
-    pro: supreme || expanded.includes("pro"),
-    commissioner: supreme || expanded.includes("commissioner"),
-    warRoom: supreme || expanded.includes("war_room"),
+    pro: expanded.includes("pro"),
+    commissioner: expanded.includes("commissioner"),
+    warRoom: expanded.includes("war_room"),
   }
 }
 

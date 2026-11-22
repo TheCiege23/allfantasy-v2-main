@@ -6,7 +6,7 @@ import {
   isLeagueVirtualRoom,
   markVirtualThreadRead,
 } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { getThreadReadReceipts, markPlatformThreadRead } from "@/lib/platform/chat-service"
 import { prisma } from "@/lib/prisma"
 
@@ -20,7 +20,7 @@ async function assertVirtualMembership(threadId: string, appUserId: string): Pro
   })
   if (bracketMember) return true
 
-  return canAccessLeagueDraft(leagueId, appUserId)
+  return (await resolveLeagueAccess(leagueId, appUserId)) != null
 }
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ threadId: string }> }) {

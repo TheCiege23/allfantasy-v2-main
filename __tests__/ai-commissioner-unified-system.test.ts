@@ -16,6 +16,7 @@ const toConfigViewMock = vi.fn()
 const analyzeLeagueGovernanceMock = vi.fn()
 const createPlatformNotificationMock = vi.fn()
 const resolveForUserMock = vi.fn()
+const settingsPatchMock = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -48,6 +49,10 @@ vi.mock('@/lib/ai-commissioner/AICommissionerService', () => ({
   appendAICommissionerActionLog: appendAICommissionerActionLogMock,
   runAICommissionerCycle: runAICommissionerCycleMock,
   toConfigView: toConfigViewMock,
+}))
+
+vi.mock('@/lib/league/execute-league-settings-patch', () => ({
+  executeLeagueSettingsPatch: settingsPatchMock,
 }))
 
 vi.mock('@/lib/ai-commissioner/LeagueGovernanceAnalyzer', () => ({
@@ -238,5 +243,41 @@ describe('UnifiedCommissionerSystem', () => {
     expect(assessment.conflictResolution.workflow.recentOpenDisputes).toHaveLength(1)
 
     dateNowSpy.mockRestore()
+  })
+
+  describe('league rule actions go through the commissioner settings save', () => {
+    beforeEach(() => {
+      leagueFindUniqueMock.mockResolvedValue({ id: 'league-1', sport: 'NFL', userId: 'user-1', tradeReviewHours: 48, playoffTeams: 4 })
+      settingsPatchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    })
+
+    it('tighten_trade_review_window saves the review window as a trades edit, never a bare update', async () => {
+      const { applyUnifiedCommissionerAction } = await import('../lib/ai-commissioner/UnifiedCommissionerSystem')
+      const result = await applyUnifiedCommissionerAction({
+        leagueId: 'league-1', userId: 'user-1', actionKey: 'tighten_trade_review_window', confirmed: true, payload: { tradeReviewHours: 6 },
+      })
+      expect(result).toMatchObject({ ok: true, message: 'Trade review window set to 12h.' })
+      expect(settingsPatchMock).toHaveBeenCalledWith('user-1', { leagueId: 'league-1', tradeReviewHours: 12 }, { section: 'trades' })
+      expect(leagueUpdateMock).not.toHaveBeenCalled()
+    })
+
+    it('set_playoff_defaults saves teams and weeks per round as a playoffs edit', async () => {
+      const { applyUnifiedCommissionerAction } = await import('../lib/ai-commissioner/UnifiedCommissionerSystem')
+      await applyUnifiedCommissionerAction({
+        leagueId: 'league-1', userId: 'user-1', actionKey: 'set_playoff_defaults', confirmed: true, payload: { playoffTeams: 6, playoffWeeksPerRound: 1 },
+      })
+      expect(settingsPatchMock).toHaveBeenCalledWith('user-1', { leagueId: 'league-1', playoffTeams: 6, playoffWeeksPerRound: 1 }, { section: 'playoffs' })
+      expect(leagueUpdateMock).not.toHaveBeenCalled()
+    })
+
+    it('a refused save (a locked area, too many playoff teams) is the action result, and nothing is logged as applied', async () => {
+      settingsPatchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'playoffTeams cannot exceed league size (4)' }), { status: 400 }))
+      const { applyUnifiedCommissionerAction } = await import('../lib/ai-commissioner/UnifiedCommissionerSystem')
+      const result = await applyUnifiedCommissionerAction({
+        leagueId: 'league-1', userId: 'user-1', actionKey: 'set_playoff_defaults', confirmed: true, payload: { playoffTeams: 6 },
+      })
+      expect(result).toEqual({ ok: false, applied: false, message: 'playoffTeams cannot exceed league size (4)' })
+      expect(appendAICommissionerActionLogMock).not.toHaveBeenCalled()
+    })
   })
 })

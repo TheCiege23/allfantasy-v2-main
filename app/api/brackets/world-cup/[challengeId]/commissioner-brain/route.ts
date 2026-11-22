@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { randomUUID } from "crypto"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -112,7 +113,7 @@ export async function GET(
   })
 }
 
-export async function POST(
+async function paidToolPost(
   request: Request,
   context: { params: Promise<{ challengeId: string }> }
 ) {
@@ -154,7 +155,7 @@ export async function POST(
     sourceType: "world_cup_commissioner_brain",
     sourceId: `${params.data.challengeId}:${parsed.data.action}`,
     idempotencyKey: `wc-commissioner-brain:${auth.user.id}:${params.data.challengeId}:${parsed.data.action}:${parsed.data.round ?? "none"}:${parsed.data.tone}`,
-    description: "World Cup commissioner AI report",
+    description: "World Cup commissioner Chimmy report",
     metadata: {
       challengeId: params.data.challengeId,
       action: parsed.data.action,
@@ -245,8 +246,8 @@ export async function POST(
     standings: "Standings snapshot",
     watch: "What to watch",
     recap: "Round recap",
-    preview_recap: "AI pool recap preview",
-    post_recap: "AI pool recap",
+    preview_recap: "Chimmy pool recap preview",
+    post_recap: "Chimmy pool recap",
     drama_recap: "Pool Drama Report",
     path: "Path to win",
     reminder: "Reminder",
@@ -304,3 +305,5 @@ export async function POST(
     tokenSpend,
   })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

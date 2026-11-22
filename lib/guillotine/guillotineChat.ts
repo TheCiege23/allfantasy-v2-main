@@ -3,6 +3,7 @@
  */
 
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { chopAnnouncementText } from './chopAnnouncement'
 
 /**
  * ⚠ AUTHORED BY THE LEAGUE OWNER, TAGGED AS A HOST ANNOUNCEMENT. `LeagueChatMessage.userId` must be a
@@ -19,11 +20,7 @@ export async function postChopToLeagueChat(args: {
   userId: string
 }): Promise<void> {
   const { leagueId, weekOrPeriod, choppedRosterIds, displayNames, userId } = args
-  const names = choppedRosterIds.map((id) => displayNames[id] ?? id).join(', ')
-  const message =
-    choppedRosterIds.length > 1
-      ? `Week ${weekOrPeriod} — Chopped: ${names}. Their rosters have been released to waivers.`
-      : `Week ${weekOrPeriod} — ${names} has been chopped. Their roster has been released to waivers.`
+  const message = chopAnnouncementText(weekOrPeriod, choppedRosterIds.map((id) => displayNames[id] ?? id))
   await createLeagueChatMessage(leagueId, userId, message, {
     type: 'host_announcement',
     metadata: { senderIsHost: true, contentType: 'guillotine_chop', guillotineChop: true, weekOrPeriod, choppedRosterIds },

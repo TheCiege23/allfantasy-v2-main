@@ -31,6 +31,13 @@ export type SeasonWeekPhase = 'preseason' | 'regular' | 'playoffs' | 'season_com
 export type SeasonWeekUnknownReason =
   /** The sport's schedule feed does not carry a usable week — see `sportWeekSignal.ts`. */
   | 'NO_WEEK_SIGNAL'
+  /**
+   * A daily sport whose feed HAS a calendar, but this season's regular-season opener is neither
+   * curated nor derivable yet (a dynasty league's year 2 before opening night is ingested). Distinct
+   * from `NO_WEEK_SIGNAL` so a held league says what a human must do: record the published opener in
+   * `REGULAR_SEASON_START_UTC` (`lib/season-week/dailySportSeasonStarts.ts`), the one place it lives.
+   */
+  | 'SEASON_OPENER_UNRECORDED'
   /** No schedule rows at all for this sport/season. */
   | 'NO_SCHEDULE_ROWS'
   /** Rows exist but none carries both a week and a kickoff time. */

@@ -37,7 +37,7 @@ export type PeriodRoster = {
   teams: Record<string, { teamName: string; playerIds: string[] }>
 }
 
-export type DerivedMove = {
+type DerivedMove = {
   period: number
   teamId: string
   teamName: string
@@ -47,7 +47,7 @@ export type DerivedMove = {
   drops: string[]
 }
 
-export type SuspectedTrade = {
+type SuspectedTrade = {
   period: number
   teamAId: string
   teamAName: string
@@ -59,7 +59,7 @@ export type SuspectedTrade = {
   bSent: string[]
 }
 
-export type DerivedTransactions = {
+type DerivedTransactions = {
   moves: DerivedMove[]
   /**
    * Two-way exchanges only. Never a recorded trade — see the header. A consumer

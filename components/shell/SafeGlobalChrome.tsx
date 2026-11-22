@@ -1,10 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
 import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
 import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
+import { OfflineLineupSync } from "@/components/pwa/OfflineLineupSync"
+import { NewVersionReload } from "@/components/shell/NewVersionReload"
+import { RouterCacheFreshness } from "@/components/shell/RouterCacheFreshness"
+import { CareerWidgetSync } from "@/components/platform/CareerWidgetSync"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
 import { initPWA } from "@/lib/pwa"
 import { isInIosAppClient } from "@/lib/platform/iosApp"
@@ -191,7 +195,7 @@ function FacebookSdkScript({ appId }: { appId: string }) {
   )
 }
 
-export interface SafeGlobalChromeProps {
+interface SafeGlobalChromeProps {
   fbAppId?: string
 }
 
@@ -236,6 +240,16 @@ export function SafeGlobalChrome({
   return (
     <>
       <ServiceWorkerLifecycle />
+      {isAuthPath(pathname) ? null : <OfflineLineupSync />}
+      {isAuthPath(pathname) ? null : <NewVersionReload />}
+      {/* iOS app only: keeps the home-screen career widget current on open and resume. */}
+      {isAuthPath(pathname) ? null : <CareerWidgetSync />}
+      {/* Suspense: it reads useSearchParams, which must not bail a static page out of prerendering. */}
+      {isAuthPath(pathname) ? null : (
+        <Suspense fallback={null}>
+          <RouterCacheFreshness />
+        </Suspense>
+      )}
 
       {renderFacebookSdk ? <div id="fb-root" /> : null}
       {renderFacebookSdk ? <FacebookSdkScript appId={fbAppId} /> : null}
@@ -253,4 +267,3 @@ export function SafeGlobalChrome({
   )
 }
 
-export { isAuthPath }

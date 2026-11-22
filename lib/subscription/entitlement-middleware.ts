@@ -1,11 +1,10 @@
+import { preparePaidToolCharge, replayPaidToolRequest } from '@/lib/tokens/paidToolBilling'
 import { NextResponse } from 'next/server'
 import type { FeatureGateDecision } from '@/lib/subscription/FeatureGateService'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
 import {
-  TokenInsufficientBalanceError,
-  TokenSpendConfirmationRequiredError,
   TokenSpendRuleNotFoundError,
   TokenSpendService,
 } from '@/lib/tokens/TokenSpendService'
@@ -65,24 +64,6 @@ function lockedResponse(decision: FeatureGateDecision): NextResponse {
   )
 }
 
-function tokenConfirmationRequiredResponse(
-  decision: FeatureGateDecision,
-  preview: TokenSpendPreview
-): NextResponse {
-  return NextResponse.json(
-    {
-      error: 'Token spend confirmation required.',
-      code: 'token_confirmation_required',
-      message: `Use ${preview.tokenCost} token${preview.tokenCost === 1 ? '' : 's'} to unlock this request once.`,
-      requiredPlan: decision.requiredPlan,
-      upgradePath: decision.upgradePath,
-      entitlement: decision.entitlement,
-      preview,
-    },
-    { status: 409 }
-  )
-}
-
 function insufficientTokenResponse(
   decision: FeatureGateDecision,
   preview: TokenSpendPreview
@@ -117,6 +98,10 @@ function unavailableTokenRuleResponse(decision: FeatureGateDecision): NextRespon
 export async function requireFeatureEntitlement(
   options: FeatureGateMiddlewareOptions
 ): Promise<FeatureGateMiddlewareResult> {
+  if (options.allowTokenFallback) {
+    const replay = await replayPaidToolRequest(options.userId)
+    if (replay) return { ok: false, response: replay }
+  }
   const gate = new FeatureGateService()
   const decision = await gate.evaluateUserFeatureAccess(
     options.userId,
@@ -144,7 +129,7 @@ export async function requireFeatureEntitlement(
       userId: options.userId,
       ruleCode: tokenRuleCode,
       entitlement: decision.entitlement,
-      currentBalance: Number(balance.balance || 0),
+      currentBalance: Number(balance.spendableBalance ?? balance.balance ?? 0),
       userEmail: options.userEmail,
     })
   } catch (error) {
@@ -156,37 +141,15 @@ export async function requireFeatureEntitlement(
   if (!preview.canSpend) {
     return { ok: false, response: insufficientTokenResponse(decision, preview) }
   }
-  if (!options.confirmTokenSpend) {
-    return { ok: false, response: tokenConfirmationRequiredResponse(decision, preview) }
-  }
-
-  let tokenSpend: TokenLedgerEntryView
-  try {
-    tokenSpend = await tokenSpendService.spendTokensForRule({
-      userId: options.userId,
-      ruleCode: tokenRuleCode,
-      confirmed: true,
-      sourceType: options.tokenSourceType ?? 'feature_gate_fallback',
-      sourceId: options.tokenSourceId ?? `${options.featureId}:${Date.now()}`,
-      description: options.tokenDescription ?? `Token fallback unlock for ${options.featureId}`,
-      metadata: {
-        featureId: options.featureId,
-        ...(options.tokenMetadata ?? {}),
-      },
-      userEmail: options.userEmail,
-    })
-  } catch (error) {
-    if (error instanceof TokenInsufficientBalanceError) {
-      return { ok: false, response: insufficientTokenResponse(decision, preview) }
-    }
-    if (error instanceof TokenSpendConfirmationRequiredError) {
-      return { ok: false, response: tokenConfirmationRequiredResponse(decision, preview) }
-    }
-    if (error instanceof TokenSpendRuleNotFoundError) {
-      return { ok: false, response: unavailableTokenRuleResponse(decision) }
-    }
-    throw error
-  }
+  const prepared = await preparePaidToolCharge({
+    userId: options.userId, userEmail: options.userEmail, ruleCode: tokenRuleCode, preview,
+    confirmed: options.confirmTokenSpend === true,
+    sourceType: options.tokenSourceType ?? 'feature_gate_fallback', sourceId: options.tokenSourceId,
+    description: options.tokenDescription ?? `Token fallback unlock for ${options.featureId}`,
+    metadata: { featureId: options.featureId, ...(options.tokenMetadata ?? {}) },
+  })
+  if (!prepared.ok) return prepared
+  const tokenSpend = await prepared.commit()
 
   return {
     ok: true,

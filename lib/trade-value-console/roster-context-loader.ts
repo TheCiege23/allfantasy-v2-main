@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -15,6 +16,8 @@ import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-tr
 import { inventoryPickId, type InventoryPick } from '@/lib/league-trade-engine/futurePickInventory'
 import { livePickValue } from './leagueTradePricing'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { readConfirmedLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 /** Mirrors internal `RosterContext` in trade-engine (not exported). */
 export type TradeEngineRosterContext = {
@@ -24,7 +27,7 @@ export type TradeEngineRosterContext = {
 }
 
 /** Shapes expected by `buildNegotiationToolkit` `availablePicks`. */
-export type NegotiationAvailablePick = {
+type NegotiationAvailablePick = {
   id: string
   displayName?: string
   round?: number
@@ -165,7 +168,7 @@ async function rosterIdsToAssets(args: {
   return out
 }
 
-export type OpponentTeamOption = {
+type OpponentTeamOption = {
   externalId: string
   teamName: string
   ownerName: string
@@ -229,7 +232,7 @@ export async function loadTradeEngineRosterContext(args: {
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId: args.leagueId },
-    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+    select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
   })
 
   const claimedTeam = teams.find(t => t.claimedByUserId === args.userId)
@@ -239,7 +242,7 @@ export async function loadTradeEngineRosterContext(args: {
   const userPlatformId = viewer?.ok ? viewer.team.platformUserId : claimedTeam?.platformUserId ?? args.userId
   const userRoster = viewer?.ok
     ? rosters.find(r => r.id === viewer.roster.id)
-    : rosters.find(r => r.platformUserId === args.userId) ?? rosters.find(r => r.platformUserId === userPlatformId)
+    : rosters.find(r => isRosterManagedBy(r, args.userId)) ?? rosters.find(r => r.platformUserId === userPlatformId)
   if (!userRoster) {
     args.dataGaps.push('No synced roster row for your account in this league — lineup impact uses trade assets only.')
     return {
@@ -259,8 +262,10 @@ export async function loadTradeEngineRosterContext(args: {
     } else {
       const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
         ? league.settings as Record<string, unknown> : null
+      const dynasty = leagueVariantFor(league.settings, league.leagueType).dynasty ||
+        (!readConfirmedLeagueConcept(league.settings) && league.isDynasty)
       const inventory = await loadImportedFuturePicks({ leagueId: args.leagueId, platform: league.platform,
-        isDynasty: league.isDynasty, leagueSeason: league.season,
+        isDynasty: dynasty, leagueSeason: league.season,
         status: typeof settings?.status === 'string' ? settings.status : null, teams, rosters })
       ownedPicks = inventory.picksByRosterId.get(userRoster.id) ?? []
       if (inventory.readFailed) args.dataGaps.push('Future pick ownership could not be loaded; no pick sweeteners are suggested.')

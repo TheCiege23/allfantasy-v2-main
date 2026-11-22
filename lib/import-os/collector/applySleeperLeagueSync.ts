@@ -30,9 +30,12 @@ import {
   buildTier0LeagueColumnPatch,
   buildImportedLeagueSettings,
   persistTradedPicks,
+  clearReturnedTradedPicks,
+  refreshKeepsStoredScoring,
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { isDynastyForWrite } from '@/lib/league-import/leagueTypeWrite'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -169,9 +172,14 @@ async function applyLeagueState(
    * rebuild the bundle degrades to the previous merge rather than dropping the sync.
    */
   let mergedSettings: Record<string, unknown>
+  let refreshedScoringPresetId: string | undefined
   try {
     const bundle = buildCanonicalImportBundle(normalized)
     mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
+    /* A refresh that kept the stored scoring keeps the stored preset too, instead of a guess. */
+    refreshedScoringPresetId = refreshKeepsStoredScoring(existingSettings, bundle)
+      ? undefined
+      : bundle.scoringPresetId
   } catch (e) {
     mergedSettings = { ...existingSettings, ...freshSettings }
     out.notes.push(
@@ -192,9 +200,12 @@ async function applyLeagueState(
     name: normalized.league.name,
     avatarUrl: normalized.league_branding?.avatar_url ?? undefined,
     scoring: normalized.league.scoring ?? undefined,
+    scoringPresetId: refreshedScoringPresetId,
     status: normalized.league.status ?? undefined,
     leagueSize: typeof normalized.league.leagueSize === 'number' ? normalized.league.leagueSize : undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; without this every sync rewrote Fantrax's
+    // `false` over it (Fantrax cannot say dynasty). See `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings }),
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (rosterPositions ?? undefined) as Prisma.InputJsonValue | undefined,
     settings: mergedSettings as Prisma.InputJsonValue,
@@ -610,13 +621,35 @@ async function applyTradedPicks(
 ): Promise<ApplyScopeResult> {
   const out = emptyApplyResult()
   const picks = normalized.traded_picks
-  if (!Array.isArray(picks) || picks.length === 0) {
-    // Absent = provider doesn't expose them; empty = none traded. Either way a no-op (no erasure).
-    return out
+  // Absent = provider doesn't expose them; empty = none traded. Neither erases anything by itself.
+  if (Array.isArray(picks) && picks.length > 0) {
+    const res = await persistTradedPicks(leagueId, picks)
+    out.imported += res.written
+    out.rejected += res.skipped
+    /*
+     * ⚠ A PICK THE SAVE LEFT ALONE IS IN NEITHER COUNT ABOVE. The save does not update a pick
+     * AllFantasy has settled (an in-app trade moved it, or it has been used or forfeited): that
+     * is not a write and not a refusal. Without this line a protected pick is invisible in the
+     * run record, and "the guard held" reads the same as "the provider sent fewer picks".
+     */
+    if (res.leftAlone > 0) {
+      out.notes.push(
+        `traded_picks: ${res.leftAlone} pick(s) left as stored (settled in AllFantasy: traded in the app, used or forfeited)`,
+      )
+    }
   }
-  const res = await persistTradedPicks(leagueId, picks)
-  out.imported += res.written
-  out.rejected += res.skipped
+  /*
+   * The one erasure this scope performs, and only on a positive statement: a provider that
+   * lists every pick (Fantrax, MFL) names the ones that are home, and a stored "traded" row
+   * for one of those is stale. Runs even when nothing is currently traded — a league whose
+   * last traded pick just came back has an empty `traded_picks` and one row to clear.
+   */
+  const returned = normalized.returned_picks
+  if (Array.isArray(returned) && returned.length > 0) {
+    const res = await clearReturnedTradedPicks(leagueId, returned)
+    out.removed += res.cleared
+    out.rejected += res.skipped
+  }
   return out
 }
 

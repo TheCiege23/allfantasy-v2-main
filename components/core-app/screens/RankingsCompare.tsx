@@ -1,3 +1,5 @@
+import { COMPARE_PLATFORMS, parseComparePlatform } from '@/lib/core-app/rankings'
+import { platformLabel } from '@/lib/core-app/rankingsEngine'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { getLevelIcon } from '@/lib/rank/levels'
@@ -14,7 +16,9 @@ import {
   type TeamCompareData,
   type TeamCompareSide,
 } from '@/lib/core-app/rankings'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-rankings-screen.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Compare — handoff 14c, widened from managers to four kinds.
@@ -54,6 +58,8 @@ export function RankingsCompare({
   teams,
   players,
   filterPairs = [],
+  lookupPlatform = 'allfantasy',
+  compareScope,
 }: {
   kind: CompareKind
   result: CompareResult | null
@@ -62,20 +68,24 @@ export function RankingsCompare({
   teams: TeamCompareData | null
   players: PlayerPickData | null
   filterPairs?: Array<[string, string]>
+  lookupPlatform?: string
+  compareScope?: string
 }) {
   return (
     <div className="af-rk">
-      <header className="af-rk-head">
-        <div>
-          <h1 className="af-rk-title">Compare</h1>
-          <p className="af-rk-sub">Side by side, on the same scale the rankings use.</p>
-        </div>
-        <div className="af-rk-headact">
+      <PageHeader
+        className="af-rk-head"
+        titleClassName="af-rk-title"
+        subClassName="af-rk-sub"
+        actionsClassName="af-rk-headact"
+        title="Compare"
+        sub="Side by side, on the same scale the rankings use."
+        actions={
           <Link className="af-rk-btn" href={`/core/rankings${qs(filterPairs)}`}>
             ← Rankings
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <nav className="af-rk-tabs" aria-label="What to compare">
         {KINDS.map((k) => (
@@ -91,7 +101,7 @@ export function RankingsCompare({
       </nav>
 
       {kind === 'managers' ? (
-        <ManagersCompare result={result} query={query} filterPairs={filterPairs} />
+        <ManagersCompare result={result} query={query} filterPairs={filterPairs} lookupPlatform={lookupPlatform} compareScope={compareScope} />
       ) : kind === 'leagues' && leagues ? (
         <LeaguesCompare data={leagues} />
       ) : kind === 'teams' && teams ? (
@@ -113,18 +123,36 @@ function ManagersCompare({
   result,
   query,
   filterPairs,
+  lookupPlatform,
+  compareScope,
 }: {
   result: CompareResult | null
   query: string
   filterPairs: Array<[string, string]>
+  lookupPlatform: string
+  compareScope?: string
 }) {
   return (
     <>
       <form className="af-rk-search" action="/core/rankings" method="get" aria-label="Compare with a manager">
         <input type="hidden" name="view" value="compare" />
-        {filterPairs.map(([k, v]) => (
+        {filterPairs.filter(([key]) => key !== 'careerLeague').map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
+        <label className="af-rk-field">
+          <span>Username platform</span>
+          <select name="lookup" defaultValue={parseComparePlatform(lookupPlatform)}>
+            {COMPARE_PLATFORMS.map((platform) => <option key={platform} value={platform}>{platformLabel(platform)}</option>)}
+          </select>
+        </label>
+        <label className="af-rk-field">
+          <span>Compare results from</span>
+          <select name="compareScope" defaultValue={compareScope ?? (filterPairs.some(([key]) => key === 'platform') ? 'current' : 'all')}>
+            <option value="all">All platforms</option>
+            <option value="platform">Selected platform</option>
+            {filterPairs.some(([key]) => key === 'platform') ? <option value="current">Current board platform</option> : null}
+          </select>
+        </label>
         <label className="af-rk-input">
           <span aria-hidden="true">@</span>
           <input type="text" name="user" defaultValue={query} placeholder="username" aria-label="Manager username to compare against" autoComplete="off" />
@@ -137,8 +165,7 @@ function ManagersCompare({
       {result == null ? (
         <section className="af-rk-card">
           <p className="af-rk-a">
-            Enter a manager&apos;s username, or use a name on the community board. Only managers whose careers have been
-            ranked can be compared — the comparison reads the same ledger the boards do.
+            Enter a ranked manager&apos;s AllFantasy username or a username they linked from another platform.
           </p>
         </section>
       ) : !result.ok ? (
@@ -177,7 +204,7 @@ function ManagerCard({ m, side }: { m: CompareManager; side: 'you' | 'them' }) {
             {side === 'you' ? <span className="af-rk-sr"> (you)</span> : null}
           </p>
           <p className="af-rk-vsmeta">
-            Lvl {m.level} {m.levelName} · {m.leagueSeasons.toLocaleString()} league-seasons · {m.confidence} confidence
+            Lvl {m.level} {m.levelName} · {m.leagueSeasons.toLocaleString(getAppIntlLocale())} league-seasons · {m.confidence} confidence
           </p>
         </div>
         <div className="af-rk-vsgrade">

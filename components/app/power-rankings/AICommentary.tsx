@@ -1,5 +1,7 @@
 'use client';
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useState, useCallback } from 'react';
 import { Loader2, MessageCircle } from 'lucide-react';
 import { useLanguage } from '@/components/i18n/LanguageProviderClient';
@@ -8,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver';
 import type { PowerRankingsOutput } from '@/lib/league-power-rankings/types';
 
-export interface AICommentaryProps {
+interface AICommentaryProps {
   leagueId: string;
   leagueName: string;
   season: string;
@@ -46,9 +48,9 @@ export function AICommentary({
     setError(null);
     setUpgradePath(null);
     try {
-      const res = await fetch(
+      const res = await paidToolFetchWithConfirm(
         `/api/leagues/${encodeURIComponent(leagueId)}/power-rankings/commentary?week=${week}`,
-        { method: 'POST' }
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmTokenSpend: false }) }
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

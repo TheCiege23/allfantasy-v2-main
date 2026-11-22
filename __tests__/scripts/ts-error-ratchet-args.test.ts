@@ -41,12 +41,13 @@ function logFor(byFile: Record<string, number>, extra: string[] = []): string {
   return [...extra, ...lines, ''].join('\n')
 }
 
-function run(args: string[]) {
+function run(args: string[], env: NodeJS.ProcessEnv = process.env) {
   const res = spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: 30_000,
     windowsHide: true,
+    env,
   })
   return {
     status: res.status,
@@ -141,5 +142,27 @@ describe('an argument it cannot use stops it, with no verdict', () => {
     const r = run(['--from', missing])
     expect(r.status).toBe(2)
     expect(r.output).toContain('--from log not found')
+  })
+})
+
+/*
+ * The failure reason must reach the check-runs API as an annotation: the job log is not readable
+ * from every environment that has to act on a red check, and the step's exit code alone says nothing.
+ */
+describe('GitHub Actions annotations', () => {
+  it('annotates each file that gained errors, with its first errors, only on Actions', () => {
+    const onActions = run(['--from', plantedLog], { ...process.env, GITHUB_ACTIONS: 'true' })
+    expect(onActions.status).toBe(1)
+    expect(onActions.output).toMatch(/^::error file=[^,]+,title=TypeScript ratchet::.+ → .+ errors%0A.+: error TS\d+: /m)
+
+    const local = run(['--from', plantedLog], { ...process.env, GITHUB_ACTIONS: '' })
+    expect(local.status).toBe(1)
+    expect(local.output).not.toContain('::error')
+  })
+
+  it('does not annotate a passing run', () => {
+    const r = run(['--from', cleanLog], { ...process.env, GITHUB_ACTIONS: 'true' })
+    expect(r.status).toBe(0)
+    expect(r.output).not.toContain('::error')
   })
 })

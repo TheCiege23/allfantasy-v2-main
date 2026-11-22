@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * WHAT AN ANSWER WAS BUILT FROM, RENDERED WHERE THE ANSWER IS.
@@ -60,7 +61,7 @@ export type ChimmyEvidence = {
  * would understate what the answer touched.
  */
 const SOURCE_LABELS: Record<string, string> = {
-  deterministic: 'Stored data (no AI call)',
+  deterministic: 'Stored data (no Chimmy call)',
   live_web_search: 'Live web search',
   league_sports_grounding_packet: 'Your league settings and rosters',
   league_source_references: 'Your league pages',
@@ -94,6 +95,7 @@ const SOURCE_LABELS: Record<string, string> = {
   find_league_by_name: 'Found the league you named',
   get_my_roster: 'Your roster, scoring and waiver budget',
   get_league_trade_activity: 'Trade block, proposals and league trade history',
+  get_manager_record: "A leaguemate's trades, waivers and drafts",
   get_league_trade_history: "Your league's completed trades, itemized",
   get_available_players: 'Who is actually available',
   get_player_value: 'Player trade values',
@@ -204,7 +206,6 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   const detailId = useId()
 
   const {
-    confidencePct,
     level,
     rationale,
     leagueContext,
@@ -326,7 +327,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
 
           {syncedAt ? (
             <p className="af-cm-ev-signals">
-              Sports data synced {new Date(syncedAt).toLocaleString()}.
+              Sports data synced {new Date(syncedAt).toLocaleString(getAppIntlLocale())}.
             </p>
           ) : null}
 
@@ -345,4 +346,3 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
   )
 }
 
-export default ChimmyEvidenceBlock

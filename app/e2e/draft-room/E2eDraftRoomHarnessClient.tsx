@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { DraftBoard } from '@/components/draft/DraftBoard'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { DraftRoomLeagueFacts } from '@/lib/draft-room/leagueNote'
 
 function E2EDraftRoomHarnessInner() {
   const searchParams = useSearchParams()
@@ -11,6 +12,20 @@ function E2EDraftRoomHarnessInner() {
   const sport = normalizeToSupportedSport(searchParams.get('sport'))
   const isCommissioner = searchParams.get('commissioner') !== '0'
   const e2eRoom = searchParams.get('e2eRoom') === '1'
+  /** Room v2 league accents: `?leagueType=guillotine` etc. `dynasty` also turns on the dynasty room. */
+  const leagueType = searchParams.get('leagueType')
+  const isDynasty = leagueType === 'dynasty'
+  /** Room v2 league notes / slot salaries: `?leagueFacts=<json DraftRoomLeagueFacts>`. Bad JSON is ignored. */
+  const leagueFactsRaw = searchParams.get('leagueFacts')
+  const leagueFacts = useMemo<DraftRoomLeagueFacts | null>(() => {
+    if (!leagueFactsRaw) return null
+    try {
+      const parsed = JSON.parse(leagueFactsRaw) as DraftRoomLeagueFacts
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }, [leagueFactsRaw])
 
   const [entered, setEntered] = useState(e2eRoom)
 
@@ -20,7 +35,7 @@ function E2EDraftRoomHarnessInner() {
   }, [leagueId])
 
   return (
-    <div className="min-h-screen bg-[#040915] p-4" data-testid="e2e-draft-room-harness">
+    <div className={entered ? 'h-[100dvh] overflow-hidden bg-[#040915]' : 'min-h-screen bg-[#040915] p-4'} data-testid="e2e-draft-room-harness">
       {!entered ? (
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
           <p className="text-sm text-white/70">E2E draft room harness</p>
@@ -40,9 +55,11 @@ function E2EDraftRoomHarnessInner() {
           leagueId={leagueId}
           leagueName={`E2E ${leagueId}`}
           sport={sport}
-          isDynasty={false}
+          isDynasty={isDynasty}
           isCommissioner={isCommissioner}
-          presentationVariant="redraft_snake"
+          leagueType={leagueType}
+          leagueFacts={leagueFacts}
+          presentationVariant={isDynasty ? 'default' : 'redraft_snake'}
         />
       )}
     </div>

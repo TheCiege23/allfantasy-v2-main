@@ -1,3 +1,4 @@
+import { requestedRosterIdFrom, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -24,9 +25,9 @@ export async function GET(
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
-  const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-  })
+  // The named team when the manager holds it, else their first; a co-owned team when they hold none.
+  const viewing = await resolveViewingRoster(leagueId, userId, requestedRosterIdFrom(_req))
+  const roster = viewing ? await prisma.roster.findFirst({ where: { leagueId, id: viewing.rosterId } }) : null
   if (!roster) {
     return NextResponse.json({ error: 'No roster for this user in this league.' }, { status: 404 })
   }

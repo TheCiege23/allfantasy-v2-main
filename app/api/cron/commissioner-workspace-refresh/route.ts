@@ -6,7 +6,11 @@ import { discoverWorkspaceRefreshLeagues } from '@/lib/automation/jobs/workspace
 import { refreshWorkspaceTasksBatch } from '@/lib/automation/jobs/workspace/refreshWorkspaceTasksJob'
 import { generateScheduledReportsBatch } from '@/lib/automation/jobs/reports/generateScheduledReportsJob'
 import { runCommissionerRecipesBatch } from '@/lib/automation/jobs/commissioner/runCommissionerRecipesJob'
+import { postUntouchedRecapDrafts } from '@/lib/recap-review/recapReviewService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { runScheduledAiCommissionerAlerts } from '@/lib/ai-commissioner/scheduledAlertsBatch'
+import { scanImportedLeaguesForTanking } from '@/lib/integrity/scanImportedTanking'
+import { runWeeklyCommishDigests } from '@/lib/commissioner-workspace/weeklyDigest'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -123,7 +127,45 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] recipes failed:', toErrorMessage(e))
         return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1 }
       })
-      return { ...workspace, reports, recipes }
+      /*
+       * Weekly recaps held for review (lib/recap-review): a draft nobody touched by this morning
+       * posts now, in leagues that asked for that. Off for every league until a commissioner picks
+       * review mode, so on most runs this is one indexed read that finds nothing.
+       */
+      const recapDrafts = leagueId
+        ? { checked: 0, posted: 0, failed: 0 }
+        : await postUntouchedRecapDrafts().catch((e) => {
+            console.error('[cron-commissioner] recap drafts failed:', toErrorMessage(e))
+            return { checked: 0, posted: 0, failed: 1 }
+          })
+      /*
+       * "Commissioner AI alerts" (League.leagueAiCommissionerAlerts): the AI commissioner cycle for
+       * every league that switched it on and whose owner has AF Commissioner. It used to run only
+       * when a commissioner pressed Run. New alerts only, so a daily run never repeats itself.
+       */
+      const aiAlerts = await runScheduledAiCommissionerAlerts({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] ai alerts failed:', toErrorMessage(e))
+        return { discovered: 0, ran: 0, skippedNoPlan: 0, failed: 1, created: 0 }
+      })
+      /*
+       * The tanking monitor for IMPORTED Sleeper leagues (lib/integrity/scanImportedTanking.ts): the
+       * latest finished week's lineup audit, opened as an integrity flag in leagues whose commissioner
+       * switched tanking monitoring on. A native league's week is scanned by its own finalizer instead.
+       */
+      const importedTanking = await scanImportedLeaguesForTanking({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] imported tanking scan failed:', toErrorMessage(e))
+        return { discovered: 0, scanned: 0, flagged: 0, failed: 1 }
+      })
+      /*
+       * The weekly commissioner digest (lib/commissioner-workspace/weeklyDigest.ts): Tuesday, with
+       * Wednesday as catch-up; a no-op the other five days. LAST on purpose, so it counts the cases
+       * the tanking scan above has just opened.
+       */
+      const digest = await runWeeklyCommishDigests({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] weekly digest failed:', toErrorMessage(e))
+        return { day: true, weekKey: '', candidates: 0, sent: 0, quiet: 0, alreadySent: 0, failed: 1 }
+      })
+      return { ...workspace, reports, recipes, recapDrafts, aiAlerts, importedTanking, digest }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -148,6 +190,18 @@ export async function GET(request: Request) {
         recipesEnabled: r.recipes.enabled,
         recipesCompleted: r.recipes.completed,
         recipesFailed: r.recipes.failed,
+        recapDraftsPosted: r.recapDrafts.posted,
+        recapDraftsFailed: r.recapDrafts.failed,
+        aiAlertsRan: r.aiAlerts.ran,
+        aiAlertsCreated: r.aiAlerts.created,
+        aiAlertsFailed: r.aiAlerts.failed,
+        importedTankingScanned: r.importedTanking.scanned,
+        importedTankingFlagged: r.importedTanking.flagged,
+        importedTankingFailed: r.importedTanking.failed,
+        digestDay: r.digest.day,
+        digestSent: r.digest.sent,
+        digestQuiet: r.digest.quiet,
+        digestFailed: r.digest.failed,
       },
     }),
   )
@@ -162,6 +216,8 @@ export async function GET(request: Request) {
     failed: outcome.failed,
     reports: outcome.reports,
     recipes: outcome.recipes,
+    aiAlerts: outcome.aiAlerts,
+    importedTanking: outcome.importedTanking,
     results: outcome.leagues,
   })
 }

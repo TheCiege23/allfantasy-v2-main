@@ -108,7 +108,6 @@ async function computeInfluenceLeaders(
     },
   });
 
-  const centralityByNode = new Map<string, number>();
   const tradeWeightByNode = new Map<string, number>();
   const rivalryWeightByNode = new Map<string, number>();
   const championshipByNode = new Map<string, number>();

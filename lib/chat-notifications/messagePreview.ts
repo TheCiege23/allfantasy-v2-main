@@ -18,7 +18,7 @@ import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 
 export const MESSAGE_PREVIEW_MAX_CHARS = 140
 
-export type MessagePreviewInput = {
+type MessagePreviewInput = {
   messageType?: string | null
   body?: string | null
   metadata?: Record<string, unknown> | null
@@ -47,7 +47,7 @@ function str(v: unknown): string | null {
 }
 
 /** Collapse whitespace and cut to `max` characters by code point, so an emoji is never split. */
-export function truncatePreview(text: string, max = MESSAGE_PREVIEW_MAX_CHARS): string {
+function truncatePreview(text: string, max = MESSAGE_PREVIEW_MAX_CHARS): string {
   const flat = text.replace(/\s+/g, ' ').trim()
   const chars = Array.from(flat)
   if (chars.length <= max) return flat

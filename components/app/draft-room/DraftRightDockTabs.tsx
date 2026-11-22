@@ -3,8 +3,10 @@
 /**
  * D.6.1 — Sleeper-style right-dock tabs.
  *
- * One shared body slot. Default tabs: QUEUE | ROSTER | CHAT.
- * Draft rooms can also expose WAR ROOM when a deterministic draft-intel body is passed.
+ * FOUR tabs since 2026-11-19: QUEUE | MY TEAM | CHIMMY | CHAT (+ TEAMS in an auction).
+ * There were eight. Intel, Draft intelligence and AF Legacy were three views of Chimmy's
+ * read on the draft and now live inside the Chimmy tab; Activity duplicated the pick cards
+ * the chat already shows. A stored preference for a removed tab opens Chimmy.
  * Only the active tab fills the dock body. Inactive tab BODIES stay mounted
  * (display:none via CSS) so:
  *   - the Roster tab keeps updating in real-time when picks land while you're
@@ -20,26 +22,39 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
-export type DraftRightDockTab = 'queue' | 'intel' | 'roster' | 'war_room' | 'activity' | 'chat'
+export type DraftRightDockTab = 'queue' | 'teams' | 'chimmy' | 'roster' | 'chat'
+
+/** Tabs that existed before 2026-11-19; a stored choice of one of them opens Chimmy. */
+const MERGED_INTO_CHIMMY = new Set(['intel', 'war_room', 'activity'])
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
-export interface DraftRightDockTabsProps {
+interface DraftRightDockTabsProps {
   queueBody: ReactNode
-  /** "Before your next pick" lookahead. Optional — the tab appears only when a body is supplied. */
-  intelBody?: ReactNode
+  /** "My team": the viewer's roster, with a switcher to look at any other team. */
   rosterBody: ReactNode
-  warRoomBody?: ReactNode
   /**
-   * 8b's third right-column card. Optional so the tab only appears where a body is supplied —
-   * same pattern warRoomBody already uses.
+   * Chimmy, the draft assistant. Optional like the others, and mounted on first open rather than
+   * with the dock: it is a chat surface with its own requests, and most visits never open it.
    */
-  activityBody?: ReactNode
+  chimmyBody?: ReactNode
+  /**
+   * Auction only: every team's budget, max bid and spots, plus recent wins. Moved here from above
+   * the board (2026-11-15) so the auction stage stays compact and the player pool in view.
+   */
+  teamsBody?: ReactNode
+  /** Label for the Teams tab (localized by the caller). */
+  teamsLabel?: string
   chatBody: ReactNode
   /** Default tab when no preference stored. Spec calls for "Queue". */
   defaultTab?: DraftRightDockTab
   /** Override active tab from outside (e.g. tests / programmatic switch). */
   activeTabOverride?: DraftRightDockTab | null
+  /**
+   * One-shot switch from outside (an "Ask Chimmy" button). Unlike `activeTabOverride` it does not
+   * pin the tab: the user can move away afterwards. Bump `key` to request the same tab again.
+   */
+  openTabRequest?: { tab: DraftRightDockTab; key: number } | null
   /** Optional badge counts surfaced on the tab labels (e.g. queue length). */
   queueCount?: number
   testIdBase?: string
@@ -47,22 +62,22 @@ export interface DraftRightDockTabsProps {
 
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
-  { id: 'intel', label: 'Intel' },
-  { id: 'roster', label: 'Roster' },
-  { id: 'war_room', label: 'AF Legacy' },
-  { id: 'activity', label: 'Activity' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'roster', label: 'My team' },
+  { id: 'chimmy', label: 'Chimmy' },
   { id: 'chat', label: 'Chat' },
 ]
 
 export function DraftRightDockTabs({
   queueBody,
-  intelBody = null,
   rosterBody,
-  warRoomBody = null,
-  activityBody = null,
+  chimmyBody = null,
+  teamsBody = null,
+  teamsLabel,
   chatBody,
   defaultTab = 'queue',
   activeTabOverride = null,
+  openTabRequest = null,
   queueCount,
   testIdBase = 'draft-right-dock',
 }: DraftRightDockTabsProps) {
@@ -72,15 +87,8 @@ export function DraftRightDockTabs({
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(TAB_PREF_KEY)
-      if (
-        v === 'queue' ||
-        v === 'intel' ||
-        v === 'roster' ||
-        v === 'war_room' ||
-        v === 'activity' ||
-        v === 'chat'
-      )
-        setActiveTab(v)
+      if (v === 'queue' || v === 'teams' || v === 'chimmy' || v === 'roster' || v === 'chat') setActiveTab(v)
+      else if (v && MERGED_INTO_CHIMMY.has(v)) setActiveTab('chimmy')
     } catch {
       /* ignore */
     }
@@ -102,9 +110,8 @@ export function DraftRightDockTabs({
    */
   const tabs = BASE_TABS.filter(
     (tab) =>
-      (tab.id !== 'intel' || Boolean(intelBody)) &&
-      (tab.id !== 'war_room' || Boolean(warRoomBody)) &&
-      (tab.id !== 'activity' || Boolean(activityBody)),
+      (tab.id !== 'teams' || Boolean(teamsBody)) &&
+      (tab.id !== 'chimmy' || Boolean(chimmyBody)),
   )
   const rawEffectiveTab = activeTabOverride ?? activeTab
   /*
@@ -118,22 +125,36 @@ export function DraftRightDockTabs({
     setActiveTab(id)
   }, [])
 
+  const openTabKey = openTabRequest?.key
+  const openTabTarget = openTabRequest?.tab
+  useEffect(() => {
+    if (openTabKey == null || !openTabTarget) return
+    setActiveTab(openTabTarget)
+  }, [openTabKey, openTabTarget])
+
+  /* Chimmy mounts the first time its tab is shown and then stays mounted, so the conversation
+     survives switching away — the same reason the other bodies stay mounted. */
+  const [chimmyMounted, setChimmyMounted] = useState(false)
+  useEffect(() => {
+    if (effectiveTab === 'chimmy') setChimmyMounted(true)
+  }, [effectiveTab])
+
   return (
     <section
       data-testid={testIdBase}
       data-active-tab={effectiveTab}
       aria-label="Draft right dock"
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-l-xl border-l border-white/[0.06] bg-[linear-gradient(180deg,#0d1428_0%,#0b1324_100%)]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-l-xl border-l border-white/[0.06] bg-[#0d1424]"
     >
-      {/* Tab header row. Active tab uses cyan-100 + bottom underline; inactives are muted. */}
+      {/* Tab header row. Active tab is white with a solid underline, as on the board; inactives are muted. */}
       <div
         role="tablist"
         aria-label="Draft right dock tabs"
         data-testid={`${testIdBase}-tablist`}
         /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
            have squeezed or stranded a column as soon as a fifth tab existed. */
-        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
-        className="grid shrink-0 border-b border-white/[0.05] bg-[#101a30]" 
+        style={{}}
+        className="flex shrink-0 overflow-x-auto border-b border-white/[0.05] bg-[#101a30]"
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -147,16 +168,26 @@ export function DraftRightDockTabs({
               id={`${testIdBase}-tab-${tab.id}`}
               data-testid={`${testIdBase}-tab-${tab.id}`}
               onClick={() => onSelect(tab.id)}
-              className={`relative flex items-center justify-center gap-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
+              tabIndex={isActive ? 0 : -1}
+              onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })}
+              onKeyDown={(event) => {
+                const index = tabs.findIndex((entry) => entry.id === tab.id)
+                const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
+                if (next < 0) return
+                event.preventDefault()
+                onSelect(tabs[next]!.id)
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+              }}
+              className={`relative flex min-h-[44px] min-w-[80px] flex-1 shrink-0 items-center justify-center gap-1 px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                 isActive
-                  ? 'text-cyan-100'
-                  : 'text-white/50 hover:bg-white/[0.04] hover:text-white/85'
+                  ? 'text-white'
+                  : 'text-[#8b91a7] hover:bg-[#1d2236] hover:text-white'
               }`}
             >
-              <span>{tab.label}</span>
+              <span>{tab.id === 'teams' && teamsLabel ? teamsLabel : tab.label}</span>
               {tab.id === 'queue' && typeof queueCount === 'number' && queueCount > 0 ? (
                 <span
-                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full border border-cyan-300/35 bg-cyan-500/20 px-1 text-[11px] font-bold text-cyan-100"
+                  className="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-white px-1 text-[11px] font-bold text-[#14172a]"
                   aria-label={`${queueCount} queued`}
                   data-testid={`${testIdBase}-queue-count`}
                 >
@@ -166,7 +197,7 @@ export function DraftRightDockTabs({
               {isActive ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-3 bottom-0 h-px rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                  className="absolute inset-x-3 bottom-0 h-[2px] rounded-full bg-white"
                 />
               ) : null}
             </button>
@@ -188,16 +219,28 @@ export function DraftRightDockTabs({
         >
           {queueBody}
         </div>
-        {intelBody ? (
+        {teamsBody ? (
           <div
             role="tabpanel"
-            id={`${testIdBase}-panel-intel`}
-            aria-labelledby={`${testIdBase}-tab-intel`}
-            data-testid={`${testIdBase}-panel-intel`}
-            aria-hidden={effectiveTab !== 'intel'}
-            className={effectiveTab === 'intel' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
+            id={`${testIdBase}-panel-teams`}
+            aria-labelledby={`${testIdBase}-tab-teams`}
+            data-testid={`${testIdBase}-panel-teams`}
+            aria-hidden={effectiveTab !== 'teams'}
+            className={effectiveTab === 'teams' ? 'flex h-full min-h-0 flex-col overflow-auto px-2' : 'hidden'}
           >
-            {intelBody}
+            {teamsBody}
+          </div>
+        ) : null}
+        {chimmyBody ? (
+          <div
+            role="tabpanel"
+            id={`${testIdBase}-panel-chimmy`}
+            aria-labelledby={`${testIdBase}-tab-chimmy`}
+            data-testid={`${testIdBase}-panel-chimmy`}
+            aria-hidden={effectiveTab !== 'chimmy'}
+            className={effectiveTab === 'chimmy' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
+          >
+            {chimmyMounted || effectiveTab === 'chimmy' ? chimmyBody : null}
           </div>
         ) : null}
         <div
@@ -210,32 +253,6 @@ export function DraftRightDockTabs({
         >
           {rosterBody}
         </div>
-        {activityBody ? (
-          <div
-            role="tabpanel"
-            id={`${testIdBase}-panel-activity`}
-            aria-labelledby={`${testIdBase}-tab-activity`}
-            data-testid={`${testIdBase}-panel-activity`}
-            aria-hidden={effectiveTab !== 'activity'}
-            className={
-              effectiveTab === 'activity' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'
-            }
-          >
-            {activityBody}
-          </div>
-        ) : null}
-        {warRoomBody ? (
-          <div
-            role="tabpanel"
-            id={`${testIdBase}-panel-war_room`}
-            aria-labelledby={`${testIdBase}-tab-war_room`}
-            data-testid={`${testIdBase}-panel-war-room`}
-            aria-hidden={effectiveTab !== 'war_room'}
-            className={effectiveTab === 'war_room' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'}
-          >
-            {warRoomBody}
-          </div>
-        ) : null}
         <div
           role="tabpanel"
           id={`${testIdBase}-panel-chat`}

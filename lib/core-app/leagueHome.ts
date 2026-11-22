@@ -1,7 +1,9 @@
 import 'server-only'
+import { leagueFormatFaqHref } from '@/lib/league/leagueFormatFaq'
 import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import {
   resolveImportCoverageSummary,
   type ImportCoverageSummary,
@@ -23,8 +25,11 @@ import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manage
 import { memberActivityFromReads, staleActivityReason } from './commissioner/activity'
 import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
+import { resolveRedraftIdentity } from '@/lib/league-media/redraftIdentity'
+import { buildRedraftHomeDeck, type RedraftHomeDeck } from './redraftLeagueHome'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
+import { createRenderTimer } from './renderTiming'
 import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type RecentTrade } from './recentTrades'
 import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
@@ -36,6 +41,20 @@ import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/lea
 import { rosterIdsMatch } from './rosterIdMatch'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
+import { myRosterCandidates, rosterPlayerIds } from './myRoster'
+import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
+import {
+  buildDynastyHomeDeck,
+  isSeasonOverStage,
+  starterIdsOf,
+  taxiIdsOf,
+  type DynastyHomeDeck,
+  type DynastyOffseasonInput,
+} from './dynastyLeagueHome'
+import { loadDynastyOutlook } from './dynastyOutlook'
+import { loadChampionHistory } from '@/lib/league/dynastyChampionRafters'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -132,6 +151,17 @@ export type LeagueStanding = {
 export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
+  /**
+   * The redraft season-race deck for an imported league whose stored data positively says redraft
+   * (lib/core-app/redraftLeagueHome.ts). Absent or null: every other league — Home renders as before.
+   */
+  redraft?: RedraftHomeDeck | null
+  /**
+   * The Dynasty Era deck for a dynasty league (lib/core-app/dynastyLeagueHome.ts): the season clock,
+   * the rafters, your draft capital, your starters' ages and your taxi squad. Absent or null: every
+   * other league — Home renders as before.
+   */
+  dynasty?: DynastyHomeDeck | null
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
   calendar?: LeagueCalendarEvent[]
@@ -150,7 +180,9 @@ export type LeagueHomeData = {
     variant: string | null
     name: string
     platform: string
+    canRemoveImported?: boolean
     format: string | null
+    formatFaqHref?: string
     sport: string
     season: number | null
     currentWeek: number | null
@@ -180,6 +212,9 @@ export type LeagueHomeData = {
    */
   stage: string | null
   preSeason: boolean
+  /** Provider teams remain visible before standings have any scored games. */
+  teamDirectory: Array<{ id: string; name: string; ownerName: string; isYou: boolean }>
+  rosteredPlayerCount: number
   /**
    * The week the scoreboard is showing, and the weeks it could show.
    *
@@ -356,18 +391,6 @@ function recordOf(t: { wins: number; losses: number; ties: number }): string {
   return t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`
 }
 
-/** Reads an integer out of the settings blob, tolerating string values. */
-function settingWeek(settings: unknown, ...keys: string[]): number | null {
-  if (!settings || typeof settings !== 'object') return null
-  const bag = settings as Record<string, unknown>
-  for (const key of keys) {
-    const raw = bag[key]
-    const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
-    if (Number.isFinite(n) && n > 0 && n < 30) return Math.floor(n)
-  }
-  return null
-}
-
 /*
  * ⚠ `buildTimeline` LIVED HERE AND HAS BEEN DELETED, not merely bypassed.
  *
@@ -464,86 +487,158 @@ export async function getLeagueHomeData(
    * two managers traded the pick, and resolving it to whoever it later became
    * would rewrite the deal they made.
    */
-  let recentTrades = await getRecentTrades(
-    [{
-      id: league.id,
-      name: league.name ?? 'League',
-      platformLeagueId: league.platformLeagueId,
-      avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
-      sport: String(league.sport ?? 'NFL'),
-    }],
-    new Date(),
-    6,
-    { viewerUserId: userId, reconcileLive: true, enrichLeagueContext: true },
-  ).catch(() => [])
-  if (String(league.platform).toLowerCase() === 'sleeper') {
-    const owner = await prisma.userProfile.findUnique({
-      where: { userId },
-      select: { sleeperUserId: true },
-    }).catch(() => null)
-    if (owner?.sleeperUserId) {
-      const live = await scanPendingSleeperTrades({
-        platformLeagueId: league.platformLeagueId,
-        ownerSleeperId: owner.sleeperUserId,
-        sport: String(league.sport),
-        alertOnNewOffers: true,
-      }).catch(() => null)
-      /*
-       * This scan already knows the offers waiting on you in this league; the Trades
-       * urgency badge reads that instead of scanning again. Only an answered scan is
-       * recorded — a failed one says nothing about what is waiting.
-       */
-      if (live?.scanned) {
-        await recordPendingOffers(
-          userId,
-          [{
-            leagueId: league.id,
-            waiting: live.trades.filter((t) => !t.proposedByViewer && t.lifecycleStatus !== 'complete').length,
-          }],
-          new Date(),
-        ).catch(() => undefined)
-      }
-      /*
-       * 🛑 THE GRADED COPY WINS (2026-09-27). This used to keep the LIVE copy and drop the loader's —
-       * so every trade the scan could see replaced its graded twin with "League-specific grade is
-       * still being prepared", on the one page whose subject is this league. A live copy is now
-       * added only for a trade the loader does not have, built by the loader's own
-       * `liveCompletedTrade` (it was a hand-kept copy here) and graded the same way.
-       */
-      const recentLeague = {
+  /*
+   * ⚠ EVERY READ HERE THAT NEEDS ONLY THE LEAGUE ROW STARTS NOW, TOGETHER (2026-11-14).
+   * They used to run one after another — recent trades (plus a LIVE Sleeper scan and grading),
+   * activity, current week, power board, rosters, teams, then matchup, rivals and pairing — and a
+   * league switch measured ~7s in prod (first byte 0.39s, last byte 7.1s) for reads that do not
+   * depend on each other. Each is still awaited where it was used, so what the screen shows is
+   * unchanged; only the waiting overlaps. `renderTiming` logs per-read durations for any render
+   * over 1.5s, so the next slow read names itself.
+   *
+   * ⚠ A read started here and awaited later must never reject unobserved: `timer.time` attaches
+   * a handler, which is why every early read goes through it.
+   */
+  const timer = createRenderTimer('league-home')
+  const recentTradesRead: Promise<RecentTrade[]> = timer.time('trades', (async () => {
+    let recentTrades = await getRecentTrades(
+      [{
         id: league.id,
         name: league.name ?? 'League',
         platformLeagueId: league.platformLeagueId,
         avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
         sport: String(league.sport ?? 'NFL'),
+      }],
+      new Date(),
+      6,
+      { viewerUserId: userId, reconcileLive: true, enrichLeagueContext: true },
+    ).catch(() => [])
+    if (String(league.platform).toLowerCase() === 'sleeper') {
+      const owner = await prisma.userProfile.findUnique({
+        where: { userId },
+        select: { sleeperUserId: true },
+      }).catch(() => null)
+      if (owner?.sleeperUserId) {
+        const live = await scanPendingSleeperTrades({
+          platformLeagueId: league.platformLeagueId,
+          ownerSleeperId: owner.sleeperUserId,
+          sport: String(league.sport),
+          alertOnNewOffers: true,
+        }).catch(() => null)
+        /*
+         * This scan already knows the offers waiting on you in this league; the Trades
+         * urgency badge reads that instead of scanning again. Only an answered scan is
+         * recorded — a failed one says nothing about what is waiting.
+         */
+        if (live?.scanned) {
+          await recordPendingOffers(
+            userId,
+            [{
+              leagueId: league.id,
+              waiting: live.trades.filter((t) => !t.proposedByViewer && t.lifecycleStatus !== 'complete').length,
+            }],
+            new Date(),
+          ).catch(() => undefined)
+        }
+        /*
+         * 🛑 THE GRADED COPY WINS (2026-09-27). This used to keep the LIVE copy and drop the loader's —
+         * so every trade the scan could see replaced its graded twin with "League-specific grade is
+         * still being prepared", on the one page whose subject is this league. A live copy is now
+         * added only for a trade the loader does not have, built by the loader's own
+         * `liveCompletedTrade` (it was a hand-kept copy here) and graded the same way.
+         */
+        const recentLeague = {
+          id: league.id,
+          name: league.name ?? 'League',
+          platformLeagueId: league.platformLeagueId,
+          avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
+          sport: String(league.sport ?? 'NFL'),
+        }
+        const known = new Set(recentTrades.map((trade) => trade.id.slice(trade.id.lastIndexOf(':') + 1)))
+        const fresh = (live?.completedTrades ?? [])
+          .filter((trade) => !known.has(trade.transactionId))
+          // A trade with no date keeps the old behaviour — dated now — rather than disappearing.
+          .map((trade) => liveCompletedTrade(recentLeague, { ...trade, proposedAt: trade.proposedAt ?? new Date().toISOString() }))
+          .filter((trade): trade is NonNullable<typeof trade> => trade != null)
+        recentTrades = [...recentTrades, ...fresh]
+          .sort((a, b) => Date.parse(b.acceptedAt) - Date.parse(a.acceptedAt))
+          .slice(0, 6)
+        // Only the fresh trades that survived the cut are graded — grading rows nobody sees is pure cost.
+        const freshIds = new Set(fresh.map((trade) => trade.id))
+        await Promise.all(recentTrades.filter((trade) => freshIds.has(trade.id)).map((trade) => gradeProviderRecentTrade(trade)))
       }
-      const known = new Set(recentTrades.map((trade) => trade.id.slice(trade.id.lastIndexOf(':') + 1)))
-      const fresh = (live?.completedTrades ?? [])
-        .filter((trade) => !known.has(trade.transactionId))
-        // A trade with no date keeps the old behaviour — dated now — rather than disappearing.
-        .map((trade) => liveCompletedTrade(recentLeague, { ...trade, proposedAt: trade.proposedAt ?? new Date().toISOString() }))
-        .filter((trade): trade is NonNullable<typeof trade> => trade != null)
-      recentTrades = [...recentTrades, ...fresh]
-        .sort((a, b) => Date.parse(b.acceptedAt) - Date.parse(a.acceptedAt))
-        .slice(0, 6)
-      // Only the fresh trades that survived the cut are graded — grading rows nobody sees is pure cost.
-      const freshIds = new Set(fresh.map((trade) => trade.id))
-      await Promise.all(recentTrades.filter((trade) => freshIds.has(trade.id)).map((trade) => gradeProviderRecentTrade(trade)))
     }
-  }
+    return recentTrades
+  })())
+  const activityRead = timer.time('activity', getLeagueActivity({
+    leagueId: league.id,
+    platformLeagueId: league.platformLeagueId,
+    platform: league.platform,
+    sport: league.sport,
+    limit: 8,
+  }).catch(() => null))
+  const settingsWeek = leagueWeekFromSettings(league.settings)
+  const currentWeekRead: Promise<number | null> =
+    settingsWeek != null
+      ? Promise.resolve(settingsWeek)
+      : league.platformLeagueId
+        ? timer.time('currentWeek', resolveCurrentWeekForLeague(league.platformLeagueId).then((r) => r?.week ?? null).catch(() => null))
+        : Promise.resolve(null)
+  const seasonStatus = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+    ? (league.settings as Record<string, unknown>).status : null
+  const seasonFinished = ['complete', 'completed'].includes(String(seasonStatus ?? '').toLowerCase())
+  const powerBoardRead =
+    league.season != null
+      ? timer.time('powerBoard', currentWeekRead.then((cw) => getAllPlayBoard({
+          leagueId: league.id,
+          platformLeagueId: league.platformLeagueId,
+          seasonYear: league.season as number,
+          throughWeek: seasonFinished || cw == null ? null : cw - 1,
+        })).catch(() => null))
+      : Promise.resolve(null)
+  const rosterReads = timer.time('rosters', Promise.all([
+    prisma.roster.findMany({
+        where: { leagueId },
+        select: { platformUserId: true, faabRemaining: true, playerData: true },
+      })
+      .catch((): Array<{ platformUserId: string; faabRemaining: number | null; playerData: unknown }> => []),
+    prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } })
+      .catch(() => null),
+  ]))
+  const teamsRead = timer.time('teams', prisma.leagueTeam.findMany({
+    where: { leagueId, ...CURRENT_TEAMS },
+    select: {
+      id: true,
+      teamName: true,
+      ownerName: true,
+      wins: true,
+      losses: true,
+      ties: true,
+      pointsFor: true,
+      currentRank: true,
+      claimedByUserId: true,
+      // The platform's roster id, so the scoreboard can mark your own game.
+      externalId: true,
+      // Both flags: a co-commissioner is exactly who the hub preview is for.
+      isCommissioner: true,
+      isCoCommissioner: true,
+      // With claimedByUserId and platformUserId, tells an empty seat from a manager (isUnownedTeam).
+      isOrphan: true,
+      // The owner id, which is how Roster rows (and their FAAB) are found.
+      platformUserId: true,
+    },
+    orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
+  }))
+  const matchupRead = timer.time('matchup', preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId, null, lc).catch(() => null))
+  const rivalRead = timer.time('rivals', preSeason ? Promise.resolve(null) : getRivalRecords(userId, [league.id]).catch(() => null))
+  const pairingRead = timer.time('pairing', resolvePairedHalf(league.id, userId).catch(() => null))
   /*
    * ⚠ AND THE WAIVERS THE PANEL SAID WERE "NOT READ". They are read — the
    * Decision-OS activity cron writes completed Sleeper waivers, free-agent
    * moves and trades daily, league-wide. The old copy blamed the data for a
    * query nobody had written.
    */
-  const activity = await getLeagueActivity({
-    leagueId: league.id,
-    platformLeagueId: league.platformLeagueId,
-    platform: league.platform,
-    sport: league.sport,
-    limit: 8,
-  }).catch(() => null)
+  const activity = await activityRead
 
   const activityRows = (activity?.items ?? [])
     // Trades already arrive through the grade sweep below, with valuations
@@ -577,23 +672,9 @@ export async function getLeagueHomeData(
       }
     })
 
-  const currentWeek =
-    leagueWeekFromSettings(league.settings) ??
-    (league.platformLeagueId
-      ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week ?? null
-      : null)
-  const seasonStatus = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
-    ? (league.settings as Record<string, unknown>).status : null
-  const seasonFinished = ['complete', 'completed'].includes(String(seasonStatus ?? '').toLowerCase())
-  const powerBoard =
-    league.season != null
-      ? await getAllPlayBoard({
-          leagueId: league.id,
-          platformLeagueId: league.platformLeagueId,
-          seasonYear: league.season,
-          throughWeek: seasonFinished || currentWeek == null ? null : currentWeek - 1,
-        }).catch(() => null)
-      : null
+  const currentWeek = await currentWeekRead
+  const powerBoard = await powerBoardRead
+  const recentTrades = await recentTradesRead
 
   const buzzRows = recentTrades.map((t) => ({
     id: t.id,
@@ -634,18 +715,10 @@ export async function getLeagueHomeData(
    * A miss here costs one dash in one column — it is a display join, not a
    * gate, so it does not need the three-candidate fallback the scoreboard uses.
    */
-  const [rosterRows, waiverSettings] = await Promise.all([
-    prisma.roster.findMany({
-        where: { leagueId },
-        select: { platformUserId: true, faabRemaining: true },
-      })
-      .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => []),
-    prisma.leagueWaiverSettings.findUnique({ where: { leagueId }, select: { waiverType: true } })
-      .catch(() => null),
-  ])
+  const [rosterRows, waiverSettings] = await rosterReads
   const faabEnabled = waiverSettings?.waiverType?.toLowerCase() === 'faab'
 
-  const rosterCountForDraft = rosterRows.length
+  const rosteredPlayerCount = rosterRows.reduce((total, row) => total + rosterPlayerIds(row.playerData).length, 0)
   const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
 
   /*
@@ -654,30 +727,7 @@ export async function getLeagueHomeData(
    * showing a team nobody manages, ranked among the live ones. `isOrphan` below does NOT do this
    * job — it is selected to LABEL an empty seat, not to exclude a departed one.
    */
-  const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId, ...CURRENT_TEAMS },
-    select: {
-      id: true,
-      teamName: true,
-      ownerName: true,
-      wins: true,
-      losses: true,
-      ties: true,
-      pointsFor: true,
-      currentRank: true,
-      claimedByUserId: true,
-      // The platform's roster id, so the scoreboard can mark your own game.
-      externalId: true,
-      // Both flags: a co-commissioner is exactly who the hub preview is for.
-      isCommissioner: true,
-      isCoCommissioner: true,
-      // With claimedByUserId and platformUserId, tells an empty seat from a manager (isUnownedTeam).
-      isOrphan: true,
-      // The owner id, which is how Roster rows (and their FAAB) are found.
-      platformUserId: true,
-    },
-    orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
-  })
+  const teams = await teamsRead
 
   const yours = teams.find((t) => t.claimedByUserId === userId) ?? null
 
@@ -721,8 +771,7 @@ export async function getLeagueHomeData(
    * are the evidence. Without this, a league with full rosters on screen was
    * told "no draft has been set up".
    */
-  const draftedAlready = rosterCountForDraft > 0
-
+  const draftedAlready = rosteredPlayerCount > 0
 
   // A league whose teams all sit at 0-0 has been imported but never had results
   // read. Showing that as a standings table would present "everyone is 0-0" as a
@@ -862,19 +911,85 @@ export async function getLeagueHomeData(
    * calendar's — see the currentWeek note above — unless the viewer picked
    * another one.
    */
-  const board =
+  const boardRead =
     viewWeek != null && league.season != null
-      ? await getLeagueScoreboard({
+      ? timer.time('scoreboard', latestProjectionWeek().catch(() => null).then((projectionWeek) => getLeagueScoreboard({
           leagueId: league.id,
           platformLeagueId: league.platformLeagueId,
-          seasonYear: league.season,
+          seasonYear: league.season as number,
           week: viewWeek,
           yourRosterId: yours?.externalId ?? null,
           scoringSettings: extractScoringSettings(league.settings),
-          projectionWeek: await latestProjectionWeek().catch(() => null),
-        }).catch(() => null)
-      : null
+          projectionWeek,
+        })).catch(() => null))
+      : Promise.resolve(null)
 
+  /*
+   * The redraft "season race" deck (lib/core-app/redraftLeagueHome.ts), for an imported league whose
+   * STORED data positively says redraft (lib/league-media/redraftIdentity.ts). Everything it shows is
+   * already read above except the recap's week, which is the same WeeklyMatchup read as `board` for
+   * the week before the current one — skipped when `board` already is that week. Null for every other
+   * league, which renders exactly as before.
+   */
+  const redraftIdentity = resolveRedraftIdentity({
+    platform: league.platform,
+    sport: league.sport,
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    isDynasty: league.isDynasty,
+    bestBallMode: league.bestBallMode,
+    guillotineMode: league.guillotineMode,
+    settings: league.settings,
+  })
+  const recapWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null
+  const recapBoard = () =>
+    getLeagueScoreboard({
+      leagueId: league.id,
+      platformLeagueId: league.platformLeagueId,
+      seasonYear: league.season as number,
+      week: recapWeek as number,
+      yourRosterId: yours?.externalId ?? null,
+      scoringSettings: extractScoringSettings(league.settings),
+      projectionWeek: null,
+    }).catch(() => null)
+  // Same rule as before — reuse `board` when it already IS last week — but when it is not, the
+  // recap read no longer waits for this week's board to finish first.
+  const lastWeekBoardRead =
+    redraftIdentity && !preSeason && recapWeek != null && league.season != null
+      ? viewWeek === recapWeek
+        ? boardRead.then((b) => (b?.week === recapWeek ? b : recapBoard()))
+        : timer.time('recapScoreboard', recapBoard())
+      : Promise.resolve(null)
+  const board = await boardRead
+  const lastWeekBoard = await lastWeekBoardRead
+  const redraft = redraftIdentity
+    ? buildRedraftHomeDeck({
+        identity: redraftIdentity,
+        settings: league.settings,
+        currentWeek,
+        stage,
+        preSeason,
+        standings: standings.available ? standings.data : null,
+        board,
+        lastWeekBoard,
+      })
+    : null
+
+  const dynasty = usesDynastyBackground({
+    isDynasty: league.isDynasty,
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    guillotineMode: league.guillotineMode,
+  })
+    ? await loadDynastyHomeDeck({
+        league,
+        rosterRows,
+        yours,
+        userId,
+        stage,
+        draftRow: draftSummaryRead.then(([all]) => all?.rows?.[0] ?? null).catch(() => null),
+      }).catch(() => null)
+    : null
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
@@ -888,8 +1003,8 @@ export async function getLeagueHomeData(
    * second query, so two surfaces cannot disagree about one league's matchup.
    */
   const [matchupData, rivalData, pairing] = await Promise.all([
-    preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId, null, lc).catch(() => null),
-    preSeason ? Promise.resolve(null) : getRivalRecords(userId, [league.id]).catch(() => null),
+    matchupRead,
+    rivalRead,
     /*
      * ⚠ NOT GATED ON `preSeason`, UNLIKE THE TWO ABOVE. A franchise pairing is a
      * fact about the leagues, not about the week — and a C2C pair is at its most
@@ -897,7 +1012,7 @@ export async function getLeagueHomeData(
      * the pro half has nothing to show. Gating it would hide the feature during
      * the only window this user has actually been looking at it.
      */
-    resolvePairedHalf(league.id, userId).catch(() => null),
+    pairingRead,
   ])
 
   const resolvedMatchup: LeagueHomeData['matchup'] = preSeason
@@ -951,9 +1066,19 @@ export async function getLeagueHomeData(
           reason: rivalData?.reason ?? 'no scored weeks are stored for this league yet',
         }
 
+  timer.done({ platform: String(league.platform ?? ''), preSeason })
   return {
+    redraft,
+    dynasty,
     stage,
     preSeason,
+    teamDirectory: teams.map((team) => ({
+      id: team.id,
+      name: team.teamName,
+      ownerName: team.ownerName,
+      isYou: team.id === yours?.id,
+    })),
+    rosteredPlayerCount,
     pairing,
     calendar: leagueCalendar(league.settings),
     league: {
@@ -961,7 +1086,9 @@ export async function getLeagueHomeData(
       variant: league.leagueVariant,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
+      canRemoveImported: league.userId === userId || isImportedPlatform(league.platform),
       format: league.leagueType ?? null,
+      formatFaqHref: leagueFormatFaqHref(league),
       sport: String(league.sport ?? 'NFL'),
       season: league.season ?? null,
       currentWeek,
@@ -1041,7 +1168,8 @@ export async function getLeagueHomeData(
       ? {
           available: true,
           data: {
-            href: `/core/draft-hq?league=${league.id}`,
+            // A live draft goes straight to the room; Draft HQ is the planning screen.
+            href: draftRow.phase === 'live' ? draftRoomHref(league.id) : `/core/draft-hq?league=${league.id}`,
             linkLabel:
               draftRow.phase === 'done'
                 ? 'Open the draft board'
@@ -1183,5 +1311,171 @@ export async function getLeagueHomeData(
       }
     })(),
     syncAge: { label: age.label, stale: age.stale },
+  }
+}
+
+/**
+ * The Dynasty Era deck's reads (lib/core-app/dynastyLeagueHome.ts). Every read is best-effort and only
+ * empties its own block: the history (rafters + first season), the outlook (future picks + starter
+ * ages, the SAME loader My Team uses), and the taxi count off the roster already read above.
+ *
+ * ⚠ AGES ONLY FOR SLEEPER-ID ROSTERS. `SportsPlayer.age` is keyed by Sleeper id. A Sleeper import and a
+ * native league store Sleeper ids on the roster; ESPN, Yahoo, MFL, Fantrax and Fleaflicker store their
+ * own ids, and a numeric id from one namespace can equal a different player's Sleeper id — so for those
+ * the age block is left empty rather than risk another player's age.
+ */
+async function loadDynastyHomeDeck(args: {
+  league: {
+    id: string
+    platform: string | null
+    sport: string | null
+    season: number | null
+    status: string | null
+    leagueType: string | null
+    isDynasty: boolean | null
+    settings: unknown
+    createdAt: Date | null
+    taxiSlots: number | null
+  }
+  rosterRows: Array<{ platformUserId: string; playerData: unknown }>
+  yours: { platformUserId: string | null; externalId: string | null } | null
+  userId: string
+  /** `resolveLeagueStage(league)`, computed once above. */
+  stage: string | null
+  /** This league's Draft HQ row (the read already in flight above), for a live / waiting rookie draft. */
+  draftRow: Promise<{ phase: string; modeLabel: string | null } | null>
+  now?: Date
+}): Promise<DynastyHomeDeck> {
+  const { league } = args
+  const candidates = args.yours ? myRosterCandidates(args.yours, args.userId) : []
+  const mine =
+    candidates.map((id) => args.rosterRows.find((r) => r.platformUserId === id)).find((r) => r != null) ?? null
+  const platform = String(league.platform ?? '').trim().toLowerCase()
+  const sleeperIds = platform === 'sleeper' || isNativePlatform(league.platform)
+  const starterIds = mine && sleeperIds ? starterIdsOf(mine.playerData) : []
+  const rosterIds = mine && sleeperIds ? rosterPlayerIds(mine.playerData) : []
+
+  const sportRaw = String(league.sport ?? '').trim()
+  const positions = rosterIds.length
+    ? await prisma.sportsPlayer
+        .findMany({
+          where: {
+            sleeperId: { in: rosterIds },
+            ...(sportRaw ? { sport: { in: [...new Set([sportRaw, sportRaw.toUpperCase(), sportRaw.toLowerCase()])] } } : {}),
+          },
+          select: { sleeperId: true, position: true },
+          orderBy: { updatedAt: 'desc' },
+        })
+        .catch(() => [] as Array<{ sleeperId: string | null; position: string | null }>)
+    : []
+  const positionOf = new Map<string, string | null>()
+  for (const row of positions) if (row.sleeperId && !positionOf.has(row.sleeperId)) positionOf.set(row.sleeperId, row.position)
+  const asPlayer = (id: string) => ({ sleeperId: id, name: id, position: positionOf.get(id) ?? null })
+
+  const [history, outlook] = await Promise.all([
+    loadChampionHistory(league.id, args.userId, league.season).catch(() => ({ rafters: null, firstSeason: null })),
+    args.yours
+      ? loadDynastyOutlook({
+          league: {
+            id: league.id,
+            platform: league.platform,
+            leagueType: league.leagueType,
+            isDynasty: league.isDynasty,
+            season: league.season,
+            status: league.status,
+            sport: league.sport,
+          },
+          teamExternalId: args.yours.externalId,
+          rosterCandidates: candidates,
+          starters: starterIds.map(asPlayer),
+          roster: rosterIds.map(asPlayer),
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ])
+
+  const offseason = await loadDynastyOffseasonInput({
+    league,
+    stage: args.stage,
+    firstSeasonOnFile: history.firstSeason,
+    draftRow: args.draftRow,
+    now: args.now ?? new Date(),
+  }).catch(() => null)
+
+  return buildDynastyHomeDeck({
+    league: { season: league.season, sport: league.sport, createdAt: league.createdAt, settings: league.settings, platform: league.platform },
+    firstSeasonOnFile: history.firstSeason,
+    rafters: history.rafters,
+    outlook,
+    taxi: mine ? { count: taxiIdsOf(mine.playerData).length, slots: Math.max(0, Number(league.taxiSlots ?? 0) || 0) } : null,
+    offseason,
+  })
+}
+
+/**
+ * The offseason state's reads — ONLY for a league between seasons, so an in-season Home pays no extra
+ * query and its deck is built exactly as before. Every value is a stored row or setting; nothing is
+ * derived from a sport's usual calendar:
+ *
+ *   rookie draft   League.settings draft_start / draftStartTime / draft_date (leagueCalendar), else
+ *                  LeagueSettings.draftDateUtc; live / waiting from this league's Draft HQ row when that
+ *                  row is a rookie draft. The builder drops a start already past (an earlier draft's).
+ *   keeper         the open KeeperSelectionSession's deadline, else League.settings keeper_deadline_at.
+ *   rollover       RedraftSeason `setup` for the next season — when it was created (native leagues).
+ *   kickoff        the next season's first regular-season SportsGame on file, when one is stored.
+ *
+ * No contract-deadline read: no column or setting stores one for a league.
+ */
+async function loadDynastyOffseasonInput(args: {
+  league: { id: string; sport: string | null; season: number | null; settings: unknown }
+  stage: string | null
+  firstSeasonOnFile: number | null
+  draftRow: Promise<{ phase: string; modeLabel: string | null } | null>
+  now: Date
+}): Promise<DynastyOffseasonInput | null> {
+  const { league, stage, now } = args
+  const season = league.season
+  if (season == null || !Number.isInteger(season)) return null
+  const over = isSeasonOverStage(stage)
+  const rolled = isPreDraftOrDrafting({ status: stage }) && args.firstSeasonOnFile != null && args.firstSeasonOnFile < season
+  if (!over && !rolled) return null
+  const nextSeason = over ? season + 1 : season
+
+  const settingsEvents = leagueCalendar(league.settings)
+  const fromSettings = (key: string) => {
+    const at = settingsEvents.find((e) => e.key === key)?.at
+    return at ? new Date(at) : null
+  }
+  const sportRaw = String(league.sport ?? '').trim()
+  const sports = sportRaw ? [...new Set([sportRaw, sportRaw.toUpperCase(), sportRaw.toLowerCase()])] : []
+
+  const [row, leagueSettings, keeperSession, setupSeason, firstGame] = await Promise.all([
+    args.draftRow.catch(() => null),
+    prisma.leagueSettings.findUnique({ where: { leagueId: league.id }, select: { draftDateUtc: true } }).catch(() => null),
+    prisma.keeperSelectionSession
+      .findFirst({ where: { leagueId: league.id, status: 'open', deadline: { gt: now } }, orderBy: { deadline: 'asc' }, select: { deadline: true } })
+      .catch(() => null),
+    prisma.redraftSeason
+      .findFirst({ where: { leagueId: league.id, status: 'setup', season: nextSeason }, select: { createdAt: true } })
+      .catch(() => null),
+    sports.length
+      ? prisma.sportsGame
+          .findFirst({
+            where: { sport: { in: sports }, season: nextSeason, seasonType: 'regular', startTime: { gt: now } },
+            orderBy: { startTime: 'asc' },
+            select: { startTime: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+  ])
+  const rookieRow = row && String(row.modeLabel ?? '').toLowerCase() === 'rookie' ? row : null
+  return {
+    stage,
+    now,
+    draftAt: fromSettings('draft') ?? leagueSettings?.draftDateUtc ?? null,
+    draftLive: rookieRow?.phase === 'live',
+    draftScheduled: rookieRow?.phase === 'upcoming',
+    keeperDeadlineAt: keeperSession?.deadline ?? fromSettings('keeper'),
+    rolledOverAt: setupSeason?.createdAt ?? null,
+    nextSeasonStartAt: firstGame?.startTime ?? null,
   }
 }

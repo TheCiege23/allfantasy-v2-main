@@ -23,15 +23,18 @@
  * available. Missing rows and unrecognised values fail closed for the same reason: a trade that waits for a
  * commissioner is recoverable; one that executed without review is not.
  *
- * Redraft leagues have no saved vote threshold, so the threshold is the server default every proposal
- * already used. The point is that the caller can no longer choose it.
+ * The vote threshold is the league's veto rule (lib/league-trade-engine/vetoRule.ts) — the number the
+ * commissioner saved in Trade Settings, as votes or as a percent of the teams — the same rule the generic
+ * engine reads. A league that saved none keeps 4 votes, the default every proposal already used. The
+ * point stays that the caller can never choose it.
  */
 import type { PrismaClient } from '@prisma/client'
+import { DEFAULT_VETO_VOTES, readVetoRule, type VetoRule } from '@/lib/league-trade-engine/vetoRule'
 
 export type RedraftTradeVetoMode = 'commissioner' | 'league_vote' | 'no_veto'
 
-/** No saved vote threshold exists for redraft leagues; this is the value proposals already defaulted to. */
-export const REDRAFT_DEFAULT_VETO_THRESHOLD = 4
+/** The threshold a league that saved no veto rule gets; the value proposals always defaulted to. */
+export const REDRAFT_DEFAULT_VETO_THRESHOLD = DEFAULT_VETO_VOTES
 
 /**
  * Request-body fields that would let a caller choose governance. Refused with a 400, never silently
@@ -53,16 +56,43 @@ export function vetoModeFromReviewType(raw: unknown): RedraftTradeVetoMode {
   return 'commissioner'
 }
 
+/**
+ * PURE: a veto rule as the vote count a redraft proposal stores. A count is capped at the teams that can
+ * vote (all but the two in the trade); a percent is of all the teams, rounded up — the generic engine's
+ * arithmetic, so a league reads the same either way.
+ */
+export function redraftVetoThreshold(rule: VetoRule, teamCount: number | null | undefined): number {
+  const teams = typeof teamCount === 'number' && teamCount > 0 ? teamCount : null
+  if (rule.mode === 'percent') return teams ? Math.max(1, Math.ceil((teams * rule.value) / 100)) : REDRAFT_DEFAULT_VETO_THRESHOLD
+  return Math.max(1, teams ? Math.min(rule.value, Math.max(1, teams - 2)) : rule.value)
+}
+
+/** The league's settings and size, or null — a failed read keeps the default threshold, never the proposal. */
+async function readLeagueVetoInputs(
+  db: Partial<Pick<PrismaClient, 'league'>>,
+  leagueId: string,
+): Promise<{ settings: unknown; leagueSize: number | null } | null> {
+  if (!db.league) return null
+  try {
+    return (await db.league.findUnique({ where: { id: leagueId }, select: { settings: true, leagueSize: true } })) ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function resolveRedraftTradeGovernance(
-  db: Pick<PrismaClient, 'redraftLeagueExtendedSettings'>,
+  db: Pick<PrismaClient, 'redraftLeagueExtendedSettings'> & Partial<Pick<PrismaClient, 'league'>>,
   leagueId: string,
 ): Promise<{ vetoMode: RedraftTradeVetoMode; vetoThreshold: number }> {
-  const settings = await db.redraftLeagueExtendedSettings.findUnique({
-    where: { leagueId },
-    select: { commissionerTradeReviewType: true },
-  })
+  const [settings, league] = await Promise.all([
+    db.redraftLeagueExtendedSettings.findUnique({
+      where: { leagueId },
+      select: { commissionerTradeReviewType: true },
+    }),
+    readLeagueVetoInputs(db, leagueId),
+  ])
   return {
     vetoMode: vetoModeFromReviewType(settings?.commissionerTradeReviewType),
-    vetoThreshold: REDRAFT_DEFAULT_VETO_THRESHOLD,
+    vetoThreshold: league ? redraftVetoThreshold(readVetoRule(league.settings), league.leagueSize) : REDRAFT_DEFAULT_VETO_THRESHOLD,
   }
 }

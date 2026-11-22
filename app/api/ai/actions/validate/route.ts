@@ -8,7 +8,7 @@ import { validateActionExecutionServerSide } from '@/lib/chimmy-actions/AIAction
 
 const ActionTypeSchema = z.string().refine(
   (value): value is AIActionType => value in AI_ACTION_REGISTRY,
-  'Unsupported AI action type.',
+  'Unsupported Chimmy action type.',
 )
 
 const RoleSchema = z.enum(['member', 'co-owner', 'commissioner', 'admin']).nullable()
@@ -30,16 +30,16 @@ const ActionSchema = z.object({
   requiredPermissions: z.array(z.enum(['member', 'co_owner', 'commissioner', 'admin', 'premium', 'commissioner_subscription'])),
   isAvailable: z.boolean(),
   disabledReason: z.string().nullable(),
-  payload: z.record(z.unknown()),
+  payload: z.record(z.string(), z.unknown()),
   prefillTarget: z.string().nullable().optional(),
-  prefillData: z.record(z.unknown()).optional(),
+  prefillData: z.record(z.string(), z.unknown()).optional(),
   workflowPrefill: z
     .object({
       workflowType: z.string().min(1),
       sport: z.string().nullable().optional(),
       leagueId: z.string().nullable().optional(),
       teamId: z.string().nullable().optional(),
-      values: z.record(z.unknown()),
+      values: z.record(z.string(), z.unknown()),
     })
     .nullable()
     .optional(),

@@ -39,6 +39,20 @@ const base = (settings: Record<string, unknown>) => ({
 })
 
 describe('NativeWaiversScreen', () => {
+  it('an imported league is told up front that a claim here stays in AllFantasy; a native league is not', async () => {
+    // The settings route's Write Authority (lib/league/write-authority.ts) marks an imported league `shadow`.
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: true, sourceLabel: 'Fantrax' } }))
+    const { unmount } = render(<NativeWaiversScreen league={{ ...league, platform: 'fantrax' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.getByTestId('shadow-league-waiver-notice').textContent).toContain('nothing is submitted to Fantrax')
+    unmount()
+
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: false } }))
+    render(<NativeWaiversScreen league={league} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.queryByTestId('shadow-league-waiver-notice')).toBeNull()
+  })
+
   it('a FAAB league claims through the claim drawer, never an instant add', async () => {
     const calls = stubFetch(base({ waiverType: 'faab', faabBudget: 100 }))
     render(<NativeWaiversScreen league={league} />)
@@ -59,5 +73,37 @@ describe('NativeWaiversScreen', () => {
     await waitFor(() => expect(calls.some((c) => c.url.includes('/add-drop') && c.init?.method === 'POST')).toBe(true))
     const body = JSON.parse(String(calls.find((c) => c.url.includes('/add-drop'))!.init!.body))
     expect(body).toEqual({ addPlayerId: 'p1', dropPlayerId: null })
+  })
+
+  it('shows each player\'s headshot, team crest and season stat line — NFL and NBA', async () => {
+    const nfl = {
+      ...player('p1', 'Tank Bigsby', 'RB', 11.2),
+      sport: 'NFL',
+      headshotUrl: 'https://sleepercdn.com/content/nfl/players/9997.jpg',
+      teamLogoUrl: 'https://a.espncdn.com/i/teamlogos/nfl/500/jax.png',
+      normalizedStats: { cacheStats: { rushing_yards: 766, rushing_touchdowns: 7, games_played: 17 } },
+    }
+    stubFetch({ ...base({ waiverType: 'fcfs' }), '/players': { players: [nfl] } })
+    const { unmount } = render(<NativeWaiversScreen league={league} />)
+    expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
+    expect(screen.getByAltText('Tank Bigsby').getAttribute('src')).toBe(nfl.headshotUrl)
+    expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nfl.teamLogoUrl)
+    // Each season figure under its own label (a labelled strip on a phone, one line on a wide screen).
+    expect(screen.getByTestId('native-waivers-stats-p1').textContent).toBe('RUSH YDS766TD7')
+    unmount()
+
+    const nba = {
+      id: 'n1', name: 'Jalen Brunson', position: 'PG', team: 'New York Knicks', sport: 'NBA', projectedPoints: null, injuryStatus: null,
+      headshotUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/mr4fe21711892054.png',
+      teamLogoUrl: 'https://r2.thesportsdb.com/images/media/team/badge/knicks.png',
+      normalizedStats: { cacheStats: { points: 1927, total_rebounds: 247, assists: 503, games_played: 74 } },
+      product: { unified: {} },
+    }
+    stubFetch({ ...base({ waiverType: 'fcfs' }), '/players': { players: [nba] } })
+    render(<NativeWaiversScreen league={{ ...league, sport: 'NBA' } as UserLeague} />)
+    expect(await screen.findByText('Jalen Brunson')).toBeTruthy()
+    expect(screen.getByAltText('Jalen Brunson').getAttribute('src')).toBe(nba.headshotUrl)
+    expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nba.teamLogoUrl)
+    expect(screen.getByTestId('native-waivers-stats-n1').textContent).toBe('PTS/G26REB/G3.3AST/G6.8')
   })
 })

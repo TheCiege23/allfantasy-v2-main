@@ -8,6 +8,7 @@ import {
   isSubscriptionEntitlementBypassUserId,
 } from "@/lib/dev-admin/access"
 import { prisma } from "@/lib/prisma"
+import { provenPrivilegedEmail } from "@/lib/auth/provenPrivilegedEmail"
 import {
   hasFeatureAccessForPlans,
   isActiveOrGraceStatus,
@@ -84,12 +85,15 @@ function mapPlanCodeToPlanId(code: string | null | undefined): SubscriptionPlanI
 }
 
 export class EntitlementResolver {
+  constructor(private readonly db: Pick<typeof prisma, 'userSubscription' | 'adminSubscriptionGrant'> = prisma) {}
+
   async resolveForUser(
     userId: string,
     featureId?: SubscriptionFeatureId,
-    email?: string | null
+    email?: string | null,
+    options?: { strictReads?: boolean },
   ): Promise<EntitlementResolveResult> {
-    const entitlement = await this.resolveSnapshot(userId, email)
+    const entitlement = await this.resolveSnapshot(userId, email, options)
     const hasAccess = featureId
       ? this.hasFeatureAccess(entitlement, featureId)
       : isActiveOrGraceStatus(entitlement.status)
@@ -110,22 +114,22 @@ export class EntitlementResolver {
     }
   }
 
-  async resolveSnapshot(userId: string, email?: string | null): Promise<EntitlementSnapshot> {
-    if (isSubscriptionEntitlementBypassUserId(userId, email)) {
+  async resolveSnapshot(userId: string, email?: string | null, options?: { strictReads?: boolean }): Promise<EntitlementSnapshot> {
+    if (isSubscriptionEntitlementBypassUserId(userId, await provenPrivilegedEmail(userId, email))) {
       return buildDevAdminEntitlementSnapshot()
     }
 
     const now = new Date()
 
     const [subscriptions, activeGrants] = await Promise.all([
-      (prisma as any).userSubscription
+      (this.db as any).userSubscription
         .findMany({
           where: { userId },
           include: { plan: { select: { code: true } } },
           orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
         })
-        .catch(() => []) as Promise<DbUserSubscriptionRow[]>,
-      (prisma as any).adminSubscriptionGrant
+        .catch((error: unknown) => { if (options?.strictReads) throw error; return [] }) as Promise<DbUserSubscriptionRow[]>,
+      (this.db as any).adminSubscriptionGrant
         .findMany({
           where: {
             userId,
@@ -135,7 +139,7 @@ export class EntitlementResolver {
           orderBy: [{ expiresAt: "desc" }],
           select: { tier: true, expiresAt: true },
         })
-        .catch(() => []) as Promise<Array<{ tier: string; expiresAt: Date }>>,
+        .catch((error: unknown) => { if (options?.strictReads) throw error; return [] }) as Promise<Array<{ tier: string; expiresAt: Date }>>,
     ])
 
     if (!subscriptions.length && !activeGrants.length) {

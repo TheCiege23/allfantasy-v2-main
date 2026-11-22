@@ -1,17 +1,19 @@
 /**
  * GET/PUT: Survivor idol setup (survivor-theme handoff, IdolSetup).
- * Any league member can read the counts and league values; the drawn and picked types reach only
- * the commissioner (and not when they hid the draw from themselves). Only the commissioner writes,
- * and only before the draft starts.
+ * Any league member can read the counts and league values; the picked types reach only the
+ * commissioner, and the DRAWN types only a commissioner who does not play (and did not hide the
+ * draw from themselves) — a playing commissioner is a manager for hidden information. Only the
+ * commissioner writes, and only before the draft starts.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { getSurvivorIdolSetupView, saveSurvivorIdolConfig } from '@/lib/survivor/survivorIdolConfigService'
+import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +29,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
   if (!(await canAccessLeagueDraft(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!(await isSurvivorLeague(leagueId))) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
-  const view = await getSurvivorIdolSetupView(leagueId, { isCommissioner: await isCommissioner(leagueId, userId) })
+  const [commissioner, access] = await Promise.all([canCommissionerAct(leagueId, userId, 'view'), resolveSurvivorAccessContext(leagueId, userId)])
+  const view = await getSurvivorIdolSetupView(leagueId, { isCommissioner: commissioner, canSeeDraw: Boolean(access?.decisions.canSeeHiddenIdolAssignments) })
   return NextResponse.json(view, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -36,11 +39,12 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
-  if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   if (!(await isSurvivorLeague(leagueId))) return NextResponse.json({ error: 'Not a survivor league' }, { status: 404 })
   const body = await req.json().catch(() => null)
   const result = await saveSurvivorIdolConfig(leagueId, body)
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
-  const view = await getSurvivorIdolSetupView(leagueId, { isCommissioner: true })
+  const access = await resolveSurvivorAccessContext(leagueId, userId)
+  const view = await getSurvivorIdolSetupView(leagueId, { isCommissioner: true, canSeeDraw: Boolean(access?.decisions.canSeeHiddenIdolAssignments) })
   return NextResponse.json(view)
 }

@@ -19,8 +19,8 @@ import { legalLastUpdated } from "@/lib/legal/legalVersions"
  * lib/legal/legalVersions at that moment.
  */
 
-export type LegalDocument = "terms" | "disclaimer" | "privacy"
-export type LegalAcceptanceSource = "signup" | "age_prompt"
+type LegalDocument = "terms" | "disclaimer" | "privacy"
+type LegalAcceptanceSource = "signup" | "age_prompt"
 
 type Db = Pick<typeof prisma, "legalAcceptance">
 

@@ -17,6 +17,8 @@
 export const CHIMMY_PLAN_DAILY_INCLUDED = 100
 
 export type ChimmyPlanAllowanceView = {
+  /** Free answers are separate from purchased AF Tokens and subscription answers. */
+  kind?: 'free' | 'plan'
   /** True when this answer came out of the allowance; false when it was used up and tokens applied. */
   included: boolean
   planName: string
@@ -38,6 +40,7 @@ export function readPlanAllowanceView(value: unknown): ChimmyPlanAllowanceView |
   if (!isCount(v.used) || !isCount(v.limit) || v.limit <= 0) return null
   if (typeof v.resetsAt !== 'string') return null
   return {
+    ...(v.kind === 'free' || v.kind === 'plan' ? { kind: v.kind } : {}),
     included: v.included,
     planName: v.planName.trim(),
     used: Math.min(Math.floor(v.used), Math.floor(v.limit)),
@@ -49,6 +52,11 @@ export function readPlanAllowanceView(value: unknown): ChimmyPlanAllowanceView |
 
 /** Under an answer: what this one did to the allowance. */
 export function describeAnswerAllowance(view: ChimmyPlanAllowanceView): string {
+  if (view.kind === 'free') {
+    if (view.released) return `Not counted · ${view.used} of ${view.limit} free answers used today`
+    if (view.included) return `Free daily answer · ${view.used} of ${view.limit} today`
+    return `Today's ${view.limit} free answers are used · this answer used tokens`
+  }
   if (view.released) return `Not counted — ${view.used} of ${view.limit} ${view.planName} answers used today`
   if (view.included) return `Included with ${view.planName} · ${view.used} of ${view.limit} today`
   return `${view.planName}'s ${view.limit} daily answers are used — this one used tokens`
@@ -57,6 +65,12 @@ export function describeAnswerAllowance(view: ChimmyPlanAllowanceView): string {
 /** In the composer, before anything is sent. */
 export function describeAllowanceNote(view: ChimmyPlanAllowanceView, tokenCost: number | null): string {
   const left = Math.max(0, view.limit - view.used)
+  if (view.kind === 'free') {
+    const status = left > 0
+      ? `${left} of ${view.limit} free Chimmy answers left today.`
+      : `Today's ${view.limit} free Chimmy answers are used. They refill at midnight UTC.`
+    return status + (tokenCost != null ? ` Extra answers cost ${tokenCost} tokens, or use AF Pro.` : '')
+  }
   if (left > 0) {
     return `Included with ${view.planName}: ${left} of ${view.limit} Chimmy answers left today.` +
       (tokenCost != null ? ` After that, answers cost ${tokenCost} tokens.` : '')

@@ -6,6 +6,7 @@ import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core
 import { resolveLeagueAccess } from "@/lib/league-access"
 import { getLeagueChatMessages } from "@/lib/league-chat/LeagueChatMessageService"
 import { prisma } from "@/lib/prisma"
+import { leagueChatModerator } from "@/lib/commissioner/broadcastAccess"
 
 /**
  * GET /api/shared/chat/threads/[threadId]/pinned
@@ -50,7 +51,8 @@ export async function GET(_req: Request, props: { params: Promise<{ threadId: st
         },
       })
       const pinned = bracketMessagesToPlatform(rows.reverse(), threadId)
-      return NextResponse.json({ status: "ok", pinned })
+      // Bracket pools keep their old rule (any member pins); the commissioner-only rule is league chat's.
+      return NextResponse.json({ status: "ok", pinned, canPin: true })
     }
 
     /*
@@ -71,12 +73,16 @@ export async function GET(_req: Request, props: { params: Promise<{ threadId: st
      * `messageTypeIn` filters in SQL, so the board holds pins and not whatever
      * happens to be recent.
      */
-    const pinned = await getLeagueChatMessages(leagueId, {
-      limit: 100,
-      requestingUserId: user.appUserId,
-      messageTypeIn: ["pin"],
-    })
-    return NextResponse.json({ status: "ok", pinned })
+    const [pinned, moderator] = await Promise.all([
+      getLeagueChatMessages(leagueId, {
+        limit: 100,
+        requestingUserId: user.appUserId,
+        messageTypeIn: ["pin"],
+      }),
+      leagueChatModerator(leagueId, user.appUserId),
+    ])
+    // `canPin` tells the conversation whether to offer Pin and unpin at all; the pin route decides.
+    return NextResponse.json({ status: "ok", pinned, canPin: moderator != null })
   }
   const all = await getPlatformThreadMessages(user.appUserId, threadId, 100)
   const pinned = all.filter((m) => m.messageType === "pin")

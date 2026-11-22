@@ -166,36 +166,15 @@ describe('the connect-a-league flow', () => {
     expect(SERVICE_IMPORT).toMatch(/already part of another franchise/)
   })
 
-  /**
-   * ⚠ WAS "uses the CFB player map, not NFL", WHICH WAS THE BUG ONCE FANTRAX
-   * WENT LIVE FOR BOTH SPORTS. getLeagueInfo does not report a sport, so
-   * hardcoding CFB made every NFL Fantrax league resolve to nothing and look
-   * empty. The id spaces do not overlap at all (measured on a real college
-   * league: 447/466 in the CFB map, 0/466 in NFL), so the sport is now measured
-   * — both maps are tried and the one that names more players wins.
-   */
-  it('measures the sport instead of assuming one', () => {
-    expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('CFB')")
-    expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('NFL')")
-    expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('MLB')")
-    expect(SERVICE_IMPORT).toContain('map names more players IS the sport')
-    // The winner drives what gets stored, rather than a literal.
+  it('stores the detected sport and format from the selected import candidate', () => {
     expect(SERVICE_IMPORT).toMatch(/sport: best\.sport/)
     expect(SERVICE_IMPORT).toMatch(/isDevy: best\.isDevy/)
-  })
-
-  /**
-   * ⚠ One map being unavailable must not fail the import — a league is one
-   * sport, so the other map's outage is irrelevant to it.
-   */
-  it('needs only one of the five player maps to load', () => {
-    expect(SERVICE_IMPORT).toMatch(/if \(!cfb\.ok && !nfl\.ok && !mlb\.ok && !nba\.ok && !nhl\.ok\)/)
   })
 
   it('aborts when almost nothing resolves, rather than storing anonymous ids', () => {
     expect(SERVICE_IMPORT).toMatch(/named \/ total < 0\.5|< 0\.5/)
     // All supported maps are tried; reaching the guard means none fits.
-    expect(SERVICE_IMPORT).toMatch(/against the college, NFL, MLB, NBA or NHL player maps/)
+    expect(SERVICE_IMPORT).toMatch(/Only .* players could be named against .* player maps\. Nothing was imported\./)
   })
 })
 

@@ -126,9 +126,28 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
     expect(screen.getByTestId('trade-grade-market').textContent).toContain('C')
     // The totals stay the league values the lines add up to.
     expect(container.querySelector('.af-tc-stepbar-totals')!.textContent).toContain('Get 5,153')
-    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('what your grade is taken on')
+    expect(screen.getByTestId('trade-roster-fit').textContent).toContain('used for your grade')
     expect(screen.getByTestId('trade-roster-fit').textContent).toContain('you cannot fill 1 TE slot')
     expect(screen.getByTestId('trade-value-grade-basis').textContent).toContain('Your grade is for your team')
+  })
+
+  /*
+   * Reported 2026-11-11: the phone bar read Get 8,433 / +1,679 while the counter sentence under the
+   * same grade said "reduces the quoted gap from 1,731" — the 52 the grade credits for an open roster
+   * spot was in the grade's totals and missing from the page's.
+   */
+  it('every total includes the roster-spot credit the grade includes, on the side the grade put it', async () => {
+    const base = mcBrideGrade()
+    serve({ ...base, getValue: base.getValue + 52, rosterSpot: { side: 'get', spots: 1, valuePerSpot: 52, value: 52 } })
+    const { container } = render(<TradeCenter league={{ id: 'grade-roster-spot', name: 'L', format: 'Dynasty', teamCount: 12 }} />)
+    await analyze(container)
+    const bar = container.querySelector('.af-tc-stepbar-totals')!.textContent!
+    expect(bar).toContain('Get 5,205')
+    expect(bar).toContain('Send 5,000')
+    expect(bar).toContain('+205')
+    // The side bar says why its total is above the rows, so they still add up.
+    expect(screen.getByTestId('trade-side-roster-spot').textContent).toContain('incl. open roster spot')
+    expect(screen.getByTestId('trade-side-roster-spot').textContent).toContain('52')
   })
 
   it('keeps a league-value headline when the grade is not a your-team grade', async () => {
@@ -256,7 +275,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
   it('pauses route polling while the first asset picker is open, before a player is selected', () => {
     expect(routeRefreshClaimed()).toBe(false)
     const view = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
-    fireEvent.click(screen.getAllByRole('button', { name: '+ Add asset', exact: true })[0])
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".af-tc-team[data-side='give'] .af-tc-add")!)
     expect(routeRefreshClaimed()).toBe(true)
     fireEvent.click(screen.getAllByRole('button', { name: 'Close', exact: true })[0])
     expect(routeRefreshClaimed()).toBe(false)
@@ -321,9 +340,9 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
       }] }) } : { ok: false, status: 500, json: async () => ({}) })
     const { container } = render(<TradeCenter league={{ id: `l-${Math.random()}`, name: 'L', format: 'Dynasty', teamCount: 12 }} />)
     await analyze(container)
-    expect(screen.getByText('Re-evaluated counteroffers')).toBeTruthy()
+    expect(screen.getByText('Ways to even it out')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add to proposal' }))
-    expect(container.querySelector('.af-tc-review')!.textContent).toContain('Depth Receiver')
+    expect(container.querySelector(".af-tc-team[data-side='get']")!.textContent).toContain('Depth Receiver')
     expect(container.querySelector('.af-tc-verdict')).toBeNull()
     await act(async () => { fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!) })
     const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/trade-value/analyze'))
@@ -344,7 +363,7 @@ describe('🛑 the page shows the numbers the grade is taken on', () => {
       fireEvent.click(container.querySelector<HTMLButtonElement>('.af-tc-stepbar-primary')!)
     })
 
-    const review = container.querySelector('.af-tc-review')!.textContent ?? ''
+    const review = container.querySelector('.af-tc-builder')!.textContent ?? ''
     expect(review).toContain('5,928')
     expect(review).toContain('base 4,500')
     // The totals add up to the grade's totals, not to the market prices.

@@ -74,7 +74,7 @@ describe('trade grading policy', () => {
     expect(policy.requiredEvidence).toEqual(expect.arrayContaining(['contract_terms', 'cap_ledgers', 'dead_money_rules']))
   })
 
-  test('the supplied Survivor Guillotine variant is a distinct phase-driven policy', () => {
+  test('the supplied Survivor Guilly variant is a distinct phase-driven policy', () => {
     const policy = resolveTradeGradingPolicy({
       concept: 'survivor',
       bestBall: false,

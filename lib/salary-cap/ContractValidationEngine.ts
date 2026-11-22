@@ -6,7 +6,7 @@ import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
 import { getOrCreateLedger } from './CapCalculationService'
 import type { ContractBidInput } from './types'
 
-export interface ValidationResult {
+interface ValidationResult {
   valid: boolean
   errors: string[]
 }

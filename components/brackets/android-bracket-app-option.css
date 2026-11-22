@@ -1,0 +1,57 @@
+.af-bracket-app-option {
+  box-sizing: border-box;
+  width: min(100%, 440px);
+  margin: 0 auto 16px;
+  padding: 16px;
+  border: 1px solid #267a80;
+  border-radius: 16px;
+  background: #10252d;
+  color: #effbfb;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.af-bracket-app-option a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #79eee1;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* League invite landing (components/league-join/AndroidInviteAppPrompt.tsx): pinned to the bottom so the
+   invite card above keeps its place, with room for a dismiss button. */
+.af-join-app-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(calc(100% - 32px), 440px);
+  margin: 0;
+  padding-right: 48px;
+  /* Above the floating theme toggle (fixed, z-40, bottom-right), which otherwise sat on top of the
+     dismiss button on a phone; the toggle is reachable again once the prompt is dismissed. */
+  z-index: 41;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.af-join-app-prompt p {
+  margin: 0;
+}
+.af-join-app-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 20px;
+}
+.af-join-app-prompt__close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: #effbfb;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}

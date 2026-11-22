@@ -98,7 +98,7 @@ export async function provisionSurvivorChats(
       await db.survivorChatChannel.update({ where: { id: existing.id }, data: { memberUserIds: tribeMembers } })
     } else {
       const ch = await db.survivorChatChannel.create({
-        data: { leagueId, name: `${tribe.name} Tribe`, channelType: 'tribe', tribeId: tribe.id, memberUserIds: tribeMembers },
+        data: { leagueId, name: `${tribe.name} Huddle`, channelType: 'tribe', tribeId: tribe.id, memberUserIds: tribeMembers },
         select: { id: true },
       })
       channelId = ch.id
@@ -107,7 +107,7 @@ export async function provisionSurvivorChats(
       await db.survivorTribe.update({ where: { id: tribe.id }, data: { chatChannelId: channelId } })
     }
 
-    tribeChannels.push({ tribeId: tribe.id, channelId: channelId!, name: `${tribe.name} Tribe`, memberCount: tribeMembers.length, created: channelCreated })
+    tribeChannels.push({ tribeId: tribe.id, channelId: channelId!, name: `${tribe.name} Huddle`, memberCount: tribeMembers.length, created: channelCreated })
   }
 
   if (created) {

@@ -1,8 +1,9 @@
 'use client'
 
 import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
@@ -13,6 +14,12 @@ import { isPerGameBasis } from '@/lib/waivers/waiverSportBasis'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiverLineupBoardMessages } from '@/lib/core-app/messages/waiverLineupBoard'
+import { crowdLine } from '@/lib/waivers/waiverCrowdLine'
+import { FilterChips } from '@/components/core-app/primitives/FilterChips'
+import { waiverPick, type WaiverPick } from '@/lib/core-app/waiversGuide'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -53,11 +60,22 @@ export type WaiverLineupBoardProps = {
    * of the order, so the list says what that costs against what waiting costs — facts, not a verdict.
    */
   rollingPriority?: { priority: number; leagueRosters: number } | null
+  /**
+   * The page headline reads the board's top row (2026-11-13 guide): called once the board loads, or
+   * fails. One read, shared — the headline never fetches a second copy of the wire.
+   */
+  onPick?: (pick: WaiverPick) => void
 }
 
-export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null }: WaiverLineupBoardProps) {
+export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null, onPick }: WaiverLineupBoardProps) {
+  const guide = useMessages(waiversGuideMessages)
   const [board, setBoard] = useState<WaiverBoard | null>(null)
   const [failed, setFailed] = useState(false)
+  /* The filter bar: a name search and one position chip at a time, over the ranked adds only. */
+  const [query, setQuery] = useState('')
+  const [pos, setPos] = useState<string | null>(null)
+  /* Phone only: the coverage notes fold behind one button (the stylesheet decides; see af-waivers.css). */
+  const [notesOpen, setNotesOpen] = useState(false)
   const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
   const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
   /*
@@ -66,7 +84,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
    * patterns rebuild the templated ones ("74 free agents are…") around their numbers.
    */
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiverLineupBoardMessages)
   const copy = (english: string) => coreUiCopy(english, language)
   /*
    * Arriving from the home's "Add <player> in <league>" button (TriageBestAdd): `player` is the add
@@ -88,11 +106,21 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         if (!r.ok) throw new Error(String(r.status))
         return (await r.json()) as WaiverBoard
       })
-      .then((b) => alive && setBoard(b))
-      .catch(() => alive && setFailed(true))
+      .then((b) => {
+        if (!alive) return
+        setBoard(b)
+        onPick?.(waiverPick(b))
+      })
+      .catch(() => {
+        if (!alive) return
+        setFailed(true)
+        // A failed board removes itself; the headline then says only what the page is for.
+        onPick?.({ kind: 'unranked' })
+      })
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onPick is a callback, not an input to the read
   }, [leagueId, out])
 
   // Bring the highlighted add into view once the board has drawn him.
@@ -117,7 +145,7 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
     return (
       <section className="af-card af-wv-section af-wlb" data-testid="waiver-lineup-board-loading" aria-busy="true">
         <div className="af-wv-section-head">
-          <h2 className="af-label">{es ? 'Vale la pena sumar' : 'Worth adding'}</h2>
+          <h2 className="af-label">{m.worthAdding}</h2>
         </div>
         <div className="af-wlb-skel" aria-hidden />
         <div className="af-wlb-skel" aria-hidden />
@@ -138,18 +166,15 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
       <div className="af-wv-section-head">
         {/* One "?" for the whole list — how +N, "over …" and AF are read — not four per row. */}
         <h2 className="af-label">
-          {es ? 'Vale la pena sumar' : 'Worth adding'} <TopicTip topic="worthAdding" />
+          {m.worthAdding} <TopicTip topic="worthAdding" />
         </h2>
-        {board.state === 'ok' && board.currentLineupPoints != null ? (
-          <span className="af-wv-section-note af-num">
-            {/* The BEST lineup your roster can field — not the one set on the platform. */}
-            {es ? 'tu mejor alineación' : 'your best lineup'} {board.currentLineupPoints}
-            {perGame ? (es ? ' por partido' : ' per game') : board.week ? (es ? ` · sem ${board.week}` : ` · wk ${board.week}`) : ''}
-          </span>
-        ) : null}
+        {/*
+          "your best lineup 133.7 · wk 9" stood here. Every row's "+N" is already against that lineup, so
+          the total was a second number to decode (2026-11-13 guide) — the "?" above explains the basis.
+        */}
       </div>
 
-      {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} es={es} /> : null}
+      {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
 
       {board.state !== 'ok' ? (
         <p className="af-wlb-why">{copy(REASON[board.state])}</p>
@@ -163,15 +188,28 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
           )}
         </p>
       ) : (
+        <DynastyMarkersScope markers={board.dynastyMarkers}>
+        <WaiverFilteredList candidates={board.candidates} query={query} pos={pos} onQuery={setQuery} onPos={setPos}>
+          {(shown) => (
         <ul className="af-wlb-list">
-          {board.candidates.map((c) => (
+          {shown.map((c) => (
             <li
               key={c.sleeperId ?? c.playerKey ?? c.name}
               className="af-wlb-row"
               data-wlb-player={c.sleeperId ?? undefined}
               data-highlight={highlight && c.sleeperId === highlight ? 'true' : undefined}
             >
+              {/*
+                The position as a tinted badge leading the row (the redesign's table). Decorative: the
+                meta line still says the position in text — only hidden visually while the badge is
+                there (af-waivers.css), so a reader hears it once.
+              */}
+              <span className="af-wlb-pos" data-pos={posKey(c.position)} aria-hidden="true">
+                {c.position ?? '—'}
+              </span>
               <span className="af-wlb-who">
+                {/* Dynasty leagues: age / ROOKIE chips after the name (renders the name alone otherwise). */}
+                <DynastyNameLine markerKey={c.sleeperId}>
                 <span className="af-wlb-name">
                   {/*
                     Opens the player card in this league's context (handoff STATE 7). Outside the
@@ -188,22 +226,23 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                     leagueId={leagueId}
                   />
                 </span>
+                </DynastyNameLine>
                 <span className="af-wlb-meta">
-                  {c.position ?? '—'}
-                  {c.team ? ` · ${c.team}` : ''} · {es ? 'proy' : 'proj'}{' '}
-                  <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
-                  {/* AllFantasy's own engine, beside the provider's figure. */}
-                  {c.afProjectedPoints != null ? (
-                    <>
-                      {' · '}
-                      <span
-                        className="af-wlb-af af-num"
-                        title={es ? 'Proyección del motor de AllFantasy, ajustada a la puntuación de esta liga' : "AllFantasy engine projection, adjusted to this league's scoring"}
-                      >
-                        AF {c.afProjectedPoints.toFixed(1)}
-                      </span>
-                    </>
-                  ) : null}
+                  <span className="af-wlb-meta-pos">{c.position ?? '—'} · </span>
+                  {c.team ? `${c.team} · ` : ''}
+                  {/* One unit: the chips after it must not leave "proj" at a line end without its number. */}
+                  {/*
+                    ONE projection on the row (2026-11-13 guide): "proj 11.1 · AF 11.8" made the reader
+                    pick between two numbers that rank nothing. The ranking runs on `projectedPoints`;
+                    AllFantasy's own figure stays one hover away, in the title.
+                  */}
+                  <span
+                    className="af-wlb-proj"
+                    title={c.afProjectedPoints != null ? guide.afTitle(c.afProjectedPoints.toFixed(1)) : undefined}
+                  >
+                    {m.proj}{' '}
+                    <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  </span>
                   {/*
                     ⚠ A FORM NUMBER IS BACKWARD-LOOKING AND SAYS SO. It is a recency-weighted mean
                     of what he has actually scored here, used only where no projection feed covers
@@ -214,19 +253,49 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                   {c.basis === 'form' ? (
                     <span
                       className="af-wlb-chip"
-                      title={es ? 'Ninguna proyección lo cubre: esto es lo que viene anotando aquí' : 'No projection feed covers him — this is his recent scoring here'}
+                      title={m.formTitle}
                     >
-                      {es ? `forma · ${c.formGames} p` : `form · ${c.formGames}g`}
+                      {m.formChip(c.formGames)}
                     </span>
                   ) : null}
                   {c.basis === 'season_rate' ? (
                     <span
                       className="af-wlb-chip"
-                      title={es ? 'Un promedio por partido de la proyección de temporada de AllFantasy, no una proyección para esta semana' : "A per-game rate from AllFantasy's season projection, not a projection for this week"}
+                      title={m.seasonRateTitle}
                     >
-                      {es ? 'por partido · temporada' : 'per game · season'}
+                      {m.seasonRateChip}
                     </span>
                   ) : null}
+                  {/* A league-value-board add carries what it rests on (games, or at-bats / innings); thin is flagged. */}
+                  {c.sample ? (
+                    <span className="af-wlb-chip" title={m.gamesTitle} data-thin={c.sample.thin ? 'true' : undefined}>
+                      {m.sampleChip(c.sample.kind, c.sample.count, c.sample.thin)}
+                    </span>
+                  ) : null}
+                  {/*
+                    How synced Sleeper leagues see him (NFL only): the share that roster him and how
+                    many added him this week. The population is named in each title — these are
+                    leagues synced to AllFantasy, not all of Sleeper — and below five leagues the row
+                    shows nothing rather than a share of two.
+                  */}
+                  {(() => {
+                    const crowd = crowdLine(board.crowd, c.sleeperId)
+                    if (!crowd) return null
+                    return (
+                      <>
+                        {crowd.rosteredPct != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="rostered" title={m.rosteredTitle(crowd.syncedLeagues)}>
+                            {m.rosteredChip(crowd.rosteredPct)}
+                          </span>
+                        ) : null}
+                        {crowd.addedIn != null ? (
+                          <span className="af-wlb-crowd af-num" data-kind="added" title={m.addedTitle(crowd.addedIn, crowd.activeLeagues)}>
+                            {m.addedChip(crowd.addedIn)}
+                          </span>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                   {/*
                     The bid, from the Waiver intelligence rule — the only bid source on this
                     screen. A player that rule has no market value for gets no figure, never a
@@ -236,17 +305,11 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
                     <span
                       className="af-wlb-bid af-num"
                       data-over={faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining ? 'true' : undefined}
-                      title={
-                        es
-                          ? 'Oferta sugerida con la regla de Inteligencia de agentes libres de abajo: presupuesto × su valor de mercado ÷ el ancla, con un tope del 60% del presupuesto'
-                          : 'Suggested bid by the Waiver intelligence rule below: budget × his market value ÷ the anchor, capped at 60% of the budget'
-                      }
+                      title={m.bidTitle}
                     >
-                      {es ? 'oferta' : 'bid'} ~${bidQuotes[c.sleeperId]}
+                      {m.bid} ~${bidQuotes[c.sleeperId]}
                       {faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining
-                        ? es
-                          ? ` · más que tus $${faab.remaining} restantes`
-                          : ` · over your $${faab.remaining} left`
+                        ? m.overYourLeft(faab.remaining)
                         : ''}
                     </span>
                   ) : null}
@@ -257,35 +320,49 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
               <span className="af-wlb-over">
                 {c.displaces ? (
                   <>
-                    {es ? 'en lugar de' : 'over'} {c.displaces.name}{' '}
-                    <span className="af-num">
-                      ({c.displaces.projectedPoints.toFixed(1)}
-                      {c.displaces.afProjectedPoints != null ? ` · AF ${c.displaces.afProjectedPoints.toFixed(1)}` : ''})
-                    </span>
+                    {guide.replaces} {c.displaces.name}{' '}
+                    <span className="af-num">({c.displaces.projectedPoints.toFixed(1)})</span>
                   </>
                 ) : (
                   // No incumbent to name; a blank here would read as a bug.
-                  es ? 'ocupa un puesto vacío' : 'fills an empty slot'
+                  m.fillsEmptySlot
                 )}
               </span>
             </li>
           ))}
         </ul>
+          )}
+        </WaiverFilteredList>
+        </DynastyMarkersScope>
       )}
 
       {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
-        <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} es={es} />
+        <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} />
       ) : null}
 
       {/*
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
       */}
-      {board.notes.map((n) => (
-        <p key={n} className="af-wlb-note">
-          {copy(n)}
-        </p>
-      ))}
+      {board.notes.length > 0 ? (
+        <button
+          type="button"
+          className="af-wlb-notes-toggle"
+          aria-expanded={notesOpen}
+          aria-controls="af-wlb-notes"
+          onClick={() => setNotesOpen((open) => !open)}
+        >
+          {notesOpen ? guide.hideWhyNotListed : guide.whyNotListed}
+        </button>
+      ) : null}
+      <div className="af-wlb-notes" id="af-wlb-notes" data-open={notesOpen || undefined}>
+        {board.notes.map((n) => (
+          <p key={n} className="af-wlb-note">
+            {copy(n)}
+          </p>
+        ))}
+      </div>
+      {/* No "Why it matters" (2026-11-14): the list's GAIN column already says it is ranked by what each player adds. */}
     </section>
   )
 }
@@ -295,31 +372,135 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
  * and byes in the weeks just ahead. Three checkable facts (lib/waivers/rosterNeeds.ts) — nothing
  * here grades the roster.
  */
-function RosterNeedsStrip({ needs, es }: { needs: RosterNeeds; es: boolean }) {
+/** The tint family for a position badge: the four skill positions by name, kickers, and one for the rest. */
+function posKey(position: string | null | undefined): string {
+  const p = String(position ?? '').toUpperCase()
+  if (p === 'QB' || p === 'RB' || p === 'WR' || p === 'TE' || p === 'K') return p
+  return 'OTHER'
+}
+
+type Candidate = WaiverBoard['candidates'][number]
+
+/**
+ * The full-width filter bar over the ranked adds, then the list. Exported for tests.
+ *
+ * It filters what the board already ranked — it never asks for more players, and the ranking itself is
+ * untouched. Chips are the positions actually on the list (no chip that can only ever empty it), and the
+ * bar is not drawn for a list too short to need one.
+ */
+export function WaiverFilteredList({
+  candidates,
+  query,
+  pos,
+  onQuery,
+  onPos,
+  children,
+}: {
+  candidates: Candidate[]
+  query: string
+  pos: string | null
+  onQuery: (q: string) => void
+  onPos: (p: string | null) => void
+  children: (shown: Candidate[]) => ReactNode
+}) {
+  const m = useMessages(waiverLineupBoardMessages)
+  const positions = [...new Set(candidates.map((c) => c.position).filter((p): p is string => !!p))]
+  const q = query.trim().toLowerCase()
+  const shown = candidates.filter(
+    (c) => (pos == null || c.position === pos) && (q === '' || c.name.toLowerCase().includes(q)),
+  )
+  const showBar = candidates.length >= 3
+  /* The "All" chip's id: no position is spelled like this. */
+  const ALL_POSITIONS = '__all__'
+  return (
+    <>
+      {showBar ? (
+        <div className="af-wlb-filter" role="group" aria-label={m.filterLabel} data-testid="waiver-filter-bar">
+          <input
+            type="search"
+            className="af-wlb-search"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder={m.searchPlaceholder}
+            aria-label={m.searchLabel}
+          />
+          {positions.length > 1 ? (
+            /*
+              The shared FilterChips (components/core-app/primitives): one pressed pill is the position.
+              Tapping the pressed one again clears it, as before. `data-pos` keeps the position colour.
+            */
+            <FilterChips
+              className="af-wlb-chips"
+              ariaLabel={m.positionFilterLabel}
+              value={pos ?? ALL_POSITIONS}
+              onChange={(next) => onPos(next === ALL_POSITIONS || next === pos ? null : next)}
+              options={[
+                { id: ALL_POSITIONS, label: m.allPositions },
+                ...positions.map((p) => ({ id: p, label: p, data: { pos: posKey(p) } })),
+              ]}
+            />
+          ) : null}
+          {shown.length !== candidates.length ? (
+            <span className="af-wlb-count af-num" aria-live="polite">
+              {m.showing(shown.length, candidates.length)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {shown.length > 0 ? (
+        <>
+          {/* Column heads for the wide table; every row carries its own labels, so this is decoration. */}
+          <div className="af-wlb-head" aria-hidden="true">
+            <span />
+            <span>{m.colPlayer}</span>
+            <span>{m.colGain}</span>
+            <span>{m.colOver}</span>
+          </div>
+          {children(shown)}
+        </>
+      ) : (
+        <p className="af-wlb-why" data-testid="waiver-filter-empty">
+          {m.noMatches}{' '}
+          <button
+            type="button"
+            className="af-wlb-clear"
+            onClick={() => {
+              onQuery('')
+              onPos(null)
+            }}
+          >
+            {m.clearFilter}
+          </button>
+        </p>
+      )}
+    </>
+  )
+}
+
+function RosterNeedsStrip({ needs }: { needs: RosterNeeds }) {
+  const m = useMessages(waiverLineupBoardMessages)
   const byes = needs.byes.filter((b) => b.players.some((p) => p.starter))
   if (needs.emptySlots.length === 0 && needs.noBackup.length === 0 && byes.length === 0) return null
   return (
-    <ul className="af-wlb-needs" data-testid="waiver-roster-needs" aria-label={es ? 'Lo que necesita tu plantilla' : 'What your roster needs'}>
+    <ul className="af-wlb-needs" data-testid="waiver-roster-needs" aria-label={m.rosterNeedsLabel}>
       {needs.emptySlots.length > 0 ? (
         <li data-tone="bad">
           <span className="af-wlb-need-k">
-            {es ? 'Vacío' : 'Empty'}
-            {needs.week != null ? (es ? ` en sem ${needs.week}` : ` in wk ${needs.week}`) : ''}
+            {m.empty}
+            {needs.week != null ? m.inWeek(needs.week) : ''}
           </span>
           {needs.emptySlots.join(', ')}
         </li>
       ) : null}
       {needs.noBackup.map((n) => (
         <li key={n.position} data-tone="warn">
-          <span className="af-wlb-need-k">{es ? `Sin suplente de ${n.position}` : `No ${n.position} backup`}</span>
-          {es
-            ? `${n.rostered} en plantilla para ${n.starting} ${n.starting === 1 ? 'puesto titular' : 'puestos titulares'}`
-            : `${n.rostered} rostered for ${n.starting} starting ${n.starting === 1 ? 'slot' : 'slots'}`}
+          <span className="af-wlb-need-k">{m.noBackup(n.position)}</span>
+          {m.rosteredFor(n.rostered, n.starting)}
         </li>
       ))}
       {byes.map((b) => (
         <li key={b.week} data-tone={needs.week != null && b.week === needs.week ? 'bad' : 'muted'}>
-          <span className="af-wlb-need-k">{es ? `Descanso sem ${b.week}` : `Bye wk ${b.week}`}</span>
+          <span className="af-wlb-need-k">{m.byeWeek(b.week)}</span>
           {/* Starters only: a bench player's bye changes nothing you start. */}
           {b.players
             .filter((p) => p.starter)
@@ -341,41 +522,23 @@ function PriorityCost({
   priority,
   candidates,
   perGame,
-  es,
 }: {
   priority: { priority: number; leagueRosters: number }
   candidates: WaiverBoard['candidates']
   perGame: boolean
-  es: boolean
 }) {
+  const m = useMessages(waiverLineupBoardMessages)
   const [top, next] = candidates
-  const unit = perGame ? (es ? ' por partido' : ' per game') : ''
+  const unit = perGame ? m.perGame : ''
   const last = priority.priority === priority.leagueRosters
-  if (es) {
-    return (
-      <p className="af-wlb-priority" data-testid="waiver-priority-cost">
-        <strong>Tu prioridad: #{priority.priority} de {priority.leagueRosters}.</strong>{' '}
-        {last
-          ? 'Ya eres último, así que un reclamo no te cuesta ningún lugar en el orden.'
-          : `Un reclamo te manda al #${priority.leagueRosters}. `}
-        {!last
-          ? next
-            ? `${top.name} suma +${top.gain.toFixed(1)}${unit}; el siguiente, ${next.name}, suma +${next.gain.toFixed(1)}: una diferencia de ${(top.gain - next.gain).toFixed(1)} puntos es lo que compra gastarla.`
-            : `${top.name} (+${top.gain.toFixed(1)}${unit}) es el único agente libre que mejora tu alineación.`
-          : ''}
-      </p>
-    )
-  }
   return (
     <p className="af-wlb-priority" data-testid="waiver-priority-cost">
-      <strong>Your priority: #{priority.priority} of {priority.leagueRosters}.</strong>{' '}
-      {last
-        ? 'You are already last, so a claim costs you no place in the order.'
-        : `A claim sends you to #${priority.leagueRosters}. `}
+      <strong>{m.yourPriority(priority.priority, priority.leagueRosters)}</strong>{' '}
+      {last ? m.alreadyLast : m.claimSendsYouTo(priority.leagueRosters)}
       {!last
         ? next
-          ? `${top.name} adds +${top.gain.toFixed(1)}${unit}; the next best, ${next.name}, adds +${next.gain.toFixed(1)} — a ${(top.gain - next.gain).toFixed(1)}-point gap is what spending it buys.`
-          : `${top.name} (+${top.gain.toFixed(1)}${unit}) is the only free agent who improves your lineup.`
+          ? m.priorityGap(top.name, top.gain.toFixed(1), unit, next.name, next.gain.toFixed(1), (top.gain - next.gain).toFixed(1))
+          : m.onlyFreeAgent(top.name, top.gain.toFixed(1), unit)
         : ''}
     </p>
   )

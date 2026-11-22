@@ -12,14 +12,21 @@
 }
 
 .af-sp {
+  /* viewport-fit=cover includes the notch and home indicator. Center within
+     the safe region, including when Safari pans the visual viewport. */
+  --af-sp-top-gap: max(24px, calc(env(safe-area-inset-top, 0px) - var(--af-dialog-top, 0px)));
+  --af-sp-bottom-gap: max(24px, env(safe-area-inset-bottom, 0px));
+  --af-sp-left-gap: max(12px, env(safe-area-inset-left, 0px));
+  --af-sp-right-gap: max(12px, env(safe-area-inset-right, 0px));
+  --af-sp-height: calc(var(--af-dialog-height, 100dvh) - var(--af-sp-top-gap) - var(--af-sp-bottom-gap));
   position: fixed;
   z-index: 71;
-  top: 50%;
-  left: 50%;
+  top: calc(var(--af-dialog-top, 0px) + var(--af-sp-top-gap) + var(--af-sp-height) / 2);
+  left: calc((100vw + var(--af-sp-left-gap) - var(--af-sp-right-gap)) / 2);
   transform: translate(-50%, -50%);
-  width: min(460px, calc(100vw - 24px));
+  width: min(460px, calc(100vw - var(--af-sp-left-gap) - var(--af-sp-right-gap)));
   max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
+  max-height: var(--af-sp-height);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line2);
@@ -256,4 +263,15 @@
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--bad);
+}
+
+/* Touch controls need room for a thumb in both phone orientations. */
+@media (pointer: coarse) {
+  .af-core .af-sp-input,
+  .af-core .af-sp-select,
+  .af-core .af-sp-textarea { font-size: 16px; min-height: 44px; }
+  .af-core .af-sp-close { width: 44px; height: 44px; }
+  .af-core .af-sp-chip,
+  .af-core .af-sp-btn { min-height: 44px; min-width: 44px; }
+  .af-core .af-sp-diag-list label { min-height: 44px; }
 }

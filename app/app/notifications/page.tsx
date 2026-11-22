@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { FinalScoreLogos } from "@/components/notifications/FinalScoreLogos"
 import {
   Bell,
   Check,
@@ -15,7 +16,6 @@ import {
 import { EmptyStateRenderer, ErrorStateRenderer, LoadingStateRenderer } from "@/components/ui-states"
 import { resolveNoResultsState, resolveRecoveryActions } from "@/lib/ui-state"
 import { useNotifications } from "@/hooks/useNotifications"
-import type { PlatformNotification } from "@/types/platform-shared"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import {
   getNotificationDestination,
@@ -179,6 +179,7 @@ export default function NotificationsPage() {
                             <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
                               {n.title}
                             </p>
+                            <FinalScoreLogos type={n.type} meta={n.meta} />
                             {n.body && (
                               <p className="mt-0.5 text-xs" style={{ color: "var(--muted2)" }}>
                                 {n.body}

@@ -1,5 +1,4 @@
 import type { IExternalScoringMapper } from '../../mappers/ExternalScoringMapper'
-import type { NormalizedScoring } from '../../types'
 import type { SleeperImportPayload } from './types'
 
 export const SleeperScoringMapper: IExternalScoringMapper<SleeperImportPayload> = {

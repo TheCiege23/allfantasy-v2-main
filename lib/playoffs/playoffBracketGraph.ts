@@ -19,7 +19,7 @@ import type { PlayoffRoundKey, PlayoffSeriesView, PlayoffSport } from "./types"
  */
 
 /** Which half of the draw a column belongs to, reading outward from the final. */
-export type BracketSide = "left" | "right"
+type BracketSide = "left" | "right"
 
 export type BracketNode = {
   series: PlayoffSeriesView
@@ -138,7 +138,7 @@ export function descendantsOf(seriesNumber: number, graph: BracketGraph): Set<nu
   return out
 }
 
-export type SeriesOdds = { home: number; away: number; basis: "live" | "seed" | "unknown" }
+type SeriesOdds = { home: number; away: number; basis: "live" | "seed" | "unknown" }
 
 /**
  * Win probability for a series.
@@ -164,12 +164,7 @@ export function seriesOdds(series: PlayoffSeriesView): SeriesOdds {
   return { home, away: 100 - home, basis: "seed" }
 }
 
-/** True once both sides name a real club rather than a placeholder. */
-export function isResolved(series: PlayoffSeriesView, isOfficial: (n: string | null) => boolean): boolean {
-  return isOfficial(series.homeTeamName) && isOfficial(series.awayTeamName)
-}
-
-export type SeriesStatusKind = "live" | "final" | "scheduled" | "tbd"
+type SeriesStatusKind = "live" | "final" | "scheduled" | "tbd"
 
 export function seriesStatusKind(
   series: PlayoffSeriesView,
@@ -211,10 +206,10 @@ export function abbreviate(name: string | null | undefined): string {
   return words[words.length - 1].slice(0, 3).toUpperCase()
 }
 
-export type SportRoundLabels = Partial<Record<PlayoffRoundKey, string>>
+type SportRoundLabels = Partial<Record<PlayoffRoundKey, string>>
 
 /** Short round labels for the column headers, per sport vocabulary. */
-export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
+const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
   mlb: {
     wild_card: "Wild Card",
     division_series: "Division",
@@ -232,6 +227,18 @@ export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
     conference_semifinals: "Round 2",
     conference_finals: "Conf. Finals",
     finals: "Stanley Cup",
+  },
+  nba_cup: {
+    cup_group_play: "Group Play",
+    cup_quarterfinals: "Quarterfinals",
+    cup_semifinals: "Semifinals",
+    cup_championship: "Championship",
+  },
+  nfl: {
+    nfl_wild_card: "Wild Card",
+    nfl_divisional: "Divisional",
+    nfl_conference: "Conference",
+    nfl_super_bowl: "Super Bowl",
   },
   ncaaf: {
     cfp_first_round: "First Round",
@@ -257,6 +264,10 @@ export function sideLabel(conference: string | null): string {
       return "Eastern Conference"
     case "west":
       return "Western Conference"
+    case "afc":
+      return "AFC"
+    case "nfc":
+      return "NFC"
     case "upper":
       return "Upper Bracket"
     case "lower":

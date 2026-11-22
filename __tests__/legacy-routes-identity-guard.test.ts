@@ -64,8 +64,9 @@ const UNGATED_HANDLER_ALLOWANCE: Record<string, number> = {
  *
  * Deliberately separate from `PUBLIC_ALLOWLIST`: those routes are legitimately public and
  * justified. These are not. Every one takes a caller-supplied `username` from the query
- * string and serves whoever it names; 9 of them "gate" on `requireAuthOrOrigin`, which
- * returns `authenticated: true` for an anonymous caller and so authenticates nobody.
+ * string and serves whoever it names. When this list was written, 9 of them "gated" on
+ * `requireAuthOrOrigin`, which returns `authenticated: true` for an anonymous caller and so
+ * authenticates nobody. Those have since been fixed and removed; the three left are below.
  *
  * They are listed rather than fixed because they were invisible until the `searchParams?.`
  * regex fix in this file, and they are NOT the legacy-Sleeper class this sweep closed:
@@ -80,17 +81,15 @@ const UNGATED_HANDLER_ALLOWANCE: Record<string, number> = {
  * CI green is the exact failure this file exists to prevent.
  */
 const KNOWN_UNGATED: Record<string, string> = {
-  'insights/route.ts': 'Serves getUnreadInsights(username) behind requireAuthOrOrigin.',
-  'badges/route.ts': 'Reads badges for the named user behind requireAuthOrOrigin.',
-  'ai-gm-analyze/route.ts': 'LLM-calling; requireAuthOrOrigin only — also a billing vector.',
+  // insights, badges, ai-gm-analyze and simulations were removed 2026-11 (security/hardening-2026-11):
+  // they now resolve identity through requireLegacySleeperIdentity, so this file checks them.
   'pre-analysis/route.ts': 'Reads analysis for the named user; ungated.',
-  'simulations/route.ts': 'Reads simulations for the named user behind requireAuthOrOrigin.',
   'cfb-players/route.ts': 'FANTRAX identity space (fantraxUsername) — needs a different gate.',
   'fantrax/route.ts': 'FANTRAX identity space — needs a different gate.',
 }
 
 /** Ratchet ceiling. Lower it as routes are fixed; never raise it. */
-const KNOWN_UNGATED_CEILING = 7
+const KNOWN_UNGATED_CEILING = 3
 
 /**
  * Username arriving from the caller — property access, destructuring, or a query param.

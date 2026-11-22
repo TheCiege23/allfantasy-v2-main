@@ -48,8 +48,12 @@ vi.mock('@/lib/prisma', () => {
 // Graders reach Sleeper for a Sleeper league; neither is under test here.
 vi.mock('@/lib/draft-intel/draftReportService', () => ({ getDraftReport: vi.fn(async () => null) }))
 vi.mock('@/lib/draft-intel/importedDraftReport', () => ({ buildImportedDraftReport: vi.fn(async () => null) }))
+// The dynasty rookie room reads the future-pick inventory (which re-reads the league row) on its own;
+// its reads are tested in draft-hq-rookie-room.test.tsx. This file counts the lottery's reads, so the
+// room is stubbed out here rather than letting it move those counts.
+vi.mock('@/lib/core-app/draftHqRookieRoomLoad', () => ({ loadRookieDraftRoom: vi.fn(async () => null) }))
 
-import { computePickInventory, getDraftHqData } from '@/lib/core-app/draftHq'
+import { computePickInventory, getDraftHqData, getDraftLotteryOdds } from '@/lib/core-app/draftHq'
 
 const L = 'league-1'
 const U = 'user-1'
@@ -402,6 +406,7 @@ describe('getDraftHqData — weighted lottery', () => {
       pickCount: 2,
       playoffTeamCount: 2,
       fallbackOrder: 'reverse order of finish',
+      fallbackMode: 'reverse_standings',
       alreadyRunAt: null,
     })
     // Weights rank PF within the pool, lowest scorer heaviest: Delta (800) 2, Mine (900) 1.
@@ -409,6 +414,16 @@ describe('getDraftHqData — weighted lottery', () => {
       ['Mine', '5-8', 33.3, true],
       ['Delta', '2-10-1', 66.7, false],
     ])
+  })
+
+  it('getDraftLotteryOdds (the dynasty standings card) answers exactly what Draft HQ shows', async () => {
+    lotteryLeague()
+    const hq = await getDraftHqData(L, U)
+    lotteryLeague()
+    const odds = await getDraftLotteryOdds(L, U)
+    expect(odds).toEqual(hq?.lottery)
+    lotteryLeague({ isDynasty: false })
+    expect((await getDraftLotteryOdds(L, U))?.available).toBe(false)
   })
 
   it('🛑 a league that is not dynasty is refused from the row it already has — no extra read', async () => {

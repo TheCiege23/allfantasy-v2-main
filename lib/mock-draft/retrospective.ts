@@ -79,21 +79,21 @@ function inferMissReason(
 
   if (actual.position !== predicted.position) {
     return {
-      reason: `Position surprise: AI expected ${predicted.position}, manager went ${actual.position}`,
+      reason: `Position surprise: Chimmy expected ${predicted.position}, manager went ${actual.position}`,
       scorecardInsight: `Team Need weight (${sc.teamNeedWeight}%) may have been miscalibrated for ${actual.position} demand`,
     }
   }
 
   if (sc.managerTendencyWeight > 35) {
     return {
-      reason: `Manager tendency overweighted — AI leaned too heavily on historical behavior`,
+      reason: `Manager tendency overweighted — Chimmy leaned too heavily on historical behavior`,
       scorecardInsight: `Tendency weight was ${sc.managerTendencyWeight}%, but manager deviated from pattern`,
     }
   }
 
   if (sc.adpWeight > 45) {
     return {
-      reason: `ADP-driven miss — AI trusted consensus ranking too much`,
+      reason: `ADP-driven miss — Chimmy trusted consensus ranking too much`,
       scorecardInsight: `ADP weight was ${sc.adpWeight}%, actual pick was a reach or value grab`,
     }
   }
@@ -108,12 +108,12 @@ function inferMissReason(
   if (actualProb > 0 && actualProb < predicted.probability) {
     return {
       reason: `Close call — actual pick was in predictions but ranked lower (${actualProb}% vs ${predicted.probability}%)`,
-      scorecardInsight: `The AI identified the player but underestimated probability by ${predicted.probability - actualProb}%`,
+      scorecardInsight: `Chimmy identified the player but underestimated probability by ${predicted.probability - actualProb}%`,
     }
   }
 
   return {
-    reason: `Unpredicted pick — ${actual.playerName} was not in the AI's top targets`,
+    reason: `Unpredicted pick — ${actual.playerName} was not in the Chimmy's top targets`,
     scorecardInsight: `All five scoring factors missed this selection`,
   }
 }

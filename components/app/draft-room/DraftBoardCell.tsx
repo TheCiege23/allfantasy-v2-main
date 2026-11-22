@@ -1,15 +1,18 @@
 'use client'
 
 import React from 'react'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Gavel, History, Lock, Pencil } from 'lucide-react'
 import { withAlpha } from '@/lib/draft-room'
-import { LazyDraftImage } from './LazyDraftImage'
 import { PlayerAvatar } from './PlayerAvatar'
-import { isDefRowForAvatar } from '@/lib/draft-room/classify-avatar-source'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
+import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerImage } from '@/lib/players/getPlayerImage'
+import { positionTintHex } from '@/lib/draft-room/positionTint'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 
 export type DraftBoardCellPick = {
   overall: number
@@ -27,7 +30,10 @@ export type DraftBoardCellPick = {
   byeWeek: number | null
   displayName: string | null
   amount?: number | null
+  /** A kept player pre-assigned to this slot before the draft — not a pick anyone made. */
   isKeeper?: boolean
+  /** The kept player belongs to the viewer's roster. */
+  isViewerKeeper?: boolean
   isDevyPick?: boolean
   isCollegePick?: boolean
   isProPick?: boolean
@@ -47,6 +53,12 @@ export type DraftBoardCellPick = {
   experienceBadge?: string | null
   /** overall − market ADP, rounded; set only when large enough to badge (+ steal, − reach). */
   adpDelta?: number | null
+  /** League signature (room v2): the player's age, or a college pick's class year. */
+  signatureChip?: { kind: 'age' | 'class'; text: string; title: string } | null
+  /** Snake salary-cap signature: the contract this slot is signed to (`loadRookieContractTerms`). */
+  slotSalary?: { salary: number; years: number } | null
+  /** Keeper league: this kept player's year as a keeper (2+), from the league's keeper history. */
+  keeperYear?: number | null
 }
 
 function TinyHeadshot({
@@ -55,19 +67,21 @@ function TinyHeadshot({
   position,
   teamLogoUrl,
   teamAbbr,
+  size = 26,
 }: {
   name: string | null
   src: string | null
   /** F.1 — DEF picks render the team logo as the primary avatar. */
   position?: string | null
   /** F.1 — passed only for DEF picks; non-DEF cells keep the existing
-   * separate `TinyTeamLogo` badge so the layout doesn't change for normal players. */
+   * team on the line under the name. */
   teamLogoUrl?: string | null
   teamAbbr?: string | null
+  size?: number
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
-   * because TinyTeamLogo is rendered separately in this layout. */
+   * because the tile prints the team under the name. 40px on the square tiles. */
   return (
     <PlayerAvatar
       headshotUrl={src}
@@ -75,43 +89,15 @@ function TinyHeadshot({
       teamLogoUrl={teamLogoUrl}
       teamAbbr={teamAbbr}
       position={position}
-      size={22}
+      size={size}
       testIdBase="draft-board-cell-headshot"
     />
   )
 }
 
-function TinyTeamLogo({
-  team,
-  src,
-}: {
-  team: string | null
-  src: string | null
-}) {
-  const [imgError, setImgError] = React.useState(false)
-  if (src && !imgError) {
-    return (
-      <LazyDraftImage
-        src={src}
-        alt=""
-        width={14}
-        height={14}
-        className="rounded object-contain"
-        lazy
-        onError={() => setImgError(true)}
-      />
-    )
-  }
-  return (
-    <span className="inline-flex h-[14px] min-w-[14px] items-center justify-center rounded border border-cyan-300/50 bg-[#1a2844] px-0.5 text-[11px] font-bold text-cyan-100">
-      {team ? team.slice(0, 3).toUpperCase() : '—'}
-    </span>
-  )
-}
-
 export type PickHighlightTone = 'none' | 'user' | 'ai'
 
-export type DraftBoardCellProps = {
+type DraftBoardCellProps = {
   pick: DraftBoardCellPick
   isEmpty: boolean
   isCurrentPick?: boolean
@@ -137,9 +123,19 @@ export type DraftBoardCellProps = {
   presentationVariant?: 'default' | 'redraft_snake'
   /** Commissioner-only: opens the Pick Editor panel prefilled with this overall. Caller gates by viewer + draft state. */
   onCommissionerEditPick?: () => void
+  /** Filled cells: tap the tile to open the player card. The corner buttons stop propagation. */
+  onOpenPlayer?: () => void
+  /**
+   * Survivor signature: the column's tribe colour, drawn as a thin edge along the tile's top. The
+   * column header names the tribe, so the colour is never the only cue.
+   */
+  tribeColor?: string | null
 }
 
 /**
+ * Room v2 (2026-11): the on-the-clock tile is a dark tile with a cyan border, glow and an "On the
+ * clock" label, not a solid fill; your picks keep a thin cyan ring. Before v2:
+ *
  * ⚠ GOLD BELONGS TO "ON THE CLOCK" AND NOTHING ELSE ON THIS BOARD.
  *
  * The user tone used to be amber — the same family as the `#f6c445` on-the-clock cell. On a
@@ -150,9 +146,13 @@ export type DraftBoardCellProps = {
  * `ai` stays sky — distinct from both, and mutually exclusive with `user` on a given cell anyway.
  */
 function highlightClass(tone: PickHighlightTone | undefined): string {
-  if (tone === 'user')
-    return 'ring-1 ring-cyan-400/60 border-cyan-400/50 shadow-[0_4px_24px_rgba(34,211,238,0.24)]'
-  if (tone === 'ai') return 'ring-1 ring-sky-400/55 border-sky-400/45 shadow-[0_4px_26px_rgba(56,189,248,0.26)]'
+  // Gold = your picks, matching the legend. It was a cyan ring beside a cyan on-the-clock ring
+  // and a sky ring on Chimmy-run teams: three near-identical blues for three meanings.
+  // A white ring set off by a dark gap: tiles are coloured by POSITION (WR yellow, RB green...),
+  // so any coloured ring vanishes on one of them. Measured: gold on a WR tile could not be seen.
+  if (tone === 'user') return 'ring-2 ring-white ring-offset-2 ring-offset-[#0b1428]'
+  // Chimmy-run teams are marked AUTO in their column header; a fourth ring colour only added noise.
+  if (tone === 'ai') return ''
   return ''
 }
 
@@ -174,18 +174,6 @@ function StatusBadge({
   )
 }
 
-function PositionBadge({ pos }: { pos: string | null }) {
-  const p = (pos ?? '—').trim().slice(0, 4).toUpperCase()
-  return (
-    <span
-      className="inline-flex min-w-[1.5rem] shrink-0 items-center justify-center rounded-md border border-cyan-300/45 bg-cyan-500/25 px-1 py-0.5 text-[11px] font-bold text-cyan-100/95 shadow-sm"
-      title={pos ?? undefined}
-    >
-      {p}
-    </span>
-  )
-}
-
 function DraftBoardCellInner({
   pick,
   isEmpty,
@@ -201,9 +189,13 @@ function DraftBoardCellInner({
   onTradeFromCell,
   onViewTradeHistory,
   onCommissionerEditPick,
+  onOpenPlayer,
+  tribeColor,
   presentationVariant = 'default',
 }: DraftBoardCellProps) {
-  const rs = presentationVariant === 'redraft_snake'
+  const openPlayer = !isEmpty && pick.playerName?.trim() && onOpenPlayer ? onOpenPlayer : undefined
+  const { tInterpolate, t } = useOptionalLanguage()
+  const headerCopy = useMessages(draftRoomHeaderMessages)
   const sportNorm = normalizeToSupportedSport(pick.sport ?? sport ?? DEFAULT_SPORT)
 
   const normalized = React.useMemo(() => {
@@ -234,52 +226,89 @@ function DraftBoardCellInner({
     (normalized ? getPlayerImage(normalized, sportNorm) : null)
   const teamLogoSrc = normalized?.teamLogoUrl ?? null
 
-  const tint =
-    tradedPickColorMode && pick.tradedPickMeta?.tintColor
-      ? {
-          borderColor: withAlpha(pick.tradedPickMeta.tintColor, 0.54),
-          backgroundColor: withAlpha(pick.tradedPickMeta.tintColor, 0.16),
-        }
+  // Sleeper-style: a flat slate tile when empty, a solid position-coloured tile once filled.
+  // Trade colouring still wins when the commissioner turned it on.
+  const tradeHex = tradedPickColorMode ? pick.tradedPickMeta?.tintColor ?? null : null
+  const positionHex = !isEmpty ? positionTintHex(pick.position, sportNorm) : null
+  const fillHex = !isEmpty ? positionHex : tradeHex
+  /**
+   * A kept player was assigned before the draft — nobody picked them. A solid position tile made
+   * them indistinguishable from a real pick (the old cue was an 11px "K"), so a keeper is drawn
+   * LOCKED instead: dark striped tile, position-coloured edge, light text. The viewer's own keeper
+   * adds the accent ring the board already uses for "yours".
+   */
+  const isKept = Boolean(pick.isKeeper) && !isEmpty
+  const keptHex = positionHex ?? '#8b949e'
+  const tileStyle: React.CSSProperties | undefined = isKept
+    ? {
+        backgroundColor: '#101a2e',
+        backgroundImage: `repeating-linear-gradient(135deg, ${withAlpha(keptHex, 0.24)} 0 7px, transparent 7px 14px)`,
+        boxShadow: pick.isViewerKeeper
+          ? `inset 0 0 0 2px ${keptHex}, 0 0 0 2px #22d3ee`
+          : `inset 0 0 0 2px ${keptHex}`,
+      }
+    : fillHex
+      ? isEmpty
+        ? { backgroundColor: withAlpha(fillHex, 0.22), boxShadow: `inset 0 0 0 1px ${withAlpha(fillHex, 0.55)}` }
+        : { backgroundColor: fillHex }
       : undefined
-  const managerTint =
-    !tint && pick.managerTintColor
-      ? {
-          borderColor: withAlpha(pick.managerTintColor, 0.40),
-          backgroundColor: withAlpha(pick.managerTintColor, 0.11),
-        }
-      : undefined
+  // Filled tiles carry dark text on the bright position colour. Kept tiles are dark.
+  const onFill = !isEmpty && Boolean(positionHex) && !isKept
 
   const ownerLabel = pick.tradedPickMeta?.newOwnerName ?? pick.displayName ?? null
   const showTradeChip = Boolean(isEmpty && ownerLabel && pick.tradedPickMeta?.newOwnerName)
+  /**
+   * Provenance survives the pick: a made pick on a traded slot keeps a small "via X" marker (X = the
+   * slot's original owner). It sits on the first-name line so the tile keeps its height and its
+   * position colour; the trade tint only ever colours EMPTY cells.
+   */
+  const viaOwner = !isEmpty ? pick.tradedPickMeta?.previousOwnerName?.trim() || null : null
   const compactLabel = compactPickLabel(pick.pickLabel)
 
   const ariaLabel = isEmpty
     ? `Draft pick ${compactLabel}, empty slot`
-    : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
+    : isKept
+      ? `${pick.isViewerKeeper ? 'Your kept player' : 'Kept player'} ${pick.playerName ?? ''}, ${pick.position ?? ''}, ${pick.team ?? ''}, uses pick ${compactLabel}`
+      : `${pick.playerName ?? 'Player'}, ${pick.position ?? ''}, ${pick.team ?? ''}, pick ${compactLabel}`
 
-  const hoverLift = !isEmpty ? 'hover:z-[1] hover:-translate-y-px' : 'hover:z-[1]'
+  const hasRealHeadshot = Boolean(headshotSrc && classifyAvatarSource(headshotSrc) === 'headshot')
+  const hasStatusBadges = Boolean(
+    pick.isKeeper ||
+      pick.isDevyPick ||
+      pick.isCollegePick ||
+      pick.isProPick ||
+      pick.isPromotedFromDevy ||
+      showTradeChip ||
+      (isEmpty && (isCollegeRound || isDevyRound)),
+  )
+
+  /*
+   * Tile buttons. Empty tiles keep trade / history bottom-right. A filled tile's text runs to the
+   * bottom edge, and below md these buttons are always visible (no hover on touch), so there they
+   * move to the top-left corner, which a filled tile leaves free (the pick number is top-right).
+   */
+  const topLeftStart = onCommissionerEditPick ? 'left-6' : 'left-0.5'
+  const tradeSpot = isEmpty ? 'bottom-0.5 right-0.5' : `top-0.5 ${topLeftStart}`
+  const historySpot = isEmpty
+    ? onTradeFromCell ? 'bottom-0.5 right-6' : 'bottom-0.5 right-0.5'
+    : `top-0.5 ${onTradeFromCell ? (onCommissionerEditPick ? 'left-[46px]' : 'left-6') : topLeftStart}`
+
+  const nameParts = (pick.playerName ?? '').trim().split(/\s+/)
+  const firstName = nameParts.length > 1 ? nameParts[0] : ''
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : nameParts[0] ?? ''
 
   return (
     <div
-      className={`group relative flex h-[42px] min-h-[42px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[11px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[44px] sm:min-h-[44px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
-        onTradeFromCell ? 'pr-7 sm:pr-8' : ''
-      } ${
+      className={`group relative flex h-[68px] w-full flex-col overflow-hidden rounded-lg px-1.5 py-1 text-[11px] [container-type:inline-size] transition-[box-shadow,filter,background-color] duration-150 hover:z-[1] hover:brightness-110 ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''
       } ${
         isCurrentPick
-          ? rs
-            ? 'border-[#f6c445]/70 bg-[radial-gradient(ellipse_at_50%_0%,rgba(246,196,69,0.34),transparent),linear-gradient(155deg,rgba(246,196,69,0.2),rgba(15,23,42,0.96))] shadow-[0_0_46px_rgba(246,196,69,0.4)] ring-2 ring-[#f6c445]/70'
-            : 'border-[#f6c445]/75 bg-gradient-to-br from-[#f6c445]/26 via-[#28344e] to-[#1b2438] shadow-[0_0_40px_rgba(246,196,69,0.35)] ring-2 ring-[#f6c445]/70'
-          : isRecentPick
-            ? rs
-              ? 'border-emerald-400/42 bg-gradient-to-br from-emerald-500/18 via-[#142338] to-[#0f1c2e] ring-1 ring-emerald-400/38 shadow-[0_0_26px_rgba(52,211,153,0.22)]'
-              : 'border-emerald-400/46 bg-gradient-to-br from-emerald-500/18 via-[#1e2f46] to-[#172438] ring-1 ring-emerald-400/38 shadow-[0_0_24px_rgba(52,211,153,0.26)]'
-            : isEmpty
-              ? // Dashed per 8b: an unpicked slot reads as an outline waiting to be filled.
-                'border-dashed border-white/[0.10] bg-[rgba(7,11,22,0.64)]'
-              : `border-white/[0.10] bg-gradient-to-br from-[#1c2741] via-[#141e31] to-[#0f1928] ${rs ? 'shadow-[0_8px_22px_rgba(2,8,24,0.40)]' : 'shadow-[0_10px_24px_rgba(2,8,24,0.42)]'} ${highlightClass(pickHighlight)}`
+          ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
+          : isEmpty
+            ? 'bg-[#2a2f45]'
+            : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]' : ''} ${highlightClass(pickHighlight)}`
       }`}
-      style={tint ?? managerTint}
+      style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
       data-overall={pick.overall}
       data-round={pick.round}
       data-slot={pick.slot}
@@ -289,7 +318,29 @@ function DraftBoardCellInner({
       data-current={isCurrentPick ? 'true' : 'false'}
       role="group"
       aria-label={ariaLabel}
+      data-tribe-color={tribeColor ?? undefined}
+      {...(openPlayer
+        ? {
+            onClick: openPlayer,
+            onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+              if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault()
+                openPlayer()
+              }
+            },
+            tabIndex: 0,
+            title: `View ${pick.playerName} player card`,
+          }
+        : {})}
     >
+      {tribeColor ? (
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-1 shadow-[0_1px_0_rgba(0,0,0,0.35)]"
+          style={{ backgroundColor: tribeColor }}
+          aria-hidden
+          data-testid={`draft-board-cell-tribe-edge-${pick.overall}`}
+        />
+      ) : null}
       {onCommissionerEditPick ? (
         <button
           type="button"
@@ -300,11 +351,8 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-commish-edit-${pick.overall}`}
           title={`Edit pick ${pick.overall}`}
           aria-label={`Edit pick ${pick.overall}`}
-          /* Slice 7 — hover/focus-only on desktop to match Sleeper's clean tile.
-             Mobile (no hover) keeps a touch-friendly always-visible tap target via
-             `md:opacity-0`: visible by default on small screens, hidden on md+ until
-             hover/focus reveals it. */
-          className="absolute left-0.5 top-0.5 z-[2] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-100 opacity-60 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/60 hover:bg-amber-500/30 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+          /* Hover/focus-only on desktop to keep the tile clean; always visible on touch screens. */
+          className="absolute left-0.5 top-0.5 z-[2] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-100 opacity-60 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
           <Pencil className="h-3 w-3" />
         </button>
@@ -317,9 +365,9 @@ function DraftBoardCellInner({
             onTradeFromCell()
           }}
           data-testid={`draft-board-cell-trade-${pick.overall}`}
-          title="Offer pick trade"
-          aria-label="Offer pick trade for this slot"
-          className="absolute right-0.5 top-0.5 z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/14 bg-[#0a1228]/95 text-white/60 opacity-90 shadow-sm backdrop-blur-sm transition duration-150 hover:border-cyan-400/40 hover:text-cyan-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+          title={t('draftRoom.board.offerPickTrade')}
+          aria-label={t('draftRoom.board.offerPickTradeAria')}
+          className={`absolute ${tradeSpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-white/80 opacity-80 transition duration-150 hover:bg-black/65 hover:text-white hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
@@ -334,134 +382,223 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-history-${pick.overall}`}
           title="View trade history for this pick"
           aria-label="View trade history for this pick"
-          className={`absolute ${onTradeFromCell ? 'right-0.5 top-7' : 'right-0.5 top-0.5'} z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/30 bg-amber-500/12 text-amber-200/85 opacity-90 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/50 hover:text-amber-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
+          className={`absolute ${historySpot} z-[1] inline-flex h-5 w-5 items-center justify-center rounded bg-black/45 text-amber-200 opacity-80 transition duration-150 hover:bg-black/65 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <History className="h-3 w-3" />
         </button>
       ) : null}
-      <div
-        className={`pointer-events-none absolute inset-x-0 top-0 ${isCurrentPick ? 'h-[2px] animate-pulse' : 'h-px'}`}
-        style={{ backgroundColor: withAlpha(pick.managerTintColor ?? '#94a3b8', isCurrentPick ? 1 : 0.38) }}
-        aria-hidden
-      />
 
-      <div className="flex items-start justify-between gap-0.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-0.5">
-          {pick.isKeeper ? <StatusBadge label="K" className="bg-emerald-500/25 text-emerald-200" /> : null}
-          {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/25 text-violet-200" /> : null}
-          {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/25 text-violet-200" /> : null}
-          {pick.isProPick ? <StatusBadge label="P" className="bg-cyan-500/25 text-cyan-200" /> : null}
-          {pick.isPromotedFromDevy ? <StatusBadge label="Promoted" className="bg-amber-500/25 text-amber-200" /> : null}
+      {/* Pick number in the corner, as Sleeper does, so it never costs the name a line. */}
+      <span
+        className={`pointer-events-none absolute right-1.5 top-1 tabular-nums text-[11px] font-bold leading-none ${onFill ? 'text-[#14172a]/70' : 'text-white/65'}`}
+        aria-hidden
+      >
+        {compactLabel}
+      </span>
+
+      {hasStatusBadges ? (
+        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden pr-8">
+          {isKept ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-px font-mono text-[11px] font-extrabold uppercase leading-[13px] tracking-[0.04em] text-[#14172a]"
+              style={{ backgroundColor: keptHex }}
+              data-testid={`draft-board-cell-keeper-${pick.overall}`}
+            >
+              <Lock className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+              {pick.isViewerKeeper ? 'Yours' : 'Kept'}
+            </span>
+          ) : null}
+          {pick.isDevyPick ? <StatusBadge label="D" className="bg-violet-500/30 text-violet-100" /> : null}
+          {pick.isCollegePick ? <StatusBadge label="C" className="bg-violet-500/30 text-violet-100" /> : null}
+          {pick.isProPick ? <StatusBadge label="P" className="bg-cyan-500/30 text-cyan-100" /> : null}
+          {pick.isPromotedFromDevy ? <StatusBadge label="Promoted" className="bg-amber-500/30 text-amber-100" /> : null}
           {showTradeChip ? (
             <span
-              className={`max-w-[70px] truncate rounded px-1 py-0.5 text-[11px] font-semibold ${
-                showNewOwnerInRed ? 'bg-red-500/20 text-red-200' : 'bg-white/20 text-white/95'
+              className={`max-w-[80px] truncate rounded px-1 text-[11px] font-semibold ${
+                showNewOwnerInRed ? 'bg-red-500/25 text-red-100' : 'bg-white/20 text-white'
               }`}
               title={ownerLabel ?? undefined}
             >
               {ownerLabel}
             </span>
           ) : null}
+          {isEmpty && isCollegeRound ? (
+            <StatusBadge label="College" className="bg-violet-500/30 text-violet-100" />
+          ) : isEmpty && isDevyRound ? (
+            <StatusBadge label="Devy" className="bg-violet-500/30 text-violet-100" />
+          ) : null}
         </div>
+      ) : null}
 
-        <span className="-mt-px tabular-nums text-[11px] font-medium text-white/38" aria-hidden>
-          {compactLabel}
+      {isEmpty && isCurrentPick ? (
+        <span
+          className="pointer-events-none mt-auto self-center text-[11px] font-black uppercase tracking-[0.04em] text-[color:var(--af-league-accent,#67e8f9)]"
+          data-testid={`draft-board-cell-on-clock-${pick.overall}`}
+        >
+          {headerCopy.onTheClock}
         </span>
-      </div>
-
+      ) : null}
+      {isEmpty && pick.slotSalary ? (
+        <span
+          className={`pointer-events-none self-center text-[12px] font-bold leading-none tabular-nums text-white/60 ${isCurrentPick ? 'mt-0.5' : 'mt-auto'}`}
+          title={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+          aria-label={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+          data-testid={`draft-board-cell-slot-salary-${pick.overall}`}
+        >
+          ${pick.slotSalary.salary}
+        </span>
+      ) : null}
       {isEmpty ? (
-        <div className="mt-auto flex min-h-0 flex-1 items-end justify-between gap-1">
-          <div className="flex min-w-0 items-center gap-0.5 text-white/30">
-            {emptyCellDirection === 'reverse' ? (
-              <ArrowLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            ) : (
-              <ArrowRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            )}
-            <span className="truncate text-[11px] font-normal" title={ownerLabel ?? 'Awaiting pick'}>
-              {ownerLabel ?? 'Awaiting pick'}
-            </span>
-            {isCollegeRound ? (
-              <StatusBadge label="College" className="shrink-0 bg-violet-500/25 text-violet-200" />
-            ) : isDevyRound ? (
-              <StatusBadge label="Devy" className="shrink-0 bg-violet-500/25 text-violet-200" />
-            ) : null}
-          </div>
+        <div className="mt-auto flex min-w-0 items-center justify-between gap-1 text-white/45">
+          {emptyCellDirection === 'reverse' ? (
+            <ArrowLeft className="h-3 w-3 shrink-0" aria-hidden />
+          ) : (
+            <ArrowRight className="h-3 w-3 shrink-0" aria-hidden />
+          )}
           {pick.tradedPickMeta?.previousOwnerName ? (
             <span
-              className="max-w-[56px] shrink-0 truncate text-[11px] text-white/30"
-              title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
+              className="max-w-[70px] shrink-0 truncate text-[11px] text-white/45"
+              title={tInterpolate('draftRoom.board.originally', { owner: pick.tradedPickMeta.previousOwnerName })}
             >
-              from {pick.tradedPickMeta.previousOwnerName}
+              {tInterpolate('draftRoom.board.fromOwner', { owner: pick.tradedPickMeta.previousOwnerName })}
             </span>
           ) : null}
         </div>
       ) : (
-        <div className="mt-0.5 flex min-h-0 flex-1 flex-col justify-between gap-0.5 overflow-hidden">
-          <div className="flex min-w-0 items-start gap-1">
-            <div className="relative shrink-0">
+        /*
+         * Room v2 (2026-11): the headshot sits centred at the top of the tile, the name under it
+         * as "A. Runner", then position · team. Centred rather than tucked into a corner is the
+         * AF tile; it also keeps the name from wrapping around the photo on narrow boards.
+         */
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
+          data-testid={`draft-board-cell-body-${pick.overall}`}
+        >
+          {/* Only a real photo: with none, an initials circle read as a dark blob over the name. A tile
+              already carrying a badge row (keeper, devy, trade) gives the photo's height to the text. */}
+          {hasRealHeadshot && !hasStatusBadges ? (
+            <div
+              className={`shrink-0 overflow-hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}
+              data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}
+            >
               <TinyHeadshot
                 name={pick.playerName}
                 src={headshotSrc}
                 position={pick.position}
                 teamLogoUrl={teamLogoSrc}
                 teamAbbr={pick.team}
+                size={26}
               />
-              {/* F.1 — DEF picks already use the team logo as the primary avatar
-                  (see PlayerAvatar's DEF branch). Skip the duplicate corner overlay. */}
-              {isDefRowForAvatar(pick.position) ? null : (
-                <div className="absolute -bottom-0.5 -right-0.5 rounded border border-white/12 bg-[#232c40] p-px">
-                  <TinyTeamLogo team={pick.team} src={teamLogoSrc} />
-                </div>
-              )}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <span className="truncate font-semibold leading-tight tracking-tight text-white text-[11px]" title={pick.playerName ?? undefined}>
-                  {pick.playerName}
-                </span>
-                <PositionBadge pos={pick.position} />
-                {/* On the name row, not the team/bye row: at normal board density the cell
-                    clips everything below the first line, which hid this badge entirely. */}
-                {pick.adpDelta != null && pick.adpDelta !== 0 ? (
-                  <span
-                    className={`shrink-0 rounded px-1 text-[11px] font-bold tabular-nums ${
-                      pick.adpDelta > 0 ? 'bg-emerald-500/18 text-emerald-200' : 'bg-rose-500/18 text-rose-200'
-                    }`}
-                    title={
-                      pick.adpDelta > 0
-                        ? `Taken ${pick.adpDelta} picks after ADP`
-                        : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
-                    }
-                    data-testid="draft-board-cell-adp-delta"
-                  >
-                    {pick.adpDelta > 0 ? `+${pick.adpDelta}` : `\u2212${Math.abs(pick.adpDelta)}`}
-                  </span>
-                ) : null}
-                {pick.experienceBadge ? (
-                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/95">
-                    {pick.experienceBadge}
-                  </span>
-                ) : null}
-              </div>
-              <p className="flex min-w-0 items-center gap-1 text-[11px] text-white/44">
-                <span className="truncate">
-                  {(pick.team ?? '—').toString()}
-                  {pick.byeWeek != null && pick.byeWeek > 0 ? ` · Bye ${pick.byeWeek}` : ''}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {pick.amount != null && pick.amount > 0 ? (
-            <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[11px] font-semibold text-amber-100">
-              <Gavel className="h-2.5 w-2.5" aria-hidden />
-              ${pick.amount}
+          ) : null}
+          {viaOwner ? (
+            <span
+              className={`max-w-full truncate rounded-[3px] px-0.5 text-[11px] font-semibold leading-[12px] ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
+              title={tInterpolate('draftRoom.board.originally', { owner: viaOwner })}
+              data-testid={`draft-board-cell-via-${pick.overall}`}
+            >
+              {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
             </span>
           ) : null}
-
-          {pick.injuryStatus ? (
-            <span className="truncate text-[11px] text-amber-300/90" title={pick.injuryStatus}>
-              {pick.injuryStatus}
+          <span className="block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
+            {/* "A. Runner" for the eye; the full name for screen readers and text search. */}
+            <span aria-hidden>
+              {firstName ? <span className="font-medium opacity-80">{firstName.slice(0, 1)}. </span> : null}
+              <span className="font-extrabold">{lastName}</span>
+            </span>
+            <span className="sr-only">{pick.playerName}</span>
+          </span>
+          {/*
+            With a league signature chip the line stays ONE row: wrapping it pushed the player's name
+            off an 84px tile (measured on phone and portrait tablet). The team truncates first — the
+            headshot already carries the team logo — and the ADP gap gives way below a 120px tile
+            (`af-tile-squeezable`, globals.css), where it no longer fits beside the chip.
+          */}
+          <span
+            className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 ${
+              pick.signatureChip || pick.slotSalary ? 'flex-nowrap' : 'flex-wrap'
+            }`}
+            data-testid={`draft-board-cell-info-${pick.overall}`}
+          >
+            <span className="min-w-0 truncate">
+              {(pick.position ?? '—').toString()} · {(pick.team ?? '—').toString()}
+            </span>
+            {pick.injuryStatus ? (
+              <span className="shrink-0 font-bold text-red-700" title={pick.injuryStatus}>
+                {pick.injuryStatus.slice(0, 1).toUpperCase()}
+              </span>
+            ) : null}
+            {pick.slotSalary ? (
+              <span
+                className="shrink-0 rounded bg-black/20 px-0.5 font-bold tabular-nums"
+                title={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+                aria-label={headerCopy.slotSalary(pick.slotSalary.salary, pick.slotSalary.years)}
+                data-testid={`draft-board-cell-salary-${pick.overall}`}
+              >
+                ${pick.slotSalary.salary}
+              </span>
+            ) : null}
+            {pick.signatureChip ? (
+              <span
+                className="shrink-0 rounded bg-black/20 px-0.5 font-bold tabular-nums"
+                title={pick.signatureChip.title}
+                aria-label={pick.signatureChip.title}
+                data-testid={`draft-board-cell-signature-${pick.overall}`}
+                data-kind={pick.signatureChip.kind}
+              >
+                {pick.signatureChip.text}
+              </span>
+            ) : null}
+            {pick.experienceBadge ? (
+              <span className="shrink-0 rounded bg-black/20 px-0.5 text-[11px] font-bold uppercase">
+                {pick.experienceBadge}
+              </span>
+            ) : null}
+            {pick.amount != null && pick.amount > 0 ? (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-black/20 px-0.5 font-bold tabular-nums">
+                <Gavel className="h-2.5 w-2.5" aria-hidden />${pick.amount}
+              </span>
+            ) : null}
+            {pick.adpDelta != null && pick.adpDelta !== 0 ? (
+              <span
+                className={`shrink-0 rounded bg-black/25 px-0.5 font-bold tabular-nums ${pick.signatureChip || pick.slotSalary ? 'af-tile-squeezable' : ''}`}
+                title={
+                  pick.adpDelta > 0
+                    ? `Taken ${pick.adpDelta} picks after ADP`
+                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                }
+                aria-label={
+                  pick.adpDelta > 0
+                    ? `Taken ${pick.adpDelta} picks after ADP`
+                    : `Taken ${Math.abs(pick.adpDelta)} picks before ADP`
+                }
+                data-testid="draft-board-cell-adp-delta"
+              >
+                {/* Words, not a bare "−5": nobody could tell what an unlabelled minus number meant. */}
+                {pick.adpDelta > 0 ? `${pick.adpDelta} late` : `${Math.abs(pick.adpDelta)} early`}
+              </span>
+            ) : null}
+          </span>
+          {isKept ? (
+            <span
+              className="block max-w-full truncate text-[11px] font-bold leading-[13px]"
+              style={{ color: keptHex }}
+              data-testid={`draft-board-cell-keeper-cost-${pick.overall}`}
+            >
+              {pick.keeperYear ? (
+                <>
+                  {/* Below 120px "Costs " gives way so the round and the year both fit (globals.css). */}
+                  <span className="af-tile-squeezable">{pick.isViewerKeeper ? 'Costs your ' : 'Costs '}</span>
+                  {`Rd ${pick.round}`}
+                  <span
+                    title={headerCopy.keeperYearTitle(pick.keeperYear)}
+                    aria-label={headerCopy.keeperYearTitle(pick.keeperYear)}
+                    data-testid={`draft-board-cell-keeper-year-${pick.overall}`}
+                  >
+                    {` · ${headerCopy.keeperYear(pick.keeperYear)}`}
+                  </span>
+                </>
+              ) : pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
             </span>
           ) : null}
         </div>

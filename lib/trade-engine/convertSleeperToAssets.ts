@@ -1,6 +1,6 @@
 import { Asset } from './types'
 
-export interface AssetValueEntry {
+interface AssetValueEntry {
   value: number
   marketValue?: number
   impactValue?: number

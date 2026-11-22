@@ -21,6 +21,9 @@ import { orchestrateInformationalAnswer } from '@/lib/decision-os/envelope/orche
 import { describeAction } from '@/lib/decision-os/envelope/actionCapability'
 import type { DecisionOsResult } from '@/lib/decision-os/envelope/orchestrate'
 import type { EnvelopeFact } from '@/lib/decision-os/envelope/types'
+import { prisma } from '@/lib/prisma'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { resolveNativePickYears } from '@/lib/league-trade-engine/nativePickYears'
 
 /**
  * League rules as envelope facts.
@@ -102,6 +105,45 @@ function rulesAsFacts(snapshot: ChimmyLeagueSnapshot, now: Date): EnvelopeFact[]
 }
 
 /**
+ * How many seasons ahead this league's draft picks can be traded — the horizon the trade engine offers
+ * native picks over (`resolveNativePickYears` on `DynastyLeagueConfig.futurePicksYearsOut`, the Draft Pick
+ * Settings tab). A dynasty-family league that plays on AllFantasy and allows pick trading only: an
+ * import's horizon is its platform's, and a league with pick trading off has none to state.
+ *
+ * A stored value is `provider_reported`; no config row (or no value) is the engine's default of 3 and is
+ * `inferred`, for the reason `rulesAsFacts` gives. A failed read adds no fact rather than guess one.
+ */
+async function pickTradeYearsFacts(snapshot: ChimmyLeagueSnapshot, now: Date): Promise<EnvelopeFact[]> {
+  if (String(snapshot.platform ?? '').trim().toLowerCase() !== 'manual') return []
+  if (!isDynastyFamilyLeague({ leagueType: snapshot.leagueType, isDynasty: snapshot.isDynasty })) return []
+  try {
+    const [league, dynasty] = await Promise.all([
+      prisma.league.findUnique({ where: { id: snapshot.id }, select: { draftPickTrading: true } }),
+      prisma.dynastyLeagueConfig.findUnique({ where: { leagueId: snapshot.id }, select: { futurePicksYearsOut: true } }),
+    ])
+    if (!league || league.draftPickTrading === false) return []
+    const stored = dynasty?.futurePicksYearsOut
+    return [
+      {
+        key: 'league.picks.tradeYears',
+        label: 'Seasons ahead draft picks can be traded',
+        value: resolveNativePickYears(stored),
+        citation: {
+          source: 'league_settings',
+          reference: null,
+          observedAt: null,
+          retrievedAt: now.toISOString(),
+          basis: stored == null ? 'inferred' : 'provider_reported',
+        },
+        stale: false,
+      },
+    ]
+  } catch {
+    return []
+  }
+}
+
+/**
  * Build the envelope block for the prompt.
  *
  * Returns null only when there is no authorized league AND no refusal to
@@ -141,7 +183,7 @@ export async function buildDecisionEnvelopeGrounding(args: {
     decisionOs: async (ctx) => {
       if (!ctx.league || !args.snapshot) return {}
       const os: DecisionOsResult = {
-        facts: rulesAsFacts(args.snapshot, now),
+        facts: [...rulesAsFacts(args.snapshot, now), ...(await pickTradeYearsFacts(args.snapshot, now))],
         /*
          * ⚠ NO RECOMMENDATION FROM HERE. This adapter reports league RULES; the
          * engines that recommend run elsewhere on the route and have not been

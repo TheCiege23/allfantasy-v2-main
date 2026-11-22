@@ -3,9 +3,9 @@
  * Sport-aware via SportDynastyResolver.
  */
 
-import { getPeakAgeRange } from './SportDynastyResolver'
+import { getPeakAgeRange, isCollegeDynastySport } from './SportDynastyResolver'
 
-export type Horizon = 'next' | 'three' | 'five'
+type Horizon = 'next' | 'three' | 'five'
 
 /**
  * Multiplier for dynasty value at a given horizon (0–1+). Age and position drive decline.
@@ -17,13 +17,24 @@ export function ageMultiplier(
   horizon: Horizon
 ): number {
   if (!age || age <= 0) return 1
-  const cfg = getPeakAgeRange(sport, position)
   const horizonOffset: Record<Horizon, number> = {
     next: 0,
     three: 2,
     five: 4,
   }
-  const effAge = age + horizonOffset[horizon]
+  return ageMultiplierAtAge(sport, position, age + horizonOffset[horizon])
+}
+
+/**
+ * The curve itself at one age (`ageMultiplier` is this at age + its horizon offset). Exported for the
+ * dynasty trade grade (`lib/decision-os/trade/sportDynastyValue.ts`), which walks it a season at a time.
+ */
+export function ageMultiplierAtAge(sport: string, position: string, effAge: number): number {
+  if (!effAge || effAge <= 0) return 1
+  // NCAAF / NCAAB: no age effect at any horizon — players leave college before any decline, and
+  // eligibility (not age) is what ends their value. See COLLEGE_DYNASTY_SPORTS.
+  if (isCollegeDynastySport(sport)) return 1
+  const cfg = getPeakAgeRange(sport, position)
 
   if (effAge < cfg.peakStart - 2) {
     return 0.85 + (effAge / (cfg.peakStart - 2)) * 0.15
@@ -47,7 +58,6 @@ export function rosterAgingRiskScore(
   for (const p of players) {
     const base = Math.max(0, p.dynastyValue)
     totalValue += base
-    const mNext = ageMultiplier(sport, p.position, p.age ?? null, 'next')
     const mFive = ageMultiplier(sport, p.position, p.age ?? null, 'five')
     const decline = 1 - mFive
     riskSum += base * decline

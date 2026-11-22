@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { realManagerName } from '@/lib/core-app/draftHqState'
 import {
   indexBySleeperId,
   leagueIdSpaces,
@@ -31,7 +32,7 @@ import {
  * board and make the pick numbers skip.
  */
 
-export type LivePick = {
+type LivePick = {
   /** Sport of this draft, so the card and club crest use the right league. */
   sport?: string
   overall: number
@@ -82,9 +83,18 @@ export async function getLiveDraftPicks(
 ): Promise<LiveDraftPicks> {
   if (liveLeagueIds.length === 0) return EMPTY
 
-  const sessions = await prisma.draftSession
+  /*
+   * 🛑 THE LATEST DRAFT PER LEAGUE, NOT EVERY DRAFT THE LEAGUE HAS EVER HAD (2026-11-13). This read
+   * every session of a live league, and the loop below writes `byLeague[leagueId]` once per session,
+   * so whichever came last won — a league with last year's finished draft beside this year's live one
+   * could show last year's picks, or none. Measured on the live board: "Picks made 3" over "No picks
+   * recorded yet". Ordered newest first so the first row per league is the one Draft HQ's own card
+   * describes (draftHqState.latestDraftsByLeague uses the same createdAt-then-id order).
+   */
+  const allSessions = await prisma.draftSession
     .findMany({
       where: { leagueId: { in: liveLeagueIds } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: {
         id: true,
         leagueId: true,
@@ -103,6 +113,12 @@ export async function getLiveDraftPicks(
           league: { platform: string | null; sport: string } | null
         }>,
     )
+  const seenLeague = new Set<string>()
+  const sessions = allSessions.filter((s) => {
+    if (seenLeague.has(s.leagueId)) return false
+    seenLeague.add(s.leagueId)
+    return true
+  })
 
   if (sessions.length === 0) return EMPTY
 
@@ -111,18 +127,20 @@ export async function getLiveDraftPicks(
 
   const [picks, myTeams, queueEntries, legacyQueues] = await Promise.all([
     /*
-     * ⚠ ORDERED DESC AND TAKEN WHOLE, THEN SLICED PER SESSION IN MEMORY. Prisma
-     * has no per-group limit, and `take: TAIL` on the whole set would return the
-     * last four picks OVERALL — which on two concurrent drafts means one of them
-     * renders an empty board. The cap is generous but bounded: live drafts are
-     * rare and the tail is short.
+     * ⚠ ONE SMALL QUERY PER LIVE DRAFT, EACH TAKING ITS OWN TAIL. Prisma has no per-group limit, and
+     * one shared `take` over every session ordered by `overall` desc hands the whole cap to whichever
+     * draft is furthest along: a 200-pick draft beside a 3-pick one left the small one with an empty
+     * board (2026-11-13). Live drafts are few, so this is two or three indexed reads, not a fan-out.
+     * Each result is re-filtered to its own session so a loose mock cannot double a pick.
      */
-    prisma.draftPick
-      .findMany({
-        where: { sessionId: { in: sessionIds } },
-        orderBy: { overall: 'desc' },
-        take: TAIL * sessionIds.length * 3,
-        select: {
+    Promise.all(
+      sessionIds.map((sessionId) =>
+        prisma.draftPick
+          .findMany({
+            where: { sessionId },
+            orderBy: { overall: 'desc' },
+            take: TAIL,
+            select: {
           sessionId: true,
           overall: true,
           round: true,
@@ -136,22 +154,25 @@ export async function getLiveDraftPicks(
           playerId: true,
         },
       })
-      .catch(
-        () =>
-          [] as Array<{
-            sessionId: string
-            overall: number
-            round: number
-            roundPick: number | null
-            rosterId: string
-            displayName: string | null
-            playerName: string
-            position: string
-            team: string | null
-            playerImageUrl: string | null
-            playerId: string | null
-          }>,
+          .then((rows) => rows.filter((r) => r.sessionId === sessionId))
+          .catch(
+            () =>
+              [] as Array<{
+                sessionId: string
+                overall: number
+                round: number
+                roundPick: number | null
+                rosterId: string
+                displayName: string | null
+                playerName: string
+                position: string
+                team: string | null
+                playerImageUrl: string | null
+                playerId: string | null
+              }>,
+          ),
       ),
+    ).then((lists) => lists.flat()),
     prisma.leagueTeam
       .findMany({
         where: { leagueId: { in: liveLeagueIds }, claimedByUserId: userId },
@@ -205,14 +226,18 @@ export async function getLiveDraftPicks(
    * player card needs a resolved Sleeper id for all of them and a stored image
    * says nothing about whether we can identify the man. The cost is one slightly
    * longer `IN` list on a query that already runs: `picks` is capped at
-   * `TAIL * sessions * 3` (TAIL = 4) and only exists while a draft is LIVE, so
-   * this is a dozen ids per draft, not a table scan.
+   * `TAIL` per live draft (TAIL = 4) and only exists while a draft is LIVE, so
+   * this is four ids per draft, not a table scan.
    */
   type PickMeta = { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }
   const leagueOfSession = new Map(sessions.map((s) => [s.id, s.league]))
-  /** Each pick's lookup key: `sleeper:<id>` or `<SPORT>:<id>` for a provider id; null when unreadable. */
+  /** Each pick's lookup key: `sleeper:<SPORT>:<id>` or `<SPORT>:<id>` for a provider id; null when unreadable. */
   const keyOfPick = new Map<string, string>()
-  const sleeperIds = new Set<string>()
+  /*
+   * ⚠ BY SPORT: a Sleeper id is unique only within one sport, so a Sleeper NBA draft's 9228 is
+   * looked up among NBA rows and keyed apart from a Sleeper NFL draft's 9228.
+   */
+  const sleeperIdsBySport = new Map<string, Set<string>>()
   const providerIdsBySport = new Map<string, Set<string>>()
   for (const p of picks) {
     if (!p.playerId) continue
@@ -220,8 +245,10 @@ export async function getLiveDraftPicks(
     const sport = String(league?.sport ?? 'NFL').toUpperCase()
     const split = leagueIdSpaces([p.playerId], sport, league?.platform)
     if (split.sleeperIds.length > 0) {
-      sleeperIds.add(p.playerId)
-      keyOfPick.set(`${p.sessionId}:${p.overall}`, `sleeper:${p.playerId}`)
+      const set = sleeperIdsBySport.get(sport) ?? new Set<string>()
+      set.add(p.playerId)
+      sleeperIdsBySport.set(sport, set)
+      keyOfPick.set(`${p.sessionId}:${p.overall}`, `sleeper:${sport}:${p.playerId}`)
     } else if (split.providerIds.length > 0) {
       const set = providerIdsBySport.get(sport) ?? new Set<string>()
       set.add(p.playerId)
@@ -232,9 +259,14 @@ export async function getLiveDraftPicks(
 
   const metaSelect = { externalId: true, sleeperId: true, source: true, imageUrl: true, team: true, position: true } as const
   const [bySleeperRows, byProviderRows] = await Promise.all([
-    sleeperIds.size > 0
-      ? prisma.sportsPlayer.findMany({ where: sleeperIdWhere([...sleeperIds]), select: metaSelect }).catch(() => [])
-      : Promise.resolve([]),
+    Promise.all(
+      [...sleeperIdsBySport].map(([sport, ids]) =>
+        prisma.sportsPlayer
+          .findMany({ where: sleeperIdWhere([...ids], sport), select: metaSelect })
+          .then((rows) => ({ sport, rows }))
+          .catch(() => ({ sport, rows: [] as Array<{ externalId: string | null; sleeperId: string | null; source: string | null; imageUrl: string | null; team: string | null; position: string | null }> })),
+      ),
+    ),
     Promise.all(
       [...providerIdsBySport].map(([sport, ids]) =>
         prisma.sportsPlayer
@@ -253,7 +285,9 @@ export async function getLiveDraftPicks(
   })
   const byPlayerKey = new Map<string, PickMeta>()
   // Sleeper's own row wins over the provider rows the crosswalk stamped with the same Sleeper id.
-  for (const [sleeperId, row] of indexBySleeperId(bySleeperRows)) byPlayerKey.set(`sleeper:${sleeperId}`, metaOf(row))
+  for (const { sport, rows } of bySleeperRows) {
+    for (const [sleeperId, row] of indexBySleeperId(rows)) byPlayerKey.set(`sleeper:${sport}:${sleeperId}`, metaOf(row))
+  }
   for (const row of byProviderRows) {
     const key = `${row.sport}:${row.externalId}`
     if (!byPlayerKey.has(key)) byPlayerKey.set(key, metaOf(row))
@@ -269,7 +303,7 @@ export async function getLiveDraftPicks(
     const nameByRoster = new Map(
       order
         .filter((o) => o.rosterId != null)
-        .map((o) => [String(o.rosterId), (o.displayName ?? '').trim() || null] as const),
+        .map((o) => [String(o.rosterId), realManagerName(o.displayName)] as const),
     )
     const mine = myRosterByLeague.get(s.leagueId) ?? null
 
@@ -294,7 +328,7 @@ export async function getLiveDraftPicks(
           pickInRound: p.roundPick ?? ((p.overall - 1) % teams) + 1,
           rosterId: String(p.rosterId),
           managerName:
-            p.displayName?.trim() || nameByRoster.get(String(p.rosterId)) || null,
+            realManagerName(p.displayName) ?? nameByRoster.get(String(p.rosterId)) ?? null,
           isYours: mine != null && String(p.rosterId) === mine,
           playerName: p.playerName?.trim() || null,
           position: p.position?.trim() || meta?.position || null,

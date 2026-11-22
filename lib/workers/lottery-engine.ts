@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { assertLiveDraftContext } from '@/lib/draft/resolve-draft-context'
 import { previewLotteryOdds, runWeightedLottery } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
+import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 import {
   getDraftOrderModeAndLotteryConfig,
   setDraftOrderModeAndLotteryConfig,
@@ -21,6 +22,8 @@ export type LotteryResult = {
 
 export async function previewDraftLottery(draftId: string) {
   const context = await assertLiveDraftContext(draftId)
+  const restriction = await legacyDraftLotteryRestriction(context.leagueId, context.draftId)
+  if (restriction) throw new Error(restriction)
   const { lotteryConfig } = await getDraftOrderModeAndLotteryConfig(context.leagueId)
   return previewLotteryOdds(context.leagueId, lotteryConfig)
 }
@@ -30,6 +33,8 @@ export async function runDraftLottery(
   options?: { finalize?: boolean; seed?: string }
 ): Promise<LotteryResult> {
   const context = await assertLiveDraftContext(draftId)
+  const restriction = await legacyDraftLotteryRestriction(context.leagueId, context.draftId)
+  if (restriction) throw new Error(restriction)
   const { lotteryConfig } = await getDraftOrderModeAndLotteryConfig(context.leagueId)
   const seed =
     options?.seed && options.seed.trim()

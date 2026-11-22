@@ -27,6 +27,7 @@ import {
   type ViewerIdentity,
 } from './tradeRecord'
 import { playerIdSpaceFor, resolveTradePlayers, type PlayerIdSpace, type ResolvedTradePlayer } from './tradePlayers'
+import { tradeParticipantRosterIds } from '@/lib/redraft/tradeParticipants'
 
 /**
  * Read an EXISTING trade from the tables it already lives in and return it normalized (see
@@ -79,6 +80,8 @@ type RedraftRow = {
   status: string
   proposerRosterId: string
   receiverRosterId: string
+  /** A 3- or 4-team trade's other teams (lib/redraft/tradeParticipants.ts). Empty for two teams. */
+  additionalRosterIds?: string[] | null
   createdAt: Date
   processedAt: Date | null
   expiresAt: Date | null
@@ -127,7 +130,7 @@ export type LoadTradeDeps = {
   loadProviderOffer: (leagueId: string, provider: string, providerTradeId: string) => Promise<ProviderRow | null>
   /** `RedraftRoster.id` → `Roster.id`, through the unique `Roster.redraftRosterId`. */
   rostersForRedraft: (leagueId: string, redraftRosterIds: string[]) => Promise<Map<string, string>>
-  resolvePlayers: (ids: readonly string[], opts: { space: PlayerIdSpace; sport: string }) => Promise<Map<string, ResolvedTradePlayer>>
+  resolvePlayers: typeof resolveTradePlayers
   /** The viewer's ids in every space a trade source uses. */
   viewerIdentity: (leagueId: string, userId: string) => Promise<ViewerIdentity>
   isCommissioner: (leagueId: string, userId: string) => Promise<boolean>
@@ -164,7 +167,7 @@ export const defaultLoadTradeDeps: LoadTradeDeps = {
       prisma.redraftTradeProposal.findFirst({
         where: { id: proposalId, leagueId },
         select: {
-          id: true, leagueId: true, status: true, proposerRosterId: true, receiverRosterId: true,
+          id: true, leagueId: true, status: true, proposerRosterId: true, receiverRosterId: true, additionalRosterIds: true,
           createdAt: true, processedAt: true, expiresAt: true,
           assets: { select: { assetType: true, playerId: true, playerName: true, pickSeason: true, pickRound: true, fromRosterId: true, toRosterId: true, metadata: true } },
         },
@@ -201,7 +204,7 @@ export const defaultLoadTradeDeps: LoadTradeDeps = {
     }
   },
   isCommissioner: async (leagueId, userId) =>
-    Boolean((await assertLeagueCommissioner(leagueId, userId).catch(() => null))?.ok),
+    Boolean((await assertLeagueCommissioner(leagueId, userId, 'view').catch(() => null))?.ok),
 }
 
 const refuse = (code: TradeRefusal['code'], reason: string, missingAssets: string[] = []): LoadTradeResult => ({
@@ -256,7 +259,7 @@ async function withPlayers(
   resolvePlayers: LoadTradeDeps['resolvePlayers'],
 ): Promise<{ ok: true; sides: { a: LoadedTradeAsset[]; b: LoadedTradeAsset[] } } | { ok: false; refusal: TradeRefusal }> {
   const ids = [...raw.sideA.gives, ...raw.sideB.gives].flatMap((a) => (a.kind === 'player' ? [a.playerId] : []))
-  const found = ids.length ? await resolvePlayers(ids, { space, sport: league.sport }).catch(() => new Map<string, ResolvedTradePlayer>()) : new Map<string, ResolvedTradePlayer>()
+  const found = ids.length ? await resolvePlayers(ids, { space, sport: league.sport, membershipCheckedLeagueId: league.id }).catch(() => new Map<string, ResolvedTradePlayer>()) : new Map<string, ResolvedTradePlayer>()
   const missing: string[] = []
   const toLoaded = (asset: RawTrade['sideA']['gives'][number]): LoadedTradeAsset | null => {
     if (asset.kind !== 'player') return asset
@@ -265,7 +268,7 @@ async function withPlayers(
       missing.push(`player ${asset.playerId} (${p && !p.ok && p.why === 'ambiguous' ? 'matches more than one player' : 'no player found'})`)
       return null
     }
-    return { kind: 'player', playerId: asset.playerId, name: p.name, position: p.position }
+    return { kind: 'player', playerId: asset.playerId, name: p.name, position: p.position, idSpace: space, identity: p }
   }
   const a = raw.sideA.gives.map(toLoaded)
   const b = raw.sideB.gives.map(toLoaded)
@@ -343,11 +346,19 @@ export async function loadTrade(
     const row = await d.loadRedraftProposal(league.id, args.ref.proposalId).catch(() => null)
     if (!row) return refuse('not_found', 'That trade could not be found in this league.')
     const rdStatus = redraftTradeStatus(row.status, row.expiresAt, now)
-    const rdParties = [row.proposerRosterId, row.receiverRosterId, ...row.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])]
+    /*
+     * Every team in the trade is a party, and a multi-team trade is refused `multi_team` by twoSides —
+     * declared from the row itself, so the refusal never rests on the assets alone. Two teams: no
+     * declared extras, exactly as before.
+     */
+    const rdExtra = tradeParticipantRosterIds(row).filter((id) => id !== row.proposerRosterId && id !== row.receiverRosterId)
+    const rdParties = [row.proposerRosterId, row.receiverRosterId, ...rdExtra, ...row.assets.flatMap((a) => [a.fromRosterId, a.toRosterId])]
     if (!(await mayView('redraft', rdStatus, rdParties))) return PRIVATE_REFUSAL
     const sides = twoSides(
       row.assets.map((a) => ({ fromTeamId: a.fromRosterId, toTeamId: a.toRosterId, asset: redraftAsset(a) })),
-      { sideAId: row.proposerRosterId, sideBId: row.receiverRosterId },
+      rdExtra.length
+        ? { sideAId: row.proposerRosterId, sideBId: row.receiverRosterId, declaredTeamIds: rdExtra }
+        : { sideAId: row.proposerRosterId, sideBId: row.receiverRosterId },
     )
     if (!sides.ok) return sides
     raw = sides.trade
@@ -386,7 +397,7 @@ export async function loadTrade(
     proposedAt = iso(row.proposedAt ?? row.firstSeenAt)
     completedAt = status === 'completed' ? iso(row.respondedAt) : null
     rosterIdFor = () => null // External roster ids: mapped through the canonical world by the evaluator.
-    space = 'sleeper'
+    space = playerIdSpaceFor({ platform: row.provider, sport: league.sport })
   }
 
   const players = await withPlayers(raw, league, space, d.resolvePlayers)

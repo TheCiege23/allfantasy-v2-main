@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { suggestPlayers } from '@/lib/core-app/playerSuggest'
+import { FINDER_SPORTS } from '@/lib/core-app/finderSports'
 
 /**
  * Player Finder typeahead: the finder's own catalog search, ranked and
@@ -20,6 +21,7 @@ export const dynamic = 'force-dynamic'
 const querySchema = z.object({
   q: z.string().min(2),
   limit: z.coerce.number().int().min(1).max(10).default(8),
+  sport: z.enum(FINDER_SPORTS).optional(),
 })
 
 export async function GET(req: Request) {
@@ -47,6 +49,7 @@ export async function GET(req: Request) {
 
   const suggestions = await suggestPlayers({
     query: parsed.data.q,
+    sport: parsed.data.sport,
     userId,
     limit: parsed.data.limit,
     loadLeagueIds: async () => {

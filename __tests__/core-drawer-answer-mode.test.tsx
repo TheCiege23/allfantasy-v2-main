@@ -93,7 +93,7 @@ describe('the Answer toggle', () => {
   it('starts on Deep (the full answer) and sends it', async () => {
     openDrawer()
     expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Summary' }).getAttribute('aria-pressed')).toBe('false')
     ask('Who should I start?')
     await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
     expect(sentMode(0)).toBe('deep_analysis')
@@ -101,8 +101,8 @@ describe('the Answer toggle', () => {
 
   it('sends Fast once chosen', async () => {
     openDrawer()
-    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
-    expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
+    expect(screen.getByRole('button', { name: 'Summary' }).getAttribute('aria-pressed')).toBe('true')
     ask('Who should I start?')
     await waitFor(() => expect(chimmyPosts()).toHaveLength(1))
     expect(sentMode(0)).toBe('fast_take')
@@ -118,7 +118,7 @@ describe('the Answer toggle', () => {
     openDrawer()
     ask('First question')
     await waitFor(() => expect(screen.getByText('Start him.')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
     ask('Second question')
     await waitFor(() => expect(chimmyPosts()).toHaveLength(2))
     expect(sentMode(0)).toBe('deep_analysis')
@@ -127,21 +127,21 @@ describe('the Answer toggle', () => {
 
   it('remembers the choice for that user only', async () => {
     const first = openDrawer('u1')
-    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
     first.unmount()
 
     const again = openDrawer('u1')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Fast' }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Summary' }).getAttribute('aria-pressed')).toBe('true'))
     again.unmount()
 
     openDrawer('u2')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Deep' }).getAttribute('aria-pressed')).toBe('true'))
   })
 
-  it('never implies Deep costs more', () => {
+  it('explains allowance use and confirms prices before unlocking', () => {
     openDrawer()
     fireEvent.click(screen.getByRole('button', { name: 'Deep' }))
-    expect(screen.getByText(/Same price either way/)).toBeTruthy()
+    expect(screen.getByText(/Included answers come first; token prices are shown before unlocking extra detail/)).toBeTruthy()
   })
 })
 
@@ -154,6 +154,15 @@ describe('which mode answered', () => {
     expect(screen.getByText('Deep answer')).toBeTruthy()
   })
 
+  it('keeps older paid brief replies distinct from free summary claims', async () => {
+    postMock.mockResolvedValue(jsonResponse(200,{response:'An older paid brief.',meta:{mode:'fast_take',tokenSpend:{tokenCost:3}}}))
+    openDrawer();ask('Old brief')
+    await screen.findByText('An older paid brief.')
+    expect(document.querySelector('.af-cm-mode-tag')?.textContent).toBe('Summary')
+    expect(screen.getByText('3 tokens')).toBeTruthy()
+    expect(screen.queryByText('Free summary')).toBeNull()
+  })
+
   it('claims nothing when the server did not say, or said something else', async () => {
     postMock
       .mockResolvedValueOnce(jsonResponse(200, { response: 'First.', meta: {} }))
@@ -164,6 +173,6 @@ describe('which mode answered', () => {
     ask('Two')
     await waitFor(() => expect(screen.getByText('Second.')).toBeTruthy())
     expect(screen.queryByText('Deep answer')).toBeNull()
-    expect(screen.queryByText('Fast answer')).toBeNull()
+    expect(screen.queryByText('Free summary')).toBeNull()
   })
 })

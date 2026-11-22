@@ -96,8 +96,8 @@ export async function signInAs(
        * The result is a session that passes middleware and fails every server
        * component that checks for a user id — and those redirect to /login, so the
        * symptom is an unexplained redirect on a page the test just proved it could
-       * reach. `app/tokens/layout.tsx` is exactly that: it redirects to
-       * `/login?callbackUrl=/tokens` when `session.user.id` is missing, which sent the
+       * reach. `app/tokens/page.tsx` redirects to login when
+       * `session.user.id` is missing, which sent the
        * subscription-entitlement token CTA test to a 15s waitForURL timeout while
        * `/api/auth/session` cheerfully reported the user as signed in.
        */

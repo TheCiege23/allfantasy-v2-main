@@ -1,89 +1,43 @@
-/**
- * Zombie universe standings: aggregate across linked leagues (PROMPT 353).
- */
-
+/** Native season results joined by owner; no current-team totals leaking into an archived season. */
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getRosterTeamMap } from './rosterTeamMap'
-import { getTotalWinningsByRoster } from './ZombieWeeklyWinningsLedger'
 
 export interface UniverseStandingsRow {
-  leagueId: string
-  rosterId: string
-  levelId: string
-  levelName: string
-  status: string
-  totalPoints: number
-  pointsPerWeek: number[]
-  winnings: number
-  serums: number
-  weapons: number
-  weekKilled: number | null
-  killedByRosterId: string | null
+  leagueId: string; rosterId: string; levelId: string; levelName: string; status: string
+  wins: number; losses: number; ties: number; totalPoints: number; pointsPerWeek: number[]
+  winnings: number; serums: number; weapons: number; weekKilled: number | null; killedByRosterId: string | null
 }
-
-export async function getUniverseStandings(
-  universeId: string,
-  season?: number
-): Promise<UniverseStandingsRow[]> {
-  const leagues = await prisma.zombieLeague.findMany({
-    where: { universeId },
-    include: { level: true, league: { select: { id: true }, include: { teams: { select: { id: true, pointsFor: true } } } } },
+export async function getUniverseStandings(universeId: string, season?: number, db: Prisma.TransactionClient = prisma): Promise<UniverseStandingsRow[]> {
+  const selectedSeason = season ?? (await db.zombieLeague.aggregate({ where: { universeId }, _max: { season: true } }))._max.season
+  const leagues = await db.zombieLeague.findMany({
+    where: { universeId, ...(selectedSeason != null ? { season: selectedSeason } : {}) }, include: { level: true },
   })
-
   const out: UniverseStandingsRow[] = []
-
-  for (const zl of leagues) {
-    if (!zl.levelId || !zl.level) continue
-
-    const teamRows = await prisma.zombieLeagueTeam.findMany({
-      where: { leagueId: zl.leagueId },
-      select: {
-        rosterId: true,
-        status: true,
-        weekBecameZombie: true,
-        killedByRosterId: true,
-      },
-    })
-    const winnings = await getTotalWinningsByRoster(zl.leagueId)
-    const pointsForByTeam = Object.fromEntries(zl.league.teams.map((t) => [t.id, t.pointsFor]))
-    const { rosterIdToTeamId } = await getRosterTeamMap(zl.leagueId)
-
-    for (const t of teamRows) {
-      const teamId = rosterIdToTeamId.get(t.rosterId)
-      const totalPoints = teamId ? pointsForByTeam[teamId] ?? 0 : 0
+  for (const z of leagues) {
+    if (!z.levelId || !z.level) continue
+    const se = season ?? z.season
+    const native = await db.redraftSeason.findUnique({ where: { leagueId_season: { leagueId: z.leagueId, season: se } } })
+    const [teams, owners, results, money, resources] = await Promise.all([
+      db.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId }, include: { items: { where: { isUsed: false, isExpired: false }, select: { itemType: true } } } }),
+      db.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } }),
+      native ? db.redraftRoster.findMany({ where: { seasonId: native.id } }) : Promise.resolve([]),
+      db.zombieWeeklyWinnings.findMany({ where: { leagueId: z.leagueId }, select: { rosterId: true, amount: true } }),
+      db.zombieResourceLedger.findMany({ where: { leagueId: z.leagueId }, select: { rosterId: true, resourceType: true, balance: true } }),
+    ])
+    const ownerByRoster = new Map(owners.map(r => [r.id, r.platformUserId]))
+    const resultByOwner = new Map(results.map(r => [r.ownerId, r]))
+    for (const team of teams) {
+      const result = resultByOwner.get(ownerByRoster.get(team.rosterId) ?? '')
       out.push({
-        leagueId: zl.leagueId,
-        rosterId: t.rosterId,
-        levelId: zl.levelId,
-        levelName: zl.level.name,
-        status: t.status,
-        totalPoints,
-        pointsPerWeek: [], // optional: fill from TeamPerformance per week
-        winnings: winnings[t.rosterId] ?? 0,
-        serums: 0, // aggregate from ZombieResourceLedger
-        weapons: 0,
-        weekKilled: t.weekBecameZombie,
-        killedByRosterId: t.killedByRosterId,
+        leagueId: z.leagueId, rosterId: team.rosterId, levelId: z.levelId, levelName: z.level.name,
+        status: team.status, wins: result?.wins ?? 0, losses: result?.losses ?? 0, ties: result?.ties ?? 0,
+        totalPoints: result?.pointsFor ?? 0, pointsPerWeek: [],
+        winnings: money.filter(r => r.rosterId === team.rosterId).reduce((n, r) => n + r.amount, 0),
+        serums: native && z.sport === 'NFL' ? (team.items ?? []).filter(i => i.itemType.includes('serum')).length : resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'serum').reduce((n, r) => n + r.balance, 0),
+        weapons: native && z.sport === 'NFL' ? (team.items ?? []).filter(i => i.itemType.startsWith('weapon_')).length : resources.filter(r => r.rosterId === team.rosterId && r.resourceType === 'weapon').reduce((n, r) => n + r.balance, 0),
+        weekKilled: team.weekBecameZombie, killedByRosterId: team.killedByRosterId,
       })
     }
   }
-
-  for (const row of out) {
-    const [serums, weapons] = await Promise.all([
-      getResourceBalance(row.leagueId, row.rosterId, 'serum'),
-      getResourceBalance(row.leagueId, row.rosterId, 'weapon'),
-    ])
-    row.serums = serums
-    row.weapons = weapons
-  }
-
   return out
-}
-
-async function getResourceBalance(leagueId: string, rosterId: string, resourceType: string): Promise<number> {
-  const row = await prisma.zombieResourceLedger.findFirst({
-    where: { leagueId, rosterId, resourceType },
-    select: { balance: true },
-  })
-  return row?.balance ?? 0
 }

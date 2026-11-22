@@ -52,9 +52,10 @@ describe('rollPostseason', () => {
   it('scopes to postseason statuses only', async () => {
     await rollPostseason()
     const where = findManySeasons.mock.calls[0][0].where
-    expect(where.status).toEqual({ in: ['regular_season_complete', 'playoffs'] })
+    expect(where.AND[0].status).toEqual({ in: ['regular_season_complete', 'playoffs', 'complete'] })
+    expect(where.AND[1]).toEqual({ OR: [{ status: { not: 'complete' } }, { league: { lifecycleState: 'completed' } }] })
     // Native leagues only, same as every other engine.
-    expect(where.league).toBeDefined()
+    expect(where.AND[0].league).toBeDefined()
   })
 
   it('generates a bracket for a season that reached the boundary without one', async () => {
@@ -245,5 +246,20 @@ describe('rotisserie postseason routing', () => {
   it('holds a tied or incompletely scored roto season', async () => {
     finalizeSeason.mockResolvedValue({ok:false,code:'NO_WINNER'})
     expect(await rollPostseason()).toMatchObject({held:1,finalized:0,outcomes:[expect.objectContaining({detail:'NO_WINNER'})]})
+  })
+})
+
+
+describe('completed season archive repair', () => {
+  it('retries the archive after champion persistence without advancing a round', async () => {
+    findManySeasons.mockResolvedValue([{ ...SEASON, status: 'complete', league: { lifecycleState: 'completed' } }])
+    finalizeSeason.mockResolvedValue({ ok: true, championRosterId: 'winner', offseasonEntered: true })
+    expect(await rollPostseason()).toMatchObject({ finalized: 1, advanced: 0 })
+    expect(advanceRound).not.toHaveBeenCalled()
+  })
+  it('reports an incomplete archive as pending', async () => {
+    findManySeasons.mockResolvedValue([{ ...SEASON, status: 'complete', league: { lifecycleState: 'completed' } }])
+    finalizeSeason.mockResolvedValue({ ok: true, offseasonEntered: false })
+    expect(await rollPostseason()).toMatchObject({ finalized: 0, held: 1, outcomes: [expect.objectContaining({ detail: 'OFFSEASON_ARCHIVE_PENDING' })] })
   })
 })

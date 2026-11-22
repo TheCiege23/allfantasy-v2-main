@@ -47,21 +47,46 @@ function badgeFor(label: string): string | null {
 }
 
 describe('Core tab urgency badges', () => {
-  it('puts each league count on its own tab', () => {
-    render(shell({ urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3, sync: 4 } }))
-    expect(badgeFor('My team')).toBe('2')
-    expect(badgeFor('Trades')).toBe('1')
-    expect(badgeFor('Draft HQ')).toBe('3')
-    expect(badgeFor('Sync')).toBe('4')
+  /*
+   * Inside a league the rail is Sleeper's tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19): a count
+   * shows on the tab holding its screen (My team under Team, Trades under Trade, Draft HQ under League), and on the
+   * screen's own link in the strip above the screen when that tab is open.
+   */
+  it('puts each league count on the tab holding its screen', () => {
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { myTeam: 2, trades: 1, draftHq: 3 } }))
+    expect(badgeFor('Team')).toBe('2')
+    expect(badgeFor('Trade')).toBe('1')
+    expect(badgeFor('League')).toBe('3')
+    // Your week carries the lineup count only when My team is off the nav.
+    expect(badgeFor('Your week')).toBeNull()
+  })
+
+  it("shows a screen's own count on its link in the open tab's strip", () => {
+    render(shell({ selectedLeagueId: 'lg1', active: 'my-team', urgencyBadges: { myTeam: 2 } }))
+    const strip = screen.getByTestId('af-subtabs')
+    const myTeam = Array.from(strip.querySelectorAll('a')).find((a) => a.textContent?.includes('My team'))
+    expect(myTeam?.querySelector('.af-nav-badge')?.textContent).toBe('2')
+  })
+
+  /* My team is league-only since 2026-11-12, so with no league its lineup count moves to Your week. */
+  it('shows the lineup count on Your week when no league is selected', () => {
+    render(shell({ urgencyBadges: { myTeam: 2 } }))
+    expect(badgeFor('My team')).toBeNull()
+    expect(badgeFor('Your week')).toBe('2')
+  })
+
+  /* Sync left the rail for every league on 2026-10-31; a stale count must not bring it back. */
+  it('has no Sync tab, even with a stale-league count', () => {
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { sync: 4 } }))
+    const labels = screen.getAllByRole('link').map((a) => a.textContent?.replace(/\s+/g, ' ').trim())
+    expect(labels.some((t) => t === 'Sync' || t?.startsWith('↻'))).toBe(false)
+    expect(screen.queryAllByRole('link').some((a) => a.getAttribute('href')?.startsWith('/core/sync'))).toBe(false)
   })
 
   it('draws nothing for a zero, a null, or an absent prop', () => {
-    const { unmount } = render(shell({ urgencyBadges: { myTeam: 0, trades: null } }))
+    render(shell({ selectedLeagueId: 'lg1', urgencyBadges: { myTeam: 0, trades: null } }))
     expect(badgeFor('My team')).toBeNull()
     expect(badgeFor('Trades')).toBeNull()
-    unmount()
-    render(shell())
-    expect(badgeFor('Sync')).toBeNull()
   })
 
   /* A running draft is the more urgent fact; a number would bury it. */

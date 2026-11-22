@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { judge, summarizeRun, toRunRecord } from '../scripts/vitest-ratchet-judge.mjs'
 
@@ -173,6 +175,26 @@ describe('judge', () => {
     expect(v.fixed).toEqual(['__tests__/baseline-red.test.ts'])
   })
 
+  it('fails a run whose only finding is a baseline file that now passes (stale entry)', () => {
+    const summary = summarizeRun({
+      jsonReport: { testResults: [jsonFile('__tests__/baseline-red.test.ts', 'passed', [['known bad', 'passed']])] },
+      runRecord: toRunRecord(
+        [{ moduleId: '/repo/__tests__/baseline-red.test.ts' }],
+        [{ moduleId: '/repo/__tests__/baseline-red.test.ts', state: () => 'passed' }],
+        [],
+        'passed',
+      ),
+      toRel,
+      collectErrors,
+    })
+    expect(judge({ baseline, summary })).toEqual({
+      regressions: [],
+      runErrors: [],
+      fixed: ['__tests__/baseline-red.test.ts'],
+      ok: false,
+    })
+  })
+
   it('judges only what the run scheduled, so a shard never reports the other shards missing', () => {
     const summary = summarizeRun({
       jsonReport: { testResults: [jsonFile('__tests__/pass.test.ts', 'passed', [['passes', 'passed']])] },
@@ -183,5 +205,37 @@ describe('judge', () => {
     const v = judge({ baseline, summary })
     expect(v.ok).toBe(true)
     expect(v.fixed).toEqual([])
+  })
+})
+
+/*
+ * The committed baseline itself. The judge can only call an entry stale when the file RUNS: a
+ * deleted test file never runs, so it can never be reported as passing and would sit in the
+ * allowlist forever (`commissioner-intelligence-preview` did, after its suite was retired).
+ * And `count` drifted from the list it counts. Both are checked here, plus a triage reason per
+ * entry, so "why is this allowed to fail" always has an answer in the file.
+ */
+describe('scripts/vitest-failure-baseline.json', () => {
+  const baselineFile = JSON.parse(readFileSync(join(process.cwd(), 'scripts', 'vitest-failure-baseline.json'), 'utf8')) as {
+    count: number
+    failingFiles: string[]
+    reasons?: Record<string, string>
+  }
+
+  it('has a count that matches its list, and no duplicates', () => {
+    expect(baselineFile.count).toBe(baselineFile.failingFiles.length)
+    expect(new Set(baselineFile.failingFiles).size).toBe(baselineFile.failingFiles.length)
+  })
+
+  it('lists only test files that exist', () => {
+    const missing = baselineFile.failingFiles.filter((f) => !existsSync(join(process.cwd(), f)))
+    expect(missing).toEqual([])
+  })
+
+  it('gives every entry a triage reason, and no reason outlives its entry', () => {
+    const reasons = baselineFile.reasons ?? {}
+    const unexplained = baselineFile.failingFiles.filter((f) => !reasons[f]?.trim() || /^UNTRIAGED/.test(reasons[f]))
+    expect(unexplained).toEqual([])
+    expect(Object.keys(reasons).filter((f) => !baselineFile.failingFiles.includes(f))).toEqual([])
   })
 })

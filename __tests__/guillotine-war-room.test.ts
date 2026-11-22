@@ -282,7 +282,7 @@ describe('guillotineTradeEngine', () => {
     const res = guillotineTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: [] })
     // 🛑 2026-09-30: facts, never a verdict — "disabled" is a fact here, and the shadow's rule reads the flag.
     expect(res).not.toHaveProperty('verdict')
-    expect(res.explanationFacts).toEqual(['Trades are disabled in this guillotine league.'])
+    expect(res.explanationFacts).toEqual(['Trades are disabled in this Guilly league.'])
     expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.guillotine.tradesEnabled })).toBe('disabled')
   })
 
@@ -326,7 +326,7 @@ describe('guillotineWeeklyPlanEngine', () => {
 
 describe('guillotineWarRoomPrompt', () => {
   it('includes survival-first rules and no-fake-data rules', () => {
-    expect(GUILLOTINE_WAR_ROOM_SYSTEM_RULES).toContain('Guillotine')
+    expect(GUILLOTINE_WAR_ROOM_SYSTEM_RULES).toContain('Guilly')
     expect(GUILLOTINE_WAR_ROOM_SYSTEM_RULES.toUpperCase()).toContain('SURVIVAL-FIRST')
     expect(GUILLOTINE_WAR_ROOM_SYSTEM_RULES.toLowerCase()).toContain('do not invent eliminated teams')
   })
@@ -344,7 +344,7 @@ describe('guillotineWarRoomPrompt', () => {
       faab: buildFaabPlan(ctx, 'r1'),
       weeklyPlan: buildWeeklyPlan(ctx, 'r1'),
     })
-    expect(prompt).toContain('GUILLOTINE LEAGUE CONTEXT')
+    expect(prompt).toContain('GUILLY LEAGUE CONTEXT')
     expect(prompt).toContain('SURVIVAL STANDINGS')
     expect(prompt).toContain('DETERMINISTIC SURVIVAL RISK')
     expect(prompt).toContain('WEEKLY SURVIVAL PLAN')

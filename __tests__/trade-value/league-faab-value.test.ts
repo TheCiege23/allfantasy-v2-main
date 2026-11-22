@@ -61,7 +61,7 @@ describe('loadLeagueFaabState', () => {
     expect((await loadLeagueFaabState(LEAGUE))?.weeksLeft).toBe(9)
   })
 
-  it('leaves out a chopped guillotine roster, whose FAAB will never be spent', async () => {
+  it('leaves out a chopped Guilly roster, whose FAAB will never be spent', async () => {
     h.rosters = [team(100), team(200, [])]
     const out = await loadLeagueFaabState({ ...LEAGUE, leagueVariant: 'guillotine' } as LoadedTradeLeague)
     expect(out?.balances).toEqual([100])

@@ -31,7 +31,7 @@ describe('earlier image turns', () => {
 
   it('the route marks history and hands the tool loop the screenshot evidence', () => {
     const route = readFileSync('app/api/chat/chimmy/route.ts', 'utf8')
-    expect(route).toMatch(/^\s*const conversation = markEarlierImageTurns\(parsedConversation\.slice/m)
-    expect(route).toMatch(/^\s*question: screenshotSummary\n\s*\? `\$\{message\}\\n\\n\$\{fenceScreenshotEvidence\(classifyScreenshotEvidence\(screenshotSummary\)\)\}`/m)
+    expect(route).toContain('markEarlierImageTurns(priorConversationTurns(parsedConversation, message, MAX_CONVERSATION_CONTEXT_TURNS))')
+    expect(route).toMatch(/^\s*question: screenshotSummary\r?\n\s*\? `\$\{message\}\\n\\n\$\{fenceScreenshotEvidence\(classifyScreenshotEvidence\(screenshotSummary\)\)\}`/m)
   })
 })

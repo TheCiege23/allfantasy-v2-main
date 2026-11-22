@@ -72,3 +72,11 @@ describe('DraftBoardCell commissioner edit affordance', () => {
     expect(screen.getByTestId('draft-board-cell-commish-edit-5')).toBeInTheDocument()
   })
 })
+
+describe('DraftBoardCell player name', () => {
+  it('keeps a space between the first- and last-name lines in the tile text', () => {
+    const { container } = render(<DraftBoardCell pick={makePick({ playerName: 'Atlas Runner' })} isEmpty={false} />)
+    expect(container.textContent).toMatch(/Atlas Runner/)
+    expect(container.textContent).not.toMatch(/AtlasRunner/)
+  })
+})

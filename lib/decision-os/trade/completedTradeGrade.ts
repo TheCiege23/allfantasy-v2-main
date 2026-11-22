@@ -6,6 +6,7 @@ import type { TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
+import { createTtlMemo } from '@/lib/ttl-memo'
 import { emptySideIndex, isPirateSteal, pirateStealReason, PIRATE_STEAL_KIND } from '@/lib/trade-intel/pirateSteal'
 import {
   frozenOriginalFor,
@@ -58,15 +59,25 @@ import type { TradeValueSource } from './valueSource'
 /*
  * One grader per league, briefly memoised: a history page asks for a grade per trade, and the chart
  * behind every one of them is the same. Five minutes is well inside the chart's own freshness.
+ *
+ * ⚠ BOUNDED. Each grader holds its league's whole trade chart, FantasyCalc board included (~1 MB+).
+ * This was a plain Map whose TTL was only checked on read, so every league ever graded stayed in
+ * memory for the life of the process — on the cron worker, `trade-grade-notify` touches every league
+ * every 5 minutes. Expired entries are now swept on write and the count is capped. Enabled in tests
+ * too, so callers see exactly the memoisation they always did.
  */
 const GRADER_TTL_MS = 5 * 60 * 1000
-const graders = new Map<string, { at: number; grader: Promise<LeagueTradeGrader | null> }>()
+const graders = createTtlMemo<Promise<LeagueTradeGrader | null>>({
+  ttlMs: GRADER_TTL_MS,
+  maxEntries: 200,
+  enabled: () => true,
+})
 
 export function completedTradeGraderFor(leagueId: string): Promise<LeagueTradeGrader | null> {
   const hit = graders.get(leagueId)
-  if (hit && Date.now() - hit.at < GRADER_TTL_MS) return hit.grader
+  if (hit) return hit
   const grader = createLeagueTradeGrader({ leagueId }).catch(() => null)
-  graders.set(leagueId, { at: Date.now(), grader })
+  graders.set(leagueId, grader)
   return grader
 }
 
@@ -91,7 +102,7 @@ export function sleeperPlayerInput(name: string, sleeperId?: string | null, posi
   return {
     kind: 'player',
     name,
-    ...(id ? { providerIdentity: { provider: 'sleeper' as const, id, ...(pos ? { position: pos } : {}) } } : {}),
+    ...(id ? { rosterPlayerId: id, providerIdentity: { provider: 'sleeper' as const, id, ...(pos ? { position: pos } : {}) } } : {}),
   }
 }
 
@@ -144,8 +155,9 @@ function pushPickAtTradeTime(out: GradeInputs, season: string | number | null, r
 }
 
 /*
- * The only evidence a trade-date grade may stand on: that day's FantasyCalc rows (players, below-chart
- * floor at 0, pick rows) and the league's own FAAB formula, which has no date. Anything else on a line
+ * Historical captures contain that day's FantasyCalc rows (players, below-chart
+ * floor at 0, pick rows) and the league's own FAAB formula, which has no date. The live league chart
+ * can also supply an AF player quote when its recorded snapshot is fresh at grading. Anything else on a line
  * — a defender's league board, a devy option, a sports-db row, the historical file, a curve — is a
  * second source, and one is enough to send the whole trade back to its first-graded original.
  */
@@ -217,7 +229,7 @@ export async function gradeAtTradeTime(
       const view = await gradeDeal(grader, { give: inputs.give, get: inputs.get, viewerSide: false })
       if (!view.graded || view.lines.length !== assets.length) return null
       for (const line of view.lines) {
-        if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
+        if (!line.valueSource || (line.valueSource !== 'af_completed_trades' && !TRADE_DATE_SOURCES.has(line.valueSource))) return null
         if (line.valueSource === 'faab_formula') continue
         // The chart's own sync time must itself sit within the tolerance of the trade.
         const synced = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN
@@ -467,7 +479,7 @@ type ArchivedPick = {
  */
 export type ArchivedPlayer = string | null | { name: string | null; sleeperId?: string | null; position?: string | null }
 
-function archivedSide(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>, currentSeason: number): GradeInputs {
+function archivedSide(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>, currentSeason: number, faab?: number): GradeInputs {
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const player of players) {
     const p = typeof player === 'string' || player == null ? { name: player } : player
@@ -482,8 +494,13 @@ function archivedSide(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArr
     else if (Number.isFinite(year) && year >= currentSeason && p.round != null && p.round > 0) out.assets.push({ kind: 'pick', year, round: p.round })
     else out.unpriceable.push(p.label)
   }
+  // FAAB LAST, as `completedTradeInputs` orders a side: players, picks, FAAB.
+  if (faab != null && Number.isFinite(faab) && faab > 0) out.assets.push({ kind: 'faab', amount: faab })
   return out
 }
+
+/** Withheld rather than priced on the $100 stand-in — see `LeagueTradeChart.waiverBudgetFromLeague`. */
+export const BUDGET_UNPRICED_REASON = "this trade moved waiver budget, and the league's own budget isn't on file to price it against"
 
 /**
  * THE grade for one archived trade row (`LeagueTrade`), from the row's own point of view — what it
@@ -507,9 +524,11 @@ export async function gradeArchivedTrade(
      */
     labels?: { receiver?: string | null; partner?: string | null }
     /**
-     * FAAB each way, when the caller READ it (a raw Sleeper transaction's `waiver_budget`). Absent means
-     * unknown — `LeagueTrade` stores none — and then a one-way row is never called a Pirate steal, since
-     * a player sold for FAAB has the same shape (Jameis Winston for $35, Pirate League twinty, week 3).
+     * FAAB (waiver budget) each way, when the caller READ it — a raw Sleeper transaction's `waiver_budget`, or a
+     * `LeagueTrade` row's `budgetReceived`/`budgetGiven`. Absent means unknown: a one-way row is then never called
+     * a Pirate steal, since a player sold for FAAB has the same shape (Jameis Winston for $35, Pirate League
+     * twinty, week 3). Present and above zero, it is PRICED on each side on the league's own budget — or the
+     * letter is withheld when that budget is not on file (`BUDGET_UNPRICED_REASON`).
      */
     faab?: { received: number; gave: number } | null
     /**
@@ -541,8 +560,8 @@ export async function gradeArchivedTradeWithInputs(
   grader: LeagueTradeGrader | null,
   args: Parameters<typeof gradeArchivedTrade>[1],
 ): Promise<{ grade: TradeGradeView; give: GradeInputs; get: GradeInputs }> {
-  const give = archivedSide(args.gave, args.picksOut, args.currentSeason)
-  const get = archivedSide(args.received, args.picksIn, args.currentSeason)
+  const give = archivedSide(args.gave, args.picksOut, args.currentSeason, args.faab?.gave)
+  const get = archivedSide(args.received, args.picksIn, args.currentSeason, args.faab?.received)
   /*
    * A Pirate steal is not graded — and never frozen, since only a letter freezes. Only with FAAB in
    * hand: without it the one-way shape could be a FAAB sale (see `faab`).
@@ -561,13 +580,16 @@ export async function gradeArchivedTradeWithInputs(
       get,
     }
   }
+  if (grader && ((args.faab?.received ?? 0) > 0 || (args.faab?.gave ?? 0) > 0) && grader.chart?.waiverBudgetFromLeague !== true) {
+    return { grade: { graded: false, reason: BUDGET_UNPRICED_REASON, basis: null, leagueType: grader.leagueType }, give, get }
+  }
   const current = await gradeDeal(grader, { give, get, viewerSide: false })
   const o = args.original
   if (!o) return { grade: current, give, get }
   const tradeAt = tradeTimeOf({ completedAt: o.tradeAt ?? null, tradeId: o.tradeId })
   const tradeTimeInputs = {
-    give: archivedSideAtTradeTime(args.gave, args.picksOut),
-    get: archivedSideAtTradeTime(args.received, args.picksIn),
+    give: archivedSideAtTradeTime(args.gave, args.picksOut, args.faab?.gave),
+    get: archivedSideAtTradeTime(args.received, args.picksIn, args.faab?.received),
   }
   if (o.frozen) {
     const { view, toFreeze } = await completedOriginal({
@@ -601,16 +623,20 @@ export function archivedTradeInputs(args: {
   picksIn: ReadonlyArray<ArchivedPick>
   picksOut: ReadonlyArray<ArchivedPick>
   currentSeason: number
+  /** As `gradeArchivedTrade`'s `faab`. */
+  faab?: { received: number; gave: number } | null
 }): { today: { give: GradeInputs; get: GradeInputs }; atTradeTime: { give: GradeInputs; get: GradeInputs } } {
+  const f = args.faab ?? null
   return {
-    today: { give: archivedSide(args.gave, args.picksOut, args.currentSeason), get: archivedSide(args.received, args.picksIn, args.currentSeason) },
-    atTradeTime: { give: archivedSideAtTradeTime(args.gave, args.picksOut), get: archivedSideAtTradeTime(args.received, args.picksIn) },
+    today: { give: archivedSide(args.gave, args.picksOut, args.currentSeason, f?.gave), get: archivedSide(args.received, args.picksIn, args.currentSeason, f?.received) },
+    atTradeTime: { give: archivedSideAtTradeTime(args.gave, args.picksOut, f?.gave), get: archivedSideAtTradeTime(args.received, args.picksIn, f?.received) },
   }
 }
 
 /** An archived side AT THE TIME OF THE TRADE: every pick as the pick it was (Decision 3). */
-function archivedSideAtTradeTime(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>): GradeInputs {
+function archivedSideAtTradeTime(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>, faab?: number): GradeInputs {
   const out = archivedSide(players, [], 0)
   for (const p of picks) pushPickAtTradeTime(out, p.season, p.round, p.label)
+  if (faab != null && Number.isFinite(faab) && faab > 0) out.assets.push({ kind: 'faab', amount: faab })
   return out
 }

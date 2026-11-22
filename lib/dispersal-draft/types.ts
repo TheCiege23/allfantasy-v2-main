@@ -4,7 +4,7 @@
 
 export type DispersalScenario = 'orphan_teams' | 'league_downsizing'
 
-export type DispersalAssetType = 'player' | 'draft_pick' | 'faab'
+type DispersalAssetType = 'player' | 'draft_pick' | 'faab'
 
 export type DispersalAsset = {
   id: string
@@ -76,4 +76,9 @@ export type DispersalDraftState = {
   completedAt: string | null
   pickTimeSeconds: number
   autoPickOnTimeout: boolean
+  /**
+   * When the current pick's clock runs out (`pickDeadlineFor`), the same instant for every viewer and for
+   * the server's sweep. Null when no clock runs: not in progress, or no pick timer.
+   */
+  pickDeadlineAt: string | null
 }

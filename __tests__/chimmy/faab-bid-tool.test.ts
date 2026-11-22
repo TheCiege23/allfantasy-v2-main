@@ -66,7 +66,7 @@ beforeEach(() => {
 })
 
 describe('get_faab_bid_plan', () => {
-  it('in a guillotine league, splits the remaining budget across the real upgrades only', async () => {
+  it('in a Guilly league, splits the remaining budget across the real upgrades only', async () => {
     const text = await buildFaabBidContext('L1', 'me')
     expect(text).toContain('The user has $400 FAAB left of a $1000 season budget.')
     expect(text).toContain('- Free TE (TE): bid up to $323')
@@ -159,9 +159,9 @@ describe('get_faab_bid_plan', () => {
   })
 
   it('is reachable from the tool loop, and needs a league in scope', async () => {
-    const text = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: 'L1', userId: 'me' } as never)
+    const text = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: 'L1', userId: 'me', depth: 'pro' } as never)
     expect(text).toContain('- Free TE (TE): bid up to $323')
-    const noLeague = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: null, userId: 'me' } as never)
+    const noLeague = await executeChimmyTool('get_faab_bid_plan', {}, { leagueId: null, userId: 'me', depth: 'pro' } as never)
     expect(noLeague).not.toContain('FAAB BID PLAN')
   })
 })
@@ -203,7 +203,7 @@ describe('computeFaabBidPlan', () => {
  */
 describe('the bid plan reaches the chat as data', () => {
   it('hands the route the plan it rendered, once, and records the run for "Newer answer below"', async () => {
-    const ctx: ChimmyToolContext = { leagueId: 'L1', userId: 'me', faabPlans: [], toolRuns: [] }
+    const ctx: ChimmyToolContext = { leagueId: 'L1', userId: 'me', depth: 'pro', faabPlans: [], toolRuns: [] }
     const text = await executeChimmyTool('get_faab_bid_plan', {}, ctx)
     expect(text).toBe(await buildFaabBidContext('L1', 'me'))
     expect(ctx.faabPlans).toHaveLength(1)
@@ -212,7 +212,7 @@ describe('the bid plan reaches the chat as data', () => {
   })
 
   it('records nothing when no league is in scope — nothing was computed', async () => {
-    const ctx: ChimmyToolContext = { leagueId: null, userId: 'me', faabPlans: [], toolRuns: [] }
+    const ctx: ChimmyToolContext = { leagueId: null, userId: 'me', depth: 'pro', faabPlans: [], toolRuns: [] }
     await executeChimmyTool('get_faab_bid_plan', {}, ctx)
     expect(ctx.faabPlans).toEqual([])
     expect(ctx.toolRuns).toEqual([])

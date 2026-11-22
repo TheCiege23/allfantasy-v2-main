@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_V2_STATE } from '@/lib/create-league-v2/state'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key }) }))
+vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useLanguage: () => ({ t: (key: string) => key }), useOptionalLanguage: () => ({ language: 'en' }) }))
 vi.mock('@/components/create-league-v2/CreateLeagueVideoTile', () => ({ CreateLeagueVideoTile: ({ testId, onSelect }: { testId: string; onSelect: () => void }) => <button data-testid={testId} onClick={onSelect}>Select</button> }))
 import { LeagueBasicsStep } from '@/components/create-league-v2/CreateLeagueWizard'
 
@@ -16,12 +16,24 @@ describe('simple creation team choices agree with the server', () => {
     const next = { ...state, ...onChange.mock.calls[0][0] }
     expect(next.teamCount).toBe(12)
     view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
+    // Keeper runs to 20 (free even sizes; the odd ones are AF Commissioner and not in a free stepper).
+    const evens = [4, 6, 8, 10, 12, 14, 16]
+    if (concept === 'keeper') evens.push(18, 20)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
-    expect(count).toHaveAttribute('max', '16')
-    expect(count).toHaveAttribute('step', '2')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4, 6, 8, 10, 12, 14, 16')
-    for (const teamCount of [4, 6, 8, 10, 12, 14, 16]) {
+    if (concept === 'dynasty') {
+      // NFL Dynasty takes every size, odd ones included, up to the NFL's 32 teams (owner's rule,
+      // 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS). College leagues keep the full range to 250.
+      evens.push(5, 9, 31, 32)
+      expect(count).toHaveAttribute('max', '32')
+      expect(count).toHaveAttribute('step', '1')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 32')
+    } else {
+      expect(count).toHaveAttribute('max', String(evens.at(-1)))
+      expect(count).toHaveAttribute('step', '2')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent(evens.join(', '))
+    }
+    for (const teamCount of evens) {
       const validation = validateCreatePayload({ concept, sport: next.sport, teamCount, draftType: next.draftType, scoringPreset: next.scoringPresetId, leagueName: 'Accepted choices' })
       expect(validation.ok, JSON.stringify(validation)).toBe(true)
     }
@@ -40,16 +52,59 @@ describe('simple creation team choices agree with the server', () => {
       expect(patch.bestBall.playoffTeams).toBe(4)
     }
   })
+  it('steps from 16 to 17 in NFL dynasty', () => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 16, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.click(screen.getByTestId('g30-team-count-increase'))
+    expect(onChange.mock.calls[0][0].teamCount).toBe(17)
+  })
+
   it('preserves the full redraft range and a valid existing selection', () => {
     const onChange = vi.fn()
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 32, sport: 'NFL' as const }
+    // A college league: the full native range. (A pro league stops where its players run out.)
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 160, sport: 'NCAAF' as const }
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '2')
-    expect(count).toHaveAttribute('max', '32')
+    expect(count).toHaveAttribute('max', '250')
     expect(count).toHaveAttribute('step', '1')
-    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 250')
     fireEvent.click(screen.getByTestId('g30-league-type-redraft'))
-    expect(onChange.mock.calls[0][0].teamCount).toBe(32)
+    expect(onChange.mock.calls[0][0].teamCount).toBe(160)
+  })
+})
+
+
+describe('Zombie universe controls', () => {
+  it('applies 20 when entering Zombie, preserves a chosen size and offers six shared leagues', () => {
+    const onChange = vi.fn()
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
+    const view = render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
+    fireEvent.click(screen.getByTestId('g30-league-type-zombie'))
+    const next = { ...state, ...onChange.mock.calls.at(-1)![0] }
+    expect(next.teamCount).toBe(20)
+    view.rerender(<LeagueBasicsStep state={next} onChange={onChange} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('min', '4')
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '20')
+    fireEvent.change(screen.getByTestId('g30-zombie-league-count'), { target: { value: '6' } })
+    expect(onChange.mock.calls.at(-1)![0]).toEqual({ zombieLeagueCount: 6 })
+    view.rerender(<LeagueBasicsStep state={{ ...next, teamCount: 4, zombieLeagueCount: 6 }} onChange={onChange} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-zombie-universe')).toHaveTextContent('24 roster seats in total')
+    fireEvent.click(screen.getByTestId('g30-league-type-zombie'))
+    expect(onChange.mock.calls.at(-1)![0].teamCount).toBe(4)
+  })
+  it('shows imported rosters as a single league and disables batching', () => {
+    render(<LeagueBasicsStep state={{ ...DEFAULT_V2_STATE, leagueType: 'zombie', teamCount: 20, zombieLeagueCount: 6 }}
+      onChange={vi.fn()} importCarryover fieldErrors={null} />)
+    expect(screen.getByTestId('g30-zombie-league-count')).toBeDisabled()
+    expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
+  })
+
+  it('a pro-sport league is offered no more teams than the real league has', () => {
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
   })
 })

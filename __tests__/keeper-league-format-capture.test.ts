@@ -124,4 +124,20 @@ describe('BUG-4 · the grounding packet reads the captured keeper flag', () => {
     const s = resolveSettings({ leagueType: 'keeper', settings: {} })
     expect(s.isKeeper).toBe(true)
   })
+
+  it('a confirmed redraft clears stale dynasty, keeper and Best Ball signals', () => {
+    const s = resolveSettings({
+      leagueType: 'dynasty', isDynasty: true, bestBallMode: true,
+      settings: { is_keeper: true, best_ball: 1, leagueTypeConfirmation: { type: 'redraft' } },
+    })
+    expect(s).toMatchObject({ leagueType: 'redraft', isDynasty: false, isKeeper: false, isBestBall: false })
+  })
+
+  it('a confirmed specialty type wins while retaining its proven dynasty base', () => {
+    const s = resolveSettings({
+      leagueType: 'redraft',
+      settings: { isDynasty: true, leagueTypeConfirmation: { type: 'zombie' } },
+    })
+    expect(s).toMatchObject({ leagueType: 'zombie', isDynasty: true, isKeeper: false })
+  })
 })

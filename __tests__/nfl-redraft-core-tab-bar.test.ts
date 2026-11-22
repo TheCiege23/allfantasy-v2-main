@@ -148,7 +148,7 @@ describe('NFL redraft core — deep-link blocker', () => {
     // Belt-and-suspenders: even if a non-settings deep link mapped to an id
     // not in the redraft tabDefs, the gate below skips the setActiveTab call.
     // Without this, history/ai_coaching/etc. could render.
-    expect(src).toMatch(/if \(ids\.has\(target\)\) setActiveTab\(target\)/)
+    expect(src).toMatch(/if \(ids\.has\(target\)\) \{[^}]*\bsetActiveTab\(target\)/)
   })
 
   it('resets activeTab back to a valid tabDefs.id if it drifts', () => {

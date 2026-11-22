@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { EXCLUDED_VARIANTS } from "@/lib/leagues/leagueListFilter"
+import { leagueTypeBasis } from "@/lib/league/leagueTypeGrading"
 import type {
   ChimmyContextProvider,
   ChimmyContextRequest,
@@ -24,19 +25,20 @@ import type {
 
 const VARIANT_NOT_IN = Array.from(EXCLUDED_VARIANTS)
 
-function resolveFormat(row: {
-  isDynasty?: boolean | null
+export function resolveFormat(row: {
   leagueType?: string | null
+  settings?: unknown
+  platform?: string | null
+  isDynasty?: boolean | null
   guillotineMode?: boolean | null
   bestBallMode?: boolean | null
 }): string | null {
-  if (row.bestBallMode) return "bestball"
-  if (row.guillotineMode) return "guillotine"
-  if (row.isDynasty) return "dynasty"
-  if (typeof row.leagueType === "string" && row.leagueType.trim().length > 0) {
-    return row.leagueType
-  }
-  return "redraft"
+  const basis = leagueTypeBasis({ settings: row.settings, leagueType: row.leagueType, platform: row.platform })
+  if (basis.source === 'confirmed' || (basis.type !== 'redraft' && basis.type !== 'dynasty')) return basis.type
+  if (row.guillotineMode) return 'guillotine'
+  if (row.bestBallMode) return 'best_ball'
+  if (row.isDynasty) return 'dynasty'
+  return basis.type
 }
 
 export class LeagueContextProvider
@@ -90,6 +92,7 @@ export class LeagueContextProvider
             scoring: true,
             isDynasty: true,
             leagueType: true,
+            settings: true,
             guillotineMode: true,
             bestBallMode: true,
             leagueSize: true,

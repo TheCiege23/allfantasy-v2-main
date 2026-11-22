@@ -117,5 +117,19 @@ export type GuillotineEventType =
   | 'weekly_recap'
   | 'chop_animation_trigger'
   | 'roster_released'
+  /** A chopped team's unspent FAAB was split among the survivors (./faabOnChop.ts). */
+  | 'faab_split'
   | 'removal_request'
+  /** Survivors' FAAB topped up or reset after a chop (./faabAfterChop.ts); once per season and week. */
   | 'faab_after_chop'
+  /** A chopped manager's "Who's next?" pick (./nextChopPick.ts). */
+  | 'next_chop_pick'
+  /** The once-a-week chop-zone warning went out (./chopAlerts.ts); its presence stops a resend. */
+  | 'chop_zone_warning'
+  /**
+   * A stat correction moved a finished week's scores (./statCorrectionHandler.ts). The chop stands;
+   * metadata says whether the corrected scores would have chopped someone else.
+   */
+  | 'stat_correction'
+  /** The commissioner undid a chop (./chopUndo.ts): the team is back, its players restored. */
+  | 'chop_undone'

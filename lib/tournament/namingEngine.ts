@@ -30,28 +30,6 @@ function pickUnused<T>(pool: T[], used: Set<string>, i: number): T {
   return pool[start]!
 }
 
-export function getRoundLabel(roundType: string, participantCount: number): string {
-  const n = participantCount
-  switch (roundType) {
-    case 'opening':
-      return 'Opening Season'
-    case 'qualifier':
-      return n >= 128 ? `Round of ${Math.min(n, 256)}` : 'Qualifier Round'
-    case 'elite':
-      return n <= 16 ? 'Elite Eight' : 'Elite Round'
-    case 'semifinal':
-      return 'Championship Semis'
-    case 'final':
-      return 'Final Four'
-    case 'championship':
-      return 'The Championship'
-    case 'bubble':
-      return 'Bubble Week'
-    default:
-      return 'Tournament Round'
-  }
-}
-
 export function generateConferenceName(
   _tournamentId: string,
   conferenceNumber: number,

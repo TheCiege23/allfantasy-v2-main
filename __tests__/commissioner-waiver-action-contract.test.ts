@@ -8,6 +8,7 @@ vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: h.authori
 vi.mock('@/lib/waiver-wire', () => ({ getEffectiveLeagueWaiverSettings: vi.fn(), upsertLeagueWaiverSettings: h.settings, getPendingClaims: vi.fn(), getProcessedClaimsAndTransactions: h.history }))
 vi.mock('@/lib/waiver-wire/process-engine', () => ({ processWaiverClaimsForLeague: h.process }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ setWaiverProcessingLocked: h.lock }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromAssert(() => h.authorize))
 import { GET, POST, PUT } from '@/app/api/commissioner/leagues/[leagueId]/waivers/route'
 const ctx = () => ({ params: Promise.resolve({ leagueId: 'L1' }) })
 const request = (body?: string) => new NextRequest('https://example.test/api/commissioner/leagues/L1/waivers', { method: 'POST', ...(body === undefined ? {} : { body }) })

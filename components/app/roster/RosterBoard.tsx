@@ -295,6 +295,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
             leagueSport={leagueSport}
             moveToBenchEnabled={Number(slotLimits.bench ?? 0) > 0}
             moveToIrEnabled={Number(slotLimits.ir ?? 0) > 0}
+            moveToTaxiEnabled={Number(slotLimits.taxi ?? 0) > 0}
           />
         ))}
       </div>
@@ -373,6 +374,8 @@ type RosterSectionProps = {
   leagueSport: string
   moveToBenchEnabled: boolean
   moveToIrEnabled: boolean
+  /** The league has a taxi squad (phase 8, 2026-10-29). The save applies the league's taxi rules. */
+  moveToTaxiEnabled: boolean
 }
 
 function RosterSection({
@@ -393,6 +396,7 @@ function RosterSection({
   leagueSport,
   moveToBenchEnabled,
   moveToIrEnabled,
+  moveToTaxiEnabled,
 }: RosterSectionProps) {
   const isEmpty = players.length === 0
   const activeSwapCanMoveToSection =
@@ -457,6 +461,7 @@ function RosterSection({
               leagueSport={leagueSport}
               moveToBenchEnabled={moveToBenchEnabled}
               moveToIrEnabled={moveToIrEnabled}
+              moveToTaxiEnabled={moveToTaxiEnabled}
             />
           ))
         )}
@@ -479,6 +484,8 @@ type PlayerCardProps = {
   leagueSport: string
   moveToBenchEnabled: boolean
   moveToIrEnabled: boolean
+  /** The league has a taxi squad (phase 8, 2026-10-29). The save applies the league's taxi rules. */
+  moveToTaxiEnabled: boolean
 }
 
 function PlayerCard({
@@ -495,6 +502,7 @@ function PlayerCard({
   leagueSport,
   moveToBenchEnabled,
   moveToIrEnabled,
+  moveToTaxiEnabled,
 }: PlayerCardProps) {
   const statusColor =
     player.status === "healthy"
@@ -635,6 +643,20 @@ function PlayerCard({
             className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/70 hover:bg-white/10"
           >
             IR
+          </button>
+        )}
+        {moveToTaxiEnabled && player.slot !== "taxi" && player.slot !== "devy" && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onMove("taxi")
+            }}
+            data-testid={`roster-move-taxi-${player.id}`}
+            title={`Move ${player.name} to the taxi squad`}
+            className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/70 hover:bg-white/10"
+          >
+            Taxi
           </button>
         )}
         <button

@@ -140,5 +140,16 @@ export function judge({ baseline, summary }) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([file, why]) => ({ file, reasons: why }))
 
-  return { regressions, runErrors, fixed, ok: regressions.length === 0 && runErrors.length === 0 }
+  // 🛑 A baseline entry that now PASSES also fails the run. Left in place, it is an excuse
+  // waiting for its file's next real regression: `fantasy-os/route-guard` sat in the baseline
+  // for months asserting nothing, and 28 other entries were found passing on 2026-10-19 with
+  // nobody told. Reporting them was not enough -- a green line nobody reads. Remove the entry in
+  // the same change that fixed it; a file that flaps between red and green is a flake to fix,
+  // not debt to allowlist.
+  return {
+    regressions,
+    runErrors,
+    fixed,
+    ok: regressions.length === 0 && runErrors.length === 0 && fixed.length === 0,
+  }
 }

@@ -12,11 +12,13 @@
  * Works for ALL sports and ALL league types including specialty leagues.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { UserMinus, UserPlus, X, Search, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { DuplicateManagerWarningsSection } from '@/components/league-settings/DuplicateManagerWarningsSection'
+import { readTournamentCoCommissioners, SeatlessCoCommissioners, type TournamentCoCommissioner } from '@/components/league-settings/TournamentLeagueNotes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +69,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
   type MemberFilter = 'all' | 'commissioner' | 'coowner' | 'orphan' | 'assigned'
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all')
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [tournamentCos, setTournamentCos] = useState<TournamentCoCommissioner[]>([])
 
   // Load member data
   const load = useCallback(async () => {
@@ -117,6 +120,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       if (!res.ok) { setError(data.error ?? t('leagueSettings.loadFailed')); return }
 
       setCanManageMembers(true)
+      setTournamentCos(readTournamentCoCommissioners(data))
 
       const teamsRaw = data.teams ?? [] as Array<Record<string, unknown>>
       const rostersRaw = data.rosters ?? []
@@ -150,7 +154,7 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
         const isOrphanFlag = Boolean(t.isOrphan)
         const isOrphan = isOrphanFlag
           || !manager?.userId
-          || (manager.userId as string).startsWith('orphan-')
+          || isSeatPlaceholderUserId(manager.userId as string)
           || (t.ownerName as string ?? '').toLowerCase().includes('unassigned')
         const rp = roster ? (rosterPlayers[roster.id] ?? { starters: [], allPlayers: [] }) : { starters: [], allPlayers: [] }
 
@@ -306,6 +310,8 @@ export function MemberSettingsCommissionerPanel({ leagueId }: Props) {
       )}
 
       {canManageMembers && <DuplicateManagerWarningsSection leagueId={leagueId} />}
+
+      <SeatlessCoCommissioners people={tournamentCos} />
 
       {canManageMembers ? (
         <div className="flex flex-wrap items-center gap-2">

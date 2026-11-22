@@ -28,16 +28,18 @@ export type GradeMomentInput = {
   tradeAt?: string | null
   /** Priced on the guillotine basis — set by `gradeMomentOf`, or read from the grade's own lines. */
   guillotine?: boolean | null
+  zombie?: boolean | null
   lines?: ReadonlyArray<{ valueSource?: string | null }> | null
 }
 
 /** The fields `gradeMomentOf` keeps — enough for `gradeMoment` to say the same thing later. */
-export type GradeMomentFields = {
+type GradeMomentFields = {
   frozenAt: string | null
   frozenBasis: 'trade_date' | 'first_graded' | null
   pricedAsOf: string | null
   tradeAt: string | null
   guillotine: boolean
+  zombie?: boolean
 }
 
 /**
@@ -51,8 +53,16 @@ function onGuillotine(grade: GradeMomentInput | null | undefined): boolean {
   return lines.length > 0 && lines.every((l) => l.valueSource === 'guillotine_points' || l.valueSource === 'guillotine_faab')
 }
 
-const GUILLOTINE_NOTE_EN = '(guillotine lineup and FAAB values)'
-const GUILLOTINE_NOTE_ES = '(valores de guillotina: alineación y FAAB)'
+function onZombie(grade: GradeMomentInput | null | undefined): boolean {
+  if (typeof grade?.zombie === 'boolean') return grade.zombie
+  const lines = grade?.lines ?? []
+  return lines.length > 0 && lines.every((line) => line.valueSource === 'zombie_points')
+}
+
+const GUILLOTINE_NOTE_EN = '(Guilly lineup and FAAB values)'
+const GUILLOTINE_NOTE_ES = '(valores Guilly: alineación y FAAB)'
+const ZOMBIE_NOTE_EN = '(Zombie player and free-agent values)'
+const ZOMBIE_NOTE_ES = '(valores Zombie: jugadores y agentes libres)'
 const MARKET_NOTE_EN = '(no market record from the trade date)'
 const MARKET_NOTE_ES = '(no hay registro del mercado de la fecha del traspaso)'
 
@@ -102,9 +112,10 @@ export function gradeMoment(grade: GradeMomentInput | null | undefined, language
     const priced = dayOf(grade.pricedAsOf) ?? frozen
     const after = afterTrade(Math.max(0, Math.round(serial(priced) - serial(traded))), es)
     const g = onGuillotine(grade)
+    const z = onZombie(grade)
     return es
-      ? `del ${fmt(priced, true, true)}, ${after} ${g ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES}`
-      : `from ${fmt(priced, false, true)}, ${after} ${g ? GUILLOTINE_NOTE_EN : MARKET_NOTE_EN}`
+      ? `del ${fmt(priced, true, true)}, ${after} ${g ? GUILLOTINE_NOTE_ES : z ? ZOMBIE_NOTE_ES : MARKET_NOTE_ES}`
+      : `from ${fmt(priced, false, true)}, ${after} ${g ? GUILLOTINE_NOTE_EN : z ? ZOMBIE_NOTE_EN : MARKET_NOTE_EN}`
   }
 
   // A v1 original, or one whose trade time is unknown: when it was first graded, and nothing more.
@@ -119,6 +130,7 @@ export function gradeMomentOf(grade: GradeMomentInput | null | undefined): Grade
     pricedAsOf: grade?.pricedAsOf ?? null,
     tradeAt: grade?.tradeAt ?? null,
     guillotine: onGuillotine(grade),
+    ...(onZombie(grade) ? { zombie: true } : {}),
   }
 }
 
@@ -138,10 +150,10 @@ export function gradeMomentToSpanish(english: string): string | null {
     const d = esDate(atTrade[1]!, atTrade[2]!)
     return d ? `en la fecha del traspaso (${d})` : null
   }
-  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|guillotine lineup and FAAB values)\)$/.exec(english)
+  const from = /^from ([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (?:the day of the trade|(\d+) days? after the trade) \((no market record from the trade date|(?:guillotine|Guilly) lineup and FAAB values|Zombie player and free-agent values)\)$/.exec(english)
   if (from) {
     const d = esDate(from[1]!, from[2]!, from[3]!)
-    const note = from[5] === 'guillotine lineup and FAAB values' ? GUILLOTINE_NOTE_ES : MARKET_NOTE_ES
+    const note = from[5]!.endsWith('lineup and FAAB values') ? GUILLOTINE_NOTE_ES : from[5]!.startsWith('Zombie') ? ZOMBIE_NOTE_ES : MARKET_NOTE_ES
     return d ? `del ${d}, ${afterTrade(from[4] ? Number(from[4]) : 0, true)} ${note}` : null
   }
   const first = /^when first graded ([A-Z][a-z]{2}) (\d{1,2})$/.exec(english)
@@ -152,10 +164,3 @@ export function gradeMomentToSpanish(english: string): string | null {
   return null
 }
 
-/** Today's letter for the side that sends `give`, when a frozen original has since moved — else null. */
-export function movedLetter(
-  grade: { letter?: string; current?: { letter: string } | null } | null | undefined,
-): string | null {
-  const now = grade?.current?.letter
-  return now && now !== grade?.letter ? now : null
-}

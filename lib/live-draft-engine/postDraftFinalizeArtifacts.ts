@@ -1,5 +1,5 @@
 import { completeSeasonDraft } from '@/lib/tournament/seasonDraftCompletion'
-import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
 ﻿/**
  * Post-draft artifacts after DraftSession is marked completed: roster materialization + persisted grades.
  * Kept separate from DraftSessionService to avoid circular imports with ranking/draft-grade code.
@@ -94,13 +94,13 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
             redraftSeasonId: summary.seasonId,
           })
           if (guillotine.ok && guillotine.created) {
-            console.info('[postDraftFinalizeArtifacts] guillotine season created', {
+            console.info('[postDraftFinalizeArtifacts] Guilly season created', {
               leagueId,
               guillotineSeasonId: guillotine.seasonId,
             })
           }
         } catch (guillotineErr) {
-          console.error('[postDraftFinalizeArtifacts] guillotine season ensure failed', {
+          console.error('[postDraftFinalizeArtifacts] Guilly season ensure failed', {
             leagueId,
             error: guillotineErr instanceof Error ? guillotineErr.message : String(guillotineErr),
           })

@@ -42,6 +42,7 @@ export type CancelSubscriptionsDeps = {
   findSubscriptions: (userId: string) => Promise<SubscriptionRow[]>
   /** Called only when there is something to look up, so an account with no Stripe history needs no key. */
   getStripe: () => Stripe
+  cancelGooglePlay?: (userId: string) => Promise<string[]>
 }
 
 export type CancelSubscriptionsResult = {
@@ -64,10 +65,14 @@ export async function cancelSubscriptionsOnDelete(
     (r) => r.source === "apple" && r.status !== "canceled" && r.status !== "expired",
   )
 
+  const googleRows = rows.some(r => r.source === "google_play")
+  if (googleRows && !deps.cancelGooglePlay) throw new Error("Google Play cancellation is unavailable; account deletion must wait")
+  const googleCancelled = googleRows ? await deps.cancelGooglePlay!(userId) : []
+
   const subscriptionIds = new Set(rows.map((r) => r.stripeSubscriptionId).filter((id): id is string => !!id))
   const customerIds = new Set(rows.map((r) => r.stripeCustomerId).filter((id): id is string => !!id))
   if (subscriptionIds.size === 0 && customerIds.size === 0) {
-    return { cancelled: [], hasAppleSubscription }
+    return { cancelled: googleCancelled, hasAppleSubscription }
   }
 
   const stripe = deps.getStripe()
@@ -79,7 +84,7 @@ export async function cancelSubscriptionsOnDelete(
     }
   }
 
-  const cancelled: string[] = []
+  const cancelled: string[] = [...googleCancelled]
   for (const id of subscriptionIds) {
     const sub = await stripe.subscriptions.retrieve(id).catch((error: { code?: string }) => {
       // A row naming a subscription Stripe no longer has bills nothing.

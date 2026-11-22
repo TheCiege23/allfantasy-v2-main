@@ -14,9 +14,9 @@ import { dynastyValue, ageTrajectory, type AgeTrajectory } from './dynastyPlayer
 import { evaluateDynastyTeamDirection } from './dynastyTeamDirectionEngine'
 import type { ContentionWindow, DynastyPlayerFact, DynastyWarRoomContext } from './types'
 
-export type AssetCall = 'buy' | 'sell' | 'hold'
+type AssetCall = 'buy' | 'sell' | 'hold'
 
-export interface BuySellHoldEntry {
+interface BuySellHoldEntry {
   playerId: string
   playerName: string
   position: string

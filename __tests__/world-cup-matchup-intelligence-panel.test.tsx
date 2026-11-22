@@ -44,7 +44,7 @@ describe("WorldCupMatchupIntelligencePanel AF Pro gating", () => {
     getIntelMock.mockResolvedValue(baseIntel())
   })
 
-  it("shows locked card but leaves AI buttons clickable for token fallback when user does not have Bracket Brain AI", async () => {
+  it("shows locked card but leaves Chimmy buttons clickable for token fallback when user does not have Bracket Brain Chimmy", async () => {
     const WorldCupMatchupIntelligencePanel = (await import(
       "@/components/brackets/world-cup/WorldCupMatchupIntelligencePanel"
     )).default
@@ -67,10 +67,10 @@ describe("WorldCupMatchupIntelligencePanel AF Pro gating", () => {
     expect(await screen.findByTestId("wc-bracket-brain-locked-card")).toBeInTheDocument()
     expect(screen.getByTestId("wc-ai-ask-button")).not.toBeDisabled()
     expect(screen.getByTestId("wc-ai-explain-button")).not.toBeDisabled()
-    expect(screen.getByText(/Basic stats \(non-AI\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/Basic stats \(non-Chimmy\)/i)).toBeInTheDocument()
   })
 
-  it("does not show locked card when user has Bracket Brain AI", async () => {
+  it("does not show locked card when user has Bracket Brain Chimmy", async () => {
     const WorldCupMatchupIntelligencePanel = (await import(
       "@/components/brackets/world-cup/WorldCupMatchupIntelligencePanel"
     )).default
@@ -92,7 +92,7 @@ describe("WorldCupMatchupIntelligencePanel AF Pro gating", () => {
 
     await screen.findByTestId("world-cup-matchup-intelligence-panel")
     expect(screen.queryByTestId("wc-bracket-brain-locked-card")).not.toBeInTheDocument()
-    expect(screen.queryByText(/Basic stats \(non-AI\)/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Basic stats \(non-Chimmy\)/i)).not.toBeInTheDocument()
     expect(screen.getByTestId("wc-ai-ask-button")).not.toBeDisabled()
     expect(screen.getByTestId("wc-ai-explain-button")).not.toBeDisabled()
   })
@@ -125,7 +125,7 @@ describe("WorldCupMatchupIntelligencePanel AF Pro gating", () => {
   })
 })
 
-describe("WorldCupMatchupCard AI insight entrypoint", () => {
+describe("WorldCupMatchupCard Chimmy insight entrypoint", () => {
   const match = {
     id: "m1",
     matchNumber: 1,
@@ -152,7 +152,7 @@ describe("WorldCupMatchupCard AI insight entrypoint", () => {
     venueCity: "City",
   } as any
 
-  it("shows locked matchup AI CTA while keeping free deterministic matchup context visible", async () => {
+  it("shows locked matchup Chimmy CTA while keeping free deterministic matchup context visible", async () => {
     const WorldCupMatchupCard = (await import("@/components/brackets/world-cup/WorldCupMatchupCard")).default
     render(<WorldCupMatchupCard match={match} aiInsightsUnlocked={false} />)
 
@@ -163,12 +163,12 @@ describe("WorldCupMatchupCard AI insight entrypoint", () => {
     expect(within(card).queryByText(/bracket guidance stays limited/i)).toBeNull()
   })
 
-  it("opens deterministic matchup insights for AI/Pro users with safe copy", async () => {
+  it("opens deterministic matchup insights for Chimmy/Pro users with safe copy", async () => {
     const WorldCupMatchupCard = (await import("@/components/brackets/world-cup/WorldCupMatchupCard")).default
     render(<WorldCupMatchupCard match={match} aiInsightsUnlocked />)
 
     const card = screen.getByTestId("world-cup-match-ai-insight-m1")
-    fireEvent.click(within(card).getByText("AI Insights"))
+    fireEvent.click(within(card).getByText("Chimmy Insights"))
 
     expect(within(card).getByText(/Safer pick/i)).toBeInTheDocument()
     expect(within(card).getByText(/Upside pick/i)).toBeInTheDocument()

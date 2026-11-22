@@ -11,10 +11,12 @@ const m = vi.hoisted(() => {
     put: vi.fn(async (key: string) => key),
     configured: vi.fn(() => true),
     loadTrophy: vi.fn(),
+    relay: vi.fn(async () => ({ synced: true })),
+    notify: vi.fn(),
     create: vi.fn(async (leagueId: string, userId: string, text: string, options: Record<string, unknown>) => {
       const id = String(options.idempotencyKey)
       if (ids.has(id)) return null
-      ids.add(id); posts.push({ leagueId, userId, text, options }); return { id }
+      ids.add(id); posts.push({ leagueId, userId, text, options }); return { id, body: text, senderName: 'Jules', senderAvatarUrl: null, messageType: 'text' }
     }),
   }
 })
@@ -23,6 +25,8 @@ vi.mock('@/lib/prisma', () => ({ prisma: { tournamentLeagueParticipant: m.tlp, l
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: (...a: unknown[]) => m.membership(...a) }))
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: (...a: [string, string, string, Record<string, unknown>]) => m.create(...a) }))
 vi.mock('@/lib/chat-core/privateStorage', () => ({ privateChatStorageConfigured: () => m.configured(), putPrivateChatFile: (k: string) => m.put(k) }))
+vi.mock('@/lib/discord/sync-outbound', () => ({ syncOutboundLeagueChat: (...a: unknown[]) => m.relay(...a) }))
+vi.mock('@/lib/chat-notifications/chatMessageNotifier', () => ({ queueLeagueChatNotifications: (...a: unknown[]) => m.notify(...a) }))
 vi.mock('@/lib/tournament/divisions/lifecycle', () => ({ loadTrophy: (...a: unknown[]) => m.loadTrophy(...a) }))
 
 import { buildHubView } from '@/lib/tournament/divisions/hubView'
@@ -58,6 +62,26 @@ describe('post the share card to league chat', () => {
     expect(post.options.imageUrl).toMatch(/^\/api\/chat\/upload\?path=chat%2FL7%2Fimage%2F/)
     expect(post.options.metadata).toMatchObject({ attachments: [{ type: 'image', url: post.options.imageUrl }], tournamentShare: { tournamentId: 't1', entryId: entry } })
     expect(m.tlp.findMany.mock.calls[0]![0].where).toEqual({ userId: 'u1', league: { tournamentId: 't1', leagueId: { not: null } } })
+  })
+
+  it('relays to Discord and alerts members through the normal league chat path, once per post', async () => {
+    const r = await postShareCardToLeagueChat({ userId: 'u1', tournamentId: 't1', entryId: entry, image: png() })
+    const post = m.posts[0]!
+    expect(m.relay).toHaveBeenCalledTimes(1)
+    expect(m.relay).toHaveBeenCalledWith({ leagueId: 'L7', messageId: r.messageId, authorName: 'Jules', authorAvatarUrl: null, text: post.text, gifUrl: null })
+    expect(m.notify).toHaveBeenCalledTimes(1)
+    // `source: 'league'` + the poster as sender: the notifier skips the poster and applies each
+    // member's League chat preference, exactly as for a typed message.
+    expect(m.notify).toHaveBeenCalledWith({ leagueId: 'L7', messageId: r.messageId, senderUserId: 'u1', messageType: 'text', body: post.text, metadata: post.options.metadata, source: 'league' })
+    await expect(postShareCardToLeagueChat({ userId: 'u1', tournamentId: 't1', entryId: entry, image: png() })).rejects.toMatchObject({ status: 409 })
+    expect(m.relay).toHaveBeenCalledTimes(1)
+    expect(m.notify).toHaveBeenCalledTimes(1)
+  })
+
+  it('a Discord relay failure does not fail the post', async () => {
+    m.relay.mockRejectedValueOnce(new Error('discord down'))
+    await expect(postShareCardToLeagueChat({ userId: 'u1', tournamentId: 't1', entryId: entry, image: null })).resolves.toMatchObject({ leagueId: 'L7' })
+    expect(m.notify).toHaveBeenCalledTimes(1)
   })
 
   it('posts once per moment: a repeat is refused before anything is stored', async () => {

@@ -24,6 +24,8 @@ const FOLLOW_UP_CHIPS = [
 
 export interface ChimmyConversationThreadProps {
   messages: ChimmyConversationMessage[]
+  analysisUnlockId?: string
+  onAnalysisUnlock?: (id: string) => void
   isTyping?: boolean
   onFollowUpClick?: (chip: ChimmyFollowUpChip) => void
   onFeedbackSubmit?: (args: { messageId: string; feedback: 'helpful' | 'unhelpful' }) => void
@@ -46,6 +48,8 @@ export interface ChimmyConversationThreadProps {
  */
 export default function ChimmyConversationThread({
   messages,
+  analysisUnlockId,
+  onAnalysisUnlock,
   isTyping = false,
   onFollowUpClick,
   onFeedbackSubmit,
@@ -61,9 +65,25 @@ export default function ChimmyConversationThread({
   className = '',
 }: ChimmyConversationThreadProps) {
   const endRef = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(false)
 
+  /*
+   * Follow new messages by scrolling THIS thread's scroll box only. `scrollIntoView` scrolls every
+   * ancestor, the page included: in the draft room's Chimmy tab (2026-11-19) it scrolled the whole
+   * fixed-height room up by ~720px and left a black screen. Not on first render either, so opening
+   * a panel shows its top rather than jumping to the end.
+   */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = endRef.current
+    if (!el) return
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      return
+    }
+    const scroller = nearestScrollBox(el)
+    if (!scroller) return
+    const gap = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom
+    if (gap > 0) scroller.scrollBy({ top: gap, behavior: 'smooth' })
   }, [messages, isTyping])
 
   return (
@@ -77,6 +97,8 @@ export default function ChimmyConversationThread({
           content={msg.content}
           imageUrl={msg.imageUrl}
           meta={msg.meta}
+          onAnalysisUnlock={msg.id === analysisUnlockId && onAnalysisUnlock ? () => onAnalysisUnlock(msg.id) : undefined}
+          analysisBusy={isTyping}
           onFeedbackSubmit={onFeedbackSubmit}
           feedbackSelection={feedbackByMessageId[msg.id] ?? null}
           followUpChips={
@@ -135,4 +157,15 @@ export default function ChimmyConversationThread({
       <div ref={endRef} aria-hidden />
     </div>
   )
+}
+
+/** The closest ancestor that scrolls vertically; null when only the page would. */
+function nearestScrollBox(el: HTMLElement): HTMLElement | null {
+  let node = el.parentElement
+  while (node && node !== document.body && node !== document.documentElement) {
+    const oy = getComputedStyle(node).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) return node
+    node = node.parentElement
+  }
+  return null
 }

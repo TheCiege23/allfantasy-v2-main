@@ -1,4 +1,5 @@
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreLang } from '@/lib/core-app/messages/coreLocale'
 
 const spanish: Record<string, string> = {
   "My Team Highlights": "Videos de mi equipo",
@@ -29,7 +30,10 @@ const spanish: Record<string, string> = {
   "Highlights are temporarily unavailable. Please try again later.": "Los videos no están disponibles temporalmente. Inténtalo más tarde."
 }
 
+const BY_LANG: Partial<Record<'en' | 'es', Record<string, string>>> = { es: spanish }
+
 export function useHighlightCopy() {
   const { language } = useOptionalLanguage()
-  return { language, copy: (text: string) => language === 'es' ? spanish[text] ?? text : text }
+  const table = BY_LANG[coreLang(language)]
+  return { language, copy: (text: string) => table?.[text] ?? text }
 }

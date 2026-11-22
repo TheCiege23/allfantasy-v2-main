@@ -81,7 +81,10 @@ describe('deriveGuillotineAtmosphere', () => {
   it('falls back to default and the league row when the summary is unavailable', () => {
     const state = derive(null, { settings: { eliminationStartWeek: 6 } })
     expect(state.mood).toBe('default')
-    expect(guillotineBannerLine(state)).toBe('16 alive · First chop wk 6')
+    // In a season under way the team count is not how many are alive: with no summary it is left out.
+    expect(guillotineBannerLine(state)).toBe('First chop wk 6')
+    // Before the draft nobody can have been chopped, so the count is true and is shown.
+    expect(guillotineBannerLine(derive(null, { predraft: true, settings: { eliminationStartWeek: 6 } }))).toBe('16 alive · First chop wk 6')
   })
 
   it('season over (past the last chop week) is calm, not a chop week', () => {
@@ -90,7 +93,7 @@ describe('deriveGuillotineAtmosphere', () => {
 })
 
 describe('isGuillotineAtmosphereLeague', () => {
-  it('guillotine variant or guillotine mode', () => {
+  it('guillotine variant or Guilly mode', () => {
     expect(isGuillotineAtmosphereLeague({ leagueVariant: 'guillotine' })).toBe(true)
     expect(isGuillotineAtmosphereLeague({ leagueVariant: 'redraft', guillotineMode: true })).toBe(true)
   })
@@ -144,7 +147,7 @@ describe('SpecialtyLeagueAtmosphere guillotine variant', () => {
 })
 
 const nativeLeague = (over: Record<string, unknown> = {}) => ({
-  id: 'g1', name: 'Blade Runners', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 16, format: 'Guillotine',
+  id: 'g1', name: 'Blade Runners', platform: 'allfantasy', sport: 'NFL', season: 2026, teamCount: 16, format: 'Guilly',
   scoring: 'PPR', currentWeek: 12, lifecycleState: 'in_season', leagueVariant: 'guillotine', guillotineMode: true, ...over,
 }) as never
 
@@ -178,7 +181,7 @@ describe('native league header banner', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('a guillotine league gets the banner, its status line and mood, and keeps League settings', () => {
+  it('a Guilly league gets the banner, its status line and mood, and keeps League settings', () => {
     const { container } = renderWorkspace({ line: 'Chop week 12 · 9 alive', mood: 'chop_week' })
     const banner = screen.getByTestId('guillotine-league-banner')
     expect(banner.getAttribute('data-format')).toBe('guillotine')
@@ -206,7 +209,7 @@ describe('native league header banner', () => {
 describe('LeagueShell wiring', () => {
   const src = readFileSync(join(process.cwd(), 'app/league/[leagueId]/LeagueShell.tsx'), 'utf8')
 
-  it('enables the guillotine atmosphere only for native guillotine leagues', () => {
+  it('enables the guillotine atmosphere only for native Guilly leagues', () => {
     expect(src).toMatch(/^\s*const guillotineAtmosphereEnabled = nativeWorkspace && isGuillotineAtmosphereLeague\(league\)$/m)
     expect(src).toMatch(/^\s*\) : guillotineAtmosphere \? \($/m)
     expect(src).toMatch(/^\s*<SpecialtyLeagueAtmosphere variant="guillotine" mood=\{guillotineAtmosphere\.mood\} \/>$/m)

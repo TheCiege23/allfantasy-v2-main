@@ -13,6 +13,15 @@ import type {
 
 const API_BASE = 'https://www.fleaflicker.com/api'
 
+/** Lightweight, season-verified standings read for category and historical questions. */
+export async function fetchFleaflickerStandings(sport: FleaflickerSport, leagueId: number,
+  season: number): Promise<FleaflickerStandingsResponse> {
+  const body = await fetchJson<FleaflickerStandingsResponse>(
+    `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`)
+  if (body.season !== season) throw new FleaflickerSeasonMismatchError(season, body.season ?? null)
+  return body
+}
+
 export class FleaflickerImportLeagueNotFoundError extends Error {
   constructor(message: string) {
     super(message)
@@ -198,8 +207,9 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
  * `FleaflickerSeasonMismatchError` below) and on two committed fixtures:
  *   - `scoreboard.NFL.2021.week1.json` (league 206154) carries `schedulePeriod.low.season: 2021`;
  *     the ENDPOINTS.yaml `season` note records 2024/2025/2026/2099 returning that same body.
- *   - `scoreboard.NFL.json` (league 356670, PRE-DRAFT) carries `schedulePeriod.low` WITHOUT a
- *     `season` key, so a pre-draft league's mismatch has `returnedSeason === null`.
+ *   - `scoreboard.NFL.json` (league 356670, PRE-DRAFT) and `scoreboard.NFL.2026.live.json` (league
+ *     344624, in season) carry NO `season` key. Such a body passes when its first period starts in
+ *     the requested year, and otherwise mismatches with `returnedSeason === null`.
  *
  * ⚠ ONLY A NON-NULL MISMATCH MOVES THE SEASON. A null one is the pre-draft shape above, and every
  * other failure (network, 5xx, 404) keeps the requested season — the import must not start
@@ -226,7 +236,7 @@ async function resolveFleaflickerServedSeason(
  * repeated import simply sees the same trade IDs again; persistence dedupes
  * those IDs instead of deleting and rebuilding the league ledger.
  */
-export async function fetchFleaflickerTransactions(
+async function fetchFleaflickerTransactions(
   sport: FleaflickerSport,
   leagueId: number,
   options: { maxPages?: number } = {},
@@ -289,10 +299,45 @@ export class FleaflickerSeasonMismatchError extends Error {
   }
 }
 
-export interface FleaflickerScoreboardWeek {
+/**
+ * The calendar year (UTC) in which the body's EARLIEST schedule period starts, or null when the
+ * body carries no usable date.
+ *
+ * 🛑 WHY THIS EXISTS. A league that is in its CURRENT season sends no `season` key at all — not on
+ * `schedulePeriod.low`, not on any `eligibleSchedulePeriods[].low`. Observed 2026-11-21 on league
+ * 344624 mid-week-11 (`contracts/fleaflicker/fixtures/scoreboard.NFL.2026.live.json`), and on the
+ * pre-draft league 356670 (`scoreboard.NFL.json`). Requiring the key refused every live league as
+ * "season unknown (silently clamped)", so the one live Fleaflicker league in production never got a
+ * `WeeklyMatchup` row.
+ *
+ * ⚠ ABSENCE ALONE IS NOT ACCEPTED, AND THAT IS THE WHOLE POINT. A request for NEXT year on a live
+ * league would be clamped onto this same key-less body, so "no key means it is what you asked for"
+ * reopens the clamp. The dates are independent of the request: the live body's first period starts
+ * 2026-09-08, the clamped league 206154's starts 2021-09-07. A body is taken as the requested
+ * season only when that year matches.
+ *
+ * ⚠ THE EARLIEST period, never `schedulePeriod` itself: a late-season week starts in January of the
+ * following year (2021 period 16 already starts 2021-12-22).
+ *
+ * ⚠ CONFIRMED FOR NFL ONLY. Whether Fleaflicker labels an NBA/NHL season by its start or end year
+ * is unobserved; if it is the end year this returns the other one and the guard refuses, which is
+ * the behaviour before this function existed. It fails closed.
+ */
+function seasonStartYearOf(body: FleaflickerScoreboardResponse): number | null {
+  const starts = [...(body.eligibleSchedulePeriods ?? []), body.schedulePeriod]
+    .map((p) => Number(p?.low?.startEpochMilli))
+    .filter((ms) => Number.isFinite(ms) && ms > 0)
+  if (starts.length === 0) return null
+  return new Date(Math.min(...starts)).getUTCFullYear()
+}
+
+interface FleaflickerScoreboardWeek {
   /** The scoring period, 1-indexed. */
   week: number
-  /** Taken from `schedulePeriod.low.season`, never from the request. */
+  /**
+   * The season the body was verified to describe: `schedulePeriod.low.season` when the provider
+   * states one, otherwise the requested season confirmed against the body's dates.
+   */
   season: number
   games: FleaflickerScoreboardGame[]
 }
@@ -305,7 +350,7 @@ export interface FleaflickerScoreboardWeek {
  * own value returned byte-identical responses.
  *
  * ⚠ ASSERTS THE SEASON AND THROWS RATHER THAN RETURNING A BEST EFFORT. See
- * `FleaflickerSeasonMismatchError`. A caller that would rather skip than fail
+ * `FleaflickerSeasonMismatchError`, and `seasonStartYearOf` for a body that states no season. A caller that would rather skip than fail
  * should catch it — but it must not be silently swallowed, because the payload
  * underneath looks completely healthy.
  */
@@ -322,10 +367,17 @@ export async function fetchFleaflickerScoreboard(
 
   const body = await fetchJson<FleaflickerScoreboardResponse>(url)
 
-  const returnedSeason = body.schedulePeriod?.low?.season ?? null
-  if (returnedSeason !== season) {
-    throw new FleaflickerSeasonMismatchError(season, returnedSeason)
+  const statedSeason = body.schedulePeriod?.low?.season ?? null
+  /*
+   * The season the body describes. A stated season is the authority and must equal the request.
+   * With none stated, the request stands only when the body's own first-period date falls in that
+   * year (see `seasonStartYearOf`); the thrown error still reports `null`, because the dates
+   * corroborate a request and never supply a label.
+   */
+  if (statedSeason != null ? statedSeason !== season : seasonStartYearOf(body) !== season) {
+    throw new FleaflickerSeasonMismatchError(season, statedSeason)
   }
+  const returnedSeason = season
 
   const periods = (body.eligibleSchedulePeriods ?? [])
     .map((p) => p.value ?? p.ordinal)
@@ -363,7 +415,7 @@ export async function fetchFleaflickerScoreboard(
  * APPLY HERE, and its absence is deliberate rather than forgotten. There is no
  * season to be clamped and no `schedulePeriod` to check one against.
  */
-export async function fetchFleaflickerRules(
+async function fetchFleaflickerRules(
   sport: FleaflickerSport,
   leagueId: number,
 ): Promise<FleaflickerRulesResponse> {
@@ -414,7 +466,7 @@ export async function fetchFleaflickerDraftBoard(
  * No `scoring_period`: the endpoint then serves the current lineup period, which is the lineup an
  * import is for. The captured fixture pinned week 1 only because a finished season has no "current".
  */
-export async function fetchFleaflickerTeamRoster(
+async function fetchFleaflickerTeamRoster(
   sport: FleaflickerSport,
   leagueId: number,
   teamId: number,

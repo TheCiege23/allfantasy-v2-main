@@ -3,6 +3,7 @@
  * Keeps parity with legacy `isFormComplete` rules while adding draft/scoring/team validation.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import type { CreateLeagueV2State } from './state'
 import {
@@ -19,6 +20,16 @@ import {
   getSurvivorTribeOptions,
 } from './rules-engine'
 import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
+import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { toUtc } from '@/lib/timezone'
+import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
+import { checkNewBestBallLeaguePool, type BestBallPoolCheck } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply, type PlayerSupplyCheck } from '@/lib/league-creation/playerSupply'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -35,7 +46,11 @@ function isKeeperSetupValid(k: ReturnType<typeof getDefaultKeeperSetup>): boolea
 /**
  * Returns blocking issues that prevent POST /api/leagues (or tournament create).
  */
-export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): CreateLeagueCompletionIssue[] {
+export function analyzeCreateLeagueCompletion(
+  state: CreateLeagueV2State,
+  /** An import carryover's team count, which the import-flexible types accept off their list. */
+  options: { importedTeamCount?: number | null } = {},
+): CreateLeagueCompletionIssue[] {
   const issues: CreateLeagueCompletionIssue[] = []
   const lt = getEffectiveLeagueType(state)
 
@@ -46,6 +61,9 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
 
   if (lt === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)) {
     issues.push({ code: 'survivor_tribes_invalid', message: 'Choose a valid starting tribe count for this cast size.' })
+  }
+  if (lt === 'survivor' && state.survivorEntryFeeMode === 'paid' && parseSurvivorDuesUsd(state.survivorDuesUsd ?? '') === 'invalid') {
+    issues.push({ code: 'survivor_dues_invalid', message: 'Enter a dues amount greater than zero, or leave it blank.' })
   }
 
   if (!state.sport) {
@@ -73,10 +91,14 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
   } else if (lt === 'redraft' && !isUniversalTeamCount(state.teamCount)) {
     issues.push({
       code: 'team_count_invalid',
-      message: 'Team count must be from 2 through 32.',
+      message: `Team count must be from 2 through ${MAX_NATIVE_TEAMS}.`,
     })
   } else {
-    const allowedTeams = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+    const allowedTeams = teamCountOptionsWithImported(
+      getTeamCountOptions(state.sport, lt, state.soccerPipeline),
+      state.idpSelected ? 'idp' : lt,
+      options.importedTeamCount,
+    )
     if (!allowedTeams.includes(state.teamCount)) {
       issues.push({
         code: 'team_count_invalid',
@@ -120,6 +142,41 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
 
   if (!state.timezone.trim()) {
     issues.push({ code: 'timezone_required', message: 'Choose a timezone.' })
+  }
+
+  /*
+   * Survivor eliminates at most one manager per scoring period, so a cast needs roughly one
+   * period per manager: 24 in the NBA's 25-week season fits only when the draft lands in the
+   * opening week. The server refuses such a league (validateCreateLeague builds the same plan);
+   * this mirror surfaces the refusal on the wizard, where the cast and the draft date can
+   * still change. Same inputs as the server: the wizard sends no Exile or finalist overrides,
+   * so the foundation defaults apply on both sides.
+   */
+  if (
+    lt === 'survivor' &&
+    isSurvivorPlanSport(state.sport) &&
+    state.draftScheduleLater !== true &&
+    state.draftDate.trim() &&
+    state.draftTime.trim() &&
+    state.timezone.trim()
+  ) {
+    try {
+      const exile = normalizeSurvivorFoundationSettings({})
+      buildSurvivorFullSeasonPlan({
+        sport: state.sport,
+        season: resolveLeagueCreationSeason(state.sport),
+        castSize: state.teamCount,
+        draftAt: toUtc(state.draftDate, state.draftTime, state.timezone),
+        exileEnabled: exile.exileIslandEnabled,
+        // The wizard has no return-week field, so the plan picks one that fits the remaining season.
+        finalistCount: readSurvivorLateSeasonSettings({}).finalistCount,
+      })
+    } catch (error) {
+      issues.push({
+        code: 'survivor_season_too_short',
+        message: error instanceof Error ? error.message : 'Not enough season remains for this cast.',
+      })
+    }
   }
 
   // TE premium turned on must say how much: the commissioner picks the per-catch amount.
@@ -221,7 +278,39 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
     }
   }
 
+  // The same pool check POST /api/leagues refuses on (validateCreateLeague.ts), so the wizard says why first.
+  const pool = bestBallPoolCheckForWizard(state)
+  for (const refusal of pool?.refusals ?? []) {
+    issues.push({ code: 'best_ball_pool', message: refusal.message })
+  }
+  const supply = playerSupplyCheckForWizard(state, options.importedTeamCount != null && options.importedTeamCount === state.teamCount)
+  if (supply && !supply.ok && supply.message) issues.push({ code: 'player_supply', message: supply.message })
+
   return issues
+}
+
+/**
+ * The best ball pool check for the league the wizard is about to create (lib/bestball/poolCapacity.ts):
+ * Classic Best Ball, or a Guilly league with best ball lineups. Null for every other league. Its
+ * `warnings` are shown beside the team count; its `refusals` block creation (above).
+ */
+export function bestBallPoolCheckForWizard(state: CreateLeagueV2State): BestBallPoolCheck | null {
+  const lt = getEffectiveLeagueType(state)
+  const leagueType = lt === 'best_ball' && !state.idpSelected ? 'best_ball' : lt === 'guillotine' && state.guillotineBestBall === true ? 'guillotine' : null
+  if (!leagueType || !(state.teamCount > 0)) return null
+  return checkNewBestBallLeaguePool({ sport: state.sport, leagueType, teamCount: state.teamCount })
+}
+
+/**
+ * The player supply check for the league the wizard is about to create (lib/league-creation/
+ * playerSupply.ts): a pro-sport Redraft or Dynasty league. Null for every other league, and for one
+ * carried over from an import (it keeps the size it has).
+ */
+export function playerSupplyCheckForWizard(state: CreateLeagueV2State, importCarryover = false): PlayerSupplyCheck | null {
+  const lt = getEffectiveLeagueType(state)
+  if (importCarryover || (lt !== 'redraft' && lt !== 'dynasty') || !(state.teamCount > 0)) return null
+  const check = checkNewLeaguePlayerSupply({ sport: state.sport, leagueType: state.idpSelected ? 'idp' : lt, teamCount: state.teamCount })
+  return check.verified ? check : null
 }
 
 export function isFormComplete(state: CreateLeagueV2State): boolean {
@@ -237,6 +326,7 @@ export function getConceptDefaultNotes(leagueType: LeagueTypeId): string {
     best_ball: 'Weekly optimal lineup scoring; draft modes vary by sport.',
     guillotine: 'Weekly elimination until one champion remains.',
     survivor: 'Tribe-based elimination brackets.',
+    survivor_guillotine: 'Tribes compete for immunity; the lowest score is chopped each period.',
     zombie: 'Thematic elimination league format.',
     tournament: 'Large participant pool split into feeder leagues.',
     salary_cap: 'Cap-based roster construction.',

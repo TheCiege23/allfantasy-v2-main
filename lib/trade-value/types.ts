@@ -7,10 +7,10 @@
 
 export const TRADE_VALUE_SNAPSHOT_VERSION = '1.0' as const
 
-export type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consideration'
+type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consideration'
 
 /** Raw value sources captured for a single asset. `null` = source not available at capture time. */
-export interface AssetValueSources {
+interface AssetValueSources {
   marketObservation?: import('@/lib/decision-os/value-v2/market').MarketObservationV2 | null
   projectionValue: number | null
   /**
@@ -101,8 +101,9 @@ export interface AssetValueSnapshot {
   formatFit?: {
     formatId: string | null
     label: string | null
-    fit: { multiplier: number; reason: string } | null
-    legality: { ok: boolean; reason?: string } | null
+    /** `reasonCode` / `reasonParams`: the reason as a code (`lib/trade-value/formats/types.ts`). */
+    fit: { multiplier: number; reason: string; reasonCode?: string; reasonParams?: Record<string, string | number> } | null
+    legality: { ok: boolean; reason?: string; reasonCode?: string; reasonParams?: Record<string, string | number> } | null
   } | null
 }
 
@@ -148,7 +149,7 @@ export interface TradeGrade {
    * `insufficientData` state instead of a letter.
    */
   grade: string | null
-  /** sideA.total − sideB.total (positive = sideA receives more) */
+  /** sideA.total − sideB.total. Sides total what they send, so a positive gap favors sideB. */
   valueDifference: number
   /** 0–100, 100 = perfectly even. `null` when insufficientData. */
   fairnessScore: number | null
@@ -185,7 +186,7 @@ export interface TradeValueSnapshot {
   coverage?: TradeAssetCoverage
 }
 
-export type TradeAssetCoverageStatus = 'complete' | 'partial' | 'blocked'
+type TradeAssetCoverageStatus = 'complete' | 'partial' | 'blocked'
 
 export interface TradeAssetCoverageItem {
   key: string

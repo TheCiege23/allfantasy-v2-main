@@ -25,6 +25,7 @@ import {
   type SoccerScoringRow,
 } from '@/lib/soccer-scoring/SoccerScoringCategories'
 import type { SoccerScoringPresetKey } from '@/lib/soccer-scoring/SoccerScoringPresets'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +91,7 @@ export function SoccerScoringSettingsPanel({
   isCommissioner = false,
 }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, SOCCER_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<SoccerPreset[]>([])
@@ -195,7 +197,7 @@ export function SoccerScoringSettingsPanel({
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/soccer-scoring`,
         {
           method: 'PUT',
@@ -227,7 +229,7 @@ export function SoccerScoringSettingsPanel({
     } finally {
       setSaving(false)
     }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -248,6 +250,8 @@ export function SoccerScoringSettingsPanel({
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -494,6 +498,7 @@ export function SoccerScoringSettingsPanel({
         />
       )}
     </div>
+    </>
   )
 }
 

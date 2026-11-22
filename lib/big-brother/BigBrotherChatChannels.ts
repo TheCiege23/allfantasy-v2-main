@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { getRosterTeamMap } from '@/lib/zombie/rosterTeamMap'
 
 export type BigBrotherChannelKey = 'main' | 'hoh_room' | 'have_nots' | 'jury' | 'nominees'
@@ -87,7 +88,7 @@ export async function getAccessibleBbChannels(
     }),
   ])
   const isCommissioner = league?.userId === userId
-  const myRosterId = roster?.id ?? null
+  const myRosterId = roster?.id ?? await acceptedCoOwnerRosterId(leagueId, userId)
 
   const cycle = await prisma.bigBrotherCycle.findFirst({
     where: { leagueId },

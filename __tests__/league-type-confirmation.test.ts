@@ -1,6 +1,10 @@
+import { structuralSettingsLockReason } from '@/lib/league/structuralSettingsLock'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const h = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }))
+vi.mock('@/lib/league/structuralSettingsLock', () => ({ structuralSettingsLockReason: vi.fn().mockResolvedValue(null) }))
+
+const h = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), upsertCap: vi.fn() }))
+vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({ upsertSalaryCapConfig: h.upsertCap }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { league: { findUnique: h.findUnique, update: h.update } },
 }))
@@ -17,7 +21,8 @@ const league = (over: Record<string, unknown> = {}) => ({
 })
 
 beforeEach(() => {
-  h.findUnique.mockReset(); h.update.mockReset()
+  h.findUnique.mockReset(); h.update.mockReset(); h.upsertCap.mockReset()
+  h.upsertCap.mockResolvedValue({})
   h.findUnique.mockResolvedValue(league())
   h.update.mockResolvedValue({})
 })
@@ -54,6 +59,32 @@ describe('rankableType is the only field a ranking may read', () => {
 })
 
 describe('confirming', () => {
+  // Imported leagues confirmed as Salary Cap had no cap config, so every cap feature was off.
+  it('a Salary Cap confirmation creates the league cap config, after the league is written', async () => {
+    const out = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    expect(out.ok).toBe(true)
+    // Empty input: sport defaults on create, and nothing a commissioner set is ever overwritten.
+    expect(h.upsertCap).toHaveBeenCalledWith('L1', {})
+    expect(h.upsertCap.mock.invocationCallOrder[0]).toBeGreaterThan(h.update.mock.invocationCallOrder[0])
+  })
+
+  it('no cap config for any other type, or when the confirmation itself fails', async () => {
+    await confirmLeagueType({ leagueId: 'L1', type: 'dynasty', userId: 'u1' })
+    expect(h.upsertCap).not.toHaveBeenCalled()
+    h.update.mockRejectedValueOnce(new Error('db down'))
+    const failed = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    expect(failed).toEqual({ ok: false, reason: 'write-failed' })
+    expect(h.upsertCap).not.toHaveBeenCalled()
+  })
+
+  it('a cap config failure does not undo the confirmation', async () => {
+    h.upsertCap.mockRejectedValueOnce(new Error('cap table down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    warn.mockRestore()
+    expect(out.ok).toBe(true)
+  })
+
   it('records who decided and when', async () => {
     h.findUnique.mockResolvedValue(league())
     await confirmLeagueType({ leagueId: 'L1', type: 'tournament', userId: 'u1' })
@@ -180,7 +211,7 @@ describe('confirming an EFL league (user decision 2026-09-16)', () => {
   })
 })
 
-describe('confirming a Survivor Guillotine league (user decision 2026-09-16)', () => {
+describe('confirming a Survivor Guilly league (user decision 2026-09-16)', () => {
   it('records it as one format and writes its guillotine chassis to the column', async () => {
     const r = await confirmLeagueType({ leagueId: 'L1', type: 'survivor_guillotine', userId: 'u1' })
     expect(r.ok).toBe(true)
@@ -227,4 +258,18 @@ describe('what to actually ask about', () => {
     }))
     expect(await pendingTypeConfirmations(['L1'])).toEqual([])
   })
+})
+
+it('converts a native Guilly league to redraft in the format confirmation path', async () => {
+  h.findUnique.mockResolvedValue(league({ platform: 'manual', guillotineMode: true, leagueVariant: 'guillotine', settings: { inviteCode: 'KEEP', guillotine_mode: true } }))
+  await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1' })
+  expect(h.update.mock.calls[0][0].data).toMatchObject({ leagueType: 'redraft', leagueVariant: 'redraft', guillotineMode: false, isDynasty: false,
+    settings: { inviteCode: 'KEEP', guillotine_mode: false, leagueTypeConfirmation: { type: 'redraft' } } })
+})
+
+it('refuses a runtime flag change after drafting even when the saved type already says redraft', async () => {
+  h.findUnique.mockResolvedValue(league({ platform: 'manual', guillotineMode: true, leagueVariant: 'guillotine' }))
+  vi.mocked(structuralSettingsLockReason).mockResolvedValueOnce('after the draft has started')
+  expect(await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1' })).toEqual({ ok: false, reason: 'structure-locked' })
+  expect(h.update).not.toHaveBeenCalled()
 })

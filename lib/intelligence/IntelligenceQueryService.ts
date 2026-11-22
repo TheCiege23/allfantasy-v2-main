@@ -24,7 +24,7 @@ export class IntelligenceAccessError extends Error {
   }
 }
 
-export interface LeagueActivitySummary {
+interface LeagueActivitySummary {
   leagueId: string
   sport: string | null
   leagueConcept: string | null
@@ -35,8 +35,8 @@ export interface LeagueActivitySummary {
   counts: { trade: number; waiver: number; lineup: number; draft: number; scoring: number; governance: number; lifecycle: number; other: number }
 }
 
-export type LeagueHealthStatus = 'healthy' | 'cooling' | 'stale' | 'unknown'
-export interface LeagueHealthSnapshot {
+type LeagueHealthStatus = 'healthy' | 'cooling' | 'stale' | 'unknown'
+interface LeagueHealthSnapshot {
   leagueId: string
   lastActivityAt: string | null
   daysSinceLastActivity: number | null
@@ -47,7 +47,7 @@ export interface LeagueHealthSnapshot {
   status: LeagueHealthStatus
 }
 
-export interface ManagerActivitySnapshot {
+interface ManagerActivitySnapshot {
   leagueId: string
   managerKey: string
   lastActiveAt: string | null
@@ -56,7 +56,7 @@ export interface ManagerActivitySnapshot {
   actions: { trade: number; waiver: number; lineup: number; other: number }
 }
 
-export type ActionItemSeverity = 'info' | 'warning' | 'action'
+type ActionItemSeverity = 'info' | 'warning' | 'action'
 export interface CommissionerActionItem {
   kind: string
   severity: ActionItemSeverity
@@ -65,7 +65,7 @@ export interface CommissionerActionItem {
 }
 
 /** Privacy-safe audit-feed item (no payload content, no PII). */
-export interface AuditFeedItem {
+interface AuditFeedItem {
   eventId: string
   type: string
   summary: string
@@ -74,12 +74,12 @@ export interface AuditFeedItem {
   sport: string | null
   leagueConcept: string | null
 }
-export interface AuditFeedPage {
+interface AuditFeedPage {
   items: AuditFeedItem[]
   nextCursor: string | null
 }
 
-export interface ActionItemThresholds {
+interface ActionItemThresholds {
   staleLeagueDays?: number
   inactiveManagerDays?: number
 }

@@ -4,15 +4,17 @@
  * POST: manager or commissioner submits promotion (rightsId + promotedProPlayerId).
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isDevyLeague, getDevyConfig } from '@/lib/devy'
 import { checkPromotionEligibility, executePromotion } from '@/lib/devy'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { DEVY_LIFECYCLE_STATE } from '@/lib/devy/types'
 import { getPromotionWindowStatus } from '@/lib/devy/lifecycle/DevyLifecycleAutomation'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,12 +115,12 @@ export async function POST(
     return NextResponse.json({ error: 'Rights not found' }, { status: 404 })
   }
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   const roster = await prisma.roster.findFirst({
     where: { leagueId, id: right.rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  const isOwner = roster?.platformUserId === userId
+  const isOwner = isRosterManagedBy(roster, userId) || (await acceptedCoOwnerRosterId(leagueId, userId)) === right.rosterId
   if (!commissioner && !isOwner) {
     return NextResponse.json({ error: 'Only the rights holder or commissioner can promote' }, { status: 403 })
   }

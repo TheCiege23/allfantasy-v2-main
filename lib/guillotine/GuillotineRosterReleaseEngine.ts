@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { appendEvent } from './GuillotineEventLog'
+import { isImportedLeague } from './importedLeagueGuard'
 
 export interface ReleaseChoppedRostersInput {
   leagueId: string
@@ -19,6 +20,11 @@ export interface ReleaseChoppedRostersInput {
 export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): Promise<void> {
   const { leagueId, rosterIds } = input
   if (rosterIds.length === 0) return
+  // 🛑 Never empty a roster in an imported league: the provider owns it (./importedLeagueGuard.ts).
+  if (await isImportedLeague(leagueId)) {
+    console.warn('[guillotine] roster release refused: imported league', JSON.stringify({ leagueId, rosterIds }))
+    return
+  }
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId, id: { in: rosterIds } },
@@ -26,7 +32,13 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
   })
 
   const releasedPlayerIds: string[] = []
+  /*
+   * What each roster held before it was emptied, so an undone chop (./chopUndo.ts) can put it back exactly.
+   * Chops released before this was recorded have no snapshot; undo rebuilds their player list instead.
+   */
+  const previousPlayerData: Record<string, unknown> = {}
   for (const roster of rosters) {
+    previousPlayerData[roster.id] = roster.playerData ?? null
     const ids = getRosterPlayerIds(roster.playerData)
     releasedPlayerIds.push(...ids)
     const emptyData = Array.isArray(roster.playerData) ? [] : clearReleasedRosterData(roster.playerData)
@@ -40,6 +52,7 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
     rosterIds,
     releasedPlayerIds,
     releaseTiming: input.releaseTiming,
+    previousPlayerData,
   })
 }
 

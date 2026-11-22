@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import {
   computeDraftRoundsFromSlots,
+  computeStartupDraftCapacity,
   formatCountsTaxiAndDevy,
   type DraftRoundsBreakdown,
 } from '@/lib/draft/draftSettingsPolicy'
@@ -40,5 +41,16 @@ export async function getComputedDraftRounds(leagueId: string): Promise<Computed
   )
   const breakdown = computeDraftRoundsFromSlots(payload.template.slots, countsTaxiAndDevy)
   if (breakdown.rosterSpots <= 0) return null
-  return { ...breakdown, countsTaxiAndDevy }
+  /*
+   * 🛑 A DYNASTY STARTUP DRAFT FILLS THE ACTIVE ROSTER, NOT TAXI AND IR. League creation already caps it
+   * (`computeStartupDraftCapacity`, `executeCanonicalLeagueCreation`): a draft that also fills taxi
+   * hands every team more players than its active limit, and from then on every trade that adds a
+   * player is refused for exceeding it. This helper is what a commissioner's roster edit re-runs, and it
+   * counted taxi — so adding ONE bench spot before the draft took a 12-team startup from 24 rounds to 35
+   * (dynasty simulation, 2026-11-08). Same cap here, so both paths agree.
+   */
+  const rounds = countsTaxiAndDevy
+    ? Math.max(1, Math.min(breakdown.rounds, computeStartupDraftCapacity(payload.template.slots)))
+    : breakdown.rounds
+  return { ...breakdown, rounds, countsTaxiAndDevy }
 }

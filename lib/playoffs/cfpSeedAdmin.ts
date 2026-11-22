@@ -23,7 +23,7 @@ import { applyPlayoffSeedsToChallenges, type ApplyPlayoffSeedsSweep } from "./pl
  * idempotent.
  */
 
-export type CfpSeedSaveResult =
+type CfpSeedSaveResult =
   | {
       ok: true
       record: CfpSeedsRecord
@@ -62,7 +62,7 @@ export async function saveCfpSeedsAndApply(input: {
    */
   if (corrections.length > 0 && poolIds.length > 0) {
     const started = await (prisma as any).playoffBracketSeries.count({
-      where: { challengeId: { in: poolIds }, status: { in: ["in_progress", "final"] } },
+      where: { challengeId: { in: poolIds }, OR: [{ status: { in: ["in_progress", "final"] } }, { startsAt: { lte: new Date() } }] },
     })
     if (started > 0) {
       return {

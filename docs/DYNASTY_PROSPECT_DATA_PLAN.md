@@ -98,7 +98,10 @@ in §7.
   `debut_year_confirmed` and `rookie_experience` as `'unknown'`, and
   `isTheSportsDbRookieExperienceSupported()` returns `false`.
 - `league_ids` lists MLB 4424 and NBA 4387, and **no NHL id** (`ENDPOINTS.yaml:146-147`). There
-  are no MiLB, AHL or CHL ids, and no fixture for any non-football sport.
+  are no MiLB, AHL or CHL ids **in `league_ids`**, and no fixture for any non-football sport.
+  ⚠ Correction 2026-10-20: the `v1.all_leagues.json` fixture DOES list AHL, ECHL, USHL, OHL, WHL,
+  QMJHL, NCAA D1 hockey and two Triple-A leagues. Nothing documents or captures their rosters or
+  players, and no player field carries NHL/MLB rights (`contracts/thesportsdb/GAPS.md` G-16).
 - **Use:** headshots and biographical enrichment only. Not a prospect source.
 
 ### 2.3 NCAAB devy (NBA prospects)
@@ -440,3 +443,13 @@ per vendor for contract-directory work and identity tuning.
 9. **D-9 Rankings.** Should prospect *rankings* (Baseball America, FanGraphs, EP) be licensed,
    or computed in-house from stats and draft capital? This is a separate contract from the
    player universe.
+
+## NBA pre-draft values
+
+The trade grader can read an operator-supplied board licensed for AllFantasy use. The board needs a publisher name, a UTC publication timestamp, the NBA draft year and a list of players. Each player needs `playerId` in `espn:ncaab:<id>` format, `name` and the publisher's explicit integer `rank`. The importer keeps ranks as published, checks each match against the current ESPN college roster, and requires at least five verified entries. Ranks expire 30 days after publication.
+
+Set `rankBasis` to `nba_draft_projection` when the publisher ranks players by projected NBA draft order. The grader uses that rank as a rookie-pick slot. Use `college_production` for a board ordered by NCAA results. The importer can dry-run either board. Publishing and live pricing require the draft-order marker. An unmarked file can be dry-run and must be classified before publication.
+
+Run `node --require ./scripts/_audit-preload.cjs --import tsx scripts/ingest-nba-prospect-ranks.ts <normalized.json>` with the target database configured. Check the match count, then repeat with `--apply` to save. The trade grader reads the existing database cache.
+
+The Sportradar Top Prospects API identifies top prospects with a Boolean flag. A licensed ranked board supplies the ordinal used by the grade. [Sportradar Top Prospects documentation](https://developer.sportradar.com/basketball/reference/nba-top-prospects)

@@ -44,6 +44,7 @@
  */
 import { buildFullMlbScoringConfig } from '@/lib/mlb-scoring/MlbScoringPresets'
 import { buildFullSoccerScoringConfig } from '@/lib/soccer-scoring/SoccerScoringPresets'
+import { NHL_GATED_ENGINE_KEY_MAP, nhlStoreScoresGatedKeys } from '@/lib/nhl-scoring/nhlScoringEngineContract'
 
 type Store = {
   settingsKey: string
@@ -52,11 +53,14 @@ type Store = {
   receptionFromPresetUntilSaved?: boolean
   /** The rules an UNSAVED store scores — what the panel displays for a league nobody customized. */
   defaultRules?: () => Record<string, unknown>
+  /** Rows wired after leagues existed: bridged only when `scoresGated(store)` (NHL). */
+  gated?: { keyMap: Readonly<Record<string, string>>; scoresGated: (raw: unknown) => boolean }
 }
 
 export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
   NHL: {
     settingsKey: 'nhl_scoring_config',
+    gated: { keyMap: NHL_GATED_ENGINE_KEY_MAP, scoresGated: nhlStoreScoresGatedKeys },
     keyMap: {
       goals: 'g',
       assists: 'a',
@@ -221,7 +225,7 @@ export function storeSavedByPerson(raw: unknown): boolean {
 }
 
 /** Panel rules -> engine category points, for one sport. Non-numeric values are dropped. */
-export function bridgeUiRulesForSport(sport: string, rules: Record<string, unknown>): Record<string, number> {
+function bridgeUiRulesForSport(sport: string, rules: Record<string, unknown>): Record<string, number> {
   const store = UI_SCORING_STORES[sport]
   if (!store) return {}
   const out: Record<string, number> = {}
@@ -251,5 +255,11 @@ export function bridgeSportUiScoringStore(sport: string, settings: unknown): Rec
   if (!rules || typeof rules !== 'object') return {}
   const out = bridgeUiRulesForSport(sport, rules as Record<string, unknown>)
   if (store.receptionFromPresetUntilSaved && !storeSavedByPerson(raw)) delete out.rec
+  if (store.gated?.scoresGated(raw)) {
+    for (const [uiKey, engineKey] of Object.entries(store.gated.keyMap)) {
+      const value = Number((rules as Record<string, unknown>)[uiKey])
+      if ((rules as Record<string, unknown>)[uiKey] != null && Number.isFinite(value)) out[engineKey] = value
+    }
+  }
   return out
 }

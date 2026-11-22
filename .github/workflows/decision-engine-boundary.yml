@@ -33,16 +33,26 @@ jobs:
   decision-engine-boundary:
     name: Decision Engine Boundary
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full-history checkout can take more than five minutes on a cold runner.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history: the guard diffs base..head, and a shallow clone cannot resolve the base.
-          fetch-depth: 0
+          # The guard compares two trees; full history and all branches are unnecessary.
+          fetch-depth: 1
+
+      - name: Fetch the base commit for the boundary diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          fi
 
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
 
       # No `npm ci` on purpose. scripts/check-decision-engine-boundary.mjs imports node:fs,
       # node:path and node:child_process and nothing else, so an install would buy nothing and

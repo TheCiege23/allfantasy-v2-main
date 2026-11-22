@@ -5,7 +5,7 @@
  * the IDP salary-cap transfer (a no-op for non-IDP leagues). It never moved `RedraftRosterPlayer`
  * rows or transferred `RedraftRoster.faabBalance`, so accepted trades did not actually change rosters.
  *
- * This module settles a two-party redraft trade for real:
+ * This module settles a redraft trade for real — two teams, or every team of a multi-team trade:
  *  - `player` assets: move the active `RedraftRosterPlayer` from the sending roster to the receiving
  *    roster (rosterId update; acquisitionType -> "trade"; slotType -> "BENCH").
  *  - `faab` assets: transfer the metadata amount between `RedraftRoster.faabBalance` with a
@@ -23,6 +23,10 @@ import type { Prisma } from '@prisma/client'
 import { applyRedraftFaabDeltasInTransaction } from './faabTransfer'
 import { movePlayerBoundIdolsInTransaction } from '@/lib/survivor/playerBoundIdolTransfer'
 import { transferNbaSurvivorRosterPlayer } from '@/lib/survivor/transferNbaSurvivorRosterPlayer'
+import { copyRedraftFaabToGeneric } from '@/lib/league/faabMirror'
+import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
+import { assignSeasonDraftLineup } from '@/lib/tournament/seasonDraftPolicy'
+import type { readSeasonTradePolicy } from '@/lib/tournament/seasonTradePolicy'
 
 export type TradeSettlementTx = Prisma.TransactionClient
 
@@ -55,25 +59,60 @@ export async function settleRedraftTradeAssets(
   tx: TradeSettlementTx,
   input: {
     leagueId?: string
+    tradeId?: string
     proposerRosterId: string
     receiverRosterId: string
+    /** Multi-team trades: the teams beyond proposer and receiver (lib/redraft/tradeParticipants.ts). */
+    additionalRosterIds?: string[]
     assets: SettlementAssetRow[]
+    seasonTrade?: Awaited<ReturnType<typeof readSeasonTradePolicy>>
   },
 ): Promise<TradeSettlementResult> {
   const { proposerRosterId, receiverRosterId, assets } = input
-  const validRosterIds = new Set([proposerRosterId, receiverRosterId])
+  const additionalRosterIds = input.additionalRosterIds ?? []
+  const policy = input.seasonTrade
+  if (policy) {
+    if (additionalRosterIds.length || assets.some(asset => asset.assetType !== 'player' && asset.assetType !== 'faab')) {
+      throw new Error('Tournament trades support two teams and player or FAAB assets.')
+    }
+    await tx.$queryRaw`SELECT id FROM redraft_seasons WHERE id = ${policy.seasonId} FOR UPDATE`
+    const rosters = await tx.redraftRoster.findMany({ where: {
+      id: { in: [proposerRosterId, receiverRosterId] }, seasonId: policy.seasonId,
+    }, select: { id: true } })
+    if (rosters.length !== 2) throw new Error('Both tournament trade rosters must belong to the active season.')
+    if (assets.some(asset => asset.assetType === 'player') && (policy.nextScoringAt === null || Date.now() >= policy.nextScoringAt)) {
+      throw new Error('Tournament player trades settle before the next scoring period locks.')
+    }
+  }
+  // Every asset must move between two teams IN the trade — for a two-team trade, the same pair as ever.
+  const validRosterIds = new Set([proposerRosterId, receiverRosterId, ...additionalRosterIds])
 
   let playersMoved = 0
   let picksRecorded = 0
-  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true } }) : null
+  const league = input.leagueId ? await tx.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true, settings: true, zombieLeague: { select: { id: true } } } }) : null
+  if (seasonSetupBlocked(league?.settings) && !policy) throw new Error('A tournament trade requires the frozen trade policy.')
+  if (league?.zombieLeague && input.leagueId) {
+    const { lockItemLeague } = await import('@/lib/zombie/beta2025ItemService')
+    await lockItemLeague(tx, input.leagueId)
+    const z = await tx.zombieLeague.findUniqueOrThrow({ where: { id: league.zombieLeague.id }, select: { correctionHoldFromWeek: true } })
+    if (z.correctionHoldFromWeek != null) throw new Error('Trades are held during reviewed Zombie stat-correction recovery.')
+  }
   const preserveNbaSurvivorOwnership = league?.sport === 'NBA' && league.survivorMode === true
 
   // Net FAAB delta per roster (positive = gains FAAB).
   const faabDelta = new Map<string, number>([
     [proposerRosterId, 0],
     [receiverRosterId, 0],
+    ...additionalRosterIds.map((id): [string, number] => [id, 0]),
   ])
 
+  const itemAssets = assets.filter(a => a.assetType === 'zombie_item')
+  if (itemAssets.length) {
+    if (!input.leagueId || !input.tradeId) throw new Error('Zombie item settlement requires a league and trade id.')
+    await (await import('@/lib/zombie/beta2025ItemTrades')).settleBetaTradeItems(tx, {
+      leagueId: input.leagueId, tradeId: input.tradeId, rosterIds: [proposerRosterId, receiverRosterId], assets: itemAssets,
+    })
+  }
   for (const asset of assets) {
     const fromRosterId = asset.fromRosterId
     const toRosterId = asset.toRosterId
@@ -81,6 +120,7 @@ export async function settleRedraftTradeAssets(
       throw new Error('Trade asset has invalid roster direction')
     }
 
+    if (asset.assetType === 'zombie_item') continue // moved atomically above
     if (asset.assetType === 'player') {
       if (!asset.playerId) throw new Error('Player asset missing playerId')
       const moved = preserveNbaSurvivorOwnership
@@ -120,9 +160,19 @@ export async function settleRedraftTradeAssets(
     throw new Error(`Unsupported trade asset type: ${asset.assetType}`)
   }
 
+  if (policy && playersMoved) {
+    for (const rosterId of validRosterIds) {
+      const players = await tx.redraftRosterPlayer.findMany({ where: { rosterId, droppedAt: null }, orderBy: { id: 'asc' } })
+      for (const { player, slotType } of assignSeasonDraftLineup(policy.config, players)) {
+        if (player.slotType !== slotType) await tx.redraftRosterPlayer.update({ where: { id: player.id }, data: { slotType } })
+      }
+    }
+  }
+
   // Apply net FAAB transfers as conditional in-database arithmetic, so two trades settling at once from the
   // same roster cannot both spend the same balance. See ./faabTransfer.ts.
   const faabTransferred = await applyRedraftFaabDeltasInTransaction(tx, faabDelta)
+  await copyRedraftFaabToGeneric(tx, [...faabDelta].filter(([, delta]) => delta !== 0).map(([id]) => id))
 
   return { playersMoved, faabTransferred, picksRecorded }
 }

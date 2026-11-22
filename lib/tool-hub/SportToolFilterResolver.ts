@@ -7,7 +7,7 @@ import { getAllTools } from './ToolHubService'
 
 const UNIVERSAL_TOOL_SLUGS: ToolSlug[] = ['league-transfer', 'trade-finder', 'career-share', 'season-strategy']
 
-export type SportFilterOption = {
+type SportFilterOption = {
   slug: SportSlug
   label: string
   leagueSport: string
@@ -53,8 +53,8 @@ const HREF_TOOL_ALIASES: Record<string, ToolSlug> = {
   '/career-share': 'career-share',
   '/season-strategy': 'season-strategy',
   '/legacy?tab=mock-draft': 'ai-draft-assistant',
-  '/app/simulation-lab': 'matchup-simulator',
-  '/matchup-simulator': 'matchup-simulator',
+  '/app/simulation-lab': 'simulation-lab',
+  '/matchup-simulator': 'simulation-lab',
   '/app/power-rankings': 'power-rankings',
   '/bracket': 'bracket-challenge',
   '/brackets': 'bracket-challenge',

@@ -1,3 +1,6 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -41,13 +44,18 @@ export async function GET(
 
   let roster = rosterIdParam
     ? await prisma.roster.findFirst({ where: { id: rosterIdParam, leagueId } })
-    : await prisma.roster.findFirst({ where: { leagueId, platformUserId: session.user.id } })
+    : await (async () => {
+        // No team named: the manager's first (lib/league/viewerTeams.ts). Own teams only, no co-owner
+        // fallback, because the ownership check below is on the roster's owner.
+        const viewing = await resolveViewingRoster(leagueId, session.user!.id!, null, { allowCoOwner: false })
+        return viewing ? prisma.roster.findFirst({ where: { id: viewing.rosterId, leagueId } }) : null
+      })()
 
   if (!roster) {
     return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
   }
 
-  if (roster.platformUserId !== session.user.id && league.userId !== session.user.id) {
+  if (!isRosterManagedBy(roster, session.user.id) && !(await canCommissionerAct(leagueId, session.user.id, 'rosters'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

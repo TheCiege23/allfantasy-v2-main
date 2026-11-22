@@ -64,7 +64,23 @@ export type ProposeTradeModalProps = {
    */
   platform?: string | null
   sport?: string | null
+  /** Pending native offer being answered, when composing a counter. */
+  counterTradeId?: string | null
+  /**
+   * Opened from the Propose grid (components/league/TradeProposeGrid.tsx): the manager tapped, and
+   * the player tapped on their roster. Applied once, after the rosters load.
+   */
+  initialPartnerRosterId?: string | null
+  initialGetPlayerId?: string | null
 }
+
+/** Offer lifetimes the trade engine accepts (`expiresInHours`; it defaults to 48). */
+export const TRADE_EXPIRY_OPTIONS: ReadonlyArray<{ hours: number; label: string }> = [
+  { hours: 24, label: '1 day' },
+  { hours: 48, label: '2 days' },
+  { hours: 72, label: '3 days' },
+  { hours: 168, label: '1 week' },
+]
 
 type TradeContext = {
   valueBook: string
@@ -88,7 +104,13 @@ export function ProposeTradeModal({
   onSubmitted,
   platform,
   sport,
+  counterTradeId = null,
+  initialPartnerRosterId = null,
+  initialGetPlayerId = null,
 }: ProposeTradeModalProps) {
+  const [expiresInHours, setExpiresInHours] = useState(48)
+  const [sendDirectMessage, setSendDirectMessage] = useState(true)
+  const preselectApplied = useRef(false)
   const { data: session } = useSession()
   const myUserId = session?.user?.id ?? null
   const tradeCopy = useMemo(() => writeAuthorityCopy('trade', platform), [platform])
@@ -122,6 +144,8 @@ export function ProposeTradeModal({
   const [directPartnerLegs, setDirectPartnerLegs] = useState<SuggestedMultiTeamLeg[]>([])
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [counterReady, setCounterReady] = useState(false)
+  const [counterLoading, setCounterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadTradeData = useCallback(async () => {
@@ -189,13 +213,73 @@ export function ProposeTradeModal({
       setDirectPartnerLegs([])
       setSelectedSuggestionId(null)
       setError(null)
+      setCounterReady(false)
+      setCounterLoading(false)
+      setExpiresInHours(48)
+      setSendDirectMessage(true)
+      preselectApplied.current = false
     }
   }, [open])
+
+  // Opened from the Propose grid: select the tapped manager and player once the rosters are in.
+  useEffect(() => {
+    if (!open || counterTradeId || preselectApplied.current || !rosters || (!initialPartnerRosterId && !initialGetPlayerId)) return
+    // The Players screen's Trade tab knows the player and may not know his team's roster id here:
+    // the team is then whichever other roster holds him.
+    const mine = viewerTeamRosterId ?? viewerRosterId
+    const partner =
+      (initialPartnerRosterId ? rosters.find((r) => r.rosterId === initialPartnerRosterId) : undefined) ??
+      (initialGetPlayerId ? rosters.find((r) => r.rosterId !== mine && r.players.some((p) => p.id === initialGetPlayerId)) : undefined)
+    if (!partner) return
+    preselectApplied.current = true
+    setPartnerRosterId(partner.rosterId)
+    if (initialGetPlayerId && partner.players.some((p) => p.id === initialGetPlayerId)) setGetPlayerIds(new Set([initialGetPlayerId]))
+  }, [open, counterTradeId, rosters, initialPartnerRosterId, initialGetPlayerId, viewerTeamRosterId, viewerRosterId])
 
   const myRoster = useMemo(
     () => rosters?.find((r) => r.rosterId === viewerTeamRosterId) ?? rosters?.find((r) => r.rosterId === viewerRosterId) ?? rosters?.find((r) => r.platformUserId === myUserId) ?? null,
     [rosters, viewerTeamRosterId, viewerRosterId, myUserId],
   )
+  useEffect(() => {
+    if (!open || !counterTradeId || !myRoster || !rosters || counterReady) return
+    let active = true
+    setCounterLoading(true)
+    setError(null)
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(counterTradeId)}`, { cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error ?? 'Could not load the offer.')
+        const trade = data.trade as { status?: string; proposerRosterId?: string; receiverRosterId?: string; items?: Array<{ itemType: string; itemReference?: string | null; fromRosterId: string; toRosterId: string; faabAmount?: number | null }> } | undefined
+        if (!trade || trade.status !== 'pending' || !Array.isArray(trade.items)) throw new Error('This offer is no longer available to counter.')
+        const ids = [...new Set([trade.proposerRosterId, trade.receiverRosterId, ...trade.items.flatMap(item => [item.fromRosterId, item.toRosterId])].filter((id): id is string => Boolean(id)))]
+        if (ids.length !== 2 || !ids.includes(myRoster.rosterId)) throw new Error('Only two-team offers involving your team can be opened as a counter.')
+        const partner = rosters.find(r => ids.includes(r.rosterId) && r.rosterId !== myRoster.rosterId && r.canReceiveProposal)
+        if (!partner) throw new Error('This trade partner is no longer available.')
+        const givePlayers = new Set<string>(), getPlayers = new Set<string>(), givePicks = new Set<string>(), getPicks = new Set<string>()
+        let giveBudget = 0, getBudget = 0
+        for (const item of trade.items) {
+          const giving = item.fromRosterId === myRoster.rosterId && item.toRosterId === partner.rosterId
+          const receiving = item.fromRosterId === partner.rosterId && item.toRosterId === myRoster.rosterId
+          if (!giving && !receiving) throw new Error('This offer contains an unsupported trade leg.')
+          const owner = giving ? myRoster : partner
+          const id = item.itemReference ?? ''
+          if (item.itemType === 'player' && owner.players.some(p => p.id === id)) (giving ? givePlayers : getPlayers).add(id)
+          else if (['rookie_pick', 'devy_pick', 'future_pick'].includes(item.itemType) && owner.picks.some(p => p.pickId === id)) (giving ? givePicks : getPicks).add(id)
+          else if (item.itemType === 'faab' && typeof item.faabAmount === 'number' && item.faabAmount > 0) { if (giving) giveBudget += item.faabAmount; else getBudget += item.faabAmount }
+          else throw new Error('An original asset is unavailable or cannot be edited. Review the offer before building a new trade.')
+        }
+        if (!active) return
+        setPartnerRosterId(partner.rosterId)
+        setGivePlayerIds(givePlayers); setGetPlayerIds(getPlayers); setGivePickIds(givePicks); setGetPickIds(getPicks)
+        setGiveFaab(giveBudget ? String(giveBudget) : ''); setGetFaab(getBudget ? String(getBudget) : '')
+        setCounterLoading(false)
+        setCounterReady(true)
+      })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : 'Could not load the offer.') })
+      .finally(() => { if (active) setCounterLoading(false) })
+    return () => { active = false }
+  }, [open, counterTradeId, leagueId, myRoster, rosters, counterReady])
+
   const partnerRoster = useMemo(
     () => (partnerRosterId ? (rosters?.find((r) => r.rosterId === partnerRosterId) ?? null) : null),
     [rosters, partnerRosterId],
@@ -236,7 +320,7 @@ export function ProposeTradeModal({
 
   const firstHasAssets = givePlayerIds.size + getPlayerIds.size + givePickIds.size + getPickIds.size > 0 || Number(giveFaab) > 0 || Number(getFaab) > 0
   const secondHasAssets = secondGivePlayerIds.size + secondGetPlayerIds.size + secondGivePickIds.size + secondGetPickIds.size > 0 || Number(secondGiveFaab) > 0 || Number(secondGetFaab) > 0
-  const canSubmit = Boolean(myRoster && partnerRoster && firstHasAssets && (!multiTeam || (secondPartnerRoster && secondHasAssets)) && !submitting)
+  const canSubmit = Boolean(myRoster && partnerRoster && firstHasAssets && (!multiTeam || (secondPartnerRoster && secondHasAssets)) && !submitting && (!counterTradeId || counterReady) && !counterLoading)
 
   /*
    * THE grade for the deal as composed (2026-09-28): re-asked 450 ms after the last change, two-team
@@ -376,7 +460,8 @@ export function ProposeTradeModal({
       const selectedPackage = suggestions.flatMap((suggestion) => suggestion.packages).find((proposal) => proposal.id === selectedSuggestionId)
       const selectedMultiPackage = multiTeamSuggestions.find((proposal) => proposal.id === selectedSuggestionId)
 
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades`, {
+      const endpoint = `/api/leagues/${encodeURIComponent(leagueId)}/trades${counterTradeId ? `/${encodeURIComponent(counterTradeId)}/counter` : ''}`
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -384,7 +469,9 @@ export function ProposeTradeModal({
           receiverRosterId: partnerRoster.rosterId,
           assets,
           decisionEvidenceToken: selectedPackage?.decisionEvidenceToken ?? selectedMultiPackage?.decisionEvidenceToken ?? null,
+          expiresInHours,
           metadata: {
+            sendDirectMessage,
             multiTeam: Boolean(multiTeam && secondPartnerRoster),
             participantRosterIds: [myRoster.rosterId, partnerRoster.rosterId, ...(secondPartnerRoster ? [secondPartnerRoster.rosterId] : [])],
             acceptedRosterIds: [],
@@ -409,7 +496,7 @@ export function ProposeTradeModal({
       // this says "Shadow trade created — send this offer in ESPN to make it real", never
       // "Trade offer sent", which would imply the partner was notified on their platform.
       const created = data.writeAuthority?.copy ?? tradeCopy
-      toast.success(created.title ?? tradeCopy.title, { description: created.detail || undefined })
+      toast.success(counterTradeId ? 'Counteroffer sent' : (created.title ?? tradeCopy.title), { description: counterTradeId ? 'The original offer is now marked as countered.' : (created.detail || undefined) })
       onSubmitted()
       onClose()
     } catch {
@@ -423,7 +510,7 @@ export function ProposeTradeModal({
     <AppModal
       open={open}
       onClose={onClose}
-      title={shadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
+      title={counterTradeId ? 'Counter offer' : shadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
       size="lg"
       className="af-core af-league-transactions af-transaction-dialog"
     >
@@ -447,7 +534,7 @@ export function ProposeTradeModal({
         ) : (
           <>
             {tradeContext ? (
-              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-cyan-100/80">
+              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-[var(--badge-text-cyan)]">
                 <p>
                   Suggestions use this league&apos;s {tradeContext.valueBook} values, {tradeContext.proposalModel ?? 'league'} rules and your {tradeContext.managerStrategy ?? 'balanced'} strategy, plus roster construction, records, picks and FAAB.{tradeContext.missing.length ? ` Full contextual grading remains pending for ${tradeContext.missing.join(' and ')}.` : ' The required strategy and paired outcome simulation are available.'}
                 </p>
@@ -469,7 +556,7 @@ export function ProposeTradeModal({
                 </label>
               </div>
             ) : null}
-            {visibleSuggestions.length > 0 ? (
+            {!counterTradeId && visibleSuggestions.length > 0 ? (
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Suggested trade partners</p>
                 <div className="grid gap-2 sm:grid-cols-3">
@@ -495,7 +582,7 @@ export function ProposeTradeModal({
                 </div>
               </div>
             ) : null}
-            {visibleMultiTeamSuggestions.length > 0 ? (
+            {!counterTradeId && visibleMultiTeamSuggestions.length > 0 ? (
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Suggested three-team trades</p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -513,6 +600,7 @@ export function ProposeTradeModal({
               Trade partner
               <select
                 value={partnerRosterId ?? ''}
+                disabled={Boolean(counterTradeId)}
                 onChange={(e) => {
                   setSelectedSuggestionId(null)
                   setDirectPartnerLegs([])
@@ -531,7 +619,7 @@ export function ProposeTradeModal({
               </select>
             </label>
 
-            {activeSuggestion?.packages.length ? (
+            {!counterTradeId && activeSuggestion?.packages.length ? (
               <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.04] p-3">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-200">Recommended packages for this manager</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -566,7 +654,7 @@ export function ProposeTradeModal({
             ) : null}
 
             <label className="flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--surface2)] px-3 py-2 text-[12px] font-semibold text-[var(--muted)]">
-              <input type="checkbox" checked={multiTeam} onChange={(e) => { setSelectedSuggestionId(null); setDirectPartnerLegs([]); setMultiTeam(e.target.checked); if (!e.target.checked) setSecondPartnerRosterId(null) }} />
+              <input type="checkbox" disabled={Boolean(counterTradeId)} checked={multiTeam} onChange={(e) => { setSelectedSuggestionId(null); setDirectPartnerLegs([]); setMultiTeam(e.target.checked); if (!e.target.checked) setSecondPartnerRosterId(null) }} />
               Add a third team
             </label>
             {multiTeam ? (
@@ -680,6 +768,83 @@ export function ProposeTradeModal({
               </div>
             ) : null}
 
+            {/* Review (owner's page review #9): what each team receives and sends, how long the offer
+                stays open, and whether it lands in the managers' DM. */}
+            {myRoster && partnerRoster && firstHasAssets ? (() => {
+              const participants = [myRoster, partnerRoster, ...(multiTeam && secondPartnerRoster ? [secondPartnerRoster] : [])]
+              const nameOf = (id: string) => (id === myRoster.rosterId ? 'You' : rosters?.find((r) => r.rosterId === id)?.ownerName ?? 'Manager')
+              const legs: Array<{ from: string; to: string; label: string; pos: string | null }> = []
+              const addLegs = (from: typeof myRoster, to: typeof myRoster, players: ReadonlySet<string>, picks: ReadonlySet<string>, faab: string) => {
+                for (const id of players) {
+                  const p = from.players.find((x) => x.id === id)
+                  legs.push({ from: from.rosterId, to: to.rosterId, label: p?.name ?? id, pos: p?.position ?? null })
+                }
+                for (const id of picks) legs.push({ from: from.rosterId, to: to.rosterId, label: from.picks.find((x) => x.pickId === id)?.label ?? id, pos: 'PICK' })
+                const amount = Math.floor(Number(faab))
+                if (amount > 0) legs.push({ from: from.rosterId, to: to.rosterId, label: `$${amount} FAAB`, pos: 'FAAB' })
+              }
+              addLegs(myRoster, partnerRoster, givePlayerIds, givePickIds, giveFaab)
+              addLegs(partnerRoster, myRoster, getPlayerIds, getPickIds, getFaab)
+              if (multiTeam && secondPartnerRoster) {
+                addLegs(myRoster, secondPartnerRoster, secondGivePlayerIds, secondGivePickIds, secondGiveFaab)
+                addLegs(secondPartnerRoster, myRoster, secondGetPlayerIds, secondGetPickIds, secondGetFaab)
+              }
+              for (const leg of directPartnerLegs) legs.push({ from: leg.fromRosterId, to: leg.toRosterId, label: leg.asset.name, pos: leg.asset.position ?? null })
+              return (
+                <div className="flex flex-col gap-3 rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-3" data-testid="propose-trade-review">
+                  <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted)]">
+                    Review trade offer · {participants.length === 3 ? '3-way trade: ' : ''}{participants.map((r) => nameOf(r.rosterId)).join(' · ')}
+                  </p>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                    {participants.map((r) => (
+                      <div key={r.rosterId} className="rounded-lg border border-[var(--line2)] bg-[var(--surface)] p-2.5" data-testid="propose-trade-review-team">
+                        <p className="text-[13px] font-bold text-[var(--text)]">{nameOf(r.rosterId)}</p>
+                        <div className="mt-1.5 grid grid-cols-2 gap-2 text-[12px]">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-extrabold tracking-wider text-emerald-300">RECEIVES</p>
+                            {legs.filter((l) => l.to === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">from {nameOf(l.from)}</span></p>)}
+                            {legs.every((l) => l.to !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-extrabold tracking-wider text-rose-300">SENDS</p>
+                            {legs.filter((l) => l.from === r.rosterId).map((l, i) => <p key={i} className="truncate text-[var(--text)]">{l.label}<span className="block text-[11px] text-[var(--muted)]">to {nameOf(l.to)}</span></p>)}
+                            {legs.every((l) => l.from !== r.rosterId) ? <p className="text-[var(--muted)]">—</p> : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
+                      Offer expires in
+                      <select
+                        value={expiresInHours}
+                        onChange={(e) => setExpiresInHours(Number(e.target.value))}
+                        className="min-h-[36px] rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-2 text-[13px] text-[var(--text)]"
+                        data-testid="propose-trade-expiry"
+                      >
+                        {TRADE_EXPIRY_OPTIONS.map((o) => <option key={o.hours} value={o.hours}>{o.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text)]">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={sendDirectMessage}
+                        onChange={(e) => setSendDirectMessage(e.target.checked)}
+                        className="h-4 w-4 accent-[var(--accent)]"
+                        data-testid="propose-trade-send-dm"
+                      />
+                      Send a direct message
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-[var(--muted)]">
+                    Every team must send or receive at least one asset.{multiTeam ? ' Direct messages go to two-team offers only.' : ''}
+                  </p>
+                </div>
+              )
+            })() : null}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -695,7 +860,7 @@ export function ProposeTradeModal({
                 className="rounded-lg bg-[var(--accent)] px-3 py-2 text-[12px] font-semibold text-[var(--bg)] disabled:opacity-50"
                 data-testid="propose-trade-submit"
               >
-                {submitting ? 'Saving…' : submitLabel}
+                {submitting ? 'Saving…' : counterTradeId ? 'Send counteroffer' : submitLabel}
               </button>
             </div>
           </>

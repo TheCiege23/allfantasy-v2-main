@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { importedWaiverSettings } from '@/lib/core-app/waiverRowMeta'
 
 /**
  * WAIVER RULES — and an explicit refusal about waiver ACTIVITY.
@@ -63,6 +64,23 @@ export async function buildWaiverContext(leagueId: string, userId: string): Prom
     return null
   }
   if (!settings) return null
+
+  /*
+   * ⚠ A FANTRAX ROW IS ALLFANTASY'S SPORT DEFAULTS, NOT THE LEAGUE'S RULES. The Fantrax import carries
+   * no waiver settings (waiverRowMeta.ts `importedWaiverSettings`), so "FAAB budget: 100" here would be
+   * an invented rule stated as fact. An unreadable platform keeps the old behaviour.
+   */
+  const platform = await prisma.league
+    .findUnique({ where: { id: leagueId }, select: { platform: true } })
+    .then((l) => l?.platform ?? null)
+    .catch(() => null)
+  if (!importedWaiverSettings(settings, platform)) {
+    return [
+      'WAIVER RULES for this league: NOT IMPORTED — unknown. Fantrax does not send its waiver settings to AllFantasy.',
+      '- Do NOT state a waiver type, FAAB budget, processing day or claim limit for this league; tell the user to check the league settings on Fantrax.',
+      '- NO WAIVER ACTIVITY IS AVAILABLE: do NOT say who claimed, dropped or was outbid, and do NOT report what a player went for.',
+    ].join('\n')
+  }
 
   const lines: string[] = ['WAIVER RULES for this league (these are the settings, not activity):']
   lines.push(`- Type: ${settings.waiverType}.`)

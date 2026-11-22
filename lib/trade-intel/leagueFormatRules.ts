@@ -153,6 +153,9 @@ export const FORMAT_ALIASES: ReadonlySet<string> = new Set([
   'royal',
   'king_of_the_hill',
   'koth',
+  // Created from the wizard as a redraft shell (lib/survivor-guillotine/createFit.ts). Read exactly
+  // like a confirmed Survivor Guilly league: concept `guillotine`, variant `survivor_guillotine`.
+  'survivor_guillotine',
 ])
 
 /**
@@ -351,7 +354,9 @@ export function readFormatRules(league: {
    * the league was created, not a statement about it. `find` over the format allowlist asks the
    * question that was always intended: is any of these actually a format?
    */
-  const formatAlias = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
+  const formatAliasId = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
+  // The same label mapping a confirmation gets: a `survivor_guillotine` tag reads as `guillotine`.
+  const formatAlias = formatAliasId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(formatAliasId) ?? formatAliasId)
   /*
    * The confirmed concept, when a human gave one. `resolveLeagueConcept` with no
    * column returns ONLY the confirmation, so a league without one reads exactly
@@ -369,11 +374,15 @@ export function readFormatRules(league: {
    * row that has one is not this function's to reinterpret.
    */
   const confirmedId = resolveLeagueConcept(league.settings, null)
-  const variant: FormatVariant | null =
-    confirmedId === 'survivor_guillotine' ? 'survivor_guillotine' : null
   const confirmed =
     confirmedId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(confirmedId) ?? confirmedId)
   const confirmedIsBareBase = confirmedId === 'redraft' || confirmedId === 'dynasty'
+  // The variant follows whichever statement wins below: a confirmation, else a format alias.
+  const variant: FormatVariant | null =
+    confirmedId === 'survivor_guillotine' ||
+    (formatAliasId === 'survivor_guillotine' && (confirmedId == null || confirmedIsBareBase))
+      ? 'survivor_guillotine'
+      : null
   const leagueVariant = String(league.leagueVariant ?? '').trim().toLowerCase()
   const raw = (
     leagueVariant === 'salary_cap' || leagueVariant === 'contract_dynasty'
@@ -477,7 +486,7 @@ export function readFormatRules(league: {
      */
     futurePicksTradeable = false
     notes.push(
-      'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+      'Guilly: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
     )
   } else if (concept === 'king_of_the_hill') {
     /*
@@ -544,7 +553,7 @@ export function readFormatRules(league: {
      */
     futurePicksTradeable = true
     notes.push(
-      'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Zombie teams cannot trade, so the pool of legal partners only ever shrinks.',
+      'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Survivors and Whisperers may trade. Zombies cannot trade; serum revivals can restore eligible partners.',
     )
   } else if (concept === 'devy' || concept === 'c2c') {
     /*

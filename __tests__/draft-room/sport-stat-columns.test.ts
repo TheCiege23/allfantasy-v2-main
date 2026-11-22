@@ -8,7 +8,6 @@ import {
   getStatValueForDraftPlayer,
   sportUsesColumnKeys,
 } from '@/lib/draft-room/draftSportStatColumns'
-import { resolvePlayerPoolAdpColumns } from '@/lib/draft-room/playerPoolAdpColumns'
 
 function nflSplits(partial: Partial<NflDraftProjectionSplits>): NflDraftProjectionSplits {
   return {
@@ -41,11 +40,13 @@ describe('getDraftStatColumnsForSport', () => {
     expect(getDraftStatColumnsForSport('NCAAF', { position: 'PK' }).some((c) => c.key === 'fgm')).toBe(true)
   })
 
-  it('NBA / NCAAB share basketball columns', () => {
+  it('NBA exposes observed rates and shooting while college keeps its existing columns', () => {
     const nba = getDraftStatColumnsForSport('NBA')
     const ncaab = getDraftStatColumnsForSport('NCAAB')
-    expect(nba.map((c) => c.key)).toEqual(ncaab.map((c) => c.key))
-    expect(nba.map((c) => c.key)).toContain('pts')
+    expect(nba.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'fg_pct', 'ft_pct', 'gp', 'nba_proj'])
+    expect(ncaab.map((c) => c.key)).toEqual(['pts', 'reb', 'mpg', 'ast', 'stl', 'blk', 'fg3m', 'nba_proj'])
+    expect(nba.find(c => c.key === 'ast')?.label).toBe('APG')
+    expect(ncaab.find(c => c.key === 'ast')?.label).toBe('AST')
   })
 
   it('MLB hitter vs pitcher by position', () => {
@@ -210,15 +211,6 @@ describe('filterDraftPlayersByStat', () => {
     expect(filterDraftPlayersByStat(players, pts, { op: 'between', min: 9, max: 11 })).toHaveLength(1)
     expect(filterDraftPlayersByStat(players, pts, { op: 'eq', value: 25 })).toHaveLength(1)
     expect(filterDraftPlayersByStat(players, pts, { op: 'exists' })).toHaveLength(2)
-  })
-})
-
-describe('ADP separation unchanged', () => {
-  it('resolvePlayerPoolAdpColumns keeps system vs AI separate', () => {
-    const r = resolvePlayerPoolAdpColumns({ adp: 5.2, aiAdp: 9.1, aiAdpSampleSize: 99 })
-    expect(r.systemAdp).toBe(5.2)
-    expect(r.aiAdp).toBe(9.1)
-    expect(r.aiAdpSampleSize).toBe(99)
   })
 })
 

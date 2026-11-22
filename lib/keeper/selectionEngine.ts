@@ -1,7 +1,12 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { withKeeperSessionLock } from './keeperSessionLock'
 import { computeKeeperEligibility } from './eligibilityEngine'
 import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
+import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
+import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
+import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
 export async function openKeeperSelectionPhase(
   leagueId: string,
@@ -54,7 +59,22 @@ export async function submitKeeperSelections(
   seasonId: string,
   playerIds: string[],
 ): Promise<SubmitKeeperResult> {
-  const league = await prisma.league.findFirst({ where: { id: leagueId } })
+  return withKeeperSessionLock(leagueId, seasonId, (db) =>
+    submitKeeperSelectionsLocked(db, rosterId, leagueId, seasonId, playerIds))
+}
+
+async function submitKeeperSelectionsLocked(
+  db: Prisma.TransactionClient,
+  rosterId: string,
+  leagueId: string,
+  seasonId: string,
+  playerIds: string[],
+): Promise<SubmitKeeperResult> {
+  const session = await db.keeperSelectionSession.findFirst({ where: { leagueId, seasonId } })
+  if (session && (session.status !== 'open' || session.deadline && new Date(session.deadline).getTime() <= Date.now())) {
+    throw new Error('Keeper selections are closed')
+  }
+  const league = await db.league.findFirst({ where: { id: leagueId } })
   if (!league) throw new Error('League not found')
 
   const maxKeepers = league.keeperCount ?? 3
@@ -62,15 +82,32 @@ export async function submitKeeperSelections(
     throw new Error(`At most ${maxKeepers} keepers`)
   }
 
-  const roster = await prisma.redraftRoster.findFirst({
+  const roster = await db.redraftRoster.findFirst({
     where: { id: rosterId, leagueId, seasonId },
     include: { players: true },
   })
   if (!roster) throw new Error('Roster not found')
 
-  const elig = await prisma.keeperEligibility.findMany({
-    where: { seasonId, rosterId, playerId: { in: playerIds } },
-  })
+  if (playerIds.length === 0) {
+    // Persist the deliberate choice atomically; a failed write must not report success.
+    await db.leagueAuditLog.create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
+  }
+
+  // The window's roster is next season's empty shell; the keepable players and their eligibility rows
+  // are on this owner's roster in the season just played (lib/keeper/keeperSourceRoster.ts). Records
+  // are still written under the window's season and roster: lock, carryover and the next draft read those.
+  const source = await resolveKeeperSourceRoster({ leagueId, seasonId, rosterId }, db)
+  const sourcePlayers = source.mapped
+    ? source.rosterId
+      ? await db.redraftRosterPlayer.findMany({ where: { rosterId: source.rosterId } })
+      : []
+    : roster.players
+
+  const elig = source.rosterId
+    ? await db.keeperEligibility.findMany({
+        where: { seasonId: source.seasonId, rosterId: source.rosterId, playerId: { in: playerIds } },
+      })
+    : []
   const eligMap = new Map(elig.map((e) => [e.playerId, e]))
 
   const valid: SubmitKeeperResult['valid'] = []
@@ -78,57 +115,91 @@ export async function submitKeeperSelections(
   const cost: SubmitKeeperResult['cost'] = []
   const warnings: string[] = []
 
-  const costRoundCounts = new Map<number, string[]>()
   const candidates: {
     pid: string
     e: (typeof elig)[0]
   }[] = []
 
+  // A keeper the commissioner rejected stays rejected: saving him again does not put him back.
+  const rejected = new Set(
+    (await db.keeperRecord.findMany({ where: { leagueId, seasonId, rosterId, status: 'rejected', playerId: { in: playerIds } }, select: { playerId: true } })).map((r) => r.playerId),
+  )
+
   for (const pid of playerIds) {
+    if (rejected.has(pid)) {
+      conflicted.push({ playerIds: [pid], reason: 'rejected_by_commissioner' })
+      continue
+    }
     const e = eligMap.get(pid)
     if (!e?.isEligible) {
       conflicted.push({ playerIds: [pid], reason: e?.ineligibleReason ?? 'ineligible' })
       continue
     }
-    const onRoster = roster.players.some((p) => p.playerId === pid && !p.droppedAt)
+    const onRoster = sourcePlayers.some((p) => p.playerId === pid && !p.droppedAt)
     if (!onRoster) {
       conflicted.push({ playerIds: [pid], reason: 'not_on_roster' })
       continue
     }
-
-    const cr = e.projectedCostRound
-    if (cr != null) {
-      const arr = costRoundCounts.get(cr) ?? []
-      arr.push(pid)
-      costRoundCounts.set(cr, arr)
-    }
     candidates.push({ pid, e })
   }
 
-  const duplicateRoundPlayers = new Set<string>()
-  for (const [round, ids] of costRoundCounts) {
-    if (ids.length > 1) {
-      conflicted.push({
-        playerIds: ids,
-        reason: `duplicate_round_${round}`,
-      })
-      for (const id of ids) duplicateRoundPlayers.add(id)
+  /*
+   * Which pick each round-cost keeper uses (lib/keeper/keeperRules.ts). Two keepers costing the
+   * same round either move (lose_round_before / lose_round_after) or are refused for the manager
+   * to choose (player_chooses / reject_both). The stored `costRound` is the pick actually used,
+   * which is what the carryover forfeits and the next draft places.
+   */
+  const rules = resolveKeeperRules(league)
+  const latestDraft = await db.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { rounds: true },
+  })
+  const placement = placeTeamKeepers(
+    rules,
+    candidates.flatMap(({ pid, e }) => (e.projectedCostRound != null ? [{ playerId: pid, costRound: e.projectedCostRound }] : [])),
+    { totalRounds: latestDraft?.rounds ?? Math.max(15, ...candidates.map((c) => c.e.projectedCostRound ?? 1)) },
+  )
+  const placedById = new Map(placement.placed.map((p) => [p.playerId, p]))
+  const refusedById = new Map(placement.refused.map((r) => [r.playerId, r]))
+  const refusedByRound = new Map<number, string[]>()
+  for (const r of placement.refused) {
+    if (r.reason !== 'same_round') {
+      conflicted.push({ playerIds: [r.playerId], reason: r.reason })
+      continue
     }
+    refusedByRound.set(r.costRound, [...(refusedByRound.get(r.costRound) ?? []), r.playerId])
+  }
+  for (const [round, ids] of refusedByRound) {
+    // In the order the manager listed them, as before.
+    ids.sort((x, y) => playerIds.indexOf(x) - playerIds.indexOf(y))
+    conflicted.push({ playerIds: ids, reason: `duplicate_round_${round}` })
   }
 
-  const rule = league.keeperConflictRule ?? 'player_chooses'
   for (const { pid, e } of candidates) {
-    if (duplicateRoundPlayers.has(pid)) {
-      if (rule === 'reject_both') {
-        await prisma.keeperRecord.deleteMany({
+    if (refusedById.has(pid)) {
+      if (rules.sameRoundRule === 'reject_both') {
+        await db.keeperRecord.deleteMany({
           where: { seasonId, rosterId, playerId: pid },
         })
       }
       continue
     }
 
-    const player = roster.players.find((p) => p.playerId === pid)!
-    const rec = await prisma.keeperRecord.upsert({
+    const spot = placedById.get(pid)
+    const costRound = spot ? spot.round : e.projectedCostRound
+    const costLabel = spot ? placedKeeperLabel(spot) : e.projectedCost
+    if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
+
+    const player = sourcePlayers.find((p) => p.playerId === pid && !p.droppedAt)!
+    /*
+     * This keep's season as a keeper: the seasons he was already a LOCKED keeper (the eligibility
+     * row's history count, the same one the max-years rule uses) plus this one. It was the constant
+     * 1, so every record said "first year". Selection is refused once the session locks (above), so
+     * the history here never already includes this season.
+     */
+    const yearsKept = Math.max(0, e.yearsKept ?? 0) + 1
+    const rec = await db.keeperRecord.upsert({
       where: {
         seasonId_rosterId_playerId: {
           seasonId,
@@ -146,17 +217,18 @@ export async function submitKeeperSelections(
         team: player.team,
         sport: player.sport,
         originalDraftYear: new Date().getFullYear(),
-        yearsKept: 1,
-        costRound: e.projectedCostRound,
+        yearsKept,
+        costRound,
         costAuctionValue: e.projectedCostAuction,
-        costLabel: e.projectedCost,
+        costLabel,
         status: 'pending',
         acquisitionType: player.acquisitionType,
       },
       update: {
-        costRound: e.projectedCostRound,
+        costRound,
         costAuctionValue: e.projectedCostAuction,
-        costLabel: e.projectedCost,
+        costLabel,
+        yearsKept,
         status: 'pending',
         submittedAt: new Date(),
       },
@@ -164,14 +236,39 @@ export async function submitKeeperSelections(
     valid.push(rec)
     cost.push({
       playerId: pid,
-      costLabel: e.projectedCost,
-      costRound: e.projectedCostRound,
+      costLabel,
+      costRound,
     })
   }
 
-  await prisma.keeperSelectionSession.updateMany({
+  /*
+   * 🛑 THE LIST A MANAGER SAVES IS THEIR SELECTION. The Keepers tab posts every ticked player, but a
+   * save only ever added: untick a player and save, and his record stayed on file, was locked with
+   * the rest, cost a pick and could put the team over the keeper limit (the limit is checked against
+   * the list sent, not what is stored). Saving nobody left every earlier keeper in place too. A
+   * pending or commissioner-confirmed keeper the list no longer names is removed. Locked and rejected
+   * records are never touched.
+   */
+  await db.keeperRecord.deleteMany({ where: { leagueId, seasonId, rosterId, status: { in: ['pending', 'confirmed'] }, playerId: { notIn: playerIds } } })
+
+  /*
+   * How many TEAMS have submitted, counted, not incremented. It went up by one on every save, so one
+   * manager saving twice read "2 of 4 teams submitted" to the commissioner (walked locally
+   * 2026-11-20), and a refused pick counted too. A team has submitted when it holds a keeper on
+   * file or has deliberately kept nobody.
+   */
+  const [withKeepers, keptNobody] = await Promise.all([
+    db.keeperRecord.findMany({ where: { leagueId, seasonId, status: { not: 'rejected' } }, select: { rosterId: true }, distinct: ['rosterId'] }),
+    db.leagueAuditLog.findMany({ where: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId }, select: { metadata: true } }),
+  ])
+  const submitted = new Set(withKeepers.map((r) => r.rosterId))
+  for (const row of keptNobody) {
+    const id = (row.metadata as { rosterId?: unknown } | null)?.rosterId
+    if (typeof id === 'string' && id) submitted.add(id)
+  }
+  await db.keeperSelectionSession.updateMany({
     where: { seasonId, leagueId },
-    data: { teamsSubmitted: { increment: 1 } },
+    data: { teamsSubmitted: submitted.size },
   })
 
   return { valid, conflicted, cost, warnings }
@@ -216,51 +313,54 @@ export async function validateAllConflicts(
 }
 
 export async function lockKeeperSelections(leagueId: string, sessionId: string): Promise<void> {
-  const session = await prisma.keeperSelectionSession.findFirst({
-    where: { id: sessionId, leagueId },
-  })
-  if (!session) throw new Error('Session not found')
+  const initial = await prisma.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
+  if (!initial) throw new Error('Session not found')
 
-  const wasAlreadyLocked = session.status === 'locked'
+  const session = await withKeeperSessionLock(leagueId, initial.seasonId, async (db) => {
+    // Re-read after the lock: another deadline runner may have completed while we waited.
+    const current = await db.keeperSelectionSession.findFirst({ where: { id: sessionId, leagueId } })
+    if (!current) throw new Error('Session not found')
+    if (current.status === 'locked') return null
 
-  await prisma.keeperRecord.updateMany({
-    where: { leagueId, seasonId: session.seasonId, status: 'pending' },
-    data: { status: 'locked', lockedAt: new Date() },
-  })
+    // A provider/value failure keeps the old no-default behavior. A savepoint removes ALL
+    // partially created defaults before locking the manager selections already on file.
+    await db.$executeRaw`SAVEPOINT keeper_defaults`
+    try {
+      await applyMissedDeadlineRule(leagueId, current.seasonId, db)
+      await db.$executeRaw`RELEASE SAVEPOINT keeper_defaults`
+    } catch (error) {
+      await db.$executeRaw`ROLLBACK TO SAVEPOINT keeper_defaults`
+      await db.$executeRaw`RELEASE SAVEPOINT keeper_defaults`
+      console.error('[keeper] missed-deadline rule failed; defaults rolled back', { leagueId, sessionId, error: error instanceof Error ? error.message : error })
+    }
 
-  await prisma.keeperSelectionSession.update({
-    where: { id: sessionId },
-    data: { status: 'locked', lockedAt: new Date() },
-  })
-
-  await prisma.league.update({
-    where: { id: leagueId },
-    data: { keeperPhaseActive: false },
-  })
-
-  // Materialize locked keepers onto the incoming season's rosters. Guarded on
-  // `wasAlreadyLocked` because `executeSeasonCarryover` creates roster-player
-  // rows rather than upserting them — re-running it on an already-locked
-  // session (a repeat commissioner click, or the deadline sweep racing a
-  // manual lock) would duplicate every kept player instead of no-op'ing.
-  if (!wasAlreadyLocked) {
-    const outgoing = await prisma.redraftSeason.findFirst({
-      where: { leagueId, NOT: { id: session.seasonId } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
+    /*
+     * 🛑 A KEEPER THE COMMISSIONER CONFIRMED WAS DROPPED AT THE LOCK. The dashboard's Confirm button
+     * sets `confirmed`; the lock promoted only `pending`, and the carryover, the pick forfeits and the
+     * next draft all read `locked`. So approving a keeper was the one way to lose him: he stayed in
+     * the pool and the team kept its pick. Both statuses lock; `rejected` never does.
+     */
+    await db.keeperRecord.updateMany({
+      where: { leagueId, seasonId: current.seasonId, status: { in: ['pending', 'confirmed'] } },
+      data: { status: 'locked', lockedAt: new Date() },
     })
-    if (outgoing) {
-      try {
-        await executeSeasonCarryover(leagueId, outgoing.id, session.seasonId)
-      } catch (error) {
-        console.error('[keeper] executeSeasonCarryover failed after lock', {
-          leagueId,
-          sessionId,
-          incomingSeasonId: session.seasonId,
-          outgoingSeasonId: outgoing.id,
-          error,
-        })
-      }
+    await db.keeperSelectionSession.update({ where: { id: sessionId }, data: { status: 'locked', lockedAt: new Date() } })
+    await db.league.update({ where: { id: leagueId }, data: { keeperPhaseActive: false } })
+    return current
+  })
+
+  // Only the transaction that changed open -> locked materializes the season carryover.
+  if (!session) return
+  const outgoing = await prisma.redraftSeason.findFirst({
+    where: { leagueId, NOT: { id: session.seasonId } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  })
+  if (outgoing) {
+    try {
+      await executeSeasonCarryover(leagueId, outgoing.id, session.seasonId)
+    } catch (error) {
+      console.error('[keeper] executeSeasonCarryover failed after lock', { leagueId, sessionId, incomingSeasonId: session.seasonId, outgoingSeasonId: outgoing.id, error })
     }
   }
 }

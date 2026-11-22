@@ -51,7 +51,7 @@ export function eliminationFormat(league: {
       (t): t is string => typeof t === 'string' && t.trim() !== '',
     ) ?? ''
   const type = raw.trim().toLowerCase().replace(/[\s-]+/g, '_')
-  if (type.includes('guillotine')) return type.includes('survivor') ? 'survivor_guillotine' : 'guillotine'
+  if (type.includes('guillotine') || type.includes('guilly')) return type.includes('survivor') ? 'survivor_guillotine' : 'guillotine'
   if (
     league.guillotineMode === true ||
     settings.guillotineMode === true ||

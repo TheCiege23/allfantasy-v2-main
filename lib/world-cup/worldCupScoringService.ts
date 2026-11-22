@@ -664,6 +664,35 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
 
   await prisma.$transaction(leaderboardWrites)
 
+  // Keep the before/after numbers from the read that preceded this successful write.
+  // Notification delivery is best effort and must never roll back scoring.
+  try {
+    const beforeByEntry = new Map(fresh.entries.map((entry) => [entry.id, entry]))
+    const changedRows = refreshedRows.filter((row) => {
+      const before = beforeByEntry.get(row.entryId)
+      return before && (before.totalScore !== row.totalScore || before.rank !== row.rank ||
+        before.correctPicks !== row.correctPicks || before.incorrectPicks !== row.incorrectPicks)
+    })
+    if (changedRows.length) {
+      const { emitBracketChangeAlert, settleBracketAlertBatch } = await import('@/lib/chimmy/bracketChangeAlerts')
+      const failed = await settleBracketAlertBatch(changedRows, (row) => {
+        const before = beforeByEntry.get(row.entryId)
+        if (!before) return Promise.resolve(false)
+        return emitBracketChangeAlert({
+          userId: before.userId, entryId: row.entryId, entryName: before.name,
+          poolName: fresh.name, format: 'world_cup',
+          before: { score: before.totalScore, rank: before.rank,
+            correctPicks: before.correctPicks, incorrectPicks: before.incorrectPicks },
+          after: { score: row.totalScore, rank: row.rank,
+            correctPicks: row.correctPicks, incorrectPicks: row.incorrectPicks },
+        })
+      })
+      if (failed) console.warn('[world cup scoring] change alerts failed', { failed })
+    }
+  } catch (error) {
+    console.warn('[world cup scoring] change alerts unavailable', error)
+  }
+
   void import("./worldCupBracketRecalculateHooks")
     .then((m) => m.afterWorldCupRecalculate(challengeId))
     .catch(() => {})

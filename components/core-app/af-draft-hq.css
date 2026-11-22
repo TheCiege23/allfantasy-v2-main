@@ -58,6 +58,43 @@
   color: var(--good);
 }
 
+/* The way into the draft room. Pushed to the row's end and sized as a real
+   touch target (44px) — a phone user reported not finding the board from here. */
+.af-dh-enter {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-dh-enter[data-live='true']::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.af-dh-enter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 520px) {
+  .af-dh-enter {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 .af-dh-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

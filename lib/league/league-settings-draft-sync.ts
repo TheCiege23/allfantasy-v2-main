@@ -108,7 +108,7 @@ export function draftOrderSlotsToSlotOrder(
 export const NOT_STARTED_DRAFT_STATUSES: ReadonlySet<string> = new Set(['pre_draft', 'configuring', 'configured'])
 
 /** LeagueSettings keys this sync carries onto the draft session. */
-export const DRAFT_SESSION_SYNC_KEYS = [
+const DRAFT_SESSION_SYNC_KEYS = [
   'pickTimerPreset',
   'pickTimerCustomValue',
   'draftType',
@@ -157,7 +157,7 @@ async function loadRosterIdResolver(leagueId: string): Promise<(ownerId: string)
   return buildRosterIdResolver(rosters, teams)
 }
 
-export type DraftSessionSyncResult =
+type DraftSessionSyncResult =
   | { synced: true }
   | { synced: false; reason: 'no_session' | 'draft_started' | 'nothing_to_sync' }
 

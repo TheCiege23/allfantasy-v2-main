@@ -17,12 +17,12 @@ import { resolveRedraftRosterLookupReadOnly } from '@/lib/redraft/redraftRosterI
 import { aggregateManagerTeamHealth } from './teamHealthAggregator'
 import type { ManagerTeamHealthV1 } from './types'
 
-export interface TeamHealthResolverArgs {
+interface TeamHealthResolverArgs {
   userId: string
   leagueId: string
 }
 
-export interface TeamHealthDataProvider {
+interface TeamHealthDataProvider {
   /** Returns the contract, or null when the user has no roster / no active players. */
   getManagerTeamHealth(args: TeamHealthResolverArgs): Promise<ManagerTeamHealthV1 | null>
 }

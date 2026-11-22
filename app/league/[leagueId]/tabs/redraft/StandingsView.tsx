@@ -11,6 +11,7 @@ import {
   generatePlayoffs,
   type RedraftPlayoffRuntimeClient,
 } from '@/lib/redraft/client'
+import { PlayoffSeriesLine } from '@/components/league/PlayoffSeriesStrip'
 
 export function StandingsView({
   rows,
@@ -304,6 +305,9 @@ function PlayoffRuntimePanel({
 
   const champion = runtime.teams.find((team) => team.rosterId === runtime.bracket.championRosterId)
   const rounds = runtime.bracket.rounds
+  const thirdPlace = runtime.bracket.thirdPlaceMatchup ?? null
+  const thirdPlaceTeam = runtime.teams.find((team) => team.rosterId === runtime.bracket.thirdPlaceRosterId)
+  const lowerRounds = runtime.bracket.consolationRounds ?? []
   const firstRoundByes = runtime.seeds.slice(0, runtime.settings.firstRoundByes)
 
   return (
@@ -324,6 +328,15 @@ function PlayoffRuntimePanel({
               Locked
             </span>
           ) : null}
+          {runtime.settings.reseedAfterEachRound ? (
+            <span
+              data-testid="redraft-playoff-reseed-chip"
+              title="After each round the highest remaining seed plays the lowest remaining seed. Seeds stay as set at the playoff start."
+              className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-200"
+            >
+              Reseeds each round
+            </span>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -340,6 +353,11 @@ function PlayoffRuntimePanel({
               {runtime.seeds.map((seed) => (
                 <span key={seed.rosterId} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white/75">
                   {seed.seed}. {seed.displayName}
+                  {seed.qualifiedBy === 'division' ? (
+                    <span data-testid="redraft-playoff-division-winner" className="ml-1 text-emerald-200/80" title="Division winner">
+                      · Div
+                    </span>
+                  ) : null}
                 </span>
               ))}
             </div>
@@ -361,35 +379,100 @@ function PlayoffRuntimePanel({
             Champion crowned: {champion.displayName}
           </p>
         ) : null}
+        {champion && thirdPlaceTeam ? (
+          <p data-testid="redraft-playoff-third-place" className="text-[11px] text-white/60">
+            Third place: {thirdPlaceTeam.displayName}
+          </p>
+        ) : null}
       </div>
 
       <div data-testid="redraft-playoff-bracket" className="grid gap-2">
         {rounds.length ? (
           rounds.map((round) => (
-            <div key={round.roundId} className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="font-semibold text-white/80">{round.roundName}</p>
-                <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
-              </div>
-              <div className="grid gap-1.5">
-                {round.matchups.map((matchup) => (
-                  <div key={matchup.matchupId} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px]">
-                    <span className="truncate text-white/70">{teamName(runtime, matchup.homeRosterId, matchup.homeSeed)}</span>
-                    <span className="text-white/35">vs</span>
-                    <span className="truncate text-right text-white/70">{teamName(runtime, matchup.awayRosterId, matchup.awaySeed)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <BracketRoundCard
+              key={round.roundId}
+              runtime={runtime}
+              title={round.roundName}
+              status={round.status}
+              matchups={
+                round === rounds[rounds.length - 1] && thirdPlace ? [...round.matchups, thirdPlace] : round.matchups
+              }
+            />
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-white/12 bg-black/15 p-3 text-[11px] text-white/55">
             No bracket rows are stored yet.
           </div>
         )}
+        {lowerRounds.length ? (
+          <div data-testid="redraft-playoff-lower-bracket" className="grid gap-2">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+              {runtime.bracket.lowerBracket === 'toilet_bowl' ? 'Toilet bowl — losers advance' : 'Consolation bracket'}
+            </p>
+            {lowerRounds.map((round) => (
+              <BracketRoundCard key={round.roundId} runtime={runtime} title={round.roundName} status={round.status} matchups={round.matchups} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   )
+}
+
+function BracketRoundCard({
+  runtime,
+  title,
+  status,
+  matchups,
+}: {
+  runtime: RedraftPlayoffRuntimeClient
+  title: string
+  status: string
+  matchups: RedraftPlayoffRuntimeClient['bracket']['rounds'][number]['matchups']
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="font-semibold text-white/80">
+          {title}
+          {matchups.some((matchup) => matchup.metadata?.reseeded === true) ? (
+            <span data-testid="redraft-playoff-round-reseeded" className="ml-2 text-[11px] font-normal text-cyan-200/80">
+              Reseeded
+            </span>
+          ) : null}
+        </p>
+        <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">{status}</span>
+      </div>
+      <div className="grid gap-1.5">
+        {matchups.map((matchup) => (
+          <div key={matchup.matchupId} className="grid gap-0.5" data-testid={`redraft-playoff-matchup-${matchup.bracketType}`}>
+            {matchup.bracketType === 'third_place' ? (
+              <span className="text-[11px] uppercase tracking-[0.14em] text-white/40">Third place</span>
+            ) : null}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px]">
+              <span className="truncate text-white/70">{teamName(runtime, matchup.homeRosterId, matchup.homeSeed)}</span>
+              <span className="text-white/35">{scoreLine(matchup)}</span>
+              <span className="truncate text-right text-white/70">{teamName(runtime, matchup.awayRosterId, matchup.awaySeed)}</span>
+            </div>
+            {/* Best-of-N series mode only (lib/playoff-runtime/playoffSeries.ts): the series record. */}
+            <PlayoffSeriesLine
+              seriesLengths={runtime.settings?.seriesLengths}
+              matchup={matchup}
+              nameOf={(rosterId) => teamName(runtime, rosterId, null)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Final scores once written; the running total while the round is live; otherwise "vs". */
+function scoreLine(matchup: { homeScore: number | null; awayScore: number | null; metadata: Record<string, unknown> }): string {
+  if (matchup.homeScore != null && matchup.awayScore != null) return `${matchup.homeScore} – ${matchup.awayScore}`
+  const live = matchup.metadata?.live as { homeScore?: unknown; awayScore?: unknown } | undefined
+  if (live && typeof live.homeScore === 'number' && typeof live.awayScore === 'number') return `${live.homeScore} – ${live.awayScore} live`
+  return 'vs'
 }
 
 function RuntimeMetric({ label, value }: { label: string; value: string | number }) {

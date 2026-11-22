@@ -59,6 +59,16 @@ export type ActivityPlayer = {
   position: string | null
   team: string | null
   imageUrl: string | null
+  /**
+   * On an ADD: the fantasy team that received him, when the payload says which roster and that roster
+   * is a team in this league (Sleeper's `adds` is `{ playerId: rosterId }`). What lets a trade card
+   * say who got whom. Absent or null means unknown — never guessed from the row's first manager.
+   *
+   * ⚠ A ROSTER ID IS A SLOT IN ONE SEASON and `LeagueTeam.externalId` holds the CURRENT slot, so this
+   * is only right for the current season's moves. The one reader that shows it (league chat's move
+   * cards) reads the last 30 days for that reason.
+   */
+  to?: string | null
 }
 
 export type LeagueActivityItem = {
@@ -386,7 +396,8 @@ export async function describeImportedActivityRows(
   const players = everyPlayerId.size
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sleeperId: { in: [...everyPlayerId] } },
+          // Scoped to the league's sport when known: Sleeper numbers its NFL and NBA pools independently.
+          where: { ...(args.sport ? { sport: args.sport.toUpperCase() } : {}), sleeperId: { in: [...everyPlayerId] } },
           select: {
             sleeperId: true,
             name: true,
@@ -425,6 +436,15 @@ export async function describeImportedActivityRows(
     }
   }
 
+  /* Which team an added player went to: Sleeper's `adds` maps player id → the receiving roster id. */
+  const receiverOf = (adds: unknown, playerId: string): string | null => {
+    if (!adds || typeof adds !== 'object' || Array.isArray(adds)) return null
+    const roster = (adds as Record<string, unknown>)[playerId]
+    if (roster == null || roster === '') return null
+    const t = byKey.get(String(roster))
+    return t?.teamName ?? t?.ownerName ?? null
+  }
+
   let unattributed = 0
 
   const items: LeagueActivityItem[] = rows.map((r) => {
@@ -449,7 +469,7 @@ export async function describeImportedActivityRows(
       teamName: team?.teamName ?? null,
       avatarUrl: team?.avatarUrl ?? null,
       involvedTeams,
-      adds: ids(p.adds).map((id) => resolve(id, space)),
+      adds: ids(p.adds).map((id) => ({ ...resolve(id, space), to: receiverOf(p.adds, id) })),
       drops: ids(p.drops).map((id) => resolve(id, space)),
       bid: readBid(p),
       picks: pickLabels(p.draftPicks),

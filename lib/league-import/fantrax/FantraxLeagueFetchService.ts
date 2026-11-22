@@ -2,12 +2,20 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   FantraxImportDraftPick,
+  FantraxImportFuturePick,
   FantraxImportPayload,
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
-import { isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxRosterSlots } from './fantraxProSports'
+import {
+  readStoredFantraxDerived,
+  readStoredFantraxDraft,
+  readStoredFantraxFuturePicks,
+  readStoredFantraxTeamLogos,
+  rekeyFantraxFuturePicks,
+} from './fantraxSnapshotHistory'
+import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
   rank?: unknown
@@ -44,6 +52,7 @@ type LegacyRosterPlayer = {
   primaryPosition?: unknown
   position?: unknown
   nflTeam?: unknown
+  team?: unknown
   /**
    * Which team owns him. Present on live-API imports, absent on CSV-era
    * snapshots — a CSV only ever held the uploader's own squad, so an untagged
@@ -274,15 +283,22 @@ export function splitLineup(
   sport?: string,
 ): { starters: string[]; bench: string[]; reserve: string[]; taxi?: string[] } | null {
   /*
-   * ⚠ MINORS → TAXI FOR NBA/NHL ONLY. A dynasty basketball/hockey league's
-   * minor-league stash is what our NBA/NHL catalogs call the taxi squad, and
-   * filing it as bench made a prospect look like a rostered NBA/NHL player.
-   * `MINORS` is the status this file's tests already name; it is not in a
-   * captured response (contracts/fantrax/GAPS.md), so a different spelling
-   * falls through to bench — today's behaviour, never IR. MLB and the football
-   * sports keep their split unchanged: native MLB has no taxi slots to land in.
+   * ⚠ MINORS → TAXI FOR NBA/NHL/MLB. A dynasty basketball/hockey/baseball league's
+   * minor-league stash is what our catalogs call the taxi squad, and filing it as
+   * bench made a prospect look like a rostered player and counted him against the
+   * active roster. `MINORS` is the status this file's tests already name; it is not
+   * in a captured response for any sport (contracts/fantrax/GAPS.md F-04), so a
+   * different spelling falls through to bench — the old behaviour, never IR.
+   *
+   * MLB joined 2026-10-26: it was left out because native MLB has no taxi slots, but
+   * the Team tab shows an imported roster's taxi list whatever the sport, and a taxi
+   * player is kept out of the roster limit (lib/league/rosterLimit.ts). The football
+   * sports keep their split unchanged.
    */
-  const taxiStatuses = isFantraxSplitSeasonSport(sport) ? FANTRAX_MINORS_STATUSES : null
+  const taxiStatuses =
+    isFantraxSplitSeasonSport(sport) || String(sport ?? '').trim().toLowerCase() === 'mlb'
+      ? FANTRAX_MINORS_STATUSES
+      : null
   const starters: string[] = []
   const bench: string[] = []
   const reserve: string[] = []
@@ -421,11 +437,12 @@ function medianRosterSize(players: LegacyRosterPlayer[]): number | null {
   return counts.length % 2 === 0 ? Math.round((counts[mid - 1]! + counts[mid]!) / 2) : counts[mid]!
 }
 
-function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { name: string; position: string; team: string }> {
+function buildRosterPlayerMap(players: LegacyRosterPlayer[], sport: string): Record<string, { name: string; position: string; team: string }> {
   const map: Record<string, { name: string; position: string; team: string }> = {}
   for (const player of players) {
     const playerId = asString(player.fantraxId)
     if (!playerId) continue
+    const position = (asString(player.primaryPosition) || asString(player.position) || 'N/A').toUpperCase()
     map[playerId] = {
       /*
        * ⚠ A RAW FANTRAX ID IS NOT A NAME. `|| playerId` put "069b6" in the name
@@ -441,8 +458,8 @@ function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { n
        * either.
        */
       name: asString(player.name) || `Unknown player (${playerId})`,
-      position: (asString(player.primaryPosition) || asString(player.position) || 'N/A').toUpperCase(),
-      team: asString(player.nflTeam),
+      position: sport === 'SOCCER' ? fantraxSoccerPosition(position) : position,
+      team: asString(player.nflTeam) || (sport === 'SOCCER' ? asString(player.team) : ''),
     }
   }
   return map
@@ -509,7 +526,8 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
-  let sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> } | undefined
+  let sourceSettings: Extract<import('./importFantraxLeague').FantraxImportOutcome, { ok: true }>['sourceSettings'] | undefined
+  let sourceCurrentPeriod: number | null = null
   let sourceSeasonState: string | null = null
 
   /*
@@ -559,6 +577,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const includeConfig = {
@@ -632,6 +651,7 @@ export async function fetchFantraxLeagueForImport(
     liveScoringGaps = outcome.scoringGaps
     sourceSettings = outcome.sourceSettings
     sourceSeasonState = outcome.seasonState
+    sourceCurrentPeriod = outcome.currentPeriod
   }
 
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
@@ -647,7 +667,7 @@ export async function fetchFantraxLeagueForImport(
     matchups,
     userTeam,
   })
-  const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers)
+  const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers, sport)
   /*
    * ⚠ ROSTERS ARE PER TEAM NOW. Everything used to be attributed to the
    * uploader's team because a CSV export contained nothing else; the live API
@@ -663,6 +683,9 @@ export async function fetchFantraxLeagueForImport(
     else rosterByTeam.set(label, [player])
   }
   const userTeamId = resolveTeamId(userTeam, teamMap)
+  const storedLogos = readStoredFantraxTeamLogos(leagueRecord.transactions)
+  const logoByFantraxTeamId = new Map(storedLogos.map((l) => [l.teamId, l.logoUrl]))
+  const logoByTeamLabel = new Map(storedLogos.flatMap((l) => (l.teamName && normalizeTeamLabel(l.teamName) ? [[normalizeTeamLabel(l.teamName), l.logoUrl] as const] : [])))
   const standingsByNormalizedTeam = new Map<string, LegacyStanding>()
   for (const standing of standings) {
     const label = asString(standing.team)
@@ -676,7 +699,7 @@ export async function fetchFantraxLeagueForImport(
     const isUserTeam = normalizeTeamLabel(userTeam) === normalizedLabel
     const ownPlayers = rosterByTeam.get(normalizedLabel) ?? []
     const teamPlayerMap = ownPlayers.length
-      ? buildRosterPlayerMap(ownPlayers)
+      ? buildRosterPlayerMap(ownPlayers, sport)
       : isUserTeam
         ? rosterPlayerMap
         : {}
@@ -692,7 +715,8 @@ export async function fetchFantraxLeagueForImport(
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
       managerName: isUserTeam ? username : teamName,
       teamName,
-      logoUrl: null,
+      /* Synced by the browser connector from the logged-in site; the public API has none (GAPS F-14, F-20). */
+      logoUrl: logoByFantraxTeamId.get(asString(standing?.fantraxTeamId)) ?? logoByTeamLabel.get(normalizeTeamLabel(teamName)) ?? null,
       wins: asNumber(standing?.wins, 0) ?? 0,
       losses: asNumber(standing?.losses, 0) ?? 0,
       ties: asNumber(standing?.ties, 0) ?? 0,
@@ -777,7 +801,9 @@ export async function fetchFantraxLeagueForImport(
   const firstUnscored = schedule.find((week) =>
     week.matchups.every((m) => m.points1 == null && m.points2 == null),
   )
+  const usesPeriodCalendar = usesFantraxPeriodCalendar(sport)
   const currentWeek =
+    (usesPeriodCalendar ? sourceCurrentPeriod : null) ??
     firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
 
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {
@@ -826,7 +852,7 @@ export async function fetchFantraxLeagueForImport(
     }
   })
 
-  const draftPicks: FantraxImportDraftPick[] = transactions
+  const exportDraftPicks: FantraxImportDraftPick[] = transactions
     .filter((transaction) => transaction.isDraftPick)
     .map((transaction) => {
       const round = transaction.pickRound ?? null
@@ -853,6 +879,78 @@ export async function fetchFantraxLeagueForImport(
     .filter(Boolean) as FantraxImportDraftPick[]
 
   /*
+   * ⚠ THE STORED DRAFT BOARD AND THE DERIVED MOVES (see `fantraxSnapshotHistory.ts`). A live import
+   * writes both into this same column, beside the export groups read above. The board is the whole
+   * draft with real Fantrax player ids, so it SUPERSEDES the export's traded-pick events, which
+   * describe the same draft with synthetic ids; a league with no board on file keeps those events.
+   *
+   * Teams are mapped by the name stored with each row, then by Fantrax's own team id through the
+   * standings — the same two keys `buildTeamIdMap` used. An unattributable row is dropped rather
+   * than handed to a guessed team.
+   */
+  const labelByFantraxTeamId = new Map<string, string>()
+  for (const standing of standings) {
+    const id = asString(standing.fantraxTeamId)
+    if (id && !labelByFantraxTeamId.has(id)) labelByFantraxTeamId.set(id, asString(standing.team))
+  }
+  const teamIdFor = (teamName: string | null | undefined, fantraxTeamId: string): string | null =>
+    resolveTeamId(asString(teamName), teamMap) ?? resolveTeamId(labelByFantraxTeamId.get(fantraxTeamId) ?? '', teamMap)
+
+  const storedBoard = readStoredFantraxDraft(leagueRecord.transactions)
+  const boardPicks: FantraxImportDraftPick[] = (storedBoard?.picks ?? []).flatMap((pick) => {
+    const teamId = teamIdFor(pick.teamName, pick.teamId)
+    if (!teamId) return []
+    return [{
+      round: pick.round,
+      pickNumber: pick.pick,
+      teamId,
+      playerId: pick.playerId,
+      playerName: pick.playerName,
+      position: pick.position,
+      team: pick.team,
+    } satisfies FantraxImportDraftPick]
+  })
+  const draftPicks = boardPicks.length > 0 ? boardPicks : exportDraftPicks
+
+  /* Future-season picks, re-keyed from Fantrax's team ids to ours. Absent when none are on file. */
+  const storedFuturePicks = readStoredFantraxFuturePicks(leagueRecord.transactions)
+  const futurePicks: FantraxImportFuturePick[] | undefined = storedFuturePicks
+    ? rekeyFantraxFuturePicks(storedFuturePicks, teamIdFor)
+    : undefined
+
+  const storedDerived = readStoredFantraxDerived(leagueRecord.transactions)
+  const derivedTransactions: FantraxImportTransaction[] = []
+  for (const move of storedDerived.moves) {
+    const teamId = teamIdFor(move.teamName, move.teamId)
+    if (!teamId) continue
+    derivedTransactions.push({
+      transactionId: `fantrax:${leagueRecord.id}:derived:${move.id}`,
+      /* An add may be a waiver claim or a free-agent pickup; the roster diff cannot tell which. */
+      type: move.adds.length > 0 ? 'free_agent' : 'drop',
+      status: 'inferred',
+      createdAt: toIsoDate(move.observedAt),
+      teamIds: [teamId],
+      adds: Object.fromEntries(move.adds.map((id) => [id, teamId])),
+      drops: Object.fromEntries(move.drops.map((id) => [id, teamId])),
+    })
+  }
+  for (const trade of storedDerived.suspectedTrades) {
+    const a = teamIdFor(trade.teamAName, trade.teamAId)
+    const b = teamIdFor(trade.teamBName, trade.teamBId)
+    if (!a || !b) continue
+    derivedTransactions.push({
+      transactionId: `fantrax:${leagueRecord.id}:derived:${trade.id}`,
+      type: 'trade',
+      /* Never `completed`: a two-way roster exchange LOOKS like a trade; Fantrax never said so. */
+      status: 'suspected',
+      createdAt: toIsoDate(trade.observedAt),
+      teamIds: [a, b],
+      adds: Object.fromEntries([...trade.aSent.map((id) => [id, b]), ...trade.bSent.map((id) => [id, a])]),
+      drops: Object.fromEntries([...trade.aSent.map((id) => [id, a]), ...trade.bSent.map((id) => [id, b])]),
+    })
+  }
+
+  /*
    * ⚠ NBA/NHL ONLY: THE LINEUP SLOTS ARE IN `rosterInfo`, AND THEY ARE MAPPED
    * ONTO OUR CATALOGS. `buildRosterPositionCounts` stays empty for every other
    * sport — unchanged — but a basketball or hockey league arrives with its real
@@ -860,9 +958,16 @@ export async function fetchFantraxLeagueForImport(
    * native equivalent is reported as `rosterSlotGaps`, never coerced.
    */
   const splitSeason = isFantraxSplitSeasonSport(sport)
-  const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
+  /*
+   * ⚠ AND NFL / NCAAF / MLB NOW TOO. They stored no slots at all, so a Fantrax superflex or IDP
+   * league reached My Team and the add/drop gate with no lineup, and nothing could tell it was IDP.
+   * Same `positionConstraints` read; unlike NBA/NHL it is all-or-nothing (see mapFantraxLineupSlots).
+   */
+  const proSlots = sport === 'NCAAB' || (splitSeason && (sport === 'NBA' || sport === 'NHL'))
     ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
-    : null
+    : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB' || sport === 'SOCCER'
+      ? mapFantraxLineupSlots(sport, sourceSettings?.rosterInfo)
+      : null
 
   const previousSeasonRecords = await prisma.fantraxLeague.findMany({
     where: {
@@ -895,15 +1000,19 @@ export async function fetchFantraxLeagueForImport(
        */
       isFinished:
         sourceSeasonState === 'complete' ||
-        (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear()),
+        ((!usesPeriodCalendar || !sourceSeasonState) &&
+          (splitSeason ? isFantraxSplitSeasonFinished(season) : season < new Date().getFullYear())),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     settings: {
-      scoringType: sport === 'MLB' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
+      scoringType: sport === 'MLB' || sport === 'SOCCER' || splitSeason ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: proSlots ? proSlots.slots : buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
-      rosterSize: medianRosterSize(rosterPlayers),
+      rosterSize: medianRosterSize(rosterPlayers) ?? (() => {
+        const total = sourceSettings?.rosterInfo?.maxTotalPlayers
+        return typeof total === 'number' && Number.isSafeInteger(total) && total > 0 ? total : null
+      })(),
       scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),
       raw: {
         isDevy: leagueRecord.isDevy,
@@ -915,12 +1024,26 @@ export async function fetchFantraxLeagueForImport(
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),
         ...(proSlots && proSlots.gaps.length > 0 ? { rosterSlotGaps: proSlots.gaps } : {}),
+        // Divisions, re-keyed from Fantrax's team id to ours (the id every team row is stored under).
+        divisionByTeamId: Object.fromEntries(
+          standings.flatMap((standing) => {
+            const division = sourceSettings?.teamDivisions?.[asString(standing.fantraxTeamId)]
+            const teamId = resolveTeamId(asString(standing.team), teamMap)
+            return division && teamId ? [[teamId, division]] : []
+          }),
+        ),
       },
     },
     teams,
     schedule,
-    transactions,
+    transactions: [...transactions, ...derivedTransactions],
     draftPicks,
+    ...(futurePicks ? { futurePicks } : {}),
+    historySources: {
+      draftBoard: boardPicks.length > 0,
+      exportTransactions: transactions.length,
+      derivedTransactions: derivedTransactions.length,
+    },
     playerMap: rosterPlayerMap,
     previousSeasons: previousSeasonRecords.map((record) => ({
       season: String(record.season),

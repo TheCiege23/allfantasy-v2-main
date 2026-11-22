@@ -11,6 +11,8 @@ export type EnterRedraftOffseasonResult = {
   ok: true
   snapshotId: string
   alreadyInOffseason: boolean
+  /** The archived season year — what the record book and awards engines key on, as a string. */
+  season: number
 } | {
   ok: false
   code: 'SEASON_NOT_FOUND' | 'SEASON_NOT_COMPLETE' | 'LEAGUE_NOT_COMPLETED' | 'TOURNAMENT_RESULT_INCOMPLETE'
@@ -96,7 +98,17 @@ export async function enterRedraftOffseason(
     where: { leagueId_season: { leagueId: season.leagueId, season: season.season } },
   })
   if (existing && league.lifecycleState === 'offseason') {
-    return { ok: true, snapshotId: existing.id, alreadyInOffseason: true }
+    /*
+     * A re-run on an archived season still repairs its `SeasonResult` rows — from the archive's own
+     * `teamRecords`, so the champion it names is the one the snapshot already recorded.
+     */
+    const archived = readArchivedSeasonResultSources(existing.teamRecords)
+    if (archived.length > 0) {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await upsertNativeSeasonResults(tx, season.leagueId, season.season, archived)
+      })
+    }
+    return { ok: true, snapshotId: existing.id, alreadyInOffseason: true, season: season.season }
   }
 
   const nativeTournament = isNativeTournamentLeague(league)
@@ -150,6 +162,11 @@ export async function enterRedraftOffseason(
       franchiseId: franchise?.id ?? null,
       franchiseName: franchise?.teamName ?? roster.teamName ?? roster.ownerName,
       managerUserId: roster.ownerId,
+      ownerId: roster.ownerId,
+      managerAvatar: roster.avatarUrl,
+      teamName: roster.teamName,
+      isChampion: tournament ? tournament.championRosterIds.includes(roster.id) : bracketResult ? roster.id === bracketResult.championRosterId : index === 0,
+      isRunnerUp: tournament ? tournament.runnerUpRosterIds.includes(roster.id) : bracketResult ? roster.id === bracketResult.runnerUpRosterId : index === 1,
       managerName: roster.ownerName,
       rosterId: roster.id,
       rank: tournament?.finishByRosterId.get(roster.id) ?? index + 1,
@@ -181,7 +198,8 @@ export async function enterRedraftOffseason(
     : null
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    let snapshot = existing
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`season-archive:${seasonId}`}, 0))`
+    let snapshot = await tx.leagueSeason.findUnique({ where: { leagueId_season: { leagueId: season.leagueId, season: season.season } } })
     let created = false
     if (!snapshot) {
       snapshot = await tx.leagueSeason.create({
@@ -274,6 +292,14 @@ export async function enterRedraftOffseason(
       })
     }
 
+    /*
+     * The record book and season awards read `SeasonResult`, which only the import paths ever
+     * wrote — so a native league's record book was empty. Written OUTSIDE `if (!snapshot)` on
+     * purpose: an archive another finalizer committed first must not leave these missing, and the
+     * upsert on the unique key makes a retry a repair rather than a duplicate.
+     */
+    await upsertNativeSeasonResults(tx, season.leagueId, season.season, records)
+
     if (league.lifecycleState === 'completed') {
       await transitionLeagueStateInTransaction(tx, {
         leagueId: season.leagueId,
@@ -314,7 +340,98 @@ export async function enterRedraftOffseason(
     actionLabel: 'View season history',
   })
 
-  return { ok: true, snapshotId: result.snapshot.id, alreadyInOffseason: !result.created }
+  return { ok: true, snapshotId: result.snapshot.id, alreadyInOffseason: !result.created, season: season.season }
+}
+
+/** One team's finished season, as `SeasonResult` needs it. `rosterId` is the season's RedraftRoster. */
+export type NativeSeasonResultSource = {
+  rosterId: string
+  ownerId: string | null
+  wins: number
+  losses: number
+  pointsFor: number
+  pointsAgainst: number
+  isChampion: boolean
+}
+
+/**
+ * Upserts one `SeasonResult` per team of a finished native season.
+ *
+ * 🛑 KEYED BY THE LEAGUE'S GENERIC `Roster.id`, NEVER THE `RedraftRoster.id`. Every reader
+ * (`buildSeasonResultManagerMap`, the record book, awards) resolves `SeasonResult.rosterId` through
+ * the generic `Roster` rows to a manager, and a `RedraftRoster.id` changes every season, so keying
+ * by it would split one manager's history into a stranger per year. The season's owner is matched
+ * to `Roster.platformUserId` — the identity those readers use. An owner with no generic roster, or
+ * one shared by two rosters, is SKIPPED rather than guessed: a row credited to the wrong manager is
+ * worse than a missing one, and a later run can still fill it.
+ */
+export async function upsertNativeSeasonResults(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+  seasonYear: number,
+  sources: NativeSeasonResultSource[],
+): Promise<{ written: number; skipped: number }> {
+  if (sources.length === 0) return { written: 0, skipped: 0 }
+  const rosters = await tx.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
+  const rosterByOwner = new Map<string, string | null>()
+  for (const roster of rosters) {
+    if (!roster.platformUserId) continue
+    // Two generic rosters for one owner is ambiguous; mark it so neither is chosen.
+    rosterByOwner.set(roster.platformUserId, rosterByOwner.has(roster.platformUserId) ? null : roster.id)
+  }
+
+  const season = String(seasonYear)
+  const used = new Set<string>()
+  let written = 0
+  let skipped = 0
+  for (const source of sources) {
+    const rosterId = source.ownerId ? rosterByOwner.get(source.ownerId) ?? null : null
+    if (!rosterId || used.has(rosterId)) {
+      skipped += 1
+      continue
+    }
+    used.add(rosterId)
+    const values = {
+      wins: source.wins,
+      losses: source.losses,
+      pointsFor: source.pointsFor,
+      pointsAgainst: source.pointsAgainst,
+      champion: source.isChampion,
+    }
+    await tx.seasonResult.upsert({
+      where: { uniq_season_result_league_season_roster: { leagueId, season, rosterId } },
+      update: values,
+      create: { leagueId, season, rosterId, ...values },
+    })
+    written += 1
+  }
+  if (skipped > 0) {
+    console.warn('[redraft-offseason] season results skipped for unmapped owners', { leagueId, season, skipped })
+  }
+  return { written, skipped }
+}
+
+/** The per-team rows an existing `LeagueSeason.teamRecords` archive carries, for a repair run. */
+export function readArchivedSeasonResultSources(teamRecords: unknown): NativeSeasonResultSource[] {
+  if (!Array.isArray(teamRecords)) return []
+  const out: NativeSeasonResultSource[] = []
+  for (const row of teamRecords) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    if (typeof r.rosterId !== 'string' || !r.rosterId) continue
+    const owner = typeof r.ownerId === 'string' ? r.ownerId : typeof r.managerUserId === 'string' ? r.managerUserId : null
+    const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+    out.push({
+      rosterId: r.rosterId,
+      ownerId: owner,
+      wins: num(r.wins),
+      losses: num(r.losses),
+      pointsFor: num(r.pointsFor),
+      pointsAgainst: num(r.pointsAgainst),
+      isChampion: r.isChampion === true,
+    })
+  }
+  return out
 }
 
 type BracketResult = {

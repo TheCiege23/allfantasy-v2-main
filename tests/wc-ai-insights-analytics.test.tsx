@@ -53,12 +53,17 @@ vi.mock("@/lib/world-cup/worldCupClientTokenConfirm", async (importOriginal) => 
   const real = await importOriginal<typeof import("@/lib/world-cup/worldCupClientTokenConfirm")>()
   return {
     ...real,
-    confirmWorldCupTokenSpend: (...args: unknown[]) => confirmMock(...args),
+    confirmWorldCupTokenSpend: (...args: unknown[]) => {
+      const accepted = confirmMock(...args)
+      if (accepted) approvePaidToolQuote(args[0])
+      return accepted
+    },
   }
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+import { approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
 import { WORLD_CUP_CTA } from "@/lib/analytics/eventNames"
 
 function makeEntitlements({
@@ -94,31 +99,18 @@ function makeProps(
 }
 
 function okFetch(body: unknown) {
-  return vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => body,
-  })
+  return vi.fn().mockImplementation(async () => Response.json(body))
 }
 
 function errorFetch(body: unknown, status = 500) {
-  return vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    json: async () => body,
-  })
+  return vi.fn().mockImplementation(async () => Response.json(body, { status }))
 }
 
-function confirmFetch(body: unknown) {
-  return vi.fn().mockResolvedValueOnce({
-    ok: false,
-    status: 409,
-    json: async () => ({ code: "token_confirmation_required", preview: { tokenCost: 5 }, ...body }),
-  }).mockResolvedValueOnce({
-    ok: true,
-    status: 200,
-    json: async () => ({ card: { kind: "rooting_guide", data: {} } }),
-  })
+function confirmFetch(body: Record<string, unknown>) {
+  return vi.fn().mockImplementationOnce(async (_url, init: RequestInit) => Response.json({
+    code: "token_confirmation_required", preview: { tokenCost: 5 },
+    tokenQuote: 'test-signed-offer', paidToolRequestId: new Headers(init.headers).get('x-paid-tool-request-id'), ...body,
+  }, { status: 409 })).mockImplementationOnce(async () => Response.json({ card: { kind: "rooting_guide", data: {} } }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -368,7 +360,8 @@ describe("WorldCupAiInsightsCTA — analytics: token confirmation", () => {
   })
 
   it("fires token_confirm_accepted when user confirms token spend", async () => {
-    vi.stubGlobal("fetch", confirmFetch({}))
+    const fetchMock = confirmFetch({})
+    vi.stubGlobal("fetch", fetchMock)
     confirmMock.mockReturnValue(true) // user accepts
 
     render(<WorldCupAiInsightsCTA {...makeProps()} />)
@@ -378,6 +371,12 @@ describe("WorldCupAiInsightsCTA — analytics: token confirmation", () => {
       const acceptedCall = beaconMock.mock.calls.find(([name]) => name === WORLD_CUP_CTA.TOKEN_CONFIRM_ACCEPTED)
       expect(acceptedCall).toBeTruthy()
     })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const first = fetchMock.mock.calls[0][1] as RequestInit
+    const second = fetchMock.mock.calls[1][1] as RequestInit
+    expect(new Headers(second.headers).get('x-paid-tool-request-id')).toBe(new Headers(first.headers).get('x-paid-tool-request-id'))
+    expect(new Headers(first.headers).get('x-paid-tool-quote')).toBeNull()
+    expect(new Headers(second.headers).get('x-paid-tool-quote')).toBe('test-signed-offer')
   })
 
   it("does NOT fire token_confirm_accepted when user cancels", async () => {

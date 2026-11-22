@@ -18,7 +18,7 @@ const redirect = vi.hoisted(() =>
   }),
 )
 const getDashboardLeagueListForUser = vi.hoisted(() => vi.fn())
-const readChimmyPlanAllowance = vi.hoisted(() => vi.fn())
+const readChimmyAnswerAllowance = vi.hoisted(() => vi.fn())
 const recordProactiveOpen = vi.hoisted(() => vi.fn())
 
 vi.mock('next-auth', () => ({ getServerSession }))
@@ -26,7 +26,7 @@ vi.mock('next/navigation', () => ({ redirect }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({ getDashboardLeagueListForUser }))
 vi.mock('@/lib/chimmy/planAllowance', () => ({
-  readChimmyPlanAllowance,
+  readChimmyAnswerAllowance,
   planAllowanceMeta: (s: { planName: string; used: number; limit: number; resetsAt: string }, included: boolean) => ({
     included,
     planName: s.planName,
@@ -79,7 +79,7 @@ beforeEach(() => {
       { id: 'L1', name: 'KBFL', platform: 'sleeper', platformLeagueId: '1180', teamCount: 12 },
     ],
   })
-  readChimmyPlanAllowance.mockResolvedValue(null)
+  readChimmyAnswerAllowance.mockResolvedValue(null)
   recordProactiveOpen.mockResolvedValue(undefined)
 })
 
@@ -118,9 +118,9 @@ describe('/chimmy/chat on the server', () => {
   })
 
   it('shows an AF Pro account its included answers instead of a price', async () => {
-    readChimmyPlanAllowance.mockResolvedValue({ planName: 'AF Pro', limit: 100, used: 63, remaining: 37, resetsAt: '2026-09-26T00:00:00.000Z' })
+    readChimmyAnswerAllowance.mockResolvedValue({ planName: 'AF Pro', limit: 100, used: 63, remaining: 37, resetsAt: '2026-09-26T00:00:00.000Z' })
     const props = await openWith({})
-    expect(readChimmyPlanAllowance).toHaveBeenCalledWith({ userId: 'u1', email: 'me@example.com' })
+    expect(readChimmyAnswerAllowance).toHaveBeenCalledWith({ userId: 'u1', email: 'me@example.com' })
     expect(props.planAllowance).toEqual({ included: true, planName: 'AF Pro', used: 63, limit: 100, resetsAt: '2026-09-26T00:00:00.000Z' })
   })
 

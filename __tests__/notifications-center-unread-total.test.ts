@@ -30,6 +30,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
+import { getDeepLinkRedirect } from '@/lib/routing/DeepLinkHandler'
 
 /** 60 stored rows, every one already read — the production shape. */
 const sixtyAllRead = Array.from({ length: 60 }, (_, i) => ({
@@ -62,6 +63,21 @@ describe('getNotificationsCenter unread total', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     discordFindFirst.mockResolvedValue(null)
+  })
+
+  it('keeps league chat and DM destinations in the bell and the Notifications screen', async () => {
+    const leagueHref = '/league/L1?openChat=league&message=m1'
+    const dmHref = '/messages?thread=t2&message=m2'
+    findMany.mockResolvedValue([
+      { ...sixtyAllRead[0], type: 'mention', leagueId: 'L1', meta: { actionHref: leagueHref } },
+      { ...sixtyAllRead[1], type: 'direct_message', meta: { actionHref: dmHref } },
+    ])
+    count.mockResolvedValue(2)
+
+    const data = await getNotificationsCenter({ userId: 'u1', issues: [], now: NOW })
+    expect(data.rest.map((row) => row.action?.href)).toEqual([leagueHref, dmHref])
+    expect(getDeepLinkRedirect(leagueHref)).toBe(leagueHref)
+    expect(getDeepLinkRedirect(dmHref)).toBe(dmHref)
   })
 
   it('reports unread from the database, not from the 60-row window', async () => {

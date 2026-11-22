@@ -19,8 +19,11 @@ export type UploadedAttachment = {
 export type PollDraft = {
   question: string
   options: string[]
-  closeAt: Date
+  /** null = no deadline; the poll stays open until closed by hand. */
+  closeAt: Date | null
   allowMultiple: boolean
+  /** 'after_close' hides the tally from everyone until the poll closes — redacted server-side. */
+  resultsVisibility?: 'live' | 'after_close'
   /** Hide WHO voted. Enforced on the server, not by the client declining to render it. */
   anonymous?: boolean
 }

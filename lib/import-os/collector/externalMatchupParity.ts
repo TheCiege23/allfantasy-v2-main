@@ -34,6 +34,7 @@ import {
   YahooImportConnectionError,
   YahooImportLeagueNotFoundError,
 } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
+import { importedCategoryCacheKey, verifiedCategoryPairs, yahooRosterId } from './importedCategorySnapshots'
 
 const CACHE_KEY_PREFIX = 'external_matchup_sync'
 /** Full provider reads are heavier than Sleeper's keyless burst — refresh each league every 6h in season, not every 30min. */
@@ -43,9 +44,25 @@ const FAILURE_RETRY_MS = 30 * 60 * 1000
 /** Bound credential probes per league (a league can have many importing users). */
 const MAX_USER_CANDIDATES = 3
 
-export type ExternalMatchupProvider = 'espn' | 'yahoo'
+/** A provider read window only; the provider still supplies the actual week and scoring period. */
+export function externalMatchupSeasonActive(sport: string, season: number, now: Date): boolean {
+  if (!Number.isInteger(season) || Number.isNaN(now.getTime())) return false
+  const month = now.getUTCMonth() + 1
+  const year = now.getUTCFullYear()
+  switch (sport.toUpperCase()) {
+    case 'NBA': return month >= 10 ? season === year : month <= 6 && season === year - 1
+    case 'NHL': return month >= 9 ? season === year : month <= 6 && season === year - 1
+    case 'NCAAB': return month >= 11 ? season === year : month <= 4 && season === year - 1
+    case 'NCAAF': return month >= 8 ? season === year : month === 1 && season === year - 1
+    case 'SOCCER': return month >= 8 ? season === year : month <= 6 && season === year - 1
+    case 'MLB': return month >= 3 && month <= 11 && season === year
+    default: return false
+  }
+}
 
-export interface ExternalMatchupConnection {
+type ExternalMatchupProvider = 'espn' | 'yahoo'
+
+interface ExternalMatchupConnection {
   provider: ExternalMatchupProvider
   /** The provider's league id — ESPN numeric id / Yahoo league key. Matches `League.platformLeagueId`. */
   externalLeagueId: string
@@ -123,7 +140,8 @@ export async function enumerateExternalMatchupConnections(): Promise<ExternalMat
  * zero-padded id would ever appear.
  */
 function toRosterId(provider: ExternalMatchupProvider, sourceTeamId: string): string | null {
-  const raw = provider === 'yahoo' ? sourceTeamId.split('.t.')[1] ?? '' : sourceTeamId
+  if (provider === 'yahoo') return yahooRosterId(sourceTeamId)
+  const raw = sourceTeamId
   const n = Number(String(raw).trim())
   return Number.isInteger(n) && n >= 0 ? String(n) : null
 }
@@ -141,7 +159,8 @@ export type ScheduleWeekInput = {
    * shared precisely because what a WeeklyMatchup row MEANS must not diverge per
    * provider.
    */
-  matchups: Array<{ teamId1: string; teamId2: string | null; points1?: number; points2?: number }>
+  matchups: Array<{ teamId1: string; teamId2: string | null; points1?: number; points2?: number;
+    categories1?: Record<string, number>; categories2?: Record<string, number> }>
 }
 
 /**
@@ -184,10 +203,25 @@ export async function applySchedule(
     const rows: Array<{
       rosterId: string
       matchupId: number
+      /** Which of this roster's games in the week the row is; 1 unless the league plays several. */
+      game: number
       pointsFor: number
       pointsAgainst: number
       win: number
     }> = []
+    /*
+     * A league whose teams play several games a week (Fantrax: 3 or 5) lists a roster once per
+     * game. Each game is its own row, numbered in the order the provider lists them; the pairing
+     * stays on `matchupId`, which every reader already groups by. Before `game` existed the
+     * roster-week key kept the first game and `skipDuplicates` silently dropped the rest, leaving
+     * the survivors as half-pairs.
+     */
+    const gamesSeen = new Map<string, number>()
+    const nextGame = (rosterId: string): number => {
+      const game = (gamesSeen.get(rosterId) ?? 0) + 1
+      gamesSeen.set(rosterId, game)
+      return game
+    }
     weekEntry.matchups.forEach((m, index) => {
       const roster1 = toRoster(m.teamId1)
       if (roster1 == null) return
@@ -211,7 +245,7 @@ export async function applySchedule(
        * standings screen.
        */
       if (m.teamId2 == null || m.teamId2 === '') {
-        rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: 0, win: 0 })
+        rows.push({ rosterId: roster1, matchupId, game: nextGame(roster1), pointsFor: p1, pointsAgainst: 0, win: 0 })
         soloRowsWritten += 1
         return
       }
@@ -219,20 +253,21 @@ export async function applySchedule(
       const roster2 = toRoster(m.teamId2)
       if (roster2 == null) return
       const p2 = typeof m.points2 === 'number' && Number.isFinite(m.points2) ? m.points2 : 0
-      rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: p2, win: p1 > p2 ? 1 : 0 })
-      rows.push({ rosterId: roster2, matchupId, pointsFor: p2, pointsAgainst: p1, win: p2 > p1 ? 1 : 0 })
+      rows.push({ rosterId: roster1, matchupId, game: nextGame(roster1), pointsFor: p1, pointsAgainst: p2, win: p1 > p2 ? 1 : 0 })
+      rows.push({ rosterId: roster2, matchupId, game: nextGame(roster2), pointsFor: p2, pointsAgainst: p1, win: p2 > p1 ? 1 : 0 })
     })
     if (rows.length === 0) continue
 
     const existing = await prisma.weeklyMatchup.findMany({
       where: { leagueId: externalLeagueId, seasonYear: weekEntry.season, week: weekEntry.week },
-      select: { rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
+      select: { rosterId: true, matchupId: true, game: true, pointsFor: true, pointsAgainst: true, win: true },
     })
-    const byRoster = new Map(existing.map((r) => [r.rosterId, r]))
+    // Keyed by roster AND game: a roster has one row per game it plays in the week.
+    const byRoster = new Map(existing.map((r) => [`${r.rosterId}#${r.game ?? 1}`, r]))
     const unchanged =
       existing.length === rows.length &&
       rows.every((r) => {
-        const prev = byRoster.get(r.rosterId)
+        const prev = byRoster.get(`${r.rosterId}#${r.game}`)
         return (
           prev != null &&
           prev.matchupId === r.matchupId &&
@@ -314,6 +349,8 @@ async function fetchScheduleWithCandidates(
             teamId2: m.teamKey2,
             points1: m.points1,
             points2: m.points2,
+            categories1: m.categories1,
+            categories2: m.categories2,
           })),
         })),
       }
@@ -355,10 +392,10 @@ export async function runExternalMatchupParity(input?: {
     if (executed >= maxLeagues) break
     const runKey = `${connection.provider}:${connection.externalLeagueId}:${connection.season}`
 
-    // Season gate per league sport: only NFL has a calendar today, so non-NFL
-    // leagues resolve to 'unknown' and are skipped honestly, never guessed.
+    // The shared cadence has only an NFL calendar. Other supported sports use a
+    // bounded provider-read window; the provider supplies the actual scoring week.
     const { state } = resolveCadence({ sport: connection.sport, provider: connection.provider, now })
-    if (!isInSeason(state)) {
+    if (!isInSeason(state) && !externalMatchupSeasonActive(connection.sport, connection.season, now)) {
       summary.notDue++
       summary.results.push({ runKey, status: 'not_due', note: `season state ${state}` })
       continue
@@ -393,6 +430,18 @@ export async function runExternalMatchupParity(input?: {
         connection.externalLeagueId,
         fetched.schedule
       )
+      if (connection.provider === 'yahoo' || connection.provider === 'espn') {
+        for (const week of fetched.schedule) {
+          const pairs = verifiedCategoryPairs(week.matchups, (id) => toRosterId(connection.provider, id))
+          if (!pairs.length) continue
+          const key = importedCategoryCacheKey(connection.provider, connection.externalLeagueId, week.season, week.week)
+          const expiresAt = new Date(now.getTime() + 10 * 365 * 86_400_000)
+          const data = { provider: connection.provider, leagueId: connection.externalLeagueId, season: week.season,
+            week: week.week, fetchedAt: now.toISOString(), pairs }
+          await prisma.sportsDataCache.upsert({ where: { cacheKey: key },
+            create: { cacheKey: key, data, expiresAt }, update: { data, expiresAt } })
+        }
+      }
       summary.synced++
       summary.results.push({ runKey, status: 'synced', weeksWritten, weeksUnchanged, soloRowsWritten })
       /*

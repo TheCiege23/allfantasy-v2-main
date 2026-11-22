@@ -8,9 +8,10 @@
  *   - the per-league cockpit's missing-lineups flag (`lib/core-app/commissionerHub.ts`);
  *   - the lineup-reminder recipe (`runCommissionerRecipesJob.ts`).
  *
- * 🛑 A STORED LINEUP HAS NO EMPTY-SLOT MARKER. Sleeper sends `"0"` for an empty starting slot, but
- * every importer drops it before storing (`SleeperRosterMapper` `starter_ids`), so an empty slot
- * survives only as a starters list SHORTER than this number. Measured on production 2026-09-17:
+ * 🛑 A STORED LINEUP MAY HAVE NO EMPTY-SLOT MARKER. Sleeper sends `"0"` for an empty starting slot,
+ * and every importer dropped it before storing (`SleeperRosterMapper` `starter_ids` keeps it since
+ * 2026-10-29; rows imported earlier do not), so an empty slot may survive only as a starters list
+ * SHORTER than this number. Measured on production 2026-09-17:
  * 0 of 4,027 stored rosters contain a `"0"`; 241 in-season Sleeper rosters are short.
  *
  * Pure: no Prisma.

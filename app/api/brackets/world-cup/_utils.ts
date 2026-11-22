@@ -23,7 +23,7 @@ export const worldCupInviteParamsSchema = z.object({
   inviteCode: z.string().min(4).max(64),
 })
 
-export type WorldCupApiSessionUser = {
+type WorldCupApiSessionUser = {
   id: string
   email?: string | null
   name?: string | null

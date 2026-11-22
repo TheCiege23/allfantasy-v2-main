@@ -51,6 +51,27 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   }
 }
 
+/** This NFL week's kickoffs by club (playerGame.weekKickoffs), bounded; {} when unreadable. */
+export async function loadNflWeekKickoffs(): Promise<Record<string, string>> {
+  return (
+    (await withTimeout(
+      (async () => {
+        const week = await resolveSportsWeek('NFL').catch(() => null)
+        if (!week) return {}
+        const games = await prisma.sportsGame
+          .findMany({
+            where: { sport: 'NFL', season: week.season, week: week.week, seasonType: week.seasonType },
+            select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+            take: 400,
+          })
+          .catch(() => [])
+        return weekKickoffs(games)
+      })().catch(() => ({})),
+      IMPACT_TIMEOUT_MS,
+    )) ?? {}
+  )
+}
+
 /** The lineup screen to fix it on — the one rule, shared with the finder's per-league calls. */
 export function fixLinkFor(league: LinkLeague): { href: string; label: string } | null {
   const link = lineupFixLink(league)
@@ -82,23 +103,7 @@ export async function buildFanOutLeagues(userId: string, group: readonly FanOutA
   const startByLeague = new Map<string, string | null>()
   const nfl = Boolean(sleeperId && (sport == null || sport.toUpperCase() === 'NFL'))
   // This week's kickoffs, read once: the bench picker's locks and the free-agent fallback's both.
-  const kickoffs: Record<string, string> = nfl
-    ? ((await withTimeout(
-        (async () => {
-          const week = await resolveSportsWeek('NFL').catch(() => null)
-          if (!week) return {}
-          const games = await prisma.sportsGame
-            .findMany({
-              where: { sport: 'NFL', season: week.season, week: week.week, seasonType: week.seasonType },
-              select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
-              take: 400,
-            })
-            .catch(() => [])
-          return weekKickoffs(games)
-        })().catch(() => ({})),
-        IMPACT_TIMEOUT_MS,
-      )) ?? {})
-    : {}
+  const kickoffs: Record<string, string> = nfl ? await loadNflWeekKickoffs() : {}
   if (nfl && sleeperId) {
     const picked = await withTimeout(
       (async () => {
@@ -174,8 +179,8 @@ export async function buildFanOutLeagues(userId: string, group: readonly FanOutA
   return out
 }
 
-/** The free agent to add per league, for a viewer with player depth; empty for everyone else. */
-async function freeAgentPicks(
+/** The free agent to add per league, for a viewer with player depth; empty for everyone else. Also used by lib/notifications/lineupImpact.ts. */
+export async function freeAgentPicks(
   userId: string,
   sleeperId: string,
   leagueIds: readonly string[],

@@ -253,6 +253,7 @@ export interface LiveScoreRow {
    * silently dropped from every provider series group, for every sport.
    */
   eventName?: string | null
+  playoffSeries?: { completed: boolean; winnerTeamId: string | null }
   odds: string | null
   overUnder: number | null
   week: number | null
@@ -442,6 +443,7 @@ interface ESPNLeaderCategory {
 }
 
 interface ESPNCompetition {
+  series?: { completed?: boolean; competitors?: Array<{ id: string; wins?: number }> }
   competitors: ESPNCompetitor[]
   status: {
     /** `state` is "pre", "in" or "post". */
@@ -538,6 +540,12 @@ function dedupeLiveScoreRows(rows: LiveScoreRow[]): LiveScoreRow[] {
   return Array.from(byId.values())
 }
 
+function readEspnScore(value: unknown): number | null {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return null
+  const score = Number(value)
+  return Number.isSafeInteger(score) && score >= 0 ? score : null
+}
+
 export async function fetchEspnScoreboard(
   sport: LiveSport,
   options: { dates?: string[] } = {},
@@ -579,14 +587,14 @@ export async function fetchEspnScoreboard(
         homeTeamId: home.team.id,
         homeTeamFull: home.team.displayName,
         homeLogo: home.team.logo,
-        homeScore: parseInt(home.score, 10) || 0,
+        homeScore: readEspnScore(home.score),
         homeRecord: home.records?.[0]?.summary ?? null,
         ...(isTop25Sport(sport) && home.curatedRank ? { homeRank: top25Rank(home.curatedRank.current) } : {}),
         awayTeam: abbrev(away.team.abbreviation),
         awayTeamId: away.team.id,
         awayTeamFull: away.team.displayName,
         awayLogo: away.team.logo,
-        awayScore: parseInt(away.score, 10) || 0,
+        awayScore: readEspnScore(away.score),
         awayRecord: away.records?.[0]?.summary ?? null,
         ...(isTop25Sport(sport) && away.curatedRank ? { awayRank: top25Rank(away.curatedRank.current) } : {}),
         status: comp.status.type.name,
@@ -604,10 +612,20 @@ export async function fetchEspnScoreboard(
          * that only fills one of them still says something.
          */
         eventName: comp.notes?.[0]?.headline ?? event.name ?? null,
+        ...(comp.series ? { playoffSeries: {
+          completed: comp.series.completed === true,
+          winnerTeamId: (() => {
+            const teams = comp.series!.competitors ?? []
+            if (!comp.series!.completed || teams.length !== 2 || teams.some(t => typeof t.wins !== 'number') || teams[0].wins === teams[1].wins) return null
+            return teams[0].wins! > teams[1].wins! ? teams[0].id : teams[1].id
+          })(),
+        } } : {}),
         odds: comp.odds?.[0]?.details ?? null,
         overUnder: comp.odds?.[0]?.overUnder ?? null,
         week: event.week?.number ?? null,
-        season: event.season.year,
+        // ESPN labels winter leagues by their ending year; native redraft and RI
+        // key the same season by its starting year (2026-27 => 2026).
+        season: ['NBA', 'NHL'].includes(sport) ? event.season.year - 1 : event.season.year,
         topPerformer: pickTopPerformer(comp.leaders),
         leaders: pickGameLeaders(comp.leaders as EspnLeaderCategory[] | undefined),
         // Raw ESPN abbreviations on purpose: `possessionText` is written in
@@ -1045,6 +1063,9 @@ async function syncLiveScoresToDb(sport: LiveSport, scores: LiveScoreRow[], sour
         update: {
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
+          ...(['NBA', 'NHL'].includes(sport) && source === 'espn_live' ? {
+            raw: { homeTeamFull: score.homeTeamFull, awayTeamFull: score.awayTeamFull },
+          } : {}),
           homeScore,
           awayScore,
           status: statusForDb,
@@ -1060,6 +1081,9 @@ async function syncLiveScoresToDb(sport: LiveSport, scores: LiveScoreRow[], sour
           externalId: score.gameId,
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
+          ...(['NBA', 'NHL'].includes(sport) && source === 'espn_live' ? {
+            raw: { homeTeamFull: score.homeTeamFull, awayTeamFull: score.awayTeamFull },
+          } : {}),
           homeScore,
           awayScore,
           status: statusForDb,

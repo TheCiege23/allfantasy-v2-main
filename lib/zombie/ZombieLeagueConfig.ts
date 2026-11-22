@@ -33,6 +33,12 @@ export async function isZombieLeague(leagueId: string): Promise<boolean> {
     select: { id: true },
   })
   if (config) return true
+  // Native Zombie creation can attach the ZombieLeague row before a separate config is upserted.
+  const nativeLeague = await prisma.zombieLeague.findUnique({
+    where: { leagueId },
+    select: { id: true },
+  })
+  if (nativeLeague) return true
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { leagueVariant: true },
@@ -43,7 +49,7 @@ export async function isZombieLeague(leagueId: string): Promise<boolean> {
 export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLeagueConfigLoaded | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, leagueVariant: true },
+    select: { id: true, leagueVariant: true, sport: true },
   })
   if (!league) return null
 
@@ -58,23 +64,24 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
       whispererSelection: toWhispererSelection(row.whispererSelection),
       infectionLossToWhisperer: row.infectionLossToWhisperer,
       infectionLossToZombie: row.infectionLossToZombie,
-      serumReviveCount: row.serumReviveCount,
-      serumAwardHighScore: row.serumAwardHighScore,
-      serumAwardOnBashMaul: row.serumAwardOnBashMaul,
-      serumUseBeforeLastStarter: row.serumUseBeforeLastStarter,
+      serumReviveCount: league.sport === 'NFL' ? 2 : row.serumReviveCount,
+      autoSerumRevive: league.sport === 'NFL' || row.autoSerumRevive,
+      serumAwardHighScore: league.sport === 'NFL' || row.serumAwardHighScore,
+      serumAwardOnBashMaul: league.sport === 'NFL' || row.serumAwardOnBashMaul,
+      serumUseBeforeLastStarter: league.sport === 'NFL' || row.serumUseBeforeLastStarter,
       weaponScoreThresholds: parseWeaponThresholds(row.weaponScoreThresholds),
-      weaponTopTwoActive: row.weaponTopTwoActive,
-      bombOneTimeOverride: row.bombOneTimeOverride,
+      weaponTopTwoActive: league.sport === 'NFL' || row.weaponTopTwoActive,
+      bombOneTimeOverride: league.sport === 'NFL' || row.bombOneTimeOverride,
       ambushCountPerWeek: row.ambushCountPerWeek,
       ambushRemapMatchup: row.ambushRemapMatchup,
       noWaiverFreeAgency: row.noWaiverFreeAgency,
       statCorrectionReversal: row.statCorrectionReversal,
-      zombieTradeBlocked: row.zombieTradeBlocked,
+      zombieTradeBlocked: true,
       dangerousDropThreshold: row.dangerousDropThreshold,
     }
   }
 
-  if (league.leagueVariant !== ZOMBIE_VARIANT) return null
+  if (league.leagueVariant !== ZOMBIE_VARIANT && !(await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } }))) return null
 
   return {
     leagueId: league.id,
@@ -84,12 +91,13 @@ export async function getZombieLeagueConfig(leagueId: string): Promise<ZombieLea
     infectionLossToWhisperer: true,
     infectionLossToZombie: true,
     serumReviveCount: 2,
+    autoSerumRevive: league.sport === 'NFL',
     serumAwardHighScore: true,
     serumAwardOnBashMaul: true,
     serumUseBeforeLastStarter: true,
     weaponScoreThresholds: null,
     weaponTopTwoActive: true,
-    bombOneTimeOverride: false,
+    bombOneTimeOverride: league.sport === 'NFL',
     ambushCountPerWeek: 1,
     ambushRemapMatchup: true,
     noWaiverFreeAgency: true,
@@ -107,6 +115,7 @@ export async function upsertZombieLeagueConfig(
     infectionLossToWhisperer: boolean
     infectionLossToZombie: boolean
     serumReviveCount: number
+    autoSerumRevive: boolean
     serumAwardHighScore: boolean
     serumAwardOnBashMaul: boolean
     serumUseBeforeLastStarter: boolean
@@ -130,6 +139,7 @@ export async function upsertZombieLeagueConfig(
       infectionLossToWhisperer: input.infectionLossToWhisperer ?? true,
       infectionLossToZombie: input.infectionLossToZombie ?? true,
       serumReviveCount: input.serumReviveCount ?? 2,
+      autoSerumRevive: input.autoSerumRevive ?? false,
       serumAwardHighScore: input.serumAwardHighScore ?? true,
       serumAwardOnBashMaul: input.serumAwardOnBashMaul ?? true,
       serumUseBeforeLastStarter: input.serumUseBeforeLastStarter ?? true,
@@ -140,7 +150,7 @@ export async function upsertZombieLeagueConfig(
       ambushRemapMatchup: input.ambushRemapMatchup ?? true,
       noWaiverFreeAgency: input.noWaiverFreeAgency ?? true,
       statCorrectionReversal: input.statCorrectionReversal ?? false,
-      zombieTradeBlocked: input.zombieTradeBlocked ?? true,
+      zombieTradeBlocked: true,
       dangerousDropThreshold: input.dangerousDropThreshold ?? null,
     },
     update: {
@@ -149,6 +159,7 @@ export async function upsertZombieLeagueConfig(
       ...(input.infectionLossToWhisperer !== undefined && { infectionLossToWhisperer: input.infectionLossToWhisperer }),
       ...(input.infectionLossToZombie !== undefined && { infectionLossToZombie: input.infectionLossToZombie }),
       ...(input.serumReviveCount !== undefined && { serumReviveCount: input.serumReviveCount }),
+      ...(input.autoSerumRevive !== undefined && { autoSerumRevive: input.autoSerumRevive }),
       ...(input.serumAwardHighScore !== undefined && { serumAwardHighScore: input.serumAwardHighScore }),
       ...(input.serumAwardOnBashMaul !== undefined && { serumAwardOnBashMaul: input.serumAwardOnBashMaul }),
       ...(input.serumUseBeforeLastStarter !== undefined && { serumUseBeforeLastStarter: input.serumUseBeforeLastStarter }),
@@ -159,7 +170,7 @@ export async function upsertZombieLeagueConfig(
       ...(input.ambushRemapMatchup !== undefined && { ambushRemapMatchup: input.ambushRemapMatchup }),
       ...(input.noWaiverFreeAgency !== undefined && { noWaiverFreeAgency: input.noWaiverFreeAgency }),
       ...(input.statCorrectionReversal !== undefined && { statCorrectionReversal: input.statCorrectionReversal }),
-      ...(input.zombieTradeBlocked !== undefined && { zombieTradeBlocked: input.zombieTradeBlocked }),
+      zombieTradeBlocked: true,
       ...(input.dangerousDropThreshold !== undefined && { dangerousDropThreshold: input.dangerousDropThreshold }),
     },
   })

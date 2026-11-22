@@ -16,6 +16,9 @@ export type PublicTradeDecisionReceipt = {
   valueSource: string | null
   projectionSource: string | null
   participantOutcomes: Array<{ rosterId: string; beforePct: number; afterPct: number; deltaPct: number }>
+  lineupBasis?: 'historical_points_per_game' | null
+  lineupCoverage?: Array<{ rosterId: string; rosterPlayers: number | null;
+    linkedPlayers: number | null; scoredPlayers: number | null; status: 'verified' | 'blocked'; reason: string | null }>
   participantDecisions: Array<{
     rosterId: string
     grade: string | null
@@ -24,6 +27,7 @@ export type PublicTradeDecisionReceipt = {
     reason: string
     valueGiven: number | null
     valueReceived: number | null
+    divisionImpactSummary?: string
     valueDelta: number | null
     lineupPointsDelta: number | null
     outcomeMetric: string | null
@@ -87,6 +91,15 @@ export function publicTradeDecisionReceipt(row: DecisionSnapshotRow): PublicTrad
     policyVersion: row.policyVersion,
     format: row.format,
     capturedAt: row.capturedAt.toISOString(),
+    lineupBasis: decisionResult.lineupBasis === 'historical_points_per_game' ? 'historical_points_per_game' : null,
+    lineupCoverage: Array.isArray(decisionResult.lineupCoverage) ? decisionResult.lineupCoverage.flatMap((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+      const item = value as Record<string, unknown>
+      return typeof item.rosterId === 'string' ? [{ rosterId: item.rosterId,
+        rosterPlayers: numberOrNull(item.rosterPlayers), linkedPlayers: numberOrNull(item.linkedPlayers),
+        scoredPlayers: numberOrNull(item.scoredPlayers), status: item.status === 'verified' ? 'verified' as const : 'blocked' as const,
+        reason: typeof item.reason === 'string' ? item.reason : null }] : []
+    }) : [],
     contextualGradeAllowed: readiness.contextualGradeAllowed === true,
     missingEvidence: Array.isArray(readiness.missingRequired) ? readiness.missingRequired.map(String) : [],
     reason: typeof readiness.reason === 'string' ? readiness.reason : null,
@@ -124,6 +137,7 @@ export function publicTradeDecisionReceipt(row: DecisionSnapshotRow): PublicTrad
             reason: item.reason,
             valueGiven: numberOrNull(item.valueGiven),
             valueReceived: numberOrNull(item.valueReceived),
+            ...(typeof item.divisionImpactSummary === 'string' ? { divisionImpactSummary: item.divisionImpactSummary } : {}),
             valueDelta: numberOrNull(item.valueDelta),
             lineupPointsDelta: numberOrNull(item.lineupPointsDelta),
             outcomeMetric: typeof item.outcomeMetric === 'string' ? item.outcomeMetric : null,

@@ -85,6 +85,18 @@ describe('daily-sport weekly score sync', () => {
     await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/CRICKET is not available yet/)
   })
 
+  it('uses soccer gameweek dates even when a caller supplies a seven-day opener', async () => {
+    prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([{ playerId: 'p1', sport: 'SOCCER', position: 'FWD', team: '7' }])
+    await runSync({ seasonStartUtc: SEASON_START })
+    const where = prismaMock.playerGameStat.findMany.mock.calls[0][0].where
+    expect(where.gameDate).toEqual({
+      gte: new Date('2026-08-28T00:00:00.000Z'),
+      lt: new Date('2026-09-04T00:00:00.000Z'),
+    })
+  })
+
   describe('week selection', () => {
     beforeEach(() => {
       prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })

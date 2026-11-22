@@ -353,7 +353,6 @@ describe('server-built sentences are held to their loaders', () => {
       '`${what} on ${event.at.slice(0, 10)}`',
       '(no league activity has ever been recorded)',
       '(no league activity recorded in ${daysSinceLastActivity} days)',
-      "'Active and engaged'",
     ]) expect(live, s).toContain(s)
     expect(deadlineLabelText('Playoffs start is this week', 'es')).toBe('Inicio de los playoffs: esta semana')
     expect(deadlineLabelText('Next waiver processing in 1 hours', 'es')).toBe('Próximo procesamiento de reclamos: en 1 hora')

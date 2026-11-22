@@ -1,7 +1,3 @@
-import type { LineupDecisionMode } from '@/lib/lineup-decision-engine/types'
-
-export type { LineupDecisionMode }
-
 /** Client-side roster row for optimizer API + UI enrichment */
 export interface LineupRosterPlayer {
   id: string
@@ -133,10 +129,3 @@ export interface OptimizeApiResponse {
   } | null
 }
 
-export interface PreferenceProfileApi {
-  profile?: {
-    traitSummary: Record<string, { confidence: number; sampleSize: number; lastReinforcedAt: string | null }>
-    optimizerProfileInput: Record<string, unknown>
-    stats?: { autoSubAllowRate: number; injuryContingencyOverrideRate: number }
-  }
-}

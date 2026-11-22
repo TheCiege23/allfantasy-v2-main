@@ -1,17 +1,20 @@
 'use client'
+import {SurvivorGuillotineCommissionerPanel} from '@/components/league-settings/SurvivorGuillotineCommissionerPanel'
 
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { buildSGSchedule, defaultSGConfig, SG_MODE_LABELS } from '@/lib/survivor-guillotine/config'
+import { allStarsSGConfig, buildSGSchedule, defaultSGConfig, SG_MODE_LABELS } from '@/lib/survivor-guillotine/config'
 import { SG_POWER_LABELS } from '@/lib/survivor-guillotine/powers'
 import type { SGConfig, SGMode, SGPowerKind } from '@/lib/survivor-guillotine/types'
 import styles from './setup.module.css'
 
 export function SurvivorGuillotineSetup() {
-  const [config, setConfig] = useState<SGConfig>(() => defaultSGConfig())
-  const [leagueName, setLeagueName] = useState('')
+  const [config, setConfig] = useState<SGConfig>(() => allStarsSGConfig())
+  const [seasonYear, setSeasonYear] = useState(() => new Date().getFullYear())
+  const [leagueName, setLeagueName] = useState('Survivor All-Stars')
   const [draftType, setDraftType] = useState('snake')
   const [inviteLink, setInviteLink] = useState('')
+  const [scoringPreset, setScoringPreset] = useState('fb_half_ppr')
   const [notice, setNotice] = useState('')
   const [leagueId, setLeagueId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -21,7 +24,7 @@ export function SurvivorGuillotineSetup() {
     if (!id) return
     fetch(`/api/leagues/${encodeURIComponent(id)}/survivor-guillotine`)
       .then(async response => response.ok ? response.json() : null)
-      .then(data => { if (data?.season?.config) { setConfig(data.season.config as SGConfig); void loadInvite(id) } })
+      .then(data => { if (data?.season?.config) { setConfig(data.season.config as SGConfig); if (data.seasonYear) setSeasonYear(data.seasonYear); void loadInvite(id) } })
       .catch(() => setNotice('Could not load saved league rules.'))
   }, [])
   const schedule = useMemo(() => buildSGSchedule(config), [config])
@@ -33,9 +36,7 @@ export function SurvivorGuillotineSetup() {
       if (!response.ok) return
       const data = await response.json()
       if (typeof data.inviteLink === 'string') setInviteLink(data.inviteLink)
-    } catch {
-      // Saving rules succeeds independently of invite-link retrieval.
-    }
+    } catch { /* Rules remain saved if invite retrieval fails. */ }
   }
   function update<K extends keyof SGConfig>(key: K, value: SGConfig[K]) {
     setConfig(current => ({ ...current, [key]: value }))
@@ -45,7 +46,10 @@ export function SurvivorGuillotineSetup() {
     return <label className={styles.field}>{label}<input type="number" min={min} max={max} value={Number.isFinite(config[key]) ? config[key] : ''} onChange={event => update(key, event.currentTarget.value === '' ? NaN : Number(event.currentTarget.value))} /></label>
   }
   function selectField<K extends keyof SGConfig>(key: K, label: string, options: [SGConfig[K], string][]) {
-    return <label className={styles.field}>{label}<select value={String(config[key])} onChange={event => update(key, event.currentTarget.value as SGConfig[K])}>{options.map(([value, text]) => <option key={String(value)} value={String(value)}>{text}</option>)}</select></label>
+    return <label className={styles.field}>{label}<select value={String(config[key] ?? (key === 'gauntletIdolMode' ? 'sealed_auction' : ''))} onChange={event => {
+      if (key === 'sport') { setConfig(event.currentTarget.value === 'NBA' ? defaultSGConfig('NBA') : allStarsSGConfig()); setScoringPreset(event.currentTarget.value === 'NBA' ? 'nba_points' : 'fb_half_ppr') }
+      else update(key, event.currentTarget.value as SGConfig[K])
+    }}>{options.map(([value, text]) => <option key={String(value)} value={String(value)}>{text}</option>)}</select></label>
   }
   function toggle(key: 'gauntletTribeImmunity' | 'gauntletIdolAuction' | 'tradesEnabled' | 'ceremonyPresentation', label: string) {
     return <label className={styles.check}><input type="checkbox" checked={config[key]} onChange={event => update(key, event.currentTarget.checked)} />{label}</label>
@@ -78,38 +82,35 @@ export function SurvivorGuillotineSetup() {
   async function createLeague() {
     if (leagueId || schedule.errors.length || !leagueName.trim()) return
     if (config.teamCount > 32) { setNotice('New league creation currently supports up to 32 managers.'); return }
-    setSaving(true)
-    setNotice('Creating your league…')
+    setSaving(true); setNotice('Creating your league…')
+    let createdId = ''
     try {
-      const response = await fetch('/api/leagues', { method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-          concept: 'redraft', sport: config.sport, scoringPreset: config.sport === 'NFL' ? 'fb_half_ppr' : 'nba_points',
+      const response = await fetch('/api/leagues', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concept: 'redraft', sport: config.sport, season: seasonYear, scoringPreset,
           teamCount: config.teamCount, draftType, leagueName: leagueName.trim(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
-          conceptSetup: { visibility: 'private', isPublic: false },
-        }) })
-      const data = await response.json()
-      if (!response.ok || data.success === false) throw new Error(data.error ?? 'League creation failed')
-      const id = data.league?.id as string | undefined
-      if (!id) throw new Error('League creation returned no league ID')
-      setLeagueId(id)
-      window.history.replaceState(null, '', `/survivor-guillotine/setup?leagueId=${encodeURIComponent(id)}`)
-      const rules = await fetch(`/api/leagues/${encodeURIComponent(id)}/survivor-guillotine`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rules', config }),
-      })
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, language: 'en', tradeReviewMode: 'commissioner',
+          conceptSetup: { visibility: 'private', isPublic: false } }) })
+      const result = await response.json()
+      if (!response.ok || !result.league?.id) throw new Error(result.error ?? 'League creation failed.')
+      createdId = result.league.id; setLeagueId(createdId)
+      window.history.replaceState(null, '', `/survivor-guillotine/setup?leagueId=${encodeURIComponent(createdId)}`)
+      const rules = await fetch(`/api/leagues/${encodeURIComponent(createdId)}/survivor-guillotine`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rules', config }) })
       const saved = await rules.json()
-      if (!rules.ok) throw new Error(`League ${id} was created. Save its Survivor rules before inviting managers: ${saved.error ?? 'save failed'}`)
-      await loadInvite(id)
-      setNotice('Survivor Guillotine league created. Review your rules, then share the invite link.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'League creation failed') }
+      if (!rules.ok) throw new Error(saved.error ?? 'Rules could not be saved.')
+      await loadInvite(createdId)
+      setNotice('Survivor Guilly league created. Review your rules, then share the invite link.')
+    } catch (error) { setNotice(`${createdId ? 'Your league was created. Keep this page open and retry Save to league after resolving this issue: ' : ''}${error instanceof Error ? error.message : 'Could not create league'}`) }
     finally { setSaving(false) }
   }
   return <main className={styles.page}>
+    {leagueId && <SurvivorGuillotineCommissionerPanel leagueId={leagueId}/>}
     <header className={styles.header}>
-      <div><span className={styles.eyebrow}>ALLFANTASY · COMMISSIONER WORKSHOP</span><h1><Image src="/survivor-guillotine/emblem.svg" alt="" width={52} height={52} className={styles.emblem} />Survivor Guillotine</h1><p>Build your island. Set the rules. Leave three standing.</p></div>
+      <div><span className={styles.eyebrow}>ALLFANTASY · COMMISSIONER WORKSHOP</span><h1><Image src="/survivor-guillotine/emblem.svg" alt="" width={52} height={52} className={styles.emblem} />Survivor Guilly</h1><p>Build your island. Set the rules. Leave three standing.</p></div>
       <span className={styles.badge}>{leagueId ? 'Live league setup' : 'Setup preview'}</span>
     </header>
-    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Choose your rules and create a private NFL or NBA league. The invite link appears after Survivor Guillotine is configured.'}</p>
+    <p className={styles.preview}>{leagueId ? 'Configure the league rules, then save them to this league. Tribes and each live scoring period are managed after rosters are ready.' : 'Choose your rules and create a private NFL or NBA league. The invite link appears after Survivor Guilly is configured.'}</p>
+    <label className={styles.field}>Season<input type="number" min={new Date().getFullYear()} max={new Date().getFullYear() + 1} value={seasonYear} disabled={!!leagueId} onChange={event => setSeasonYear(Number(event.target.value))} /></label>{config.sport === 'NFL' && <p>Choose next season if this season is already underway. Your draft must precede the games your league will score.</p>}
     <div className={styles.stats}>
       <article><strong>{Number.isFinite(config.teamCount) ? config.teamCount : '—'}</strong><span>Starting teams</span></article>
       <article><strong>{Number.isFinite(config.tribeCount) ? config.tribeCount : '—'}</strong><span>Starting tribes</span></article>
@@ -118,10 +119,7 @@ export function SurvivorGuillotineSetup() {
     </div>
     <div className={styles.columns}>
       <div>
-        {!leagueId && <section className={styles.card}><h2>Create your league</h2><div className={styles.fields}>
-          <label className={styles.field}>League name<input value={leagueName} maxLength={100} onChange={event => setLeagueName(event.currentTarget.value)} placeholder="Survivor All Stars" /></label>
-          <label className={styles.field}>Draft format<select value={draftType} onChange={event => setDraftType(event.currentTarget.value)}><option value="snake">Snake</option><option value="linear">Linear</option><option value="auction">Auction</option><option value="offline">Offline</option><option value="auto">Auto</option></select></label>
-        </div><p className={styles.hint}>Create the league first; share its invitation after the rules are saved. You can schedule the draft and choose tribes in league control.</p></section>}
+        {!leagueId && <section className={styles.card}><h2>Draft format</h2><label className={styles.field}>Draft format<select value={draftType} onChange={event => setDraftType(event.currentTarget.value)}><option value="snake">Snake</option><option value="linear">Linear</option><option value="auction">Auction</option><option value="offline">Offline</option><option value="auto">Auto</option></select></label></section>}
         <section className={styles.card}><h2>Your season</h2><div className={styles.fields}>
           {selectField('sport', 'Sport', [['NFL', 'Football'], ['NBA', 'Basketball']])}
           {numberField('teamCount', 'Starting managers', 4, 64)}
@@ -129,13 +127,30 @@ export function SurvivorGuillotineSetup() {
           {numberField('championshipPeriod', 'Championship scoring period', 2, 60)}
           {numberField('gauntletPeriods', 'Gauntlet periods', 0, 20)}
           {numberField('mergedChopPeriods', 'Individual chop periods', 1, 20)}
-          {numberField('faabBudget', 'Season FAAB budget', 0, 100000)}
+          {numberField('faabBudget', 'Season FAAB budget', 0, 100000)}<label className={styles.field}>Post-chop FAAB bidding window (hours)<input type="number" min={0} max={168} value={config.waiverDelayHours ?? 0} onChange={e => update('waiverDelayHours', Number(e.target.value))} /></label>
           {selectField('tribeFormation', 'Form tribes', [['commissioner', 'Commissioner assigns'], ['random', 'Random draw'], ['captain_draft', 'Captain draft'], ['manager_choice', 'Manager choice']])}
         </div><p className={styles.hint}>The last three elimination periods are individual by default. The Gauntlet sits immediately before them. Change the lengths or individual periods below.</p>
         {config.sport === 'NBA' && <div className={styles.inset}><h3>NBA scoring calendar</h3><p>Use your league’s actual weekly scoring periods, including combined weeks. Choose your championship period; football’s Week 14 merge does not apply.</p><div className={styles.fields}>
           {selectField('nbaScoring', 'Weekly scoring', [['total_points', 'Total weekly fantasy points'], ['capped_games', 'Cap player games']])}
           {config.nbaScoring === 'capped_games' && numberField('nbaGameCap', 'Player games per team / period', 1, 200)}
         </div><p className={styles.hint}>For an All-Star or shortened period, choose the elimination format or “No elimination” in the schedule.</p></div>}
+        </section>
+        {config.sport === 'NFL' && <section className={styles.card}><h2>Roster expansion</h2>
+          <button type="button" className={styles.secondary} onClick={() => { setConfig(allStarsSGConfig()); setNotice('All-Stars preset loaded. Review the season calendar before saving.') }}>Load updated NFL All-Stars preset</button>
+          <label className={styles.check}><input type="checkbox" checked={config.rosterExpansion?.enabled ?? false} onChange={e => update('rosterExpansion', { ...allStarsSGConfig().rosterExpansion!, ...config.rosterExpansion, enabled: e.target.checked })} />Enable scheduled lineup and bench expansion</label>
+          {config.rosterExpansion?.enabled && <><p>Open with QB, 2 RB, 2 WR, TE, and 2 FLEX. Each expansion opens a new starting slot and one bench spot by default.</p><div className={styles.fields}>
+            <label className={styles.field}>Opening bench spots (blank keeps the league’s bench)<input type="number" min={0} max={40} value={config.rosterExpansion.openingBenchSlots ?? ''} onChange={e => update('rosterExpansion', { ...config.rosterExpansion!, openingBenchSlots: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+            <label className={styles.field}>Bench spots added per expansion<input type="number" min={0} max={10} value={config.rosterExpansion.benchPerExpansion} onChange={e => update('rosterExpansion', { ...config.rosterExpansion!, benchPerExpansion: Number(e.target.value) })} /></label>
+          </div>{config.rosterExpansion.steps.map((step, index) => <div className={styles.fields} key={index}>
+            <label className={styles.field}>Expansion {index + 1} period<input type="number" min={2} max={config.championshipPeriod - 1} value={step.period} onChange={e => update('rosterExpansion', { ...config.rosterExpansion!, steps: config.rosterExpansion!.steps.map((row, i) => i === index ? { ...row, period: Number(e.target.value) } : row) })} /></label>
+            <label className={styles.field}>Starting slot<select value={step.slot} onChange={e => update('rosterExpansion', { ...config.rosterExpansion!, steps: config.rosterExpansion!.steps.map((row, i) => i === index ? { ...row, slot: e.target.value as 'FLEX' | 'SUPERFLEX' } : row) })}><option value="FLEX">FLEX</option><option value="SUPERFLEX">SUPERFLEX</option></select></label>
+          </div>)}</>}
+        </section>}
+        <section className={styles.card}><h2>Public reward challenges</h2><p>These announced challenges are separate from concealed random rewards.</p>
+          {(config.rewardChallenges ?? []).map((reward, index) => <div className={styles.fields} key={index}><label className={styles.field}>Reward period<input type="number" min={1} max={config.championshipPeriod - 1} value={reward.period} onChange={e => update('rewardChallenges', config.rewardChallenges!.map((row, i) => i === index ? { ...row, period: Number(e.target.value) } : row))} /></label><label className={styles.field}>Challenge<select value={reward.kind} onChange={e => update('rewardChallenges', config.rewardChallenges!.map((row, i) => i === index ? { ...row, kind: e.target.value as typeof reward.kind } : row))}><option value="tribe_blowout_faab">Biggest matchup blowout: tribe FAAB</option><option value="highest_score_idol">Highest weekly score: immunity idol</option><option value="highest_score_swap">Highest weekly score: swap token</option></select></label>{reward.kind === 'tribe_blowout_faab' && <label className={styles.field}>FAAB per tribe member<input type="number" min={0} value={reward.amount} onChange={e => update('rewardChallenges', config.rewardChallenges!.map((row, i) => i === index ? { ...row, amount: Number(e.target.value) } : row))} /></label>}<button type="button" onClick={() => update('rewardChallenges', config.rewardChallenges!.filter((_, i) => i !== index))}>Remove challenge</button></div>)}
+          <button type="button" onClick={() => update('rewardChallenges', [...(config.rewardChallenges ?? []), { period: 1, kind: 'highest_score_idol', amount: 0 }])}>Add public challenge</button>
+          <label className={styles.check}><input type="checkbox" checked={config.championRotation ?? false} onChange={e => update('championRotation', e.target.checked)} />Everyone serves as champion before repeat nominations</label>
+          <label className={styles.field}>Shuffle before periods (comma separated)<input value={config.shufflePeriods.join(', ')} onChange={e => update('shufflePeriods', e.target.value.split(',').map(value => Number(value.trim())).filter(Boolean))} /></label>
         </section>
         <section className={styles.card}><h2>Tribe decisions</h2><div className={styles.fields}>
           {selectField('submissionMode', 'Submission approval', [['first_valid', 'First valid submission'], ['tribe_vote', 'Tribe vote'], ['captain', 'Captain submits'], ['commissioner', 'Commissioner resolves']])}
@@ -147,7 +162,11 @@ export function SurvivorGuillotineSetup() {
           {selectField('gauntletDraft', 'New tribe draft', [['snake', 'Snake'], ['alternating', 'Alternating'], ['commissioner', 'Commissioner choice']])}
           {selectField('gauntletCaptains', 'Captain selection', [['previous_period_top_two', 'Previous period’s two highest scorers'], ['commissioner', 'Commissioner chooses']])}
           {selectField('gauntletElimination', 'Double elimination', [['per_tribe', 'Lowest eligible manager per tribe'], ['league_lowest_two', 'Two lowest eligible managers overall']])}
-        </div><p className={styles.hint}>Reset to two equal tribes{gauntlet ? ` before period ${gauntlet.period}` : ''}. No tribe immunity by default.</p>{toggle('gauntletTribeImmunity', 'Enable tribe immunity during the Gauntlet')}{toggle('gauntletIdolAuction', 'Enable FAAB bidding for a recirculating Gauntlet idol')}</section>
+        </div><p className={styles.hint}>Reset to two equal tribes{gauntlet ? ` before period ${gauntlet.period}` : ''}. Captains make real picks; alternating schoolyard picks are the default. No tribe immunity by default.</p>{toggle('gauntletTribeImmunity', 'Enable tribe immunity during the Gauntlet')}
+          {selectField('gauntletIdolMode', 'Gauntlet idol rules', [['retired_player', 'Announced retired player: FAAB waivers, drop and announce before kickoff'], ['sealed_auction', 'Private sealed auction']])}
+          {config.gauntletIdolMode !== 'retired_player' && toggle('gauntletIdolAuction', 'Enable FAAB bidding for a recirculating Gauntlet idol')}
+          {config.gauntletIdolMode === 'retired_player' && <p className={styles.hint}>Select a verified retired player in the Gauntlet calendar. The owner plays the idol with one action that drops the player and announces immunity. After use, a new idol enters the next period. Swap tokens work through the Gauntlet; neither swapped manager can be used in another swap that period.</p>}
+        </section>
         <section className={styles.card}><h2>Hidden powers & Chop Night</h2>
           <p className={styles.hint}>One personal immunity idol is guaranteed in the draft pool. Other powers and reward weeks are concealed, including from a participating commissioner. Player-bound idols follow the player through waivers; weekly rewards disappear when their manager is chopped.</p>
           <div className={styles.powers}>{(Object.keys(SG_POWER_LABELS) as SGPowerKind[]).map(kind => <label className={styles.check} key={kind}><input type="checkbox" disabled={kind === 'personal_immunity'} checked={config.enabledPowers.includes(kind)} onChange={event => update('enabledPowers', event.currentTarget.checked ? [...config.enabledPowers, kind] : config.enabledPowers.filter(item => item !== kind))} />{SG_POWER_LABELS[kind]}{kind === 'personal_immunity' ? ' · required' : ''}</label>)}</div>
@@ -170,10 +189,11 @@ export function SurvivorGuillotineSetup() {
         </tr>)}</tbody></table></div>
         <button className={styles.secondary} type="button" onClick={() => update('periodOverrides', {})}>Reset period overrides</button>
         <button className={styles.primary} type="button" disabled={schedule.errors.length > 0} onClick={exportRules}>Export season rules</button>
-        {!leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving || !leagueName.trim()} onClick={createLeague}>{saving ? 'Creating…' : 'Create Survivor Guillotine league'}</button>}
         {leagueId && <button className={styles.primary} type="button" disabled={schedule.errors.length > 0 || saving} onClick={saveRules}>{saving ? 'Saving…' : 'Save to league'}</button>}
         {leagueId && <a className={styles.primary} href={`/survivor-guillotine/${encodeURIComponent(leagueId)}`}>Open league island</a>}
-        {inviteLink && <div className={styles.inset}><h3>Invite managers</h3><p>Share this link when your league is ready.</p><a href={inviteLink}>{inviteLink}</a><button className={styles.secondary} type="button" onClick={() => { void navigator.clipboard?.writeText(inviteLink).then(() => setNotice('Invite link copied.')) }}>Copy invite link</button></div>}
+        {leagueId && <a className={styles.secondary} href={`/app/league/${encodeURIComponent(leagueId)}`}>League hub, invites & player draft</a>}
+        {!leagueId && <div className={styles.inset}><h3>Create your league</h3><label className={styles.field}>League name<input value={leagueName} onChange={e => setLeagueName(e.target.value)} /></label><label className={styles.field}>Scoring<select value={scoringPreset} onChange={e => setScoringPreset(e.target.value)}>{config.sport === 'NFL' ? <><option value="fb_half_ppr">Half PPR</option><option value="fb_ppr">PPR</option><option value="fb_standard">Standard</option></> : <option value="nba_points">NBA points</option>}</select></label><button className={styles.primary} disabled={saving || schedule.errors.length > 0 || !leagueName.trim()} onClick={createLeague}>{saving ? 'Creating…' : 'Create Survivor Guilly league'}</button></div>}
+        {inviteLink && <div className={styles.inset}><h3>Invite managers</h3><a href={inviteLink}>{inviteLink}</a><button className={styles.secondary} type="button" onClick={() => { void navigator.clipboard?.writeText(inviteLink).then(() => setNotice('Invite link copied.')) }}>Copy invite link</button></div>}
         <p role="status" className={styles.hint}>{notice}</p>
         <div className={styles.inset}><h3>Manager home</h3><ol><li>Your lineup</li><li>This week’s rules & actions</li><li>Tribe race & matchups</li><li>Elimination danger</li><li>Your private powers</li><li>League activity</li></ol><p>Chopped managers keep chat, spectating, recaps, and ceremony access.</p></div>
       </aside>

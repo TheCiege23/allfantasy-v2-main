@@ -24,27 +24,27 @@ function state(overrides: Partial<CreateLeagueV2State> = {}): CreateLeagueV2Stat
     sport: 'NFL',
     scoringPresetId: 'fb_half_ppr',
     draftType: 'snake',
-    name: 'Guillotine Tile League',
+    name: 'Guilly Tile League',
     nameTouched: true,
     ...overrides,
   }
 }
 
-describe('Create wizard — Guillotine tile', () => {
-  it('offers Guillotine for NFL, and picking it sets the concept', () => {
+describe('Create wizard — Guilly tile', () => {
+  it('offers Guilly for NFL, and picking it sets the concept', () => {
     const onChange = vi.fn()
     render(<LeagueBasicsStep state={state()} onChange={onChange} fieldErrors={{}} />)
     fireEvent.click(screen.getByTestId('g30-league-type-guillotine'))
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ leagueType: 'guillotine' }))
   })
 
-  it('does not offer Guillotine for a sport the server refuses it for (NCAAB)', () => {
+  it('does not offer Guilly for a sport the server refuses it for (NCAAB)', () => {
     render(<LeagueBasicsStep state={state({ sport: 'NCAAB', scoringPresetId: '' })} onChange={vi.fn()} fieldErrors={{}} />)
     expect(screen.queryByTestId('g30-league-type-guillotine')).toBeNull()
     expect(screen.getByTestId('g30-league-type-redraft')).toBeTruthy()
   })
 
-  it('hides the median-game box for guillotine, and shows it for redraft', () => {
+  it('hides the median-game box for Guilly, and shows it for redraft', () => {
     const { rerender } = render(<LeagueBasicsStep state={state({ leagueType: 'guillotine' })} onChange={vi.fn()} fieldErrors={{}} />)
     expect(screen.queryByTestId('g30-median-game')).toBeNull()
     rerender(<LeagueBasicsStep state={state({ leagueType: 'redraft' })} onChange={vi.fn()} fieldErrors={{}} />)

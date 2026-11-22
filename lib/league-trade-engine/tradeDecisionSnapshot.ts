@@ -112,7 +112,8 @@ export function buildTradeDecisionSnapshot(input: {
     (verified?.assets.length && verified.assets.every((asset) => asset.value != null)) || serverValuesAvailable,
   )
   const playerEvidence = verified?.assets.filter((asset) => asset.itemType === 'player') ?? []
-  const serverProjectionsAvailable = Boolean(serverParticipants.length && serverParticipants.every((participant) => participant.lineupPointsDelta != null))
+  const serverProjectionsAvailable = Boolean(input.serverDecisionResult?.lineupBasis !== 'historical_points_per_game' &&
+    serverParticipants.length && serverParticipants.every((participant) => participant.lineupPointsDelta != null))
   const projectionsAvailable = Boolean(
     (verified && playerEvidence.length > 0 && playerEvidence.every((asset) => asset.weeklyProjection != null))
     || serverProjectionsAvailable,
@@ -140,6 +141,8 @@ export function buildTradeDecisionSnapshot(input: {
         scope: input.serverDecisionResult.scope,
         evaluatorSupported: input.serverDecisionResult.evaluatorSupported,
         reason: input.serverDecisionResult.reason,
+        lineupBasis: input.serverDecisionResult.lineupBasis ?? null,
+        lineupCoverage: cloneJson(input.serverDecisionResult.lineupCoverage ?? []),
         participants: input.serverDecisionResult.participants.map((participant) => {
           const outcome = outcomeByRosterId.get(participant.rosterId) ?? null
           // THE grade (lib/decision-os/trade/tradeGrade.ts) — the letter every trade screen shows.
@@ -152,7 +155,9 @@ export function buildTradeDecisionSnapshot(input: {
             ? `${verified?.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability changes from ${outcome.beforePct.toFixed(1)}% to ${outcome.afterPct.toFixed(1)}% (${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%).`
             : 'A verified paired outcome simulation was not available for this team.'
           const lineupLine = participant.lineupPointsDelta != null
-            ? `Projected starting lineup changes ${participant.lineupPointsDelta >= 0 ? '+' : ''}${participant.lineupPointsDelta.toFixed(2)} points for the captured week.`
+            ? input.serverDecisionResult?.lineupBasis === 'historical_points_per_game'
+              ? `Historical starting-lineup strength changes ${participant.lineupPointsDelta >= 0 ? '+' : ''}${participant.lineupPointsDelta.toFixed(2)} league-scored points per game; this is not a projection.`
+              : `Projected starting lineup changes ${participant.lineupPointsDelta >= 0 ? '+' : ''}${participant.lineupPointsDelta.toFixed(2)} points for the captured week.`
             : 'Starting-lineup change could not be verified.'
           const contextLine = `League context: ${policy.format.replaceAll('_', ' ')} with the saved scoring and roster rules.`
           return {

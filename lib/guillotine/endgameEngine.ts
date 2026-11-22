@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 
 import { resolveGuillotineEndgame, resolveCumulativeFinalWinner, type GuillotineEndgameFormat } from './endgameRules'
+import { readPeriodWeeks } from './eliminationPeriods'
 export type { GuillotineEndgameFormat } from './endgameRules'
 
 export async function transitionToFinalStage(seasonId: string, scoringPeriod: number): Promise<void> {
@@ -49,8 +50,14 @@ export async function determineEndgameState(seasonId: string): Promise<EndgameSt
       const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, redraftRosterId: true } })
       const engineIds = aliveIds.map(id => rosters.find(row => row.redraftRosterId === id)?.id).filter((id): id is string => !!id)
       if (engineIds.length === aliveIds.length) {
-        const scores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId, season: g.season, weekOrPeriod: { gte: g.finalStageStartPeriod, lt: g.finalStageStartPeriod + cumulativePeriods } }, select: { rosterId: true, weekOrPeriod: true, periodPoints: true } })
-        const winner = resolveCumulativeFinalWinner(engineIds, g.finalStageStartPeriod, g.currentScoringPeriod, cumulativePeriods, scores)
+        // The whole season's scores: the final's periods decide, and the season total breaks a tie.
+        const seasonScores = await prisma.guillotinePeriodScore.findMany({ where: { leagueId, season: g.season, rosterId: { in: engineIds } }, select: { rosterId: true, weekOrPeriod: true, periodPoints: true } })
+        // Two-week periods (MLB) are keyed by their last week, so the final's periods sit two weeks apart.
+        const periodWeeks = readPeriodWeeks(league?.settings)
+        const scores = seasonScores.filter(row => row.weekOrPeriod >= g.finalStageStartPeriod! && row.weekOrPeriod < g.finalStageStartPeriod! + cumulativePeriods * periodWeeks)
+        const seasonTotals = new Map<string, number>()
+        for (const row of seasonScores) seasonTotals.set(row.rosterId, (seasonTotals.get(row.rosterId) ?? 0) + row.periodPoints)
+        const winner = resolveCumulativeFinalWinner(engineIds, g.finalStageStartPeriod, g.currentScoringPeriod, cumulativePeriods, scores, seasonTotals, periodWeeks)
         champion = winner ? rosters.find(row => row.id === winner)?.redraftRosterId ?? null : null
       }
     }

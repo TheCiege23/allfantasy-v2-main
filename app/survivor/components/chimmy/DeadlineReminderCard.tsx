@@ -8,11 +8,11 @@ export function DeadlineReminderCard({
   href: string
 }) {
   return (
-    <div className="rounded-xl border border-orange-500/35 bg-orange-500/10 p-3">
-      <p className="font-mono text-[13px] tabular-nums text-orange-100">⏱ {label}</p>
+    <div className="rounded-xl border border-[rgba(240,163,94,0.34)] bg-[rgba(240,163,94,0.08)] p-3">
+      <p className="font-mono text-[13px] tabular-nums text-[#f6d3ae]">⏱ {label}</p>
       <Link
         href={href}
-        className="mt-2 inline-flex min-h-[44px] items-center text-[12px] font-semibold text-orange-200 underline"
+        className="mt-2 inline-flex min-h-[44px] items-center text-[12px] font-semibold text-[var(--survivor-torch,#f0a35e)] underline"
       >
         Cast vote now
       </Link>

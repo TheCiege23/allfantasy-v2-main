@@ -20,6 +20,7 @@ import { updateScheduleConfigForLeague } from '@/lib/fantasy-schedule/ScheduleCo
 import { createDefaultLeagueRosterConfig, getRosterEngineRegistry, type SupportedRosterSport } from '@/lib/roster-engine'
 import { warmLeagueSportsDataAfterCreate } from '@/lib/league-creation/warmLeagueSportsData'
 import { receptionPointsForScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import { notifySurvivorCommissionerOnce } from '@/lib/survivor/survivorCommissionerAlerts'
 
 /**
  * Tell the live scorer the league's reception value. `calculateScoreFromSportConfig` falls back
@@ -161,13 +162,17 @@ export async function runLeagueBootstrap(
     } catch { /* non-fatal */ }
   }
   let nflTePremium = false
-  if (leagueSport === 'NFL') {
+  // An imported league carried over its own rules (`importedNflScoring`); seeding the preset here
+  // would replace them, the same reason MLB skips its seed above.
+  const nflImportedScoring = asObject(settings.nfl_scoring_config).source === 'IMPORTED_MAPPED'
+  if (leagueSport === 'NFL' && !nflImportedScoring) {
     try {
       // ESPN / Sleeper presets seed that site's own rules; TE premium adds its per-catch amount.
       const { applyDefaultNflScoringOnCreate, nflScoringSeedForCreate } = await import('@/lib/nfl-scoring')
       const seed = nflScoringSeedForCreate({ scoringPresetId: leagueRow?.scoringPresetId, tePremiumPoints: settings.te_premium_points })
       await applyDefaultNflScoringOnCreate(leagueId, seed.presetKey, seed.rules)
       nflTePremium = seed.enableTEPremium
+      await fillEmptyScoringRulebook(leagueId, seed.rules)
     } catch { /* non-fatal */ }
   }
   if (leagueSport === 'NCAAF') {
@@ -201,6 +206,18 @@ export async function runLeagueBootstrap(
   if (rosterRegistry.isSupported(String(leagueSport)) && !(leagueSport === 'MLB' && settings.importCarryover)) {
     try {
       await createDefaultLeagueRosterConfig(leagueId, leagueSport as SupportedRosterSport, leagueType)
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // The draft config above was seeded from the SPORT default (NBA = 13 rounds) before the roster
+  // template existed, and variant templates differ (NBA guillotine has 11 spots). Start the league
+  // with rounds = draftable roster spots, unless the creator chose a round count themselves.
+  if (settings.draft_rounds == null && settings.draftRounds == null) {
+    try {
+      const { applyRosterTemplateChange } = await import('@/lib/draft/syncDraftRoundsToRoster')
+      await applyRosterTemplateChange(leagueId, { keepManualOverride: false, logTag: 'league bootstrap' })
     } catch {
       // non-fatal
     }
@@ -267,7 +284,19 @@ export async function runLeagueBootstrap(
         challengesSystemRun: sw.survivor_challenges_system_run !== false,
         regularSeasonEndWeek: readSurvivorFullSeasonPlan(sw)?.endWeek ?? null,
       })
-      if (foundation.exileIslandEnabled) await getOrCreateExileLeague(leagueId).catch(() => {})
+      if (foundation.exileIslandEnabled) {
+        await getOrCreateExileLeague(leagueId).catch(async (error: unknown) => {
+          // Exile is where voted-out managers go. A league without it looks fine until the first
+          // Torch Ceremony, so the commissioner hears about it now, and the dashboard lists it.
+          const message = error instanceof Error ? error.message : String(error)
+          await notifySurvivorCommissionerOnce(leagueId, 'exile_setup_failed', {
+            dedupeKey: 'creation',
+            title: 'Exile Island could not be created',
+            body: `Your Survivor league was created, but its Exile Island side league failed to set up (${message.slice(0, 160)}). Open Settings → Exile to retry before the first elimination.`,
+            deepLinkPath: `/league/${leagueId}?guide=settings`, urgency: 'critical',
+          }).catch(() => {})
+        })
+      }
       await runSurvivorLeagueBootstrap(leagueId).catch(() => {})
     } catch {
       // non-fatal; legacy wizard path will fill in if used
@@ -328,12 +357,13 @@ export async function runLeagueBootstrap(
           : null
 
       await upsertZombieLeagueConfig(leagueId, { whispererSelection, universeId })
-      await createZombieLeague(
+      const attached = await prisma.zombieLeague.findUnique({ where: { leagueId }, select: { id: true } })
+      if (!attached) await createZombieLeague(
         {
           leagueId,
           name: league?.name ?? null,
           sport: String(leagueSport),
-          teamCount: typeof league?.leagueSize === 'number' ? league.leagueSize : 12,
+          teamCount: typeof league?.leagueSize === 'number' ? league.leagueSize : 20,
           isPaid: false,
           buyInAmount: null,
           whispererSelectionMode: whispererSelection,
@@ -355,6 +385,9 @@ export async function runLeagueBootstrap(
     try {
       const { upsertBigBrotherConfig } = await import('@/lib/big-brother/BigBrotherLeagueConfig')
       await upsertBigBrotherConfig(leagueId, {})
+      // The commissioner's setup choices (tie-break, finale, jury, HOH challenge) become the game's rules.
+      const { applyBigBrotherSetupRules } = await import('@/lib/big-brother/bigBrotherSetupRulesApply')
+      await applyBigBrotherSetupRules(leagueId)
       try {
         const { runBigBrotherLeagueBootstrap } = await import('@/lib/big-brother/bigBrotherLeagueBootstrap')
         const boot = await runBigBrotherLeagueBootstrap(leagueId)
@@ -393,4 +426,31 @@ export async function runLeagueBootstrap(
     playoff: { playoffConfigApplied: playoffResult.playoffConfigApplied },
     schedule: { scheduleConfigApplied: scheduleResult.scheduleConfigApplied },
   }
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+/**
+ * A format with no settings snapshot of its own (zombie is one) is created with
+ * `scoringSettings: { rules: [], preset, ... }`: a label and no rulebook. Its real rules are seeded
+ * into the scoring panel's store just above, so the league scored correctly while everything that
+ * reads `scoringSettings` (projections first) saw nothing (production, 2026-11-22: five hosted NFL
+ * leagues). Write the same rules there in the vocabulary those readers use. A league that already
+ * has a rulebook is left alone, and a failure here never fails creation.
+ */
+async function fillEmptyScoringRulebook(leagueId: string, panelRules: Record<string, number>): Promise<void> {
+  const { extractScoringSettings, hasScoringRules, projectionRulesFromNflPanelRules } = await import('@/lib/projections/leagueScoring')
+  const rules = projectionRulesFromNflPanelRules(panelRules)
+  if (!rules) return
+  const row = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const settings = asObject(row?.settings)
+  const { nfl_scoring_config: _panel, ...withoutPanel } = settings
+  // Judged without the panel store, which the reader would otherwise fall back to.
+  if (hasScoringRules(extractScoringSettings(withoutPanel))) return
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: { settings: { ...settings, scoringSettings: { ...asObject(settings.scoringSettings), rules } } as never },
+  })
 }

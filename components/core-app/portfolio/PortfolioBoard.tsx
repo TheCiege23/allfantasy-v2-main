@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import type {
   PortfolioInsights,
   PortfolioLeagueFacts,
@@ -39,6 +40,8 @@ import {
 import type { ImpactSlot, PlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 import { impactText, SLOT_LABEL } from '@/components/core-app/screens/ExposureImpact'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { scoringFormatText } from '@/lib/core-app/scoringFormatText'
 import {
   BarList,
   ChartScroll,
@@ -75,10 +78,16 @@ const VIEWS: Array<{ key: PortfolioViewKey; label: string }> = [
   { key: 'exposure', label: 'Exposure' },
   { key: 'risk', label: 'Risk' },
   { key: 'value', label: 'Value' },
-  { key: 'leagues', label: 'Leagues' },
+  /*
+   * "Teams", not "Leagues" (2026-11-12): this screen now sits behind the My Leagues entry, whose
+   * switch already offers "Leagues" — two controls with one name on one page. It is also the more
+   * accurate word: one row per CLAIMED TEAM (see Portfolio.tsx), with the board's filters applied.
+   * The `pf_view=leagues` param is unchanged, so old links still open this tab.
+   */
+  { key: 'leagues', label: 'Teams' },
 ]
 
-export type PortfolioBoardProps = {
+type PortfolioBoardProps = {
   insights: PortfolioInsights
   recorded: RecordedValueDay[]
   /** Now-facts from the home loader, per league id. Null when that read failed. */
@@ -157,10 +166,15 @@ const DIMENSIONS: Array<{ key: DistributionDimension; label: string; filter?: ke
   { key: 'stage', label: 'Season stage', filter: 'stages' },
 ]
 
-function bucketLabel(dimension: DistributionDimension, key: string): string {
+/**
+ * A bar's label. Only the scoring buckets follow the reader's language — the scoring-format ruling
+ * (__tests__/spanish-wording-rulings.test.tsx §9), which the "ppr" help tip beside them names in
+ * Spanish; the board's other words are not translated yet.
+ */
+export function bucketLabel(dimension: DistributionDimension, key: string, language: string): string {
   if (dimension === 'platform') return PLATFORM_LABEL[key] ?? key
   if (dimension === 'family') return FAMILY_LABEL[key] ?? key
-  if (dimension === 'scoring') return SCORING_LABEL[key] ?? key
+  if (dimension === 'scoring') return scoringFormatText(SCORING_LABEL[key] ?? key, language)
   if (dimension === 'status') return STATUS_LABEL[key] ?? key
   if (dimension === 'stage') return STAGE_LABEL[key] ?? key
   return key
@@ -309,6 +323,7 @@ export function PortfolioBoard({
   const [exposureLimit, setExposureLimit] = useState(40)
   const [multiOnly, setMultiOnly] = useState(true)
   const builtLabel = useRelativeTime(builtAt)
+  const { language } = useOptionalLanguage()
 
   /* URL sync — replaceState, never a navigation. Other params on the URL are kept as they are. */
   useEffect(() => {
@@ -597,6 +612,12 @@ export function PortfolioBoard({
             {actions.length > 8 ? <p className="af-pfb-note">{plural(actions.length - 8, 'more league')} with smaller issues.</p> : null}
           </section>
 
+          {/*
+            2026-11-20: the page's one "More detail" fold (MoreDetail.tsx). The overview answers "which
+            leagues need me"; the league-mix chart is background, so it moved in here unchanged. The other
+            views are tabs the reader chose, so their content stays open.
+          */}
+          <MoreDetail note="Where your leagues sit — by platform, format, scoring, sport and stage" testId="portfolio-more">
           <section className="af-pfb-card" aria-labelledby="af-pfb-dist">
             <header className="af-pfb-card-head">
               <div>
@@ -624,7 +645,7 @@ export function PortfolioBoard({
                     <BarList
                       ariaLabel={`Leagues by ${d.label.toLowerCase()}`}
                       max={indexes.length}
-                      items={buckets.slice(0, 6).map((b) => ({ key: b.key, label: bucketLabel(d.key, b.key), value: b.count }))}
+                      items={buckets.slice(0, 6).map((b) => ({ key: b.key, label: bucketLabel(d.key, b.key, language), value: b.count }))}
                       selected={dist?.dimension === d.key ? dist.key : null}
                       onSelect={(key) =>
                         setDist((cur) => (cur?.dimension === d.key && cur.key === key ? null : { dimension: d.key, key }))
@@ -642,7 +663,7 @@ export function PortfolioBoard({
               <div className="af-pfb-drill" aria-live="polite">
                 <div className="af-pfb-drill-head">
                   <strong>
-                    {bucketLabel(dist.dimension, dist.key)} · {plural(distSelected.count, 'league')}
+                    {bucketLabel(dist.dimension, dist.key, language)} · {plural(distSelected.count, 'league')}
                   </strong>
                   {distFilterKey && dist.key !== 'unknown' && dist.dimension !== 'scoring' ? (
                     <button
@@ -682,6 +703,7 @@ export function PortfolioBoard({
               </div>
             ) : null}
           </section>
+          </MoreDetail>
         </>
       ) : null}
 
@@ -1182,4 +1204,3 @@ export function PortfolioBoard({
 
 export type { PortfolioViewKey }
 
-export default PortfolioBoard

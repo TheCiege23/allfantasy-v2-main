@@ -14,10 +14,10 @@ export async function GET(req: NextRequest) {
     }
 
     const action = req.nextUrl.searchParams?.get('action') || 'live'
-    const limit = Math.min(parseInt(req.nextUrl.searchParams?.get('limit') || '300'), 500)
     const type = (req.nextUrl.searchParams?.get('type') || 'redraft') as 'dynasty' | 'redraft'
     const pool = req.nextUrl.searchParams?.get('pool') || 'all'
     const sport = normalizeToSupportedSport(req.nextUrl.searchParams?.get('sport') || DEFAULT_SPORT)
+    const limit = Math.min(parseInt(req.nextUrl.searchParams?.get('limit') || '300'), sport === 'NBA' ? 1000 : 500)
     const { payload } = await getCachedMockDraftPool({
       action,
       type,

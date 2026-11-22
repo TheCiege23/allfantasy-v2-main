@@ -44,7 +44,7 @@ export function parseTeamRecords(raw: unknown): LeagueSeasonTeamRecord[] {
 }
 
 /** Aggregate across stored LeagueSeason rows (any league). */
-export function computeAllTimeStandings(seasons: LeagueSeason[]): ManagerAllTime[] {
+export function computeAllTimeStandings(seasons: Pick<LeagueSeason, 'season' | 'teamRecords'>[]): ManagerAllTime[] {
   const byKey = new Map<
     string,
     {

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import {
   isSurvivorNotificationKind,
   renderSurvivorNotificationEmail,
@@ -112,9 +113,11 @@ export async function processNotificationQueue(leagueId: string): Promise<{ sent
     if (claimed.count !== 1) continue
     try {
       // Vote reminders go only to managers who can vote and have not (survivor-core §5).
-      const userIds = VOTE_REMINDER_TYPES.has(n.type) && !n.recipientUserId
+      // Castaways Chimmy runs have no account: a notification row needs one, and one failing row would
+      // fail the whole league notice. Chimmy needs no alert to play.
+      const userIds = (VOTE_REMINDER_TYPES.has(n.type) && !n.recipientUserId
         ? await resolveVoteReminderRecipients(leagueId)
-        : await resolveRecipientUserIds(leagueId, n.recipientUserId, n.recipientRole)
+        : await resolveRecipientUserIds(leagueId, n.recipientUserId, n.recipientRole)).filter(id => !isSeatPlaceholderUserId(id))
       const title =
         !n.isSpoilerSafe
           ? 'Something happened on the Island'

@@ -171,3 +171,30 @@ describe('rotateForFairness — weighted lead share', () => {
     }
   })
 })
+
+describe('createRunBudget — abort signal', () => {
+  it('reads as spent once its signal is aborted, however much time is left', () => {
+    let t = 0
+    const controller = new AbortController()
+    const budget = createRunBudget(60_000, () => t, controller.signal)
+    t = 1_000
+    expect(budget.exhausted()).toBe(false)
+    expect(budget.remainingMs()).toBe(59_000)
+
+    controller.abort()
+
+    expect(budget.exhausted()).toBe(true)
+    expect(budget.remainingMs()).toBe(0)
+    // Elapsed time is still real time, for the log lines that report it.
+    expect(budget.elapsedMs()).toBe(1_000)
+  })
+
+  it('behaves exactly as before when no signal is passed', () => {
+    let t = 0
+    const budget = createRunBudget(10_000, () => t)
+    t = 9_999
+    expect(budget.exhausted()).toBe(false)
+    t = 10_000
+    expect(budget.exhausted()).toBe(true)
+  })
+})

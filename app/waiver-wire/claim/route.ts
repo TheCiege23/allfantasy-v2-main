@@ -2,6 +2,12 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  isRedraftLeagueMovesLocked,
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE,
+} from "@/lib/redraft/tradeMoveLock"
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -25,6 +31,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Bid amount cannot be negative" },
         { status: 400 }
+      )
+    }
+
+    // The commissioner's move lock (see app/api/redraft/waivers/route.ts): no UI caller, so no way around it.
+    if (await isRedraftLeagueMovesLocked(String(leagueId))) {
+      return NextResponse.json(
+        { error: REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+        { status: REDRAFT_MOVES_LOCKED_STATUS }
       )
     }
 

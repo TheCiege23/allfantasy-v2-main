@@ -5,9 +5,9 @@ import type { ChimmyAnswerContract } from "@/lib/chimmy-chat/response-contract"
 
 export type { ChimmyAnswerContract }
 
-export type AIInsightType = "matchup" | "playoff" | "dynasty" | "trade" | "waiver" | "draft"
+type AIInsightType = "matchup" | "playoff" | "dynasty" | "trade" | "waiver" | "draft"
 
-export type AIContextSource =
+type AIContextSource =
   | "messages_ai"
   | "messages_dm_ai"
   | "trade_analyzer"
@@ -34,8 +34,13 @@ export type AIContextSource =
   | "power_rankings"
   | "power_rankings_team"
   | "long_term_coaching"
+  | "bracket_entry"
+  | "playoff_bracket_entry"
+  | "world_cup_bracket_entry"
+  | "bracket_change_alert"
 
 export type AIChatContext = {
+  portfolioState?: import("@/lib/chimmy/portfolio/types").PortfolioState
   prompt?: string
   leagueId?: string
   leagueName?: string
@@ -65,7 +70,7 @@ export type AIChatContext = {
   }
 }
 
-export type ChimmyProviderStatus = Record<string, string> | undefined
+type ChimmyProviderStatus = Record<string, string> | undefined
 
 /** Optional UI labels for structured Chimmy cards (default: evidence-style copy). */
 export type ChimmyResponseSectionTitles = {
@@ -87,6 +92,9 @@ export type ChimmyResponseStructure = {
 }
 
 export type ChimmyMessageMeta = {
+  portfolio?: import("@/lib/chimmy/portfolio/types").PortfolioEvidence
+  bracketEvidence?: import('@/lib/chimmy/bracketEvidence').BracketEvidence
+  analysisPreview?: import("@/lib/chimmy/deepAnalysisPreview").DeepAnalysisPreview
   mode?: ChimmyAssistantMode
   answerContract?: ChimmyAnswerContract
   confidencePct?: number

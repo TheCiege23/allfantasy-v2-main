@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   ])
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   if (!league.guillotineMode) {
-    return NextResponse.json({ error: 'Not a Guillotine league' }, { status: 400 })
+    return NextResponse.json({ error: 'Not a Guilly league' }, { status: 400 })
   }
   if (!roster) return NextResponse.json({ error: 'No roster found' }, { status: 404 })
 

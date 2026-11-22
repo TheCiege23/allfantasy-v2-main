@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import '@/components/core-app/af-connected-scope.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy, hubText } from '@/lib/core-app/formatHubCopy'
 
 type ScopeSide = {
   memberId: string
@@ -25,22 +27,24 @@ export function ConnectedDecisionScopeBar({
   selectedLeagueId: string
   sides: ScopeSide[]
 }) {
+  const { language } = useOptionalLanguage()
+  const c = (english: string) => hubCopy(english, language)
   function askAll() {
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {
       detail: {
         tab: 'chimmy',
-        prefill: `Use every selected roster in ${franchiseName} to help with this ${screen.replace(/-/g, ' ')} decision.`,
+        prefill: hubText.askAllPrefill(franchiseName, screen.replace(/-/g, ' '), language),
       },
     }))
   }
 
   return (
-    <aside className="af-connected-scope" aria-label={`${franchiseName} tool scope`}>
+    <aside className="af-connected-scope" aria-label={hubText.scopeAria(franchiseName, language)}>
       <div>
-        <span>CONNECTED FRANCHISE</span>
+        <span>{c('CONNECTED FRANCHISE')}</span>
         <strong>{franchiseName}</strong>
       </div>
-      <nav aria-label="Use this tool in a connected league">
+      <nav aria-label={c('Use this tool in a connected league')}>
         {sides.filter((side) => side.leagueId).map((side) => (
           <Link
             key={side.memberId}
@@ -52,8 +56,8 @@ export function ConnectedDecisionScopeBar({
           </Link>
         ))}
       </nav>
-      <button type="button" onClick={askAll}>Ask Chimmy across all</button>
-      <Link className="af-connected-scope-home" href={`/core/war-room?league=${encodeURIComponent(selectedLeagueId)}`}>Hub home</Link>
+      <button type="button" onClick={askAll}>{c('Ask Chimmy across all')}</button>
+      <Link className="af-connected-scope-home" href={`/core/war-room?league=${encodeURIComponent(selectedLeagueId)}`}>{c('Hub home')}</Link>
     </aside>
   )
 }

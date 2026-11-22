@@ -10,6 +10,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
 import {
   getEffectiveLeagueRosterTemplate,
@@ -45,6 +47,7 @@ export type DraftPoolSnapshotPayload = {
   devyConfig?: unknown
   c2cConfig?: unknown
   isIdp?: boolean
+  rookieFilterState?: string
   meta?: {
     source?: 'db-cache' | 'memory-cache'
     entryCount?: number
@@ -63,6 +66,8 @@ export type WarmDraftPoolSnapshotFastResult =
       entryCount: number
       syncedAt: string | null
       cacheKey: string
+      /** Past its expiry: served while a background rebuild runs (`allowStale` callers only). */
+      stale?: boolean
     }
   | {
       warm: false
@@ -104,9 +109,23 @@ function buildStandardPoolApiCacheKey(leagueId: string): string {
 
 function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTemplate): string {
   const starterEligible = starterEligiblePlayerPositionsFromTemplate(effectiveLeagueTemplate.template)
-  return `${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
+  return `${effectiveLeagueTemplate.sport === 'NBA' ? 'nba-current-roster-v2:' : ''}${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
     starterEligible.size > 0 ? starterEligible : new Set(effectiveLeagueTemplate.allowedPositions),
   )}`
+}
+
+async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
+  try {
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { draftModeLabel: true },
+    })
+    const label = String(session?.draftModeLabel ?? '').toLowerCase()
+    return label === STARTUP_PRO_DRAFT_LABEL || label === STARTUP_COLLEGE_DRAFT_LABEL ? `:phase-${label}` : ''
+  } catch {
+    return ''
+  }
 }
 
 export async function resolveDraftPoolCacheContext(
@@ -119,11 +138,55 @@ export async function resolveDraftPoolCacheContext(
 }> {
   const effectiveLeagueTemplate =
     options?.effectiveLeagueTemplate ?? (await getEffectiveLeagueRosterTemplate(leagueId))
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate)
+  // A two-draft Devy / C2C startup offers a different pool in each draft, and this cache is per
+  // league: the college draft must not be served the pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,
     standardCacheKey: buildDraftPoolCacheKey(leagueId, rosterFp, buildStandardPoolApiCacheKey(leagueId)),
+  }
+}
+
+/**
+ * 🛑 A DRAFT OUTLIVES ITS POOL CACHE BY HOURS. Rows expire after `AF_DRAFT_POOL_CACHE_TTL_SECONDS`
+ * (300 s by default) and a draft runs for hours, so without this every expiry handed the next
+ * autopick, room load or lookahead a full cold build — 60–90 s on a quiet container, 522 s
+ * logged on a loaded one — while the pick clock ran. The full-season Survivor rehearsal showed it as
+ * the pool being rebuilt from scratch over and over through one draft.
+ *
+ * Readers that opt in (`allowStale`) now take the last good row, up to this old, and start ONE
+ * background rebuild (`ensureDraftPoolReady` is single-flight per league). Readiness checks stay
+ * fresh-only, so the rebuild still happens; nobody waits for it.
+ */
+export const DRAFT_POOL_MAX_STALE_MS = 6 * 60 * 60 * 1000
+
+type StaleDraftPoolRow = { payload: DraftPoolSnapshotPayload; entryCount: number; syncedAt: string | null; cacheKey: string }
+
+/** The newest expired-but-recent row for this pool: the exact key first, then any row of the same roster fingerprint. */
+export async function readStaleDraftPoolRow(
+  leagueId: string,
+  context: { cacheKey: string; rosterFp: string },
+  now: Date = new Date(),
+): Promise<StaleDraftPoolRow | null> {
+  const model = getDraftPoolCacheModel()
+  if (!model) return null
+  const floor = new Date(now.getTime() - DRAFT_POOL_MAX_STALE_MS)
+  const select = { payload: true, entryCount: true, syncedAt: true, cacheKey: true }
+  const exact = await model.findFirst({ where: { cacheKey: context.cacheKey, expiresAt: { gt: floor } }, select })
+  const row = hasDraftableEntries(exact?.payload)
+    ? exact
+    : await model.findFirst({
+      where: { leagueId, sourceFingerprint: context.rosterFp, expiresAt: { gt: floor } },
+      orderBy: { syncedAt: 'desc' },
+      select,
+    })
+  if (!row || !hasDraftableEntries(row.payload)) return null
+  return {
+    payload: row.payload,
+    entryCount: Number(row.entryCount ?? inferEntryCountFromPayload(row.payload)),
+    syncedAt: row.syncedAt instanceof Date ? row.syncedAt.toISOString() : null,
+    cacheKey: typeof row.cacheKey === 'string' ? row.cacheKey : context.cacheKey,
   }
 }
 
@@ -172,7 +235,11 @@ function withWarmSnapshotMeta(
 
 export async function getWarmDraftPoolSnapshotFast(
   leagueId: string,
-  options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
+  options?: {
+    effectiveLeagueTemplate?: EffectiveLeagueTemplate
+    /** Serve an expired row (see `DRAFT_POOL_MAX_STALE_MS`) and rebuild in the background instead of reporting cold. */
+    allowStale?: boolean
+  },
 ): Promise<WarmDraftPoolSnapshotFastResult> {
   const model = getDraftPoolCacheModel()
   if (!model) {
@@ -254,6 +321,27 @@ export async function getWarmDraftPoolSnapshotFast(
         entryCount,
         syncedAt,
         cacheKey: effectiveCacheKey,
+      }
+    }
+
+    if (options?.allowStale) {
+      const stale = await readStaleDraftPoolRow(leagueId, { cacheKey: cacheContext.standardCacheKey, rosterFp: cacheContext.rosterFp }, now)
+      if (stale) {
+        triggerDraftPoolPrewarmBackground(leagueId)
+        return {
+          warm: true,
+          source: 'db-cache',
+          stale: true,
+          payload: withWarmSnapshotMeta(stale.payload, {
+            source: 'db-cache',
+            entryCount: stale.entryCount,
+            cacheKey: stale.cacheKey,
+            cachedAt: stale.syncedAt,
+          }),
+          entryCount: stale.entryCount,
+          syncedAt: stale.syncedAt,
+          cacheKey: stale.cacheKey,
+        }
       }
     }
 
@@ -363,6 +451,33 @@ export function ensureDraftPoolReady(leagueId: string): Promise<EnsureDraftPoolR
   return build
 }
 
+/**
+ * Waits for a pool build this process is already running for `leagueId`, if any, so a caller
+ * that is about to build the same pool can read the row that build writes instead.
+ *
+ * ⚠ The draft-room page fires `triggerDraftPoolPrewarmBackground` and the room's first
+ * `GET /draft/pool` arrives a moment later. The GET had its own in-flight map, so a brand-new
+ * league ran two full builds of the same pool at once on one thread (part of the 30s+ first load
+ * reported 2026-10-28). Capped at `maxWaitMs` so a stuck build cannot hang the request; on timeout
+ * or failure the caller simply falls through to building it itself, as before.
+ */
+export async function waitForInFlightDraftPoolBuild(leagueId: string, maxWaitMs = 60_000): Promise<boolean> {
+  const build = inFlightPoolBuilds.get(leagueId)
+  if (!build) return false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      build.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, maxWaitMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+  return true
+}
+
 /** Test seam: how many league builds this process is running right now. */
 export function inFlightDraftPoolBuildCount(): number {
   return inFlightPoolBuilds.size
@@ -437,6 +552,8 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           expiresAt,
         },
@@ -454,6 +571,8 @@ async function ensureDraftPoolReadyOnce(leagueId: string): Promise<EnsureDraftPo
             devyConfig: resolved.devyConfig,
             c2cConfig: resolved.c2cConfig,
             isIdp: resolved.isIdp,
+            rookieFilterState: resolved.rookieFilterState,
+            provenNonRookies: resolved.provenNonRookies,
           } as unknown as object,
           syncedAt: new Date(),
           expiresAt,

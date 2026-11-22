@@ -54,6 +54,11 @@ describe("AdminProductionReadinessService", () => {
    * schedule and the readiness matchers drift apart, which is exactly what happened.
    */
   it("treats the consolidated job=all entry as covering live sync", async () => {
+    vi.doMock("@/lib/production-health/cronRegistry", () => ({
+      readVercelCrons: () => [
+        { path: "/api/brackets/world-cup/cron/sync?job=all&provider=apifootball&recalculate=true", schedule: "0 8 * * *" },
+      ],
+    }))
     const { getAdminProductionReadiness } = await import("@/lib/admin-dashboard/AdminProductionReadinessService")
     const result = await getAdminProductionReadiness()
     const worldCup = result.crons.find((row) => row.id === "world-cup-official")
@@ -62,6 +67,37 @@ describe("AdminProductionReadinessService", () => {
     expect(worldCup?.missing).toEqual([])
     // Either a dedicated job=live entry or the job=all entry satisfies this.
     expect(worldCup?.configuredPaths.some((row) => /job=(live|all)\b/.test(row))).toBe(true)
+    vi.doUnmock("@/lib/production-health/cronRegistry")
+  })
+
+  /*
+   * ⚠ The World Cup sync was RETIRED from cron-schedule.json after the 2026 final (4491fe57a
+   * reused its slot). The test above used to read the real file and went red then — and the
+   * service went on reporting the retired job as "missing", which ApiHealthService turns into a
+   * CRITICAL. A retired seasonal job is omitted; a PARTIAL declaration still reports.
+   * Reads the real file on purpose, so the row reappears the moment the sync is re-declared.
+   */
+  it("omits the retired World Cup sync row rather than raising a false critical", async () => {
+    const { readFileSync } = await import("node:fs")
+    const schedule = JSON.parse(readFileSync("cron-schedule.json", "utf8")) as { crons: { path: string }[] }
+    const declared = schedule.crons.some((c) => c.path.startsWith("/api/brackets/world-cup/cron/sync"))
+
+    const { getAdminProductionReadiness } = await import("@/lib/admin-dashboard/AdminProductionReadinessService")
+    const result = await getAdminProductionReadiness()
+    const worldCup = result.crons.find((row) => row.id === "world-cup-official")
+
+    if (declared) expect(worldCup?.status).not.toBe("missing")
+    else expect(worldCup).toBeUndefined()
+  })
+
+  it("still reports a partially declared World Cup sync", async () => {
+    vi.doMock("@/lib/production-health/cronRegistry", () => ({
+      readVercelCrons: () => [{ path: "/api/brackets/world-cup/cron/sync?job=teams", schedule: "0 8 * * *" }],
+    }))
+    const { getAdminProductionReadiness } = await import("@/lib/admin-dashboard/AdminProductionReadinessService")
+    const result = await getAdminProductionReadiness()
+    expect(result.crons.find((row) => row.id === "world-cup-official")?.status).toBe("partial")
+    vi.doUnmock("@/lib/production-health/cronRegistry")
   })
 
   /*

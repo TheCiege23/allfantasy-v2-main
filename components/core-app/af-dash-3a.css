@@ -266,6 +266,11 @@
 .af3a-mono { font-family: 'JetBrains Mono', monospace; }
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
+/* Nothing in the main column (Dashboard3A `mainShown`): the side cards share the full width instead. */
+.af3a-body[data-no-main] { grid-template-columns: minmax(0, 1fr); }
+.af3a-body[data-no-main] > .af3a-col-main { display: none; }
+.af3a-body[data-no-main] > .af3a-col-side { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
@@ -736,6 +741,10 @@
 .af-connect-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .af-connect-note { margin: 8px 0 0; max-width: 36ch; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .af-connect-note[data-tone='bad'] { color: var(--warn, #f59e0b); }
+/* An unverified account's confirm-your-email nudge (2026-11-15): under the league, never instead of it,
+   so its button is the quiet one. A full-width row of its own, outside any media query. */
+.af-connect-confirm { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.af-connect-confirm .af-connect-go { min-height: 36px; background: transparent; color: var(--text); border: 1px solid var(--line); }
 @media (max-width: 560px) {
   .af-connect-actions, .af-connect-go { width: 100%; }
 }
@@ -750,4 +759,117 @@
   color: var(--af-good, #3ecf8e);
   font-size: 12px;
   cursor: pointer;
+}
+
+
+/* Focused home cards, matching the league dashboard's identity hierarchy. */
+.af-core .af3a-card { border-radius: 16px; box-shadow: none; padding: 18px; background: var(--surface); border: 1px solid var(--line); }
+.af-core .af3a-cardhead { margin-bottom: 14px; }
+.af-core .af3a-cardhead .af3a-label { font: 750 15px/1.3 system-ui, sans-serif; letter-spacing: -.01em; text-transform: none; color: var(--text); }
+.af-core .af3a-leagues { display: grid; gap: 8px; }
+.af-core .af3a-league { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); }
+.af-core .af3a-league:hover { border-color: var(--accent-line); }
+.af-core .af3a-league .af3a-tile { width: 44px; height: 44px; flex: 0 0 44px; overflow: hidden; border-radius: 12px; }
+.af-core .af3a-league-body { flex: 1; min-width: 0; }
+.af-core .af3a-league-body b { display: block; color: var(--text); font-size: 14px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.af-core .af3a-league-body em { display: block; margin-top: 3px; color: var(--muted); font: 500 12px/1.4 system-ui, sans-serif; }
+.af-core .af3a-league-arrow { font-size: 24px; color: var(--muted); }
+/* A Survivor league and its Exile Island: one cell, the island under the league, joined by ↕. */
+.af-core .af3a-league-pair { display: grid; gap: 0; min-width: 0; }
+.af-core .af3a-exile-link { margin: -2px 0; font-size: 15px; font-weight: 800; line-height: 1.2; text-align: center; color: var(--accent); }
+.af-core .af3a-league-score { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.af-core .af3a-league-score strong { font-size: 17px; color: var(--text); }
+.af-core .af3a-league-score small { color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .af-core .af3a-card { padding: 14px; border-radius: 14px; }
+  .af-core .af3a-league { padding: 10px; }
+  .af-core .af3a-reason { font-size: 14px; line-height: 1.5; }
+}
+
+
+.af-core .af3a-home-leagues { margin-bottom: 18px; }
+.af-core .af3a-home-leagues .af3a-leagues { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.af-core .af3a-insights { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 6px; }
+.af-core .af3a-insights > summary { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); font-size: 15px; font-weight: 650; cursor: pointer; }
+.af-core .af3a-insights > summary span { font-size: 12px; font-weight: 400; color: var(--muted); }
+.af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 720px) { .af-core .af3a-insights > .af3a-bottom { grid-template-columns: minmax(0, 1fr); } }
+
+/*
+ * ── 2026-11-01 home redesign: My leagues as cover cards ──────────────────────
+ *
+ * Scoped to `.af3a-home-leagues` so the same list elsewhere is untouched. Appended last and top-level
+ * (CLAUDE.md on @media nesting). Each card reads its platform from `data-platform` on the link and
+ * tints a band across its top with the platform's own --p-* token, so an ESPN league is findable
+ * among sixty Sleeper ones at a glance — the letter tile alone did not do that at card size.
+ */
+.af-core .af3a-home-leagues .af3a-cardhead .af3a-label {
+  display: inline-block;
+  color: var(--text);
+  font: 900 20px/1.15 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+.af-core .af3a-home-leagues .af3a-cardhead .af3a-label::first-letter { text-transform: uppercase; }
+.af-core .af3a-home-leagues .af3a-leagues {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+}
+.af-core .af3a-home-leagues .af3a-league {
+  --plat-bg: var(--chip);
+  position: relative;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 132px;
+  padding: 14px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.af-core .af3a-home-leagues .af3a-league::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 52px;
+  background: var(--plat-bg);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.af-core .af3a-home-leagues .af3a-league > * { position: relative; }
+.af-core .af3a-home-leagues .af3a-league[data-platform='sleeper'] { --plat-bg: var(--p-sleeper-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='espn'] { --plat-bg: var(--p-espn-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='yahoo'] { --plat-bg: var(--p-yahoo-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='fantrax'] { --plat-bg: var(--p-fantrax-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='mfl'] { --plat-bg: var(--p-mfl-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='fleaflicker'] { --plat-bg: var(--p-fleaflicker-bg); }
+.af-core .af3a-home-leagues .af3a-league[data-platform='manual'] { --plat-bg: var(--p-manual-bg); }
+.af-core .af3a-home-leagues .af3a-league .af3a-tile {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 2px solid var(--surface2);
+  border-radius: 14px;
+}
+.af-core .af3a-home-leagues .af3a-league-body { width: 100%; }
+.af-core .af3a-home-leagues .af3a-league-arrow {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 20px;
+}
+@media (max-width: 720px) {
+  .af-core .af3a-home-leagues .af3a-leagues { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .af-core .af3a-home-leagues .af3a-league { min-height: 120px; padding: 12px; }
+}
+
+/*
+ * Phones: the platform band was 52px of tint with nothing in it but the tile's top half and the
+ * chevron (live /core at 575px, 2026-11-05). It keeps its job — telling an ESPN league from sixty
+ * Sleeper ones — at 34px, with a 40px tile straddling it and no forced card height.
+ */
+@media (max-width: 720px) {
+  .af-core .af3a-home-leagues .af3a-league { min-height: 0; gap: 8px; }
+  .af-core .af3a-home-leagues .af3a-league::before { height: 34px; }
+  .af-core .af3a-home-leagues .af3a-league .af3a-tile { width: 40px; height: 40px; flex-basis: 40px; border-radius: 12px; }
+  .af-core .af3a-home-leagues .af3a-league-arrow { top: 6px; }
 }

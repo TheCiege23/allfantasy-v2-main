@@ -131,6 +131,8 @@ export async function getNextMatchup(args: {
   priceLineups?: MatchupLineupPricer | null
   /** The provider sets the scoring lineup, so a one-lineup forecast would overstate certainty. */
   bestBall?: boolean
+  /** The league's sport: a non-NFL league is never priced from NFL rows sharing an id (`projectionSportScope`). */
+  sport?: string | null
 }): Promise<NextMatchup | null> {
   const { leagueId, platformLeagueId, myExternalId, seasonYear, week } = args
   if (!platformLeagueId || !myExternalId) return null
@@ -242,7 +244,7 @@ export async function getNextMatchup(args: {
   const projections = canPrice && !args.priceLineups
     ? await lookupProjections(everyId, args.projectionWeek, {
         scoringSettings: args.scoringSettings,
-      }).catch(() => new Map())
+      }, args.sport).catch(() => new Map())
     : new Map()
 
   function side(rosterId: string): MatchupSide {

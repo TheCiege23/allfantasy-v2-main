@@ -34,11 +34,41 @@ describe('guillotine blind waiver window', () => {
     expect(getWaiverBlindWindowStart('NBA', new Date('2026-10-27T23:00:00Z'))).toBeNull()
   })
 
-  it('inside the window a guillotine league holds claims submitted after it opened', async () => {
-    for (const sport of ['NFL', 'NBA']) {
+  /*
+   * NHL weeks run Tuesday–Monday from its Tuesday opener, exactly like NBA, so it has NBA's window.
+   * MLB weeks run Wednesday–Tuesday (2026 and 2027 openers are Wednesdays): its run is Friday 11:00 UTC
+   * and the window opens Wednesday 23:00 UTC (7pm ET), before a chop that lands Wednesday night ET.
+   */
+  it('NHL: the window runs Wednesday 00:00 UTC to the Thursday 12:00 UTC run, as NBA', () => {
+    expect(getWaiverBlindWindowStart('NHL', new Date('2026-10-28T03:00:00Z'))?.toISOString()).toBe('2026-10-28T00:00:00.000Z')
+    expect(getWaiverBlindWindowStart('NHL', new Date('2026-10-29T11:59:00Z'))?.toISOString()).toBe('2026-10-28T00:00:00.000Z')
+    expect(getWaiverBlindWindowStart('NHL', new Date('2026-10-27T23:00:00Z'))).toBeNull()
+    expect(getWaiverBlindWindowStart('NHL', new Date('2026-10-29T12:10:00Z'))).toBeNull()
+  })
+
+  it('MLB: the window opens Wednesday 23:00 UTC and runs to the Friday 11:00 UTC run, covering the chop', () => {
+    // Week Wed 2027-04-07 – Tue 2027-04-13; the chop lands Wednesday night ET (Thursday ~02:00 UTC).
+    expect(getWaiverBlindWindowStart('MLB', new Date('2027-04-15T02:00:00Z'))?.toISOString()).toBe('2027-04-14T23:00:00.000Z')
+    expect(getWaiverBlindWindowStart('MLB', new Date('2027-04-16T10:59:00Z'))?.toISOString()).toBe('2027-04-14T23:00:00.000Z')
+    expect(getWaiverBlindWindowStart('MLB', new Date('2027-04-14T22:00:00Z'))).toBeNull()
+    expect(getWaiverBlindWindowStart('MLB', new Date('2027-04-16T11:10:00Z'))).toBeNull()
+  })
+
+  it('MLB/NHL: a chop that lands before the window still holds its claims until the run', () => {
+    // An early MLB chop (Wednesday 20:00 UTC, before the 23:00 window) is anchored on the chop itself.
+    const early = new Date('2027-04-14T20:00:00Z')
+    expect(getChopHoldStart('MLB', early, new Date('2027-04-14T21:00:00Z'))).toEqual(early)
+    expect(getChopHoldStart('MLB', early, new Date('2027-04-16T11:30:00Z'))).toBeNull()
+    const nhlEarly = new Date('2026-10-27T20:00:00Z')
+    expect(getChopHoldStart('NHL', nhlEarly, new Date('2026-10-27T22:00:00Z'))).toEqual(nhlEarly)
+  })
+
+  it('inside the window a Guilly league holds claims submitted after it opened', async () => {
+    for (const sport of ['NFL', 'NBA', 'NHL', 'MLB']) {
       prismaMock.redraftWaiverClaim.findMany.mockClear()
       prismaMock.league.findUnique.mockResolvedValueOnce({ sport, guillotineMode: true, leagueVariant: null })
-      const now = sport === 'NFL' ? new Date('2026-10-27T23:00:00Z') : new Date('2026-10-28T03:00:00Z')
+      const now =
+        sport === 'NFL' ? new Date('2026-10-27T23:00:00Z') : sport === 'MLB' ? new Date('2027-04-15T02:00:00Z') : new Date('2026-10-28T03:00:00Z')
       await processWaiverWindow('league-1', 'season-1', now)
       expect(whereOf()).toEqual({
         leagueId: 'league-1',
@@ -51,11 +81,13 @@ describe('guillotine blind waiver window', () => {
 
   it('outside the window, and for other leagues, every pending claim settles', async () => {
     const sunday = new Date('2026-11-01T15:00:00Z')
+    expect(getWaiverBlindWindowStart('NCAAF', sunday)).not.toBeNull() // so the NCAAF case below tests the sport list
     const insideNfl = new Date('2026-10-27T23:00:00Z')
     for (const [league, now] of [
       [{ sport: 'NFL', guillotineMode: true, leagueVariant: null }, sunday],
       [{ sport: 'NFL', guillotineMode: false, leagueVariant: 'redraft' }, insideNfl],
-      [{ sport: 'MLB', guillotineMode: true, leagueVariant: 'guillotine' }, insideNfl],
+      // A sport whose schedule has not been checked still settles every run — on a Sunday, inside its own window.
+      [{ sport: 'NCAAF', guillotineMode: true, leagueVariant: 'guillotine' }, sunday],
     ] as const) {
       prismaMock.redraftWaiverClaim.findMany.mockClear()
       prismaMock.league.findUnique.mockResolvedValueOnce(league)

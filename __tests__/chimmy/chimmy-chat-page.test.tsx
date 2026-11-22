@@ -135,10 +135,10 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(screen.getByRole('heading', { name: 'Chimmy' })).toBeInTheDocument()
     expect(screen.getByText('Who sees this: Just you')).toBeInTheDocument()
     expect(screen.getByLabelText('League scope')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Fast' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Summary' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deep' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Which league needs me most\?/ })).toBeInTheDocument()
-    expect(screen.getByText('Chimmy answers may cost 9 tokens. Under 2 answers\' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.')).toBeInTheDocument()
+    expect(screen.getByText('Free summaries and lookups cost nothing. Detailed answers use your daily allowance first; review the price before spending tokens.')).toBeInTheDocument()
 
     // What the hands-on test saw on the old page, none of which the drawer has.
     // The right-rail headings were relabelled Chimmy Quick Ask / Chimmy Hub / Chimmy Status (brand
@@ -192,7 +192,7 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
 
   it('asks /api/chat/chimmy in multipart, as this page, with the URL\'s sport while no league is picked', async () => {
     openPage({ sport: 'NBA' })
-    fireEvent.click(screen.getByRole('button', { name: 'Fast' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
     await ask('Who are the best waiver adds tonight?')
 
     await waitFor(() => expect(screen.getByText('Start him.')).toBeInTheDocument())

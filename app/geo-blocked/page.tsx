@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import { CancelSubscriptionPanel } from "@/components/billing/CancelSubscriptionPanel"
 import { liveSubscriptions } from "@/lib/account/liveSubscriptions"
+import { RESTRICTED_STATES, getRestrictedStateMeta } from "@/lib/geo/restrictedStates"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,13 @@ export default async function GeoBlockedPage(
 ) {
   const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
-  const state = typeof sp.state === "string" ? sp.state.toUpperCase() : "WA"
+  // Since November 2026 no state is full-block (Washington moved to paid-block), so this page is
+  // reached only by an old link or a future full-block state. It names no state it cannot back up.
+  const state = typeof sp.state === "string" ? sp.state.toUpperCase() : null
+  const meta = state ? getRestrictedStateMeta(state) : undefined
+  const fullBlocked = meta?.level === "full_block"
+  const placeName = fullBlocked ? meta.name : "your location"
+  const paidStates = RESTRICTED_STATES.filter((s) => s.level === "paid_block").map((s) => s.name)
   const showVpn = sp.vpn === "1"
   // Set by middleware.ts for an account-level lock (lib/geo/accountGeoLock): the
   // visitor may be anywhere, so the page must say the lock follows the ACCOUNT.
@@ -29,25 +36,28 @@ export default async function GeoBlockedPage(
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
       <div className="mx-auto max-w-xl text-center">
         <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
-        <h1 className="mb-2 text-2xl font-black sm:text-3xl">🚫 AllFantasy.ai Is Not Available in Washington State</h1>
-        <p className="mb-6 text-sm leading-7 text-white/70">
-          We&apos;re sorry, but Washington state law (RCW 9.46.240) prohibits fantasy sports services, including free play,
-          regardless of whether a fee is charged.
-        </p>
-        <p className="mb-8 text-sm leading-7 text-white/70">
-          We comply with all applicable state laws and therefore cannot provide access to AllFantasy.ai from Washington.
-        </p>
+        <h1 className="mb-2 text-2xl font-black sm:text-3xl">🚫 AllFantasy.ai Is Not Available from {placeName}</h1>
+        {fullBlocked ? (
+          <p className="mb-6 text-sm leading-7 text-white/70">
+            {meta.details} ({meta.legalBasis})
+          </p>
+        ) : (
+          <p className="mb-6 text-sm leading-7 text-white/70">
+            We couldn&apos;t confirm that AllFantasy.ai is available where you are. If you think this is a mistake, go back to the{" "}
+            <Link href="/" className="underline">
+              home page
+            </Link>{" "}
+            and try again, or email{" "}
+            <a href="mailto:support@allfantasy.ai" className="underline">
+              support@allfantasy.ai
+            </a>
+            .
+          </p>
+        )}
 
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left text-sm leading-7 text-white/75">
-          <p className="mb-3 font-semibold text-white">This applies to residents of:</p>
-          <p className="mb-2">
-            <span className="rounded border border-red-500/40 bg-red-500/15 px-2 py-0.5 text-xs font-bold text-red-300">
-              🔴 Washington (WA)
-            </span>{" "}
-            — Full restriction (no account creation or access)
-          </p>
-          <p className="mt-4 text-xs text-white/55">
-            These states allow free accounts but restrict paid leagues: Hawaii · Idaho · Montana · Nevada (users there may view our
+          <p className="text-xs text-white/55">
+            These states allow free accounts but restrict paid features: {paidStates.join(" · ")} (users there may view our
             paid-restriction page for reference).
           </p>
         </div>
@@ -56,9 +66,9 @@ export default async function GeoBlockedPage(
           <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-left text-sm text-red-100">
             <p className="font-semibold">This account is locked</p>
             <p className="mt-2 text-red-100/90">
-              Your account has been used from Washington, or paid with a card billed to a Washington address, so it stays
-              locked wherever you sign in from. Any such payment was refunded in full. If you don&apos;t live in Washington
-              (for example, you were only visiting), email{" "}
+              Your account has been used from a state where AllFantasy.ai isn&apos;t available, so it stays locked wherever
+              you sign in from. Any payment from there was refunded in full. If you don&apos;t live there (for example, you
+              were only visiting), email{" "}
               <a href="mailto:support@allfantasy.ai" className="underline">
                 support@allfantasy.ai
               </a>{" "}
@@ -67,9 +77,9 @@ export default async function GeoBlockedPage(
           </div>
         ) : null}
 
-        {subs.hasStripe || subs.hasApple ? (
+        {subs.hasStripe || subs.hasApple || subs.hasGooglePlay ? (
           <div className="text-left">
-            <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} />
+            <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} hasGooglePlay={subs.hasGooglePlay} />
           </div>
         ) : null}
 

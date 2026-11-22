@@ -57,7 +57,7 @@ describe('buildWeeklyCareer', () => {
     expect(career.seasons[0]).toMatchObject({ weeks: 1, fieldSize: 2, averageFinish: 2, bottomScores: 1 })
   })
 
-  it('in a guillotine, a zero after scoring is the chop — dated to the last week you played', () => {
+  it('in a Guilly, a zero after scoring is the chop — dated to the last week you played', () => {
     const rows = [
       ...week(2026, 1, { '1': 90, '2': 120, '3': 100, '4': 80 }), // 4 chopped after wk 1
       ...week(2026, 2, { '1': 85, '2': 120, '3': 100, '4': 0 }), // you are lowest: chopped after wk 2

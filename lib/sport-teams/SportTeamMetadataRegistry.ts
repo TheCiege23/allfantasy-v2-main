@@ -5,6 +5,7 @@
  */
 import type { SportType, TeamMetadata } from './types'
 import { getAllCanonicalTeams } from '@/lib/team-abbrev'
+import { COPY_LEAGUE_MLB_TEAMS, COPY_LEAGUE_NBA_TEAMS, COPY_LEAGUE_NHL_TEAMS } from '@/lib/league/copyLeagueTeamTables'
 
 const ESPN_LOGO_BASE: Record<SportType, string> = {
   NFL: 'https://a.espncdn.com/i/teamlogos/nfl/500',
@@ -23,20 +24,56 @@ const NFL_LOGO_KEY: Record<string, string> = {
   HOU: 'hou', IND: 'ind', JAX: 'jax', KC: 'kc', LAC: 'lac', LAR: 'lar',
   LV: 'lv', MIA: 'mia', MIN: 'min', NE: 'ne', NO: 'no', NYG: 'nyg',
   NYJ: 'nyj', PHI: 'phi', PIT: 'pit', SEA: 'sea', SF: 'sf', TB: 'tb',
-  TEN: 'ten', WAS: 'was',
+  TEN: 'ten',
+  // ESPN's code for Washington is wsh (contracts/espn/fixtures/teams.NFL.json, 2026-11-19); was.png also loads.
+  WAS: 'wsh',
 }
+
+/*
+ * NBA, MLB and NHL: the current clubs, checked against ESPN's team lists (contracts/espn/fixtures/teams.{NBA,NHL,MLB}.json
+ * through lib/league/copyLeagueTeamTables.ts, which a test pins to them).
+ *
+ * ⚠ THE CODES ARE THE ONES PROVIDERS SEND, NOT ALWAYS ESPN'S. `team_id` is the code, and
+ * lib/sport-teams/SportPlayerPoolResolver.ts maps every player's stored team through getTeamIdByAbbreviationMap, so a
+ * renamed code orphans every player row stored under the old one. Rolling Insights sends CWS for the White Sox
+ * (contracts/rolling-insights/fixtures/live.MLB.json), so CWS stays CWS and only its crest is ESPN's chw.png.
+ *
+ * Fixed 2026-11-19, and the reason this is more than logos: the lists still had MLB OAK and NHL ARI. Rolling Insights
+ * sends ATH and AZ, so every Athletics and Diamondbacks player matched no team at all (team_id null). Oakland and
+ * Arizona's NHL club are gone: MLB OAK → ATH (the same franchise; OAK still resolves to it), NHL ARI → UTAH (the Utah
+ * Mammoth). Arizona's MLB club stays ARI, with AZ resolving to it.
+ */
+const NBA_ABBREV = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GS', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NO', 'NY', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SA', 'TOR', 'UTAH', 'WAS']
+const MLB_ABBREV = ['ARI', 'ATH', 'ATL', 'BAL', 'BOS', 'CHC', 'CWS', 'CIN', 'CLE', 'COL', 'DET', 'HOU', 'KC', 'LAA', 'LAD', 'MIA', 'MIL', 'MIN', 'NYM', 'NYY', 'PHI', 'PIT', 'SD', 'SF', 'SEA', 'STL', 'TB', 'TEX', 'TOR', 'WSH']
+const NHL_ABBREV = ['ANA', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', 'DET', 'EDM', 'FLA', 'LA', 'MIN', 'MTL', 'NSH', 'NJ', 'NYI', 'NYR', 'OTT', 'PHI', 'PIT', 'SJ', 'SEA', 'STL', 'TB', 'TOR', 'UTAH', 'VAN', 'VGK', 'WPG', 'WSH']
 
 /**
- * NBA-standard / provider spellings -> the ESPN code ESPN's CDN path uses. Same mapping as the NBA
- * row of EXTRA_ALIASES in lib/follows/teamResolver.ts. Without it `GSW` built `nba/500/gsw.png`.
+ * Other spellings of a club → the code above. A lookup by any of them finds the club and its `team_id`.
+ * The NBA row is the same mapping as EXTRA_ALIASES in lib/follows/teamResolver.ts.
  */
-const NBA_LOGO_ALIAS: Record<string, string> = {
-  GSW: 'GS', NYK: 'NY', NOP: 'NO', SAS: 'SA', UTA: 'UTAH', PHO: 'PHX', BRK: 'BKN', BK: 'BKN', WAS: 'WSH',
+const TEAM_CODE_ALIAS: Partial<Record<SportType, Record<string, string>>> = {
+  NBA: { GSW: 'GS', NYK: 'NY', NOP: 'NO', SAS: 'SA', UTA: 'UTAH', PHO: 'PHX', BRK: 'BKN', BK: 'BKN', WSH: 'WAS' },
+  MLB: { AZ: 'ARI', CHW: 'CWS', OAK: 'ATH' },
+  NHL: { UTA: 'UTAH' },
 }
 
-const NBA_ABBREV = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GS', 'HOU', 'IND', 'LAC', 'LAL', 'MEM', 'MIA', 'MIL', 'MIN', 'NO', 'NY', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SA', 'TOR', 'UTAH', 'WAS']
-const MLB_ABBREV = ['ARI', 'ATL', 'BAL', 'BOS', 'CHC', 'CWS', 'CIN', 'CLE', 'COL', 'DET', 'HOU', 'KC', 'LAA', 'LAD', 'MIA', 'MIL', 'MIN', 'NYM', 'NYY', 'OAK', 'PHI', 'PIT', 'SD', 'SF', 'SEA', 'STL', 'TB', 'TEX', 'TOR', 'WSH']
-const NHL_ABBREV = ['ANA', 'ARI', 'BOS', 'BUF', 'CGY', 'CAR', 'CHI', 'COL', 'CBJ', 'DAL', 'DET', 'EDM', 'FLA', 'LA', 'MIN', 'MTL', 'NSH', 'NJ', 'NYI', 'NYR', 'OTT', 'PHI', 'PIT', 'SJ', 'SEA', 'STL', 'TB', 'TOR', 'VAN', 'VGK', 'WPG', 'WSH']
+/** A code above → ESPN's code, where they differ: ESPN's code is the crest's file name. */
+const ESPN_CODE: Partial<Record<SportType, Record<string, string>>> = {
+  NBA: { WAS: 'WSH' },
+  MLB: { CWS: 'CHW' },
+}
+
+const ESPN_TEAMS: Partial<Record<SportType, readonly { code: string; name: string }[]>> = {
+  NBA: COPY_LEAGUE_NBA_TEAMS,
+  MLB: COPY_LEAGUE_MLB_TEAMS,
+  NHL: COPY_LEAGUE_NHL_TEAMS,
+}
+
+/** The registry's code for a spelling: its own code, or the code an alias points at. */
+function canonicalCode(sport: SportType, abbreviation: string): string {
+  const abbr = abbreviation.trim().toUpperCase()
+  return TEAM_CODE_ALIAS[sport]?.[abbr] ?? abbr
+}
 
 /** NCAA Football: FBS team abbreviations (subset for logo/display; expand via DB or ingestion). Unique abbrevs. */
 const NCAAF_ABBREV = [
@@ -91,8 +128,10 @@ export function logoUrlForAbbrev(sport: SportType, abbreviation: string): string
     const key = NFL_LOGO_KEY[abbr] ?? abbr.toLowerCase()
     return `${base}/${key}.png`
   }
-  if (sport === 'NBA') {
-    const key = (NBA_LOGO_ALIAS[abbr] ?? abbr).toLowerCase()
+  if (sport === 'NBA' || sport === 'MLB' || sport === 'NHL') {
+    // Without the alias `GSW` built `nba/500/gsw.png`; without the ESPN code, the White Sox built `cws.png`.
+    const code = canonicalCode(sport, abbr)
+    const key = (ESPN_CODE[sport]?.[code] ?? code).toLowerCase()
     return `${base}/${key}.png`
   }
   const key = abbr.toLowerCase().replace(/\s/g, '')
@@ -116,12 +155,16 @@ function buildNflTeams(): TeamMetadata[] {
   }))
 }
 
-/** Build static team list for a sport (abbrev-only; name/city from abbrev for display). */
+/**
+ * Build static team list for a sport. NBA, MLB and NHL carry ESPN's full name ("Chicago White Sox"); the college lists
+ * have no verified names and keep the code.
+ */
 function buildLeagueTeams(sport: SportType, abbrevs: string[]): TeamMetadata[] {
+  const names = new Map((ESPN_TEAMS[sport] ?? []).map((t) => [t.code, t.name]))
   return abbrevs.map((abbr) => ({
     team_id: abbr,
     sport_type: sport,
-    team_name: abbr,
+    team_name: names.get(ESPN_CODE[sport]?.[abbr] ?? abbr) ?? abbr,
     city: '',
     abbreviation: abbr,
     conference: null,
@@ -195,7 +238,8 @@ export function getTeamByAbbreviation(
   abbreviation: string
 ): TeamMetadata | null {
   const list = getTeamMetadataForSport(sportType)
-  const abbr = abbreviation.trim().toUpperCase()
+  // An alias (AZ, CHW, OAK, GSW, …) finds its club too.
+  const abbr = canonicalCode(toSportType(String(sportType)), abbreviation)
   return list.find((t) => t.abbreviation.toUpperCase() === abbr) ?? null
 }
 
@@ -239,6 +283,16 @@ export function getTeamIdByAbbreviationMap(sportType: SportType | string): Map<s
   for (const team of getTeamMetadataForSport(sportType)) {
     map.set(team.abbreviation.toUpperCase(), team.team_id)
   }
+  /*
+   * Aliases too, so a player stored under a provider's spelling (Rolling Insights' AZ, CWS) gets its club's team_id.
+   * NBA, MLB and NHL only: NFL has none here, and SportPlayerPoolResolver walks the NFL map's entries to build one
+   * defense per club, which an alias would duplicate.
+   */
+  const sport = toSportType(String(sportType))
+  for (const [alias, code] of Object.entries(TEAM_CODE_ALIAS[sport] ?? {})) {
+    const teamId = map.get(code)
+    if (teamId && !map.has(alias)) map.set(alias, teamId)
+  }
   return map
 }
 
@@ -258,7 +312,7 @@ export async function getTeamMetadataForSportDbAware(
  * Registry schema version — bump when static team data or logo-key maps change.
  * Format: YYYY-MM-DD.revision
  */
-export const SPORT_TEAM_METADATA_REGISTRY_VERSION = '2026-03-20.1'
+export const SPORT_TEAM_METADATA_REGISTRY_VERSION = '2026-11-19.1'
 
 /**
  * List sports that have team metadata registered in the static registry.

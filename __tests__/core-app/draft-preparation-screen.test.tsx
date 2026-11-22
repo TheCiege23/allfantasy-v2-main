@@ -127,3 +127,21 @@ describe("draft preparation accessible controls", () => {
     expect(screen.queryByRole("button", { name: "Move down A" })).toBeNull();
   });
 });
+
+describe("draft preparation — empty benchmark", () => {
+  it("points at the draft room's player pool when no benchmark players exist", () => {
+    render(<DraftPreparation data={{ ...data, state: "empty", reason: "No compatible observed ADP snapshot is available.", observedAt: null, players: [] }} leagueId="nba league" />);
+    const link = screen.getByTestId("draft-prep-room-link");
+    expect(link.getAttribute("href")).toBe("/league/nba%20league/draft");
+  });
+
+  it("does not point a finished draft at the room", () => {
+    render(<DraftPreparation data={{ ...data, state: "empty", observedAt: null, players: [] }} leagueId="l" draftComplete />);
+    expect(screen.queryByTestId("draft-prep-room-link")).toBeNull();
+  });
+
+  it("does not add the pointer when benchmark players are listed", () => {
+    render(<DraftPreparation data={data} leagueId="l" />);
+    expect(screen.queryByTestId("draft-prep-room-link")).toBeNull();
+  });
+});

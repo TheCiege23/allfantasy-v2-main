@@ -87,6 +87,10 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'request-origin', why: 'NBA website used only as Origin and Referer headers; official JSON is fetched from the NBA stats and CDN hosts', test: /^www\.nba\.com$/i },
+  { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
+  { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
+  { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
   // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
   // links returned with season-readiness evidence, never live provider reads.
   // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
@@ -94,7 +98,12 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'namespace', why: 'OOXML chart, drawing and relationship identifiers in locally generated Excel files; never fetched', test: /^schemas\.openxmlformats\.org$/i },
   { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
+  { name: 'first-party', why: 'isolated AllFantasy Pirate rehearsal cron calls to our authenticated staging app', test: /^pirate-web-staging\.up\.railway\.app$/i },
+  { name: 'first-party', why: 'isolated AllFantasy Bracket staging gateway for authenticated Chimmy QA', test: /^bracket-qa-gateway-staging\.up\.railway\.app$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },
+  // Exact rehearsal origin used by the staging-only cron runner to invoke our authenticated
+  // import route. Provider reads remain inside that route's existing bounded importers.
+  { name: 'first-party', why: 'isolated Zombie rehearsal app — authenticated cron invocation', test: /^zombie-web-staging\.up\.railway\.app$/i },
   /*
    * ⚠ `cloudinary` WAS IN THIS ALTERNATION and matched api.cloudinary.com, which is an
    * upload API — lib/world-cup/worldCupChatImageUpload.ts POSTs to
@@ -135,7 +144,15 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * server/ or scripts/ ever starts fetching one, this classification fails rather than
    * quietly exempting a data read.
    */
-  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|hooks\.stripe\.com|www\.google-analytics\.com)$/i },
+  // Apple MusicKit JS: a <script src> the visitor's browser loads when they open the Apple
+  // Music tab (lib/apple-music/musicKitClient.ts), allowed in script-src. Our code never
+  // fetches it, and the developer-token route signs locally without calling Apple.
+  { name: 'browser-only', why: 'Apple MusicKit JS script tag loaded by the visitor\'s browser and listed in the CSP allowlist; never fetched by our code', test: /^js-cdn\.music\.apple\.com$/i },
+  // Ad and analytics vendors Google Tag Manager injects into the visitor's page; named in
+  // the report-only CSP (lib/security/cspReportOnly.ts) from the measured csp-report log.
+  // Same NEVER_FETCHED guarantee as above: our code must never call them.
+  { name: 'browser-only', why: 'GTM-injected ad/analytics pixels (TikTok, Reddit, Google Ads, Cloudflare Insights) listed in the report-only CSP; never fetched by our code', test: /^(analytics\.tiktok\.com|analytics-ipv6\.tiktokw\.us|www\.redditstatic\.com|alb\.reddit\.com|pixel-config\.reddit\.com|analytics\.google\.com|www\.google\.com|ad\.doubleclick\.net|stats\.g\.doubleclick\.net|googleads\.g\.doubleclick\.net|static\.cloudflareinsights\.com|cloudflareinsights\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   { name: 'share-link', why: 'the social newsroom opens these composers / upload pages in the admin\'s browser, never fetched — app/admin/social-newsroom/NewsroomBoard.tsx', test: /^(www\.threads\.net|www\.instagram\.com|www\.tiktok\.com)$/i },
   /*
@@ -169,6 +186,19 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com|appleid\.apple\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'Twilio messaging transport status reads; not a fantasy data feed', test: /^api\.twilio\.com$/i },
+  /*
+   * Google Cloud Storage, read by lib/google-play/playInstallStats.ts for the Play
+   * Console's own installs export (admin dashboard download counts). It IS fetched,
+   * from the admin page only, cached in-process for hours; it is our app-store
+   * reporting, not a fantasy data feed, so the DB-first rule does not apply.
+   */
+  { name: 'platform-infra', why: 'Play Console installs export for admin download counts; not a fantasy data feed', test: /^storage\.googleapis\.com$/i },
+  /*
+   * App Store Connect's Sales Reports API, read only by lib/app-store/appStoreSalesFetch.ts
+   * for the admin Apps page's download counts — the iOS twin of the Play export above. Each
+   * past day is cached durably in sportsDataCache by lib/app-store/appStoreDownloads.ts.
+   */
+  { name: 'platform-infra', why: 'App Store sales reports for admin download counts (api.), and the console link beside them; not a fantasy data feed', test: /^(api\.)?appstoreconnect\.apple\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
@@ -177,6 +207,11 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * Product analytics, not a read Postgres could serve.
    */
   { name: 'platform-infra', why: 'PostHog analytics SDK assets (extensions, remote config) proxied for the browser', test: /^us-assets\.i\.posthog\.com$/i },
+  /*
+   * PostHog's query API, read by lib/admin-dashboard/AppPlatformStatsService.ts for the
+   * admin Apps page (people by iOS app / Android app / web). Our own product analytics,
+   * admin-only — not a fantasy data feed, and not something Postgres holds.
+   */
   /*
    * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
    * these; they are not reads that Postgres could have served, which is what the
@@ -423,6 +458,13 @@ describe('DB-first boundary — outbound host census', () => {
     expect(classify('syndication.twitter.com', monitored)).toBe('browser-only')
   })
 
+  it('classifies only the reviewed Pirate staging origin as first-party', () => {
+    const monitored = monitoredPatterns()
+    expect(classify('pirate-web-staging.up.railway.app', monitored)).toBe('first-party')
+    expect(classify('bracket-qa-gateway-staging.up.railway.app', monitored)).toBe('first-party')
+    expect(classify('another-service.up.railway.app', monitored)).toBeNull()
+  })
+
   it('every outbound host is classified', () => {
     const monitored = monitoredPatterns()
     const unclassified = [...findHosts().values()]
@@ -452,7 +494,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only', 'request-origin'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 

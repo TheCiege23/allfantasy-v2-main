@@ -92,7 +92,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'ELIM',
-      body: 'ELIM marca una liga guillotina o survivor, un formato de eliminación, según el formato con el que se configuró la liga. En estas ligas una semana puede costar más que una derrota.',
+      body: 'ELIM marca una liga Guilly o survivor, un formato de eliminación, según el formato con el que se configuró la liga. En estas ligas una semana puede costar más que una derrota.',
     },
   },
   sinceLastVisit: {

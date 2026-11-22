@@ -10,7 +10,7 @@
  *   1. PositionChip renders sport-position-aware color badges in table rows.
  *   2. ADP delta badge surfaces the p.adp vs p.aiAdp difference (existing data).
  *   3. Null/missing stat cells use a dimmer color class for clear "no data" cues.
- *   4. Table row density is tighter (ROW_HEIGHT ≤ 32).
+ *   4. Rows leave room for readable player names and controls.
  *   5. Search control and position filter are preserved (no regression).
  *   6. Draft/queue/select handler wiring is preserved in PlayerPanel.
  *   7. No legacy draft endpoints introduced.
@@ -42,28 +42,10 @@ describe('PositionChip — position-aware color badges (Commit 22)', () => {
     expect(tableSrc).toMatch(/function PositionChip/)
   })
 
-  it('QB uses rose color (red-spectrum for quarterback)', () => {
-    expect(tableSrc).toMatch(/QB[\s\S]{0,40}rose/)
-  })
-
-  it('RB uses emerald color (green-spectrum for running back)', () => {
-    expect(tableSrc).toMatch(/RB[\s\S]{0,40}emerald/)
-  })
-
-  it('WR uses cyan color (blue-spectrum for wide receiver)', () => {
-    expect(tableSrc).toMatch(/WR[\s\S]{0,40}cyan/)
-  })
-
-  it('TE uses amber color (yellow-spectrum for tight end)', () => {
-    expect(tableSrc).toMatch(/TE[\s\S]{0,40}amber/)
-  })
-
-  it('K (kicker) uses slate/muted color', () => {
-    expect(tableSrc).toMatch(/'K'[\s\S]{0,60}slate/)
-  })
-
-  it('DEF/DST uses violet color', () => {
-    expect(tableSrc).toMatch(/DEF[\s\S]{0,60}violet/)
+  it('fills with the board position colour (positionTintHex), so pool and board agree', () => {
+    expect(tableSrc).toMatch(/import \{ positionTintHex \} from '@\/lib\/draft-room\/positionTint'/)
+    expect(tableSrc).toMatch(/const tint = positionTintHex\(p, sport\)/)
+    expect(tableSrc).toMatch(/backgroundColor: tint/)
   })
 
   it('<PositionChip> is rendered inside the player column case', () => {
@@ -79,43 +61,15 @@ describe('PositionChip — position-aware color badges (Commit 22)', () => {
 // 2. ADP delta badge — surfaces existing p.adp / p.aiAdp data
 // ---------------------------------------------------------------------------
 
-describe('ADP delta badge — surfaces existing client-side data (Commit 22)', () => {
-  it('ADP case computes delta as Math.round(p.adp - p.aiAdp)', () => {
-    expect(tableSrc).toMatch(/Math\.round\(p\.adp - p\.aiAdp\)/)
-  })
-
-  it('delta is only shown when both adp and aiAdp are finite numbers', () => {
-    expect(tableSrc).toMatch(/p\.adp != null[\s\S]{0,100}Number\.isFinite[\s\S]{0,100}p\.aiAdp != null/)
-  })
-
-  it('delta is only rendered when delta !== 0 (no noise for exact match)', () => {
-    expect(tableSrc).toMatch(/delta !== null && delta !== 0/)
-  })
-
-  it('positive delta (AI values player higher) uses emerald class', () => {
-    expect(tableSrc).toMatch(/delta > 0.*text-emerald/)
-  })
-
-  it('negative delta (AI values player lower) uses rose class', () => {
-    expect(tableSrc).toMatch(/text-rose.*delta|delta.*text-rose/)
-  })
-
-  it('delta badge carries a descriptive title for non-sighted users', () => {
-    expect(tableSrc).toMatch(/undervalued.*overvalued|overvalued.*undervalued/)
-  })
-
-  it('delta span is aria-hidden (decorative — the ADP title already conveys the info)', () => {
-    expect(tableSrc).toMatch(/aria-hidden[\s\S]{0,80}adp-delta|adp-delta[\s\S]{0,80}aria-hidden/)
-  })
-
-  it('delta testid uses -adp-delta suffix', () => {
-    expect(tableSrc).toMatch(/adp-delta/)
+describe('ADP column shows one number (2026-11-16)', () => {
+  // The unlabelled +3/−2 gap to the AF ADP column printed beside it was removed: users could
+  // not tell what it meant, and it repeated a number already on the row.
+  it('no longer renders an adp-delta badge in the pool', () => {
+    expect(tableSrc).not.toMatch(/data-testid=\{`\$\{testIdBase\}-adp-delta`\}/)
+    expect(tableSrc).toMatch(/data-testid=\{`\$\{testIdBase\}-adp`\}/)
   })
 })
 
-// ---------------------------------------------------------------------------
-// 3. Null stat cell dimming
-// ---------------------------------------------------------------------------
 
 describe('null stat cells — dimmed for "no data" clarity (Commit 22)', () => {
   it("em-dash values get text-white/30 class in the default stat branch", () => {
@@ -131,9 +85,10 @@ describe('null stat cells — dimmed for "no data" clarity (Commit 22)', () => {
 // 4. Table row density
 // ---------------------------------------------------------------------------
 
-describe('SleeperPoolTable row density — Commit 22', () => {
-  it('ROW_HEIGHT is at most 32 (reduced from previous 34)', () => {
-    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThanOrEqual(32)
+describe('SleeperPoolTable readable row density', () => {
+  it('leaves room for usable controls without making each row a large card', () => {
+    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeGreaterThanOrEqual(44)
+    expect(SLEEPER_POOL_TABLE_ROW_HEIGHT).toBeLessThanOrEqual(72)
   })
 
   it('ROW_HEIGHT is still > 0 (sanity)', () => {

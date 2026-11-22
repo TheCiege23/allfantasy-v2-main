@@ -193,7 +193,7 @@ describe('dynasty and keeper: a rebuild, not tanking (Guap, 2026-09-27)', () => 
   })
 
   it('in a one-season league it is still tanking, HIGH', () => {
-    for (const lt of [null, { type: 'redraft', label: 'Redraft' }, { type: 'best_ball', label: 'Best Ball' }, { type: 'guillotine', label: 'Guillotine' }]) {
+    for (const lt of [null, { type: 'redraft', label: 'Redraft' }, { type: 'best_ball', label: 'Best Ball' }, { type: 'guillotine', label: 'Guilly' }]) {
       const r = sold(lt)
       expect(r.checks[1]).toMatchObject({ code: 'tanking_signal', severity: 'high', status: 'raised' })
       expect(r.recommendation).toBe('consider_veto')

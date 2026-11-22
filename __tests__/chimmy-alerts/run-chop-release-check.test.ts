@@ -255,10 +255,10 @@ describe('runChopReleaseCheck', () => {
 
 describe('guillotineOnly', () => {
   const base = { leagueVariant: null, isDynasty: false, settings: null }
-  it('keeps guillotine leagues by format rules and drops the rest — never by name', () => {
+  it('keeps Guilly leagues by format rules and drops the rest — never by name', () => {
     const kept = guillotineOnly([
       { id: 'g', name: 'Friendly League', leagueType: 'guillotine', ...base },
-      { id: 'r', name: 'Guillotine Chop Masters', leagueType: 'redraft', ...base },
+      { id: 'r', name: 'Guilly Chop Masters', leagueType: 'redraft', ...base },
       { id: 'd', name: 'Dyn', leagueType: 'dynasty', ...base, isDynasty: true },
     ])
     expect(kept.map((l) => l.id)).toEqual(['g'])

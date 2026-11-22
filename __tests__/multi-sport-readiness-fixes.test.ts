@@ -48,6 +48,87 @@ describe('multisport scoring readiness', () => {
     expect(planNcaafFantraxIdentityLinks([ref, { ...ref, fantraxId: 'fx2' }], [row]).links).toEqual([])
     expect(planNcaafFantraxIdentityLinks([{ ...ref, team: 'University of Miami' }], [{ ...row, currentTeam: 'Miami University' }]).links).toEqual([])
   })
+  // Real labels from the 2026-11-19 Fantrax CFB capture: same player, same school, different label.
+  it('matches college defenders by position group (CB/DB, OLB/LB, DE/EDGE, DL/DE)', () => {
+    const row = { id: 'p1', canonicalName: 'Josiah Brown', currentTeam: 'Vanderbilt University', position: 'DB', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'Brown, Josiah', team: 'Vanderbilt', position: 'CB' }
+    for (const [fantrax, registry] of [['CB', 'DB'], ['S', 'DB'], ['OLB', 'LB'], ['DE', 'EDGE'], ['DL', 'DE'], ['EDGE', 'LB']]) {
+      expect(planNcaafFantraxIdentityLinks([{ ...ref, position: fantrax }], [{ ...row, position: registry }]).links, `${fantrax}/${registry}`).toHaveLength(1)
+    }
+  })
+  it('still refuses a same-named player in another position group when the name is not unique', () => {
+    // A second John Smith elsewhere makes the name common, so position must agree.
+    const row = { id: 'p1', canonicalName: 'John Smith', currentTeam: 'Vanderbilt University', position: 'WR', cfbdId: '42', fantraxId: null }
+    const elsewhere = { ...row, id: 'p2', currentTeam: 'University of Miami', cfbdId: '43' }
+    for (const fantrax of ['RB', 'DB', 'LB', 'QB']) {
+      expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: fantrax }], [row, elsewhere]).links, fantrax).toEqual([])
+    }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Smith, John', team: 'Vanderbilt', position: 'DE' }], [{ ...row, position: 'OLB' }, elsewhere]).links).toEqual([])
+  })
+
+  // 2026-11-19 production cases, each standing for a class of still-unlinked rostered players.
+  it('lets position only break a tie when the name is unique on both sides (Romel Stevens WR/LB)', () => {
+    const row = { id: 'p1', canonicalName: 'Romel Stevens', currentTeam: 'Vanderbilt University', position: 'LB', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'Stevens, Romel', team: 'Vanderbilt', position: 'WR' }
+    expect(planNcaafFantraxIdentityLinks([ref], [row]).links).toEqual([{ id: 'p1', fantraxId: 'fx1', cfbdId: '42' }])
+    // Two Fantrax players of that name at the school: refused.
+    expect(planNcaafFantraxIdentityLinks([ref, { ...ref, fantraxId: 'fx2', position: 'LB' }], [row]).links.filter((l) => l.fantraxId === 'fx1')).toEqual([])
+  })
+  it('matches a variant spelling of a name the registry does not hold (D\'Nas / DNas, Danny / Daniel)', () => {
+    const row = { id: 'p1', canonicalName: "D'Nas White", currentTeam: 'Vanderbilt University', position: 'DL', cfbdId: '42', fantraxId: null }
+    const ref = { fantraxId: 'fx1', name: 'White, DNas', team: 'Vanderbilt', position: 'DE' }
+    expect(planNcaafFantraxIdentityLinks([ref], [row]).links).toEqual([{ id: 'p1', fantraxId: 'fx1', cfbdId: '42' }])
+    const daniel = { ...row, canonicalName: 'Daniel Garvin', position: 'CB' }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Garvin, Danny', team: 'Vanderbilt', position: 'CB' }], [daniel]).links).toHaveLength(1)
+  })
+  it('refuses a shared initial alone, another position group, or a second candidate on either side', () => {
+    const gabe = { id: 'p1', canonicalName: 'Gabe Jones', currentTeam: 'Vanderbilt University', position: 'OL', cfbdId: '42', fantraxId: null }
+    const gavin = { fantraxId: 'fx1', name: 'Jones, Gavin', team: 'Vanderbilt', position: 'OL' }
+    expect(planNcaafFantraxIdentityLinks([gavin], [gabe]).links).toEqual([])
+    const jewelous = { ...gabe, canonicalName: 'Jewelous Walls', position: 'LB' }
+    expect(planNcaafFantraxIdentityLinks([{ fantraxId: 'fx1', name: 'Walls, JuJu', team: 'Vanderbilt', position: 'LB' }], [jewelous]).links).toEqual([])
+    const daniel = { ...gabe, canonicalName: 'Daniel Garvin', position: 'CB' }
+    const danny = { fantraxId: 'fx1', name: 'Garvin, Danny', team: 'Vanderbilt', position: 'CB' }
+    expect(planNcaafFantraxIdentityLinks([{ ...danny, position: 'WR' }], [daniel]).links).toEqual([])
+    expect(planNcaafFantraxIdentityLinks([danny], [daniel, { ...daniel, id: 'p2', canonicalName: 'Dante Garvin', cfbdId: '43' }]).links).toEqual([])
+    expect(planNcaafFantraxIdentityLinks([danny, { ...danny, fantraxId: 'fx2', name: 'Garvin, Dan' }], [daniel]).links).toEqual([])
+  })
+
+  /*
+   * 2026-11-19: 366 rostered Fantrax ids had one same-name identity and it was Rolling Insights-only (no
+   * CFBD id), each backed by an RI row agreeing on name, school and position (Dwight Johnson, OL, Vanderbilt
+   * stands in for Lamar's here — the schools resolve the same way).
+   */
+  describe('RI-only identities', () => {
+    const riRow = { id: 'r1', canonicalName: 'Dwight Johnson', currentTeam: 'Vanderbilt University', position: 'OL', cfbdId: null, fantraxId: null, rollingInsightsId: '9001' }
+    const ref = { fantraxId: '06974', name: 'Johnson, Dwight', team: 'Vanderbilt', position: 'OL' }
+    const proof = new Map([['9001', { name: 'Dwight Johnson', team: 'Vanderbilt University', position: 'OL' }]])
+
+    it('links one, keyed by RI id, when its RI row agrees', () => {
+      const plan = planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, proof)
+      expect(plan.riLinks).toEqual([{ id: 'r1', fantraxId: '06974', rollingInsightsId: '9001' }])
+      expect(plan.links).toEqual([])
+    })
+    it('refuses without an RI row, or when the RI row disagrees on name, school or position', () => {
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, new Map()).riLinks).toEqual([])
+      for (const bad of [{ name: 'Dwayne Johnson' }, { team: 'University of Miami' }, { position: 'WR' }]) {
+        const disagree = new Map([['9001', { ...proof.get('9001')!, ...bad }]])
+        expect(planNcaafFantraxIdentityLinks([ref], [riRow], [], {}, disagree).riLinks, JSON.stringify(bad)).toEqual([])
+      }
+    })
+    it('never prefers it over a CFBD-backed identity of the same name and school', () => {
+      const cfbd = { ...riRow, id: 'c1', cfbdId: '42', rollingInsightsId: null }
+      const plan = planNcaafFantraxIdentityLinks([ref], [riRow, cfbd], [], {}, proof)
+      expect(plan.links).toEqual([{ id: 'c1', fantraxId: '06974', cfbdId: '42' }])
+      expect(plan.riLinks).toEqual([])
+    })
+    it('refuses two agreeing RI-only identities, and changes nothing when no proof is passed', () => {
+      const twin = { ...riRow, id: 'r2', rollingInsightsId: '9002' }
+      const both = new Map([...proof, ['9002', proof.get('9001')!]])
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow, twin], [], {}, both).riLinks).toEqual([])
+      expect(planNcaafFantraxIdentityLinks([ref], [riRow]).riLinks).toEqual([])
+    })
+  })
 })
 
  it('maps captured college defensive fields without guessing assisted tackles or forced fumbles', () => {

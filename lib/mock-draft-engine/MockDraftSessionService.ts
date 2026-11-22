@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { MockDraftStatus, MockSlotConfigEntry, MockDraftSettings } from './types'
+import { normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 const DEFAULT_SETTINGS: MockDraftSettings = {
   sport: 'NFL',
@@ -29,7 +30,8 @@ function parseMetadata(metadata: unknown): MockDraftSettings {
     sport: normalizeToSupportedSport(String(values.sport ?? DEFAULT_SETTINGS.sport)),
     leagueType: String(values.leagueType ?? DEFAULT_SETTINGS.leagueType),
     draftType: String(values.draftType ?? DEFAULT_SETTINGS.draftType),
-    numTeams: Math.min(16, Math.max(8, Number(values.numTeams) ?? DEFAULT_SETTINGS.numTeams)),
+    // Any size a league of this sport and type accepts (lib/mock-draft/mockTeamCount.ts).
+    numTeams: normalizeMockDraftTeamCount(values.numTeams, values.sport, values.leagueType),
     rounds: Math.min(22, Math.max(1, Number(values.rounds) ?? DEFAULT_SETTINGS.rounds)),
     timerSeconds: Number(values.timerSeconds) ?? DEFAULT_SETTINGS.timerSeconds,
     aiEnabled: Boolean(values.aiEnabled ?? DEFAULT_SETTINGS.aiEnabled),
@@ -39,7 +41,7 @@ function parseMetadata(metadata: unknown): MockDraftSettings {
     poolType: String(values.poolType ?? DEFAULT_SETTINGS.poolType),
     roomMode: String(values.roomMode ?? DEFAULT_SETTINGS.roomMode) as any,
     humanTeams: Math.min(
-      Math.min(16, Math.max(8, Number(values.numTeams) ?? DEFAULT_SETTINGS.numTeams)),
+      normalizeMockDraftTeamCount(values.numTeams, values.sport, values.leagueType),
       Math.max(1, Number(values.humanTeams) || 1)
     ),
     keepersEnabled: Boolean(values.keepersEnabled ?? false),

@@ -17,26 +17,21 @@ import { leagueJoinUrl, nativeLeagueInviteCode } from '@/lib/league/league-invit
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { LeagueSettingsHome, type SettingsSubPageRender } from './LeagueSettingsHome'
 import { GuillotineFirstChopEditor, patchFirstChopWeek } from './GuillotineFirstChopEditor'
+import { GuillotineRulesEditor } from './GuillotineRulesEditor'
 import { GuillotineChopRulesEditor, patchChopRules } from './GuillotineChopRulesEditor'
+import { PirateRulesEditor } from './PirateRulesEditor'
+import type { PirateRules } from '@/lib/pirate/rules'
 import type { GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SUB_PAGE_TITLES } from './LeagueSettingsSubPageTitles'
 import { CommissionerCenter } from './CommissionerCenter'
+import { SettingsLockPanel } from './SettingsLockPanel'
+import { ScoreAdjustmentsWithCorrections } from './StatCorrectionsCard'
 import { SurvivorTribesPanel } from '@/app/league/[leagueId]/components/settings/survivor/SurvivorTribesPanel'
 import { nativeLeaguePhase } from '@/lib/league/nativeLeagueNavigation'
-
-/** The Commissioner center needs room for its two columns; phones keep the list → sub-page flow. */
-function useWideLayout(): boolean {
-  const [wide, setWide] = useState(false)
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const query = window.matchMedia('(min-width: 1024px)')
-    const sync = () => setWide(query.matches)
-    sync()
-    query.addEventListener?.('change', sync)
-    return () => query.removeEventListener?.('change', sync)
-  }, [])
-  return wide
-}
+import { buildSetupDecisions } from '@/lib/league-settings-home/setupDecisions'
+import { SetupDecisionsCard } from './SetupDecisionsCard'
+import { buildRedraftSettingsView } from '@/lib/league-media/redraftSettings'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 // The editors carry most of the old settings tree; load them only when a row is opened.
 const LeagueSettingsSubPageBody = dynamic(() => import('./LeagueSettingsSubPageBody'), {
@@ -67,20 +62,31 @@ export function LeagueSettingsHomeContainer({
   ctx,
   onExit,
   initialSubPage = null,
+  onSubPageReturn,
+  exitTo = 'home',
 }: {
   ctx: SubPanelContext
   onExit?: () => void
+  /** Where onExit lands — the Settings tab's hub or the league home — so the back button says so. */
+  exitTo?: 'home' | 'settings'
   /** Opens straight into this sub-page (an old settings link routed here); members get the list. */
   initialSubPage?: SettingsSubPageId | null
+  /**
+   * Called after a sub-page closes. The league Settings hub opens this container straight onto one
+   * editor and passes this to return there, rather than leaving the manager on this list.
+   */
+  onSubPageReturn?: () => void
 }) {
   const league = ctx.league
   const leagueId = league.id
   const guillotine = isGuillotineSettingsLeague(league)
   const [reloadKey, setReloadKey] = useState(0)
   const [rosterSlots, setRosterSlots] = useState<Record<string, number> | null>(null)
+  const [savedScoringLabel, setSavedScoringLabel] = useState<string | null>(null)
   const [draft, setDraft] = useState<SettingsHomeDraft | null>(null)
   const [hasAfCommissionerSub, setHasAfCommissionerSub] = useState(Boolean(ctx.hasAfCommissionerSub))
   const [guillotineState, setGuillotineState] = useState<SettingsHomeGuillotine | null>(null)
+  const [pirateRules, setPirateRules] = useState<PirateRules | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
@@ -90,6 +96,13 @@ export function LeagueSettingsHomeContainer({
       const slots = (d?.config as Json | undefined)?.slots
       setRosterSlots(slots && typeof slots === 'object' ? (slots as Record<string, number>) : {})
     })
+    if (String(league.sport).toUpperCase() === 'NFL') {
+      void getJson(`/api/commissioner/leagues/${id}/nfl-scoring`, ac.signal).then(d => {
+        if (!ac.signal.aborted && typeof (d?.config as Json | undefined)?.presetLabel === 'string') {
+          setSavedScoringLabel((d!.config as Json).presetLabel as string)
+        }
+      })
+    }
     void getJson(`/api/leagues/${id}/draft/settings`, ac.signal).then((d) => {
       if (ac.signal.aborted) return
       const cfg = (d?.config as Json | undefined) ?? {}
@@ -114,11 +127,23 @@ export function LeagueSettingsHomeContainer({
           scheduleLines: Array.isArray(cfg.scheduleLines) ? (cfg.scheduleLines as unknown[]).filter((l): l is string => typeof l === 'string') : [],
           advanced: cfg.advanced && typeof cfg.advanced === 'object' ? (cfg.advanced as GuillotineAdvanced) : null,
           teamsPerChop: num(cfg.teamsPerChop) ?? 1,
+          canEditPaidRules: typeof cfg.canEditPaidRules === 'boolean' ? cfg.canEditPaidRules : null,
         })
       })
     }
     return () => ac.abort()
-  }, [leagueId, guillotine, reloadKey])
+  }, [leagueId, guillotine, reloadKey, league.sport])
+
+  useEffect(() => {
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ leagueId?: string; scoringLabel?: string }>).detail
+      if (detail?.leagueId !== leagueId) return
+      if (detail.scoringLabel) setSavedScoringLabel(detail.scoringLabel)
+      setReloadKey(k => k + 1)
+    }
+    window.addEventListener('af:league-settings-saved', onSaved)
+    return () => window.removeEventListener('af:league-settings-saved', onSaved)
+  }, [leagueId])
 
   // Values saved this page-session (autosaving tabs record them) win over the stale page props.
   const effectiveLeague = useMemo(
@@ -142,23 +167,33 @@ export function LeagueSettingsHomeContainer({
       canEdit: ctx.isCommissioner,
       formatLabel: getLeagueTypeMedia(conceptKey).label,
       scoringLabel:
-        (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
+        savedScoringLabel ?? (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
       rosterSlots,
       draft,
       guillotine: guillotineState,
+      pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState])
+  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 
   const renderSubPage = useCallback(
     (id: SettingsSubPageId): SettingsSubPageRender | null => {
-      if (!ctx.isCommissioner) return null
+      if (!ctx.isCommissioner && id !== 'previous-leagues') return null
       if (id === 'survivor-tribes') {
         return {
           title: SUB_PAGE_TITLES[id],
           content: <SurvivorTribesPanel leagueId={leagueId} canEdit={ctx.isCommissioner} hasAfCommissionerSub={hasAfCommissionerSub} />,
+        }
+      }
+      if (id === 'settings-lock') {
+        return { title: SUB_PAGE_TITLES[id], content: <SettingsLockPanel leagueId={leagueId} /> }
+      }
+      if (id === 'score-adjustments') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: <ScoreAdjustmentsWithCorrections leagueId={leagueId} />,
         }
       }
       if (id === 'guillotine-first-chop') {
@@ -189,12 +224,26 @@ export function LeagueSettingsHomeContainer({
               baseChops={guillotineState.teamsPerChop ?? 1}
               startWeek={guillotineState.firstChopWeek}
               endWeek={guillotineState.endWeek ?? profile?.regularSeasonWeeks ?? 18}
-              hasAfCommissionerSub={hasAfCommissionerSub}
+              hasAfCommissionerSub={guillotineState.canEditPaidRules ?? hasAfCommissionerSub}
               save={patchChopRules(leagueId)}
               onSaved={(advanced, lines) => setGuillotineState((s) => (s ? { ...s, advanced, scheduleLines: lines } : s))}
             />
           ),
         }
+      }
+      if (id === 'guillotine-rules') {
+        return {
+          title: SUB_PAGE_TITLES[id],
+          content: (
+            <GuillotineRulesEditor
+              leagueId={leagueId}
+              onSaved={(rules) => setGuillotineState((s) => (s ? { ...s, teamsPerChop: rules.teamsPerChop, endWeek: rules.eliminationEndWeek } : s))}
+            />
+          ),
+        }
+      }
+      if (id === 'pirate-rules') {
+        return { title: SUB_PAGE_TITLES[id], content: <PirateRulesEditor leagueId={leagueId} onSaved={setPirateRules} /> }
       }
       return {
         title: SUB_PAGE_TITLES[id],
@@ -204,17 +253,42 @@ export function LeagueSettingsHomeContainer({
     [ctx.isCommissioner, guillotineState, league.sport, leagueId, subCtx, hasAfCommissionerSub],
   )
 
-  const wide = useWideLayout()
-  if (wide && ctx.isCommissioner) {
+  const phase = nativeLeaguePhase(ctx.displayLeague)
+  const { language } = useOptionalLanguage()
+  // Redraft identity (A5): the same league object the workspace root stamps `data-format="redraft"` from,
+  // with this page's saved overrides for the weeks. Null for every other league type → default page.
+  const redraft = useMemo(
+    () =>
+      buildRedraftSettingsView(
+        {
+          ...ctx.displayLeague,
+          playoffStartWeek: effectiveLeague.playoffStartWeek ?? ctx.displayLeague.playoffStartWeek ?? null,
+          tradeDeadlineWeek: effectiveLeague.tradeDeadlineWeek ?? ctx.displayLeague.tradeDeadlineWeek ?? null,
+          settings: effectiveLeague.settings ?? ctx.displayLeague.settings,
+        },
+        phase,
+        language,
+      ),
+    [ctx.displayLeague, effectiveLeague, phase, language],
+  )
+  // Before the draft, the commissioner is walked through the five settings that matter most.
+  const setupDecisions = useMemo(() => buildSetupDecisions(sections), [sections])
+  const header =
+    ctx.isCommissioner && phase === 'Setup'
+      ? (open: (id: SettingsSubPageId) => void) => <SetupDecisionsCard leagueId={leagueId} decisions={setupDecisions} onOpen={open} />
+      : undefined
+
+  if (ctx.isCommissioner) {
     const teams = effectiveLeague.teams ?? []
     const inviteRow = sections.flatMap((section) => section.rows).find((row) => row.id === 'invite')
-    const phase = nativeLeaguePhase(ctx.displayLeague)
     return (
       <CommissionerCenter
+        leagueId={leagueId}
         leagueName={effectiveLeague.name}
         sections={sections}
         renderSubPage={renderSubPage}
         onExit={onExit}
+        exitTo={exitTo}
         initialSubPage={initialSubPage}
         inSeason={phase === 'Regular season' || phase === 'Playoffs'}
         managers={{
@@ -222,7 +296,11 @@ export function LeagueSettingsHomeContainer({
           total: effectiveLeague.leagueSize ?? teams.length,
           inviteUrl: inviteRow?.copyText ?? null,
         }}
+        // Not onSubPageReturn: the center keeps one editor open and "closes" it on every category
+        // switch. Its Back button (onExit) is the way back to the hub.
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
+        header={header}
+        redraft={redraft}
       />
     )
   }
@@ -234,8 +312,11 @@ export function LeagueSettingsHomeContainer({
       canEdit={ctx.isCommissioner}
       renderSubPage={renderSubPage}
       onExit={onExit}
-      onSubPageClosed={() => setReloadKey((k) => k + 1)}
+      exitTo={exitTo}
+      onSubPageClosed={() => { setReloadKey((k) => k + 1); onSubPageReturn?.() }}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
+      header={header}
+      redraft={redraft}
     />
   )
 }

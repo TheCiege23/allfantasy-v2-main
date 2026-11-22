@@ -56,7 +56,7 @@ export function TribeMemberCard({
             ) : null}
           </div>
         </div>
-        <p className="font-mono text-lg font-semibold tabular-nums text-sky-200">
+        <p className="font-mono text-lg font-semibold tabular-nums text-[var(--survivor-torch)]">
           {weeklyScore != null ? weeklyScore.toFixed(1) : '—'}
         </p>
       </div>

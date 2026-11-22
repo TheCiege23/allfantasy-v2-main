@@ -2,6 +2,11 @@
 
 import { useState } from 'react'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { receiptsCardMessages } from '@/lib/core-app/messages/receiptsCard'
+import { langFromFlag } from '@/lib/core-app/messages/coreLocale'
+import { messagesFor } from '@/lib/i18n/messages'
+import { useMyReferralLink } from '@/lib/referral/myReferralLink'
+import { referralLinkLabel, withShareLink } from '@/lib/referral/referralShareLink'
 
 /**
  * "AF saved me" — a share image for a triage tip that came good: AllFantasy said start A over B, you
@@ -13,12 +18,15 @@ import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
  * a download where that is unavailable.
  */
 
-export type SavedTip = {
+type SavedTip = {
   recommended: { name: string; points: number }
   instead: { name: string; points: number }
   leagueName: string
   week: number
 }
+
+/** The card's words (lib/core-app/messages/receiptsCard.ts) — `es` is the prop the Receipts card passes. */
+const savedCopy = (es: boolean) => messagesFor(receiptsCardMessages, langFromFlag(es))
 
 export function savedMargin(t: SavedTip): number {
   return Math.round((t.recommended.points - t.instead.points) * 10) / 10
@@ -27,20 +35,15 @@ export function savedMargin(t: SavedTip): number {
 /** The words on the card, kept separate from the drawing so they can be tested. */
 export function savedLines(t: SavedTip, es: boolean): { headline: string; detail: string; footer: string } {
   const margin = savedMargin(t).toFixed(1)
-  return es
-    ? {
-        headline: `AllFantasy me salvó +${margin} pts`,
-        detail: `${t.recommended.name} ${t.recommended.points.toFixed(1)} vs ${t.instead.name} ${t.instead.points.toFixed(1)}`,
-        footer: `${t.leagueName} · semana ${t.week} · allfantasy.ai`,
-      }
-    : {
-        headline: `AllFantasy saved me +${margin} pts`,
-        detail: `${t.recommended.name} ${t.recommended.points.toFixed(1)} vs ${t.instead.name} ${t.instead.points.toFixed(1)}`,
-        footer: `${t.leagueName} · week ${t.week} · allfantasy.ai`,
-      }
+  const m = savedCopy(es)
+  return {
+    headline: m.savedHeadline(margin),
+    detail: m.savedDetail(t.recommended.name, t.recommended.points.toFixed(1), t.instead.name, t.instead.points.toFixed(1)),
+    footer: m.savedFooter(t.leagueName, t.week),
+  }
 }
 
-function drawCard(t: SavedTip, es: boolean): HTMLCanvasElement | null {
+function drawCard(t: SavedTip, es: boolean, link: string | null): HTMLCanvasElement | null {
   const canvas = document.createElement('canvas')
   canvas.width = 1200
   canvas.height = 630
@@ -61,25 +64,37 @@ function drawCard(t: SavedTip, es: boolean): HTMLCanvasElement | null {
   ctx.fillStyle = '#a7b0c8'
   ctx.font = '32px system-ui, sans-serif'
   ctx.fillText(footer, 80, 540, 1040)
+  /*
+   * The sharer's referral link, printed on the image (2026-11-15): a screenshot or a downloaded card
+   * travels without the share sheet's text, and this is the only way back to AllFantasy it carries.
+   */
+  const label = referralLinkLabel(link)
+  if (label) {
+    ctx.fillStyle = '#3ecf8e'
+    ctx.font = '600 30px system-ui, sans-serif'
+    ctx.fillText(label, 80, 590, 1040)
+  }
   return canvas
 }
 
 export function AfSavedShare({ tip, es }: { tip: SavedTip; es: boolean }) {
   const [busy, setBusy] = useState(false)
+  // Fetched at render, not on the tap: awaiting a request before share() can cost the tap's activation.
+  const referralLink = useMyReferralLink()
 
   const share = async () => {
     setBusy(true)
     try {
-      const canvas = drawCard(tip, es)
+      const canvas = drawCard(tip, es, referralLink)
       if (!canvas) return
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
       if (!blob) return
       const file = new File([blob], 'allfantasy-saved-me.png', { type: 'image/png' })
-      const text = savedLines(tip, es).headline
+      const text = withShareLink(savedLines(tip, es).headline, referralLink)
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean }
       if (typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
         await nav.share({ files: [file], text })
-        sendProductAnalyticsBeacon('product.triage.saved_shared', { via: 'share_sheet' })
+        sendProductAnalyticsBeacon('product.triage.saved_shared', { via: 'share_sheet', with_link: Boolean(referralLink) })
       } else {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -87,7 +102,7 @@ export function AfSavedShare({ tip, es }: { tip: SavedTip; es: boolean }) {
         a.download = file.name
         a.click()
         URL.revokeObjectURL(url)
-        sendProductAnalyticsBeacon('product.triage.saved_shared', { via: 'download' })
+        sendProductAnalyticsBeacon('product.triage.saved_shared', { via: 'download', with_link: Boolean(referralLink) })
       }
     } catch {
       /* the share sheet was dismissed — nothing to do */
@@ -98,9 +113,8 @@ export function AfSavedShare({ tip, es }: { tip: SavedTip; es: boolean }) {
 
   return (
     <button type="button" className="af3a-receipt-share" onClick={share} disabled={busy}>
-      {es ? 'Compartir' : 'Share'}
+      {savedCopy(es).savedShare}
     </button>
   )
 }
 
-export default AfSavedShare

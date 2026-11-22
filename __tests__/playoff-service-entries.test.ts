@@ -1002,3 +1002,42 @@ describe("playoff entry service", () => {
     expect(pickUpsertMock).not.toHaveBeenCalled()
   })
 })
+
+describe("NFL divisional picks follow the entry's own reseeding", () => {
+  async function setup(wildCardPicks: Array<[number, string]>) {
+    vi.clearAllMocks()
+    transactionMock.mockImplementation((callback) => callback({ playoffBracketPick: { deleteMany: pickDeleteManyMock, upsert: pickUpsertMock } }))
+    const { buildPlayoffTemplate } = await import("@/lib/playoffs/playoffTemplate")
+    const rows = buildPlayoffTemplate({ sport: "nfl", seasonYear: 2026, isTestMode: true })
+      .map((row) => ({ ...row, id: `s${row.seriesNumber}`, challengeId: "nfl-pool" }))
+    entryFindUniqueMock.mockResolvedValue({ id: "entry-1", userId: "user-1", challengeId: "nfl-pool" })
+    seriesFindUniqueMock.mockResolvedValue({
+      ...rows.find((row) => row.seriesNumber === 7),
+      challenge: { config: null, isTestMode: true, ownerUserId: "owner", sport: "nfl", seasonYear: 2026 },
+    })
+    seriesFindManyMock.mockResolvedValue(rows)
+    pickFindManyMock.mockResolvedValue(wildCardPicks.map(([n, team]) => ({ id: `p${n}`, entryId: "entry-1", seriesId: `s${n}`, pickTeamName: team })))
+    pickUpsertMock.mockResolvedValue({ id: "p7" })
+    return (await import("@/lib/playoffs/playoffService")).savePlayoffBracketPick
+  }
+  // Test-mode AFC: 1 Broncos, 2 Patriots, 3 Jaguars, 4 Steelers, 5 Texans, 6 Bills, 7 Chargers.
+  const upsets: Array<[number, string]> = [[1, "Los Angeles Chargers"], [2, "Jacksonville Jaguars"], [3, "Pittsburgh Steelers"]]
+
+  it("accepts the 1 seed's reseeded opponent — the lowest seed left — and nobody else", async () => {
+    const save = await setup(upsets)
+    await save({ challengeId: "nfl-pool", entryId: "entry-1", userId: "user-1", seriesId: "s7", pickTeamName: "Los Angeles Chargers" })
+    expect(pickUpsertMock).toHaveBeenCalledTimes(1)
+
+    const again = await setup(upsets)
+    await expect(again({ challengeId: "nfl-pool", entryId: "entry-1", userId: "user-1", seriesId: "s7", pickTeamName: "Jacksonville Jaguars" }))
+      .rejects.toThrow("Pick team must be one of the teams in this series")
+    expect(pickUpsertMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a divisional pick until every Wild Card game of the conference is picked", async () => {
+    const save = await setup(upsets.slice(0, 2))
+    await expect(save({ challengeId: "nfl-pool", entryId: "entry-1", userId: "user-1", seriesId: "s7", pickTeamName: "Denver Broncos" }))
+      .rejects.toThrow("Pick every Wild Card game in this conference first.")
+    expect(pickUpsertMock).not.toHaveBeenCalled()
+  })
+})

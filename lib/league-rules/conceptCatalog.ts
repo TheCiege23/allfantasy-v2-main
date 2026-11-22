@@ -29,7 +29,7 @@ export const CATALOG_VERSION = '2026-09-09.1'
 const ENTRIES: ConceptCatalogEntry[] = [
   {
     id: 'guillotine',
-    label: 'Guillotine',
+    label: 'Guilly',
     ruleVersion: '1.0.0',
     formatRulesConcept: 'guillotine',
     aliasTags: [],
@@ -131,7 +131,7 @@ const ENTRIES: ConceptCatalogEntry[] = [
      * `resolveLeagueRules` claim leagues that are not this format.
      */
     id: 'survivor_guillotine',
-    label: 'Survivor All-Stars Guillotine',
+    label: 'Survivor All-Stars Guilly',
     ruleVersion: '1.0.0',
     formatRulesConcept: null,
     aliasTags: [],

@@ -1,8 +1,16 @@
+import { loadWaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-gate'
+import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import {
+  isRedraftLeagueMovesLocked,
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_STATUS,
+  REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE,
+} from '@/lib/redraft/tradeMoveLock'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 
@@ -30,7 +38,7 @@ export async function GET(req: NextRequest) {
     select: { ownerId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(season.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const claims = await prisma.redraftWaiverClaim.findMany({
     where: { seasonId, rosterId },
@@ -73,13 +81,28 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine') return NextResponse.json({ error: 'Use your Survivor Guilly league waiver board for claims.' }, { status: 409 })
 
   const roster = await prisma.redraftRoster.findFirst({
     where: { id: rosterId, seasonId, leagueId },
     select: { ownerId: true, waiverPriority: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const phasePolicy = await loadWaiverPhasePolicy(leagueId, null)
+  if (!phasePolicy.claimsAllowed) return NextResponse.json({ error: phasePolicy.reason, code: phasePolicy.code }, { status: 409 })
+
+  // The commissioner's move lock, which the waiver screen's claim path (assertWaiverClaimEligibility) and the
+  // NFL runtime already refuse under. This route has no UI caller; without it a claim was queued anyway.
+  // Cancelling a pending claim (DELETE) moves nothing and stays open.
+  if (await isRedraftLeagueMovesLocked(leagueId)) {
+    return NextResponse.json(
+      { error: REDRAFT_ROSTER_MOVES_LOCKED_MESSAGE, code: REDRAFT_MOVES_LOCKED_CODE },
+      { status: REDRAFT_MOVES_LOCKED_STATUS },
+    )
+  }
 
   const bidAmount = body.bidAmount == null ? null : Number(body.bidAmount)
   if (bidAmount != null && (!Number.isFinite(bidAmount) || bidAmount < 0)) {
@@ -154,7 +177,7 @@ export async function DELETE(req: NextRequest) {
     select: { ownerId: true },
   })
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
-  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (roster.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(c.leagueId, rosterId, userId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (c.status !== 'pending') return NextResponse.json({ error: 'Only pending claims can be cancelled' }, { status: 409 })
 
   await prisma.redraftWaiverClaim.update({
@@ -164,4 +187,3 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ ok: true })
 }
-

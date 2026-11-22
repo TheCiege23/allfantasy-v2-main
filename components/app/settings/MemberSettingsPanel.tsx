@@ -1,8 +1,10 @@
 'use client'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { readTournamentCoCommissioners, SeatlessCoCommissioners, type TournamentCoCommissioner } from '@/components/league-settings/TournamentLeagueNotes'
 
 type Manager = {
   rosterId: string
@@ -13,6 +15,7 @@ type Manager = {
 
 export default function MemberSettingsPanel({ leagueId }: { leagueId?: string }) {
   const [managers, setManagers] = useState<Manager[]>([])
+  const [tournamentCos, setTournamentCos] = useState<TournamentCoCommissioner[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removingRosterId, setRemovingRosterId] = useState<string | null>(null)
@@ -37,6 +40,7 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
       }
       const nextManagers = Array.isArray(json?.managers) ? (json.managers as Manager[]) : []
       setManagers(nextManagers)
+      setTournamentCos(readTournamentCoCommissioners(json))
     } catch {
       setError('Failed to load member settings')
       setManagers([])
@@ -50,7 +54,7 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
   }, [load])
 
   const transferableManagers = useMemo(
-    () => managers.filter((m) => typeof m.userId === 'string' && m.userId.trim().length > 0 && !m.userId.startsWith('orphan-')),
+    () => managers.filter((m) => typeof m.userId === 'string' && m.userId.trim().length > 0 && !isSeatPlaceholderUserId(m.userId)),
     [managers]
   )
 
@@ -156,7 +160,7 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
                     <button
                       type="button"
                       onClick={() => handleRemoveMember(manager.rosterId)}
-                      disabled={!!removingRosterId || !manager.userId || manager.userId.startsWith('orphan-')}
+                      disabled={!!removingRosterId || !manager.userId || isSeatPlaceholderUserId(manager.userId)}
                       data-testid={`commissioner-member-remove-${manager.rosterId}`}
                       className="rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200 hover:bg-red-500/20 disabled:opacity-50"
                     >
@@ -168,6 +172,10 @@ export default function MemberSettingsPanel({ leagueId }: { leagueId?: string })
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4">
+        <SeatlessCoCommissioners people={tournamentCos} />
       </div>
 
       <div className="mt-4 space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">

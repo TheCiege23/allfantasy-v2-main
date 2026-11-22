@@ -25,24 +25,24 @@ function normPos(position: string | null | undefined): string {
 }
 
 /** Map feed quirks to canonical buckets for counting. */
-export function normalizeAliasPosition(position: string | null | undefined): string {
+function normalizeAliasPosition(position: string | null | undefined): string {
   const p = normPos(position)
   if (p === 'PK') return 'K'
   if (p === 'DEF' || p === 'D/ST' || p === 'DST') return 'DST'
   return p
 }
 
-export function isFlexEligible(pos: string | null | undefined): boolean {
+function isFlexEligible(pos: string | null | undefined): boolean {
   const p = normPos(pos)
   return p === 'RB' || p === 'WR' || p === 'TE'
 }
 
-export function isDstAlias(pos: string | null | undefined): boolean {
+function isDstAlias(pos: string | null | undefined): boolean {
   const p = normPos(pos)
   return p === 'DEF' || p === 'DST' || p === 'D/ST'
 }
 
-export function isKickerAlias(pos: string | null | undefined): boolean {
+function isKickerAlias(pos: string | null | undefined): boolean {
   const p = normPos(pos)
   return p === 'K' || p === 'PK'
 }
@@ -105,7 +105,7 @@ export function poolPlayerMatchesPositionPill(
   return canon === v || pos === v
 }
 
-export type PositionCountPlayerLike = { position?: string | null }
+type PositionCountPlayerLike = { position?: string | null }
 
 export function getDraftRoomPositionGroupCounts(
   players: PositionCountPlayerLike[],

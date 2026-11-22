@@ -26,7 +26,12 @@ export type LeagueSettingsApi = {
     isDynasty: boolean
     leagueType?: string | null
     leagueVariant?: string | null
+    platform?: string | null
+    survivorMode?: boolean | null
+    guillotineMode?: boolean | null
     bestBallMode?: boolean | null
+    /** Classic Best Ball or best ball Guilly (lib/bestball/bestBallLeagueState.ts). */
+    lineupSetsItself?: boolean
     autoCoachEnabled?: boolean | null
     rosterSize: number | null
     totalRosterSlots: number

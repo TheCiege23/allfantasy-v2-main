@@ -2,15 +2,16 @@
  * POST: commissioner — league downsizing prep (merge rosters / mark dissolved for dispersal draft).
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-eligibility'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +40,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'view')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -210,6 +211,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
         lastDownsizeSourceRosterIds: sourceRosterIds,
       }),
     },
+  })
+
+  await publishRuleChangesEvent({
+    leagueId,
+    actorUserId: userId,
+    section: 'league-size',
+    changes: league.leagueSize === newTeamCount ? [] : [{ key: 'teamCount', before: league.leagueSize, after: newTeamCount }],
   })
 
   return NextResponse.json({

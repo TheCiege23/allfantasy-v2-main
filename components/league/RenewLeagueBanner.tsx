@@ -83,7 +83,7 @@ export function RenewLeagueBanner({
       <div className="shrink-0 px-4 py-3">
         <Link
           href={tournamentHubPath}
-          className="mx-auto flex w-full max-w-md items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-8 py-3.5 text-[14px] font-bold uppercase tracking-wider text-cyan-100 shadow-lg shadow-cyan-900/20 transition hover:border-cyan-400/60 hover:bg-cyan-500/15"
+          className="mx-auto flex w-full max-w-md items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-8 py-3.5 text-[14px] font-bold uppercase tracking-wider text-[var(--badge-text-cyan)] shadow-lg shadow-cyan-900/20 transition hover:border-cyan-400/60 hover:bg-cyan-500/15"
         >
           {t('renew.tournamentHubCta').replace('{{year}}', String(nextSeason))}
         </Link>

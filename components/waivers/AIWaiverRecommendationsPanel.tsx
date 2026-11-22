@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Sparkles } from 'lucide-react'
 import { z } from 'zod'
+import { useMessages } from '@/components/i18n/useMessages'
+import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
+import { pickupRecord } from '@/lib/chimmy-outcomes/engineRecord'
+import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
+import { EvidenceLine } from '@/components/core-app/primitives'
 
 const recommendationSchema = z.object({
   addPlayerId: z.string().min(1), addPlayerName: z.string().min(1),
@@ -32,6 +37,7 @@ type RecommendResponse = {
   ok?: boolean
   recommendations?: Recommendation[]
   generatedAt?: string
+  leagueContext?: { sport?: string | null }
 }
 
 type LockedResponse = {
@@ -70,6 +76,7 @@ const SKIN_DEFAULT = {
   reason: 'mt-2 text-xs text-white/75',
   tags: 'mt-2 flex flex-wrap gap-1',
   tag: 'rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-white/60',
+  record: 'text-[11px] text-white/60',
   deeper: 'mt-2 inline-flex rounded-md border border-cyan-400/35 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-100 hover:bg-cyan-500/20',
 } as const
 
@@ -98,6 +105,7 @@ const SKIN_CORE: Record<keyof typeof SKIN_DEFAULT, string> = {
   tags: 'af-wvai-chips',
   tag: 'af-wvai-tag',
   deeper: 'af-wvai-link',
+  record: 'af-wvai-sub',
 }
 
 export default function AIWaiverRecommendationsPanel(props: { leagueId: string; surface?: 'default' | 'core' }) {
@@ -120,6 +128,7 @@ function LeagueWaiverRecommendationsPanel({
   const [locked, setLocked] = useState<LockedResponse | null>(null)
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
+  const [sport, setSport] = useState('')
   const [remindersEnabled, setRemindersEnabled] = useState(false)
   const mounted = useRef(true)
   const busy = useRef(false)
@@ -129,6 +138,13 @@ function LeagueWaiverRecommendationsPanel({
   }, [])
 
   const hasResults = recommendations.length > 0
+  /*
+   * How this panel's #1 pickup has done, from the advice ledger (lib/chimmy-outcomes/engineRecord.ts) — read
+   * once there is a list to put it beside, and shown only once it carries a rate. The ledger grades NFL only,
+   * so another sport's list carries no line.
+   */
+  const rm = useMessages(adviceRecordMessages)
+  const record = pickupRecord(useAdviceRecord(hasResults && sport.toUpperCase() === 'NFL'))
 
   const summary = useMemo(() => {
     if (!hasResults) return null
@@ -174,6 +190,7 @@ function LeagueWaiverRecommendationsPanel({
       }
       setRecommendations(payload.recommendations)
       setGeneratedAt(payload.generatedAt ?? null)
+      setSport(typeof payload.leagueContext?.sport === 'string' ? payload.leagueContext.sport : '')
     } catch {
       if (!mounted.current) return
       setError("Network error while loading Chimmy's waiver recommendations.")
@@ -232,6 +249,18 @@ function LeagueWaiverRecommendationsPanel({
             <span>{summary}</span>
             {generatedAt ? <span>Updated: {new Date(generatedAt).toLocaleString()}</span> : null}
           </div>
+
+          {record && surface === 'core' ? (
+            /* /core: the shared measured line (primitives/EvidenceLine.tsx), as under a trade grade and a bench swap. */
+            <EvidenceLine
+              label={rm.recordLabel}
+              lines={[{ text: rm.pickupRecord(record.ratePct, record.graded), testId: 'ai-waiver-recommendations-record' }]}
+            />
+          ) : record ? (
+            <p className={cx.record} data-testid="ai-waiver-recommendations-record">
+              {rm.pickupRecord(record.ratePct, record.graded)}
+            </p>
+          ) : null}
 
           <ul className={cx.list}>
             {recommendations.map((rec, index) => (

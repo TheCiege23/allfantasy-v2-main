@@ -17,6 +17,7 @@
 
 import { TtlCache } from "@/lib/chimmy-context/cache"
 import { ImportHistoryContextProvider } from "@/lib/chimmy-context/providers/ImportHistoryContextProvider"
+import { LeagueOfficeContextProvider } from "@/lib/chimmy-context/providers/LeagueOfficeContextProvider"
 import { LeagueContextProvider } from "@/lib/chimmy-context/providers/LeagueContextProvider"
 import { LeagueDifficultyContextProvider } from "@/lib/chimmy-context/providers/LeagueDifficultyContextProvider"
 import { MatchupContextProvider } from "@/lib/chimmy-context/providers/MatchupContextProvider"
@@ -35,6 +36,7 @@ import type {
   ImportedHistorySlice,
   LeagueContextSlice,
   LeagueDifficultyContextSlice,
+  LeagueOfficeContextSlice,
   MatchupContextSlice,
   ProviderResult,
   RankingContextSlice,
@@ -70,6 +72,7 @@ export type ChimmyContextEngineOptions = {
     sportsSchedule?: ChimmyContextProvider<SportsScheduleSlice>
     replayInsights?: ChimmyContextProvider<ReplayInsightSlice>
     devy?: ChimmyContextProvider<DevyContextSlice>
+    leagueOffice?: ChimmyContextProvider<LeagueOfficeContextSlice>
   }
 }
 
@@ -119,6 +122,7 @@ export class ChimmyContextEngine {
     sportsSchedule: ChimmyContextProvider<SportsScheduleSlice>
     replayInsights: ChimmyContextProvider<ReplayInsightSlice>
     devy: ChimmyContextProvider<DevyContextSlice>
+    leagueOffice: ChimmyContextProvider<LeagueOfficeContextSlice>
   }
 
   constructor(options: ChimmyContextEngineOptions = {}) {
@@ -136,6 +140,7 @@ export class ChimmyContextEngine {
       sportsSchedule: options.providers?.sportsSchedule ?? new SportsScheduleContextProvider(),
       replayInsights: options.providers?.replayInsights ?? new ReplayInsightContextProvider(),
       devy: options.providers?.devy ?? new DevyContextProvider(),
+      leagueOffice: options.providers?.leagueOffice ?? new LeagueOfficeContextProvider(),
     }
   }
 
@@ -204,6 +209,7 @@ export class ChimmyContextEngine {
       ["sportsSchedule", this.providers.sportsSchedule as AnyProvider],
       ["replayInsights", this.providers.replayInsights as AnyProvider],
       ["devy", this.providers.devy as AnyProvider],
+      ["leagueOffice", this.providers.leagueOffice as AnyProvider],
     ]
 
     const filter = options.onlyProviders ? new Set(options.onlyProviders) : null
@@ -250,6 +256,7 @@ export class ChimmyContextEngine {
     const scheduleResult = get<SportsScheduleSlice>("sportsSchedule")
     const replayResult = get<ReplayInsightSlice>("replayInsights")
     const devyResult = get<DevyContextSlice>("devy")
+    const leagueOfficeResult = get<LeagueOfficeContextSlice>("leagueOffice")
 
     const bundle: ChimmyContextBundle = {
       user: userResult?.data ?? null,
@@ -265,6 +272,7 @@ export class ChimmyContextEngine {
       sportsSchedule: scheduleResult?.data ?? null,
       replayInsights: replayResult?.data ?? null,
       devy: devyResult?.data ?? null,
+      leagueOffice: leagueOfficeResult?.data ?? null,
       memoryRefs: [],
       meta: {
         builtAt: new Date().toISOString(),

@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          # Follow .nvmrc (package.json engines: 24.x); floating LTS selected Node 26.
+          node-version-file: .nvmrc
       - name: Process deployed deadlines and reminders
         run: node scripts/big-brother-deadlines.mjs

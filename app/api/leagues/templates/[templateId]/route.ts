@@ -1,6 +1,6 @@
 /**
  * GET    /api/leagues/templates/[templateId] — get one (owner only)
- * PATCH  /api/leagues/templates/[templateId] — update name/description/payload (owner only)
+ * PATCH  /api/leagues/templates/[templateId] — update name/description/payload, or { public } to share (owner only)
  * DELETE /api/leagues/templates/[templateId] — delete (owner only)
  */
 
@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import type { LeagueTemplatePayload } from '@/lib/league-templates/types'
+import { setTemplatePublic } from '@/lib/rule-templates/templateService'
 
 async function getTemplateAndCheckOwner(templateId: string, userId: string) {
   const template = await (prisma as any).leagueTemplate.findUnique({
@@ -65,11 +66,22 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let body: { name?: string; description?: string; payload?: unknown }
+  let body: { name?: string; description?: string; payload?: unknown; public?: unknown }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  // Sharing is its own write: a locked update of payload.share, so it cannot race a rename.
+  if (body.public !== undefined) {
+    if (typeof body.public !== 'boolean') return NextResponse.json({ error: 'public must be true or false' }, { status: 400 })
+    const r = await setTemplatePublic(templateId, session.user.id, body.public)
+    if (!r.ok) {
+      const status = r.error === 'forbidden' ? 403 : r.error === 'no_recipe' ? 409 : 404
+      return NextResponse.json({ error: r.error === 'no_recipe' ? 'Re-save this template from its league before sharing it' : r.error }, { status })
+    }
+    return NextResponse.json({ id: templateId, public: r.public })
   }
 
   const data: { name?: string; description?: string | null; payload?: LeagueTemplatePayload } = {}
@@ -90,7 +102,9 @@ export async function PATCH(
     if (typeof body.payload !== 'object' || body.payload === null || Array.isArray(body.payload)) {
       return NextResponse.json({ error: 'payload must be an object' }, { status: 400 })
     }
-    data.payload = body.payload as LeagueTemplatePayload
+    // Keep the stored sharing state: a payload edit must not publish a template or set its use count.
+    const share = (existing.payload as Record<string, unknown> | null)?.share
+    data.payload = { ...(body.payload as Record<string, unknown>), share } as unknown as LeagueTemplatePayload
   }
 
   const updated = await (prisma as any).leagueTemplate.update({

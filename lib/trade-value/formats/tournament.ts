@@ -79,6 +79,12 @@ export const tournamentModel: FormatValueModel = {
         remaining === start
           ? `The bracket has not started losing rounds yet, so a trade is worth what it was worth at the outset — about ${now.expectedGames} more games either way.`
           : `${remaining} of ${start} rounds remain. Single elimination means you expect about ${now.expectedGames} more games against ${atStart.expectedGames} at the start, so a trade is worth roughly ${Math.round(multiplier * 100)}% of what the same trade was worth when the bracket began.`,
+      ...(remaining === start
+        ? { reasonCode: 'tournament.notStarted', reasonParams: { games: now.expectedGames } }
+        : {
+            reasonCode: 'tournament.roundsRemain',
+            reasonParams: { remaining, start, games: now.expectedGames, startGames: atStart.expectedGames, share: Math.round(multiplier * 100) },
+          }),
     }
   },
 

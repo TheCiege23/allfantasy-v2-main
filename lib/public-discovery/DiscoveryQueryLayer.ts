@@ -1,19 +1,33 @@
 import { prisma } from "@/lib/prisma"
-import type { LeagueSport } from "@prisma/client"
+import type { LeagueSport, Prisma } from "@prisma/client"
 import { extractLeagueCareerTier } from "@/lib/ranking/tier-visibility"
 import { isSupportedSport, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { CURRENT_DRAFT_SESSION_ORDER } from "@/lib/draft-room/currentDraftSession"
+import { countSeatsHeldByPeopleByLeague } from "@/lib/league/leagueSeats"
+import { matchesSearchText } from "./findLeagueFilters"
+import { isPaidLeagueSettings, leagueEntryFee } from "@/lib/league/paidLeague"
+import {
+  EXTERNAL_LISTING_KEY,
+  isNativePlatform,
+  listingVerification,
+  readExternalListing,
+} from "./externalListing"
+import { readLeagueVibes } from "./vibes"
+import { leaguesCommissionedByAccount, listingAccountIds } from "./ownerCommissionerTeams"
+import { isSystemLeagueOwner } from "@/lib/league-import/systemLeagueOwner"
+import { isPrivateListingOpen, isPrivateRequestableLeague, PRIVATE_JOIN_MODE } from "./privateLeagueRequests"
+import { LEAGUE_PUBLIC_DASHBOARD_KEY, LEAGUE_VISIBILITY_KEY, leagueAudience } from "@/lib/league-privacy/leagueAudience"
 import type { DiscoveryCard, DiscoveryLeagueStyle } from "./types"
 
 const DEFAULT_BASE_URL =
   typeof process !== "undefined" ? process.env.NEXTAUTH_URL ?? "https://allfantasy.ai" : "https://allfantasy.ai"
 
-const LEAGUE_VISIBILITY_KEY = "league_privacy_visibility"
 const LEAGUE_ALLOW_INVITE_LINK_KEY = "league_allow_invite_link"
 const LEAGUE_INVITE_CODE_KEY = "inviteCode"
-const LEAGUE_PUBLIC_DASHBOARD_KEY = "publicDashboard"
 const LEAGUE_DESCRIPTION_KEY = "description"
 const DEFAULT_DISCOVERY_TAKE = 300
+/** `League.platform` values for a league made here (lib/public-discovery/externalListing.ts). */
+const NATIVE_PLATFORM_VALUES = ["manual", "allfantasy", "af", "native"] as const
 
 function resolveBaseUrl(baseUrl?: string): string {
   return (baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "")
@@ -29,6 +43,7 @@ function toRecord(value: unknown): Record<string, unknown> {
 function normalizeLeagueStyleCandidate(value: unknown): DiscoveryLeagueStyle | null {
   const raw = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_")
   if (!raw) return null
+  if (raw.includes("guillotine") || raw.includes("guilly")) return "guillotine"
   if (raw.includes("best") && raw.includes("ball")) return "best_ball"
   if (raw.includes("dynasty")) return "dynasty"
   if (raw.includes("redraft")) return "redraft"
@@ -37,6 +52,28 @@ function normalizeLeagueStyleCandidate(value: unknown): DiscoveryLeagueStyle | n
   if (raw.includes("bracket")) return "bracket"
   if (raw.includes("community")) return "community"
   return null
+}
+
+/*
+ * 🛑 GUILLY HAD NO CATEGORY (audit 2026-11-06, row "Discovery"). A guillotine league read as redraft,
+ * so nobody could look for one. `League.guillotineMode` (or a guillotine variant) now makes it
+ * `guillotine`; any other style it has (best ball, dynasty, keeper) stays reachable through `alsoStyles`.
+ */
+function resolveFantasyLeagueStyles(input: {
+  leagueVariant?: string | null
+  isDynasty?: boolean | null
+  guillotineMode?: boolean | null
+  settings?: Record<string, unknown>
+}): { leagueStyle: DiscoveryLeagueStyle; alsoStyles: DiscoveryLeagueStyle[] } {
+  const style = resolveFantasyLeagueStyle(input)
+  if (input.guillotineMode === true && style !== "guillotine") {
+    return { leagueStyle: "guillotine", alsoStyles: style === "redraft" ? [] : [style] }
+  }
+  if (style === "guillotine") {
+    const other = resolveFantasyLeagueStyle({ ...input, leagueVariant: null })
+    return { leagueStyle: style, alsoStyles: other === "redraft" || other === "guillotine" ? [] : [other] }
+  }
+  return { leagueStyle: style, alsoStyles: [] }
 }
 
 function resolveFantasyLeagueStyle(input: {
@@ -67,27 +104,27 @@ function resolveFantasyLeagueStyle(input: {
 
 function resolveCreatorLeagueStyle(input: {
   creatorLeagueType: string
-  linkedLeague?: { leagueVariant?: string | null; isDynasty?: boolean | null; settings?: unknown } | null
-}): DiscoveryLeagueStyle {
-  if (String(input.creatorLeagueType).toUpperCase() === "BRACKET") return "bracket"
+  linkedLeague?: {
+    leagueVariant?: string | null
+    isDynasty?: boolean | null
+    guillotineMode?: boolean | null
+    settings?: unknown
+  } | null
+}): { leagueStyle: DiscoveryLeagueStyle; alsoStyles: DiscoveryLeagueStyle[] } {
+  if (String(input.creatorLeagueType).toUpperCase() === "BRACKET") return { leagueStyle: "bracket", alsoStyles: [] }
   if (input.linkedLeague) {
-    return resolveFantasyLeagueStyle({
+    return resolveFantasyLeagueStyles({
       leagueVariant: input.linkedLeague.leagueVariant ?? null,
       isDynasty: input.linkedLeague.isDynasty ?? false,
+      guillotineMode: input.linkedLeague.guillotineMode ?? false,
       settings: toRecord(input.linkedLeague.settings),
     })
   }
-  return "community"
+  return { leagueStyle: "community", alsoStyles: [] }
 }
 
 function resolvePaidFlag(raw: Record<string, unknown>): boolean {
-  if (typeof raw.isPaidLeague === "boolean") return raw.isPaidLeague
-  if (typeof raw.paid === "boolean") return raw.paid
-  if (typeof raw.entryFee === "number") return raw.entryFee > 0
-  if (typeof raw.entryFee === "string") return Number(raw.entryFee) > 0
-  if (typeof raw.buyIn === "number") return raw.buyIn > 0
-  if (typeof raw.buyIn === "string") return Number(raw.buyIn) > 0
-  return false
+  return isPaidLeagueSettings(raw)
 }
 
 function readString(raw: Record<string, unknown>, key: string): string | null {
@@ -128,13 +165,13 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
   }
 
   const featureMap: Array<{ key: string; label: string }> = [
-    { key: "ai_adp_enabled", label: "AI ADP" },
+    { key: "ai_adp_enabled", label: "Chimmy ADP" },
     { key: "draft_helper_enabled", label: "Draft helper" },
-    { key: "orphan_team_ai_manager_enabled", label: "AI manager" },
+    { key: "orphan_team_ai_manager_enabled", label: "Chimmy manager" },
     { key: "ai_feature_trade_analyzer_enabled", label: "Trade analyzer" },
-    { key: "ai_feature_waiver_ai_enabled", label: "Waiver AI" },
+    { key: "ai_feature_waiver_ai_enabled", label: "Waiver Chimmy" },
     { key: "ai_feature_player_comparison_enabled", label: "Player compare" },
-    { key: "ai_feature_matchup_simulator_enabled", label: "Matchup AI" },
+    { key: "ai_feature_matchup_simulator_enabled", label: "Matchup Chimmy" },
     { key: "ai_feature_fantasy_coach_enabled", label: "Fantasy coach" },
     { key: "ai_feature_ai_chat_chimmy_enabled", label: "Chimmy chat" },
   ]
@@ -146,21 +183,15 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
   return enabled.slice(0, 4)
 }
 
-/**
- * Exported for the division gate (`lib/league-join/joinDivisionGate.ts`): a league this
- * returns true for publishes its join code, so joining it is self-service, not an invitation.
- * One predicate for "public", not two that drift.
- */
+/** Whether a fantasy league publishes a join link in discovery. */
 export function isFantasyLeagueDiscoverable(settings: Record<string, unknown>): boolean {
-  const visibility = String(settings[LEAGUE_VISIBILITY_KEY] ?? "").trim().toLowerCase()
-  const hasPublicDashboard = settings[LEAGUE_PUBLIC_DASHBOARD_KEY] === true
   const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
   const allowInviteLink =
     typeof settings[LEAGUE_ALLOW_INVITE_LINK_KEY] === "boolean"
       ? Boolean(settings[LEAGUE_ALLOW_INVITE_LINK_KEY])
       : true
 
-  return Boolean(inviteCode) && allowInviteLink && (visibility === "public" || hasPublicDashboard)
+  return Boolean(inviteCode) && allowInviteLink && leagueAudience(settings) === "public"
 }
 
 function buildFillPct(memberCount: number, maxMembers: number): number {
@@ -189,9 +220,26 @@ export async function queryPublicFantasyLeagueCards(options: {
     : null
   if (candidateLeagueIds != null && candidateLeagueIds.length === 0) return []
 
-  const where = {
+  /*
+   * ⚠ THE PUBLIC TEST HAS TO RUN IN THE DATABASE, NOT ONLY AFTER `take`.
+   *
+   * This used to read the most recently updated leagues of any kind and keep the public ones in
+   * memory. Imported leagues are re-synced constantly, so they own every one of those slots —
+   * measured 2026-10-30: all 300 most recently updated leagues were imports, and the one public
+   * native league on the platform was never read, so Find a League listed nothing at all.
+   *
+   * The JSON test here is the coarse half of isFantasyLeagueDiscoverable (public, or a public
+   * dashboard); the invite-code half still runs on each row below.
+   */
+  const where: Prisma.LeagueWhereInput = {
     ...(sport ? { sport } : {}),
     ...(candidateLeagueIds ? { id: { in: candidateLeagueIds } } : {}),
+    OR: [
+      { settings: { path: [LEAGUE_VISIBILITY_KEY], equals: "public" } },
+      { settings: { path: [LEAGUE_PUBLIC_DASHBOARD_KEY], equals: true } },
+      // A league that plays on another platform, listed by its commissioner (externalListing.ts).
+      { settings: { path: [EXTERNAL_LISTING_KEY, "listed"], equals: true } },
+    ],
   }
 
   const leagues = await prisma.league.findMany({
@@ -199,6 +247,8 @@ export async function queryPublicFantasyLeagueCards(options: {
     select: {
       id: true,
       userId: true,
+      platform: true,
+      isCommissioner: true,
       name: true,
       sport: true,
       season: true,
@@ -206,9 +256,17 @@ export async function queryPublicFantasyLeagueCards(options: {
       leagueSize: true,
       scoring: true,
       isDynasty: true,
+      guillotineMode: true,
       settings: true,
+      timezone: true,
       createdAt: true,
       updatedAt: true,
+      leagueSettings: {
+        select: {
+          draftDateUtc: true,
+          timezone: true,
+        },
+      },
       draftSessions: {
         orderBy: CURRENT_DRAFT_SESSION_ORDER,
         take: 1,
@@ -222,11 +280,7 @@ export async function queryPublicFantasyLeagueCards(options: {
           username: true,
           displayName: true,
           avatarUrl: true,
-        },
-      },
-      _count: {
-        select: {
-          rosters: true,
+          createdAt: true,
         },
       },
     },
@@ -234,10 +288,40 @@ export async function queryPublicFantasyLeagueCards(options: {
     take: Math.min(options.take ?? DEFAULT_DISCOVERY_TAKE, DEFAULT_DISCOVERY_TAKE),
   })
 
+  // Seats held by real people, not rosters: a native league is created with one roster per
+  // seat, so a roster count reads every native league as full and hides its Join button.
+  // Same rule the join route and invite previews use (lib/league/leagueSeats).
+  const heldSeats = await countSeatsHeldByPeopleByLeague(
+    prisma as unknown as Prisma.TransactionClient,
+    leagues.map((l) => l.id)
+  )
+  // Whose listing each league is: the owner, or for a public ESPN league owned by the AllFantasy
+  // system account, its proven commissioner (ownerCommissionerTeams.ts). The card names THAT person;
+  // the system account is never shown as a commissioner.
+  const accounts = await listingAccountIds(leagues.map((l) => ({ id: l.id, userId: l.userId })))
+  const leaguesRun = await countLeaguesRunByCommissioner([...accounts.values()])
+  const importedIds = new Set(leagues.filter((l) => !isNativePlatform(l.platform)).map((l) => l.id))
+  const ownerCommissioned = await leaguesCommissionedByAccount(
+    new Map([...accounts].filter(([id]) => importedIds.has(id)))
+  )
+  const listedBy = await loadListingUsers(
+    leagues.filter((l) => isSystemLeagueOwner(l.userId)).map((l) => accounts.get(l.id) ?? "")
+  )
+  const shownOwner = (league: (typeof leagues)[number]) =>
+    isSystemLeagueOwner(league.userId) ? listedBy.get(accounts.get(league.id) ?? "") ?? null : league.user
+
   return leagues
     .map((league): DiscoveryCard | null => {
+      const owner = shownOwner(league)
       const settings = toRecord(league.settings)
-      if (!isFantasyLeagueDiscoverable(settings)) return null
+      const native = isNativePlatform(league.platform)
+      // A native league is joined here with its code; an imported one is listed by its verified
+      // commissioner and joined by request, because its seats live on the other platform.
+      const external = native ? null : readExternalListing(settings)
+      const verification = native
+        ? null
+        : listingVerification({ ...league, ownerCommissionsTeam: ownerCommissioned.has(league.id) })
+      if (native ? !isFantasyLeagueDiscoverable(settings) : !external?.listed || !verification) return null
 
       const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()
       const name = league.name?.trim() || "Public league"
@@ -246,22 +330,27 @@ export async function queryPublicFantasyLeagueCards(options: {
           ? String(settings[LEAGUE_DESCRIPTION_KEY]).trim()
           : null
 
+      // Word by word, not the whole phrase: "dynasty degens" finds "Dynasty Degenerates".
       if (
         query &&
-        !name.toLowerCase().includes(query) &&
-        !(description?.toLowerCase().includes(query) ?? false) &&
-        !String(league.user?.displayName ?? league.user?.username ?? "")
-          .toLowerCase()
-          .includes(query)
+        !matchesSearchText(
+          [name, description, owner?.displayName, owner?.username],
+          query
+        )
       ) {
         return null
       }
 
       const maxMembers = Math.max(2, Number(league.leagueSize ?? 12) || 12)
-      const memberCount = Number(league._count?.rosters ?? 0)
-      const leagueStyle = resolveFantasyLeagueStyle({
+      // The other platform's roster isn't readable here, so an imported league's seats are the
+      // ones its commissioner says are open.
+      const memberCount = external
+        ? Math.max(0, maxMembers - Math.min(external.openSpots, maxMembers))
+        : heldSeats.get(league.id) ?? 0
+      const { leagueStyle, alsoStyles } = resolveFantasyLeagueStyles({
         leagueVariant: league.leagueVariant,
         isDynasty: league.isDynasty,
+        guillotineMode: league.guillotineMode,
         settings,
       })
       const leagueTier = extractLeagueCareerTier(settings, 1)
@@ -285,10 +374,15 @@ export async function queryPublicFantasyLeagueCards(options: {
         sport: String(league.sport ?? "NFL"),
         memberCount,
         maxMembers,
-        joinUrl: `${baseUrl}/join?code=${encodeURIComponent(inviteCode)}`,
+        joinUrl: external ? "" : `${baseUrl}/join?code=${encodeURIComponent(inviteCode)}`,
+        joinMode: external ? "request" : "invite",
+        externalPlatform: external ? String(league.platform) : null,
+        listingVerification: verification,
+        listingNote: external?.note ?? null,
+        entryFee: leagueEntryFee(settings),
         detailUrl: `${baseUrl}/leagues/${league.id}`,
-        ownerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
-        ownerAvatar: league.user?.avatarUrl ?? null,
+        ownerName: owner?.displayName ?? owner?.username ?? "Commissioner",
+        ownerAvatar: owner?.avatarUrl ?? null,
         creatorSlug: null,
         creatorName: null,
         tournamentName: null,
@@ -300,19 +394,199 @@ export async function queryPublicFantasyLeagueCards(options: {
         fillPct: buildFillPct(memberCount, maxMembers),
         leagueType: "fantasy",
         leagueStyle,
+        alsoStyles,
         draftType,
         draftStatus,
         teamCount: maxMembers,
+        // `LeagueSettings.draftDateUtc` is what league creation and the commissioner
+        // calendar write; `settings.draftDate` is an older JSON key few leagues carry.
         draftDate:
-          typeof settings.draftDate === "string" && settings.draftDate.trim()
+          league.leagueSettings?.draftDateUtc?.toISOString() ??
+          (typeof settings.draftDate === "string" && settings.draftDate.trim()
             ? String(settings.draftDate)
-            : null,
-        commissionerName: league.user?.displayName ?? league.user?.username ?? "Commissioner",
+            : null),
+        timezone: league.timezone ?? league.leagueSettings?.timezone ?? null,
+        commissionerName: owner?.displayName ?? owner?.username ?? "Commissioner",
         aiFeatures: resolveAiFeatures(settings),
         leagueTier,
+        vibes: readLeagueVibes(settings),
+        commissionerUsername: owner?.username ?? null,
+        commissionerLeaguesRun: leaguesRun.get(accounts.get(league.id) ?? "") ?? null,
+        commissionerSinceYear: owner?.createdAt ? owner.createdAt.getUTCFullYear() : null,
       }
     })
     .filter((card): card is DiscoveryCard => card != null)
+}
+
+/** The people a system-owned league's card names (see shownOwner). A failed read names nobody. */
+async function loadListingUsers(userIds: string[]) {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  const out = new Map<string, { username: string | null; displayName: string | null; avatarUrl: string | null; createdAt: Date | null }>()
+  if (ids.length === 0) return out
+  try {
+    const rows = await prisma.appUser.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, username: true, displayName: true, avatarUrl: true, createdAt: true },
+    })
+    for (const row of rows) out.set(row.id, row)
+  } catch {
+    // The card falls back to "Commissioner".
+  }
+  return out
+}
+
+/**
+ * Private AllFantasy leagues that are recruiting, as "ask to join" cards (privateLeagueRequests.ts).
+ *
+ * 🛑 SAFE FIELDS ONLY, AND THE SELECT IS WHERE THAT IS ENFORCED: the commissioner, the members and
+ * the description are never read, so no later edit to the card can leak them by accident.
+ * `settings` is read for the listing rule and the format only — its join code is never copied out.
+ */
+export async function queryPrivateRequestableFantasyLeagueCards(options: {
+  sport: string | null
+  query: string | null
+  candidateLeagueIds?: string[] | null
+  take?: number
+}): Promise<DiscoveryCard[]> {
+  const sport = normalizeSportFilter(options.sport)
+  const query = typeof options.query === "string" ? options.query.trim().toLowerCase() : null
+  const candidateLeagueIds = Array.isArray(options.candidateLeagueIds)
+    ? [...new Set(options.candidateLeagueIds.map((id) => String(id).trim()).filter(Boolean))]
+    : null
+  if (candidateLeagueIds != null && candidateLeagueIds.length === 0) return []
+
+  const leagues = await prisma.league.findMany({
+    where: {
+      ...(sport ? { sport } : {}),
+      ...(candidateLeagueIds ? { id: { in: candidateLeagueIds } } : {}),
+      platform: { in: [...NATIVE_PLATFORM_VALUES] },
+      settings: { path: [LEAGUE_VISIBILITY_KEY], equals: "private" },
+      // A tournament's leagues are filled by the tournament, never by a request to one of them.
+      tournamentShellLeague: { is: null },
+      legacyTournamentLeague: { is: null },
+    },
+    select: {
+      id: true,
+      platform: true,
+      name: true,
+      sport: true,
+      season: true,
+      leagueVariant: true,
+      leagueSize: true,
+      scoring: true,
+      isDynasty: true,
+      // A format flag, like leagueVariant: it puts the card under Guilly.
+      guillotineMode: true,
+      settings: true,
+      createdAt: true,
+      leagueSettings: { select: { draftDateUtc: true } },
+      draftSessions: {
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        take: 1,
+        select: { draftType: true, status: true },
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+    take: Math.min(options.take ?? DEFAULT_DISCOVERY_TAKE, DEFAULT_DISCOVERY_TAKE),
+  })
+
+  const eligible = leagues.filter((league) => isPrivateRequestableLeague(league))
+  if (eligible.length === 0) return []
+  const heldSeats = await countSeatsHeldByPeopleByLeague(
+    prisma as unknown as Prisma.TransactionClient,
+    eligible.map((l) => l.id)
+  )
+
+  return eligible
+    .map((league): DiscoveryCard | null => {
+      const settings = toRecord(league.settings)
+      const name = league.name?.trim() || "Private league"
+      if (query && !matchesSearchText([name], query)) return null
+
+      const latestDraftSession = league.draftSessions[0] ?? null
+      const draftStatus =
+        normalizeDraftStatus(latestDraftSession?.status ?? null) ??
+        normalizeDraftStatus(readString(settings, "draft_status")) ??
+        normalizeDraftStatus(readString(settings, "draftStatus")) ??
+        null
+      const memberCount = heldSeats.get(league.id) ?? 0
+      if (!isPrivateListingOpen({ seatsHeld: memberCount, leagueSize: league.leagueSize, draftStatus })) return null
+
+      const maxMembers = Math.max(2, Number(league.leagueSize ?? 12) || 12)
+      return {
+        source: "fantasy",
+        id: league.id,
+        name,
+        description: null,
+        sport: String(league.sport ?? "NFL"),
+        memberCount,
+        maxMembers,
+        // No code and no page: a private league is joined by approval and read by its members only.
+        joinUrl: "",
+        joinMode: PRIVATE_JOIN_MODE,
+        externalPlatform: null,
+        listingVerification: null,
+        listingNote: null,
+        entryFee: leagueEntryFee(settings),
+        detailUrl: "",
+        ownerName: "Commissioner",
+        ownerAvatar: null,
+        creatorSlug: null,
+        creatorName: null,
+        tournamentName: null,
+        season: league.season ?? null,
+        scoringMode: league.scoring ?? null,
+        isPaid: resolvePaidFlag(settings),
+        isPrivate: true,
+        createdAt: league.createdAt.toISOString(),
+        fillPct: buildFillPct(memberCount, maxMembers),
+        leagueType: "fantasy",
+        ...resolveFantasyLeagueStyles({
+          leagueVariant: league.leagueVariant,
+          isDynasty: league.isDynasty,
+          guillotineMode: league.guillotineMode,
+          settings,
+        }),
+        draftType:
+          normalizeDraftType(latestDraftSession?.draftType ?? null) ??
+          normalizeDraftType(readString(settings, "draft_type")) ??
+          normalizeDraftType(readString(settings, "draftType")) ??
+          null,
+        draftStatus,
+        teamCount: maxMembers,
+        draftDate: league.leagueSettings?.draftDateUtc?.toISOString() ?? null,
+        timezone: null,
+        commissionerName: "Commissioner",
+        aiFeatures: [],
+        leagueTier: extractLeagueCareerTier(settings, 1),
+        vibes: [],
+        commissionerUsername: null,
+        commissionerLeaguesRun: null,
+        commissionerSinceYear: null,
+      }
+    })
+    .filter((card): card is DiscoveryCard => card != null)
+}
+
+/**
+ * For the commissioner card: how many leagues each commissioner runs ON AllFantasy, this season
+ * or any. Native only — an imported league is run on its own platform, and counting it would let
+ * "imported 40 leagues I play in" read as "runs 40 leagues". One grouped query for the page.
+ * A failed read drops the line from the card, never the listing.
+ */
+async function countLeaguesRunByCommissioner(userIds: string[]): Promise<Map<string, number>> {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  if (ids.length === 0) return new Map()
+  try {
+    const rows = await prisma.league.groupBy({
+      by: ["userId"],
+      where: { userId: { in: ids }, platform: { in: [...NATIVE_PLATFORM_VALUES] } },
+      _count: { _all: true },
+    })
+    return new Map(rows.map((r) => [r.userId, r._count._all]))
+  } catch {
+    return new Map()
+  }
 }
 
 export async function queryPublicBracketLeagueCards(options: {
@@ -482,6 +756,7 @@ export async function queryPublicCreatorLeagueCards(options: {
             id: true,
             leagueVariant: true,
             isDynasty: true,
+            guillotineMode: true,
             settings: true,
             scoring: true,
           },
@@ -531,9 +806,7 @@ export async function queryPublicCreatorLeagueCards(options: {
 
       if (
         query &&
-        !league.name.toLowerCase().includes(query) &&
-        !(description?.toLowerCase().includes(query) ?? false) &&
-        !creatorName.toLowerCase().includes(query)
+        !matchesSearchText([league.name, description, creatorName], query)
       ) {
         return null
       }
@@ -544,7 +817,7 @@ export async function queryPublicCreatorLeagueCards(options: {
         linkedFantasyLeague?.id != null ? fantasySessionByLeagueId.get(linkedFantasyLeague.id) ?? null : null
       const maxMembers = Math.max(2, Number(league.maxMembers ?? 100) || 100)
       const memberCount = Number(league.memberCount ?? 0)
-      const leagueStyle = resolveCreatorLeagueStyle({
+      const { leagueStyle, alsoStyles } = resolveCreatorLeagueStyle({
         creatorLeagueType: league.type,
         linkedLeague: linkedFantasyLeague,
       })
@@ -595,6 +868,7 @@ export async function queryPublicCreatorLeagueCards(options: {
         fillPct: buildFillPct(memberCount, maxMembers),
         leagueType: "creator",
         leagueStyle,
+        alsoStyles,
         draftType,
         draftStatus,
         teamCount: maxMembers,

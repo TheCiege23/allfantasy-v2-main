@@ -87,13 +87,13 @@ export function WeekControlPanel({
 
   return (
     <section
-      className="mb-4 rounded-lg border border-[color:var(--border-subtle,#2a2a2a)] bg-[color:var(--surface-1,#141414)] p-4"
+      className="mb-4 rounded-lg border rdt rdt-card p-4"
       data-testid="redraft-week-controls"
       aria-label="Commissioner week controls"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold uppercase tracking-wide">Week controls</h3>
-        <p className="text-xs text-[color:var(--text-tertiary,#8a8a8a)]">
+        <p className="text-xs rdt-faint">
           {seasonOver
             ? 'Regular season complete'
             : `Week ${currentWeek} of ${regularSeasonWeeks}`}
@@ -103,7 +103,7 @@ export function WeekControlPanel({
       </div>
 
       {!seasonOver && unfinished > 0 ? (
-        <p className="mt-2 text-xs text-[color:var(--text-secondary,#b4b4b4)]">
+        <p className="mt-2 text-xs rdt-muted">
           {unfinished} matchup{unfinished === 1 ? '' : 's'} in week {currentWeek} not final yet.
           Advancing is blocked until scoring settles, or override below.
         </p>
@@ -112,7 +112,7 @@ export function WeekControlPanel({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="min-h-11 rounded-md border border-[color:var(--border-subtle,#2a2a2a)] px-3 text-sm font-semibold disabled:opacity-50"
+          className="min-h-11 rounded-md border rdt-btn px-3 text-sm font-semibold disabled:opacity-50"
           disabled={busy !== null || seasonOver}
           onClick={() => void run('advance_week', currentWeek)}
         >
@@ -125,7 +125,7 @@ export function WeekControlPanel({
 
         <button
           type="button"
-          className="min-h-11 rounded-md border border-[color:var(--border-subtle,#2a2a2a)] px-3 text-sm font-semibold disabled:opacity-50"
+          className="min-h-11 rounded-md border rdt-btn px-3 text-sm font-semibold disabled:opacity-50"
           disabled={busy !== null || currentWeek <= 1}
           onClick={() => void run('open_week', Math.max(1, currentWeek - 1))}
           title="Reopen the previous week — for a scoring correction after the week rolled."
@@ -149,8 +149,8 @@ export function WeekControlPanel({
           role="status"
           className={`mt-3 text-sm ${
             message.tone === 'ok'
-              ? 'text-[color:var(--text-primary,#f5f5f5)]'
-              : 'text-[color:var(--warn,#e0a33c)]'
+              ? 'rdt-text'
+              : 'rdt-warn'
           }`}
         >
           {message.text}

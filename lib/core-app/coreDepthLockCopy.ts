@@ -1,5 +1,7 @@
-import { freeUntilLabel } from '@/components/launch/launchCopy'
 import type { CoreDepth } from './coreDepthAccess'
+import { messagesFor } from '@/lib/i18n/messages'
+import { coreDepthLockMessages, coreDepthLockSubjectMessages } from './messages/coreDepthLock'
+import { coreLang } from './messages/coreLocale'
 
 /**
  * The /core depth paywall's words in the reader's language (2026-10-06): the lock card, its
@@ -10,22 +12,22 @@ import type { CoreDepth } from './coreDepthAccess'
  * pricing page prints them in Spanish too ("AF Pro", "AF Commissioner"), and so does the product name
  * "Competitive Edge" (launchCopy.ts PRO_DEPTH_ES, the help topics).
  *
- * The English is the component's English BYTE FOR BYTE — including the "is"/"are" guess on the
- * subject's last letter — so English mode is unchanged (__tests__/core-depth-lock-spanish.test.tsx).
+ * English uses the subject's last letter to choose "is" or "are".
  *
  * Spanish avoids agreeing with the subject: a subject arrives already in Spanish from its caller, and
  * its gender and number are not known here, so the head is "{subject}: parte de AF Pro" rather than a
  * sentence whose verb would have to guess. The "Free until" day comes from the launch countdown's own
- * `freeUntilLabel`, so the lock and the banner name the day the same way.
+ * `freeUntilLabel`, so the lock and the banner name the day the same way. The lock card's words and
+ * the trade-visual subject live in lib/core-app/messages/coreDepthLock.ts.
  *
  * PURE, client- and server-safe (CommissionerHub is a server component).
  */
 
-export type CoreDepthLockLang = 'en' | 'es'
+type CoreDepthLockLang = 'en' | 'es'
 
 /** Anything that is not Spanish reads English — the same rule every /core copy module uses. */
-export function lockLang(language: string | null | undefined): CoreDepthLockLang {
-  return language === 'es' ? 'es' : 'en'
+function lockLang(language: string | null | undefined): CoreDepthLockLang {
+  return coreLang(language)
 }
 
 export type CoreDepthLockCopy = {
@@ -36,30 +38,16 @@ export type CoreDepthLockCopy = {
   body: string
   bodyAlt: string
   cta: (planName: string) => string
+  tradeBreakdownBenefit: string
+  tradeReviewWithTokens: string
+  fullTradeReview: string
+  tradeDraftStorageError: string
   /** "Free until Oct 15 — then AF Pro". */
   freeUntil: (startsAtIso: string, planName: string) => string
 }
 
-const EN: CoreDepthLockCopy = {
-  head: (subject, plan) => `${subject} ${subject.endsWith('s') ? 'are' : 'is'} part of ${plan}`,
-  headAlt: (subject) => `${subject} ${subject.endsWith('s') ? 'are' : 'is'} not included with your account`,
-  body: 'Your leagues, scores and the basics stay free. Upgrade to see the rest.',
-  bodyAlt: 'Your leagues, scores and the basics are all here.',
-  cta: (plan) => `See ${plan}`,
-  freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'en')} — then ${plan}`,
-}
-
-const ES: CoreDepthLockCopy = {
-  head: (subject, plan) => `${subject}: parte de ${plan}`,
-  headAlt: (subject) => `${subject}: no disponible con tu cuenta`,
-  body: 'Tus ligas, los marcadores y lo básico siguen siendo gratis. Mejora tu plan para ver el resto.',
-  bodyAlt: 'Tus ligas, los marcadores y lo básico están todos aquí.',
-  cta: (plan) => `Ver ${plan}`,
-  freeUntil: (startsAt, plan) => `${freeUntilLabel(startsAt, 'es')} — luego, ${plan}`,
-}
-
 export function coreDepthLockCopy(language: string | null | undefined): CoreDepthLockCopy {
-  return lockLang(language) === 'es' ? ES : EN
+  return messagesFor(coreDepthLockMessages, lockLang(language))
 }
 
 /**
@@ -85,6 +73,8 @@ export function depthLabelText(depth: CoreDepth, english: string, language: stri
  * there rather than shipping half Spanish.
  */
 const SUBJECT_ES: Record<string, string> = {
+  // The manager card (components/core-app/manager-record/ManagerRecordSheet.tsx), 2026-11-16
+  'A manager’s full record': 'El historial completo de un mánager',
   // Player Finder (components/core-app/screens/PlayerFinder.tsx and player-finder/)
   'Side-by-side compare': 'Comparación lado a lado',
   'Recommended moves': 'Movimientos recomendados',
@@ -98,6 +88,7 @@ const SUBJECT_ES: Record<string, string> = {
   'Who to trade with': 'Con quién intercambiar',
   'The full trade breakdown': 'Desglose completo de cambios',
   'The trade finder': 'Buscador de intercambios',
+  'Your rebuild plan': 'Tu plan de reconstrucción',
   // Competitive Edge (Draft HQ, Trade Center) — the product name stays
   'Competitive Edge': 'Competitive Edge',
 }
@@ -112,5 +103,5 @@ export function lockSubjectText(english: string, language: string | null | undef
 
 /** "Trading for Dalton Kincaid" — Player Finder's trade-visual lock, which names the player. */
 export function tradingForSubject(playerName: string, language: string | null | undefined): string {
-  return lockLang(language) === 'es' ? `Intercambiar por ${playerName}` : `Trading for ${playerName}`
+  return messagesFor(coreDepthLockSubjectMessages, lockLang(language)).tradingFor(playerName)
 }

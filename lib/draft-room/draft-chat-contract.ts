@@ -6,10 +6,10 @@
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import type { LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
 import type { DraftChatPlayerContext } from '@/lib/draft-room/draft-chat-player-context'
-import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { redactPollForViewer } from '@/lib/chat-core/messagePolls'
 import { isSameSiteRelativePath } from '@/lib/rich-message/safeMedia'
 
-export type DraftChatMessageCategory =
+type DraftChatMessageCategory =
   | 'USER_MESSAGE'
   | 'SYSTEM_PICK_NOTIFICATION'
   | 'COMMISSIONER_SYSTEM_MESSAGE'
@@ -18,15 +18,15 @@ export type DraftChatMessageCategory =
   | 'POLL_MESSAGE'
 
 /** Semantic origin for UI / analytics (not necessarily DB `source`). */
-export type DraftChatSourceContext = 'draft_room' | 'league_chat' | 'chimmy' | 'system' | 'unknown'
+type DraftChatSourceContext = 'draft_room' | 'league_chat' | 'chimmy' | 'system' | 'unknown'
 
-export type DraftChatReactionWire = {
+type DraftChatReactionWire = {
   emoji: string
   count: number
   userIds: string[]
 }
 
-export type DraftPickMetaWire = {
+type DraftPickMetaWire = {
   playerName: string | null
   position: string | null
   rosterDisplayName: string | null
@@ -44,7 +44,18 @@ export type DraftPickMetaWire = {
   aiManager?: boolean | null
 }
 
-export type DraftChatAiMetadataWire = {
+export type DraftRoomEventWire = {
+  kind: 'pick_trade' | 'commissioner_edit'
+  title: string
+  detail: string
+  playerName: string | null
+  position: string | null
+  team: string | null
+  headshotUrl: string | null
+  overall: number | null
+}
+
+type DraftChatAiMetadataWire = {
   aiRecommendationType?: string | null
   confidence?: number | null
   rationale?: string | null
@@ -79,6 +90,8 @@ export type DraftChatWireMessage = {
   reactions?: DraftChatReactionWire[]
   isDraftPickEvent?: boolean
   draftPickMeta?: DraftPickMetaWire | null
+  /** A pick trade or commissioner change, drawn as a card (lib/draft-room/postDraftRoomEventChat). */
+  draftRoomEvent?: DraftRoomEventWire | null
   pollPayload?: LeaguePollPayload | null
   /** Same as message id — explicit for poll clients. */
   pollId?: string | null
@@ -230,6 +243,8 @@ export function sanitizeDraftChatRichMeta(raw: unknown): Record<string, unknown>
         ...(closeAt ? { closeAt } : {}),
         allowMultiple: raw.poll.allowMultiple === true,
         anonymous: raw.poll.anonymous === true,
+        // "Show results after close" — the read paths redact the tally until then (messagePolls.ts).
+        ...(raw.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
       }
     }
   }
@@ -387,6 +402,25 @@ export function buildDraftChatWireMessage(
         }
       : null
 
+  const rawEvent =
+    normalizedType === 'draft_event' && metaRecord && typeof metaRecord.draftRoomEvent === 'object' && metaRecord.draftRoomEvent
+      ? (metaRecord.draftRoomEvent as Record<string, unknown>)
+      : null
+  const evStr = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  const draftRoomEvent: DraftRoomEventWire | null =
+    rawEvent && (rawEvent.kind === 'pick_trade' || rawEvent.kind === 'commissioner_edit') && evStr(rawEvent.detail)
+      ? {
+          kind: rawEvent.kind,
+          title: evStr(rawEvent.title) ?? (rawEvent.kind === 'pick_trade' ? 'Pick trade' : 'Commissioner change'),
+          detail: evStr(rawEvent.detail) as string,
+          playerName: evStr(rawEvent.playerName),
+          position: evStr(rawEvent.position),
+          team: evStr(rawEvent.team),
+          headshotUrl: evStr(rawEvent.headshotUrl),
+          overall: typeof rawEvent.overall === 'number' ? rawEvent.overall : null,
+        }
+      : null
+
   let pollPayload: LeaguePollPayload | null = null
   if (normalizedType === 'poll') {
     pollPayload = opts.parsePollPayload({
@@ -401,7 +435,7 @@ export function buildDraftChatWireMessage(
       ? (m.senderName ?? 'League')
       : (m.senderName ?? 'User')
 
-  const messageCategory = inferCategory(normalizedType, isDraftPickEvent, isAiSuggestion)
+  const messageCategory = inferCategory(normalizedType, isDraftPickEvent || draftRoomEvent != null, isAiSuggestion)
 
   const channelSource = m.channelSource ?? null
   const sourceContext = inferSourceContext(normalizedType, metaRecord, channelSource, isDraftPickEvent, isAiSuggestion)
@@ -449,6 +483,7 @@ export function buildDraftChatWireMessage(
     ...(playerContext ? { playerContext } : {}),
     ...(isAiSuggestion ? { isAiSuggestion: true as const } : {}),
     ...(isDraftPickEvent ? { isDraftPickEvent: true as const, draftPickMeta } : {}),
+    ...(draftRoomEvent ? { draftRoomEvent } : {}),
     ...(pollPayload
       ? {
           pollPayload,
@@ -465,7 +500,7 @@ export function buildDraftChatWireMessage(
     ...(aiMetadata ? { aiMetadata } : {}),
     parentMessageId: m.parentMessageId ?? null,
     metadata: metaRecord
-      ? ((redactAnonymousPollVotes(metaRecord, opts.viewerUserId ?? null) ?? null) as Record<string, unknown> | null)
+      ? ((redactPollForViewer(metaRecord, opts.viewerUserId ?? null) ?? null) as Record<string, unknown> | null)
       : null,
   }
 }

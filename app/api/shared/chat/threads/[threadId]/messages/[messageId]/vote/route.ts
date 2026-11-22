@@ -4,6 +4,7 @@ import { votePollMessage } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
 import { resolveLeagueAccess } from "@/lib/league-access"
 import { prisma } from "@/lib/prisma"
+import { readPrediction } from "@/lib/league-chat/predictionPolls"
 
 /**
  * POST: record a poll vote for the given option.
@@ -85,6 +86,22 @@ export async function POST(
     const pastDeadline = Number.isFinite(closeAt) && closeAt <= Date.now()
     if (closedByHand || pastDeadline) {
       return NextResponse.json({ error: "This poll is closed" }, { status: 409 })
+    }
+
+    /*
+     * A prediction poll also closes at its matchup's kickoff. `closeAt` carries the slate's first
+     * kickoff when it was known at posting time; the matchup's own status is the backstop, so a
+     * schedule that moved — or was never known — cannot leave a pick open once scoring starts.
+     */
+    const prediction = readPrediction(metadata)
+    if (prediction) {
+      const matchup = await (prisma as any).redraftMatchup.findUnique({
+        where: { id: prediction.matchupId },
+        select: { leagueId: true, status: true },
+      })
+      if (!matchup || matchup.leagueId !== leagueId || matchup.status !== "scheduled") {
+        return NextResponse.json({ error: "This matchup has kicked off — predictions are closed" }, { status: 409 })
+      }
     }
 
     const options = poll.options as LeagueOption[]

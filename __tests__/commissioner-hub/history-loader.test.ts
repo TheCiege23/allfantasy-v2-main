@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ trades: vi.fn(), sessions: vi.fn(), drafts: vi.fn(), corrections: vi.fn(), imported: vi.fn(), teams: vi.fn(), players: vi.fn() }))
+const mocks = vi.hoisted(() => ({ trades: vi.fn(), sessions: vi.fn(), drafts: vi.fn(), corrections: vi.fn(), imported: vi.fn(), teams: vi.fn(), players: vi.fn(), lotteryAudit: vi.fn(), archive: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   redraftLeagueTrade: { findMany: mocks.trades },
   draftSession: { findMany: mocks.sessions },
   redraftDraft: { findMany: mocks.drafts },
   draftPickAuditLog: { findMany: mocks.corrections },
+  leagueAuditLog: { findMany: mocks.lotteryAudit },
   // The trade list names its rows through the REAL describeImportedActivityRows, which reads these.
   leagueTeam: { findMany: mocks.teams },
   sportsPlayer: { findMany: mocks.players },
 } }))
 vi.mock('@/lib/league-history/leagueWarehouseReads', () => ({ readRecentImportedTrades: mocks.imported }))
+vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: mocks.archive }))
 
 import { importedTradeLabel, loadCommissionerHistory } from '@/lib/core-app/commissioner/history'
 
@@ -28,7 +30,9 @@ beforeEach(() => {
   mocks.drafts.mockResolvedValue([])
   mocks.sessions.mockResolvedValue([])
   mocks.corrections.mockResolvedValue([])
+  mocks.lotteryAudit.mockResolvedValue([])
   mocks.imported.mockResolvedValue([])
+  mocks.archive.mockResolvedValue({ choices: [], more: false, page: 1, total: 0 })
   mocks.teams.mockResolvedValue([
     { externalId: '1', teamName: 'Gridiron Gang', ownerName: 'ada', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
     { externalId: '2', teamName: null, ownerName: 'bo', avatarUrl: null, platformUserId: 'u2', claimedByUserId: null },
@@ -40,6 +44,65 @@ beforeEach(() => {
 })
 
 describe('commissioner history', () => {
+  it('lists an imported draft as a line that opens it in the draft archive', async () => {
+    // An imported draft has no AllFantasy draft session; it lives in the archive's own records.
+    mocks.archive.mockResolvedValue({ choices: [
+      { key: 'imported:abc 1', source: 'imported', season: 2025 },
+      { key: 'legacy:NFL:unknown', source: 'legacy', season: null },
+      { key: 'native:s1', source: 'native', season: 2026 },
+      { key: 'reset:r1', source: 'reset', season: 2026 },
+    ], more: false, page: 1, total: 4 })
+    const history = await loadCommissionerHistory('league-1', false)
+    expect(mocks.archive).toHaveBeenCalledWith(['league-1'], { limit: 20 })
+    expect(history.drafts).toEqual([])
+    expect(history.importedDrafts).toEqual([
+      { key: 'imported:abc 1', season: 2025, href: '/core/draft-hq?league=league-1&draft=imported%3Aabc+1' },
+      { key: 'legacy:NFL:unknown', season: null, href: '/core/draft-hq?league=league-1&draft=legacy%3ANFL%3Aunknown' },
+    ])
+    expect(history.draftAvailable).toBe(true)
+  })
+
+  it('says draft history could not be read when the archive read fails, never that there is none', async () => {
+    mocks.archive.mockRejectedValue(new Error('down'))
+    const history = await loadCommissionerHistory('league-1', false)
+    expect(history.importedDrafts).toEqual([])
+    expect(history.draftAvailable).toBe(false)
+    expect(history.draftNote).toBe('Some draft records or corrections could not be read.')
+  })
+
+  it('shows only complete recorded weighted lottery orders with their saved odds', async () => {
+    mocks.lotteryAudit.mockResolvedValue([
+      { id: 'draw-1', createdAt: new Date('2026-04-01T00:00:00Z'), afterState: { season: 2027, slotOrder: [{ slot: 2, rosterId: 'b', displayName: 'Beta' }, { slot: 1, rosterId: 'a', displayName: 'Alpha' }], oddsSnapshot: [{ rosterId: 'a', oddsPercent: 42.5 }, { rosterId: 'b', oddsPercent: 57.5 }] } },
+      { id: 'broken', createdAt: new Date('2026-04-02T00:00:00Z'), afterState: { slotOrder: [{ slot: 2, rosterId: 'b', displayName: 'Beta' }] } },
+    ])
+    const history = await loadCommissionerHistory('league-1', true)
+    expect(mocks.lotteryAudit).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'league-1', actionType: 'draft_lottery_run' } }))
+    expect(history.lotteries).toEqual([{ id: 'draw-1', at: '2026-04-01T00:00:00.000Z', season: 2027, slots: [{ slot: 1, team: 'Alpha', odds: 42.5 }, { slot: 2, team: 'Beta', odds: 57.5 }] }])
+  })
+
+  it('does not infer the season or invalid odds of a manually recorded lottery', async () => {
+    mocks.lotteryAudit.mockResolvedValue([{ id: 'manual', createdAt: new Date('2026-04-01T00:00:00Z'), afterState: { slotOrder: [{ slot: 1, rosterId: 'a', displayName: 'Alpha' }], oddsSnapshot: [{ rosterId: 'a', oddsPercent: 110 }] } }])
+    const history = await loadCommissionerHistory('league-1', true)
+    expect(history.lotteries?.[0]).toMatchObject({ season: null, slots: [{ slot: 1, team: 'Alpha', odds: null }] })
+  })
+
+  it('marks a failed lottery audit read unavailable without discarding other history', async () => {
+    mocks.lotteryAudit.mockRejectedValue(new Error('audit unavailable'))
+    const history = await loadCommissionerHistory('league-1', true)
+    expect(history.lotteryReadFailed).toBe(true)
+    expect(history.tradeAvailable).toBe(true)
+  })
+
+  it('includes the last saved older manual draw once, without claiming a season', async () => {
+    const saved = { seed: 'old-seed', runAt: '2026-04-01T00:00:00Z', slotOrder: [{ slot: 1, rosterId: 'a', displayName: 'Alpha' }], oddsSnapshot: [{ rosterId: 'a', oddsPercent: 60 }] }
+    const provider = { settings: { draft_lottery_last_result: saved } }
+    const history = await loadCommissionerHistory('league-1', true, provider)
+    expect(history.lotteries).toEqual([{ id: 'latest-saved-lottery', at: new Date(saved.runAt).toISOString(), season: null, slots: [{ slot: 1, team: 'Alpha', odds: 60 }] }])
+    mocks.lotteryAudit.mockResolvedValue([{ id: 'audited', createdAt: new Date(saved.runAt), afterState: saved }])
+    expect((await loadCommissionerHistory('league-1', true, provider)).lotteries).toHaveLength(1)
+    expect((await loadCommissionerHistory('league-1', false, provider)).lotteries).toBeUndefined()
+  })
+
   it('shows draft owner, player and the actual correction trail', async () => {
     mocks.sessions.mockResolvedValue([{ id: 'draft-1', status: 'completed', startedAt: new Date('2025-08-01T00:00:00Z'), completedAt: null,
       picks: [{ overall: 1, round: 1, displayName: 'Ada', playerName: 'Player B', rosterId: 'roster-1' }],

@@ -6,7 +6,6 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { withControlLock } from '@/lib/draft/draftLock'
 import { startDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
-import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import { enqueueNotification } from './notificationEngine'
 import {
   holdGuillotineScheduledDraft,
@@ -14,6 +13,9 @@ import {
   planGuillotineScheduledDraft,
   prepareGuillotineSeatsForStart,
 } from '@/lib/guillotine/lateStartSeats'
+import { getSurvivorDraftStartReadiness } from './survivorDraftStartReadiness'
+import { notifySurvivorCommissionerOnce, SURVIVOR_SEATS_ALERT_LEAD_MS } from './survivorCommissionerAlerts'
+import { reportSurvivorAutomationError } from './survivorAutomationReporting'
 
 export interface ScheduledSurvivorDraftSummary {
   scanned: number
@@ -91,20 +93,59 @@ export async function startScheduledSurvivorDrafts(now: Date = new Date()): Prom
         summary.skipped++
       } else if (locked.value.ok) {
         summary.started++
-        // A manual start notifies from the controls route; a scheduled one has no caller to do it.
-        await notifyDraftStartingSoon(leagueId).catch(() => {})
+        // startDraftSession sends the lifecycle alert for manual and scheduled starts.
       } else if (locked.value.reason === 'SURVIVOR_CAST_INCOMPLETE') {
         // A commissioner can claim the remaining seats and the next tick retries.
         summary.skipped++
         await noticeCastIncompleteOnce(leagueId, locked.value.error).catch(() => {})
       } else {
-        summary.errors.push({ leagueId, error: locked.value.error ?? locked.value.reason })
+        const failure = locked.value.error ?? locked.value.reason
+        summary.errors.push({ leagueId, error: failure })
+        reportSurvivorAutomationError(new Error(`Scheduled Survivor draft did not start: ${failure}`), { job: 'draft_start', leagueId })
       }
     } catch (error) {
       summary.errors.push({ leagueId, error: error instanceof Error ? error.message : String(error) })
+      reportSurvivorAutomationError(error, { job: 'draft_start', leagueId })
     }
   }
+  // After the due drafts: a seat warning for tomorrow's drafts never delays today's start.
+  await warnUnclaimedSeatsBeforeDraft(now).catch(() => {})
   return summary
+}
+
+/**
+ * A day before a scheduled native Survivor draft, tell the commissioner about any seat that would
+ * stop it from starting, while there is still time to fill or release it. Once per draft time.
+ */
+export async function warnUnclaimedSeatsBeforeDraft(now: Date = new Date()): Promise<number> {
+  const upcoming = await prisma.leagueSettings.findMany({
+    where: {
+      autostart: true,
+      draftDateUtc: { gt: now, lte: new Date(now.getTime() + SURVIVOR_SEATS_ALERT_LEAD_MS) },
+      league: { is: { survivorMode: true } },
+    },
+    select: { leagueId: true, draftDateUtc: true, league: { select: { platform: true } } },
+    take: 100,
+  })
+  let warned = 0
+  for (const { leagueId, draftDateUtc, league } of upcoming) {
+    if (!draftDateUtc || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { status: true, sessionKind: true, sleeperDraftId: true, teamCount: true, rounds: true, slotOrder: true },
+    })
+    if (!session || session.status !== 'pre_draft' || session.sessionKind === 'mock' || session.sleeperDraftId) continue
+    const readiness = await getSurvivorDraftStartReadiness(leagueId, session)
+    if (readiness.ready) continue
+    const outcome = await notifySurvivorCommissionerOnce(leagueId, 'seats_unclaimed_before_draft', {
+      dedupeKey: draftDateUtc.toISOString(),
+      title: 'Your Survivor draft starts in a day and cannot begin yet',
+      body: `${readiness.error} Fill or release the seat before the scheduled time, or the draft waits.`,
+      deepLinkPath: `/league/${leagueId}/draft`,
+    })
+    if (outcome.sent) warned++
+  }
+  return warned
 }
 
 /** Tells the commissioner, once per league, why the scheduled draft is waiting. */

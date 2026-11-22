@@ -26,9 +26,10 @@ export default async function LotteryDraftPage({
   }
 
   return (
-    <div className="min-h-screen bg-[#040915] px-4 py-6">
-      <div className="mx-auto max-w-5xl">
-        <LotteryDraw draftId={context.draftId} />
+    <div className="min-h-screen bg-[#040915] px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-6xl">
+        {/* Only the commissioner can run or lock the lottery (the run route 403s anyone else). */}
+        <LotteryDraw draftId={context.draftId} isCommissioner={context.isCommissioner} />
       </div>
     </div>
   )

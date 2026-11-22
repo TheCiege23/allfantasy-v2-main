@@ -1,3 +1,6 @@
+import { capToRealLeague } from '@/lib/league/teamCountLimits'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
+import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 /**
  * Create League v2 — rules engine.
  *
@@ -9,10 +12,7 @@
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
-import {
-  SURVIVOR_CREATE_CAST_SIZES,
-  getTeamCountOptionsForSport,
-} from '@/lib/league-creation-wizard/sport-team-limits'
+import { NFL_DYNASTY_TEAM_COUNTS, SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { SUPPORTED_SPORTS, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import {
   getDraftTypeUiHint,
@@ -20,7 +20,7 @@ import {
   resolveEffectiveDraftTypeForConcept,
 } from '@/lib/draft-types/draftTypeRegistry'
 import { getAllowedDraftTypesForFormat } from '@/lib/league/format-engine'
-import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineTeamCountOptions } from '@/lib/guillotine/teamCountLimits'
 import { BEST_BALL_DRAFT_MODES } from '@/lib/bestball/rules'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import {
@@ -30,6 +30,13 @@ import {
 } from '@/lib/league-creation-preset/scoring-presets'
 import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
 import { isSurvivorCreationSportAvailable } from '@/lib/survivor/survivorCreationAvailability'
+import { survivorTribeCountOptions } from '@/lib/league-creation-wizard/sport-team-limits'
+import { buildSurvivorFullSeasonPlan } from '@/lib/survivor/survivorFullSeasonPlan'
+import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
+import { normalizeSurvivorFoundationSettings } from '@/lib/survivor/survivorSettings'
+import { readSurvivorLateSeasonSettings } from '@/lib/survivor/lateSeasonSettings'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
+import { SG_CREATE_DEFAULT_TEAMS } from '@/lib/survivor-guillotine/createFit'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
@@ -106,21 +113,64 @@ const BIG_BROTHER_SIZES = [12, 14, 16, 18] as const
 /**
  * Team count options for the pill row.
  * - tournament → fixed tiers [32, 64, 96, 128, 160, 192, 224]
- * - guillotine → even counts 4 up to the sport's regular-season week max
+ * - guillotine → every count 4–35 (4–27 single elimination, 28–35 with double-elimination weeks)
  * - big_brother → fixed [12, 14, 16, 18]
- * - survivor → 16 / 20 / 24 (fixed cast sizes)
+ * - survivor → the fixed cast sizes in SURVIVOR_CREATE_CAST_SIZES (12–24, equal tribe splits)
  * - all others → even numbers 4 up to the sport's real-world club cap
  */
+/**
+ * Survivor cast sizes a league drafted today could still finish: a cast needs one vote per
+ * manager beyond the finalists, at most two per scoring period. Late in a season the largest casts
+ * stop fitting, so they are not offered rather than offered and refused. A later draft date can
+ * still refuse a size listed here; the wizard and the server check that against the chosen date.
+ * When nothing fits (an unverified season, say), the full list stays so the refusal is explained.
+ */
+function survivorCastSizesThatFitNow(sport: SupportedSport, sizes: readonly number[]): number[] {
+  if (!isSurvivorPlanSport(sport)) return [...sizes]
+  const exile = normalizeSurvivorFoundationSettings({})
+  const finalistCount = readSurvivorLateSeasonSettings({}).finalistCount
+  const season = resolveLeagueCreationSeason(sport)
+  const now = new Date()
+  const fits = sizes.filter((castSize) => {
+    try {
+      buildSurvivorFullSeasonPlan({ sport, season, castSize, now, exileEnabled: exile.exileIslandEnabled, finalistCount })
+      return true
+    } catch {
+      return false
+    }
+  })
+  return fits.length > 0 ? fits : [...sizes]
+}
+
 export function getTeamCountOptions(
   sport: SupportedSport,
   leagueType: LeagueTypeId,
   soccerPipeline?: 'mls' | 'euro' | null
 ): number[] {
+  // Never bigger than the real league for a pro sport (lib/league/teamCountLimits.ts `capToRealLeague`).
+  const sizes = capToRealLeague(sport, leagueType, listedTeamCountOptions(sport, leagueType, soccerPipeline))
+  // A pro-sport Redraft or Dynasty league is offered only the sizes its players can fill
+  // (lib/league-creation/playerSupply.ts), so the form never offers a size the server refuses.
+  // A C2C league too: a college one drafts pros on its C2C side (owner's decision, 2026-11-22).
+  if (leagueType !== 'redraft' && leagueType !== 'dynasty' && leagueType !== 'c2c') return sizes
+  const supply = checkNewLeaguePlayerSupply({ sport, leagueType, teamCount: sizes[0] ?? 2 })
+  return supply.verified ? sizes.filter((n) => n <= supply.maxTeams) : sizes
+}
+
+function listedTeamCountOptions(
+  sport: SupportedSport,
+  leagueType: LeagueTypeId,
+  soccerPipeline?: 'mls' | 'euro' | null
+): number[] {
+  if (leagueType === 'zombie') return getZombieCreationTeamCounts(sport)
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.teamCountOptionsByConceptSport?.[leagueType]?.[sport]
   if (Array.isArray(seeded) && seeded.length > 0) {
-    return [...seeded]
+    return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
+
+  if (leagueType === 'dynasty') return [...NFL_DYNASTY_TEAM_COUNTS]
+  if (leagueType === 'redraft') return [...UNIVERSAL_CREATE_TEAM_COUNTS]
 
   if (leagueType === 'tournament') {
     return [...TOURNAMENT_POOL_SIZES]
@@ -129,23 +179,13 @@ export function getTeamCountOptions(
     return [...BIG_BROTHER_SIZES]
   }
   if (leagueType === 'guillotine') {
-    const profile = getGuillotineSportConfig(sport)
-    const minTeams = Math.max(4, profile?.minTeams ?? 8)
-    const maxTeams = Math.max(minTeams, profile?.maxTeams ?? 18)
-    const options: number[] = []
-    for (let teams = minTeams; teams <= maxTeams; teams += 1) {
-      options.push(teams)
-    }
-    return options
+    return guillotineTeamCountOptions()
   }
   if (leagueType === 'survivor') {
     // This branch is only reached before `/api/leagues/create-options` resolves, or when it
     // fails — so a list that diverges from the catalog means Survivor offers different sizes
-    // depending on whether one fetch succeeded. It held [16, 20, 24] for three months after
-    // 29566580a moved the cast to 16-20, and `POST /api/league/create` clamps to
-    // SURVIVOR_CAST_SIZE_OPTIONS, so a 24 picked from this list was silently saved as 20.
-    // New leagues are offered the catalog's 16 / 20 (SURVIVOR_CREATE_CAST_SIZES).
-    return [...SURVIVOR_CREATE_CAST_SIZES]
+    // depending on whether one fetch succeeded. Both read SURVIVOR_CREATE_CAST_SIZES.
+    return survivorCastSizesThatFitNow(sport, SURVIVOR_CREATE_CAST_SIZES)
   }
   const max = getMaxTeamsForSport(sport, soccerPipeline)
   return evenTeamCountsUpTo(max)
@@ -158,9 +198,12 @@ export function getDefaultTeamCount(
   soccerPipeline?: 'mls' | 'euro' | null
 ): number {
   const opts = getTeamCountOptions(sport, leagueType, soccerPipeline)
+  if (leagueType === 'zombie') return ZOMBIE_DEFAULT_MANAGERS
   if (opts.length === 0) return 12
-  // Survivor starts at its smallest cast: 16 managers, four tribes of four (user's call, 2026-10-12).
-  if (leagueType === 'survivor') return opts[0]!
+  // Survivor starts at 16 managers (four tribes of four) when offered, else its smallest cast.
+  if (leagueType === 'survivor') return opts.includes(16) ? 16 : opts[0]!
+  // Survivor Guilly's default rules are a 22-team season (lib/survivor-guillotine/createFit.ts).
+  if (leagueType === 'survivor_guillotine' && opts.includes(SG_CREATE_DEFAULT_TEAMS)) return SG_CREATE_DEFAULT_TEAMS
   // Prefer 12 if available, otherwise middle of the list
   if (opts.includes(12)) return 12
   return opts[Math.floor(opts.length / 2)] ?? opts[0]!
@@ -171,7 +214,8 @@ export function getDefaultTeamCount(
 /**
  * Execution modes shown on the create-league wizard.
  * Best Ball exposes `offline` + `auto` because those modes are part of the
- * core Best Ball product surface. Other formats keep `offline` settings-tab-only.
+ * core Best Ball product surface. Redraft, keeper, devy, survivor and dynasty offer
+ * `offline` at creation too; other formats keep it settings-tab-only.
  */
 const EXECUTION_DRAFT_IDS = ['auto', 'offline'] as const
 const KEEPER_EXECUTION_DRAFT_IDS = ['auto', 'offline', 'team'] as const
@@ -193,7 +237,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
 
   // The canonical create endpoint validates against the format's full draft matrix.
   // Keep the wizard in sync so supported Linear and Auction drafts can be chosen at creation.
-  const sportAllowed = getAllowedDraftTypesForFormat(sport, leagueType)
+  const sportAllowed = getAllowedDraftTypesForFormat(sport, formatShellFor(leagueType))
   const seededNormalized = Array.isArray(seeded)
     ? seeded
         .map((dt) => resolveEffectiveDraftTypeForConcept(leagueType, dt))
@@ -215,7 +259,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
 
   // Best Ball keeps execution modes visible on the create surface so the
   // underlying order algorithm and execution mode can both be selected up front.
-  if (leagueType === 'best_ball' || leagueType === 'redraft' || leagueType === 'keeper') {
+  if (leagueType === 'best_ball' || leagueType === 'redraft' || leagueType === 'keeper' || leagueType === 'survivor_guillotine') {
     const existing = new Set(result.map((option) => option.id))
     const executionModes =
       leagueType === 'best_ball'
@@ -247,12 +291,28 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
         hint: mode === 'auto' ? 'CPU drafts for everyone' : 'Commissioner records picks manually',
       })
     }
+  } else if (leagueType === 'survivor') {
+    // Survivor runs one of five ways: a live snake, linear or auction room, the computer drafting
+    // every tribe's roster, or an in-person draft the commissioner enters afterwards.
+    const existing = new Set(result.map((option) => option.id))
+    for (const mode of ['offline', 'auto'] as const) {
+      if (existing.has(mode)) continue
+      result.push({
+        id: mode,
+        label: mode === 'auto' ? 'Auto' : 'Offline',
+        hint: mode === 'auto' ? 'The computer drafts every roster, start to finish' : 'Draft in person, then the commissioner enters the picks',
+      })
+    }
   } else if (leagueType !== 'big_brother' && leagueType !== 'zombie' && leagueType !== 'salary_cap') {
     result.push({
       id: 'auto',
       label: 'Auto',
       hint: 'CPU drafts for everyone',
     })
+    // A dynasty startup is often drafted in person; the commissioner enters the picks afterwards.
+    if (leagueType === 'dynasty' && !result.some((option) => option.id === 'offline')) {
+      result.push({ id: 'offline', label: 'Offline', hint: 'Commissioner records picks manually' })
+    }
   }
 
   return result
@@ -302,11 +362,7 @@ export function resolveEffectiveDraftType(leagueType: LeagueTypeId, baseDraftTyp
  * byte-identical to the old rule, so only the previously-empty sizes change.
  */
 export function getSurvivorTribeOptions(teamCount: number): number[] {
-  const evenlyDivides = [2, 3, 4].filter((t) => teamCount % t === 0)
-  if (evenlyDivides.length > 0) return evenlyDivides
-
-  // Fall back to any split leaving at least two teams in the smallest tribe.
-  return [2, 3, 4].filter((t) => Math.floor(teamCount / t) >= 2)
+  return survivorTribeCountOptions(teamCount)
 }
 
 // ── 3RR availability ────────────────────────────────────────────────
@@ -332,6 +388,11 @@ type ScoringSelection = {
   leagueType: LeagueTypeId
   sport: SupportedSport
   idpSelected: boolean
+}
+
+/** Survivor Guilly is a redraft shell: its draft matrix is redraft's, narrowed by its catalog entry. */
+function formatShellFor(leagueType: LeagueTypeId): LeagueTypeId {
+  return leagueType === 'survivor_guillotine' ? 'redraft' : leagueType
 }
 
 export function getScoringPresetOptionsForSelection(input: ScoringSelection): ScoringPresetOption[] {

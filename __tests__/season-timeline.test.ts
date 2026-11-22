@@ -82,7 +82,7 @@ describe('buildSeasonTimeline', () => {
     expect(keys(t)).toContain('last-standing')
   })
 
-  it('names a confirmed guillotine league in its own language', () => {
+  it('names a confirmed Guilly league in its own language', () => {
     const t = buildSeasonTimeline({
       settings: {},
       currentWeek: 3,

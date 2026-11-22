@@ -72,8 +72,8 @@ const chimmy = makeMsg({
 describe("WorldCupChatMessageBubble: chimmy variant", () => {
   it("1. renders Bot icon and AI chip and freshness chip", () => {
     render(<WorldCupChatMessageBubble message={chimmy} />)
-    expect(screen.getByText("Chimmy")).toBeTruthy()
-    expect(screen.getByText("AI")).toBeTruthy()
+    // The sender name and the chip both read Chimmy now that the chip no longer says AI.
+    expect(screen.getAllByText("Chimmy").length).toBeGreaterThanOrEqual(2)
     expect(screen.getByTestId("chimmy-freshness-chip")).toBeTruthy()
   })
 
@@ -192,14 +192,14 @@ describe("WorldCupChatModeTabs", () => {
 
   it("15. pool unread badge shows when poolUnread > 0", () => {
     render(<WorldCupChatModeTabs mode="ai" onModeChange={vi.fn()} poolUnread={3} />)
-    expect(screen.getByLabelText("3 unread")).toBeTruthy()
+    // The count is part of the tab's own name, spaced off the label (it used to read "Pool Chat3 unread").
+    expect(screen.getByRole("tab", { name: "Pool Chat (3 unread)" })).toBeTruthy()
   })
 
   it("16. AI available dot shown on inactive AI tab when aiAvailable=true", () => {
     render(<WorldCupChatModeTabs mode="pool" onModeChange={vi.fn()} aiAvailable />)
-    // The dot sits inside the "Ask Chimmy" tab, so its own label is just "available" (brand voice —
-    // was "AI available").
-    expect(screen.getByLabelText("available")).toBeTruthy()
+    // The dot is visual; the tab's name says it, spaced off the label (it used to read "Ask Chimmyavailable").
+    expect(screen.getByRole("tab", { name: "Ask Chimmy (available)" })).toBeTruthy()
   })
 })
 

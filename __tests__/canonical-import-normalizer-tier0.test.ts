@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import { hasIdpRosterSlot } from '@/lib/league-import/idpRosterSlots'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 
@@ -125,5 +126,34 @@ describe('canonicalImportNormalizer — backward compatibility', () => {
     expect(bundle.settingsSnapshot.rosterSettings?.irSlots).toBeUndefined()
     // playoffTeams falls back to the format-resolver default (6 for redraft)
     expect(typeof bundle.settingsSnapshot.playoffSettings?.playoffTeams).toBe('number')
+  })
+})
+
+describe('IDP detection uses exact roster slot tokens', () => {
+  const idpOf = (roster_positions: string[]) =>
+    buildCanonicalImportBundle(baseNormalized({ roster_positions } as Partial<NormalizedImportResult['league']>)).derivedFlags.idp
+
+  it('a SUPER_FLEX, DEF or D/ST slot does not make a league IDP', () => {
+    expect(idpOf(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF', 'BN', 'IR'])).toBe(false)
+    expect(idpOf(['QB:1', 'RB:2', 'WR:2', 'SUPER_FLEX:1', 'D/ST:1', 'BE:7', 'IR:1'])).toBe(false)
+    expect(idpOf(['QB', 'RB', 'WR', 'DST', 'RES', 'TAXI'])).toBe(false)
+  })
+
+  it('a real IDP slot does, flat or as a SLOT:COUNT pair', () => {
+    expect(idpOf(['QB', 'RB', 'WR', 'DL', 'BN'])).toBe(true)
+    expect(idpOf(['QB', 'RB', 'IDP_FLEX', 'BN'])).toBe(true)
+    expect(idpOf(['QB:1', 'LB:2', 'BE:7'])).toBe(true)
+    expect(idpOf(['QB:1', 'S:1'])).toBe(true)
+  })
+
+  /*
+   * ESPN's lineup slot 15 is `DP` (`ESPN_SLOT_LABELS`, EspnLeagueFetchService.ts) — the defensive-player
+   * flex at the end of ESPN's defensive block (8 DT … 14 DB, 15 DP). A league whose only IDP slots are
+   * DP flexes imported as not-IDP. `EDR` (slot 24) is NOT added: what it accepts is not established.
+   */
+  it('an ESPN DP (defensive player) slot does too', () => {
+    expect(idpOf(['QB:1', 'RB:2', 'WR:2', 'DP:3', 'BE:7'])).toBe(true)
+    expect(hasIdpRosterSlot(['QB:1', 'DP:2'])).toBe(true)
+    expect(hasIdpRosterSlot(['QB:1', 'D/ST:1', 'SUPER_FLEX:1', 'EDR:1'])).toBe(false)
   })
 })

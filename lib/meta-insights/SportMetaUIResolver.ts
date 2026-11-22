@@ -8,14 +8,11 @@ import {
   normalizeToSupportedSport,
 } from '@/lib/sport-scope'
 
-export const META_UI_SPORTS = [...SUPPORTED_SPORTS] as const
+const META_UI_SPORTS = [...SUPPORTED_SPORTS] as const
 
-export type MetaUISport = (typeof META_UI_SPORTS)[number]
+type MetaUISport = (typeof META_UI_SPORTS)[number]
 
 export function resolveSportForMetaUI(sport: string | null | undefined): MetaUISport {
   return normalizeToSupportedSport(sport ?? DEFAULT_SPORT)
 }
 
-export function getSportOptionsForUI(): Array<{ value: string; label: string }> {
-  return META_UI_SPORTS.map((s) => ({ value: s, label: s }))
-}

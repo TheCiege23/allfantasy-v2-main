@@ -16,7 +16,7 @@ export const GENERATED_XP_EVENT_TYPES = [
 ] as const
 
 /** XP events that are granted directly from platform systems such as referrals. */
-export const MANUAL_XP_EVENT_TYPES = [
+const MANUAL_XP_EVENT_TYPES = [
   'referral_bonus',
   'creator_referral_bonus',
 ] as const

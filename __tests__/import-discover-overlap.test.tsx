@@ -91,7 +91,7 @@ describe('/import discovery overlap', () => {
     const fresh = screen.getByTestId('import-discovery-account') as HTMLInputElement
     fireEvent.change(fresh, { target: { value: 'right-user' } })
     fireEvent.keyDown(fresh, { key: 'Enter' })
-    expect(discoverProviderLeagues).toHaveBeenLastCalledWith('sleeper', 'right-user', { sport: 'nfl' })
+    expect(discoverProviderLeagues).toHaveBeenLastCalledWith('sleeper', 'right-user', { sport: 'all' })
 
     await act(async () => {
       second.resolve({

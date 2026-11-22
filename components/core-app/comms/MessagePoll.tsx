@@ -1,7 +1,10 @@
 'use client'
 
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { isPollClosed, pollShare, type ViewerPoll } from '@/lib/chat-core/messagePolls'
 import { formatChatMessageTimestamp } from '@/lib/chat-core/chat-timestamps'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { predictionCopy } from '@/lib/league-chat/predictionCopy'
 
 /**
  * A votable poll in league chat.
@@ -24,39 +27,66 @@ export function MessagePoll({
   onClose?: () => void
   disabled?: boolean
 }) {
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => predictionCopy(english, language)
   const closed = isPollClosed(poll)
   const locked = closed || disabled
+  /*
+   * "Results after close": the server sent only the viewer's own vote, so there is no tally to
+   * draw — counts and bars would be the viewer's single vote dressed up as a result.
+   */
+  const hidden = poll.resultsHidden
+  const prediction = poll.prediction
 
   return (
-    <div className="af-cm-poll" data-closed={closed}>
+    <div className="af-cm-poll" data-closed={closed} data-prediction={prediction ? 'true' : undefined}>
+      {prediction ? <p className="af-cm-poll-kind">{t('Prediction · closes at kickoff')}</p> : null}
       <p className="af-cm-poll-q">{poll.question}</p>
 
       {poll.options.map((o) => {
         const share = pollShare(o, poll.totalVotes)
+        // A time option (the draft scheduler) reads in the viewer's own clock, zone named.
+        const label = o.startsAt ? localTimeLabel(o.startsAt) ?? o.text : o.text
+        const won = Boolean(prediction?.resolved && prediction.winningOptionId === o.id)
         return (
           <button
             key={o.id}
             type="button"
             className="af-cm-poll-o af-cm-poll-btn"
             data-mine={o.mine}
+            data-won={won || undefined}
             disabled={locked}
             onClick={() => onVote(o.id)}
             aria-pressed={o.mine}
-            aria-label={`${o.text}, ${o.count} vote${o.count === 1 ? '' : 's'}${o.mine ? ', your vote' : ''}`}
+            aria-label={
+              hidden
+                ? `${label}${o.mine ? ', your vote' : ''}`
+                : `${label}, ${o.count} vote${o.count === 1 ? '' : 's'}${o.mine ? ', your vote' : ''}${won ? ', correct pick' : ''}`
+            }
           >
-            {poll.totalVotes > 0 ? (
+            {!hidden && poll.totalVotes > 0 ? (
               <span className="af-cm-poll-bar" style={{ width: `${share}%` }} aria-hidden="true" />
             ) : null}
-            <span className="af-cm-poll-t">{o.text}</span>
-            <span className="af-cm-poll-n af-num">{o.count}</span>
+            <span className="af-cm-poll-t">
+              {won ? '✓ ' : ''}
+              {label}
+            </span>
+            {hidden ? (
+              o.mine ? <span className="af-cm-poll-n">✓</span> : null
+            ) : (
+              <span className="af-cm-poll-n af-num">{o.count}</span>
+            )}
           </button>
         )
       })}
 
       <p className="af-cm-poll-tot">
-        {poll.totalVotes === 0
-          ? 'No votes yet'
-          : `${poll.totalVotes} vote${poll.totalVotes === 1 ? '' : 's'}`}
+        {hidden
+          ? t('Results show when the poll closes')
+          : poll.totalVotes === 0
+            ? 'No votes yet'
+            : `${poll.totalVotes} vote${poll.totalVotes === 1 ? '' : 's'}`}
+        {prediction?.tie ? ` · ${t('Ended in a tie — no points')}` : null}
         {poll.allowMultiple ? ' · pick as many as you like' : null}
         {/*
           Said BEFORE anyone votes, not after. "Your name will not be attached"
@@ -85,4 +115,9 @@ export function MessagePoll({
   )
 }
 
-export default MessagePoll
+/** "Sat, Aug 29, 5:00 PM PDT" in the browser's own zone and the app's language; null when unreadable. */
+function localTimeLabel(iso: string): string | null {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString(getAppIntlLocale(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+}

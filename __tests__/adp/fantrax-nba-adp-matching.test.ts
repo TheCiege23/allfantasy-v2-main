@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { fantraxDisplayName, matchFantraxNbaAdp, nbaAdpNameKey } from '@/lib/adp/fantraxNbaAdp'
+import { fantraxDisplayName, matchFantraxAdp, matchFantraxNbaAdp, nbaAdpNameKey } from '@/lib/adp/fantraxNbaAdp'
 
 /** The first rows of the real `getAdp?sport=NBA` response captured 2026-10-13, in the parsed shape. */
 const FANTRAX = [
@@ -120,5 +120,42 @@ describe('matchFantraxNbaAdp', () => {
   it('ignores a row with no usable ADP', () => {
     const r = matchFantraxNbaAdp([{ fantraxId: 'z', name: 'Jokic, Nikola', position: 'C', adp: 0 }], identities)
     expect(r.matched).toEqual([])
+  })
+})
+
+describe('matchFantraxAdp — Fantrax id first (MLB / NHL)', () => {
+  const judge = { fantraxId: '02yc4', name: 'Judge, Aaron', position: 'OF', adp: 1.8 }
+
+  it('matches on PlayerIdentityMap.fantraxId even when the name would not', () => {
+    const r = matchFantraxAdp('MLB', [judge], [
+      { id: 'id-judge', canonicalName: 'A. Judge', position: 'RF', currentTeam: 'nyy', fantraxId: '02yc4' },
+    ])
+    expect(r.matched).toEqual([
+      { identityId: 'id-judge', playerName: 'A. Judge', position: 'RF', team: 'NYY', adp: 1.8 },
+    ])
+  })
+
+  it('splits two same-name identities by Fantrax id, where position could not', () => {
+    const r = matchFantraxAdp('MLB', [{ fantraxId: 'b', name: 'Smith, Will', position: 'C', adp: 90 }], [
+      { id: 'id-a', canonicalName: 'Will Smith', position: 'C', currentTeam: 'LAD', fantraxId: 'a' },
+      { id: 'id-b', canonicalName: 'Will Smith', position: 'C', currentTeam: 'ATL', fantraxId: 'b' },
+    ])
+    expect(r.matched.map((m) => m.identityId)).toEqual(['id-b'])
+  })
+
+  it('refuses the id path when two identities claim one Fantrax id, and falls back to name rules', () => {
+    const r = matchFantraxAdp('NHL', [{ fantraxId: 'x', name: 'Hughes, Jack', position: 'C', adp: 12 }], [
+      { id: 'id-1', canonicalName: 'Jack Hughes', position: 'C', currentTeam: 'NJD', fantraxId: 'x' },
+      { id: 'id-2', canonicalName: 'Jack Hughes', position: 'C', currentTeam: 'NJD', fantraxId: 'x' },
+    ])
+    expect(r.matched).toEqual([])
+    expect(r.ambiguous).toEqual(['Jack Hughes'])
+  })
+
+  it('keeps an NHL team code as stored rather than passing it through the NFL abbreviation map', () => {
+    const r = matchFantraxAdp('NHL', [{ fantraxId: 'g1', name: 'Shesterkin, Igor', position: 'G', adp: 30 }], [
+      { id: 'id-g', canonicalName: 'Igor Shesterkin', position: 'G', currentTeam: 'NYR', fantraxId: 'g1' },
+    ])
+    expect(r.matched[0]).toMatchObject({ team: 'NYR', position: 'G' })
   })
 })

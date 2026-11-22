@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
@@ -10,7 +11,6 @@ import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middle
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { shouldRunWaiverShadow, shouldRunWaiverLive, runWaiverShadowForEngine } from '@/lib/decision-os/waiver/shadow'
 import { toWaiverCard, type WaiverCard } from '@/lib/decision-os/waiver/waiverCardAdapter'
-import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { createWaiverOsLoaders } from '@/lib/decision-os/waiver-os'
@@ -155,7 +155,7 @@ const RequestSchema = z.object({
 
 export const dynamic = 'force-dynamic'
 
-export const POST = withApiUsage({
+const paidToolPost = withApiUsage({
   endpoint: '/api/waiver-ai/engine',
   tool: 'WaiverAiEngine',
 })(async (request: NextRequest, _ctx?: unknown) => {
@@ -194,7 +194,7 @@ export const POST = withApiUsage({
       }
     }
 
-    const gate = await requireFeatureEntitlement({
+    const gate = input.includeAIExplanation ? await requireFeatureEntitlement({
       userId,
       userEmail: session?.user?.email,
       featureId: 'ai_waivers',
@@ -203,17 +203,18 @@ export const POST = withApiUsage({
       tokenRuleCode: 'ai_waiver_engine_run',
       tokenSourceType: 'waiver_ai_engine',
       tokenSourceId: `${input.leagueId ?? 'waiver'}:${Date.now()}`,
-      tokenDescription: 'Waiver AI engine run',
+      tokenDescription: 'Waiver Chimmy engine run',
       tokenMetadata: {
         leagueId: input.leagueId ?? null,
         sport: input.sport ?? null,
         includeAIExplanation: Boolean(input.includeAIExplanation),
       },
-    })
+    }) : { ok: true as const, tokenSpend: null, tokenPreview: null }
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
 
     const analysis = await runWaiverAIService(input)
+    if (analysis.explanation.source !== 'ai') paidToolNotDelivered()
 
     // Decision OS Slice 2 â€” waiver shadow/live runner. Evaluation only; never executes a claim.
     // Stage 0 (SHADOW only): scope-filtered, logs parity, result discarded.
@@ -242,27 +243,16 @@ export const POST = withApiUsage({
         const liveResult = await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis }, waiverOsLoaders)
         if (liveResult.ran && liveResult.result) {
           const { decision } = liveResult.result
-          // Attach a saved three-brain analysis, if this user has one for this league. This is the
-          // last link in evidence -> analysis -> recommendation: the enrichment seam existed but had
-          // no caller, so a generated analysis reached nobody.
-          //
-          // Costs one indexed count when there is nothing to show, which is every request while
-          // AI spend is disabled. It cannot throw, and it cannot alter the verdict path -- only the
-          // explanation string -- so the card below renders identically when it declines.
-          const attached = await attachSavedAnalysis({
-            decision,
-            leagueId: input.leagueId,
-            userId,
-            tool: 'manager_intelligence',
-          })
-          const card = toWaiverCard(attached.decision)
+          // The saved three-brain analysis was retired 2026-11-19 (re-score build item 9): nothing produced one,
+          // so this read one indexed count per request to find nothing.
+          const card = toWaiverCard(decision)
           decisionOs = {
             decisionId: decision.decision_id,
             card,
             confidence: card.confidence,
             legal: card.legal,
           }
-          emitLiveTelemetry('waiver.claim', { enriched: true, ai_explained: attached.enriched, ai_reason: attached.reason, latency_ms: Date.now() - liveStart, leagueId: input.leagueId }, decision.decision_id)
+          emitLiveTelemetry('waiver.claim', { enriched: true, latency_ms: Date.now() - liveStart, leagueId: input.leagueId }, decision.decision_id)
         } else {
           emitLiveTelemetry('waiver.claim', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId: input.leagueId })
         }
@@ -321,7 +311,7 @@ export const POST = withApiUsage({
           sourceType: 'waiver_ai_engine_refund',
           sourceId: tokenFallbackLedgerId,
           idempotencyKey: `refund:waiver_ai_engine:${tokenFallbackLedgerId}`,
-          description: 'Auto refund after failed waiver AI request.',
+          description: 'Auto refund after failed waiver Chimmy request.',
           metadata: {},
         })
         .catch(() => null)
@@ -330,3 +320,5 @@ export const POST = withApiUsage({
     return NextResponse.json({ error: 'Waiver AI failed' }, { status: 500 })
   }
 })
+
+export const POST = withPaidToolBilling(paidToolPost)

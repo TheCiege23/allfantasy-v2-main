@@ -59,7 +59,7 @@ export async function POST(
   if (wantsAi && !hasAi) {
     return NextResponse.json(
       {
-        error: "AF Pro required for AI-enhanced reminder copy.",
+        error: "AF Pro required for Chimmy-enhanced reminder copy.",
         upgrade: true,
       },
       { status: 402 }

@@ -7,7 +7,7 @@ import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost
 import { ZombieBashingCard, type ZombieBashingRules } from '@/components/zombie/ZombieBashingCard'
 import type { ZombieMatchupView } from '@/lib/zombie/zombieMatchupBoard'
 
-type MatchupsPayload = {
+export type MatchupsPayload = {
   matchups?: ZombieMatchupView[]
   week?: number
   rules?: ZombieBashingRules
@@ -71,7 +71,7 @@ export default function ZombieMatchupsPage() {
           {rules ? (
             <p className="text-[13px] text-white/60">
               Win by {rules.bashingThreshold}+ to bash, {rules.maulingThreshold}+ to maul. The loser hands over{' '}
-              {Math.round(rules.bashShare * 100)}% or {Math.round(rules.maulShare * 100)}% of their week.
+              the winnings allowed by the league rules, limited to what the losing team holds.
             </p>
           ) : null}
         </div>

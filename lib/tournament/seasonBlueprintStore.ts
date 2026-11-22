@@ -2,7 +2,8 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { buildSeasonBlueprint, type SeasonBlueprint, type BlueprintStaffRole } from './seasonBlueprint'
-import { can } from './tournamentPermissions'
+import { can, isSeasonLiveStaff } from './tournamentPermissions'
+import { earliestOpeningDraft } from './seasonLeagueLayout'
 import { verifySeasonCalendar, seasonContractHash } from './seasonCalendarVerification'
 
 const CONFIG_ACTIONS = ['season_blueprint_created', 'season_blueprint_updated']
@@ -19,7 +20,8 @@ function shellFields(config: SeasonBlueprint) {
   const plan = buildSeasonBlueprint(config)
   return {
     name: config.name, sport: config.sport, maxParticipants: config.participants,
-    conferenceCount: 1, leaguesPerConference: plan.stages[0]!.leagueCount,
+    conferenceCount: Math.min(plan.stages[0]!.leagueCount, Math.max(1, config.divisions.length)),
+    leaguesPerConference: Math.ceil(plan.stages[0]!.leagueCount / Math.max(1, config.divisions.length)),
     teamsPerLeague: Math.max(...plan.stages[0]!.sizes),
     namingMode: 'commissioner_custom', openingWeekStart: config.startWeek,
     redraftWeek: config.firstCutWeek + 1, eliteRedraftWeek: config.secondCutWeek + 1,
@@ -46,7 +48,7 @@ async function lockBlueprint(tx: Prisma.TransactionClient, tournamentId: string,
   const shell = await tx.tournamentShell.findUnique({ where: { id: tournamentId } })
   if (!shell) throw new BlueprintOperationError('Tournament plan not found.', 404)
   if (ownerOnly && shell.commissionerId !== userId) throw new BlueprintOperationError('Only the owner can manage tournament staff.', 403)
-  if (shell.status !== 'blueprint' && !(allowPublished && shell.status === 'rules_published')) throw new BlueprintOperationError('Rules can only be edited while this tournament is a plan.', 409)
+  if (shell.status !== 'blueprint' && !(allowPublished && ['rules_published', 'complete'].includes(shell.status))) throw new BlueprintOperationError('Rules can only be edited while this tournament is a plan.', 409)
   const updatedAt = new Date(Math.max(Date.now(), shell.updatedAt.getTime() + 1))
   const lock = await tx.tournamentShell.updateMany({
     where: { id: tournamentId, status: shell.status, updatedAt: shell.updatedAt },
@@ -97,13 +99,13 @@ export async function updateSeasonBlueprint(userId: string, tournamentId: string
 export async function setBlueprintStaff(userId: string, tournamentId: string, username: string, role: BlueprintStaffRole) {
   return prisma.$transaction(async tx => {
     const { shell } = await lockBlueprint(tx, tournamentId, userId, true, true)
+    if (!await latestConfig(tx, tournamentId)) throw new BlueprintOperationError('Tournament plan not found.', 404)
     const assignee = await tx.appUser.findFirst({
       where: { username: { equals: username, mode: 'insensitive' } }, select: { id: true },
     })
     if (!assignee) throw new BlueprintOperationError('AllFantasy username not found.', 404)
     if (assignee.id === shell.commissionerId) throw new BlueprintOperationError('The owner already has full access.', 409)
-    // Planning roles deliberately do not grant live broadcast, advancement or delegation.
-    const permissions = { role, canEditSettings: role === 'co_commissioner', canBroadcast: false, canAdvance: false }
+    const permissions = { role, canEditSettings: role !== 'viewer', canBroadcast: false, canAdvance: false }
     await tx.tournamentShellGrant.upsert({
       where: { tournamentId_userId: { tournamentId, userId: assignee.id } },
       create: { tournamentId, userId: assignee.id, grantedByUserId: userId, ...permissions },
@@ -119,6 +121,7 @@ export async function setBlueprintStaff(userId: string, tournamentId: string, us
 export async function removeBlueprintStaff(userId: string, tournamentId: string, assigneeId: string) {
   return prisma.$transaction(async tx => {
     const { shell } = await lockBlueprint(tx, tournamentId, userId, true, true)
+    if (!await latestConfig(tx, tournamentId)) throw new BlueprintOperationError('Tournament plan not found.', 404)
     if (assigneeId === shell.commissionerId) throw new BlueprintOperationError('The tournament owner cannot be removed.', 409)
     const result = await tx.tournamentShellGrant.deleteMany({ where: { tournamentId, userId: assigneeId } })
     if (result.count > 0) await tx.tournamentAuditLog.create({ data: {
@@ -130,13 +133,13 @@ export async function removeBlueprintStaff(userId: string, tournamentId: string,
 
 export async function loadSeasonBlueprint(tournamentId: string, userId: string) {
   const shell = await prisma.tournamentShell.findUnique({ where: { id: tournamentId } })
-  if (!shell || !['blueprint', 'rules_published'].includes(shell.status)) return null
+  if (!shell || !['blueprint', 'rules_published', 'complete'].includes(shell.status)) return null
   const isOwner = shell.commissionerId === userId
   const grant = isOwner ? null : await prisma.tournamentShellGrant.findUnique({
     where: { tournamentId_userId: { tournamentId, userId } },
   })
   if (!isOwner && !grant) return null
-  const publication = shell.status === 'rules_published' ? await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_rules_published' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }) : null
+  const publication = shell.status !== 'blueprint' ? await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_rules_published' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }) : null
   const row = await latestConfig(prisma, tournamentId)
   if (!row) return null
   const grants = isOwner ? await prisma.tournamentShellGrant.findMany({ where: { tournamentId }, orderBy: { createdAt: 'asc' } }) : []
@@ -145,15 +148,28 @@ export async function loadSeasonBlueprint(tournamentId: string, userId: string) 
   }) : []
   const byId = new Map(users.map(u => [u.id, u]))
   const published = publication?.data as { config: unknown; hash: string; sourceRevision: string; calendar: { digest: string; checkedAt: string; regularGames: number; pendingGames: number; excludedGames: unknown[] } } | undefined
-  if (shell.status === 'rules_published' && !published) return null
+  if (shell.status !== 'blueprint' && !published) return null
+  const champion = shell.status === 'complete' ? await prisma.tournamentParticipant.findFirst({ where: { tournamentId, status: 'champion' }, select: { displayName: true } }) : null
+  const plan = buildSeasonBlueprint(published?.config ?? row.data)
+  const late = plan.config.rules?.calendar.draftOverrides && publication ? await prisma.tournamentAuditLog.findMany({
+    where: { tournamentId, action: 'season_draft_deadline_missed' }, select: { data: true }, orderBy: { createdAt: 'asc' },
+  }) : []
+  const missedDrafts = late.flatMap(event => {
+    const data = event.data as { stage?: number; key?: string; completeBy?: string } | null
+    return data?.stage && data.key && data.completeBy ? [{ stage: data.stage, key: data.key, completeBy: data.completeBy }] : []
+  })
   return {
-    ...buildSeasonBlueprint(published?.config ?? row.data), tournamentId, revision: publication?.id ?? row.id, isOwner,
+    ...plan, tournamentId, revision: publication?.id ?? row.id, isOwner,
+    ...(missedDrafts.length ? { missedDrafts } : {}),
     ...(publication && published ? { publication: { id: publication.id, hash: published.hash, sourceRevision: published.sourceRevision, calendarDigest: published.calendar.digest, publishedAt: publication.createdAt.toISOString(), checkedAt: published.calendar.checkedAt, regularGames: published.calendar.regularGames, pendingGames: published.calendar.pendingGames, excludedGames: published.calendar.excludedGames.length } } : {}),
+    ...(shell.currentRoundNumber ? { currentStage: shell.currentRoundNumber } : {}),
+    ...(champion ? { championName: champion.displayName } : {}),
     canEditSettings: shell.status === 'blueprint' && can({ userId, commissionerId: shell.commissionerId, grant }, 'editSettings'),
+    canReviewRecovery: isOwner || isSeasonLiveStaff(grant),
     staff: grants.map(g => ({
       userId: g.userId, username: byId.get(g.userId)?.username ?? '',
       displayName: byId.get(g.userId)?.displayName || byId.get(g.userId)?.username || 'Unavailable account',
-      role: g.canEditSettings ? 'co_commissioner' as const : 'viewer' as const,
+      role: isSeasonLiveStaff(g) ? 'live_co_commissioner' as const : g.canEditSettings ? 'co_commissioner' as const : 'viewer' as const,
     })),
   }
 }
@@ -177,13 +193,15 @@ export async function publishSeasonRules(userId: string, tournamentId: string, r
     throw new BlueprintOperationError('The tournament rules have already been published.', 409)
   }
   if (plan.revision !== revision) throw new BlueprintOperationError('The rules changed. Reload the latest plan.', 409)
+  if (plan.stages.some(stage => stage.sizes.some(size => size < 8 || size > 14))) {
+    throw new BlueprintOperationError('Every league must have 8–14 entrants. Edit the plan and select configurable qualification.', 409)
+  }
   const calendar = await checkBlueprintCalendar(userId, tournamentId, revision)
   if (calendar.digest !== digest) throw new BlueprintOperationError('The provider schedule changed. Check and review the calendar again.', 409)
   if (!calendar.ready) throw new BlueprintOperationError('Calendar has unresolved blockers: ' + calendar.blockers.join(' '), 409)
   if (calendar.excludedGames.length && !acceptExcludedGames) throw new BlueprintOperationError('Acknowledge games excluded by scoring gaps before publication.', 409)
   if (calendar.pendingGames && !acceptPendingGames) throw new BlueprintOperationError('Acknowledge pending NBA Cup-dependent games before publication.', 409)
-  const openingDraft = plan.config.rules!.calendar.drafts.find(d => d.stage === 1)!
-  if (Date.parse(openingDraft.startsAt) <= Date.now()) throw new BlueprintOperationError('The opening draft is already in the past. Update the calendar before publication.', 409)
+  if (Date.parse(earliestOpeningDraft(plan.config)) <= Date.now()) throw new BlueprintOperationError('The opening draft is already in the past. Update the calendar before publication.', 409)
   const hash = seasonContractHash({ config: plan.config, calendarDigest: calendar.digest, acceptExcludedGames, acceptPendingGames })
   return prisma.$transaction(async tx => {
     const { updatedAt } = await lockBlueprint(tx, tournamentId, userId, true)

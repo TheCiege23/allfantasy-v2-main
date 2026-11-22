@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
+import { useMessages } from '@/components/i18n/useMessages'
+import { matchupPulseRefreshMessages } from '@/lib/core-app/messages/matchupPulseRefresh'
 
 /**
  * Keeps "Where you stand" current while games are being played.
@@ -34,7 +36,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
 
-export type MatchupPulseRefreshProps = {
+type MatchupPulseRefreshProps = {
   /**
    * A starter on screen has a game in progress right now, so the numbers can move within seconds —
    * the 20s cadence. Not "starters still to play": that held 20s from Thursday to Monday.
@@ -57,9 +59,8 @@ const KICKOFF_TIMER_MAX_MS = 6 * 60 * 60 * 1000
 export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: MatchupPulseRefreshProps) {
   const router = useRouter()
   /* Status words in the reader's language — this sits on both matchup screens (2026-10-03). */
-  const { language } = useOptionalLanguage()
-  const es = language === 'es'
-  const buttonLabel = label ?? (es ? 'Actualizar tu posición' : 'Refresh where you stand')
+  const m = useMessages(matchupPulseRefreshMessages)
+  const buttonLabel = label ?? m.refreshLabel
   const [pending, startTransition] = useTransition()
 
   /*
@@ -120,6 +121,17 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
     startTransition(() => router.refresh())
   }, [router])
 
+  /* Timer- and visibility-driven refreshes only: after a deploy one would reload the page. */
+  const backgroundRefresh = useCallback(() => {
+    void refreshInBackground(() => {
+      if (!pendingRef.current) refresh()
+    })
+  }, [refresh])
+
+  useEffect(() => {
+    void primeDeployBaseline()
+  }, [])
+
   useEffect(() => {
     const period = inPlay ? LIVE_POLL_MS : IDLE_POLL_MS
 
@@ -141,7 +153,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
        */
       if (document.visibilityState !== 'visible') return
       if (pendingRef.current) return
-      refresh()
+      backgroundRefresh()
     }
 
     const id = window.setInterval(tick, period)
@@ -152,7 +164,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       // tabs does not fire a portfolio read every time.
       if (pendingRef.current) return
       if (refreshedAt != null && Date.now() - refreshedAt < period) return
-      refresh()
+      backgroundRefresh()
     }
     document.addEventListener('visibilitychange', onVisible)
 
@@ -160,7 +172,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       window.clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [inPlay, refresh, refreshedAt])
+  }, [inPlay, backgroundRefresh, refreshedAt])
 
   /*
    * Kickoff. While idle, one refresh just after the next starter's game begins, so the board turns
@@ -194,14 +206,14 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
       <span className="af-mp-live-dot" aria-hidden />
       <span className="af-mp-live-text af-num">
         {pending
-          ? es ? 'actualizando' : 'updating'
+          ? m.updating
           : age == null
             ? inPlay
-              ? es ? 'en vivo' : 'live'
-              : es ? 'sin comenzar' : 'not started'
+              ? m.live
+              : m.notStarted
             : age < 60
-              ? es ? `hace ${age} s` : `${age}s ago`
-              : es ? `hace ${Math.floor(age / 60)} min` : `${Math.floor(age / 60)}m ago`}
+              ? m.secondsAgo(age)
+              : m.minutesAgo(Math.floor(age / 60))}
       </span>
       {/*
         The manual control is not decoration. The automatic cadence is two
@@ -221,4 +233,3 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: Mat
   )
 }
 
-export default MatchupPulseRefresh

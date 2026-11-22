@@ -18,6 +18,7 @@ import {
 
 const completeDraftSessionMock = vi.fn(async () => true)
 const postDraftPickChatEventMock = vi.fn(async () => {})
+const signRookieContractForPickMock = vi.fn(async (..._args: unknown[]) => null)
 const recordTrendSignalMock = vi.fn(async () => {})
 const resolveTrendPlayerIdsMock = vi.fn(async (lookups: unknown[]) => lookups.map(() => null as string | null))
 const leagueLifecycleTransitionMock = vi.fn(async () => {})
@@ -42,6 +43,9 @@ const ctx = vi.hoisted(() => {
 
   const store = {
     picks: [] as PickRow[],
+    nba: false,
+    rights: [] as Array<{ id: string; leagueId: string; rosterId: string; devyPlayerId: string; state: string }>,
+    failRightsWrite: false,
     /** When set, `tx.draftSession.findUnique` returns these picks (simulates race / inner lock view). */
     transactionLockedPicksOverride: null as PickRow[] | null,
     session: {
@@ -124,6 +128,10 @@ const ctx = vi.hoisted(() => {
           return { ...store.session }
         }),
       },
+      devyRights: {
+        findFirst: vi.fn(async ({ where }: any) => store.rights.find(r => r.leagueId === where.leagueId && r.devyPlayerId === where.devyPlayerId) ?? null),
+        create: vi.fn(async ({ data }: any) => { if (store.failRightsWrite) throw new Error('rights write failed'); const row = { ...data, id: 'right-1' }; store.rights.push(row); return row }),
+      },
       draftPick: {
         update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
           const row = store.picks.find(p => p.id === where.id)
@@ -147,6 +155,8 @@ const ctx = vi.hoisted(() => {
   }
 
   const prisma = {
+    // No season rosters yet, so the rostered-player guard (rosteredPlayerGuard.ts) has nothing to refuse.
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     draftSession: {
       // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
       findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
@@ -161,7 +171,8 @@ const ctx = vi.hoisted(() => {
     league: {
       findUnique: vi.fn(async () => ({
         lifecycleState: 'drafting',
-        sport: 'NFL',
+        sport: store.nba ? 'NBA' : 'NFL',
+        leagueVariant: store.nba ? 'merged_devy_c2c' : null,
         userId: 'commissioner-1',
       })),
     },
@@ -169,14 +180,15 @@ const ctx = vi.hoisted(() => {
       findFirst: vi.fn(async () => null),
     },
     $transaction: vi.fn(async (fn: (tx: ReturnType<typeof buildTx>) => Promise<unknown>) => {
-      const snapshot = structuredClone({ picks: store.picks, session: store.session })
-      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; throw e }
+      const snapshot = structuredClone({ picks: store.picks, session: store.session, rights: store.rights })
+      try { return await fn(buildTx()) } catch (e) { store.picks = snapshot.picks; store.session = snapshot.session; store.rights = snapshot.rights; throw e }
     }),
   }
 
   function resetStore() {
     store.season = false; store.transactionVersionOverride = null; store.rejectVersionClaim = false
     store.picks = []
+    store.nba = false; store.rights = []; store.failRightsWrite = false; store.session.c2cConfig = null; store.session.devyConfig = null
     store.transactionLockedPicksOverride = null
     store.pickIdSeq = 0
     store.session.status = 'in_progress'
@@ -228,18 +240,30 @@ vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
   getSalaryCapConfig: vi.fn(async () => null),
 }))
 
+// submitPick signs through signRookieContractForPick. A mock without it made the call throw inside
+// submitPick's non-fatal try/catch, so the suite stayed green while asserting nothing about it.
 vi.mock('@/lib/salary-cap/RookieContractService', () => ({
-  assignRookieContract: vi.fn(async () => {}),
+  signRookieContractForPick: (...args: unknown[]) => signRookieContractForPickMock(...args),
 }))
 
 vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({
   postDraftPickChatEvent: (...args: unknown[]) => postDraftPickChatEventMock(...args),
 }))
 
+const resolveServerRookieStatusMock = vi.hoisted(() => vi.fn(async (): Promise<boolean | null> => null))
+vi.mock('@/lib/live-draft-engine/serverRookieStatus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/live-draft-engine/serverRookieStatus')>()),
+  resolveServerRookieStatus: resolveServerRookieStatusMock,
+}))
 vi.mock('@/server/services/leagueLifecycleService', () => ({
   transitionLeagueState: (...args: unknown[]) => leagueLifecycleTransitionMock(...args),
   getLeagueLifecycleState: () => 'drafting',
 }))
+
+const verifyNbaPickMock = vi.hoisted(() => vi.fn(async () => true))
+vi.mock('@/lib/devy/verifyNcaabDraftPick', () => ({ verifyNcaabCollegeDraftPick: verifyNbaPickMock }))
+vi.mock('@/lib/merged-devy-c2c/C2CLeagueConfig', async (load) => ({ ...(await load<typeof import('@/lib/merged-devy-c2c/C2CLeagueConfig')>()), isC2CLeague: vi.fn(async () => ctx.store.nba) }))
+vi.mock('@/lib/devy/DevyLeagueConfig', async (load) => ({ ...(await load<typeof import('@/lib/devy/DevyLeagueConfig')>()), isDevyLeague: vi.fn(async () => false) }))
 
 const { submitPick } = await import('@/lib/live-draft-engine/PickSubmissionService')
 
@@ -248,6 +272,32 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     ctx.resetStore()
     vi.clearAllMocks()
     completeDraftSessionMock.mockResolvedValue(true)
+  })
+
+  it.each(['user', 'auto', 'commissioner'] as const)('creates verified college ownership atomically for %s picks', async (source) => {
+    ctx.store.nba = true
+    const result = await submitPick({ leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', source, expectedOverall: 1 })
+    expect(result.success).toBe(true)
+    expect(ctx.store.picks[0]).toMatchObject({ playerId: 'espn:ncaab:1', assetType: 'c2c_college', pickMetadata: { draftCollegeRightsId: 'right-1' } })
+    expect(ctx.store.rights).toMatchObject([{ leagueId: 'league-1', rosterId: 'roster-a', devyPlayerId: 'espn:ncaab:1', state: 'COLLEGE_ACTIVE' }])
+  })
+  it('rejects unverified college IDs and rolls back when rights cannot be created', async () => {
+    ctx.store.nba = true
+    verifyNbaPickMock.mockResolvedValueOnce(false)
+    const pick = { leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', expectedOverall: 1 }
+    expect((await submitPick(pick)).success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+    ctx.store.failRightsWrite = true
+    await expect(submitPick(pick)).rejects.toThrow('rights write failed')
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(ctx.store.rights).toHaveLength(0)
+  })
+  it('does not allow college picks outside configured college rounds', async () => {
+    ctx.store.nba = true
+    ;(ctx.store.session as any).c2cConfig = { enabled: true, collegeRounds: [2] }
+    const result = await submitPick({ leagueId: 'league-1', playerName: 'College Guard', position: 'G', playerId: 'espn:ncaab:1', rosterId: 'roster-a', expectedOverall: 1 })
+    expect(result.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
   })
 
   it('successful pick creates DraftPick and resets timerEndAt + increments version', async () => {
@@ -277,6 +327,10 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     expect(ctx.store.session.timerEndAt!.getTime()).toBeGreaterThan(Date.now())
     expect(ctx.store.session.version).toBe(6)
     expect(completeDraftSessionMock).not.toHaveBeenCalled()
+    // The committed pick asks to sign its rookie contract (the signer decides whether the league signs one).
+    expect(signRookieContractForPickMock).toHaveBeenLastCalledWith({
+      leagueId: 'league-1', rosterId: 'roster-a', playerId: 'player-1', playerName: 'Josh Allen', position: 'QB', overall: 1,
+    })
   })
 
   /**
@@ -486,6 +540,68 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     vi.useRealTimers()
   })
 
+  it('absent-manager rule: the next team gets the short clock after two auto-picks in a row', async () => {
+    const { getDraftUISettingsForLeague } = await import('@/lib/draft-defaults/DraftUISettingsResolver')
+    const row = (overall: number, rosterId: string, source: string) => ({
+      id: `seed-${overall}`, sessionId: 'session-1', overall, round: Math.ceil(overall / 2), slot: rosterId === 'roster-a' ? 1 : 2,
+      rosterId, playerName: `Seed ${overall}`, position: 'RB', source,
+    })
+    const frozen = new Date('2026-07-04T12:00:00.000Z')
+    const pickFour = async (rule: { enabled: boolean; missedPicks: number; seconds: number }) => {
+      ctx.resetStore()
+      Object.assign(ctx.store.session, { rounds: 4, teamCount: 2, draftType: 'linear', thirdRoundReversal: false })
+      ctx.store.picks = [row(1, 'roster-a', 'auto'), row(2, 'roster-b', 'user'), row(3, 'roster-a', 'auto')]
+      vi.mocked(getDraftUISettingsForLeague).mockResolvedValueOnce({ tradedPickOwnerNameRedEnabled: false, tradedPickColorModeEnabled: false, absentManagerRule: rule } as never)
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Fourth', position: 'WR', rosterId: 'roster-b', playerId: 'p4', expectedOverall: 4 })
+      expect(r).toMatchObject({ success: true })
+      return ctx.store.session.timerEndAt!.getTime() - frozen.getTime()
+    }
+    vi.useFakeTimers()
+    vi.setSystemTime(frozen)
+    try {
+      // Linear, 2 teams: pick 5 is roster-a, whose last two picks were both auto-picked.
+      expect(await pickFour({ enabled: true, missedPicks: 2, seconds: 15 })).toBe(15_000)
+      expect(await pickFour({ enabled: true, missedPicks: 3, seconds: 15 })).toBe(90_000)
+      expect(await pickFour({ enabled: false, missedPicks: 2, seconds: 15 })).toBe(90_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  /*
+   * An OFFLINE draft (the commissioner enters every pick) ran a 90-second clock and auto-drafted a real
+   * manager when it expired — found on staging. Every automatic picker submits with source 'auto'.
+   */
+  describe('offline draft', () => {
+    const offline = async () => {
+      const { getDraftUISettingsForLeague } = await import('@/lib/draft-defaults/DraftUISettingsResolver')
+      vi.mocked(getDraftUISettingsForLeague).mockResolvedValueOnce({ tradedPickOwnerNameRedEnabled: false, tradedPickColorModeEnabled: false, executionMode: 'offline' } as never)
+    }
+
+    it('refuses an automatic pick and writes nothing', async () => {
+      await offline()
+      const timerBefore = ctx.store.session.timerEndAt
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r).toMatchObject({ success: false, code: 'DRAFT_PICK_OFFLINE_DRAFT' })
+      expect(ctx.store.picks).toHaveLength(0)
+      expect(ctx.store.session.timerEndAt).toBe(timerBefore)
+    })
+
+    it("takes the commissioner pick and starts no clock for the next team", async () => {
+      await offline()
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'commissioner', commissionerOverride: true, expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.picks).toHaveLength(1)
+      expect(ctx.store.session.timerEndAt).toBeNull()
+    })
+
+    it('CONTROL: a live draft still auto-picks and starts the next clock', async () => {
+      const r = await submitPick({ leagueId: 'league-1', playerName: 'Josh Allen', position: 'QB', playerId: 'player-1', rosterId: 'roster-a', source: 'auto', expectedOverall: 1 })
+      expect(r.success).toBe(true)
+      expect(ctx.store.session.timerEndAt).toBeInstanceOf(Date)
+    })
+  })
+
   it('traded pick: on-clock owner is new roster; wrong roster rejected', async () => {
     ctx.store.session.tradedPicks = [
       {
@@ -525,6 +641,50 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
   })
 })
 
+
+describe('rookies-only drafts: the server decides, for manager picks and autopicks', () => {
+  beforeEach(() => {
+    ctx.resetStore()
+    vi.clearAllMocks()
+    ctx.store.session.playerPool = 'rookies_only'
+    resolveServerRookieStatusMock.mockResolvedValue(false)
+  })
+
+  const vetPick = (source: 'user' | 'auto' | 'commissioner') => ({
+    leagueId: 'league-1',
+    playerName: 'Veteran Star',
+    position: 'QB',
+    playerId: 'vet-1',
+    rosterId: 'roster-a',
+    source,
+    expectedOverall: 1,
+  })
+
+  it('refuses a manager pick of a veteran, with no client rookie hint', async () => {
+    const r = await submitPick(vetPick('user'))
+    expect(r.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+    expect(resolveServerRookieStatusMock).toHaveBeenCalledWith({ leagueId: 'league-1', playerId: 'vet-1', playerName: 'Veteran Star' })
+  })
+
+  it('refuses an autopick of a veteran too', async () => {
+    const r = await submitPick(vetPick('auto'))
+    expect(r.success).toBe(false)
+    expect(ctx.store.picks).toHaveLength(0)
+  })
+
+  it('a commissioner pick keeps its override and never asks', async () => {
+    const r = await submitPick(vetPick('commissioner'))
+    expect(r.success).toBe(true)
+    expect(resolveServerRookieStatusMock).not.toHaveBeenCalled()
+  })
+
+  it('an unknown verdict keeps the previous behaviour', async () => {
+    resolveServerRookieStatusMock.mockResolvedValue(null)
+    const r = await submitPick(vetPick('auto'))
+    expect(r.success).toBe(true)
+  })
+})
 
 describe('tournament pick versus control version fencing', () => {
   beforeEach(() => { ctx.resetStore(); vi.clearAllMocks(); ctx.store.season = true })

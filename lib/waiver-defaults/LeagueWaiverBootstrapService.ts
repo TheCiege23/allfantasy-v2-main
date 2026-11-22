@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { getWaiverDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import type { SportType } from '@/lib/sport-defaults/types'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
+import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 
 export interface LeagueWaiverBootstrapResult {
   leagueId: string
@@ -95,12 +96,23 @@ export async function bootstrapLeagueWaiverSettings(leagueId: string): Promise<L
     lockType: (waiverDef.game_lock_behavior as string) ?? null,
     instantFaAfterClear: waiverDef.free_agent_unlock_behavior === 'instant',
   }
+  // Daily sports run on every default day (NBA [1,3,5] …); single-day sports (NFL) write no list.
+  const defaultDaysList = defaultProcessingDaysList(waiverDef.processing_days)
 
   if (existing) {
     const patch: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(defaultFields)) {
       const current = (existing as Record<string, unknown>)[key]
       if (current === undefined || current === null) patch[key] = value
+    }
+    // Only alongside a day that is itself being filled from defaults — never over a commissioner's day.
+    const existingRow = existing as Record<string, unknown>
+    if (
+      defaultDaysList &&
+      'processingDayOfWeek' in patch &&
+      (existingRow.processingDays === undefined || existingRow.processingDays === null)
+    ) {
+      patch.processingDays = defaultDaysList
     }
     if (Object.keys(patch).length === 0) {
       return {
@@ -123,6 +135,7 @@ export async function bootstrapLeagueWaiverSettings(leagueId: string): Promise<L
     data: {
       leagueId,
       ...defaultFields,
+      ...(defaultDaysList ? { processingDays: defaultDaysList } : {}),
     },
   })
 

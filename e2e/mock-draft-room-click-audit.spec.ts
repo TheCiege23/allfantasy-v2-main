@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 import { MOCK_DRAFT_ROSTER_HINT_DELAY_MS } from '@/lib/draft-room/mock-draft-ui-constants'
+import { answerCspReportsInBrowser } from './helpers/csp-report-sink'
+
+// See the helper: dev-mode CSP reports otherwise saturate the shared `next dev`.
+test.beforeEach(async ({ context }) => {
+  await answerCspReportsInBrowser(context)
+})
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -231,9 +237,9 @@ test.describe('@mock-draft-room click audit', () => {
       await assistantRefresh.click()
       await expect(page.getByTestId('mock-draft-ai-assistant-ask-chimmy')).toHaveAttribute('href', /insightType=draft/)
     }
-    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/AI ADP On/i)
+    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/Chimmy ADP On/i)
     await page.getByTestId('mock-draft-ai-adp-toggle').click()
-    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/AI ADP Off/i)
+    await expect(page.getByTestId('mock-draft-ai-adp-toggle')).toHaveText(/Chimmy ADP Off/i)
 
     await expect(page.getByTestId('mock-draft-chat-ai-suggestion')).toContainText('Chimmy:')
     await page.getByTestId('mock-draft-chat-input').fill('Let us prioritize value.')

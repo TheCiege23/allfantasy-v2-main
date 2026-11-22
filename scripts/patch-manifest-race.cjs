@@ -32,8 +32,19 @@ const PLUGIN_REL = path.join(
   'pages-manifest-plugin.js',
 )
 
-// The exact unpatched shape shipped by Next.js ≥14.
-const ORIGINAL = `        const writeMergedManifest = async (manifestPath, entries)=>{\n            await _promises.default.mkdir(_path.default.dirname(manifestPath), {\n                recursive: true\n            });\n            await _promises.default.writeFile(manifestPath, JSON.stringify({\n                ...await _promises.default.readFile(manifestPath, "utf8").then((res)=>JSON.parse(res)).catch(()=>({})),\n                ...entries\n            }, null, 2));\n        };`
+// The exact unpatched shape shipped by Next.js 14.
+const ORIGINAL_DOUBLE_QUOTED = `        const writeMergedManifest = async (manifestPath, entries)=>{\n            await _promises.default.mkdir(_path.default.dirname(manifestPath), {\n                recursive: true\n            });\n            await _promises.default.writeFile(manifestPath, JSON.stringify({\n                ...await _promises.default.readFile(manifestPath, "utf8").then((res)=>JSON.parse(res)).catch(()=>({})),\n                ...entries\n            }, null, 2));\n        };`
+
+/*
+ * ⚠ NEXT 15.5 SHIPS THE SAME CODE WITH `'utf8'` IN SINGLE QUOTES, and that one
+ * character was enough for every install and every production build to print
+ * "upstream plugin shape changed" and skip the patch. Found 2026-11-19 on 15.5.29.
+ * Both spellings are accepted; anything else still skips loudly.
+ */
+const ORIGINAL_SHAPES = [
+  ORIGINAL_DOUBLE_QUOTED,
+  ORIGINAL_DOUBLE_QUOTED.replace('"utf8"', "'utf8'"),
+]
 
 // An older revision of the patch (mkdir outside the lock — now superseded).
 const OLD_PATCHED = `        const writeMergedManifest = async (manifestPath, entries)=>{\n            const lockPath = manifestPath + ".lock";\n            const acquireManifestLock = async ()=>{\n                for(let attempt = 0; attempt < 400; attempt++){\n                    try {\n                        return await _promises.default.open(lockPath, "wx");\n                    } catch (error) {\n                        if (!error || error.code !== "EEXIST") throw error;\n                        await new Promise((resolve)=>setTimeout(resolve, 25));\n                    }\n                }\n                throw new Error("__AF_MANIFEST_LOCK_PATCH__: timed out acquiring Next manifest lock for " + manifestPath);\n            };\n            const lockHandle = await acquireManifestLock();\n            try {\n                await _promises.default.mkdir(_path.default.dirname(manifestPath), {\n                    recursive: true\n                });\n                await _promises.default.writeFile(manifestPath, JSON.stringify({\n                    ...await _promises.default.readFile(manifestPath, "utf8").then((res)=>JSON.parse(res)).catch(()=>({})),\n                    ...entries\n                }, null, 2));\n            } finally {\n                await lockHandle.close().catch(()=>{});\n                await _promises.default.unlink(lockPath).catch(()=>{});\n            }\n        };`
@@ -69,15 +80,16 @@ function patchManifestRace(repoRoot) {
     return 'already-current'
   }
 
-  if (source.includes(ORIGINAL)) {
-    fs.writeFileSync(pluginPath, source.replace(ORIGINAL, REPLACEMENT))
+  const original = ORIGINAL_SHAPES.find((shape) => source.includes(shape))
+  if (original) {
+    fs.writeFileSync(pluginPath, source.replace(original, () => REPLACEMENT))
     console.log('[patch-manifest-race] Patched Next pages-manifest-plugin manifest merge race')
     return 'patched'
   }
 
   console.warn(
     '[patch-manifest-race] Skipped manifest race patch — upstream plugin shape changed. ' +
-      'This is safe to ignore but may require updating ORIGINAL in scripts/patch-manifest-race.cjs.',
+      'This is safe to ignore but may require updating ORIGINAL_SHAPES in scripts/patch-manifest-race.cjs.',
   )
   return 'skipped-shape-changed'
 }

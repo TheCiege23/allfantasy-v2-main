@@ -11,14 +11,14 @@
  * memo turns it on with `enabled: () => true`, or `AF_TTL_MEMO_IN_TESTS=1` for a module's own.
  */
 
-export interface TtlMemo<T> {
+interface TtlMemo<T> {
   get(key: string): T | undefined
   set(key: string, value: T): void
   clear(): void
   readonly size: number
 }
 
-export interface TtlMemoOptions {
+interface TtlMemoOptions {
   ttlMs: number | (() => number)
   /** Hard cap on entries; the oldest-inserted is dropped first. */
   maxEntries: number
@@ -62,5 +62,25 @@ export function createTtlMemo<T>(options: TtlMemoOptions): TtlMemo<T> {
     get size() {
       return store.size
     },
+  }
+}
+
+/**
+ * Keep a plain module-level Map bounded, for caches that cannot become a `TtlMemo` because a caller
+ * reads them directly (an age readout, a per-key invalidation). Call it immediately before each `set`.
+ *
+ * Measured 2026-10-24: several caches on the cron worker checked their TTL only on READ, so a key
+ * that was never read again (a finished game, a stale image URL, a league nobody reopened) stayed in
+ * memory for the life of the process. This does nothing until the map reaches `maxEntries`; then it
+ * drops every expired entry and, if that was not enough, the oldest-inserted down to 90% of the cap,
+ * so the sweep cost is amortised rather than paid on every write.
+ */
+export function boundMap<V>(map: Map<string, V>, isExpired: (value: V) => boolean, maxEntries: number): void {
+  if (map.size < maxEntries) return
+  for (const [key, value] of map) if (isExpired(value)) map.delete(key)
+  const target = Math.floor(maxEntries * 0.9)
+  for (const key of map.keys()) {
+    if (map.size <= target) break
+    map.delete(key)
   }
 }

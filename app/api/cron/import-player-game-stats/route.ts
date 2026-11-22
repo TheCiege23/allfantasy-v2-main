@@ -19,6 +19,8 @@
  *   maxWeeks — cap weeks per run (default 6)
  *   limit    — cap player rows per week (smoke tests; such weeks stay `partial` by design)
  *   dryRun   — "true" to fetch/count without writing
+ *   gameDay  — "1" re-imports the week with a game in play, and does nothing when none is. See the
+ *              block that reads it.
  *
  *   multiSport — "1" switches to the Rolling Insights date sweep for MLB / NBA / NHL / NCAAB /
  *                SOCCER and skips the whole NFL path above. See the block that reads it.
@@ -34,6 +36,7 @@ import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { findNflWeekInPlay } from "@/lib/player-game-stats/nflWeekInPlay"
 import {
   dateRange,
   ingestRollingInsightsGameLogs,
@@ -41,8 +44,13 @@ import {
 } from "@/lib/sports-data/rollingInsightsGameLogs"
 import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
 import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
+import { pendingStatCorrectionDates } from "@/lib/sports-data/statCoverage"
 import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/riSeasonSchedule"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
+import { isDailyFormSport } from "@/lib/projections/dailySportForm"
+import { writeDailySportFormCache } from "@/lib/projections/dailySportFormStore"
+import { enrichOfficialNhlGameWinningGoals } from "@/lib/nhl-scoring/officialGameWinningGoalsIngest"
+import { enrichOfficialNhlGoalieGameStats } from "@/lib/nhl-scoring/officialGoalieGameStatsIngest"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -67,6 +75,12 @@ const RUN_BUDGET_MS = 240_000
  * freshness monitor report CONFIG ("no rows for job_name") forever.
  */
 const JOB_MULTI_SPORT = "cron-import-player-game-stats-multisport"
+/**
+ * Heartbeat identity for the `?gameDay=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. One row per fire, including the fires that find no game in play
+ * and call nobody: outside game windows that is every fire, and it is the healthy state.
+ */
+const JOB_GAME_DAY = "cron-import-player-game-stats-game-day"
 const DEFAULT_MAX_WEEKS = 6
 
 /**
@@ -81,7 +95,14 @@ const DEFAULT_MAX_WEEKS = 6
  * all — measured `fetched: 0`". It does: NCAAFB is on the SECOND RI account (`RSC_TOKEN2`), and a
  * probe with only the first token reads as "no college". See the two-account warning in CLAUDE.md.
  */
-const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "SOCCER"] as const
+/*
+ * NCAAF joined 2026-11-21: CFBD stopped answering on 2026-11-10 (monthly quota), and the C2C roster
+ * page needs college lines the same day. Rolling Insights rows (`source: rolling_insights_live`) sit
+ * BESIDE the CFBD rows rather than replacing them: they are keyed on the identity id, not the CFBD
+ * athlete id, so the CFBD-keyed NCAAF readers never see them. This nightly pass reconciles what the
+ * live tick wrote during the games.
+ */
+const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "NCAAF", "SOCCER"] as const
 
 type WeekOutcome = ImportWeekReport | {
   season: number
@@ -144,7 +165,12 @@ async function handle(req: NextRequest) {
       if (fromDate || toDate || budget.exhausted() || !candidates.includes(sport)) return
       try {
         // Baseball is a calendar-year season. College basketball and soccer span two years.
-        const season = sport === "MLB" ? new Date().getUTCFullYear() : currentScheduleSeason()
+        const now = new Date()
+        // Soccer's next season can be published in June. Verify it before August so its
+        // 38 gameweeks are ready when dynasty leagues roll forward.
+        const season = sport === "MLB" ? now.getUTCFullYear()
+          : sport === "SOCCER" ? now.getUTCFullYear() - (now.getUTCMonth() < 5 ? 1 : 0)
+            : currentScheduleSeason()
         const result = await syncRiSeasonSchedule({ sport, season, db: prisma as never })
         schedule = { ...(schedule ?? {}), [sport]: result }
       } catch (err) {
@@ -158,6 +184,20 @@ async function handle(req: NextRequest) {
     // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
     await syncSchedule("NCAAB")
 
+    // NBA C2C uses college boxes only for saved campus lineups. Reserve a small part of the
+    // existing pass, and report a provider refusal without retrying elsewhere in this run.
+    let nbaCampus: unknown = null
+    if (!dryRun && !fromDate && !toDate && candidates.includes("NCAAB") && budget.remainingMs() > 45_000) {
+      try {
+        const { refreshActiveNbaCampusWeeks } = await import("@/lib/c2c/refreshActiveNbaCampusWeeks")
+        nbaCampus = await refreshActiveNbaCampusWeeks(prisma, { now: new Date(), deadlineAt: Date.now() + Math.min(30_000, budget.remainingMs() - 15_000), maxEvents: 20 })
+      } catch (err) { nbaCampus = { error: String(err).slice(0, 200) } }
+    }
+
+    // Three verified soccer slates define future gameweeks and keep the current
+    // finalizer complete. Fetch them before the stat sweep spends the budget.
+    await syncSchedule("SOCCER")
+
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
       if (!explicit && budget.exhausted()) {
@@ -167,13 +207,51 @@ async function handle(req: NextRequest) {
       const dates =
         fromDate && toDate ? dateRange(fromDate, toDate) : recentDates(days)
       try {
+        const correctionDates = s === "NBA" && !fromDate && !toDate && !dryRun
+          ? await pendingStatCorrectionDates(prisma, s)
+          : []
         perSport[s] = await ingestRollingInsightsGameLogs({
           sport: s,
-          dates,
+          dates: [...new Set([...dates, ...correctionDates])],
+          persistSchedule: s === "NHL" || s === "NBA",
           shouldStop: () => budget.exhausted(),
         })
       } catch (err) {
         perSport[s] = { error: String(err).slice(0, 200) }
+      }
+
+      if (s === "NHL" && !budget.exhausted()) {
+        try {
+          // Two fresh dates plus one rotating older date cover late official
+          // corrections without consuming another cron slot or full-season scan.
+          const older = recentDates(14).slice(3)
+          const bonusDates = fromDate && toDate ? dates : [
+            ...dates.slice(0, 2), older[Math.floor(Date.now() / 86_400_000) % older.length]!,
+          ]
+          const bonus = await enrichOfficialNhlGameWinningGoals({ dates: bonusDates,
+            shouldStop: () => budget.remainingMs() < 50_000 })
+          const result = perSport[s] as Record<string, unknown>
+          result.officialGameWinningGoals = bonus
+          if (bonus.errors.length) result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            ...bonus.errors.map((error) => `official game-winning goals: ${error}`),
+          ]
+          if (budget.remainingMs() >= 50_000) {
+            const goalie = await enrichOfficialNhlGoalieGameStats({ dates: bonusDates,
+              shouldStop: () => budget.remainingMs() < 45_000 })
+            result.officialGoalieGameStats = goalie
+            if (goalie.errors.length) result.errors = [
+              ...((result.errors as string[] | undefined) ?? []),
+              ...goalie.errors.map((error) => `official goalie game stats: ${error}`),
+            ]
+          }
+        } catch (err) {
+          const result = perSport[s] as Record<string, unknown>
+          result.errors = [
+            ...((result.errors as string[] | undefined) ?? []),
+            `official NHL enrichment: ${String(err).slice(0, 180)}`,
+          ]
+        }
       }
 
       /*
@@ -219,21 +297,23 @@ async function handle(req: NextRequest) {
           ;(perSport[s] as Record<string, unknown>).cache = { error: String(err).slice(0, 200) }
         }
       }
-    }
 
-    /*
-     * THE NCAAB SEASON SCHEDULE, for the week finalizer (lib/sports-data/riSeasonSchedule.ts):
-     * every SportsGame schedule for college basketball is incomplete, so a week there cannot be
-     * judged "all games final". One RI call per scheduled run; skipped for an explicit date-range
-     * backfill. It runs before the stat sweep can exhaust the budget. Folded into this daily RI pass rather than a new route or
-     * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
-     * publishes it — writes nothing and is simply reported.
-     *
-     * SOCCER rides the same pass (three calls: EPL, La Liga, Serie A — all or nothing, see
-     * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
-     * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
-     */
-    await syncSchedule("SOCCER")
+      /*
+       * THIRD WRITE: the AF projection / position-rank lines the waiver and lineup screens read
+       * (lib/projections/dailySportFormStore.ts), rebuilt from the rows the sweep above just
+       * refreshed. Here rather than in a new cron for the same reason as the cache above — the
+       * schedule is capped — and because a derived table refreshed by the run that writes its
+       * input cannot fall a day behind it. A budget-skipped sport keeps yesterday's lines.
+       */
+      if (!budget.exhausted() && isDailyFormSport(s)) {
+        try {
+          const form = await writeDailySportFormCache(prisma, s)
+          perSport[s] = { ...((perSport[s] as Record<string, unknown>) ?? {}), form }
+        } catch (err) {
+          perSport[s] = { ...((perSport[s] as Record<string, unknown>) ?? {}), form: { error: String(err).slice(0, 200) } }
+        }
+      }
+    }
 
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
@@ -250,19 +330,25 @@ async function handle(req: NextRequest) {
      * Recorded even when every sport is deferred for budget: a deferral proves the job woke up,
      * which is the whole claim a heartbeat makes.
      */
+    const importErrors = Object.entries(perSport).flatMap(([sport, value]) => {
+      const result = value as { error?: string; errors?: string[] }
+      return [
+        ...(result.error ? [`${sport}: ${result.error}`] : []),
+        ...(result.errors ?? []).map((error) => `${sport}: ${error}`),
+      ]
+    })
     await recordSyncJobRun(
       { jobName: JOB_MULTI_SPORT, jobScope: candidates.join(","), trigger: "cron" },
       {
         rowsWritten: written,
         rowsSkipped: deferred.length,
-        errors: Object.entries(perSport)
-          .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
-          .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+        errors: importErrors,
         metadata: {
           days,
           deferredSports: deferred,
           explicitSport: explicit ?? null,
           schedule,
+          nbaCampus,
           // `season_type` labels riSeasonType.ts could not classify (GAPS N-13). Persisted here
           // because the route's response is read by nobody; an NHL preseason / MLB postseason
           // label we have not seen yet is how that gap gets closed without a probe.
@@ -277,16 +363,48 @@ async function handle(req: NextRequest) {
     )
 
     return NextResponse.json({
-      ok: true,
+      ok: importErrors.length === 0,
       mode: "multiSport",
       provider: "rolling_insights",
       written,
       sports: perSport,
       schedule,
+      nbaCampus,
       deferredForBudget: deferred.length ? deferred : undefined,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
+  }
+
+  /*
+   * GAME-DAY MODE — `?gameDay=1`, every 15 minutes (cron-schedule.json).
+   *
+   * The daily run above imports a week once, at 06:40 UTC, so a Sunday starter's stat line reached
+   * the database on Monday morning — and with it the matchup board's box score and AllFantasy's own
+   * points estimate for a league whose platform sends no player scores (lib/core-app/matchupOwnPoints.ts).
+   *
+   * This mode re-imports the week that has a game in play, and ONLY while one does. The gate reads
+   * the stored schedule; with no game in play it records its heartbeat and returns without the lock,
+   * the season probe or any provider call. With one in play it becomes an explicit-week run of the
+   * ordinary path below: one Sleeper request for the week, the same upsert, the same ledger.
+   */
+  const gameDay = url.searchParams.get("gameDay") === "1"
+  const weekInPlay = gameDay ? await findNflWeekInPlay() : null
+  if (gameDay) {
+    await recordSyncJobRun(
+      { jobName: JOB_GAME_DAY, jobScope: "NFL", trigger: "cron" },
+      { rowsWritten: 0, rowsSkipped: 0, errors: [], metadata: { weekInPlay } },
+      Date.now() - startedAt,
+    )
+    if (!weekInPlay) {
+      return NextResponse.json({
+        ok: true,
+        mode: "gameDay",
+        skipped: true,
+        reason: "no NFL game in play",
+        durationMs: Date.now() - startedAt,
+      })
+    }
   }
 
   // Stale-state sweep BEFORE lock acquisition: a function killed mid-run must not block the
@@ -305,9 +423,11 @@ async function handle(req: NextRequest) {
 
   try {
     const fetcher = new SleeperWeeklyStatsFetcher()
-    const requestedSeason = Number.isFinite(seasonParam) && seasonParam > 2000
-      ? seasonParam
-      : new Date().getUTCFullYear()
+    const requestedSeason = weekInPlay
+      ? weekInPlay.season
+      : Number.isFinite(seasonParam) && seasonParam > 2000
+        ? seasonParam
+        : new Date().getUTCFullYear()
 
     const resolved = await resolveIngestableSeason(requestedSeason, fetcher)
     if (!resolved) {
@@ -318,7 +438,9 @@ async function handle(req: NextRequest) {
       ? Math.floor(maxWeeksParam)
       : DEFAULT_MAX_WEEKS
 
-    const explicitWeek = Number.isFinite(weekParam) && weekParam >= 1 ? Math.floor(weekParam) : null
+    const explicitWeek = weekInPlay
+      ? weekInPlay.week
+      : Number.isFinite(weekParam) && weekParam >= 1 ? Math.floor(weekParam) : null
     const plan = explicitWeek
       ? { missing: [explicitWeek], partial: [] as number[], completed: [] as number[] }
       : await findWeeksNeedingWork(resolved.season)

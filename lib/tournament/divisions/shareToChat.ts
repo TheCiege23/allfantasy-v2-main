@@ -9,7 +9,11 @@
  *   - the image — private chat storage (`putPrivateChatFile` under the league's chat prefix, handed
  *     back as `chatUploadReadUrl`), the same path the chat composer's photo upload takes, so only
  *     league members can open it;
- *   - the post — `createLeagueChatMessage` with a deterministic row id.
+ *   - the post — `createLeagueChatMessage` with a deterministic row id;
+ *   - what happens after a post — the Discord relay (`syncOutboundLeagueChat`) and the "new message in
+ *     your league chat" alert (`queueLeagueChatNotifications`, which honours each member's League chat
+ *     preference), the same two calls `POST /api/league/chat` makes after saving a user message.
+ *     `createLeagueChatMessage` sends neither, so each fires exactly once here.
  *
  * ONCE PER MOMENT: the row id is derived from (tournament, entry, poster, headline). The headline is
  * the moment ("Made the bracket", "Final four", "CHAMPION"…), so a manager can post again when their
@@ -23,13 +27,15 @@ import { createHash, randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
+import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
+import { queueLeagueChatNotifications } from '@/lib/chat-notifications/chatMessageNotifier'
 import { privateChatStorageConfigured, putPrivateChatFile } from '@/lib/chat-core/privateStorage'
 import { chatUploadPrefix, chatUploadReadUrl } from '@/lib/chat-core/chatUploadAccess'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { loadTrophy } from './lifecycle'
 import { buildShareCard, type ShareCard } from './shareCard'
 
-export const SHARE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const SHARE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 
 export class ShareToChatError extends Error {
   constructor(message: string, readonly status: number) {
@@ -38,19 +44,19 @@ export class ShareToChatError extends Error {
   }
 }
 
-export const trophyHref = (tournamentId: string, entryId: string) => `/tournament-trophy/${encodeURIComponent(tournamentId)}?entry=${encodeURIComponent(entryId)}`
+const trophyHref = (tournamentId: string, entryId: string) => `/tournament-trophy/${encodeURIComponent(tournamentId)}?entry=${encodeURIComponent(entryId)}`
 
 /** Deterministic chat row id: one post per poster, entry and moment. */
-export function shareMessageId(tournamentId: string, entryId: string, userId: string, headline: string): string {
+function shareMessageId(tournamentId: string, entryId: string, userId: string, headline: string): string {
   return 'tshare_' + createHash('sha256').update([tournamentId, entryId, userId, headline].join('\u0000')).digest('hex').slice(0, 40)
 }
 
-export function shareCaption(card: ShareCard, tournamentName: string): string {
+function shareCaption(card: ShareCard, tournamentName: string): string {
   return `${card.team} · ${card.headline} — ${tournamentName}. ${card.subtitle}`.slice(0, 400)
 }
 
 /** The app league the user plays in for this tournament, when they are a member of it. */
-export async function findShareChatLeague(tournamentId: string, userId: string): Promise<{ leagueId: string; name: string } | null> {
+async function findShareChatLeague(tournamentId: string, userId: string): Promise<{ leagueId: string; name: string } | null> {
   const rows = await prisma.tournamentLeagueParticipant.findMany({
     where: { userId, league: { tournamentId, leagueId: { not: null } } },
     select: { league: { select: { leagueId: true, name: true } } },
@@ -71,7 +77,7 @@ export async function canPostShareCard(tournamentId: string, userId: string | nu
   return Boolean(await findShareChatLeague(tournamentId, userId).catch(() => null))
 }
 
-export type ShareToChatResult = { leagueId: string; leagueName: string; messageId: string; image: boolean }
+type ShareToChatResult = { leagueId: string; leagueName: string; messageId: string; image: boolean }
 
 export async function postShareCardToLeagueChat(input: { userId: string; tournamentId: string; entryId: string; image: Blob | null }): Promise<ShareToChatResult> {
   const view = await loadTrophy(input.tournamentId)
@@ -102,14 +108,31 @@ export async function postShareCardToLeagueChat(input: { userId: string; tournam
 
   const href = trophyHref(input.tournamentId, input.entryId)
   const text = `${shareCaption(card, view.tournament.name)}\n${getBaseUrl()}${href}`
-  const created = await createLeagueChatMessage(league.leagueId, input.userId, text, {
-    idempotencyKey: messageId,
-    imageUrl,
-    metadata: {
-      ...(imageUrl ? { attachments: [{ type: 'image', url: imageUrl, mimeType: 'image/png' }] } : {}),
-      tournamentShare: { tournamentId: input.tournamentId, entryId: input.entryId, headline: card.headline, href },
-    },
-  })
+  const metadata = {
+    ...(imageUrl ? { attachments: [{ type: 'image', url: imageUrl, mimeType: 'image/png' }] } : {}),
+    tournamentShare: { tournamentId: input.tournamentId, entryId: input.entryId, headline: card.headline, href },
+  }
+  const created = await createLeagueChatMessage(league.leagueId, input.userId, text, { idempotencyKey: messageId, imageUrl, metadata })
   if (!created) throw new ShareToChatError('You already posted this card to your league chat.', 409)
+
+  // Same follow-up as a member's own message. The card image lives in private chat storage, so the
+  // Discord relay carries the caption and link only.
+  await syncOutboundLeagueChat({
+    leagueId: league.leagueId,
+    messageId: created.id,
+    authorName: created.senderName ?? 'Manager',
+    authorAvatarUrl: created.senderAvatarUrl ?? null,
+    text: created.body,
+    gifUrl: null,
+  }).catch(() => console.warn('[tournament/divisions] share card Discord relay failed'))
+  queueLeagueChatNotifications({
+    leagueId: league.leagueId,
+    messageId: created.id,
+    senderUserId: input.userId,
+    messageType: created.messageType ?? 'text',
+    body: text,
+    metadata,
+    source: 'league',
+  })
   return { leagueId: league.leagueId, leagueName: league.name, messageId, image: Boolean(imageUrl) }
 }

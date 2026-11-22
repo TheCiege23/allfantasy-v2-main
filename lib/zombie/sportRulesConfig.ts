@@ -3,7 +3,7 @@
  * thresholds, weapon/serum logic, and automation tuning. Covers all 7 supported sports.
  */
 
-export type WeaponThresholdConfig = {
+type WeaponThresholdConfig = {
   type: string
   label: string
   /** A points line, when the weapon has one. Earned another way (attacks survived, a win streak) → absent. */
@@ -20,17 +20,17 @@ export type WeaponThresholdConfig = {
  * 100/120 line handed every NBA team a Knife and a Bow every week and a 20-point margin an Axe on 92%
  * of wins. A sport without its own block keeps these NFL defaults.
  */
-export type EngineWeaponThresholds = { knifeScore: number; bowScore: number; axeWinMargin: number }
+type EngineWeaponThresholds = { knifeScore: number; bowScore: number; axeWinMargin: number }
 
 export const DEFAULT_ENGINE_WEAPONS: EngineWeaponThresholds = { knifeScore: 100, bowScore: 120, axeWinMargin: 20 }
 
-export type SerumAwardConfig = {
+type SerumAwardConfig = {
   trigger: string
   label: string
   description: string
 }
 
-export type ZombieSportConfig = {
+type ZombieSportConfig = {
   sport: string
   label: string
   positions: string[]
@@ -73,8 +73,8 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     lineupFrequency: 'weekly',
     scoringWindow: 'Thursday through Monday (NFL schedule)',
     lockRule: 'Individual game kickoff locks each player',
-    bashingThreshold: 30,
-    maulingThreshold: 50,
+    bashingThreshold: 60,
+    maulingThreshold: 60,
     weaponThresholds: [
       { type: 'weapon_knife', label: 'Knife', minPoints: 120, description: 'Score 120+ pts in a week' },
       { type: 'weapon_axe', label: 'Axe', minPoints: 140, description: 'Score 140+ pts in a week' },
@@ -89,7 +89,7 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     ],
     serumAwardSummary: 'Awarded for season-high score, surviving a bashing, or being top Survivor scorer',
     infectionTiming: 'Status changes finalize Tuesday morning after MNF stat corrections',
-    weeklySchedule: 'Week resolves Tuesday. Whisperer ambush deadline: Wednesday 11:59pm ET',
+    weeklySchedule: 'Week resolves after final games. Combat choices close Wednesday 9pm Eastern; ambushes lock per affected team at its first starter kickoff.',
     challengeFrequency: '1 mini-game per week',
     edgeCases: [
       'Monday Night Football finishes: stat corrections may reverse infections within 48h window',
@@ -100,7 +100,7 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
     seasonLength: 17,
     defaultTeamCount: 12,
     resolutionDay: 'Tuesday',
-    ambushDeadline: 'Wednesday 11:59pm ET',
+    ambushDeadline: 'Before an affected team’s first starter begins',
     scoringType: 'weekly',
   },
   nba: {
@@ -377,10 +377,3 @@ export function getZombieSportConfig(sport: string): ZombieSportConfig {
   return ZOMBIE_SPORT_CONFIGS[key] ?? ZOMBIE_SPORT_CONFIGS.nfl
 }
 
-export function getSportLabel(sport: string): string {
-  return getZombieSportConfig(sport).label
-}
-
-export function getAllSportKeys(): string[] {
-  return Object.keys(ZOMBIE_SPORT_CONFIGS)
-}

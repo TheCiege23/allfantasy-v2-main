@@ -57,7 +57,7 @@
  *  - Never imports browser APIs (window, document, navigator, etc.) and
  *    never imports the Google Translate batch script.
  */
-export type BracketsLocale = "en" | "es" | "zh" | "fil" | "vi"
+type BracketsLocale = "en" | "es" | "zh" | "fil" | "vi"
 
 export const BRACKETS_SUPPORTED_LOCALES: BracketsLocale[] = [
   "en",
@@ -217,7 +217,7 @@ const EN: BracketsDictionary = {
   "brk.hub.eyebrow": "AllFantasy",
   "brk.hub.heroTitle": "Bracket Pools",
   "brk.hub.heroSubtitle":
-    "Create or join bracket pools for the FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs, and more. Free to play. AI analysis. Live leaderboards.",
+    "Create or join bracket pools for the FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs, and more. Free to play. Chimmy analysis. Live leaderboards.",
   "brk.hub.heroBadge": "2026 World Cup pools are live",
   "brk.hub.heroCreateWc": "Create World Cup Pool",
   "brk.hub.heroJoinWithCode": "Join with code",
@@ -227,10 +227,10 @@ const EN: BracketsDictionary = {
   "brk.hub.spotlight.eyebrow": "Launching now",
   "brk.hub.spotlight.title": "2026 FIFA World Cup",
   "brk.hub.spotlight.subtitle":
-    "The flagship bracket experience on AllFantasy. Build your bracket, compete with friends, and let our AI report grade your picks.",
+    "The flagship bracket experience on AllFantasy. Build your bracket, compete with friends, and let our Chimmy report grade your picks.",
   "brk.hub.spotlight.feature.groupStage": "Group stage picks",
   "brk.hub.spotlight.feature.knockoutBracket": "Knockout bracket",
-  "brk.hub.spotlight.feature.aiReport": "AI Bracket Report",
+  "brk.hub.spotlight.feature.aiReport": "Chimmy Bracket Report",
   "brk.hub.spotlight.feature.dangerZones": "Knockout Danger Zones",
   "brk.hub.spotlight.feature.commissionerTools": "Commissioner tools",
   "brk.hub.spotlight.feature.inviteShare": "Invite + share tools",
@@ -242,14 +242,14 @@ const EN: BracketsDictionary = {
     "Spin up a private pool for friends or a public pool anyone can discover — or jump into someone else's with an invite code.",
   "brk.hub.howItWorks.step2Title": "Make and finalize your picks",
   "brk.hub.howItWorks.step2Body":
-    "Pick a winner for every series and confirm your bracket. Each series locks when it starts.",
+    "Pick a winner for every matchup and confirm your bracket before it locks. Each tournament shows when its picks lock.",
   "brk.hub.howItWorks.step3Title": "Track, compete, and share",
   "brk.hub.howItWorks.step3Body":
-    "Follow live standings, get AI insights on your picks, and share your bracket report card.",
+    "Follow live standings, get Chimmy insights on your picks, and share your bracket report card.",
 
   "brk.hub.sports.title": "Sports",
   "brk.hub.sports.subtitle":
-    "MLB and NHL brackets are open now. The College Football Playoff and NFL Playoffs are up next.",
+    "Every open tournament below takes new pools. The current one is listed first.",
   "brk.hub.sports.statusLive": "Live now",
   "brk.hub.sports.statusComingSoon": "Coming soon",
   "brk.hub.sports.openCta": "Open hub",
@@ -264,7 +264,7 @@ const EN: BracketsDictionary = {
     "Stanley Cup bracket pool. Pick every series.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Wild Card to Super Bowl bracket pool. Opens in January.",
+    "Wild Card to Super Bowl bracket pool. Create one now; picks open when the field is set in January.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Pick every postseason series, Wild Card to World Series.",
@@ -273,13 +273,16 @@ const EN: BracketsDictionary = {
     "NCAA tournament bracket pool. Coming next spring.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "College Football Playoff bracket pool. Opens in December.",
+    "Pick all 11 College Football Playoff games with your league.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pick the seven-game knockout bracket with your league.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, and Copa América brackets. Coming soon.",
 
-  "brk.hub.features.title": "Built-in AI + commissioner tools",
-  "brk.hub.features.aiReport": "AI Bracket Report",
+  "brk.hub.features.title": "Built-in Chimmy + commissioner tools",
+  "brk.hub.features.aiReport": "Chimmy Bracket Report",
   "brk.hub.features.aiReport.desc":
     "Letter grade, champion confidence, win probability, and what makes your bracket unique.",
   "brk.hub.features.rooting": "Rooting Guide",
@@ -310,7 +313,7 @@ const EN: BracketsDictionary = {
   "brk.hub.v2.titleLine1": "AF World Cup",
   "brk.hub.v2.titleLine2": "Bracket Challenge",
   "brk.hub.v2.subtitle":
-    "48 nations. 104 matches. One champion. Pick every game before kickoff and compete in your own pool — with AI analysis on every matchup. Free forever.",
+    "48 nations. 104 matches. One champion. Pick every game before kickoff and compete in your own pool — with Chimmy analysis on every matchup. Free forever.",
   "brk.hub.v2.feature.teams": "48 Teams",
   "brk.hub.v2.feature.matches": "104 Matches",
   "brk.hub.v2.feature.format": "12 Groups + Knockouts",
@@ -335,14 +338,16 @@ const EN: BracketsDictionary = {
   // ── /brackets how-it-works step 4 (added to existing 3-step flow) ────
   "brk.hub.howItWorks.step4Title": "Climb the leaderboard",
   "brk.hub.howItWorks.step4Body":
-    "Follow live standings, flex on your crew with share cards, and let AI analyze what made your bracket unique.",
+    "Follow live standings, flex on your crew with share cards, and let Chimmy analyze what made your bracket unique.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "MLB & NHL brackets open now",
+  "brk.hub.v3.openBadge": "Bracket leagues open now",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Bracket Challenge",
-  "brk.hub.v3.subtitle": "Pick every series, run a pool with your friends, and climb the leaderboard as the postseason plays out.",
+  "brk.hub.v3.subtitle": "Pick every matchup, invite friends, and climb the leaderboard as games are decided.",
   "brk.hub.v3.cta.mlb": "MLB Postseason Bracket",
   "brk.hub.v3.cta.nhl": "NHL Playoff Bracket",
+  "brk.hub.v3.cta.cfp": "CFP Bracket League",
+  "brk.hub.v3.cta.nbaCup": "NBA Cup Bracket League",
   "brk.hub.v3.upNext.title": "Up next",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · December",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · January",
@@ -456,7 +461,7 @@ const ES: BracketsDictionary = {
   "brk.hub.eyebrow": "AllFantasy",
   "brk.hub.heroTitle": "Bracket Pools",
   "brk.hub.heroSubtitle":
-    "Crea o únete a grupos de brackets de la Copa del Mundo de la FIFA, playoffs de NBA y NHL, March Madness, playoffs de NFL y más. Gratis para jugar. Análisis con IA. Tablas en vivo.",
+    "Crea o únete a grupos de brackets de la Copa del Mundo de la FIFA, playoffs de NBA y NHL, March Madness, playoffs de NFL y más. Gratis para jugar. Análisis con Chimmy. Tablas en vivo.",
   "brk.hub.heroBadge": "Los grupos de la Copa del Mundo 2026 ya están abiertos",
   "brk.hub.heroCreateWc": "Crear grupo de la Copa del Mundo",
   "brk.hub.heroJoinWithCode": "Unirse con código",
@@ -466,10 +471,10 @@ const ES: BracketsDictionary = {
   "brk.hub.spotlight.eyebrow": "Lanzamiento",
   "brk.hub.spotlight.title": "Copa Mundial FIFA 2026",
   "brk.hub.spotlight.subtitle":
-    "La experiencia bracket insignia de AllFantasy. Arma tu bracket, compite con amigos y deja que nuestro informe IA califique tus picks.",
+    "La experiencia bracket insignia de AllFantasy. Arma tu bracket, compite con amigos y deja que nuestro informe Chimmy califique tus picks.",
   "brk.hub.spotlight.feature.groupStage": "Picks de fase de grupos",
   "brk.hub.spotlight.feature.knockoutBracket": "Bracket de eliminatorias",
-  "brk.hub.spotlight.feature.aiReport": "Informe IA del Bracket",
+  "brk.hub.spotlight.feature.aiReport": "Informe Chimmy del Bracket",
   "brk.hub.spotlight.feature.dangerZones": "Zonas de peligro de eliminatorias",
   "brk.hub.spotlight.feature.commissionerTools": "Herramientas de comisionado",
   "brk.hub.spotlight.feature.inviteShare": "Invitar y compartir",
@@ -481,14 +486,14 @@ const ES: BracketsDictionary = {
     "Crea un grupo privado para amigos, uno público que cualquiera pueda descubrir, o únete a otro con un código de invitación.",
   "brk.hub.howItWorks.step2Title": "Haz y finaliza tus picks",
   "brk.hub.howItWorks.step2Body":
-    "Elige un ganador para cada serie y confirma tu bracket. Cada serie se cierra cuando empieza.",
+    "Elige un ganador para cada enfrentamiento y confirma tu bracket antes del cierre. Cada torneo muestra cuándo se cierran sus picks.",
   "brk.hub.howItWorks.step3Title": "Sigue, compite y comparte",
   "brk.hub.howItWorks.step3Body":
-    "Sigue tablas en vivo, recibe ideas IA sobre tus picks y comparte tu informe del bracket.",
+    "Sigue tablas en vivo, recibe ideas Chimmy sobre tus picks y comparte tu informe del bracket.",
 
   "brk.hub.sports.title": "Deportes",
   "brk.hub.sports.subtitle":
-    "Los brackets de MLB y NHL ya están abiertos. A continuación: el Playoff de fútbol americano universitario y los Playoffs de la NFL.",
+    "Todos los torneos abiertos aceptan nuevos grupos. El torneo actual aparece primero.",
   "brk.hub.sports.statusLive": "En vivo",
   "brk.hub.sports.statusComingSoon": "Próximamente",
   "brk.hub.sports.openCta": "Abrir hub",
@@ -503,7 +508,7 @@ const ES: BracketsDictionary = {
     "Grupo de bracket de la Copa Stanley. Elige cada serie.",
   "brk.hub.sports.sport.nflPlayoffs": "Playoffs NFL",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Grupo de bracket del Wild Card al Super Bowl. Abre en enero.",
+    "Grupo de bracket del Wild Card al Super Bowl. Créalo ya; las selecciones abren cuando se define el cuadro en enero.",
   "brk.hub.sports.sport.mlbPostseason": "Postemporada MLB",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Elige cada serie de la postemporada, del Wild Card a la Serie Mundial.",
@@ -512,13 +517,16 @@ const ES: BracketsDictionary = {
     "Grupo bracket del torneo NCAA. Llega la próxima primavera.",
   "brk.hub.sports.sport.collegeFootball": "Fútbol americano universitario",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Grupo de bracket del Playoff de fútbol americano universitario. Abre en diciembre.",
+    "Pronostica los 11 partidos del College Football Playoff con tu grupo.",
+  "brk.hub.sports.sport.nbaCup": "Copa NBA",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Pronostica los siete partidos eliminatorios con tu grupo.",
   "brk.hub.sports.sport.soccer": "Fútbol",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Eurocopa y Copa América. Próximamente.",
 
-  "brk.hub.features.title": "Herramientas IA y de comisionado integradas",
-  "brk.hub.features.aiReport": "Informe IA del Bracket",
+  "brk.hub.features.title": "Herramientas Chimmy y de comisionado integradas",
+  "brk.hub.features.aiReport": "Informe Chimmy del Bracket",
   "brk.hub.features.aiReport.desc":
     "Calificación, confianza del campeón, probabilidad de victoria y qué hace único tu bracket.",
   "brk.hub.features.rooting": "Guía de a quién apoyar",
@@ -550,7 +558,7 @@ const ES: BracketsDictionary = {
   "brk.hub.v2.titleLine1": "AF Copa del Mundo",
   "brk.hub.v2.titleLine2": "Desafío de Brackets",
   "brk.hub.v2.subtitle":
-    "48 selecciones. 104 partidos. Un campeón. Elige cada partido antes del pitazo inicial y compite en tu propio grupo — con análisis IA en cada partido. Gratis para siempre.",
+    "48 selecciones. 104 partidos. Un campeón. Elige cada partido antes del pitazo inicial y compite en tu propio grupo — con análisis Chimmy en cada partido. Gratis para siempre.",
   "brk.hub.v2.feature.teams": "48 selecciones",
   "brk.hub.v2.feature.matches": "104 partidos",
   "brk.hub.v2.feature.format": "12 Grupos + Eliminatorias",
@@ -576,14 +584,16 @@ const ES: BracketsDictionary = {
   // ── /brackets how-it-works step 4 ────────────────────────────────────
   "brk.hub.howItWorks.step4Title": "Sube en la tabla",
   "brk.hub.howItWorks.step4Body":
-    "Sigue las tablas en vivo, presume con tarjetas de tu bracket y deja que la IA analice qué hace especial tu bracket.",
+    "Sigue las tablas en vivo, presume con tarjetas de tu bracket y deja que Chimmy analice qué hace especial tu bracket.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Brackets de MLB y NHL abiertos ya",
+  "brk.hub.v3.openBadge": "Ligas de brackets abiertas",
   "brk.hub.v3.titleLine1": "AF Playoffs",
   "brk.hub.v3.titleLine2": "Desafío de Brackets",
-  "brk.hub.v3.subtitle": "Elige cada serie, crea un grupo con tus amigos y sube en la clasificación a medida que avanza la postemporada.",
+  "brk.hub.v3.subtitle": "Elige cada enfrentamiento, invita a tus amigos y sube en la clasificación a medida que se deciden los partidos.",
   "brk.hub.v3.cta.mlb": "Bracket de la postemporada MLB",
   "brk.hub.v3.cta.nhl": "Bracket de playoffs NHL",
+  "brk.hub.v3.cta.cfp": "Liga de bracket CFP",
+  "brk.hub.v3.cta.nbaCup": "Liga de bracket Copa NBA",
   "brk.hub.v3.upNext.title": "A continuación",
   "brk.hub.v3.upNext.ncaaf": "Playoff de fútbol americano universitario · diciembre",
   "brk.hub.v3.upNext.nfl": "Playoffs de la NFL · enero",
@@ -697,7 +707,7 @@ const ZH: BracketsDictionary = {
   "brk.hub.eyebrow": "AllFantasy",
   "brk.hub.heroTitle": "對戰群組",
   "brk.hub.heroSubtitle":
-    "為 FIFA 世界盃、NBA 與 NHL 季後賽、March Madness、NFL 季後賽等比賽建立或加入對戰群組。免費遊玩、AI 解析、即時排行榜。",
+    "為 FIFA 世界盃、NBA 與 NHL 季後賽、March Madness、NFL 季後賽等比賽建立或加入對戰群組。免費遊玩、Chimmy 解析、即時排行榜。",
   "brk.hub.heroBadge": "2026 世界盃群組已開放",
   "brk.hub.heroCreateWc": "建立世界盃群組",
   "brk.hub.heroJoinWithCode": "用代碼加入",
@@ -707,10 +717,10 @@ const ZH: BracketsDictionary = {
   "brk.hub.spotlight.eyebrow": "重磅推出",
   "brk.hub.spotlight.title": "2026 FIFA 世界盃",
   "brk.hub.spotlight.subtitle":
-    "AllFantasy 的旗艦對戰體驗。建立你的對戰表、和朋友較量,讓 AI 報告為你評分。",
+    "AllFantasy 的旗艦對戰體驗。建立你的對戰表、和朋友較量,讓 Chimmy 報告為你評分。",
   "brk.hub.spotlight.feature.groupStage": "小組賽選擇",
   "brk.hub.spotlight.feature.knockoutBracket": "淘汰賽對戰表",
-  "brk.hub.spotlight.feature.aiReport": "AI 對戰表報告",
+  "brk.hub.spotlight.feature.aiReport": "Chimmy 對戰表報告",
   "brk.hub.spotlight.feature.dangerZones": "淘汰賽風險區",
   "brk.hub.spotlight.feature.commissionerTools": "管理員工具",
   "brk.hub.spotlight.feature.inviteShare": "邀請與分享工具",
@@ -725,11 +735,11 @@ const ZH: BracketsDictionary = {
     "為每一輪系列賽選出勝方並確認你的對戰表。每輪系列賽開打時即鎖定。",
   "brk.hub.howItWorks.step3Title": "追蹤、比拼、分享",
   "brk.hub.howItWorks.step3Body":
-    "追蹤即時排行榜、獲得 AI 對選擇的解析,並分享你的對戰表報告。",
+    "追蹤即時排行榜、獲得 Chimmy 對選擇的解析,並分享你的對戰表報告。",
 
   "brk.hub.sports.title": "支援的賽事",
   "brk.hub.sports.subtitle":
-    "MLB 與 NHL 對戰表現已開放。接下來是大學美式足球季後賽與 NFL 季後賽。",
+    "下方所有開放中的賽事都可建立新的對戰表群組。目前進行中的賽事排在最前面。",
   "brk.hub.sports.statusLive": "進行中",
   "brk.hub.sports.statusComingSoon": "即將推出",
   "brk.hub.sports.openCta": "開啟主頁",
@@ -744,7 +754,7 @@ const ZH: BracketsDictionary = {
     "史丹利盃對戰群組。預測每一輪系列賽。",
   "brk.hub.sports.sport.nflPlayoffs": "NFL 季後賽",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "從外卡賽到超級盃的對戰群組。1 月開放。",
+    "從外卡賽到超級盃的對戰群組。現在即可建立；1 月確定參賽隊伍後開放選擇。",
   "brk.hub.sports.sport.mlbPostseason": "MLB 季後賽",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "預測每一輪季後賽系列賽，從外卡賽到世界大賽。",
@@ -753,13 +763,16 @@ const ZH: BracketsDictionary = {
     "NCAA 錦標賽對戰群組。明年春天推出。",
   "brk.hub.sports.sport.collegeFootball": "大學美式足球",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "大學美式足球季後賽對戰群組。12 月開放。",
+    "與聯盟一起預測大學美式足球季後賽的 11 場比賽。",
+  "brk.hub.sports.sport.nbaCup": "NBA 盃",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "與聯盟一起預測七場淘汰賽。",
   "brk.hub.sports.sport.soccer": "足球",
   "brk.hub.sports.sport.soccer.desc":
     "歐冠、歐錦賽與美洲盃對戰群組。即將推出。",
 
-  "brk.hub.features.title": "內建 AI 與管理員工具",
-  "brk.hub.features.aiReport": "AI 對戰表報告",
+  "brk.hub.features.title": "內建 Chimmy 與管理員工具",
+  "brk.hub.features.aiReport": "Chimmy 對戰表報告",
   "brk.hub.features.aiReport.desc":
     "字母評分、冠軍信心度、奪冠機率,以及讓你的對戰表獨特的關鍵。",
   "brk.hub.features.rooting": "幫誰加油指南",
@@ -790,7 +803,7 @@ const ZH: BracketsDictionary = {
   "brk.hub.v2.titleLine1": "AF 世界盃",
   "brk.hub.v2.titleLine2": "對戰挑戰",
   "brk.hub.v2.subtitle":
-    "48 個國家。104 場比賽。一位冠軍。在開球前選好每一場、和你自己的群組一較高下 — 每場比賽都有 AI 解析。永久免費。",
+    "48 個國家。104 場比賽。一位冠軍。在開球前選好每一場、和你自己的群組一較高下 — 每場比賽都有 Chimmy 解析。永久免費。",
   "brk.hub.v2.feature.teams": "48 個國家",
   "brk.hub.v2.feature.matches": "104 場比賽",
   "brk.hub.v2.feature.format": "12 個小組 + 淘汰賽",
@@ -816,14 +829,16 @@ const ZH: BracketsDictionary = {
   // ── /brackets how-it-works step 4 ────────────────────────────────────
   "brk.hub.howItWorks.step4Title": "攀升排行榜",
   "brk.hub.howItWorks.step4Body":
-    "追蹤即時排名、用分享圖卡向朋友炫耀，並讓 AI 分析你的對戰表有何獨特之處。",
+    "追蹤即時排名、用分享圖卡向朋友炫耀，並讓 Chimmy 分析你的對戰表有何獨特之處。",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "MLB 與 NHL 對戰表現已開放",
+  "brk.hub.v3.openBadge": "對戰表聯盟現已開放",
   "brk.hub.v3.titleLine1": "AF 季後賽",
   "brk.hub.v3.titleLine2": "對戰挑戰",
-  "brk.hub.v3.subtitle": "預測每一輪系列賽，與朋友組成群組，隨季後賽進行在排行榜上攀升。",
+  "brk.hub.v3.subtitle": "預測每場對戰、邀請朋友，並隨賽果揭曉在排行榜上攀升。",
   "brk.hub.v3.cta.mlb": "MLB 季後賽對戰表",
   "brk.hub.v3.cta.nhl": "NHL 季後賽對戰表",
+  "brk.hub.v3.cta.cfp": "大學美式足球季後賽對戰表聯盟",
+  "brk.hub.v3.cta.nbaCup": "NBA 盃對戰表聯盟",
   "brk.hub.v3.upNext.title": "接下來",
   "brk.hub.v3.upNext.ncaaf": "大學美式足球季後賽 · 12 月",
   "brk.hub.v3.upNext.nfl": "NFL 季後賽 · 1 月",
@@ -939,7 +954,7 @@ const FIL: BracketsDictionary = {
   "brk.hub.eyebrow": "AllFantasy",
   "brk.hub.heroTitle": "Bracket Pools",
   "brk.hub.heroSubtitle":
-    "Gumawa o sumali sa bracket pools para sa FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs at iba pa. Libre laruin. AI analysis. Live na leaderboards.",
+    "Gumawa o sumali sa bracket pools para sa FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs at iba pa. Libre laruin. Chimmy analysis. Live na leaderboards.",
   "brk.hub.heroBadge": "Bukas na ang 2026 World Cup pools",
   "brk.hub.heroCreateWc": "Gumawa ng World Cup pool",
   "brk.hub.heroJoinWithCode": "Sumali gamit ang code",
@@ -949,10 +964,10 @@ const FIL: BracketsDictionary = {
   "brk.hub.spotlight.eyebrow": "Inilulunsad ngayon",
   "brk.hub.spotlight.title": "2026 FIFA World Cup",
   "brk.hub.spotlight.subtitle":
-    "Ang pangunahing bracket experience ng AllFantasy. Bumuo ng iyong bracket, makipagtagisan sa mga kaibigan, at hayaang i-grade ng AI report ang iyong picks.",
+    "Ang pangunahing bracket experience ng AllFantasy. Bumuo ng iyong bracket, makipagtagisan sa mga kaibigan, at hayaang i-grade ng Chimmy report ang iyong picks.",
   "brk.hub.spotlight.feature.groupStage": "Picks sa group stage",
   "brk.hub.spotlight.feature.knockoutBracket": "Knockout bracket",
-  "brk.hub.spotlight.feature.aiReport": "AI Bracket Report",
+  "brk.hub.spotlight.feature.aiReport": "Chimmy Bracket Report",
   "brk.hub.spotlight.feature.dangerZones": "Knockout Danger Zones",
   "brk.hub.spotlight.feature.commissionerTools": "Commissioner tools",
   "brk.hub.spotlight.feature.inviteShare": "Invite at share tools",
@@ -967,11 +982,11 @@ const FIL: BracketsDictionary = {
     "Pumili ng panalo sa bawat serye at kumpirmahin ang iyong bracket. Nala-lock ang bawat serye pagsimula nito.",
   "brk.hub.howItWorks.step3Title": "I-track, makipagtagisan, mag-share",
   "brk.hub.howItWorks.step3Body":
-    "Sundan ang live na leaderboard, kunin ang AI insights sa iyong picks, at i-share ang iyong bracket report card.",
+    "Sundan ang live na leaderboard, kunin ang Chimmy insights sa iyong picks, at i-share ang iyong bracket report card.",
 
   "brk.hub.sports.title": "Mga sport",
   "brk.hub.sports.subtitle":
-    "Bukas na ang MLB at NHL brackets. Susunod ang College Football Playoff at NFL Playoffs.",
+    "Tumatanggap ng bagong pool ang bawat bukas na torneo sa ibaba. Nauuna ang kasalukuyang torneo.",
   "brk.hub.sports.statusLive": "Live na",
   "brk.hub.sports.statusComingSoon": "Malapit na",
   "brk.hub.sports.openCta": "Buksan ang hub",
@@ -986,7 +1001,7 @@ const FIL: BracketsDictionary = {
     "Bracket pool ng Stanley Cup. Piliin ang bawat serye.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Bracket pool mula Wild Card hanggang Super Bowl. Magbubukas sa Enero.",
+    "Bracket pool mula Wild Card hanggang Super Bowl. Gumawa na ngayon; magbubukas ang picks kapag naitakda ang field sa Enero.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Piliin ang bawat serye ng postseason, mula Wild Card hanggang World Series.",
@@ -995,13 +1010,16 @@ const FIL: BracketsDictionary = {
     "NCAA tournament bracket pool. Darating sa susunod na tagsibol.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Bracket pool ng College Football Playoff. Magbubukas sa Disyembre.",
+    "Piliin ang mananalo sa 11 laro ng College Football Playoff kasama ang liga.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Piliin ang mananalo sa pitong knockout game kasama ang liga.",
   "brk.hub.sports.sport.soccer": "Soccer",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros, at Copa América brackets. Malapit na.",
 
-  "brk.hub.features.title": "Built-in AI at commissioner tools",
-  "brk.hub.features.aiReport": "AI Bracket Report",
+  "brk.hub.features.title": "Built-in Chimmy at commissioner tools",
+  "brk.hub.features.aiReport": "Chimmy Bracket Report",
   "brk.hub.features.aiReport.desc":
     "Letter grade, champion confidence, win probability, at kung ano ang nag-pa-unique sa bracket mo.",
   "brk.hub.features.rooting": "Rooting Guide",
@@ -1033,7 +1051,7 @@ const FIL: BracketsDictionary = {
   "brk.hub.v2.titleLine1": "AF World Cup",
   "brk.hub.v2.titleLine2": "Bracket Challenge",
   "brk.hub.v2.subtitle":
-    "48 bansa. 104 laban. Isang kampeon. Pumili sa bawat laban bago mag-kickoff at makipagtagisan sa sarili mong pool — may AI analysis sa bawat matchup. Libre habambuhay.",
+    "48 bansa. 104 laban. Isang kampeon. Pumili sa bawat laban bago mag-kickoff at makipagtagisan sa sarili mong pool — may Chimmy analysis sa bawat matchup. Libre habambuhay.",
   "brk.hub.v2.feature.teams": "48 bansa",
   "brk.hub.v2.feature.matches": "104 laban",
   "brk.hub.v2.feature.format": "12 Grupo + Knockouts",
@@ -1059,14 +1077,16 @@ const FIL: BracketsDictionary = {
   // ── /brackets how-it-works step 4 ────────────────────────────────────
   "brk.hub.howItWorks.step4Title": "Umakyat sa leaderboard",
   "brk.hub.howItWorks.step4Body":
-    "Sundan ang live standings, ipagmalaki sa iyong barkada gamit ang share cards, at hayaang suriin ng AI ang unique ng iyong bracket.",
+    "Sundan ang live standings, ipagmalaki sa iyong barkada gamit ang share cards, at hayaang suriin ng Chimmy ang unique ng iyong bracket.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Bukas na ang MLB at NHL brackets",
+  "brk.hub.v3.openBadge": "Bukas na ang bracket leagues",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Bracket Challenge",
-  "brk.hub.v3.subtitle": "Piliin ang bawat serye, gumawa ng pool kasama ang iyong mga kaibigan, at umakyat sa leaderboard habang tumatakbo ang postseason.",
+  "brk.hub.v3.subtitle": "Piliin ang mananalo sa bawat laban, mag-imbita ng mga kaibigan, at umakyat sa leaderboard habang natatapos ang mga laro.",
   "brk.hub.v3.cta.mlb": "MLB Postseason Bracket",
   "brk.hub.v3.cta.nhl": "NHL Playoff Bracket",
+  "brk.hub.v3.cta.cfp": "CFP Bracket League",
+  "brk.hub.v3.cta.nbaCup": "NBA Cup Bracket League",
   "brk.hub.v3.upNext.title": "Susunod",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · Disyembre",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · Enero",
@@ -1182,7 +1202,7 @@ const VI: BracketsDictionary = {
   "brk.hub.eyebrow": "AllFantasy",
   "brk.hub.heroTitle": "Bracket Pools",
   "brk.hub.heroSubtitle":
-    "Tạo hoặc tham gia bracket pools cho FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs và nhiều giải khác. Miễn phí. Phân tích AI. Bảng xếp hạng trực tiếp.",
+    "Tạo hoặc tham gia bracket pools cho FIFA World Cup, NBA & NHL playoffs, March Madness, NFL playoffs và nhiều giải khác. Miễn phí. Phân tích Chimmy. Bảng xếp hạng trực tiếp.",
   "brk.hub.heroBadge": "Pool World Cup 2026 đã mở",
   "brk.hub.heroCreateWc": "Tạo pool World Cup",
   "brk.hub.heroJoinWithCode": "Tham gia bằng mã",
@@ -1192,10 +1212,10 @@ const VI: BracketsDictionary = {
   "brk.hub.spotlight.eyebrow": "Ra mắt ngay",
   "brk.hub.spotlight.title": "FIFA World Cup 2026",
   "brk.hub.spotlight.subtitle":
-    "Trải nghiệm bracket chủ lực của AllFantasy. Xây bracket, đua với bạn bè, và để báo cáo AI chấm điểm lựa chọn của bạn.",
+    "Trải nghiệm bracket chủ lực của AllFantasy. Xây bracket, đua với bạn bè, và để báo cáo Chimmy chấm điểm lựa chọn của bạn.",
   "brk.hub.spotlight.feature.groupStage": "Lựa chọn vòng bảng",
   "brk.hub.spotlight.feature.knockoutBracket": "Bracket vòng loại trực tiếp",
-  "brk.hub.spotlight.feature.aiReport": "Báo cáo AI Bracket",
+  "brk.hub.spotlight.feature.aiReport": "Báo cáo Chimmy Bracket",
   "brk.hub.spotlight.feature.dangerZones": "Khu vực nguy hiểm vòng loại trực tiếp",
   "brk.hub.spotlight.feature.commissionerTools": "Công cụ chủ pool",
   "brk.hub.spotlight.feature.inviteShare": "Mời và chia sẻ",
@@ -1210,11 +1230,11 @@ const VI: BracketsDictionary = {
     "Chọn đội thắng cho từng loạt đấu và xác nhận bracket của bạn. Mỗi loạt đấu khóa khi bắt đầu.",
   "brk.hub.howItWorks.step3Title": "Theo dõi, thi đấu, chia sẻ",
   "brk.hub.howItWorks.step3Body":
-    "Theo dõi bảng xếp hạng trực tiếp, nhận phân tích AI cho lựa chọn của bạn, và chia sẻ thẻ báo cáo bracket.",
+    "Theo dõi bảng xếp hạng trực tiếp, nhận phân tích Chimmy cho lựa chọn của bạn, và chia sẻ thẻ báo cáo bracket.",
 
   "brk.hub.sports.title": "Các môn",
   "brk.hub.sports.subtitle":
-    "Bracket MLB và NHL đã mở. Tiếp theo là College Football Playoff và NFL Playoffs.",
+    "Mọi giải đấu đang mở bên dưới đều nhận nhóm mới. Giải đấu hiện tại được xếp đầu tiên.",
   "brk.hub.sports.statusLive": "Đang mở",
   "brk.hub.sports.statusComingSoon": "Sắp ra mắt",
   "brk.hub.sports.openCta": "Mở hub",
@@ -1229,7 +1249,7 @@ const VI: BracketsDictionary = {
     "Nhóm bracket Stanley Cup. Dự đoán từng loạt đấu.",
   "brk.hub.sports.sport.nflPlayoffs": "NFL Playoffs",
   "brk.hub.sports.sport.nflPlayoffs.desc":
-    "Nhóm bracket từ Wild Card đến Super Bowl. Mở vào tháng 1.",
+    "Nhóm bracket từ Wild Card đến Super Bowl. Tạo ngay; lựa chọn mở khi danh sách đội được xác định vào tháng 1.",
   "brk.hub.sports.sport.mlbPostseason": "MLB Postseason",
   "brk.hub.sports.sport.mlbPostseason.desc":
     "Dự đoán từng loạt đấu hậu mùa giải, từ Wild Card đến World Series.",
@@ -1238,13 +1258,16 @@ const VI: BracketsDictionary = {
     "Pool bracket giải NCAA. Sẽ có vào mùa xuân năm sau.",
   "brk.hub.sports.sport.collegeFootball": "College Football",
   "brk.hub.sports.sport.collegeFootball.desc":
-    "Nhóm bracket College Football Playoff. Mở vào tháng 12.",
+    "Dự đoán 11 trận College Football Playoff cùng giải đấu của bạn.",
+  "brk.hub.sports.sport.nbaCup": "NBA Cup",
+  "brk.hub.sports.sport.nbaCup.desc":
+    "Dự đoán bảy trận loại trực tiếp cùng giải đấu của bạn.",
   "brk.hub.sports.sport.soccer": "Bóng đá",
   "brk.hub.sports.sport.soccer.desc":
     "Champions League, Euros và Copa América. Sắp có.",
 
-  "brk.hub.features.title": "Công cụ AI và chủ pool tích hợp sẵn",
-  "brk.hub.features.aiReport": "Báo cáo AI Bracket",
+  "brk.hub.features.title": "Công cụ Chimmy và chủ pool tích hợp sẵn",
+  "brk.hub.features.aiReport": "Báo cáo Chimmy Bracket",
   "brk.hub.features.aiReport.desc":
     "Điểm chữ, niềm tin nhà vô địch, xác suất thắng, và điều khiến bracket của bạn khác biệt.",
   "brk.hub.features.rooting": "Hướng dẫn cổ vũ",
@@ -1276,7 +1299,7 @@ const VI: BracketsDictionary = {
   "brk.hub.v2.titleLine1": "AF World Cup",
   "brk.hub.v2.titleLine2": "Thử thách Bracket",
   "brk.hub.v2.subtitle":
-    "48 đội tuyển. 104 trận đấu. Một nhà vô địch. Chọn từng trận trước giờ bóng lăn và thi đấu trong pool của bạn — có phân tích AI cho mỗi trận. Miễn phí mãi mãi.",
+    "48 đội tuyển. 104 trận đấu. Một nhà vô địch. Chọn từng trận trước giờ bóng lăn và thi đấu trong pool của bạn — có phân tích Chimmy cho mỗi trận. Miễn phí mãi mãi.",
   "brk.hub.v2.feature.teams": "48 đội tuyển",
   "brk.hub.v2.feature.matches": "104 trận",
   "brk.hub.v2.feature.format": "12 Bảng + Vòng loại trực tiếp",
@@ -1302,14 +1325,16 @@ const VI: BracketsDictionary = {
   // ── /brackets how-it-works step 4 ────────────────────────────────────
   "brk.hub.howItWorks.step4Title": "Leo bảng xếp hạng",
   "brk.hub.howItWorks.step4Body":
-    "Theo dõi bảng xếp hạng trực tiếp, khoe với bạn bè bằng thẻ chia sẻ, và để AI phân tích điều gì làm bracket của bạn trở nên đặc biệt.",
+    "Theo dõi bảng xếp hạng trực tiếp, khoe với bạn bè bằng thẻ chia sẻ, và để Chimmy phân tích điều gì làm bracket của bạn trở nên đặc biệt.",
   // ── Hub v3 (2026-10-01): playoff-led hero, up-next labels ──
-  "brk.hub.v3.openBadge": "Bracket MLB và NHL đã mở",
+  "brk.hub.v3.openBadge": "Giải bracket hiện đã mở",
   "brk.hub.v3.titleLine1": "AF Playoff",
   "brk.hub.v3.titleLine2": "Thử thách Bracket",
-  "brk.hub.v3.subtitle": "Dự đoán từng loạt đấu, lập nhóm cùng bạn bè và leo bảng xếp hạng khi mùa playoff diễn ra.",
+  "brk.hub.v3.subtitle": "Chọn đội thắng ở từng trận, mời bạn bè và leo bảng xếp hạng khi các trận đấu kết thúc.",
   "brk.hub.v3.cta.mlb": "Bracket hậu mùa giải MLB",
   "brk.hub.v3.cta.nhl": "Bracket playoff NHL",
+  "brk.hub.v3.cta.cfp": "Giải bracket CFP",
+  "brk.hub.v3.cta.nbaCup": "Giải bracket NBA Cup",
   "brk.hub.v3.upNext.title": "Sắp tới",
   "brk.hub.v3.upNext.ncaaf": "College Football Playoff · Tháng 12",
   "brk.hub.v3.upNext.nfl": "NFL Playoffs · Tháng 1",

@@ -798,8 +798,11 @@ describe("STEP-7 — saveWorldCupBracketPickForEntry (reseeded official fixtures
       entries: [],
       includeThirdPlace: false,
     })
-    prismaMocks.$transaction.mockImplementation(async (callback: (tx: typeof prismaMocks) => Promise<unknown>) =>
-      callback(prismaMocks)
+    // Both Prisma forms: the save runs an interactive callback, and the recalculation it
+    // triggers writes the leaderboard with the batch (array) form.
+    prismaMocks.$transaction.mockImplementation(
+      async (arg: ((tx: typeof prismaMocks) => Promise<unknown>) | Promise<unknown>[]) =>
+        typeof arg === "function" ? arg(prismaMocks) : Promise.all(arg)
     )
   })
 
@@ -1185,7 +1188,7 @@ describe("PROOF-D — Commissioner settings persist and toggle", () => {
 
 // ─── Proof E: AI gating ───────────────────────────────────────────────────────
 
-describe("PROOF-E — AI gating: free users blocked, paid users unlocked", () => {
+describe("PROOF-E — Chimmy gating: free users blocked, paid users unlocked", () => {
   it("locks all premium tools for an unauthenticated free user", () => {
     const input = { isOwner: false, isAdmin: false, hasBracketBrainAi: false }
 
@@ -1210,7 +1213,7 @@ describe("PROOF-E — AI gating: free users blocked, paid users unlocked", () =>
     expect(canUseWorldCupCommissionerTools({ plans: ["supreme"] })).toBe(true)
   })
 
-  it("unlocks AI tools only with Bracket Brain or Pro+ plans", () => {
+  it("unlocks Chimmy tools only with Bracket Brain or Pro+ plans", () => {
     expect(canUseWorldCupAiTools({ hasBracketBrainAi: true })).toBe(true)
     expect(canUseWorldCupAiTools({ hasAfPro: true })).toBe(true)
     expect(canUseWorldCupAiTools({ plans: ["pro"] })).toBe(true)
@@ -1222,11 +1225,11 @@ describe("PROOF-E — AI gating: free users blocked, paid users unlocked", () =>
   it("resolves correct copy labels for the premium panel UI", () => {
     const free = resolveWorldCupEntitlementSummary({})
     expect(free.labels.commissioner).toBe("Requires AF Commissioner")
-    expect(free.labels.ai).toBe("Requires AI/Pro")
+    expect(free.labels.ai).toBe("Requires Chimmy/Pro")
 
     const admin = resolveWorldCupEntitlementSummary({ isAdmin: true })
     expect(admin.labels.commissioner).toBe("AF Commissioner active")
-    expect(admin.labels.ai).toBe("AI/Pro active")
+    expect(admin.labels.ai).toBe("Chimmy/Pro active")
   })
 })
 

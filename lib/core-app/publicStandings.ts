@@ -3,6 +3,9 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName } from './leagueHome'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
+import { leagueHasMedianGame, medianGameRecords } from './medianGame'
+import { headToHeadRecords } from './headToHeadRecords'
+import { readPlayoffFormat } from './outlookFormat'
 
 /**
  * Public league standings — the one indexable surface in the 38a suite.
@@ -42,6 +45,7 @@ export type PublicStandingRow = {
   name: string
   wins: number
   losses: number
+  ties: number
   pointsFor: number
   average: number | null
 }
@@ -94,7 +98,7 @@ export async function getPublicLeagueStandings(
           rosterId: true,
           pointsFor: true,
           pointsAgainst: true,
-          win: true,
+          matchupId: true,
         },
       })
       .catch(() => []),
@@ -103,7 +107,8 @@ export async function getPublicLeagueStandings(
         where: { leagueId },
         // ⚠ `ownerName` is NOT selected. See the header — publishing standings
         // is not consent to publish who the managers are.
-        select: { externalId: true, teamName: true },
+        // The platform's own record is read only to tell a median-game league (see medianGame.ts).
+        select: { externalId: true, teamName: true, wins: true, losses: true, ties: true },
       })
       .catch(() => []),
   ])
@@ -127,14 +132,48 @@ export async function getPublicLeagueStandings(
     if (t.externalId && label) nameByRoster.set(t.externalId, label)
   }
 
-  const totals = new Map<string, { pf: number; games: number; wins: number; losses: number }>()
+  const totals = new Map<string, { pf: number; games: number; wins: number; losses: number; ties: number }>()
+  const totalOf = (rosterId: string) => {
+    const acc = totals.get(rosterId) ?? { pf: 0, games: 0, wins: 0, losses: 0, ties: 0 }
+    totals.set(rosterId, acc)
+    return acc
+  }
   for (const r of seasonRows) {
-    const acc = totals.get(r.rosterId) ?? { pf: 0, games: 0, wins: 0, losses: 0 }
+    const acc = totalOf(r.rosterId)
     acc.pf += r.pointsFor
     acc.games += 1
-    if (r.win > 0) acc.wins += 1
-    else acc.losses += 1
-    totals.set(r.rosterId, acc)
+  }
+
+  /*
+   * 🛑 RESULTS COME FROM PAIRED SCORES, NEVER FROM `WeeklyMatchup.win` — the signed-in board's rule
+   * (standingsModel.ts). The writer stores a tie as `win = 0` for both sides, which this table used to
+   * publish as two losses, and stored `win = 1` for any unpaired roster that scored, which published a
+   * league with no head-to-head pairing as every team 1-0. A matchup that is not exactly two rows has
+   * no result.
+   */
+  for (const [rosterId, rec] of headToHeadRecords(seasonRows)) {
+    const acc = totalOf(rosterId)
+    acc.wins += rec.wins
+    acc.losses += rec.losses
+    acc.ties += rec.ties
+  }
+
+  /* Sleeper's median game is in the platform's record, so it is in this one (see medianGame.ts). */
+  const reportedGames = teams.reduce(
+    (max, t) => Math.max(max, (Number(t.wins) || 0) + (Number(t.losses) || 0) + (Number(t.ties) || 0)),
+    0,
+  )
+  // Regular season only: the median game is not a playoff game.
+  const regularEnd = readPlayoffFormat(league.settings, totals.size, null).regularSeasonEndWeek
+  const regularRows = seasonRows.filter((r) => regularEnd == null || r.week <= regularEnd)
+  const weeksDone = new Set(regularRows.map((r) => r.week)).size
+  if (leagueHasMedianGame(league.settings, reportedGames > 0 ? { maxGames: reportedGames, weeksDone } : null)) {
+    for (const [rosterId, rec] of medianGameRecords(regularRows)) {
+      const acc = totalOf(rosterId)
+      acc.wins += rec.wins
+      acc.losses += rec.losses
+      acc.ties += rec.ties
+    }
   }
 
   const ordered = [...totals.entries()].sort((a, b) => b[1].pf - a[1].pf)
@@ -150,6 +189,7 @@ export async function getPublicLeagueStandings(
     name: nameByRoster.get(rosterId) ?? `Team ${rosterId}`,
     wins: t.wins,
     losses: t.losses,
+    ties: t.ties,
     pointsFor: t.pf,
     average: t.games > 0 ? t.pf / t.games : null,
   }))

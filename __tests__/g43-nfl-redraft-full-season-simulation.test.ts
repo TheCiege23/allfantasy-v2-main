@@ -107,4 +107,20 @@ describe('G43 NFL redraft full season simulation', () => {
     )
     expect(allInvariantValues.every(Boolean)).toBe(true)
   })
+
+  it('runs the same season with divisions (winners take the top seeds) and NFL-style reseeding', () => {
+    const result = runNflRedraftFullSeasonSimulation({ playoffTeams: 4, divisionPlayoffRule: 'top_seeds', reseed: true })
+
+    expect(result.playoffs.generated).toBe(true)
+    expect(result.playoffs.rounds).toBe(2)
+    expect(result.playoffs.seeds).toHaveLength(4)
+    // One winner per division (East, West), and they hold seeds 1 and 2.
+    expect(result.playoffs.seeds.slice(0, 2).map((seed) => seed.qualifiedBy)).toEqual(['division', 'division'])
+    expect(result.playoffs.seeds.slice(2).every((seed) => seed.qualifiedBy !== 'division')).toBe(true)
+    expect(result.invariants.playoffSeedsDerivedFromStandings).toBe(true)
+    expect(result.playoffs.reseeded).toBe(true)
+    expect(result.events.map((event) => event.type)).toContain('playoffs.reseeded')
+    expect(result.playoffs.finalStandings[0]).toMatchObject({ rosterId: result.playoffs.championRosterId, champion: true })
+    expect(Object.values(result.invariants).every(Boolean)).toBe(true)
+  })
 })

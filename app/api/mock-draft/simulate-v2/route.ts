@@ -15,6 +15,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { DraftPlayer, MockDraftConfig } from '@/lib/mock-draft-simulator/types'
 import { isMockDraftsEnabled } from '@/lib/feature-toggle'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { MAX_LEAGUE_MOCK_TEAMS, normalizeMockDraftTeamCount } from '@/lib/mock-draft/mockTeamCount'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,8 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}))
     const leagueId = body.leagueId ?? null
     const sport = normalizeToSupportedSport(body.sport ?? 'NFL')
-    const numTeams = Math.min(Math.max(Number(body.numTeams) || 12, 8), 16)
+    // Any size a league of this sport and type accepts (lib/mock-draft/mockTeamCount.ts).
+    const numTeams = normalizeMockDraftTeamCount(body.numTeams, sport, body.leagueType)
     const rounds = Math.min(Math.max(Number(body.rounds) || 15, 10), 25)
     const draftType = body.draftType === 'linear' ? 'linear' : 'snake'
     const userSlot = body.userSlot != null ? Math.max(0, Math.min(numTeams - 1, Number(body.userSlot))) : null
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
         include: {
           teams: {
             select: { teamName: true, ownerName: true },
-            take: 20,
+            take: MAX_LEAGUE_MOCK_TEAMS,
           },
         },
       })

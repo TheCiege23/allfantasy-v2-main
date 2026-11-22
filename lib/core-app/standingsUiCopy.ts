@@ -1,5 +1,6 @@
 import type { StandingsBoard } from './standingsModel'
 import { MIN_WEEKS_TO_PROJECT } from './standingsModel'
+import { TIEBREAKER_LABELS } from '@/lib/standings/tiebreakerOrder'
 
 /** Spanish text for explanations derived from the board's structured facts. */
 export function standingsBoardCopy(board: StandingsBoard, language: string) {
@@ -27,7 +28,9 @@ export function standingsBoardCopy(board: StandingsBoard, language: string) {
 
   const order = board.platformOrder
     ? `El orden es la clasificación publicada por ${platform}.`
-    : board.hasHeadToHead
+    : board.hasHeadToHead && board.rules.tiebreakerSource === 'league'
+      ? `El orden sigue el porcentaje de victorias y luego los desempates del comisionado: ${board.rules.tiebreakers.map((tb) => TIEBREAKER_LABELS[tb].es.toLowerCase()).join(', ')}.`
+      : board.hasHeadToHead
       ? `El orden sigue el porcentaje de victorias, luego los puntos a favor y después el enfrentamiento directo${board.rules.tiebreakerSource === 'platform' ? `, según las reglas de ${platform}` : `; esta última regla se supone porque ${platform} no publica su desempate`}.`
       : 'El orden sigue los puntos a favor.'
 

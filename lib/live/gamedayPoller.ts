@@ -94,14 +94,13 @@ export async function anyGameInProgress(now: Date = new Date()): Promise<boolean
    * hours back covers a game already running; thirty minutes forward catches one
    * about to start, which is when §4 wants a 60s poll anyway.
    */
-  const from = new Date(now.getTime() - 3 * 3_600_000)
+  const from = new Date(now.getTime() - 8 * 3_600_000)
   const to = new Date(now.getTime() + 30 * 60_000)
 
   const rows = await prisma.sportsGame
     .findMany({
       where: { startTime: { gte: from, lte: to } },
       select: { status: true },
-      take: 60,
     })
     .catch(() => [])
 

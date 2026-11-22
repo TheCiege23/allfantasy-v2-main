@@ -40,6 +40,21 @@ describe('NFL rookie lookup respects DB-first draft loading', () => {
     },
   )
 
+  it('never calls a provider for an interactive pool, even when global flags allow live APIs', async () => {
+    h.players.mockImplementation(() => new Promise(() => {}))
+    const result = await loadNflRookieLookup({ allowLive: false })
+    expect(result.lookup.bySleeperId.get('123')?.yearsExp).toBe(0)
+    expect(h.players).not.toHaveBeenCalled()
+    expect(h.state).not.toHaveBeenCalled()
+  })
+
+  it('returns unknown without calling a provider when the interactive pool has no stored metadata', async () => {
+    h.cached.mockResolvedValue(null)
+    const result = await loadNflRookieLookup({ allowLive: false })
+    expect(result.lookup.hasData).toBe(false)
+    expect(h.players).not.toHaveBeenCalled()
+  })
+
   it('keeps expired metadata unknown without a live fetch', async () => {
     h.flags.useDbCacheOnly = true
     h.cached.mockResolvedValue({ expiresAt: new Date(0), data: { v: 1, bySleeperId: { '123': 0 } } })

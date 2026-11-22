@@ -72,11 +72,13 @@ type StateChannelRow = {
   memberUserIds: string[]
 }
 
-export interface SurvivorFoundationState {
+interface SurvivorFoundationState {
   ok: true
   leagueId: string
   phase: string
   currentWeek: number
+  /** The league's sport, so settings screens can show sport-only rules (NBA weekly scoring). */
+  sport?: string
   settings: SurvivorAccessContext['settings']
   access: {
     role: SurvivorAccessContext['role']
@@ -153,7 +155,7 @@ export interface SurvivorFoundationState {
   pendingFoundationWarnings: string[]
 }
 
-export type SurvivorFoundationStateResult =
+type SurvivorFoundationStateResult =
   | { ok: true; state: SurvivorFoundationState }
   | { ok: false; status: 403 | 404; error: string }
 
@@ -366,6 +368,7 @@ export async function buildSurvivorStateForUser(
     leagueId,
     phase: gameState?.phase ?? league.survivorPhase ?? 'setup',
     currentWeek: gameState?.currentWeek ?? 0,
+    sport: String(league.sport ?? 'NFL').toUpperCase(),
     settings: access.settings,
     access: {
       role: access.role,

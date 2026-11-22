@@ -43,6 +43,22 @@ export async function openFinale(leagueId: string, finalistUserIds: string[]): P
   await notifyJuryVoteOpenOnce(leagueId, previous?.status)
 }
 
+/**
+ * Open jury voting with no commissioner click. Idempotent: an open or finished session is left
+ * alone, and a finale that opened without a session row gets one.
+ */
+export async function ensureJuryVotingOpen(leagueId: string, deadline: Date): Promise<void> {
+  const previous = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true, votingDeadline: true } }).catch(() => null)
+  if (previous?.status === 'complete') return
+  if (previous?.status === 'voting_open' && previous.votingDeadline) return
+  await prisma.jurySession.upsert({
+    where: { leagueId },
+    create: { leagueId, status: 'voting_open', votingDeadline: deadline },
+    update: { status: 'voting_open', votingDeadline: deadline },
+  })
+  await notifyJuryVoteOpenOnce(leagueId, previous?.status)
+}
+
 export async function openJuryVoting(leagueId: string, deadline: Date): Promise<void> {
   const previous = await prisma.jurySession.findUnique({ where: { leagueId }, select: { status: true } }).catch(() => null)
   await prisma.jurySession.update({

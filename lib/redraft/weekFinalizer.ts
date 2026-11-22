@@ -1,18 +1,27 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
+import { freezeWeekPositions } from '@/lib/bestball/weekPositions'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
+import { dailySlotFor, daysInWindow, daysOnRoster, droppedInWindow, isDailyLineupScoringEnabled, loadDailyLineups } from './dailyLineups'
 import { isSealedWeek } from './weekSealed'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
+import {
+  MISSING_STAT_BLOCKING_VERDICTS,
+  classifyMissingStatPlayers,
+  type MissingStatVerdict,
+} from './weekStatEvidence'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -41,7 +50,18 @@ import { readExileRoster } from '@/lib/survivor/exileRosterRules'
  *      finished — see `lib/sports/gameStatus.ts`, sixteen vocabularies in one column);
  *   2. a grace period has passed since the last kickoff, so stat corrections land
  *      before the week is sealed;
- *   3. stat COVERAGE across the league's own starters clears a floor.
+ *   3. stat COVERAGE across the league's own starters clears a floor;
+ *   4. EVERY STARTER STILL WITHOUT A ROW IS PROVABLY A NON-APPEARANCE (`weekStatEvidence.ts`). The
+ *      floor is a league-wide ratio and cannot tell five scattered inactives from one whole game the
+ *      feed never delivered — and in best ball, where the whole roster counts, that game is up to a
+ *      fifth of a team. So a missing player is sealed at 0 only when his team's game is final AND the
+ *      feed holds other stat lines for that game (or his team had no game: a bye). If a team played and
+ *      the feed has NOTHING for its game, the week refuses with `game_stats_missing` and retries; once
+ *      that has lasted {@link WEEK_STAT_GAP_ESCALATE_MS} past the grace period it refuses as
+ *      `game_stats_missing_escalated` and writes ONE commissioner-visible league-log row
+ *      (`week_stat_gap`) naming the teams — it keeps waiting, it never seals the gap as zeros, and it
+ *      never waits silently. A player with no team to check (a free agent, an Exile pick) keeps the old
+ *      tolerance under the floor but is reported in `unverifiedZeroPlayerIds`.
  *
  * Every refusal is named and returned, never swallowed — a week that cannot be
  * closed says why, which is the diagnostic the stuck-at-week-1 state never had.
@@ -66,6 +86,29 @@ export const WEEK_FINALIZE_GRACE_MS = 12 * 60 * 60 * 1000
  * and is refused outright.
  */
 export const WEEK_FINALIZE_COVERAGE_FLOOR = 0.8
+
+/**
+ * How long a week may refuse for a missing game box score, counted from the END of the grace period,
+ * before the refusal escalates to the commissioner. A box score that is merely late lands well inside
+ * a day; one still missing after that is a feed gap a human has to know about.
+ */
+export const WEEK_STAT_GAP_ESCALATE_MS = 24 * 60 * 60 * 1000
+
+/** League-log action written once per season-week when a missing box score escalates. */
+export const WEEK_STAT_GAP_ACTION = 'week_stat_gap'
+
+/**
+ * The hard cap on waiting, counted from the END of the grace period. A box score the provider never
+ * delivers must not freeze a league: the sweep only looks back {@link WEEK_FINALIZE_LOOKBACK_WEEKS}
+ * weeks, so an unsealed week past that would never close, its matchups would never go final and the
+ * season would stall. After this long the week seals, the gap players' zeros are reported in
+ * `unverifiedZeroPlayerIds`, and ONE commissioner log row ({@link WEEK_STAT_GAP_SEALED_ACTION}) says so.
+ * A late box score is still applied afterwards by the stat-correction pass on the sealed week.
+ */
+export const WEEK_STAT_GAP_SEAL_MS = 72 * 60 * 60 * 1000
+
+/** League-log action written once per season-week when a week is sealed despite a missing box score. */
+export const WEEK_STAT_GAP_SEALED_ACTION = 'week_stat_gap_sealed'
 
 /** How many completed weeks behind the current one a sweep will try to close. */
 export const WEEK_FINALIZE_LOOKBACK_WEEKS = 3
@@ -116,6 +159,13 @@ export type WeekFinalizeRefusal =
    * fetch had already spent the hour's budget.
    */
   | 'provider_rate_limited'
+  /**
+   * A team on the slate PLAYED, its game is final, and the feed holds no stat line for that game
+   * (`weekStatEvidence.ts`). Sealing would score every one of its players 0. Waits and retries.
+   */
+  | 'game_stats_missing'
+  /** The same, still unresolved {@link WEEK_STAT_GAP_ESCALATE_MS} after the grace period: escalated. */
+  | 'game_stats_missing_escalated'
 
 export type WeekSlateSummary = {
   games: number
@@ -148,6 +198,11 @@ export type WeekFinalizeResult = {
   zeroedPlayerIds: string[]
   matchupsFinal: number
   matchupsConsidered: number
+  /** Present only when non-empty: zeros sealed with no team to check them against (see the header). */
+  unverifiedZeroPlayerIds?: string[]
+  /** Present only on a `game_stats_missing*` refusal: the players and teams whose box score is absent. */
+  statGapPlayerIds?: string[]
+  statGapTeams?: string[]
 }
 
 export type WeekFinalizerDeps = {
@@ -157,6 +212,18 @@ export type WeekFinalizerDeps = {
    * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
    */
   notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
+  /**
+   * "Your rebuild plan is ready" to a manager newly out of the race in a dynasty or keeper league
+   * (lib/trade-intel/rebuildPlanNotice.ts), once a season. Loaded on first use.
+   */
+  notifyRebuildPlans?: (args: { prisma: PrismaClient; seasonId: string }) => Promise<unknown>
+  /**
+   * "You clinched a playoff spot" / "Your playoff race is over" (lib/redraft/playoffStatusNotify.ts), once
+   * a season per manager. After the rebuild notice, which it does not repeat. Loaded on first use.
+   */
+  notifyPlayoffStatus?: (args: { prisma: PrismaClient; seasonId: string }) => Promise<unknown>
+  /** Settles the league chat's prediction polls once the week is final. Loaded on first use. */
+  resolvePredictions?: (args: { prisma: PrismaClient; leagueId: string }) => Promise<unknown>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -174,7 +241,7 @@ export type WeekFinalizerDeps = {
   syncWeekStats?: (args: {
     seasonId: string
     week: number
-  }) => Promise<{ rateLimited?: boolean } | void>
+  }) => Promise<{ rateLimited?: boolean; providerRows?: number } | void>
 }
 
 export type FinalizeRedraftWeekParams = {
@@ -184,6 +251,10 @@ export type FinalizeRedraftWeekParams = {
   seasonType?: 'regular' | 'postseason'
   graceMs?: number
   coverageFloor?: number
+  /** Override of {@link WEEK_STAT_GAP_ESCALATE_MS}. */
+  statGapEscalateMs?: number
+  /** Override of {@link WEEK_STAT_GAP_SEAL_MS}. */
+  statGapSealMs?: number
   /** Measure and report without writing. */
   dryRun?: boolean
   /**
@@ -195,7 +266,31 @@ export type FinalizeRedraftWeekParams = {
    * is sealed, exactly as before.
    */
   rosterIds?: string[]
+  /**
+   * Let a week under the coverage floor seal when EVERY starter still without a row is a proven
+   * non-appearance (`did_not_play`, `no_game` or `inactive` in `weekStatEvidence.ts`).
+   *
+   * 🛑 SET ONLY BY {@link finalizeWeekWithRefresh}, AND ONLY RIGHT AFTER A BACKFILL THAT RETURNED
+   * PROVIDER LINES. The floor guards two different failures. One is a feed outage, which the
+   * evidence check catches by itself: a team whose game the feed never delivered is
+   * `game_box_missing` and still blocks. The other is a past week whose stats nobody fetched — and
+   * there the evidence check is fooled, because teammates on OTHER leagues' rosters hold rows, so a
+   * player who played but was never fetched for THIS league reads as `did_not_play`. A fresh
+   * backfill that just returned lines for this league's players removes that case: a starter still
+   * without a row after it genuinely recorded nothing.
+   *
+   * Why it exists, measured 2026-11-14: a 12-team test league with one player per roster sat at
+   * week 5 for six weeks — every tick refused at 9/12 = 75%, with the three missing starters on a
+   * bye or inactive. The floor is a ratio, so a small league, or a real one with an inactive
+   * manager starting injured and bye-week players, can sit under it forever with nothing missing.
+   * NCAAF is untouched: its floor is 1.0 because the college sync writes explicit rows for a
+   * verified non-appearance.
+   */
+  allowProvenNonAppearanceBelowFloor?: boolean
 }
+
+/** Verdicts that prove a starter recorded nothing this week, so a 0 is the truth (weekStatEvidence.ts). */
+const PROVEN_NON_APPEARANCE: ReadonlySet<MissingStatVerdict> = new Set(['did_not_play', 'no_game', 'inactive'])
 
 function emptyResult(
   base: Pick<WeekFinalizeResult, 'seasonId' | 'leagueId' | 'sport' | 'season' | 'week'>,
@@ -393,6 +488,8 @@ export async function finalizeRedraftWeek(
    */
   let dateWindow: { start: Date; end: Date } | null = null
   if (isDateWindowed) {
+    // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
+    await ensureDailySportSeasonStart(sport, season.season, { db: prisma })
     // The stat sync's own resolver, so slate and stats cover the same days — gameweeks for soccer.
     const window = resolveDailySportWeekWindow(sport, season.season, params.week)
     if (!window) return emptyResult(base, 'season_start_unknown')
@@ -456,7 +553,7 @@ export async function finalizeRedraftWeek(
   const rosterPlayers = rosterIds.length
     ? await prisma.redraftRosterPlayer.findMany({
         where: { rosterId: { in: rosterIds }, droppedAt: null },
-        select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true },
+        select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true, team: true },
       })
     : []
   /*
@@ -477,7 +574,7 @@ export async function finalizeRedraftWeek(
    */
   const league = await prisma.league.findFirst({
       where: { id: season.leagueId },
-      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true },
+      select: { bestBallMode: true, leagueVariant: true, leagueType: true, survivorMode: true, platform: true, guillotineMode: true, settings: true },
     })
   const bestBall = leagueIsBestBall(league)
 
@@ -485,11 +582,52 @@ export async function finalizeRedraftWeek(
    * One row per (playerId, sport): the score table is keyed that way, and two managers
    * starting the same player must not be counted as two starters to cover.
    */
-  const starters = new Map<string, { playerId: string; sport: string }>()
+  const starters = new Map<string, { playerId: string; sport: string; team: string | null; position: string | null }>()
   const exileStarterKeys = new Set<string>()
-  for (const p of rosterPlayers) {
-    if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
-    starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport })
+  /*
+   * 🛑 A DAILY-LINEUP LEAGUE'S STARTERS ARE EVERYONE WHO STARTED ON ANY DAY OF THE WEEK. The daily
+   * scorer (`scoreRosterDaily`) needs a sealed weekly row for each of them, so sealing only whoever
+   * holds a starter slot now left a player started on Tuesday and benched on Wednesday unsealed — and
+   * the matchup never went final. A player dropped this week counts for the days he was here.
+   */
+  const dailySettings =
+    !bestBall && dateWindow && rosterIds.length
+      ? await prisma.league.findUnique?.({ where: { id: season.leagueId }, select: { settings: true } })
+      : null
+  if (dateWindow && dailySettings && isDailyLineupScoringEnabled(dailySettings.settings, sport)) {
+    const days = daysInWindow(dateWindow)
+    const dailyLineups = await loadDailyLineups(prisma, { redraftRosterIds: rosterIds, window: dateWindow })
+    const weekPlayers = await prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: { in: rosterIds }, ...droppedInWindow(dateWindow) },
+      select: { rosterId: true, playerId: true, position: true, sport: true, slotType: true, team: true, addedAt: true, droppedAt: true },
+    })
+    for (const p of weekPlayers) {
+      const started = daysOnRoster(p, days).some((day) =>
+        countsTowardScore(dailySlotFor(dailyLineups, p.rosterId, p.playerId, day) ?? weekSlotType(p, weekLineups), false),
+      )
+      if (started) starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport, team: p.team ?? null, position: p.position ?? null })
+    }
+  } else {
+    /*
+     * ⚠ BEST BALL SEALS THE ROSTER IT SCORES: the week's roster as of each player's lock
+     * (`bestBallWeekRoster.ts`), which keeps a player dropped after his game and leaves out one added
+     * after it. Sealing the current roster instead left the dropped player's row unsealed — and the
+     * matchup, which now scores him, could never go final.
+     */
+    const sealRows = bestBall && rosterIds.length
+      ? await loadBestBallWeekRosterRows(prisma, {
+          rosterIds,
+          sport,
+          season: season.season,
+          week: params.week,
+          platform: league?.platform ?? null,
+        })
+      : rosterPlayers
+    for (const p of sealRows) {
+      if (!countsTowardScore(weekSlotType(p, weekLineups), bestBall)) continue
+      const row = p as { team?: string | null; position?: string | null }
+      starters.set(`${p.sport}::${p.playerId}`, { playerId: p.playerId, sport: p.sport, team: row.team ?? null, position: row.position ?? null })
+    }
   }
   // Closed Exile lineups are separate from the main league roster. They must
   // participate in the same slate and coverage proof before their score can
@@ -511,7 +649,7 @@ export async function finalizeRedraftWeek(
       for (const player of roster.players) {
         if (player.slot === 'BENCH') continue
         const key = `${sport}::${player.id}`
-        starters.set(key, { playerId: player.id, sport })
+        starters.set(key, { playerId: player.id, sport, team: null, position: null })
         exileStarterKeys.add(key)
       }
     }
@@ -552,9 +690,21 @@ export async function finalizeRedraftWeek(
       slate, matchupsConsidered, starters: starters.size, startersWithStats, coverage,
     })
   }
+  const missing = [...starters.values()].filter((s) => !existing.has(`${s.sport}::${s.playerId}`))
+
+  /*
+   * 🛑 THE FLOOR FORGIVES A SHARE, NOT A GAME. Before any zero is written, every missing player must be
+   * a provable non-appearance — see `weekStatEvidence.ts` and the header's fourth condition. Run on a
+   * dry run too: `finalizeWeekWithRefresh` asks a dry run whether the week is ready.
+   *
+   * Asked BEFORE the floor only when `allowProvenNonAppearanceBelowFloor` could use the answer; the
+   * ordinary below-floor refusal stays the cheap one it always was.
+   */
   // College sync writes explicit rows for verified byes/non-appearances. A missing college
   // row therefore means missing identity or ingestion evidence, never a zero to invent.
-  if (coverage < (sport === 'NCAAF' ? 1 : coverageFloor)) {
+  const belowFloor = coverage < (sport === 'NCAAF' ? 1 : coverageFloor)
+  const mayExcuseFloor = belowFloor && params.allowProvenNonAppearanceBelowFloor === true && sport !== 'NCAAF' && missing.length > 0
+  if (belowFloor && !mayExcuseFloor) {
     return emptyResult(base, 'stat_coverage_below_floor', {
       slate,
       matchupsConsidered,
@@ -563,8 +713,81 @@ export async function finalizeRedraftWeek(
       coverage,
     })
   }
-
-  const missing = [...starters.values()].filter((s) => !existing.has(`${s.sport}::${s.playerId}`))
+  const { verdicts, gapTeams } = await classifyMissingStatPlayers(prisma as never, {
+    sport,
+    season: season.season,
+    week: params.week,
+    dateWindow,
+    missing,
+    now,
+  })
+  if (mayExcuseFloor && !missing.every((m) => PROVEN_NON_APPEARANCE.has(verdicts.get(`${m.sport}::${m.playerId}`) as MissingStatVerdict))) {
+    return emptyResult(base, 'stat_coverage_below_floor', {
+      slate,
+      matchupsConsidered,
+      starters: starters.size,
+      startersWithStats,
+      coverage,
+    })
+  }
+  const verdictOf = (m: { sport: string; playerId: string }): MissingStatVerdict | undefined => verdicts.get(`${m.sport}::${m.playerId}`)
+  const gapPlayers = missing.filter((m) => {
+    const v = verdictOf(m)
+    return v != null && MISSING_STAT_BLOCKING_VERDICTS.has(v)
+  })
+  // Measured from the end of the grace period: before it, waiting is the ordinary state.
+  const gapAnchor = lastStart ? lastStart.getTime() + graceMs : dateWindow ? dateWindow.end.getTime() : null
+  const gapCapReached =
+    gapPlayers.length > 0 && gapAnchor != null && now.getTime() >= gapAnchor + (params.statGapSealMs ?? WEEK_STAT_GAP_SEAL_MS)
+  if (gapCapReached && !params.dryRun) {
+    await recordStatGapEscalation(
+      prisma,
+      {
+        leagueId: season.leagueId,
+        seasonId: season.id,
+        season: season.season,
+        week: params.week,
+        sport,
+        teams: [...gapTeams].sort(),
+        playerIds: gapPlayers.map((m) => m.playerId),
+      },
+      WEEK_STAT_GAP_SEALED_ACTION,
+    )
+  }
+  if (gapPlayers.length > 0 && !gapCapReached) {
+    const escalateMs = params.statGapEscalateMs ?? WEEK_STAT_GAP_ESCALATE_MS
+    const escalated = gapAnchor != null && now.getTime() >= gapAnchor + escalateMs
+    const statGapTeams = [...gapTeams].sort()
+    const statGapPlayerIds = gapPlayers.map((m) => m.playerId)
+    if (escalated && !params.dryRun) {
+      await recordStatGapEscalation(prisma, {
+        leagueId: season.leagueId,
+        seasonId: season.id,
+        season: season.season,
+        week: params.week,
+        sport,
+        teams: statGapTeams,
+        playerIds: statGapPlayerIds,
+      })
+    }
+    return emptyResult(base, escalated ? 'game_stats_missing_escalated' : 'game_stats_missing', {
+      slate,
+      matchupsConsidered,
+      starters: starters.size,
+      startersWithStats,
+      coverage,
+      statGapPlayerIds,
+      statGapTeams,
+    })
+  }
+  // Past the cap the gap players seal at 0 too — reported here, never folded silently into the zeros.
+  const unverifiedZeroPlayerIds = missing
+    .filter((m) => {
+      const v = verdictOf(m)
+      return v === 'unplaced' || (gapCapReached && v != null && MISSING_STAT_BLOCKING_VERDICTS.has(v))
+    })
+    .map((m) => m.playerId)
+  const unverified = unverifiedZeroPlayerIds.length > 0 ? { unverifiedZeroPlayerIds } : {}
 
   if (params.dryRun) {
     return {
@@ -581,6 +804,7 @@ export async function finalizeRedraftWeek(
       zeroedPlayerIds: missing.map((m) => m.playerId),
       matchupsFinal: 0,
       matchupsConsidered,
+      ...unverified,
     }
   }
 
@@ -620,6 +844,8 @@ export async function finalizeRedraftWeek(
       data: { isFinalized: true },
     })
     rowsFinalized += updated.count
+    // The week's recorded positions freeze with its scores (lib/bestball/weekPositions.ts).
+    await freezeWeekPositions(prisma as never, { sport: playerSport, season: season.season, week: params.week }, playerIds)
   }
 
   await recalc(season.id, params.week)
@@ -634,8 +860,8 @@ export async function finalizeRedraftWeek(
     try {
       await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
     } catch (error) {
-      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
-      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+      // A failed scan must not undo a completed scoring week; it releases its marker and the next run retries.
+      console.error('[weekFinalizer] Tanking scan failed', { leagueId: season.leagueId, week: params.week, error })
     }
     /*
      * The result push, on the same gate: every game final, so a week this function refused (or
@@ -648,6 +874,53 @@ export async function finalizeRedraftWeek(
       await notify({ prisma, seasonId: season.id, week: params.week })
     } catch (error) {
       console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * The healthy alternative to tanking: a manager whose team is now mathematically out of the race
+     * hears once a season that a rebuild plan is waiting. Same all-final gate as the result push, so
+     * standings are settled before anyone is called out of it.
+     */
+    try {
+      const notify =
+        deps.notifyRebuildPlans ?? (await import('@/lib/trade-intel/rebuildPlanNotice')).notifyRebuildPlans
+      await notify({ prisma, seasonId: season.id })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send rebuild plan notices', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * Clinched or eliminated, by Season Outlook's own arithmetic, once a season per manager. Same all-final
+     * gate, and after the rebuild notice so a manager already told they are out is not told twice.
+     */
+    try {
+      const notify =
+        deps.notifyPlayoffStatus ?? (await import('./playoffStatusNotify')).notifyNativePlayoffStatus
+      await notify({ prisma, seasonId: season.id })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send playoff status notices', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    /*
+     * Settle the league chat's prediction polls on this week's matchups (lib/league-chat/
+     * predictionPolls.ts). Idempotent and never throws; the leaderboard read re-runs it anyway.
+     */
+    try {
+      const resolve =
+        deps.resolvePredictions ??
+        (await import('@/lib/league-chat/predictionPolls')).resolvePredictionPollsForLeague
+      await resolve({ prisma, leagueId: season.leagueId })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to resolve prediction polls', {
         leagueId: season.leagueId,
         week: params.week,
         error: error instanceof Error ? error.message : String(error),
@@ -669,6 +942,45 @@ export async function finalizeRedraftWeek(
     zeroedPlayerIds: missing.map((m) => m.playerId),
     matchupsFinal,
     matchupsConsidered: after.length,
+    ...unverified,
+  }
+}
+
+/**
+ * The escalation's commissioner-visible half: one league-log row per season-week (`week_stat_gap`,
+ * commissioner-only in `lib/league-log/leagueLog.ts`). Deduped on its entity id, so the five-minute
+ * sweep re-refusing the same week cannot spam the log. Never throws: telemetry failing must not turn a
+ * refusal into a crash, and the refusal reason itself already carries the escalation.
+ */
+async function recordStatGapEscalation(
+  prisma: PrismaClient,
+  args: { leagueId: string; seasonId: string; season: number; week: number; sport: string; teams: string[]; playerIds: string[] },
+  actionType: string = WEEK_STAT_GAP_ACTION,
+): Promise<void> {
+  try {
+    const entityId = `${args.seasonId}:${args.week}`
+    const already = await prisma.leagueAuditLog.findFirst({
+      where: { leagueId: args.leagueId, actionType, entityId },
+      select: { id: true },
+    })
+    if (already) return
+    await prisma.leagueAuditLog.create({
+      data: {
+        leagueId: args.leagueId,
+        userId: null,
+        actionType,
+        entityType: 'redraft_week',
+        entityId,
+        afterState: { teams: args.teams, playerIds: args.playerIds.slice(0, 100) },
+        metadata: { season: args.season, week: args.week, sport: args.sport, teams: args.teams.length, players: args.playerIds.length },
+      },
+    })
+  } catch (error) {
+    console.error('[weekFinalizer] Unable to record the stat-gap escalation', {
+      leagueId: args.leagueId,
+      week: args.week,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
@@ -742,10 +1054,24 @@ export async function finalizeWeekWithRefresh(
    * that can never reach the floor costs one backfill per tick until it falls out of the
    * lookback window, which is what bounds this.
    */
-  if (result.refusal === 'stat_coverage_below_floor' && deps.syncWeekStats && !params.dryRun) {
+  // A missing game box score is exactly what a backfill can answer too.
+  const backfillable =
+    result.refusal === 'stat_coverage_below_floor' ||
+    result.refusal === 'game_stats_missing' ||
+    result.refusal === 'game_stats_missing_escalated'
+  if (backfillable && deps.syncWeekStats && !params.dryRun) {
     try {
       const backfill = await deps.syncWeekStats({ seasonId: params.seasonId, week: params.week })
-      result = await attempt()
+      /*
+       * The fresh fetch is what makes a below-floor seal safe (see `allowProvenNonAppearanceBelowFloor`):
+       * only when it returned provider lines for this league's players may a starter still without a
+       * row be read as a proven non-appearance. A refused or empty fetch keeps the floor absolute.
+       */
+      const freshLines = (backfill && typeof backfill.providerRows === 'number' ? backfill.providerRows : 0) > 0
+      result = await finalizeRedraftWeek(
+        { ...params, allowProvenNonAppearanceBelowFloor: freshLines && !backfill?.rateLimited },
+        deps,
+      )
       /*
        * ⚠ REPORT THE CAUSE THAT IS TRUE. A spent quota makes the provider hand back an empty
        * payload, so the retry's coverage is the same number for a completely different
@@ -790,6 +1116,22 @@ export async function finalizeCompletedWeeksForSeason(
     },
     select: { week: true },
   })
+
+  /*
+   * 🛑 PLUS THE OLDEST OPEN WEEK BEHIND THE WINDOW — ONE, NOT ALL. A week that was still refusing when
+   * it aged out of the lookback was never looked at again, and one open week blocks `advance_week` for
+   * the rest of the season. Measured 2026-10-25: the live NHL season's week 1 had refused for coverage
+   * every tick since it ended, and would leave the window on 27 Oct with `currentWeek` still 1. Taking
+   * the single oldest keeps the bound: a long-dead league costs one extra week per tick, never a replay.
+   */
+  if (earliest > 1) {
+    const stale = await prisma.redraftMatchup.findFirst({
+      where: { seasonId: params.seasonId, week: { lt: earliest }, status: { not: 'final' }, awayRosterId: { not: null } },
+      orderBy: { week: 'asc' },
+      select: { week: true },
+    })
+    if (stale) open.push(stale)
+  }
 
   const weeks = [...new Set(open.map((m) => m.week))].sort((a, b) => a - b)
 

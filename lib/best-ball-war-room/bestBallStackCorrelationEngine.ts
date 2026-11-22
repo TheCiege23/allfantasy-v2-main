@@ -10,14 +10,14 @@
 
 import type { BestBallPlayerFact, BestBallWarRoomContext } from './types'
 
-export interface BestBallStack {
+interface BestBallStack {
   team: string
   players: Array<{ playerId: string; playerName: string; position: string }>
   /** True for a QB + pass-catcher (or skill) stack — the highest-correlation kind. */
   hasQbStack: boolean
 }
 
-export interface ByeCluster {
+interface ByeCluster {
   week: number
   count: number
   players: string[]

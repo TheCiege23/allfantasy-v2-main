@@ -1,6 +1,8 @@
 'use client'
 
 import '@/components/core-app/af-trades.css'
+import '@/components/core-app/trades/af-trades-league-guide.css'
+import { PickTermsCard } from '@/components/core-app/PickTermsCard'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { PlayerImage } from '@/app/components/PlayerImage'
@@ -10,13 +12,30 @@ import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl
 import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { tradesScreenMessages } from '@/lib/core-app/messages/tradesScreen'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { RedraftTradeDeadlineBar } from '@/components/core-app/RedraftTradeDeadlineBar'
+import { useEffect, useState } from 'react'
+import { redraftGradeTone } from '@/lib/core-app/redraftCoreTrades'
+import LocalDateTime from '@/components/core-app/LocalDateTime'
+import { tradesLeagueGuideMessages } from '@/lib/core-app/messages/tradesLeagueGuide'
+import { readHistoryNotice, realizedNet } from '@/lib/core-app/tradesLeagueGuide'
+import { shortPickLabel } from '@/lib/core-app/messages/tradesActivity'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
  * History rows carry the graded ledger's `<leagueId>:<transactionId>`; offers carry it bare.
  */
+/**
+ * How many completed trades show before "Show all" (2026-11-06 phone pass). Live at 375px the history
+ * was 2,500px, half of the Trades screen, below everything a manager acts on. The newest few are the
+ * ones anyone reads; the rest are one tap away, and a `?trade=` link to an older one opens the list.
+ */
+export const HISTORY_PREVIEW = 5
+
 function linkIdOf(id: string): string {
   return id.split(':').pop() ?? id
 }
@@ -31,7 +50,7 @@ function linkIdOf(id: string): string {
  * Imported counts-only records retain their separate fallback presentation.
  */
 
-export type TradesProps = {
+type TradesProps = {
   data: TradesData
   /** The Trade Center already renders pending offers above its builder. */
   hidePending?: boolean
@@ -78,7 +97,7 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         <span className="af-tr-offer-partner">{offer.partnerName}</span>
         {offer.proposedAt ? (
           <time className="af-tr-offer-when" dateTime={offer.proposedAt}>
-            {new Date(offer.proposedAt).toLocaleDateString()}
+            {new Date(offer.proposedAt).toLocaleDateString(getAppIntlLocale())}
           </time>
         ) : null}
       </header>
@@ -86,15 +105,15 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         {side(copy('You send'), offer.give)}
         {side(copy('You get'), offer.get)}
       </div>
-      <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded}>
+      <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded} data-rd-tone={offer.evaluation.graded ? redraftGradeTone(offer.evaluation.letter) ?? undefined : undefined}>
         {/* THE grade — the same letter this deal gets in the Trade Center and on the league page. */}
         {offer.evaluation.graded ? (
           <>
             <span className="af-tr-offer-grade af-num">{offer.evaluation.letter}</span>
             <span className="af-tr-offer-eval-copy">
               <strong>
-                {copy(offer.evaluation.label)} · {copy('you get')} {offer.evaluation.getValue.toLocaleString()} {copy('for')}{' '}
-                {offer.evaluation.giveValue.toLocaleString()}
+                {copy(offer.evaluation.label)} · {copy('you get')} {offer.evaluation.getValue.toLocaleString(getAppIntlLocale())} {copy('for')}{' '}
+                {offer.evaluation.giveValue.toLocaleString(getAppIntlLocale())}
               </strong>
               <span>{copy(offer.evaluation.recommendation)}</span>
               <small>{copy('Graded on league value')} · {copy(offer.evaluation.basis)}</small>
@@ -189,8 +208,17 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
 
 function TradeCard({ trade }: { trade: TradeRecord }) {
   const language = useOptionalLanguage().language
+  const m = useMessages(tradesScreenMessages)
+  const lg = useMessages(tradesLeagueGuideMessages)
   const copy = (value: string) => tradeUiCopy(value, language)
   const assets = trade.playersIn + trade.playersOut + trade.picks
+  /*
+   * ⚠ PHONE ONLY: the grade explanations fold behind one button (2026-11-07 phone pass). Live at 375px a
+   * card was 841px for a three-player swap — 134px of it the reasons list, plus two grade notes that end
+   * in the same caveat on both sides. The letters and the first two lines of each note stay in view; the
+   * stylesheet reads `data-why-open` only inside its phone query, so on a wide screen nothing changes.
+   */
+  const [whyOpen, setWhyOpen] = useState(false)
   /*
    * THE grade (see `TradeRecord.leagueGrade`) — the letter the Trade Center, the grade email and the
    * grade list below all show. It is taken from `players[0]`'s side: that side RECEIVED the grade's
@@ -200,6 +228,18 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
   const graded = leagueGrade?.graded ? leagueGrade : null
   const labelOf = (i: number) => (trade.players[i]?.isYou ? copy('You') : trade.players[i]?.manager ?? copy('Another manager'))
   const reasons = graded ? gradeReasons(graded, labelOf(0), labelOf(1)) : []
+  /*
+   * 2026-11-13: the card says the result and the most valuable asset; HOW it was graded folds away on
+   * every width. The last reason is the basis paragraph (on a guillotine league, nine lines defining
+   * "Guilly value"), and it was printed in full on every card. It is the same text on each card of a
+   * league, so it lives behind "How these were graded" with when it was graded and the realized caveat.
+   */
+  const headReasons = reasons.length > 2 ? reasons.slice(0, -1) : reasons
+  const basisReason = reasons.length > 2 ? reasons[reasons.length - 1]! : null
+  const anyRealized = trade.players.some((side) => side.gradeBasis === 'Realized' && realizedNet(side.gradeNote) != null)
+  /* A side's grade note that is not the realized sentence still clamps to two lines on a phone; the toggle unclamps it. */
+  const hasDetails = basisReason != null || graded != null || trade.players.some((side) => side.gradeBasis)
+  const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toLocaleString(getAppIntlLocale(), { maximumFractionDigits: 1 })}`
   const sideValues = (side: TradeRecord['players'][number], i: number) =>
     graded
       ? assetValues(
@@ -213,7 +253,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       : []
 
   return (
-    <li className="af-card af-tr-card" data-trade-id={linkIdOf(trade.transactionId)}>
+    <li className="af-card af-tr-card" data-trade-id={linkIdOf(trade.transactionId)} data-why-open={whyOpen || undefined}>
       <header className="af-tr-card-head">
         <span className="af-tr-when af-num">
           {trade.season ?? '—'}
@@ -224,7 +264,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </span>
       </header>
 
-      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? (language === 'es' ? `Intercambio desde la perspectiva de ${trade.players[0]?.manager ?? 'el primer mánager'}` : `Trade from ${trade.players[0]?.manager ?? 'the first manager'}'s perspective`) : copy('Your trade')}>
+      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? m.perspectiveAria(trade.players[0]?.manager) : copy('Your trade')}>
         <div className="af-tr-side">
           <div className="af-label">{copy(trade.yourSide === 'unknown' ? 'Received' : 'In')}</div>
           <div className="af-tr-count af-num">{trade.playersIn}</div>
@@ -238,7 +278,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </div>
 
         <div className="af-tr-side">
-          <div className="af-label">{trade.yourSide === 'unknown' ? copy('Sent') : language === 'es' ? 'Sale' : 'Out'}</div>
+          <div className="af-label">{trade.yourSide === 'unknown' ? copy('Sent') : m.out}</div>
           <div className="af-tr-count af-num">{trade.playersOut}</div>
           <div className="af-tr-count-label">
             {copy(trade.playersOut === 1 ? 'player' : 'players')}
@@ -284,28 +324,34 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       team={p.team}
                     />
                     {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
-                    {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString()}</em> : null}
+                    {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString(getAppIntlLocale())}</em> : null}
                   </span>
                 ))}
                 {side.picks?.map((pick, j) => {
                   const value = values[side.received.length + j] ?? null
                   const drafted = side.pickDrafted?.[j] ?? null
+                  /*
+                    A pick is its own chip, like a player (2026-11-14). It used to trail the players as
+                    ", 2027 round 1" with its value right after, so the row read "2027 round 12,698" —
+                    round 1, worth 2,698.
+                  */
                   return (
-                    <span key={`${pick}-${j}`}>
-                      {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
+                    <span className="af-tr-player-asset af-tr-pick-asset" key={`${pick}-${j}`} data-testid="trade-pick-asset">
+                      <span className="af-tr-pick-label">{shortPickLabel(pick, language)}</span>
                       {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
-                      {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString()}</em> : null}
+                      {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString(getAppIntlLocale())}</em> : null}
                     </span>
                   )
                 })}
               </span>
               {graded && letter ? (
-                <div className="af-tr-leaguegrade" data-letter={letter}>
+                <div className="af-tr-leaguegrade" data-letter={letter} data-rd-tone={redraftGradeTone(letter) ?? undefined}>
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
-                    {language === 'es'
-                      ? `Calificación de la liga · recibió ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} por ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} en valor de liga ${copy(gradeMoment(graded))}`
-                      : `League grade · got ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value ${gradeMoment(graded)}`}
+                    {lg.leagueGradeShort(
+                      (i === 0 ? graded.getValue : graded.giveValue).toLocaleString(getAppIntlLocale()),
+                      (i === 0 ? graded.giveValue : graded.getValue).toLocaleString(getAppIntlLocale()),
+                    )}
                   </span>
                 </div>
               ) : null}
@@ -315,9 +361,14 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 shown; a 'Realized' letter stays, because points actually scored are a different fact.
               */}
               {side.gradeBasis && !(graded && side.gradeBasis === 'Market') ? (
-                <div className="af-tr-grade" data-ungradable={!side.grade}>
+                <div className="af-tr-grade" data-ungradable={!side.grade} data-rd-tone={redraftGradeTone(side.grade) ?? undefined}>
                   <span className="af-tr-grade-badge af-num">{side.grade ?? '—'}</span>
-                  <span className="af-tr-grade-why">{copy(side.gradeBasis)} · {copy(side.gradeNote ?? '')}</span>
+                  <span className="af-tr-grade-why">
+                    {(() => {
+                      const net = side.gradeBasis === 'Realized' ? realizedNet(side.gradeNote) : null
+                      return net != null ? lg.realizedShort(signed(net)) : `${copy(side.gradeBasis)} · ${copy(side.gradeNote ?? '')}`
+                    })()}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -326,10 +377,31 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </div>
       ) : null}
 
-      {reasons.length > 0 ? (
+      {headReasons.length > 0 ? (
         <ul className="af-tr-leaguegrade-why" aria-label={copy('Why it graded this way')}>
-          {reasons.map((line) => <li key={line}>{copy(line)}</li>)}
+          {headReasons.map((line) => <li key={line}>{copy(line)}</li>)}
         </ul>
+      ) : null}
+      {hasDetails ? (
+        <>
+          <button
+            type="button"
+            className="af-tr-why-toggle af-tlg-why-toggle"
+            aria-expanded={whyOpen}
+            aria-controls={`af-tr-why-${linkIdOf(trade.transactionId)}`}
+            onClick={() => setWhyOpen((open) => !open)}
+          >
+            {whyOpen ? lg.hideGradeDetails : lg.whyTheseGrades}
+          </button>
+          {whyOpen && (graded || basisReason || anyRealized) ? (
+            <div className="af-tlg-why" id={`af-tr-why-${linkIdOf(trade.transactionId)}`}>
+              {/* The basis reason already says when ("Graded on this league's values from Oct 11…"); say it only without one. */}
+              {graded && !basisReason ? <p>{lg.gradedWhen(gradeMoment(graded), copy(gradeMoment(graded)))}</p> : null}
+              {basisReason ? <p>{copy(basisReason)}</p> : null}
+              {anyRealized ? <p>{lg.realizedCaveat}</p> : null}
+            </div>
+          ) : null}
+        </>
       ) : null}
       {leagueGrade && !leagueGrade.graded ? (
         <p className="af-tr-leaguegrade-withheld">{copy('League grade withheld:')} {copy(leagueGrade.reason)}</p>
@@ -354,9 +426,24 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
 
 export function Trades({ data, hidePending = false }: TradesProps) {
   const language = useOptionalLanguage().language
+  const m = useMessages(tradesScreenMessages)
+  const lg = useMessages(tradesLeagueGuideMessages)
+  /* "Grades updated 2026-11-14T04:17:38.300Z", said in the viewer's own clock (see readHistoryNotice). */
+  const notice = readHistoryNotice(data.historyNotice)
   const copy = (value: string) => tradeUiCopy(value, language)
+  const history = data.history.available ? data.history.data : []
+  const [showAllTrades, setShowAllTrades] = useState(false)
+  const [focusReady, setFocusReady] = useState(false)
+  // A `?trade=` link to a trade past the preview opens the full list first, then the hook looks for it.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('trade')?.trim()
+    if (wanted && history.findIndex((t) => linkIdOf(t.transactionId) === wanted) >= HISTORY_PREVIEW) setShowAllTrades(true)
+    setFocusReady(true)
+    // Once, on arrival: the link is read from the URL the page opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // A trade email or push lands here with `?trade=`; bring that trade into view.
-  useFocusTradeFromUrl()
+  useFocusTradeFromUrl(focusReady)
   return (
     /*
       Names on this screen belong to THIS league, so the card opens in its
@@ -369,12 +456,16 @@ export function Trades({ data, hidePending = false }: TradesProps) {
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-tr">
-      {/* ── League-specific grading banner ──────────────────────────── */}
-      {data.gradingContext.available ? (
+      {/*
+        ── League-specific grading banner ──────────────────────────────
+        Under the Trade Center (`hidePending`) the page's intro already says grades use this league's
+        scoring (2026-11-13), so the banner is not said a second time there.
+      */}
+      {data.gradingContext.available && !hidePending ? (
         <div className="af-tr-context">
           <span className="af-label">{copy('Scored for this league only')}</span>
           <p className="af-tr-context-body">
-            {language === 'es' ? 'Las calificaciones y recomendaciones usan las reglas de ' : 'Grades and recommendations on this page are calculated against '}
+            {m.gradingIntro}
             <strong>{data.gradingContext.data.leagueName}</strong>
             {data.gradingContext.data.format ? ` — ${data.gradingContext.data.format}` : ''}, {' '}
             {data.gradingContext.data.teamCount} {copy('teams')}. {copy('The same trade grades differently in a different league.')}
@@ -383,33 +474,58 @@ export function Trades({ data, hidePending = false }: TradesProps) {
       ) : null}
 
       {/* ── Deadline ────────────────────────────────────────────────── */}
-      <div className="af-tr-deadline">
-        <span className="af-label">{copy('Trade deadline')}</span>
-        {data.deadline.available ? (
-          data.deadline.data.none ? (
-            /*
-              The platform's sentinel for "trades stay open" (99, or any week past
-              the end of the regular season). Rendering it literally would print
-              "Week 99" on a screen people plan around.
-            */
-            <span className="af-tr-deadline-value">{copy('No deadline — trades stay open all season')}</span>
-          ) : (
-            <span className="af-tr-deadline-value">
-              {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
-              {data.deadline.data.regularSeasonLength != null ? (
-                <span className="af-tr-deadline-why">
-                  {language === 'es' ? `de una temporada regular de ${data.deadline.data.regularSeasonLength} semanas` : `of a ${data.deadline.data.regularSeasonLength}-week regular season`}
+      {/*
+        Inside a redraft /core shell the deadline is a bar (batch B4, RedraftTradeDeadlineBar). Under the
+        Trade Center (`hidePending`) that bar is already at the top of the page, so this row steps aside
+        rather than stating the deadline twice. Every other league renders the row exactly as before.
+      */}
+      {/*
+        Under the Trade Center (`hidePending`) a known trade deadline is the page's headline (2026-11-13),
+        so neither the bar nor this row repeats it there. When the deadline is NOT known the headline
+        cannot say why, so this row keeps its sentence ("…not ingested") — nothing is dropped.
+      */}
+      {hidePending && data.deadline.available ? null : <RedraftTradeDeadlineBar
+        countdown={data.deadlineCountdown}
+        snapshot={data.deadline}
+        omit={hidePending}
+        fallback={
+          <div className="af-tr-deadline">
+            <span className="af-label">{copy('Trade deadline')}</span>
+            {data.deadline.available ? (
+              data.deadline.data.none ? (
+                /*
+                  The platform's sentinel for "trades stay open" (99, or any week past
+                  the end of the regular season). Rendering it literally would print
+                  "Week 99" on a screen people plan around.
+                */
+                <span className="af-tr-deadline-value">{copy('No deadline — trades stay open all season')}</span>
+              ) : (
+                <span className="af-tr-deadline-value">
+                  {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
+                  {data.deadline.data.regularSeasonLength != null ? (
+                    <span className="af-tr-deadline-why">
+                      {m.regularSeason(data.deadline.data.regularSeasonLength)}
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
-            </span>
-          )
-        ) : (
-          <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
-        )}
-      </div>
+              )
+            ) : (
+              <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
+            )}
+          </div>
+        }
+      />}
+
+      {/* ── Conditional and protected picks: every pick carrying terms (lib/league-trade-engine/pickTerms.ts) ── */}
+      <PickTermsCard leagueId={data.league.id} />
 
       {/* ── Nightly trade ideas (absent until the agent's table exists) ── */}
-      {data.agentIdeas ? <AgentIdeas state={data.agentIdeas} /> : null}
+      {/*
+        Under the Trade Center an EMPTY nightly-ideas card ("No trade last night was near-even…") was a
+        second "Trade ideas" heading with nothing in it; the page's own trade ideas live in its fold. It
+        still shows whenever the agent has an idea.
+      */}
+      {data.agentIdeas && (data.agentIdeas.available || !hidePending) ? <AgentIdeas state={data.agentIdeas} /> : null}
 
       {/* ── Inbox / sent ────────────────────────────────────────────── */}
       {!hidePending ? <div className="af-tr-pending">
@@ -419,7 +535,13 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
       {/* ── Completed trades ────────────────────────────────────────── */}
       <section className="af-tr-history">
-        {data.historyNotice ? <p className="af-tr-grade-why" role="status">{copy(data.historyNotice)}</p> : null}
+        {notice ? (
+          <p className="af-tr-grade-why" role="status">
+            {lg.historyChecked(notice.refreshed)} <LocalDateTime value={notice.updatedAt} />.
+          </p>
+        ) : data.historyNotice ? (
+          <p className="af-tr-grade-why" role="status">{copy(data.historyNotice)}</p>
+        ) : null}
         <header className="af-tr-history-head">
           <h2 className="af-display af-tr-history-title">{copy('Completed trades')}</h2>
           {/*
@@ -434,11 +556,24 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
         {data.history.available ? (
           data.history.data.length > 0 ? (
-            <ul className="af-tr-list">
-              {data.history.data.map((t) => (
-                <TradeCard key={t.transactionId} trade={t} />
-              ))}
-            </ul>
+            <>
+              <ul className="af-tr-list" id="af-tr-history-list">
+                {(showAllTrades ? history : history.slice(0, HISTORY_PREVIEW)).map((t) => (
+                  <TradeCard key={t.transactionId} trade={t} />
+                ))}
+              </ul>
+              {history.length > HISTORY_PREVIEW ? (
+                <button
+                  type="button"
+                  className="af-tr-history-more"
+                  aria-expanded={showAllTrades}
+                  aria-controls="af-tr-history-list"
+                  onClick={() => setShowAllTrades((v) => !v)}
+                >
+                  {showAllTrades ? m.showFewerTrades : m.showAllTrades(history.length)}
+                </button>
+              ) : null}
+            </>
           ) : (
             <Unavailable reason="No trades recorded in this league." />
           )
@@ -461,7 +596,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                   prevent, and it would be reintroduced here in one line of JSX.
                 */}
                 {g.letter ? (
-                  <span className="af-tr-graderow-letter" data-grade={g.letter}>
+                  <span className="af-tr-graderow-letter" data-grade={g.letter} data-rd-tone={redraftGradeTone(g.letter) ?? undefined}>
                     {g.letter}
                   </span>
                 ) : (
@@ -487,7 +622,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                   </span>
                   <span className="af-tr-graderow-why">
                     {g.letter
-                      ? language === 'es' ? `recibió el ${g.sharePct}% del valor intercambiado` : `received ${g.sharePct}% of the traded value`
+                      ? m.sharePct(g.sharePct)
                       : copy(g.withheldReason ?? '')}
                   </span>
                   {/*

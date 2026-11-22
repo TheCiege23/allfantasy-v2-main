@@ -58,6 +58,8 @@ describe('NFL/NCAAF redraft creation defaults', () => {
 
   it('defines the NFL redraft default contract', () => {
     const contract = getRedraftDefaultContract({ sport: 'NFL', draftType: 'snake' })
+    // Redraft leagues trade their current draft's picks by default; future picks are refused by the trade engine.
+    expect((contract.tradeSettings as Record<string, unknown>).draftPickTradingEnabled).toBe(true)
 
     expect(contract).not.toBeNull()
     expect(contract).toMatchObject({

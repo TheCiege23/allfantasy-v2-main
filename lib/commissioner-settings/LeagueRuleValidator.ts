@@ -3,8 +3,8 @@
  * Sport-aware (NFL, NHL, NBA, MLB, NCAAF, NCAAB, SOCCER).
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
-import type { LeagueSport } from "@prisma/client"
 import type { LeagueSettingsPatch } from "./types"
 
 export type ValidationResult = { valid: true } | { valid: false; error: string }
@@ -42,8 +42,8 @@ export function validateRosterSettings(patch: LeagueSettingsPatch): ValidationRe
   }
   if (patch.leagueSize !== undefined && patch.leagueSize != null) {
     const n = Number(patch.leagueSize)
-    if (!Number.isInteger(n) || n < 2 || n > 32) {
-      return { valid: false, error: "League size must be between 2 and 32" }
+    if (!Number.isInteger(n) || n < 2 || n > MAX_NATIVE_TEAMS) {
+      return { valid: false, error: `League size must be between 2 and ${MAX_NATIVE_TEAMS}` }
     }
   }
   if (patch.benchSize !== undefined && patch.benchSize != null) {
@@ -75,10 +75,20 @@ export function validateTradeSettings(patch: LeagueSettingsPatch): ValidationRes
       return { valid: false, error: "Trade review type must be one of: none, commissioner, league_vote, instant" }
     }
   }
+  if (patch.vetoThresholdMode !== undefined && patch.vetoThresholdMode != null) {
+    if (patch.vetoThresholdMode !== "count" && patch.vetoThresholdMode !== "percent") {
+      return { valid: false, error: "Veto threshold must be counted as votes (count) or a percent of teams (percent)" }
+    }
+  }
   if (patch.vetoThreshold !== undefined && patch.vetoThreshold != null) {
     const n = Number(patch.vetoThreshold)
-    if (!Number.isInteger(n) || n < 0 || n > 100) {
-      return { valid: false, error: "Veto threshold must be 0–100" }
+    // A number of votes (the default) is 1–30; a percent of the league's teams is 1–100. 0 still clears it.
+    const max = patch.vetoThresholdMode === "count" ? 30 : 100
+    if (!Number.isInteger(n) || n < 0 || n > max) {
+      return {
+        valid: false,
+        error: patch.vetoThresholdMode === "count" ? "Veto votes must be 0–30" : "Veto threshold must be 0–100",
+      }
     }
   }
   return { valid: true }

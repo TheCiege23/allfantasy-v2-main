@@ -1,5 +1,7 @@
 "use client"
 
+import { paidToolFetch } from '@/lib/tokens/paidToolClient'
+
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2, Lock, Send, Settings, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -115,7 +117,7 @@ export default function WorldCupCommissionerBrainPanel({
     setLoading(true)
     setLoadError(null)
     try {
-      const res = await fetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
+      const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
         cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
@@ -139,7 +141,7 @@ export default function WorldCupCommissionerBrainPanel({
   }, [reload])
 
   async function postCommissionerBrain(payload: Record<string, unknown>): Promise<BrainPostResult> {
-    const res = await fetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
+    const res = await paidToolFetch(`/api/brackets/world-cup/${challengeId}/commissioner-brain`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -194,7 +196,7 @@ export default function WorldCupCommissionerBrainPanel({
   async function sendIncompleteReminder() {
     setBusy("inc-reminder")
     try {
-      const res = await fetch(
+      const res = await paidToolFetch(
         `/api/brackets/world-cup/${challengeId}/commissioner-brain/send-reminder`,
         {
           method: "POST",
@@ -220,7 +222,7 @@ export default function WorldCupCommissionerBrainPanel({
   async function sendBroadcastReminder() {
     setBusy("broadcast-reminder")
     try {
-      const res = await fetch(
+      const res = await paidToolFetch(
         `/api/brackets/world-cup/${challengeId}/commissioner-brain/send-reminder`,
         {
           method: "POST",
@@ -301,7 +303,7 @@ export default function WorldCupCommissionerBrainPanel({
         return
       }
       setRecapLines(Array.isArray(data.lines) ? data.lines : [])
-      toast.success("AI recap preview ready.")
+      toast.success("Chimmy recap preview ready.")
     } finally {
       setBusy(null)
     }
@@ -323,7 +325,7 @@ export default function WorldCupCommissionerBrainPanel({
         toast[cancelled ? "info" : "error"](data.error || "Could not post recap")
         return
       }
-      toast.success("AI recap posted to pool chat.")
+      toast.success("Chimmy recap posted to pool chat.")
       setRecapLines([])
       void reload()
     } finally {
@@ -381,11 +383,11 @@ export default function WorldCupCommissionerBrainPanel({
           Bracket Brain
         </div>
         <p className="mt-2 text-xs leading-relaxed text-white/55">
-          Basic lock reminders post for every commissioner. AI-enhanced Bracket Brain reports require{" "}
+          Basic lock reminders post for every commissioner. Chimmy-enhanced Bracket Brain reports require{" "}
           <span className="font-semibold text-white/85">AF Commissioner</span> or a confirmed token spend.
         </p>
         {hasAi ? (
-          <p className="mt-1 text-[11px] text-white/65">Commissioner AI access active.</p>
+          <p className="mt-1 text-[11px] text-white/65">Commissioner Chimmy access active.</p>
         ) : null}
       </div>
 
@@ -462,7 +464,7 @@ export default function WorldCupCommissionerBrainPanel({
             onChange={(ev) => setAiReminderPolish(ev.target.checked)}
             className="h-3.5 w-3.5 accent-cyan-400"
           />
-          Use AI-enhanced reminder copy (Bracket Brain)
+          Use Chimmy-enhanced reminder copy (Bracket Brain)
         </label>
       ) : null}
 
@@ -530,7 +532,7 @@ export default function WorldCupCommissionerBrainPanel({
           <Sparkles className="h-4 w-4 text-violet-300/70" />
           <h3 className="text-sm font-black text-white">Proactive Insights</h3>
           <span className="ml-auto rounded-full border border-violet-300/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
-            {hasAi ? "AI active" : "AF Commissioner"}
+            {hasAi ? "Chimmy active" : "AF Commissioner"}
           </span>
         </div>
         <p className="mb-3 text-xs leading-relaxed text-white/50">
@@ -594,13 +596,13 @@ export default function WorldCupCommissionerBrainPanel({
       <section className="rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4">
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-amber-300/70" />
-          <h3 className="text-sm font-black text-white">AI Insight Cards</h3>
+          <h3 className="text-sm font-black text-white">Chimmy Insight Cards</h3>
           <span className="ml-auto rounded-full border border-amber-300/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
             Structured
           </span>
         </div>
         <p className="mb-3 text-xs leading-relaxed text-white/50">
-          Cards built from real pool numbers — deterministic data, not hallucinated stats. AI adds one sentence of analysis.
+          Cards built from real pool numbers — deterministic data, not hallucinated stats. Chimmy adds one sentence of analysis.
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <CardInsightButton
@@ -683,14 +685,14 @@ export default function WorldCupCommissionerBrainPanel({
           <div>
             <h3 className="flex items-center gap-2 text-sm font-black text-white">
               <Sparkles className="h-4 w-4 text-white/85" />
-              AI Pool Recap
+              Chimmy Pool Recap
             </h3>
             <p className="mt-1 text-xs leading-5 text-white/55">
               Generate a preview from finalized/public leaderboard data only, then post it to pool chat when it reads right.
             </p>
           </div>
           <span className="rounded-full border border-cyan-200/25 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-white/90">
-            {hasAi ? "Commissioner AI active" : "Tokens or AF Commissioner"}
+            {hasAi ? "Commissioner Chimmy active" : "Tokens or AF Commissioner"}
           </span>
         </div>
 
@@ -715,7 +717,7 @@ export default function WorldCupCommissionerBrainPanel({
               onClick={() => void generateRecapPreview()}
               icon={<Sparkles className="h-3.5 w-3.5" />}
             >
-              Generate AI Recap
+              Generate Chimmy Recap
             </BrainButton>
             <BrainButton
               disabled={busy !== null || recapLines.length === 0}

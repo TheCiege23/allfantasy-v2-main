@@ -39,6 +39,8 @@ const defaultDeps: TradeAnalyzerIntelDeps = {
     }),
   findTopRookieRankings: () =>
     prisma.rookieRanking.findMany({
+      // The analyzer's intel is NFL; other sports' rookie rankings share this table.
+      where: { sport: 'NFL' },
       orderBy: [{ year: 'desc' }, { rank: 'asc' }],
       take: 20,
     }),
@@ -48,7 +50,7 @@ const defaultDeps: TradeAnalyzerIntelDeps = {
     }),
 }
 
-export interface TradeHubIntelInput {
+interface TradeHubIntelInput {
   playerNames: string[]
   teamAbbrevs?: string[]
   numTeams?: number
@@ -57,8 +59,8 @@ export interface TradeHubIntelInput {
   leagueContextSummary?: string[]
 }
 
-export type TradeIntelEntityType = 'player' | 'pick' | 'team' | 'league'
-export type TradeIntelSourceType =
+type TradeIntelEntityType = 'player' | 'pick' | 'team' | 'league'
+type TradeIntelSourceType =
   | 'news'
   | 'injury'
   | 'market'
@@ -69,7 +71,7 @@ export type TradeIntelSourceType =
   | 'ranking'
   | 'internet'
 
-export interface TradeIntelSignal {
+interface TradeIntelSignal {
   entityType: TradeIntelEntityType
   entityKey: string
   source: string
@@ -84,7 +86,7 @@ export interface TradeIntelSignal {
   data: Record<string, unknown>
 }
 
-export interface LeagueStrategySnapshot {
+interface LeagueStrategySnapshot {
   /**
    * The three states `computeLeagueStrategySnapshot` can actually produce.
    *
@@ -113,7 +115,7 @@ export interface LeagueStrategySnapshot {
   recommendedStrategy: string[]
   risks: string[]
 }
-export interface TradeIntelBlockMeta {
+interface TradeIntelBlockMeta {
   normalizedSignalCount: number | null
   sourceWeighting: string[]
   newsItems: number

@@ -91,13 +91,12 @@ export default function DispersalDraftLivePage() {
 
   const pickTimeSeconds = state?.pickTimeSeconds ?? 0
 
+  // The server's deadline (`pickDeadlineAt`), the same instant for every viewer and for the cron that
+  // auto-picks. It used to be `Date.now() + pickTimeSeconds`, restarted by every 3-second poll, so it never ran out.
+  const serverDeadline = state?.status === 'in_progress' && state.pickDeadlineAt ? Date.parse(state.pickDeadlineAt) : null
   useEffect(() => {
-    if (!state || state.status !== 'in_progress' || pickTimeSeconds <= 0) {
-      setDeadline(null)
-      return
-    }
-    setDeadline(Date.now() + pickTimeSeconds * 1000)
-  }, [state?.currentPickIndex, state?.status, state?.currentRosterId, pickTimeSeconds, state])
+    setDeadline(serverDeadline != null && Number.isFinite(serverDeadline) ? serverDeadline : null)
+  }, [serverDeadline])
 
   const [tick, setTick] = useState(0)
   useEffect(() => {
@@ -119,11 +118,34 @@ export default function DispersalDraftLivePage() {
     timeoutSentForPickRef.current = null
   }, [state?.currentPickIndex, state?.currentRosterId])
 
+  // Someone else's clock ran out: ask the server to move the draft on (it checks the expiry itself). The
+  // every-minute cron does the same, so this only saves the wait for whoever is watching.
+  const nudgedForPickRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!state || state.status !== 'in_progress' || !deadline) return
+    if (!state.autoPickOnTimeout || isMyTurn || secondsLeft > 0) return
+    const key = `${state.currentPickIndex}-${state.currentPickNumber}`
+    if (nudgedForPickRef.current === key) return
+    nudgedForPickRef.current = key
+    void fetch(`/api/leagues/${encodeURIComponent(leagueId)}/dispersal-draft/${encodeURIComponent(draftId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'advance_expired' }),
+    })
+      .then((r) => r.json().catch(() => ({})))
+      .then((json: { state?: DispersalDraftState }) => {
+        if (json?.state) setState(json.state)
+      })
+      .catch(() => {
+        nudgedForPickRef.current = null
+      })
+  }, [deadline, draftId, isMyTurn, leagueId, secondsLeft, state])
+
   useEffect(() => {
     if (!state || state.status !== 'in_progress') return
     if (!state.autoPickOnTimeout || pickTimeSeconds <= 0) return
     if (!isMyTurn || !myRosterId || isPassed) return
-    if (secondsLeft > 0) return
+    if (!deadline || secondsLeft > 0) return
     const key = `${state.currentPickIndex}-${state.currentPickNumber}-${myRosterId}`
     if (timeoutSentForPickRef.current === key) return
     timeoutSentForPickRef.current = key
@@ -389,7 +411,7 @@ export default function DispersalDraftLivePage() {
               type="button"
               disabled={pickBusy}
               onClick={() => void startDraft()}
-              className="mt-3 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-xs font-bold text-cyan-100"
+              className="mt-3 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-4 py-2 text-xs font-bold text-[var(--badge-text-cyan)]"
             >
               Start dispersal draft
             </button>
@@ -415,7 +437,7 @@ export default function DispersalDraftLivePage() {
                 key={k}
                 type="button"
                 onClick={() => setTab(k)}
-                className={`rounded-full px-2 py-1 ${tab === k ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/5 text-white/55'}`}
+                className={`rounded-full px-2 py-1 ${tab === k ? 'bg-cyan-500/20 text-[var(--badge-text-cyan)]' : 'bg-white/5 text-white/55'}`}
               >
                 {k === 'all'
                   ? 'All'
@@ -450,7 +472,7 @@ export default function DispersalDraftLivePage() {
                             type="button"
                             disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                             onClick={() => void submitPick(a.id)}
-                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
+                            className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-[var(--badge-text-cyan)] disabled:opacity-30"
                           >
                             Pick →
                           </button>
@@ -497,7 +519,7 @@ export default function DispersalDraftLivePage() {
                       type="button"
                       disabled={!isMyTurn || isPassed || pickBusy || state.status !== 'in_progress'}
                       onClick={() => void submitPick(a.id)}
-                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-cyan-100 disabled:opacity-30"
+                      className="shrink-0 rounded border border-cyan-400/35 px-2 py-1 text-[11px] font-bold text-[var(--badge-text-cyan)] disabled:opacity-30"
                     >
                       Pick →
                     </button>
@@ -526,7 +548,9 @@ export default function DispersalDraftLivePage() {
             </p>
           ) : null}
           {pickTimeSeconds > 0 && state.status === 'in_progress' && !isMyTurn ? (
-            <p className="mt-2 text-[11px] text-white/45">Pick timer: {pickTimeSeconds}s per turn (read-only)</p>
+            <p className="mt-2 text-[11px] text-white/45" data-testid="dispersal-clock-others">
+              {deadline ? <>On the clock — <span className="font-mono text-white/70">{fmtMmSs(secondsLeft)}</span> left</> : `Pick timer: ${pickTimeSeconds}s per turn`}
+            </p>
           ) : null}
           {pickTimeSeconds > 0 && state.status === 'in_progress' && isMyTurn ? (
             <p className={`mt-2 text-2xl font-mono ${secondsLeft <= 10 ? 'text-red-400' : 'text-white/80'}`}>

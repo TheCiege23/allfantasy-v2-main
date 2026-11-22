@@ -29,7 +29,7 @@ export function buildLeagueFormatLabel(league: {
       format.includes('guillotine') ||
       variant.includes('guillo')
     ) {
-      typeLabel = 'Guillotine'
+      typeLabel = 'Guilly'
     } else if (
       variant.includes('best_ball') ||
       variant.includes('bestball') ||

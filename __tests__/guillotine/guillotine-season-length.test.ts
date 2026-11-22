@@ -26,7 +26,7 @@ const nbaLeague = {
   playoffTeams: 4, playoffWeeksPerRound: 1, dynastyConfig: null, bbContestId: null, bestBallMode: false, settings: {},
 }
 
-describe('season length for a native guillotine league', () => {
+describe('season length for a native Guilly league', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     m.redraftSeason.findFirst.mockResolvedValue(null)
@@ -52,6 +52,6 @@ describe('season length for a native guillotine league', () => {
     m.isGuillotine.mockResolvedValue(false)
     await ensureRedraftSeason('L1')
     expect(m.getConfig).not.toHaveBeenCalled()
-    expect(m.redraftSeason.create.mock.calls[0][0].data).toMatchObject({ totalWeeks: 22, playoffStartWeek: 20 })
+    expect(m.redraftSeason.create.mock.calls[0][0].data).toMatchObject({ totalWeeks: 25, playoffStartWeek: 23 })
   })
 })

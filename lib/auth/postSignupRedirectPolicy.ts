@@ -53,7 +53,7 @@ export function isAllowedSignupPostAuthDestination(
   return false
 }
 
-export function pathAndQueryFromMaybeAbsoluteUrl(maybeUrl: string): string {
+function pathAndQueryFromMaybeAbsoluteUrl(maybeUrl: string): string {
   const t = maybeUrl.trim()
   try {
     const u = new URL(t)

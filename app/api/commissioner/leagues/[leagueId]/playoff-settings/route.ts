@@ -4,6 +4,7 @@
  * PUT: Updates playoff config. Premium stages require AF Commissioner Subscription.
  */
 
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -16,6 +17,7 @@ import {
   stageEditorPlayoffStartWeek,
 } from '@/lib/playoff-settings'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 const featureGate = new FeatureGateService()
 
@@ -34,7 +36,8 @@ export async function GET(
     select: { userId: true, sport: true, leagueVariant: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'view')
+  if (refused) return refused
 
   const config = await getPlayoffConfig(leagueId)
   const stages = getPlayoffStagesBySport(league.sport)
@@ -67,8 +70,12 @@ export async function PUT(
     select: { userId: true, sport: true, leagueVariant: true, platform: true, playoffStartWeek: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
 
+  const locked = await settingsLockedResponse(leagueId, 'playoffs')
+
+  if (locked) return locked
   const body = await req.json().catch(() => ({}))
   const includedStages = Array.isArray(body.includedStages) ? body.includedStages as string[] : []
   const startMode = typeof body.startMode === 'string' ? body.startMode : undefined
@@ -88,6 +95,23 @@ export async function PUT(
       playoffStartWeek: stageEditorPlayoffStartWeek(league),
     })
     return NextResponse.json({ preview: true, adjustment, isPremium })
+  }
+
+  /*
+   * 🛑 POSTSEASON STAGES ARE SAVED AND NEVER PLAYED (2026-11-15). Wild Card Weekend, the NBA play-in, bowl games
+   * and the rest were stored in `playoff_config_data.includedStages`, and no bracket, schedule or scorer reads it —
+   * a commissioner could pay for Wild Card Weekend and the playoffs would ignore it. Until real postseason games
+   * are scored, a change to the stages is refused rather than saved as if it worked. The start mode still saves.
+   */
+  if (Array.isArray(body.includedStages)) {
+    const current = (await getPlayoffConfig(leagueId)).includedStages ?? []
+    const same = includedStages.length === current.length && includedStages.every((id) => current.includes(id))
+    if (!same) {
+      return NextResponse.json(
+        { error: 'PLAYOFF_STAGES_COMING_SOON', message: 'Real-life postseason stages are coming soon. They do not change your playoffs yet, so they cannot be turned on.' },
+        { status: 409 },
+      )
+    }
   }
 
   const result = await savePlayoffConfig(leagueId, { includedStages, startMode }, { isPremium })

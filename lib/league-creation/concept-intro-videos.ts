@@ -4,7 +4,7 @@
  * Falls back to local league-type intros under `/public/league-type-*-intro.mp4`.
  */
 const LOCAL_LEAGUE_TYPE_INTRO: Record<string, string> = {
-  redraft: '/media/league-intros/redraft-league-intro.mp4',
+  redraft: '/media/create-league/concept/videos/Redraft.mp4',
   dynasty: '/league-type-dynasty-intro.mp4',
   keeper: '/league-type-keeper-intro.mp4',
   best_ball: '/league-type-best-ball-intro.mp4',

@@ -26,6 +26,10 @@
  * `V2KZEDYPMM8JP61B` is a 400. Never normalise the case of one.
  */
 
+import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
+import { fantraxDisplayName } from './fantraxPlayerName'
+import { isFantraxSoccerScoring } from './fantraxScoring'
+
 export const FANTRAX_FXEA_BASE = 'https://www.fantrax.com/fxea/general'
 
 /**
@@ -67,7 +71,7 @@ export const FANTRAX_ENDPOINTS = [
  * MLB/CFB. A map that fails to load fails soft (the import needs only the league's own sport to
  * load), so a wrong assumption costs NBA/NHL detection and nothing else. contracts/fantrax/GAPS.md.
  */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'EPL'
 
 export type FantraxFailure = {
   /**
@@ -272,6 +276,8 @@ export function humanizeVendorMessage(raw: string | null | undefined): string {
 /** Bounded: enough to ride out a blip without prolonging an outage. */
 const FXEA_RETRIES = 3
 const FXEA_TIMEOUT_MS = 15_000
+/** How many `getMatchupScores` periods are in flight at once. */
+const FXEA_SCORE_CONCURRENCY = 4
 
 /**
  * 408/429/5xx are "ask again shortly". A 400 is NOT one of them, deliberately: a
@@ -304,20 +310,36 @@ function fxeaRetryDelay(attempt: number): Promise<void> {
  * — check the id exactly as it appears in the league URL.` An outage was presented to the
  * user as a typo in their league id, and to the collector as a league that is not there.
  */
-async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
+async function fxeaGet<T>(
+  path: string,
+  timeoutMs = FXEA_TIMEOUT_MS,
+  /*
+   * When given, the request is a POST with this as its JSON body. The Fantrax docs
+   * accept either form on every endpoint; the body form exists here so a credential
+   * (the Secret ID) never has to ride in a URL, where request logging would keep it.
+   */
+  jsonBody?: Record<string, unknown>,
+): Promise<FantraxResult<T>> {
   let res: Response
-  let text: string
+  let text = ''
 
   for (let attempt = 0; ; attempt++) {
     const isLastAttempt = attempt === FXEA_RETRIES - 1
     try {
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), FXEA_TIMEOUT_MS)
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
         res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, {
-          headers: { Accept: 'application/json' },
+          headers: {
+            Accept: 'application/json',
+            ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
+          },
+          ...(jsonBody ? { method: 'POST', body: JSON.stringify(jsonBody) } : {}),
           signal: controller.signal,
         })
+        if (!isTransientFantraxStatus(res.status)) {
+          text = await res.text()
+        }
       } finally {
         clearTimeout(timer)
       }
@@ -346,7 +368,6 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
       }
     }
 
-    text = await res.text().catch(() => '')
     break
   }
 
@@ -390,6 +411,13 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
 
 export function getFantraxLeagueInfo(leagueId: string): Promise<FantraxResult<FantraxLeagueInfo>> {
   return fxeaGet<FantraxLeagueInfo>(`/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}`)
+}
+
+export function getFantraxLeagueTeams(leagueId: string) {
+  return fxeaGet<Pick<FantraxLeagueInfo, 'leagueName' | 'seasonYear' | 'teamInfo'>>(
+    `/getLeagueInfo?leagueId=${encodeURIComponent(leagueId)}&excludePlayerInfo=true`,
+    25_000,
+  )
 }
 
 /**
@@ -561,7 +589,15 @@ export async function getFantraxLeagues(
     return { ok: false, failure: { kind: 'api_error', message: 'a Fantrax Secret ID is required' } }
   }
 
-  const res = await fxeaGet<unknown>(`/getLeagues?userSecretId=${encodeURIComponent(trimmed)}`)
+  /*
+   * 🛑 POST BODY, NEVER THE QUERY STRING. This sent `?userSecretId=…`, which put a
+   * long-lived credential into a URL — the same shape as a token in a query
+   * parameter, leaked by any layer that logs request URLs. Fantrax documents a JSON
+   * POST body as an equal alternative; verified live 2026-11-18 that an unknown
+   * Secret ID answers `HTTP 200 {}` by POST exactly as it does by GET, and that a
+   * real one returns the account's leagues.
+   */
+  const res = await fxeaGet<unknown>('/getLeagues', FXEA_TIMEOUT_MS, { userSecretId: trimmed })
   if (!res.ok) return res
 
   const body = res.data as Record<string, unknown>
@@ -637,7 +673,8 @@ export function resolveRosters(
       const hit = playerMap[item.id]
       return {
         fantraxId: item.id,
-        name: hit?.name ?? null,
+        // "First Last" whatever order the directory was in: a refresh carries earlier snapshot names forward.
+        name: hit?.name ? fantraxDisplayName(hit.name) : null,
         team: hit?.team ?? null,
         position: item.position,
         primaryPosition: hit?.position ?? null,
@@ -738,6 +775,8 @@ export type FantraxMatchupSide = {
    * already been burnt by on standings.
    */
   gamesPlayed: number
+  /** Raw category totals, only when the provider supplies a numeric value for each category. */
+  categories?: Record<string, number>
 }
 
 export type FantraxPeriodScore = {
@@ -752,12 +791,61 @@ function parseMatchupSide(raw: unknown): FantraxMatchupSide | null {
   if (!teamId) return null
   const score = Number(row.score)
   const gamesPlayed = Number(row.gamesPlayed)
+  const categories = parseFantraxCategoryTotals(row.categories)
   return {
     teamId,
     teamName: String(row.teamName ?? '').trim(),
     score: Number.isFinite(score) ? score : 0,
     gamesPlayed: Number.isFinite(gamesPlayed) ? gamesPlayed : 0,
+    ...(Object.keys(categories).length ? { categories } : {}),
   }
+}
+
+/** A missing/approximate category value is never converted to zero. */
+function numericCategoryValue(raw: unknown): number | null {
+  let value = raw
+  for (let depth = 0; depth < 3 && value && typeof value === 'object' && !Array.isArray(value); depth++) {
+    value = (value as Record<string, unknown>).value
+  }
+  if (value === '' || value == null || (typeof value !== 'string' && typeof value !== 'number')) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+export function parseFantraxCategoryTotals(raw: unknown): Record<string, number> {
+  if (!Array.isArray(raw)) return {}
+  const totals: Record<string, number> = {}
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const item = entry as Record<string, unknown>
+    const category = item.category && typeof item.category === 'object' && !Array.isArray(item.category)
+      ? item.category as Record<string, unknown> : item
+    const key = String(category.id ?? category.categoryId ?? category.name ?? category.abbreviation ?? '').trim()
+    const value = numericCategoryValue(item.value)
+    if (!/^[A-Za-z0-9_. -]{1,40}$/.test(key) || value == null || Object.hasOwn(totals, key)) continue
+    totals[key] = value
+  }
+  return totals
+}
+
+function parsePairCategoryTotals(raw: unknown): { away: Record<string, number>; home: Record<string, number> } {
+  if (!Array.isArray(raw)) return { away: {}, home: {} }
+  const away: Record<string, number> = {}
+  const home: Record<string, number> = {}
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const item = entry as Record<string, unknown>
+    const category = item.category && typeof item.category === 'object' && !Array.isArray(item.category)
+      ? item.category as Record<string, unknown> : item
+    const key = String(category.id ?? category.categoryId ?? category.name ?? category.abbreviation ?? '').trim()
+    if (!/^[A-Za-z0-9_. -]{1,40}$/.test(key)) continue
+    const awayValue = parseFantraxCategoryTotals([{ id: key, value: item.away }])[key]
+    const homeValue = parseFantraxCategoryTotals([{ id: key, value: item.home }])[key]
+    if (awayValue == null || homeValue == null || Object.hasOwn(away, key)) continue
+    away[key] = awayValue
+    home[key] = homeValue
+  }
+  return { away, home }
 }
 
 /**
@@ -796,11 +884,17 @@ export async function getFantraxMatchupScores(
   const matchups: FantraxPeriodScore['matchups'] = []
   for (const entry of list) {
     if (entry === null || typeof entry !== 'object') continue
-    const away = parseMatchupSide((entry as Record<string, unknown>).away)
-    const home = parseMatchupSide((entry as Record<string, unknown>).home)
+    const raw = entry as Record<string, unknown>
+    const away = parseMatchupSide(raw.away)
+    const home = parseMatchupSide(raw.home)
     /* A half-read pairing cannot be attached to a fixture, so it is dropped
        rather than stored against one side. */
     if (!away || !home) continue
+    if (!Object.keys(away.categories ?? {}).length && !Object.keys(home.categories ?? {}).length) {
+      const pair = parsePairCategoryTotals(raw.categories)
+      if (Object.keys(pair.away).length) away.categories = pair.away
+      if (Object.keys(pair.home).length) home.categories = pair.home
+    }
     matchups.push({ away, home })
   }
 
@@ -932,16 +1026,47 @@ export async function fetchFantraxScheduleWithScores(
   position: FantraxSeasonPosition | null
   periodsRead: number
   periodsFailed: number
+  periodScores: FantraxPeriodScore[]
 }> {
   const rows = flattenFantraxSchedule(info)
   const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
 
-  const maxPeriods = options?.maxPeriods ?? 30
-  const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
-  if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0 }
+  const through = position?.scoredThrough ?? 0
+  if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0, periodScores: [] }
 
-  const wanted = Array.from({ length: through }, (_, i) => i + 1)
-  const results = await Promise.all(wanted.map((p) => getFantraxMatchupScores(leagueId, p)))
+  /*
+   * 🛑 NO BLANKET 30-PERIOD CAP, AND A CAP KEEPS THE NEWEST PERIODS. This read
+   * periods 1..min(through, 30), so a league in period 45 got scores for its first
+   * 30 periods and never for the current one — the one everything downstream
+   * needs. The bound is the league's own calendar. Soccer keeps its season-length
+   * cap, and a caller that passes `maxPeriods` gets the most recent periods, not
+   * the oldest.
+   */
+  const maxPeriods = options?.maxPeriods ??
+    (isFantraxSoccerScoring(info.scoringSystem) ? SOCCER_CONFIG.defaultSeasonWeeks : null)
+  const first =
+    typeof maxPeriods === 'number' && Number.isFinite(maxPeriods) && maxPeriods >= 1
+      ? Math.max(1, through - Math.trunc(maxPeriods) + 1)
+      : 1
+  const wanted = Array.from({ length: through - first + 1 }, (_, i) => first + i)
+
+  /*
+   * ⚠ A FEW AT A TIME, NOT ALL AT ONCE. One request per period fired together is
+   * a burst of 20+ against an API that answers 429, and each of those then
+   * retries on the same schedule. A small pool keeps the import polite at a cost
+   * of a few hundred milliseconds.
+   */
+  const results: Array<FantraxResult<FantraxPeriodScore>> = new Array(wanted.length)
+  let next = 0
+  const worker = async () => {
+    while (next < wanted.length) {
+      const index = next++
+      results[index] = await getFantraxMatchupScores(leagueId, wanted[index]!)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(FXEA_SCORE_CONCURRENCY, wanted.length) }, () => worker()),
+  )
 
   const scored: FantraxPeriodScore[] = []
   let periodsFailed = 0
@@ -955,6 +1080,7 @@ export async function fetchFantraxScheduleWithScores(
     position,
     periodsRead: scored.length,
     periodsFailed,
+    periodScores: scored,
   }
 }
 
@@ -1044,17 +1170,30 @@ export type FantraxOutstandingPick = {
   teamId: string
 }
 
+/**
+ * One future-season pick, as `getDraftPicks.futureDraftPicks` reports it.
+ *
+ * Measured 2026-11-18 on three public dynasty leagues (34 and 36 teams): every row is exactly
+ * `{ year, round, originalOwnerTeamId, currentOwnerTeamId }`, one row per team per round per year
+ * for ten years, traded or not. A traded pick is a row whose two team ids differ (9 of 1,360 in
+ * one league, 2 of 1,080 in another). There is no pick-in-round: the order is not set yet.
+ * Capture: `tests/fixtures/fantrax/nfl-dynasty-future-picks-public.json`.
+ */
+export type FantraxFuturePick = {
+  /** The draft year the pick belongs to. */
+  year: number
+  round: number
+  /** Fantrax team id the pick was issued to. */
+  originalOwnerTeamId: string
+  /** Fantrax team id holding it now; equal to the original when it has not been traded. */
+  currentOwnerTeamId: string
+}
+
 export type FantraxDraftPickInventory = {
   /** Current-season picks not yet used. */
   current: FantraxOutstandingPick[]
-  /**
-   * Future-season picks — the dynasty asset.
-   *
-   * ⚠ EMPTY IN THE ONLY LEAGUE MEASURED, so the element shape is UNVERIFIED and
-   * is typed as the same row only because that is the sibling field's shape.
-   * Do not build a traded-pick feature on this without seeing one first.
-   */
-  future: FantraxOutstandingPick[]
+  /** Future-season picks: the whole inventory, not only the traded ones. Empty in a redraft league. */
+  future: FantraxFuturePick[]
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -1155,11 +1294,23 @@ export async function getFantraxDraftPicks(
     return out
   }
 
+  const future: FantraxFuturePick[] = []
+  for (const raw of Array.isArray(body.futureDraftPicks) ? body.futureDraftPicks : []) {
+    const row = (raw ?? {}) as Record<string, unknown>
+    const year = toFiniteNumber(row.year)
+    const round = toFiniteNumber(row.round)
+    const originalOwnerTeamId = String(row.originalOwnerTeamId ?? '').trim()
+    const currentOwnerTeamId = String(row.currentOwnerTeamId ?? '').trim()
+    // A row missing either owner cannot say who holds the pick; it is skipped, never guessed.
+    if (year == null || round == null || round < 1 || !originalOwnerTeamId || !currentOwnerTeamId) continue
+    future.push({ year, round, originalOwnerTeamId, currentOwnerTeamId })
+  }
+
   return {
     ok: true,
     data: {
       current: read(body.currentDraftPicks),
-      future: read(body.futureDraftPicks),
+      future,
     },
   }
 }

@@ -5,6 +5,8 @@ import '@/components/core-app/af-standings.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import { messagesFor } from '@/lib/i18n/messages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /**
  * This week's lineups, projected — every team, AllFantasy's engine (AF) beside Sleeper's (labelled
@@ -46,9 +48,7 @@ export function WeekLineupsBody({ lineups, caveat }: { lineups: StandingsLineups
   return (
     <>
       <p className="af-st-lu-note">
-        {language === 'es'
-          ? `La alineación actual de cada equipo, proyectada para la semana ${lineups.week} con las reglas de esta liga. AF es la proyección de AllFantasy; ${PROJECTION_PROVIDER_LABEL} es la de ${PROJECTION_PROVIDER_LABEL}. Es un pronóstico: ${copy(caveat)}`
-          : `Each team’s lineup as currently set, projected for week ${lineups.week} under this league’s scoring. AF is AllFantasy’s own projection engine; ${PROJECTION_PROVIDER_LABEL} is ${PROJECTION_PROVIDER_LABEL}’s own projection. A forecast of the coming week — ${caveat}`}
+        {messagesFor(corePartsMessages, language).weekLineupsNote(lineups.week, PROJECTION_PROVIDER_LABEL, copy(caveat))}
       </p>
       <table className="af-st-lu-table">
         <thead>

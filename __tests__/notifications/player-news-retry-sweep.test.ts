@@ -77,7 +77,7 @@ beforeEach(() => {
   h.upsertFails = false
   h.newsFind.mockResolvedValue([ROW])
   h.newsUpdate.mockResolvedValue({ count: 1 })
-  h.dispatch.mockResolvedValue(undefined)
+  h.dispatch.mockResolvedValue({ requested: 1, delivered: 1, suppressed: 0, failed: 0 })
   h.classify.mockReturnValue('injury')
   h.rosterFind.mockResolvedValue([])
   h.followers.mockResolvedValue([])
@@ -178,4 +178,14 @@ describe('a dispatch that throws', () => {
     expect(second).toMatchObject({ retryScheduled: 0, recipients: 1 })
     expect(stampedIds()).toEqual(['news-1'])
   })
+})
+
+
+it('retries a returned dispatch failure instead of stamping the story delivered', async () => {
+  h.rosterFind.mockResolvedValue([roster('mgr-a', 'lg-a')])
+  h.dispatch.mockResolvedValueOnce({ requested: 1, delivered: 0, suppressed: 0, failed: 1 })
+  const result = await dispatchPendingPlayerNewsNotifications()
+  expect(result).toMatchObject({ retryScheduled: 1, notified: 0 })
+  expect(stampedIds()).toEqual([])
+  expect(ledger()?.lastOutcome).toBe('dispatch-failed')
 })

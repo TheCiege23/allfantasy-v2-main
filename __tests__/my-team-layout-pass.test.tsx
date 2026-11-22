@@ -107,9 +107,8 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
   }
 }
 
-describe('the DOM the layout rules depend on', () => {
-  it('puts matchup, byes and basis in the aside, and the roster in the main column', () => {
-    const data = {
+function layoutData(): MyTeamData {
+  return {
       league: { id: 'l1', name: 'KBFL', platform: 'espn', format: 'dynasty' },
       team: { available: false, reason: 'n/a' },
       starters: { available: true, data: [{ slotLabel: 'QB', player: player(), empty: false, unresolvedId: null }] },
@@ -127,7 +126,11 @@ describe('the DOM the layout rules depend on', () => {
       rosterGrade: { available: false, reason: 'n/a' },
       liveScore: { available: false, reason: 'n/a' },
     } as unknown as MyTeamData
-    const { container } = render(<MyTeam data={data} />)
+}
+
+describe('the DOM the layout rules depend on', () => {
+  it('puts matchup, byes and basis in the aside, and the roster in the main column', () => {
+    const { container } = render(<MyTeam data={layoutData()} />)
     const aside = container.querySelector('.af-mt > .af-mt-body > .af-mt-aside')!
     const main = container.querySelector('.af-mt > .af-mt-body > .af-mt-main')!
     expect(aside.querySelector('.af-mt-byes')).not.toBeNull()
@@ -136,5 +139,17 @@ describe('the DOM the layout rules depend on', () => {
     expect(main.querySelector('#lineup-player-p1')).not.toBeNull()
     expect(main.querySelector('#lineup-player-b1')).not.toBeNull()
     expect(aside.querySelector('.af-mt-row')).toBeNull()
+  })
+
+  // Owner, 2026-11-05: the starters sat about three screens down on a 1440px desktop, below the
+  // seven Roster decisions panels. The roster comes first; the decisions follow it in the main column.
+  it('puts the roster tables before Roster decisions, in the main column', () => {
+    const { container } = render(<MyTeam data={layoutData()} />)
+    const starters = container.querySelector('#af-mt-starters')!
+    const decisions = container.querySelector('section.af-tw')!
+    expect(starters).not.toBeNull()
+    expect(decisions).not.toBeNull()
+    expect(starters.compareDocumentPosition(decisions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('.af-mt > .af-mt-body > .af-mt-main')!.contains(decisions)).toBe(true)
   })
 })

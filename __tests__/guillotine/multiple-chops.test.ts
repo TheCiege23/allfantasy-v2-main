@@ -5,7 +5,7 @@ import type { PeriodScoreRow } from '@/lib/guillotine/types'
 const row = (rosterId: string, periodPoints: number, seasonPointsCumul = 100): PeriodScoreRow => ({ rosterId, periodPoints, seasonPointsCumul })
 const resolve = (candidates: PeriodScoreRow[], teamsPerChop = 2) => resolveTiebreak({ candidates, teamsPerChop, weekOrPeriod: 2, draftSlotByRoster: new Map(), tiebreakerOrder: ['season_points', 'previous_period'] })
 
-describe('multi-team guillotine chop selection', () => {
+describe('multi-team Guilly chop selection', () => {
   it('chops both lowest scores when they are distinct', () => {
     expect(resolve([row('a', 10), row('b', 20), row('c', 30), row('d', 40)]).choppedRosterIds).toEqual(['a', 'b'])
   })

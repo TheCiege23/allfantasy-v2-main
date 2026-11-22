@@ -2,19 +2,20 @@ import { toCanonicalImportPreviewJson } from '@/lib/league-import/canonicalImpor
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { buildImportedLeaguePreview } from '@/lib/league-import/ImportedLeaguePreviewBuilder'
 
-export type SleeperImportPreviewFailureCode =
+type SleeperImportPreviewFailureCode =
   | 'LEAGUE_NOT_FOUND'
   | 'NORMALIZATION_FAILED'
   | 'CONNECTION_REQUIRED'
   | 'UNAUTHORIZED'
+  | 'UNSUPPORTED_SPORT'
 
-export interface SleeperImportPreviewSuccess {
+interface SleeperImportPreviewSuccess {
   success: true
   preview: ReturnType<typeof buildImportedLeaguePreview>
   canonical: ReturnType<typeof toCanonicalImportPreviewJson>
 }
 
-export interface SleeperImportPreviewFailure {
+interface SleeperImportPreviewFailure {
   success: false
   error: string
   code: SleeperImportPreviewFailureCode

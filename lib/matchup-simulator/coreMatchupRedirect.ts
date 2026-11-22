@@ -10,7 +10,7 @@
  *
  * Pure, no imports — a page file may only export Next's page fields, so the testable part lives here.
  */
-export const MATCHUP_SIMULATOR_DESTINATION = '/core/matchup'
+const MATCHUP_SIMULATOR_DESTINATION = '/core/matchup'
 
 export function matchupSimulatorRedirectTarget(
   sp: Record<string, string | string[] | undefined>,

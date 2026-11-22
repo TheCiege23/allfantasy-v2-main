@@ -7,7 +7,7 @@ vi.mock('@/lib/workers/news-importer',()=>({runNewsImporter:mocks.news}))
 vi.mock('@/app/api/sports/news/sync-helper',()=>({syncFullNewsCoverage:mocks.sync,syncEspnNewsOnly:mocks.sync}))
 vi.mock('@/lib/notifications/PlayerNewsNotificationService',()=>({dispatchPendingPlayerNewsNotifications:mocks.dispatch}))
 vi.mock('@/lib/production-health/syncJobRunTelemetry',()=>({recordSyncJobRun:vi.fn(),extractCommonCounts:vi.fn()}))
-vi.mock('@/lib/cron/runBudget',()=>({createRunBudget:()=>({exhausted:()=>false}),respondBeforeEdge:async(fn:()=>Promise<unknown>)=>({result:await fn(),overran:false}),CRON_HARD_RESPONSE_MS:270000}))
+vi.mock('@/lib/cron/runBudget',()=>({createRunBudget:()=>({exhausted:()=>false}),respondBeforeEdge:async(fn:()=>Promise<unknown>)=>({result:await fn(),overran:false}),CRON_HARD_RESPONSE_MS:270000,CRON_RUN_BUDGET_MS:240000}))
 import { GET } from '@/app/api/cron/import-news/route'
 const request=(query='')=>new NextRequest('https://allfantasy.ai/api/cron/import-news'+query)
 beforeEach(()=>{vi.clearAllMocks();mocks.auth.mockReturnValue(true);mocks.clips.mockResolvedValue({status:'ready',count:1});mocks.news.mockResolvedValue({imported:1,sports:['NFL']});mocks.sync.mockResolvedValue({total:1,breakdown:{espn:1}});mocks.dispatch.mockResolvedValue({})})

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
+import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -13,6 +15,15 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size))
   }
   return chunks
+}
+
+/** Use the same seven-day scoring windows as the daily-sport finalizer. */
+export function resolveImportedGameWeek(sport: string, season: number, startTime: Date, providerWeek?: unknown, legacyWeek?: unknown): number {
+  if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+    return dailySportWeekForInstant(sport, season, startTime) ?? 0
+  }
+  const week = Number(providerWeek ?? legacyWeek)
+  return Number.isInteger(week) && week > 0 ? week : 0
 }
 
 function currentSeason(): number {
@@ -43,6 +54,10 @@ export async function runScheduleImporter(options?: {
       ])
     )
 
+    if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+      await ensureDailySportSeasonStart(sport, season, { db: prisma }).catch(() => null)
+    }
+
     const response = await apiChain.fetch({
       sport,
       dataType: 'schedule',
@@ -50,28 +65,33 @@ export async function runScheduleImporter(options?: {
     })
     const sourceGames = Array.isArray(response.data) && response.data.length > 0 ? response.data : legacyGames
 
-    const rows = sourceGames.map((game: any) => {
+    const rows = sourceGames.flatMap((game: any) => {
       const homeTeam = normalizeTeamAbbrev(game.homeTeamAbbrev ?? game.homeTeam) ?? game.homeTeamAbbrev ?? game.homeTeam ?? 'TBD'
       const awayTeam = normalizeTeamAbbrev(game.awayTeamAbbrev ?? game.awayTeam) ?? game.awayTeamAbbrev ?? game.awayTeam ?? 'TBD'
-      const gameDate = game.date ? new Date(game.date) : game.startTime ?? new Date()
+      const rawStart = game.startTime ?? game.date
+      if (!rawStart) return []
+      const dateOnly = typeof rawStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawStart)
+      const gameDate = new Date(dateOnly ? `${rawStart}T12:00:00.000Z` : rawStart)
+      if (Number.isNaN(gameDate.getTime())) return []
       const legacy = legacyMap.get(`${homeTeam}:${awayTeam}:${gameDate.toISOString().slice(0, 10)}`)
+      const exactStart = dateOnly ? (legacy?.startTime ?? null) : gameDate
 
-      return {
+      return [{
         sportType: sport,
         season,
-        weekOrRound: legacy?.week ?? 0,
+        weekOrRound: resolveImportedGameWeek(sport, season, gameDate, game.weekOrRound ?? game.week, legacy?.week),
         externalId: String(game.id ?? game.externalId ?? legacy?.externalId ?? `${sport}:${homeTeam}:${awayTeam}:${gameDate.toISOString()}`),
         homeTeamId: typeof game.homeTeamId === 'string' ? game.homeTeamId : legacy?.homeTeamId ?? null,
         awayTeamId: typeof game.awayTeamId === 'string' ? game.awayTeamId : legacy?.awayTeamId ?? null,
         homeTeam,
         awayTeam,
-        startTime: gameDate,
+        startTime: exactStart,
         venue: game.venue ?? legacy?.venue ?? null,
         weather: undefined,
         status: String(game.status ?? legacy?.status ?? 'scheduled').toLowerCase(),
         homeScore: typeof legacy?.homeScore === 'number' ? legacy.homeScore : null,
         awayScore: typeof legacy?.awayScore === 'number' ? legacy.awayScore : null,
-      }
+      }]
     })
 
     for (const batch of chunk(rows, UPSERT_BATCH_SIZE)) {
@@ -102,6 +122,16 @@ export async function runScheduleImporter(options?: {
           })
         )
       )
+      // Older imports stored daily-sport games in week 0 (or NHL's placeholder 500).
+      // They have no dependent rows; remove only ids we have just placed into a real week.
+      if (['NBA', 'NHL', 'MLB'].includes(sport)) {
+        const mappedIds = batch.filter((row) => row.weekOrRound > 0).map((row) => row.externalId)
+        if (mappedIds.length) {
+          await prisma.gameSchedule.deleteMany({
+            where: { sportType: sport, season, externalId: { in: mappedIds }, weekOrRound: { in: [0, 500] } },
+          })
+        }
+      }
       imported += batch.length
     }
   }

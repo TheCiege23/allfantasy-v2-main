@@ -1,0 +1,41 @@
+/* Railway cron service: use the Cloudflare URL in production and a CRON_SECRET reference. */
+const base = String(process.env.BRACKET_SYNC_URL ?? "").replace(/\/$/, "")
+const secret = String(process.env.CRON_SECRET ?? "").trim()
+if (!base || !secret) throw new Error("BRACKET_SYNC_URL and CRON_SECRET are required")
+
+const now = new Date()
+const year = now.getUTCFullYear()
+const jobs = [
+  { sport: "ncaaf", season: now.getUTCMonth() === 0 ? year - 1 : year },
+  { sport: "nba_cup", season: year },
+  // NFL playoffs run Jan-Feb under the season that started the year before. The route
+  // returns without calling ESPN outside that window.
+  { sport: "nfl", season: now.getUTCMonth() <= 1 ? year - 1 : year },
+]
+let failed = false
+for (const job of jobs) {
+  try {
+    const response = await fetch(`${base}/api/cron/season-bracket-results`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cron-secret": secret },
+      body: JSON.stringify({ ...job, apply: true }),
+      signal: AbortSignal.timeout(90_000),
+    })
+    if (!response.ok) throw new Error(`Bracket worker HTTP ${response.status}`)
+    const result = await response.json()
+    const outcomes = (result.rows ?? []).reduce((counts, row) => {
+      counts[row.outcome] = (counts[row.outcome] ?? 0) + 1
+      return counts
+    }, {})
+    console.log(JSON.stringify({ job, applied: result.applied, outcomes, experience: result.experience ?? null,
+      ...(job.sport === "nba_cup" ? { gamesPublished: result.gamesPublished ?? 0, poolsUpdated: result.poolsUpdated ?? 0, providerFailures: (result.failures ?? []).length } : {}),
+    }))
+    if ((result.rows ?? []).some((row) => /^(team-mismatch|start-time-mismatch|not-cfp-postseason|not-cfp-event|wrong-cup-season|not-nba-cup-event|invalid-final-score|not-in-seeded-field)$/.test(row.outcome))) {
+      failed = true
+    }
+  } catch (error) {
+    failed = true
+    console.error(`Bracket result sync failed for ${job.sport}:`, error instanceof Error ? error.message : String(error))
+  }
+}
+if (failed) process.exitCode = 1

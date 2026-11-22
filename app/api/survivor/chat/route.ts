@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember, assertLeagueCommissioner } from '@/lib/league/league-access'
 import { canSendToChannel } from '@/lib/survivor/chatPermissionGuard'
 import { publishSurvivorRedraftEvent } from '@/lib/survivor/survivorRedraftStreamHub'
+import { createSurvivorChatMessage } from '@/lib/survivor/survivorChatBridge'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     if (!messageId) return NextResponse.json({ error: 'messageId required' }, { status: 400 })
     const msg = await prisma.survivorChatMessage.findFirst({ where: { id: messageId } })
     if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+    const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
     const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
   if (!access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   if (contentType === 'host_announcement') {
-    const comm = await assertLeagueCommissioner(channel.leagueId, userId)
+    const comm = await assertLeagueCommissioner(channel.leagueId, userId, 'chat')
     if (!comm.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -160,9 +161,14 @@ export async function POST(req: NextRequest) {
   if (/^(?:@chimmy\s+)?(?:i\s+)?vote\b/i.test(content.trim())) {
     return NextResponse.json({ error: 'Send votes privately in your @Chimmy room.' }, { status: 422 })
   }
+  // Every @Chimmy message is private to its sender. This channel table has no private rows, so the
+  // exchange belongs in league chat, where the shared thread route keeps it between the two of them.
+  if (/^@chimmy\b/i.test(content.trim())) {
+    return NextResponse.json({ error: '@Chimmy messages are private. Send them from league chat or your tribe huddle.' }, { status: 422 })
+  }
 
   const senderName = await getUserDisplayName(userId)
-  const created = await prisma.survivorChatMessage.create({
+  const created = await createSurvivorChatMessage(prisma, {
     data: {
       leagueId: channel.leagueId,
       channelId,
@@ -217,7 +223,7 @@ export async function PATCH(req: NextRequest) {
   const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
   const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
   if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+  const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -250,7 +256,7 @@ export async function DELETE(req: NextRequest) {
   const channel = await prisma.survivorChatChannel.findFirst({ where: { id: msg.channelId, leagueId: msg.leagueId } })
   const access = await resolveSurvivorAccessContext(msg.leagueId, userId)
   if (!channel || !access?.isLeagueMember || !canSeeSurvivorChannel(access, channel)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const comm = await assertLeagueCommissioner(msg.leagueId, userId)
+  const comm = await assertLeagueCommissioner(msg.leagueId, userId, 'chat')
   if (msg.senderUserId !== userId && !comm.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

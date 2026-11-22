@@ -206,8 +206,10 @@ describe('🛑 one mark, one rule, in both places it is drawn', () => {
     expect(ROUTE).toContain('resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat })')
     expect(ROUTE).toContain('marketContextFor(league?.settings, league?.leagueType ?? null, chartTeams)')
     // The chart rule is `pricesOnDynastyChart` since 2026-09-28 (a light keeper league is redraft).
-    expect(ROUTE).toContain('isDynasty: pricesOnDynastyChart(marketContext.variant)')
-    expect(ROUTE).toContain('numQbs: (marketContext.variant.superflex ? 2 : 1) as 1 | 2')
+    expect(ROUTE).toContain('const chartIsDynasty = pricesOnDynastyChart(marketContext.variant)')
+    expect(ROUTE).toContain('const chartSettings = fantasyCalcSettingsForChart({')
+    expect(ROUTE).toContain('isSuperFlex: marketContext.variant.superflex,')
+    expect(ROUTE).toContain('leagueSize: chartTeams,')
   })
 
   /*

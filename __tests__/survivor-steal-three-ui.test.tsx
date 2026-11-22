@@ -68,5 +68,7 @@ it('removes the used idol from the vault while keeping the played screen visible
   expect(screen.getByText(/You have no active idols/)).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Steal 3' })).toBeNull()
   expect(screen.getByRole('link', { name: 'Set lineup' }).getAttribute('href')).toBe('/league/league?tab=team')
-  expect(screen.getByRole('heading', { name: 'The hand has struck' })).toBe(document.activeElement)
+  await waitFor(() => {
+    expect(screen.getByRole('heading', { name: 'The hand has struck' })).toBe(document.activeElement)
+  })
 })

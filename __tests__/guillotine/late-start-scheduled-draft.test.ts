@@ -32,7 +32,7 @@ import { startScheduledSurvivorDrafts } from '@/lib/survivor/startScheduledSurvi
 const NOW = new Date('2026-10-19T00:01:00Z')
 const STATE = { leagueId: 'g1', configuredSize: 16, claimed: 2 }
 
-describe('scheduled native guillotine draft', () => {
+describe('scheduled native Guilly draft', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     m.due.mockResolvedValue([{ leagueId: 'g1', league: { platform: 'allfantasy' } }])

@@ -21,6 +21,11 @@ import type {
 import { DraftReportCards } from '@/components/decide/DraftReportCards'
 import { ManagerH2H } from '@/components/decide/ManagerH2H'
 import { TradeLedgerGraded } from '@/components/decide/TradeLedgerGraded'
+import { rdDeckAttrs, useRedraftDeck } from '@/components/decide/redraftDeck'
+import { LeagueRafters } from '@/components/league/LeagueRafters'
+import { LeagueLegend } from '@/components/league/LeagueLegend'
+import { sourcePlatformLabel } from '@/lib/league/write-authority'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -49,6 +54,7 @@ function record(row: { wins: number; losses: number; ties: number }): string {
 }
 
 export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId: string }) {
+  const rd = useRedraftDeck(league)
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [seasonKey, setSeasonKey] = useState<string | null>(null)
@@ -92,12 +98,25 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
     Boolean(m?.ownerId && viewerId && m.ownerId === viewerId)
 
   return (
-    <div className="bdx" data-testid="legacy-home">
+    <div className="bdx" data-testid="legacy-home" {...rdDeckAttrs(rd)}>
       {loading ? (
         <>
           <div className="bdx-skel" />
           <div className="bdx-skel" style={{ marginTop: 12 }} />
         </>
+      ) : rd && data && !data.supported ? (
+        /* Redraft: the history feed covers Sleeper-imported chains only. Say what is true for an
+           AllFantasy league and point at the race it can see today, rather than naming a platform. */
+        <div className="bdx-empty rdk-deck-empty" data-testid="redraft-legacy-empty">
+          <div className="t">League history covers imported Sleeper leagues</div>
+          <div className="m">
+            Champions, the all-time manager table and past drafts come from a league&apos;s Sleeper chain.
+            {' '}{league.name} runs on AllFantasy, so its {rd.sportLabel} season lives in Standings &amp; playoffs.
+          </div>
+          <a className="bdx-btn pri rdk-deck-cta" href={`/league/${encodeURIComponent(leagueId)}?view=standings`}>
+            Open standings →
+          </a>
+        </div>
       ) : data && !data.supported ? (
         <div className="bdx-empty">
           <div className="t">History for {data.platform} leagues isn&apos;t synced yet</div>
@@ -121,6 +140,20 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
               </div>
             </div>
           ) : null}
+
+          {/* ── The rafters: champions as pennants, the league type's colours ── */}
+          <LeagueRafters
+            leagueName={league.name ?? 'This league'}
+            seasons={history.seasons.map((s) => {
+              const complete = String(s.status).toLowerCase() === 'complete'
+              return {
+                season: String(s.season),
+                champion: complete ? (s.champion?.name ?? null) : null,
+                mine: complete && isMe(s.champion),
+                open: !complete,
+              }
+            })}
+          />
 
           {/* ── Champions timeline ── */}
           <div className="bdx-kick">
@@ -278,7 +311,7 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 5,
-                              color: isMe(p.pickedBy) ? '#ff9d5c' : undefined,
+                              color: isMe(p.pickedBy) ? 'var(--bdx-me)' : undefined,
                               fontWeight: isMe(p.pickedBy) ? 700 : undefined,
                             }}
                           >
@@ -319,8 +352,11 @@ export function LegacyHome({ league, leagueId }: { league: UserLeague; leagueId:
           </div>
         </>
       )}
+      {/* Stat corrections + the league legend, for every league whatever its history state. */}
+      {!loading ? (
+        <LeagueLegend hostLabel={isNativePlatform(league.platform) ? null : sourcePlatformLabel(league.platform)} />
+      ) : null}
     </div>
   )
 }
 
-export default LegacyHome

@@ -114,16 +114,8 @@ export const PIPELINE_SPECS: PipelineSpec[] = [
     latest: async () =>
       (await prisma.roster.aggregate({ _max: { updatedAt: true } }))._max.updatedAt ?? null,
   },
-  {
-    id: "manager-psych",
-    label: "Manager psychology",
-    table: "manager_psych_profiles",
-    cadence: "rotation inside the import run",
-    warnAfterH: 24,
-    failAfterH: 72,
-    latest: async () =>
-      (await prisma.managerPsychProfile.aggregate({ _max: { updatedAt: true } }))._max.updatedAt ?? null,
-  },
+  // `manager_psych_profiles` left this list 2026-11-19: its writers were retired with the profile engine
+  // (re-score build item 10), so a freshness row for it would only ever read FAIL.
   {
     id: "decision-os-activity",
     label: "Decision OS activity ingest",

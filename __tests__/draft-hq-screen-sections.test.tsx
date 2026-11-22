@@ -124,14 +124,19 @@ describe('Draft HQ — lottery', () => {
     expect(document.body.textContent).toContain('The first 2 picks are drawn')
   })
 
-  it('where no lottery applies, the reason and no table', () => {
+  /*
+   * 2026-11-13: a section whose only content would be "this does not apply here" is left out — seven of
+   * them used to print one such line each down the page. No table, and no sentence either.
+   */
+  it('where no lottery applies, no lottery section at all', () => {
     render(
       <DraftHq
         data={data({ lottery: missing('a weighted draft lottery only applies to dynasty leagues, and this one is not') })}
       />,
     )
     expect(screen.queryByTestId('draft-hq-lottery')).toBeNull()
-    expect(document.body.textContent).toContain('only applies to dynasty leagues')
+    expect(document.body.textContent).not.toContain('only applies to dynasty leagues')
+    expect(document.body.textContent).not.toContain('Weighted lottery')
   })
 })
 
@@ -200,7 +205,11 @@ describe('Draft HQ — queue and keepers', () => {
     expect(document.body.textContent).toContain('kept in your 2026 draft, as Sleeper recorded it')
   })
 
-  it('unavailable sections keep their reasons', () => {
+  /*
+   * An empty queue before the draft is the next thing to do, so its sentence stays; "no keepers set up"
+   * is only a placeholder, so the Keepers section is left out (2026-11-13).
+   */
+  it('an empty queue keeps its reason; no keepers is no keepers section', () => {
     render(
       <DraftHq
         data={data({
@@ -212,7 +221,7 @@ describe('Draft HQ — queue and keepers', () => {
     expect(screen.queryByTestId('draft-hq-queue')).toBeNull()
     expect(screen.queryByTestId('draft-hq-keepers')).toBeNull()
     expect(document.body.textContent).toContain('you have not queued any players for this draft yet')
-    expect(document.body.textContent).toContain('this draft has no keepers set up')
+    expect(document.body.textContent).not.toContain('this draft has no keepers set up')
   })
 })
 

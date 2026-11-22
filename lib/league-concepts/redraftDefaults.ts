@@ -1,7 +1,9 @@
 import type { LeagueSport } from '@prisma/client'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
+import { NFL_CONFIG } from '@/lib/sportConfig/configs/nfl'
+import { firstRoundByesForTeams, fittedPlayoffStartWeek, playoffRoundsForTeams } from '@/lib/playoff-runtime/playoffFit'
 
-export type FootballRedraftSport = 'NFL' | 'NCAAF'
+type FootballRedraftSport = 'NFL' | 'NCAAF'
 export type RedraftDraftType =
   | 'snake'
   | 'linear'
@@ -10,11 +12,11 @@ export type RedraftDraftType =
   | 'auto'
   | 'mock_draft'
 
-export type RedraftDraftSurface = 'live' | 'mock'
+type RedraftDraftSurface = 'live' | 'mock'
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
-export type RedraftScoringPresetFormat = 'standard' | 'half_ppr' | 'ppr'
-export type CanonicalRedraftSlotKey =
+type RedraftScoringPresetFormat = 'standard' | 'half_ppr' | 'ppr'
+type CanonicalRedraftSlotKey =
   | 'QB'
   | 'RB'
   | 'WR'
@@ -30,17 +32,7 @@ export type CanonicalRedraftSlotKey =
   | 'IR'
   | 'K'
 
-export interface CanonicalRedraftRosterSlot {
-  key: CanonicalRedraftSlotKey
-  display: string
-  count: number
-  starter: boolean
-  optional: boolean
-  eligiblePositions: string[]
-  aliases: string[]
-}
-
-export interface RedraftRosterTemplate {
+interface RedraftRosterTemplate {
   rosterMode: 'redraft'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -61,7 +53,7 @@ export interface RedraftRosterTemplate {
   lineupValidationRules: Record<string, unknown>
 }
 
-export interface RedraftDraftSettings {
+interface RedraftDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: RedraftDraftType
   rounds: number
@@ -109,7 +101,7 @@ export interface RedraftDefaultContract {
   disabledSettings: Record<string, unknown>
 }
 
-export const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
+const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
   'snake',
   'linear',
   'auction',
@@ -119,8 +111,6 @@ export const REDRAFT_DRAFT_TYPE_IDS: readonly RedraftDraftType[] = [
 ] as const
 
 const DEFAULT_STARTER_ORDER = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLX', 'K', 'DEF'] as const
-const OLD_NFL_STANDARD_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 } as const
-const OLD_NCAAF_STANDARD_STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 } as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -225,21 +215,6 @@ export function getCanonicalRedraftStarterSlots(input: {
       includeIr: false,
     }),
   )
-}
-
-export function isKnownLegacyRedraftStarterMap(
-  sport: FootballRedraftSport,
-  value: unknown,
-): boolean {
-  if (!isRecord(value)) return false
-  const expected = sport === 'NCAAF' ? OLD_NCAAF_STANDARD_STARTERS : OLD_NFL_STANDARD_STARTERS
-  const keys = Object.keys(value).sort()
-  const expectedKeys = Object.keys(expected).sort()
-  if (keys.length !== expectedKeys.length) return false
-  return expectedKeys.every((key, index) => {
-    if (keys[index] !== key) return false
-    return Number(value[key]) === Number((expected as Record<string, number>)[key])
-  })
 }
 
 function pickOrderForDraftType(draftType: unknown): 'snake' | 'linear' {
@@ -659,7 +634,7 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
     tradeDeadlineWeek: sport === 'NCAAF' ? 9 : 11,
     rosterLegalityValidation: true,
     tradeHistoryAudit: true,
-    draftPickTradingEnabled: false,
+    draftPickTradingEnabled: true,
     redraftDraftAssetsEnabled: false,
     dynastyValueHidden: true,
     dynastyLanguageHidden: true,
@@ -675,7 +650,7 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
  * agreeing with it, so the two records cannot tell a commissioner different
  * things about the same league.
  */
-function derivePlayoffTeams(teamCount: number): number {
+export function derivePlayoffTeams(teamCount: number): number {
   const seats = Math.max(2, Math.floor(teamCount) || 2)
   const target = seats >= 10 ? 6 : 4
   const fitted = Math.min(target, seats)
@@ -686,15 +661,22 @@ function buildPlayoffSettings(sport: FootballRedraftSport, teamCount: number): R
   const playoffTeams = derivePlayoffTeams(teamCount)
   // NCAAF brackets end on week 13, the last full college slate (ncaafPlayoffWindow.ts).
   const ncaaf = sport === 'NCAAF' ? ncaafPlayoffWindow(playoffTeams) : null
+  // NFL: the final lands in the season's last week (17), whatever the bracket's size — a 4-team
+  // bracket starts in week 16, not in the 6-team bracket's week 15 (lib/playoff-runtime/playoffFit.ts).
+  const nflSeasonWeeks = NFL_CONFIG.defaultSeasonWeeks
+  const nflStart = fittedPlayoffStartWeek({ teams: playoffTeams, weeksPerRound: 1, seasonWeeks: nflSeasonWeeks }) ?? 15
+  const byes = firstRoundByesForTeams(playoffTeams)
   return {
     enabled: true,
     regularSeasonStartWeek: 1,
-    regularSeasonEndWeek: ncaaf ? ncaaf.regularSeasonEndWeek : 14,
+    regularSeasonEndWeek: ncaaf ? ncaaf.regularSeasonEndWeek : nflStart - 1,
     playoffTeams,
-    playoffStartWeek: ncaaf ? ncaaf.playoffStartWeek : 15,
-    championshipWeek: ncaaf ? ncaaf.championshipWeek : 17,
+    playoffStartWeek: ncaaf ? ncaaf.playoffStartWeek : nflStart,
+    championshipWeek: ncaaf ? ncaaf.championshipWeek : nflSeasonWeeks,
     playoffWeeksPerRound: 1,
-    topSeedByes: teamCount >= 10,
+    firstRoundByes: byes,
+    totalRounds: playoffRoundsForTeams(playoffTeams),
+    topSeedByes: byes > 0,
     tiebreakers: ['points_for', 'head_to_head', 'division_record'],
     standingsRule: 'record_then_points_for',
     lowerBracket: 'consolation',

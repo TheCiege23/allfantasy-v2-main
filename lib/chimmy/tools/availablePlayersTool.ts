@@ -5,6 +5,8 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import type { FantasyCalcSettings } from '@/lib/fantasycalc'
 import { isForeignIdSpace, sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
 import { excludeUntranslatedEspn } from '@/lib/decision-os/waiver/pool'
+import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { valueBookFor, type ValueBook } from '@/lib/core-app/valueBook'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -303,6 +305,34 @@ async function rosteredPlayerIds(leagueId: string, platform: string | null, spor
   }
 }
 
+/**
+ * The league's own value chart — the one the player card, `get_player_value` and the trade screens price on
+ * (`valueBookFor`) — at its latest capture, highest value first. Null when the chart has no capture.
+ */
+const CHART_READ_MAX = 600
+async function loadChartBoard(
+  book: ValueBook,
+): Promise<{ capturedAt: Date; rows: Array<{ sleeperId: string; name: string; position: string | null; value: number }> } | null> {
+  // Any failure — including a missing delegate, which throws before a `.catch` — is "no chart": the paths below answer.
+  try {
+    const where = { source: book.source, format: book.format, qbFormat: book.qbFormat }
+    const latest = await prisma.playerValueSnapshot.findFirst({ where, orderBy: { capturedAt: 'desc' }, select: { capturedAt: true } })
+    if (!latest) return null
+    const rows = await prisma.playerValueSnapshot.findMany({
+      where: { ...where, capturedAt: latest.capturedAt },
+      select: { sleeperId: true, name: true, position: true, value: true },
+      orderBy: { value: 'desc' },
+      take: CHART_READ_MAX,
+    })
+    return rows.length ? { capturedAt: latest.capturedAt, rows } : null
+  } catch {
+    return null
+  }
+}
+
+const chartName = (book: ValueBook) =>
+  `${book.format === 'DYNASTY' ? 'dynasty' : 'redraft'}, ${book.qbFormat === 'SUPERFLEX' ? 'superflex' : 'one-QB'}`
+
 /** Taken by id, or (an untranslated ESPN player) by name. */
 function isTaken(rostered: Rostered, id: string, row: NameRow): boolean {
   return rostered.ids.has(id) || rostered.hidesByName(row)
@@ -328,6 +358,7 @@ export async function buildAvailablePlayersContext(
         sport: true,
         platform: true,
         isDynasty: true,
+        leagueType: true,
         scoring: true,
         settings: true,
         _count: { select: { teams: true } },
@@ -387,6 +418,8 @@ export async function buildAvailablePlayersContext(
         sport: String(league.sport),
         leagueId,
         rostered: rostered.ids,
+        // NHL dynasty: Fantrax prospects are free agents too, named as such and never ranked.
+        ...(isDynastyFamilyLeague(league) ? { dynasty: true } : {}),
       })
     } catch {
       return `Player values are only published for NFL, and the ${league.sport} player pool could not be ranked just now for "${leagueName}". Say that plainly; do not name anyone.`
@@ -407,6 +440,40 @@ export async function buildAvailablePlayersContext(
       'Everyone would look available, which would be wrong. Say the rosters have not synced;',
       'do NOT name any players as available.',
     ].join(' ')
+  }
+
+  /*
+   * 🛑 THE LEAGUE'S OWN CHART FIRST (2026-11-20 re-score push). This ranked the waiver wire on the AllFantasy house
+   * set — 165 rows, every one dynasty — and switched to FantasyCalc only when that ran out or was the wrong concept.
+   * So the "who's available" list priced players on a different number from the player card, `get_player_value` and
+   * the trade screens, which all read the league's chart (`valueBookFor`). Now the chart the league prices on is
+   * the ranking, so a value quoted here is the value the user sees when they tap the player. The house set and the
+   * FantasyCalc fallback below remain for a chart with no capture or too few free players.
+   */
+  const book = valueBookFor(league.settings, league.leagueType ?? null)
+  const chart = await loadChartBoard(book)
+  if (chart) {
+    const free = chart.rows.filter(
+      (r) => !isTaken(rostered, String(r.sleeperId), { full_name: r.name, position: shortPosition(r.position) }),
+    )
+    if (free.length >= MIN_USEFUL) {
+      const shown = free.slice(0, MAX_SHOWN).map((r) => {
+        const pos = shortPosition(r.position)
+        return `${pos ? `${r.name} (${pos})` : r.name} — value ${Math.round(r.value)}`
+      })
+      const more = free.length > shown.length ? ` (+${free.length - shown.length} more ranked players available)` : ''
+      const limits = limitLines(`${chartName(book)} chart`, unranked).map((l) =>
+        l.startsWith('3.') && book.format === 'REDRAFT'
+          ? '3. These are this-season (redraft) chart values — what a player is worth for the rest of the season, not a this-week start ranking.'
+          : l,
+      )
+      return [
+        `UNROSTERED PLAYERS in "${leagueName}", highest value on this league's chart (${chartName(book)}) first — the same values the player card shows:`,
+        `${shown.join('; ')}${more}`,
+        `That is ${free.length} of the ${chart.rows.length} players on the chart.`,
+        ...limits,
+      ].join('\n')
+    }
   }
 
   const valued = await prisma.allFantasyMarketPlayerValue

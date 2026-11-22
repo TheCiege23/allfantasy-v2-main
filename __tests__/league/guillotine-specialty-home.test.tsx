@@ -106,7 +106,7 @@ describe('GuillotineSpecialtyHome', () => {
       <GuillotineSpecialtyHome
         leagueId="L1"
         sport="NFL"
-        leagueName="Guillotine League 26"
+        leagueName="Guilly League 26"
         summary={{
           weekOrPeriod: 5,
           dangerTiers: tiers,
@@ -128,7 +128,7 @@ describe('GuillotineSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Guillotine League 26').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Guilly League 26').length).toBeGreaterThan(0)
     expect(screen.getByText('14 teams · 3 alive')).toBeTruthy()
     expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You’re 35.9 points over the cut')
     expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('92.7')
@@ -139,5 +139,33 @@ describe('GuillotineSpecialtyHome', () => {
     expect(screen.getByTestId('guillotine-chop-moment')).toBeTruthy()
     // Projected has no data source yet: present, honest, and not clickable.
     expect((screen.getByRole('button', { name: 'Projected' }) as HTMLButtonElement).disabled).toBe(true)
+    // A manager still alive is offered both hero actions.
+    expect(screen.getByTestId('guillotine-hero-lineup')).toBeTruthy()
+    expect(screen.getByTestId('guillotine-hero-waivers')).toBeTruthy()
+  })
+
+  it('a chopped manager is not offered Set lineup or Waivers in the hero', () => {
+    render(
+      <GuillotineSpecialtyHome
+        leagueId="L1"
+        sport="NFL"
+        leagueName="Guilly League 26"
+        summary={{
+          weekOrPeriod: 5,
+          dangerTiers: tiers,
+          myRosterId: 'x',
+          config: { tiebreakerOrder: ['season_points'], teamsPerChop: 1, dangerMarginPoints: 12 },
+          home: {
+            season: 2026, scores, teamCount: 14, aliveCount: 3,
+            chopped: [{ rosterId: 'x', name: 'Open Team 3', week: 1, points: 71.2 }],
+            nextChopAt: null, chopLabel: null, nextWaiversAt: null, waiverLabel: null, lastChop,
+          },
+        }}
+      />,
+    )
+    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You were chopped in week 1')
+    expect(screen.queryByTestId('guillotine-hero-lineup')).toBeNull()
+    expect(screen.queryByTestId('guillotine-hero-waivers')).toBeNull()
+    expect(screen.getByTestId('guillotine-hero-chop')).toBeTruthy()
   })
 })

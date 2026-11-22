@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, MoreHorizontal, Search, Users } from 'lucide-react'
+import { Bell, BellOff, Lock, MoreHorizontal, Search, Users } from 'lucide-react'
 import type { ReportReason } from '@/lib/moderation/shared'
 import { TypingNote } from './TypingNote'
 import { ThreadListRow, formatLastActive, type ThreadRowContext } from './ThreadListRow'
@@ -47,7 +47,7 @@ import { PeoplePicker } from './PeoplePicker'
  * out of date.
  */
 
-export type PlatformThread = {
+type PlatformThread = {
   id: string
   threadType: string
   title: string
@@ -171,10 +171,10 @@ export function ThreadPanel({
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
 
-  const loadThreads = useCallback(async () => {
-    setError(null)
+  const loadThreads = useCallback(async (quiet = false) => {
+    if (!quiet) setError(null)
     try {
-      const res = await fetch('/api/shared/chat/threads')
+      const res = await fetch('/api/shared/chat/threads', { cache: 'no-store', signal: AbortSignal.timeout(15000) })
       const data = (await res.json().catch(() => ({}))) as {
         threads?: PlatformThread[]
         error?: string
@@ -182,6 +182,7 @@ export function ThreadPanel({
       if (!res.ok) throw new Error(data.error ?? 'Could not load conversations.')
       // Times are measured against the moment the list arrived, not when the panel mounted.
       setNow(new Date())
+      setError(null)
       setThreads((data.threads ?? []).filter((t) => t.threadType === kind))
     } catch (e) {
       // A failed REFRESH keeps the list on screen (as a failed message poll does); only a first
@@ -195,26 +196,13 @@ export function ThreadPanel({
     void loadThreads()
   }, [loadThreads])
 
-  /*
-   * The list used to load once and never again while you looked at it, so a new DM, an unread count
-   * and who is active only changed when you navigated away and back. Every 30s while the list is on
-   * screen and the tab is visible — slower than a conversation's own poll, because the list read is
-   * heavier and nothing in it is a live exchange.
-   */
-  useEffect(() => {
-    if (openThread) return
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void loadThreads()
-    }, 30_000)
-    return () => window.clearInterval(id)
-  }, [openThread, loadThreads])
-
   const loadMessages = useCallback(async (thread: PlatformThread) => {
     if (activeThreadId.current !== thread.id) return
     setError(null)
     try {
       const res = await fetch(
         `/api/shared/chat/threads/${encodeURIComponent(thread.id)}/messages`,
+        { cache: 'no-store', signal: AbortSignal.timeout(15000) },
       )
       const data = (await res.json().catch(() => ({}))) as {
         messages?: PlatformMessage[]
@@ -266,8 +254,8 @@ export function ThreadPanel({
 
   // Near-realtime: without this a message only appeared when the thread was reopened.
   useChatPolling({
-    refresh: () => (openThread ? loadMessages(openThread) : Promise.resolve()),
-    enabled: Boolean(openThread),
+    refresh: () => (openThread ? loadMessages(openThread) : loadThreads(true)),
+    enabled: true,
     active: busy,
   })
 
@@ -341,7 +329,8 @@ export function ThreadPanel({
             text: t,
             votes: [] as string[],
           })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
           anonymous: Boolean(payload.poll.anonymous),
         }
@@ -758,8 +747,10 @@ export function ThreadPanel({
               onClick={() => void toggleMute()}
               aria-pressed={Boolean(openThread.isMuted)}
               title={openThread.isMuted ? 'Muted — tap to unmute' : 'Mute this conversation'}
+              aria-label={openThread.isMuted ? 'Unmute this conversation' : 'Mute this conversation'}
             >
-              {openThread.isMuted ? '🔕' : '🔔'}
+              {/* Line icons, not 🔔/🔕 emoji: the emoji rendered as a bright yellow bell beside line-icon search. */}
+              {openThread.isMuted ? <BellOff size={17} aria-hidden /> : <Bell size={17} aria-hidden />}
             </button>
             <button
               type="button"
@@ -993,8 +984,6 @@ export function ThreadPanel({
 
   return (
     <div className="af-cm-panel">
-      <div className="af-cm-privacy">{privacy}</div>
-
       <PeoplePicker
         kind={kind}
         busy={busy}
@@ -1023,8 +1012,18 @@ export function ThreadPanel({
         )}
         {error ? <p className="af-cm-error">{error}</p> : null}
       </div>
+
+      {/*
+        Contracts 2 and 3, in full, every time the list opens — as quiet fine print under the
+        conversations rather than a box above them (2026-11-01: "it looks crowded"). Same words.
+      */}
+      <div className="af-cm-privacy af-cm-privacy-foot">
+        <Lock size={12} aria-hidden />
+        {privacy}
+      </div>
     </div>
   )
 }
 
 export default ThreadPanel
+

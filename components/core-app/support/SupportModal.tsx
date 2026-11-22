@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+import { useDialogKeyboardViewport } from '@/components/shared/useDialogKeyboardViewport'
 import { SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
 import '@/components/core-app/af-support.css'
 
@@ -121,6 +122,7 @@ export function SupportModal({
    * tabbable, or Tab off the last control lands on a transparent full-viewport
    * button and focus appears to vanish.
    */
+  useDialogKeyboardViewport(panelRef, open)
   const keepClickable = useMemo(() => [scrimRef], [])
 
   useOverlayContainment({

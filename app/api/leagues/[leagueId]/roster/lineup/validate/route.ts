@@ -1,7 +1,10 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { validateCanonicalRosterPayload } from '@/lib/roster-lineup-engine/rosterValidationService'
@@ -25,12 +28,12 @@ export async function POST(
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
 
-  const isComm = league.userId === session.user.id
+  const isComm = (await canCommissionerAct(leagueId, session.user.id, 'rosters'))
   const memberRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: session.user.id },
+    where: managedRosterWhere(leagueId, session.user.id),
     select: { id: true },
   })
-  if (!isComm && !memberRoster) {
+  if (!isComm && !memberRoster && !await acceptedCoOwnerRosterId(leagueId, session.user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { CreatorLeaguesClient } from "./CreatorLeaguesClient"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const dynamic = "force-dynamic"
 
@@ -11,6 +12,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { canonical: `${getPublicSiteOrigin()}/creator-leagues` },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,

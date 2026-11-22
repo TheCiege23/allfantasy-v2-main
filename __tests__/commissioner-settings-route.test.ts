@@ -32,6 +32,7 @@ vi.mock('@/lib/commissioner-settings', () => ({
 vi.mock('@/lib/commissioner-settings/CommissionerSettingsService', () => ({
   updateLeagueSettings: updateLeagueSettingsMock,
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromAssert(() => assertCommissionerMock))
 
 describe('/api/commissioner/leagues/[leagueId]/settings route', () => {
   beforeEach(() => {
@@ -57,7 +58,7 @@ describe('/api/commissioner/leagues/[leagueId]/settings route', () => {
 
     expect(res.status).toBe(200)
     expect(assertCommissionerMock).toHaveBeenCalledWith('league-1', 'u-commissioner')
-    expect(updateLeagueSettingsMock).toHaveBeenCalledWith('league-1', { allowMemberInviteRankBypass: true })
+    expect(updateLeagueSettingsMock).toHaveBeenCalledWith('league-1', { allowMemberInviteRankBypass: true }, 'u-commissioner')
     const body = await res.json()
     expect(body.settings.allowMemberInviteRankBypass).toBe(true)
   })
@@ -78,7 +79,7 @@ describe('/api/commissioner/leagues/[leagueId]/settings route', () => {
 
     expect(res.status).toBe(200)
     expect(assertCommissionerMock).not.toHaveBeenCalled()
-    expect(updateLeagueSettingsMock).toHaveBeenCalledWith('league-1', { allowMemberInviteRankBypass: false })
+    expect(updateLeagueSettingsMock).toHaveBeenCalledWith('league-1', { allowMemberInviteRankBypass: false }, 'u-admin')
   })
 
   it('non-commissioner non-admin cannot update settings', async () => {

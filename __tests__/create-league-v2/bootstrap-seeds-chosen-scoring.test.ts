@@ -68,6 +68,7 @@ vi.mock('@/lib/league-creation/warmLeagueSportsData', () => ({
 
 import { runLeagueBootstrap } from '@/lib/league-creation/LeagueBootstrapOrchestrator'
 import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
+import { importedNflScoring } from '@/lib/league-creation/canonical/importedNflScoring'
 
 async function createAndScoreTwoReceptions(sport: 'NFL' | 'NCAAF', scoringPresetId: string) {
   row.current = { sport, scoringPresetId, settings: {} }
@@ -92,6 +93,23 @@ describe('bootstrap seeds the scoring the manager chose', () => {
     expect(await createAndScoreTwoReceptions('NFL', 'fb_half_ppr')).toBe(1)
   })
 
+  it('NFL carried over from an import keeps the imported rules, not the preset picked in the wizard', async () => {
+    const imported = importedNflScoring({ scoringSettings: { format: 'points', rules: { rec: 0.25, rec_yd: 0.1, bonus_rec_te: 0.5 } } })!
+    row.current = {
+      sport: 'NFL',
+      scoringPresetId: 'fb_ppr',
+      settings: {
+        importCarryover: { sourceLeagueId: 'src' },
+        nfl_scoring_config: { presetKey: 'custom', source: 'IMPORTED_MAPPED', rules: imported.rules },
+        sportConfig: { enableTEPremium: true },
+      },
+    }
+    await runLeagueBootstrap('league-1', 'NFL' as never)
+    expect(await calculateScoreFromSportConfig('league-1', 'wr-1', 1, { rec: 2 }, 'WR')).toBe(0.5)
+    expect(await calculateScoreFromSportConfig('league-1', 'te-1', 1, { rec: 2 }, 'TE')).toBe(1.5)
+    expect(row.current.settings.nfl_scoring_config).toMatchObject({ source: 'IMPORTED_MAPPED' })
+  })
+
   it('NCAAF half PPR scores 0.5, not the full-PPR scorer default', async () => {
     expect(await createAndScoreTwoReceptions('NCAAF', 'ncaaf_half_ppr')).toBe(1)
     expect((row.current.settings.sportConfig as { scoringPreset: string }).scoringPreset).toBe('HALF_PPR')
@@ -102,5 +120,41 @@ describe('bootstrap seeds the scoring the manager chose', () => {
   it('NCAAF standard scores 0', async () => {
     expect(await createAndScoreTwoReceptions('NCAAF', 'ncaaf_standard')).toBe(0)
     expect((row.current.settings.ncaaf_scoring_config as { rules: { reception: number } }).rules.reception).toBe(0)
+  })
+})
+
+/**
+ * A format with no settings snapshot of its own (zombie) was created with
+ * `scoringSettings: { rules: [], preset }`: no rulebook where projections look, so every projection
+ * in the league was blank (production, 2026-11-22). Creation now writes the rules there too.
+ */
+describe('a new NFL league stores a rulebook where projections read it', () => {
+  it('fills an empty scoringSettings.rules from the scoring it seeded, and keeps the label fields', async () => {
+    const { extractScoringSettings } = await import('@/lib/projections/leagueScoring')
+    row.current = {
+      sport: 'NFL',
+      scoringPresetId: 'fb_half_ppr',
+      settings: { scoringSettings: { rules: [], preset: 'fb_half_ppr', scoringFormat: 'Half PPR' } },
+    }
+    await runLeagueBootstrap('league-1', 'NFL' as never)
+    const stored = row.current.settings.scoringSettings as Record<string, unknown>
+    expect(stored.preset).toBe('fb_half_ppr')
+    expect(stored.scoringFormat).toBe('Half PPR')
+    expect(stored.rules).toMatchObject({ rec: 0.5, pass_yd: 0.04, pass_td: 4, rush_td: 6, rec_td: 6 })
+    // Read WITHOUT the scoring panel store, so this proves the rulebook itself, not the reader's fallback.
+    const { nfl_scoring_config: _panel, ...withoutPanel } = row.current.settings
+    expect(extractScoringSettings(withoutPanel)).toMatchObject({ rec: 0.5, pass_td: 4 })
+  })
+
+  it('follows the scoring the manager chose', async () => {
+    row.current = { sport: 'NFL', scoringPresetId: 'fb_ppr', settings: { scoringSettings: { rules: [] } } }
+    await runLeagueBootstrap('league-1', 'NFL' as never)
+    expect((row.current.settings.scoringSettings as { rules: Record<string, number> }).rules.rec).toBe(1)
+  })
+
+  it('leaves a league that already has a rulebook alone', async () => {
+    row.current = { sport: 'NFL', scoringPresetId: 'fb_half_ppr', settings: { scoringSettings: { rules: { rec: 1, pass_td: 6 } } } }
+    await runLeagueBootstrap('league-1', 'NFL' as never)
+    expect((row.current.settings.scoringSettings as { rules: unknown }).rules).toEqual({ rec: 1, pass_td: 6 })
   })
 })

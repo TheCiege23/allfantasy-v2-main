@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   waiverFindUnique: vi.fn(),
   seasonFindFirst: vi.fn(),
   rosterFindFirst: vi.fn(),
+  leagueFindUnique: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -11,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueWaiverSettings: { findUnique: mocks.waiverFindUnique },
     redraftSeason: { findFirst: mocks.seasonFindFirst },
     redraftRoster: { findFirst: mocks.rosterFindFirst },
+    league: { findUnique: mocks.leagueFindUnique },
   },
 }))
 
@@ -39,6 +41,20 @@ describe('buildWaiverContext', () => {
     mocks.waiverFindUnique.mockResolvedValue(settings())
     mocks.seasonFindFirst.mockResolvedValue({ id: 'season-1' })
     mocks.rosterFindFirst.mockResolvedValue({ faabBalance: 73, waiverPriority: 4, teamName: 'My Team' })
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'manual' })
+  })
+
+  /*
+   * A Fantrax import carries no waiver settings, so the row holds AllFantasy's sport defaults.
+   * Stating "FAAB budget: 100" for that league is an invented rule.
+   */
+  it('does not state bootstrap defaults as the rules of a Fantrax league', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({ platform: 'fantrax' })
+    const out = await buildWaiverContext('lg1', 'user-1')
+    expect(out).not.toContain('FAAB budget: 100')
+    expect(out).not.toContain('Runs Wednesday')
+    expect(out).toMatch(/Fantrax/)
+    expect(out).toMatch(/not imported|unknown/i)
   })
 
   it('states the rules that are on file', async () => {

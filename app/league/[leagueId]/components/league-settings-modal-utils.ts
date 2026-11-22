@@ -53,7 +53,7 @@ export function formatConceptLabel(input: {
   bestBallMode?: boolean | null
   fallbackFormat?: string | null
 }): string | null {
-  if (input.guillotineMode) return 'Guillotine'
+  if (input.guillotineMode) return 'Guilly'
   if (input.bestBallMode) return 'Best Ball'
   if (input.isDynasty) return 'Dynasty'
 

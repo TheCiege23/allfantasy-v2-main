@@ -36,6 +36,7 @@ import { getDraftHqAll } from './draftHqAll'
 import { getLeagueActivity } from './leagueActivity'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
+import { draftRoomHref } from '@/lib/league-chat/draftChatLink'
 
 /** One half of a franchise, described identically whichever half it is. */
 export type FranchiseSide = {
@@ -285,7 +286,13 @@ export async function resolvePairedHalf(
             .filter(Boolean),
         ),
       ).sort((a, b) => a.localeCompare(b))
-      const requestedTeam = String(member.teamExternalId ?? snap?.userTeam ?? '').trim()
+      /*
+       * ⚠ AN EMPTY teamExternalId MEANS "NOT SET", NOT "THE TEAM NAMED ''". The Peach Bowl / Cream Bowl
+       * link was written with '' on both members (production, 2026-11-21), and `??` only falls back on
+       * null, so the snapshot's own userTeam was never reached: no team matched, and the college half
+       * read as a roster nobody owns. Blank falls back exactly as null does.
+       */
+      const requestedTeam = String(member.teamExternalId?.trim() || snap?.userTeam || '').trim()
       const selectedTeam = teamNames.find((name) => name.toLowerCase() === requestedTeam.toLowerCase()) ?? requestedTeam
       const userTeam = selectedTeam.toLowerCase()
       const teamOf = (r: unknown): string => {
@@ -555,7 +562,10 @@ export async function resolvePairedHalf(
           ]
             .filter(Boolean)
             .join(' · ') || null,
-        href: `/core/draft-hq?league=${encodeURIComponent(side.leagueId)}`,
+        href:
+          row.phase === 'live'
+            ? draftRoomHref(side.leagueId)
+            : `/core/draft-hq?league=${encodeURIComponent(side.leagueId)}`,
       }
     }
   }

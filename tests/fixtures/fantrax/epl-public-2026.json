@@ -1,0 +1,1525 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-26T02:22:22Z",
+    "source": "https://www.fantrax.com/fxea/general/{getLeagueInfo,getTeamRosters,getStandings,getDraftPicks,getDraftResults}?leagueId=<public league, id withheld>",
+    "note": "Public pre-draft EPL league, no credentials (fxea/general is unauthenticated). Captured with the owner's consent. League id, league name, team ids and team names replaced with placeholders; playerInfo trimmed to 20 of 707 pool entries; scoring, roster and playoff settings verbatim."
+  },
+  "info": {
+    "seasonYear": 2026,
+    "startDate": "2026-08-21",
+    "endDate": "2027-05-30",
+    "rosterInfo": {
+      "positionConstraints": {
+        "D": {
+          "maxActive": 5
+        },
+        "F": {
+          "maxActive": 3
+        },
+        "G": {
+          "maxActive": 1
+        },
+        "M": {
+          "maxActive": 5
+        }
+      },
+      "maxTotalPlayers": 11,
+      "maxTotalActivePlayers": 11,
+      "maxTotalReservePlayers": 0
+    },
+    "scoringSystem": {
+      "scoringCategories": {
+        "NON_GOALIE": {
+          "RCR": {
+            "Default": "points5"
+          },
+          "CLO": {
+            "Default": "points2"
+          },
+          "G": {
+            "Default": "points7"
+          },
+          "CLR": {
+            "Default": "points0.2"
+          },
+          "YC": {
+            "Default": "points-2"
+          },
+          "FS": {
+            "Default": "points1"
+          },
+          "Int": {
+            "Default": "points1"
+          },
+          "Off": {
+            "Default": "points-0.5"
+          },
+          "BR": {
+            "Default": "points0.3"
+          },
+          "A2": {
+            "Default": "points2"
+          },
+          "BS": {
+            "Default": "points1"
+          },
+          "TLM": {
+            "Default": "points2"
+          },
+          "CSD": {
+            "Default": "points4"
+          },
+          "OG": {
+            "Default": "points-3"
+          },
+          "ErG": {
+            "Default": "points-2"
+          },
+          "GOB": {
+            "Default": "points2"
+          },
+          "CSM": {
+            "Default": "points1"
+          },
+          "TkW": {
+            "Default": "points1"
+          },
+          "AC": {
+            "Default": "points1"
+          },
+          "BCC": {
+            "Default": "points1"
+          },
+          "CF": {
+            "Default": "points1"
+          },
+          "FKG": {
+            "Default": "points2"
+          },
+          "KP": {
+            "Default": "points1"
+          },
+          "PKD": {
+            "Default": "points3"
+          },
+          "BCM": {
+            "Default": "points-1"
+          },
+          "AER": {
+            "Default": "points0.5"
+          },
+          "DIS": {
+            "Default": "points-0.5"
+          },
+          "CS": {
+            "Default": "points1"
+          },
+          "RC": {
+            "Default": "points-6"
+          },
+          "Min": {
+            "Default": "points0"
+          },
+          "PKM": {
+            "Default": "points-5"
+          },
+          "AT": {
+            "Default": "points3"
+          },
+          "Pen": {
+            "Default": "points-2"
+          },
+          "SOT": {
+            "Default": "points2"
+          },
+          "HB": {
+            "Default": "points-1"
+          },
+          "FC": {
+            "Default": "points-1"
+          }
+        },
+        "GOALIE": {
+          "RCR": {
+            "Default": "points5"
+          },
+          "Sv": {
+            "Default": "points2"
+          },
+          "G": {
+            "Default": "points7"
+          },
+          "CLR": {
+            "Default": "points0.2"
+          },
+          "LBA": {
+            "Default": "points0.2"
+          },
+          "YC": {
+            "Default": "points-2"
+          },
+          "L": {
+            "Default": "points-2"
+          },
+          "FS": {
+            "Default": "points1"
+          },
+          "Int": {
+            "Default": "points1"
+          },
+          "A2": {
+            "Default": "points2"
+          },
+          "W": {
+            "Default": "points4"
+          },
+          "OG": {
+            "Default": "points-3"
+          },
+          "GA": {
+            "Default": "points-3"
+          },
+          "ErG": {
+            "Default": "points-2"
+          },
+          "ErS": {
+            "Default": "points-1"
+          },
+          "PKD": {
+            "Default": "points3"
+          },
+          "D>60": {
+            "Default": "points1"
+          },
+          "DIS": {
+            "Default": "points-2"
+          },
+          "CS": {
+            "Default": "points6"
+          },
+          "RC": {
+            "Default": "points-6"
+          },
+          "Min": {
+            "Default": "points0"
+          },
+          "AT": {
+            "Default": "points4"
+          },
+          "Pen": {
+            "Default": "points-2"
+          },
+          "HCS": {
+            "Default": "points1"
+          },
+          "PKS": {
+            "Default": "points8"
+          },
+          "FC": {
+            "Default": "points-1"
+          }
+        }
+      },
+      "scoringCategorySettings": [
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS_SECONDARY",
+                "name": "Assists (Second)",
+                "id": "6001",
+                "shortName": "A2"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_CLEARANCES_SUCCEEDED",
+                "name": "Effective Clearances",
+                "id": "6016",
+                "shortName": "CLR"
+              },
+              "points": 0.2
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_DISPOSSESSED",
+                "name": "Dispossessed",
+                "id": "6039",
+                "shortName": "DIS"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FOULS_COMMITTED",
+                "name": "Fouls Committed",
+                "id": "6040",
+                "shortName": "FC"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ERRORS_LED_TO_GOAL",
+                "name": "Errors Led to Goal",
+                "id": "6041",
+                "shortName": "ErG"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_LONG_BALLS_ACCURATE",
+                "name": "Long Balls - Accurate",
+                "id": "6043",
+                "shortName": "LBA"
+              },
+              "points": 0.2
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ERRORS_LED_TO_SHOT",
+                "name": "Errors Led to Shot",
+                "id": "6044",
+                "shortName": "ErS"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FOULS_SUFFERED",
+                "name": "Fouls Suffered",
+                "id": "6050",
+                "shortName": "FS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS",
+                "name": "Goals",
+                "id": "6090",
+                "shortName": "G"
+              },
+              "points": 7.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS_ON_OWN_NET",
+                "name": "Own Goals",
+                "id": "6105",
+                "shortName": "OG"
+              },
+              "points": -3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INTERCEPTIONS",
+                "name": "Interceptions",
+                "id": "6108",
+                "shortName": "Int"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_LOSSES",
+                "name": "Losses",
+                "id": "6110",
+                "shortName": "L"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS_AGAINST",
+                "name": "Goals Against",
+                "id": "6112",
+                "shortName": "GA"
+              },
+              "points": -3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_HIGH_CLAIMS_SUCCEEDED",
+                "name": "High Claims Succeeded",
+                "id": "6116",
+                "shortName": "HCS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTIES",
+                "name": "Penalties",
+                "id": "6138",
+                "shortName": "Pen"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTY_KICK_SAVES",
+                "name": "Penalty Kick Saves",
+                "id": "6170",
+                "shortName": "PKS"
+              },
+              "points": 8.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTY_KICKS_DRAWN",
+                "name": "Penalty Kicks Drawn",
+                "id": "6175",
+                "shortName": "PKD"
+              },
+              "points": 3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RED_CARDS",
+                "name": "Red Cards",
+                "id": "6190",
+                "shortName": "RC"
+              },
+              "points": -6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RED_CARDS_RESCINDED",
+                "name": "Red Cards Rescinded",
+                "id": "6192",
+                "shortName": "RCR"
+              },
+              "points": 5.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SAVES",
+                "name": "Saves",
+                "id": "6200",
+                "shortName": "Sv"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SHUTOUTS_ON_FIELD",
+                "name": "Clean Sheets On Field",
+                "id": "6249",
+                "shortName": "CS"
+              },
+              "points": 6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TIES",
+                "name": "Draws (> 60 Minutes)",
+                "id": "6260",
+                "shortName": "D>60"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_WINS",
+                "name": "Wins",
+                "id": "6270",
+                "shortName": "W"
+              },
+              "points": 4.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_YELLOW_CARDS",
+                "name": "Yellow Cards",
+                "id": "6280",
+                "shortName": "YC"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS_TOTAL",
+                "name": "Assists (Total)",
+                "id": "6362",
+                "shortName": "AT"
+              },
+              "points": 4.0
+            }
+          ],
+          "group": {
+            "code": "SOCCER_GOALIE",
+            "name": "Goalkeeper",
+            "id": "5020",
+            "shortName": "G"
+          }
+        },
+        {
+          "configs": [
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS_SECONDARY",
+                "name": "Assists (Second)",
+                "id": "6001",
+                "shortName": "A2"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS_ON_SHOTS",
+                "name": "Key Passes (Assists on Shots)",
+                "id": "6002",
+                "shortName": "KP"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BIG_CHANCES_CREATED",
+                "name": "Big Chances Created",
+                "id": "6004",
+                "shortName": "BCC"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BIG_CHANCES_MISSED",
+                "name": "Big Chances Missed",
+                "id": "6005",
+                "shortName": "BCM"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_AERIALS_WON",
+                "name": "Aerials Won",
+                "id": "6007",
+                "shortName": "AER"
+              },
+              "points": 0.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BLOCKED_SHOTS",
+                "name": "Blocked Shots",
+                "id": "6009",
+                "shortName": "BS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_BALL_RECOVERIES",
+                "name": "Ball Recoveries",
+                "id": "600h",
+                "shortName": "BR"
+              },
+              "points": 0.3
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_CLEARANCES_OFFLINE",
+                "name": "Clearances Off Line",
+                "id": "6015",
+                "shortName": "CLO"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_CLEARANCES_SUCCEEDED",
+                "name": "Effective Clearances",
+                "id": "6016",
+                "shortName": "CLR"
+              },
+              "points": 0.2
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_CORNERS_FORCED",
+                "name": "Corners Forced",
+                "id": "6026",
+                "shortName": "CF"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_CROSSES_ACCURATE",
+                "name": "Accurate Crosses",
+                "id": "6031",
+                "shortName": "AC"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_DISPOSSESSED",
+                "name": "Dispossessed",
+                "id": "6039",
+                "shortName": "DIS"
+              },
+              "points": -0.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FOULS_COMMITTED",
+                "name": "Fouls Committed",
+                "id": "6040",
+                "shortName": "FC"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ERRORS_LED_TO_GOAL",
+                "name": "Errors Led to Goal",
+                "id": "6041",
+                "shortName": "ErG"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FOULS_SUFFERED",
+                "name": "Fouls Suffered",
+                "id": "6050",
+                "shortName": "FS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_FREE_KICK_GOALS",
+                "name": "Free Kick Goals",
+                "id": "6055",
+                "shortName": "FKG"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS",
+                "name": "Goals",
+                "id": "6090",
+                "shortName": "G"
+              },
+              "points": 7.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS_OUTSIDE_BOX",
+                "name": "Goals Outside Box",
+                "id": "6093",
+                "shortName": "GOB"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_GOALS_ON_OWN_NET",
+                "name": "Own Goals",
+                "id": "6105",
+                "shortName": "OG"
+              },
+              "points": -3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_HAND_BALLS",
+                "name": "Hand Balls",
+                "id": "6107",
+                "shortName": "HB"
+              },
+              "points": -1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_INTERCEPTIONS",
+                "name": "Interceptions",
+                "id": "6108",
+                "shortName": "Int"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_OFFSIDES",
+                "name": "Offsides",
+                "id": "6130",
+                "shortName": "Off"
+              },
+              "points": -0.5
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTIES",
+                "name": "Penalties",
+                "id": "6138",
+                "shortName": "Pen"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTY_KICKS_DRAWN",
+                "name": "Penalty Kicks Drawn",
+                "id": "6175",
+                "shortName": "PKD"
+              },
+              "points": 3.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RED_CARDS",
+                "name": "Red Cards",
+                "id": "6190",
+                "shortName": "RC"
+              },
+              "points": -6.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_RED_CARDS_RESCINDED",
+                "name": "Red Cards Rescinded",
+                "id": "6192",
+                "shortName": "RCR"
+              },
+              "points": 5.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SHOTS_ON_GOAL",
+                "name": "Shots on Target",
+                "id": "6230",
+                "shortName": "SOT"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SHUTOUTS_ON_FIELD",
+                "name": "Clean Sheets On Field",
+                "id": "6249",
+                "shortName": "CS"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SHUTOUTS_DEFENDERS",
+                "name": "Clean Sheets for Defenders",
+                "id": "6255",
+                "shortName": "CSD"
+              },
+              "points": 4.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TACKLES_WON",
+                "name": "Tackles Won",
+                "id": "6256",
+                "shortName": "TkW"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_SHUTOUTS_MIDFIELDERS",
+                "name": "Clean Sheets for Midfielders",
+                "id": "6258",
+                "shortName": "CSM"
+              },
+              "points": 1.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_TACKLES_LAST_MAN",
+                "name": "Tackles - Last Man",
+                "id": "625g",
+                "shortName": "TLM"
+              },
+              "points": 2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_YELLOW_CARDS",
+                "name": "Yellow Cards",
+                "id": "6280",
+                "shortName": "YC"
+              },
+              "points": -2.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_PENALTY_KICKS_MISSED",
+                "name": "Penalty Kicks Missed",
+                "id": "6332",
+                "shortName": "PKM"
+              },
+              "points": -5.0
+            },
+            {
+              "position": {
+                "code": "DEFAULT",
+                "name": "Default",
+                "id": "-1",
+                "shortName": "Default"
+              },
+              "cumulative": true,
+              "scoringCategory": {
+                "code": "INDIVIDUAL_ASSISTS_TOTAL",
+                "name": "Assists (Total)",
+                "id": "6362",
+                "shortName": "AT"
+              },
+              "points": 3.0
+            }
+          ],
+          "group": {
+            "code": "SOCCER_NON_GOALIE",
+            "name": "Outfielder",
+            "id": "5010",
+            "shortName": "OF"
+          }
+        }
+      ],
+      "type": "POINTS_BASED"
+    },
+    "draftSettings": {},
+    "poolSettings": {
+      "duplicatePlayerType": "ALL",
+      "playerSourceType": "ALL_TEAMS"
+    },
+    "leagueName": "Public EPL league",
+    "scoringPeriods": [],
+    "teamInfo": {
+      "team01": {
+        "id": "team01",
+        "name": "Team 01"
+      },
+      "team02": {
+        "id": "team02",
+        "name": "Team 02"
+      },
+      "team03": {
+        "id": "team03",
+        "name": "Team 03"
+      },
+      "team04": {
+        "id": "team04",
+        "name": "Team 04"
+      },
+      "team05": {
+        "id": "team05",
+        "name": "Team 05"
+      },
+      "team06": {
+        "id": "team06",
+        "name": "Team 06"
+      },
+      "team07": {
+        "id": "team07",
+        "name": "Team 07"
+      },
+      "team08": {
+        "id": "team08",
+        "name": "Team 08"
+      },
+      "team09": {
+        "id": "team09",
+        "name": "Team 09"
+      },
+      "team10": {
+        "id": "team10",
+        "name": "Team 10"
+      }
+    },
+    "playerInfo": {
+      "075zi": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "02m5b": {
+        "eligiblePos": "F",
+        "status": "FA"
+      },
+      "07app": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "07apq": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "07apn": {
+        "eligiblePos": "G",
+        "status": "FA"
+      },
+      "07apo": {
+        "eligiblePos": "D",
+        "status": "FA"
+      },
+      "06onv": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "06uzy": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "05os8": {
+        "eligiblePos": "D",
+        "status": "FA"
+      },
+      "02ltw": {
+        "eligiblePos": "G",
+        "status": "FA"
+      },
+      "04lnu": {
+        "eligiblePos": "F",
+        "status": "FA"
+      },
+      "06uzw": {
+        "eligiblePos": "G",
+        "status": "FA"
+      },
+      "06uzu": {
+        "eligiblePos": "D",
+        "status": "FA"
+      },
+      "05os4": {
+        "eligiblePos": "D",
+        "status": "FA"
+      },
+      "06uzv": {
+        "eligiblePos": "M",
+        "status": "FA"
+      },
+      "062x7": {
+        "eligiblePos": "D",
+        "status": "FA"
+      },
+      "04mr4": {
+        "eligiblePos": "G",
+        "status": "FA"
+      },
+      "06uzt": {
+        "eligiblePos": "G",
+        "status": "T"
+      },
+      "045c8": {
+        "eligiblePos": "F",
+        "status": "FA"
+      },
+      "06uzo": {
+        "eligiblePos": "F",
+        "status": "FA"
+      }
+    }
+  },
+  "rosters": {
+    "period": 8,
+    "rosters": {
+      "team01": {
+        "teamName": "Team 01",
+        "rosterItems": [
+          {
+            "id": "06ex4",
+            "position": "D",
+            "salary": 6.58,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "06v51",
+            "position": "D",
+            "salary": 9.739999999999998,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "072zs",
+            "position": "M",
+            "salary": 4.0,
+            "status": "ACTIVE"
+          }
+        ],
+        "salaryCap": 100.0
+      },
+      "team02": {
+        "teamName": "Team 02",
+        "rosterItems": [],
+        "salaryCap": 100.0
+      },
+      "team03": {
+        "teamName": "Team 03",
+        "rosterItems": [
+          {
+            "id": "06zbm",
+            "position": "D",
+            "salary": 4.0,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "03gu4",
+            "position": "D",
+            "salary": 7.33,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "05l8q",
+            "position": "M",
+            "salary": 9.34,
+            "status": "ACTIVE"
+          }
+        ],
+        "salaryCap": 100.0
+      },
+      "team04": {
+        "teamName": "Team 04",
+        "rosterItems": [
+          {
+            "id": "068ym",
+            "position": "M",
+            "salary": 9.94,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "06p4j",
+            "position": "D",
+            "salary": 2.8,
+            "status": "ACTIVE"
+          },
+          {
+            "id": "02lk5",
+            "position": "M",
+            "salary": 3.2,
+            "status": "ACTIVE"
+          }
+        ],
+        "salaryCap": 100.0
+      }
+    }
+  },
+  "standings": [
+    {
+      "teamName": "Team 67",
+      "teamId": "team67",
+      "gamesBack": 0.0,
+      "rank": 1,
+      "points": "915.2",
+      "winPercentage": 0.0
+    },
+    {
+      "teamName": "Team 49",
+      "teamId": "team49",
+      "gamesBack": 0.0,
+      "rank": 2,
+      "points": "913.7",
+      "winPercentage": 0.0
+    },
+    {
+      "teamName": "Team 175",
+      "teamId": "team175",
+      "gamesBack": 0.0,
+      "rank": 3,
+      "points": "889.7",
+      "winPercentage": 0.0
+    }
+  ],
+  "draftPicks": {
+    "currentDraftPicks": [
+      {
+        "round": 1,
+        "pick": 137,
+        "teamId": "team01"
+      },
+      {
+        "round": 2,
+        "pick": 43,
+        "teamId": "team01"
+      },
+      {
+        "round": 3,
+        "pick": 137,
+        "teamId": "team01"
+      },
+      {
+        "round": 4,
+        "pick": 43,
+        "teamId": "team01"
+      },
+      {
+        "round": 5,
+        "pick": 137,
+        "teamId": "team01"
+      }
+    ]
+  },
+  "draftResults": {
+    "draftDate": "2026-08-21T14:45:00.0-0400",
+    "draftPicks": [
+      {
+        "round": 1,
+        "pick": 1,
+        "teamId": "team160",
+        "time": 1783894495000,
+        "pickInRound": 1
+      },
+      {
+        "round": 1,
+        "pick": 2,
+        "teamId": "team129",
+        "time": 1783987253000,
+        "pickInRound": 2
+      },
+      {
+        "round": 1,
+        "pick": 3,
+        "teamId": "team144",
+        "time": 1783992925000,
+        "pickInRound": 3
+      },
+      {
+        "round": 1,
+        "pick": 4,
+        "teamId": "team171",
+        "time": 1783996702000,
+        "pickInRound": 4
+      },
+      {
+        "round": 1,
+        "pick": 5,
+        "teamId": "team89",
+        "time": 1784015885000,
+        "pickInRound": 5
+      }
+    ],
+    "draftState": "completed",
+    "endDate": "2026-08-21T14:45:00.0-0400",
+    "startDate": "2026-08-21T14:45:00.0-0400"
+  },
+  "counts": {
+    "poolSize": 707,
+    "teams": 183,
+    "poolInNbaMap": 0,
+    "poolInNhlMap": 0
+  }
+}

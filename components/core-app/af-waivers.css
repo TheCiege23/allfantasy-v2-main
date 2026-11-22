@@ -22,7 +22,7 @@
 
 .af-wv-context {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--accent-line);
   background: var(--accent-soft);
 }
@@ -36,50 +36,7 @@
   color: var(--text);
 }
 
-/* ── Tiles ───────────────────────────────────────────────────────────── */
-
-.af-wv-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px;
-}
-
-.af-wv-tile {
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.af-wv-tile-value {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-/*
- * A missing value is smaller and --faint. A large grey "$0" would read as a
- * budget of zero; this has to read as "no figure".
- */
-.af-wv-tile[data-missing='true'] .af-wv-tile-value {
-  font-size: 18px;
-  color: var(--faint);
-}
-
-.af-wv-tile-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.af-wv-tile-why {
-  margin-top: 5px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--faint);
-}
+/* ── Tiles: the shared StatStrip (primitives/af-primitives.css), laid out by count, value first. ── */
 
 /* ── Sections ────────────────────────────────────────────────────────── */
 
@@ -162,7 +119,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px dashed var(--line2);
   background: var(--surface2);
 }
@@ -365,7 +322,7 @@
 }
 .af-wv-edge-rival {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -386,17 +343,6 @@
   color: var(--text2);
 }
 
-/*
- * The four header tiles, two by two on a phone (2026-10-01 audit). `minmax(190px, 1fr)` fits
- * one column in a 343px row, so four small figures took four full-width rows (~380px).
- * Its own top-level block at end of file — nothing here can be carried into another band.
- */
-@media (max-width: 560px) {
-  .af-wv-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 /* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
    Own top-level blocks at end of file, so nothing can be carried into another band. */
 .af-core .af-wv-next {
@@ -406,7 +352,7 @@
   align-items: baseline;
   gap: 4px 10px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid var(--line);
   background: var(--surface);
   font-size: 14px;
@@ -453,7 +399,7 @@
 .af-core .af-wlb-priority {
   margin: 10px 0 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text2);
@@ -482,20 +428,16 @@
 .af-core .af-wv-area-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .af-core .af-wv-area-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 
+/*
+ * 2026-11 redesign: the tiles are a KPI STRIP across the whole page, above both columns — they were a
+ * 2×2 block in the right-hand column, which pushed the first add below a column of reference cards.
+ */
 @container af-wv (min-width: 900px) {
   .af-core .af-wv-layout {
     grid-template-columns: minmax(0, 1fr) 300px;
-    grid-template-areas: 'main tiles' 'main side';
-    grid-template-rows: auto 1fr;
+    grid-template-areas: 'tiles tiles' 'main side';
     column-gap: 16px;
   }
-  /* Four tiles in a 300px column: two by two, not four full-width rows. */
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
-}
-/* A tablet-width page: the four tiles in one row, not three and an orphan. */
-@container af-wv (min-width: 600px) and (max-width: 899px) {
-  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @container af-wv (min-width: 1180px) {
   .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -547,8 +489,6 @@
 }
 
 /* ── Readability: the 11px grey reasons are the first thing a phone shrinks to unreadable ── */
-.af-core .af-wv-tile-sub,
-.af-core .af-wv-tile-why,
 .af-core .af-wv-section-note,
 .af-core .af-wlb-meta,
 .af-core .af-wlb-note,
@@ -557,7 +497,6 @@
 .af-core .af-wlb-why,
 .af-core .af-wv-edge-note,
 .af-core .af-wv-footnote { font-size: 12.5px; }
-.af-core .af-wv-tile-why,
 .af-core .af-wv-rule-why,
 .af-core .af-wlb-note,
 .af-core .af-wv-footnote { color: var(--muted); }
@@ -577,7 +516,7 @@
 .af-core .af-wvai-box {
   margin-top: 10px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--af-radius-inner, 12px);
   border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
   background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
 }
@@ -595,7 +534,7 @@
 .af-core .af-wvai-results { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .af-core .af-wvai-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
 .af-core .af-wvai-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.af-core .af-wvai-rec { padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
+.af-core .af-wvai-rec { padding: 12px; border-radius: var(--af-radius-inner, 12px); border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
 .af-core .af-wvai-rec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .af-core .af-wvai-rec-title { margin: 0; font-size: 14px; color: var(--text); }
 .af-core .af-wvai-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -630,4 +569,190 @@
   outline: 2px solid var(--af-accent, #7c5cff);
   outline-offset: -2px;
   border-radius: 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2026-11 redesign (Waivers.dc.html): KPI strip, filter bar, table rows.
+   Tokens only — af-core.css carries light, dark and AF for every one used here.
+   Own top-level blocks, so nothing is carried into another band.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* "$64 / $100": the league budget beside what is left, quieter than the figure itself. */
+.af-core .af-wv-tile-of { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0; }
+.af-core .af-wv-tile[data-tile='next-run'] .af-pg-stat-value { font-size: 20px; margin-bottom: 4px; line-height: 1.2; }
+/* The budget bar for every league now, not only the redraft stamp: a share of two real figures. */
+.af-core .af-wv-track { display: block; height: 6px; margin-top: 9px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.af-core .af-wv-track-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+
+
+/* ── The filter bar: search + position chips, the width of the card ── */
+.af-core .af-wlb-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: var(--af-radius-inner, 12px);
+  border: 1px solid var(--line);
+  background: var(--surface2, var(--surface));
+}
+.af-core .af-wlb-search {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--af-radius-inner, 12px);
+  border: 1px solid var(--line2, var(--line));
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.af-core .af-wlb-search::placeholder { color: var(--faint); }
+.af-core .af-wlb-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The position chips are the shared FilterChips (primitives/af-primitives.css); the pressed one takes its position colour below. */
+.af-core .af-wlb-count { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+.af-core .af-wlb-clear {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── Rows as a table: a position badge, the player, the gain, who he replaces ── */
+.af-core .af-wlb-head,
+.af-core .af-wlb-row { grid-template-columns: 40px minmax(0, 1fr) auto minmax(0, 32%); }
+.af-core .af-wlb-head {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-core .af-wlb-head > span:nth-child(3) { text-align: right; }
+.af-core .af-wlb-head > span:nth-child(4) { text-align: right; }
+.af-core .af-wlb-head + .af-wlb-list { margin-top: 0; }
+.af-core .af-wlb-row { align-items: center; padding: 9px 0; }
+.af-core .af-wlb-pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  background: var(--mu-pos-flex-bg);
+  color: var(--mu-pos-flex-fg);
+}
+.af-core .af-wlb-pos[data-pos='QB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='QB'][aria-pressed='true'] { background: var(--mu-pos-qb-bg); color: var(--mu-pos-qb-fg); }
+.af-core .af-wlb-pos[data-pos='RB'], .af-core .af-wlb-chips .af-pg-chip[data-pos='RB'][aria-pressed='true'] { background: var(--mu-pos-rb-bg); color: var(--mu-pos-rb-fg); }
+.af-core .af-wlb-pos[data-pos='WR'], .af-core .af-wlb-chips .af-pg-chip[data-pos='WR'][aria-pressed='true'] { background: var(--mu-pos-wr-bg); color: var(--mu-pos-wr-fg); }
+.af-core .af-wlb-pos[data-pos='TE'], .af-core .af-wlb-chips .af-pg-chip[data-pos='TE'][aria-pressed='true'] { background: var(--mu-pos-te-bg); color: var(--mu-pos-te-fg); }
+.af-core .af-wlb-pos[data-pos='K'], .af-core .af-wlb-chips .af-pg-chip[data-pos='K'][aria-pressed='true'] { background: var(--mu-pos-k-bg); color: var(--mu-pos-k-fg); }
+/* The badge says the position; the meta line keeps it in text for a screen reader, not on screen. */
+.af-core .af-wlb-meta-pos {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.af-core .af-wlb-gain { text-align: right; font-size: 15px; }
+
+@media (max-width: 720px) {
+  /* Phone: no column heads; the badge and the player share the first line, the rest wraps below. */
+  .af-core .af-wlb-head { display: none; }
+  .af-core .af-wlb-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .af-core .af-wlb-over { grid-column: 2 / -1; text-align: left; }
+  .af-core .af-wlb-search { min-height: 44px; }
+  .af-core .af-wlb-count { margin-left: 0; }
+}
+
+@media (pointer: coarse) {
+  .af-core .af-wlb-search { min-height: 44px; }
+}
+
+
+/* Rostered % and adds this week (lib/waivers/waiverCrowd.ts): facts about the wider pool, so muted,
+   never in the warn or good tones that carry this row's own verdicts. */
+.af-core .af-wlb-crowd {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  background: var(--chip, rgba(255, 255, 255, 0.06));
+  white-space: nowrap;
+}
+.af-core .af-wlb-crowd[data-kind='added'] {
+  color: var(--accent);
+  background: var(--accent-soft, rgba(34, 211, 238, 0.12));
+}
+.af-core .af-wlb-proj { white-space: nowrap; }
+
+/*
+ * ── Waivers on a phone (2026-11-07) ──
+ * Live at 375px the screen was 2,575px: Competitive Edge listed all eleven rivals (995px) and Worth
+ * adding carried three coverage notes under a one-line finding. Rivals now show the top three at every
+ * width with "Show all N managers" (WaiverCompetitiveEdge, RIVALS_PREVIEW); on a phone the notes fold
+ * behind "How this list was built". Wide screens keep the notes open and never see that toggle.
+ * Top level, appended.
+ */
+.af-core .af-wv-edge-more,
+.af-core .af-wlb-notes-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-wv-edge-more:focus-visible,
+.af-core .af-wlb-notes-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core .af-wlb-notes-toggle {
+  display: none;
+}
+@media (max-width: 640px) {
+  .af-core .af-wlb-notes-toggle {
+    display: flex;
+    justify-content: space-between;
+    border-style: solid;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .af-core .af-wlb-notes-toggle::after {
+    content: '▾' / '';
+    color: var(--accent);
+  }
+  .af-core .af-wlb-notes-toggle[aria-expanded='true']::after {
+    content: '▴' / '';
+  }
+  .af-core .af-wlb-notes:not([data-open]) {
+    display: none;
+  }
 }

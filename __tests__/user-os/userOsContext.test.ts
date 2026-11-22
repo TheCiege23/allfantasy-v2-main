@@ -31,6 +31,15 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+// a3f5afa4e routed resolveActiveLeagueContext's access decision through the canonical
+// predicate in lib/league-access.ts (owner, redraft member, claimed team, AND claimed imported
+// roster). This suite kept encoding membership in the league row it fed prisma, so the real
+// predicate hit an unmocked delegate and every test threw. The predicate has its own suites;
+// here it is doubled so these tests pin what userOsContext does with its verdict.
+const MEMBERS = new Set(['owner-1', 'member-1'])
+const resolveLeagueAccessMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: resolveLeagueAccessMock }))
+
 function baseLeague(overrides: Record<string, unknown> = {}) {
   return {
     id: 'league-1',
@@ -56,12 +65,18 @@ describe('assembleUserOsContext', () => {
     forecastFindFirst.mockResolvedValue(null)
     rosterFindFirstForContext.mockResolvedValue(null)
     rosterFindFirst.mockResolvedValue(null)
+    resolveLeagueAccessMock.mockImplementation(async (leagueId: string, userId: string) =>
+      MEMBERS.has(userId)
+        ? { leagueId, leagueSport: 'NFL', isMember: true, isCommissioner: userId === 'owner-1', isOwner: userId === 'owner-1', via: userId === 'owner-1' ? 'owner' : 'redraft' }
+        : null,
+    )
   })
 
   it('returns null when the caller has no real relationship to the league (fails closed)', async () => {
     leagueFindUnique.mockResolvedValue(baseLeague())
     const { assembleUserOsContext } = await import('@/lib/shared-services/league-hub/userOsContext')
     const result = await assembleUserOsContext({ appUserId: 'stranger', canonicalLeagueId: 'league-1' })
+    expect(resolveLeagueAccessMock).toHaveBeenCalledWith('league-1', 'stranger')
     expect(result).toBeNull()
   })
 

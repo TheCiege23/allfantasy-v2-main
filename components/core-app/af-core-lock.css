@@ -55,6 +55,13 @@
   text-decoration: none;
 }
 
+.af-core-lock-cta-secondary {
+  border: 1px solid var(--accent-line, var(--border, rgba(124, 58, 237, 0.35)));
+  background: transparent;
+  color: var(--text, inherit);
+  cursor: pointer;
+}
+
 .af-core-lock-cta:focus-visible {
   outline: 2px solid var(--accent, #7c3aed);
   outline-offset: 2px;

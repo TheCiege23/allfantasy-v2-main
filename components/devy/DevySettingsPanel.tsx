@@ -81,7 +81,7 @@ export function DevySettingsPanel({ leagueId, isCommissioner, onSaved }: Props) 
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/devy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify(Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'rookiePickOrderMethod'))),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -236,20 +236,7 @@ export function DevySettingsPanel({ leagueId, isCommissioner, onSaved }: Props) 
         </label>
       </div>
 
-      <label className="block">
-        <span className="text-xs text-white/60">Rookie pick order</span>
-        <select
-          value={config.rookiePickOrderMethod}
-          onChange={(e) => update({ rookiePickOrderMethod: e.target.value })}
-          disabled={!isCommissioner}
-          className="mt-1 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-white disabled:opacity-50"
-        >
-          <option value="reverse_standings">Reverse standings</option>
-          <option value="lottery">Lottery</option>
-          <option value="consolation">Consolation-based</option>
-          <option value="custom">Custom (commissioner)</option>
-        </select>
-      </label>
+      <p className="text-xs text-white/60">Set the rookie draft order in Dynasty and Draft Settings. The Devy draft order is configured below.</p>
       <label className="block">
         <span className="text-xs text-white/60">Devy pick order</span>
         <select

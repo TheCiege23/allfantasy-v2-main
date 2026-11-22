@@ -7,6 +7,8 @@ import { resolveConflict } from '@/lib/devy/conflictResolutionEngine'
 
 export const dynamic = 'force-dynamic'
 
+const RESOLUTIONS = new Set(['auto_resolved', 'commissioner_resolved', 'skipped'])
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -39,13 +41,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'conflictId and resolution required' }, { status: 400 })
   }
 
+  // resolveConflict throws on anything else, which surfaced as a 500 for a bad request.
+  if (!RESOLUTIONS.has(body.resolution)) {
+    return NextResponse.json({ error: 'Invalid resolution' }, { status: 400 })
+  }
+
   const c = await prisma.devyMergeConflict.findFirst({ where: { id: conflictId } })
   if (!c) return NextResponse.json({ error: 'Conflict not found' }, { status: 404 })
 
   const row = await prisma.devyImportSession.findFirst({ where: { id: c.sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   await resolveConflict(conflictId, body.resolution, body.note, userId)

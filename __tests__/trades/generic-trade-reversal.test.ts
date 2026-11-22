@@ -333,6 +333,27 @@ describe('🛑 a trade that moved a native future pick', () => {
     expect(db.roster.update).toHaveBeenCalledTimes(2)
   })
 
+  it('takes back the pick terms this trade gave, and keeps another trade’s', async () => {
+    db.league.findUnique.mockResolvedValue({
+      sport: 'NFL',
+      leagueVariant: null,
+      settings: {
+        pick_terms: {
+          'fdp:2027:1:r1': { terms: { kind: 'protected', top: 3, ifProtected: 'stays' }, tradeId: 't-1', setAt: 'x' },
+          'fdp:2028:2:r3': { terms: { kind: 'protected', top: 2, ifProtected: 'stays' }, tradeId: 't-other', setAt: 'x' },
+        },
+      },
+    })
+    const executeRaw = vi.fn(async () => 1)
+    ;(db as Record<string, unknown>).$executeRaw = executeRaw
+    const { reverseGenericTrade } = await import('@/lib/league-trade-engine/tradeReversal')
+    expect((await reverseGenericTrade({ tradeId: 't-1', actorUserId: 'u-commish', actorRole: 'commissioner', reason: 'collusion' })).ok).toBe(true)
+    expect(executeRaw).toHaveBeenCalledTimes(1)
+    expect((executeRaw.mock.calls[0] as unknown[]).slice(1)).toContain('fdp:2027:1:r1')
+    delete (db as Record<string, unknown>).$executeRaw
+    db.league.findUnique.mockResolvedValue({ sport: 'NFL', leagueVariant: null })
+  })
+
   it('a trade without native picks never reads the pick inventory', async () => {
     db.afLeagueTrade.findUnique.mockResolvedValue({ id: 't-1', leagueId: 'l-1', status: 'processed', proposerRosterId: 'r1', receiverRosterId: 'r2', items: [{ itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2' }] })
     const { evaluateGenericTradeReversalReadiness } = await import('@/lib/league-trade-engine/tradeReversal')

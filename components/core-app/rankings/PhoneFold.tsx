@@ -29,4 +29,3 @@ export function PhoneFold({ id, summary, children }: { id: string; summary: Reac
   )
 }
 
-export default PhoneFold

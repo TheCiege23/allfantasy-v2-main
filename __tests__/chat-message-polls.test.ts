@@ -18,6 +18,9 @@ describe('readViewerPoll', () => {
       closedByHand: false,
       allowMultiple: false,
       anonymous: false,
+      resultsAfterClose: false,
+      resultsHidden: false,
+      prediction: null,
     })
   })
 

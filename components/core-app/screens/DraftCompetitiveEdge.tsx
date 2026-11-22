@@ -8,6 +8,8 @@ import type { EdgeFact } from '@/lib/competitive-edge/tradeEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { messagesFor } from '@/lib/i18n/messages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /*
  * Competitive Edge on Draft HQ: what each other manager has actually taken in this league's past
@@ -24,7 +26,8 @@ function range(seasons: number[]): string {
   return seasons[0] === seasons[seasons.length - 1] ? `${seasons[0]}` : `${seasons[0]}–${seasons[seasons.length - 1]}`
 }
 
-function factCopy(fact: EdgeFact, language: string): string {
+/** A draft-history fact in the reader's language — also the manager card's (ManagerRecordSheet.tsx). */
+export function draftFactText(fact: EdgeFact, language: string): string {
   if (language !== 'es') return fact.text
   if (fact.key === 'draft.record') {
     if (fact.text.endsWith("has no picks on file in this league's drafts.")) {
@@ -50,7 +53,7 @@ function factCopy(fact: EdgeFact, language: string): string {
   return fact.text
 }
 
-function reasonCopy(reason: string, language: string): string {
+export function draftReasonText(reason: string, language: string): string {
   if (language !== 'es') return reason
   const platform = reason.match(/^Competitive Edge reads Sleeper draft history today\. (.+) leagues aren't connected yet\.$/)
   if (platform) return `Competitive Edge utiliza el historial de drafts de Sleeper. Las ligas de ${platform[1]} todavía no están conectadas.`
@@ -81,7 +84,7 @@ export function DraftCompetitiveEdge({
     return (
       <section className="af-frame af-dh-section af-dh-edge" data-testid="draft-competitive-edge">
         {head}
-        <p className="af-dh-unavailable">{reasonCopy(edge.reason, language)}</p>
+        <p className="af-dh-unavailable">{draftReasonText(edge.reason, language)}</p>
       </section>
     )
   }
@@ -101,7 +104,7 @@ export function DraftCompetitiveEdge({
               <div className="af-dh-edge-name">{r.manager.name}</div>
               <ul className="af-dh-edge-facts">
                 {r.facts.map((f) => (
-                  <li key={f.key}>{factCopy(f, language)}</li>
+                  <li key={f.key}>{draftFactText(f, language)}</li>
                 ))}
               </ul>
             </li>
@@ -109,9 +112,10 @@ export function DraftCompetitiveEdge({
         </ul>
       )}
       <p className="af-dh-edge-note" data-testid="draft-competitive-edge-basis">
-        {language === 'es'
-          ? `Datos de los drafts de Sleeper de esta liga${coverage.seasons.length > 0 ? ` (${range(coverage.seasons)})` : ''}, asignados al mánager de cada equipo en esa temporada.${coverage.unattributedSeasons.length > 0 ? ` Las selecciones de ${coverage.unattributedSeasons.join(', ')} aún no se pueden asignar y quedan fuera.` : ''} Muestra lo que hicieron, no lo que elegirán.`
-          : `Counted from this league's Sleeper drafts${coverage.seasons.length > 0 ? ` (${range(coverage.seasons)})` : ''}, matched to the manager who owned each team that season.${coverage.unattributedSeasons.length > 0 ? ` Picks from ${coverage.unattributedSeasons.join(', ')} aren't matched to a manager yet, so those drafts are left out.` : ''} It shows what they did, not what they'll take.`}
+        {messagesFor(corePartsMessages, language).draftEdgeBasis(
+          coverage.seasons.length > 0 ? range(coverage.seasons) : null,
+          coverage.unattributedSeasons.length > 0 ? coverage.unattributedSeasons.join(', ') : null,
+        )}
       </p>
     </section>
   )

@@ -22,7 +22,8 @@ import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
 // module (one import) rather than `grounding/packet`, whose 17 imports include ChimmyContextEngine
 // — this path runs on EVERY chat message, including the ones that never build a packet.
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
-import { deriveValueFormat, deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
+import { deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
+import { loadLeagueValueFormat } from '@/lib/decision-os/grounding/leagueValueBook'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { looksLikeTradeTargetQuestion, namesBothSidesOfTrade } from '@/lib/chimmy/tradeTargetQuestion'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
@@ -808,12 +809,18 @@ async function buildCachedGamesAnswer(message: string): Promise<string | null> {
    * `homeTeamId` is null on every source but TheSportsDB, which uses its own
    * id space. See lib/sports/dedupeFixtures.ts.
    */
+  const now = Date.now()
   const lines = dedupeFixtures(games as any[]).map((game: any) => {
+    const status = normalizeGameStatus(game.status)
+    const fetchedAt = game.fetchedAt ? new Date(game.fetchedAt).getTime() : NaN
+    const stale = !Number.isFinite(fetchedAt) || now - fetchedAt > 5 * 60_000
+    const state = status === 'live' && stale ? 'last reported live, current status unverified' : status
     const score =
-      typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
+      (status === 'live' || status === 'final') && typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
         ? `${game.awayScore}-${game.homeScore}`
-        : 'score TBD'
-    return `- ${game.awayTeam} @ ${game.homeTeam}: ${score} (${game.status ?? 'scheduled'}) — ${formatEt(game.startTime)}`
+        : 'score unverified'
+    const observation = Number.isFinite(fetchedAt) ? `; observed ${formatEt(new Date(fetchedAt))}` : ''
+    return `- ${game.awayTeam} @ ${game.homeTeam}: ${score} (${state}) — ${formatEt(game.startTime)}${observation}`
   })
   return `Here are the cached ${sport ?? 'sports'} games I can verify for that window:\n${lines.join('\n')}\nSource: cached SportsGame rows.`
 }
@@ -896,12 +903,16 @@ export async function buildFantasyCalcValueAnswer(
    * Null on any failure — never a default, because a default here becomes a stated claim below.
    */
   let rules: unknown = null
+  let fmt: Awaited<ReturnType<typeof loadLeagueValueFormat>> = null
   if (leagueId) {
-    rules = await createLeagueOsLoaders()
-      .loadRules(leagueId)
-      .catch(() => null)
+    // The chart by the same rule as the player card (`valueBookFor`), so a quick answer and the card agree.
+    ;[rules, fmt] = await Promise.all([
+      createLeagueOsLoaders()
+        .loadRules(leagueId)
+        .catch(() => null),
+      loadLeagueValueFormat(leagueId).catch(() => null),
+    ])
   }
-  const fmt = deriveValueFormat(rules)
   const size = deriveLeagueSizeAndPpr(rules)
 
   // With no resolvable league we still price the player, but on an explicitly GENERIC basis that
@@ -1271,12 +1282,19 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  // Private fantasy scores require the authorized league board, not a public game-score shortcut.
+  if (/\b(?:my|our)\b[^?]*\b(?:(?:fantasy|league|team)\s+)?(?:matchup|score)\b|\b(?:am\s+i\s+(?:winning|losing)|who\s+is\s+scoring\s+for\s+me)\b/i.test(message)) return null
+  if (/\b(?:my|our)\b[^?]*\b(?:fantasy|league)\b[^?]*\b(?:history|record|past|last\s+season|week\s+\d+)\b/i.test(message)) return null
   // A cache hit for one player or game cannot answer a complete roster request.
   if (isOwnRosterAnalysisQuestion(message)) return null
   if (isScopedRosterReviewQuestion(message, leagueRequested)) return null
   // A result or schedule is evidence for analysis, never a probability or a recommendation.
   // Yield before ANY shortcut so incidental "live", "tonight", or "worth" cannot hijack it.
-  if (/\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
+  // ⚠ EXCEPT unsupported live data: the router has already classified it blocked_no_charge, and
+  // ChimmyChat skips the spend preflight on that policy. Yielding sent "live World Cup odds" on
+  // to the paid model path with no confirmation and no live data behind it; the refusal below is
+  // the free, honest answer the client was promised.
+  if (intentRoute.category !== 'unsupported_live_data' && /\b(?:probabilit(?:y|ies)|chances?|odds|likely|likelihood)\b|\b(?:should\s+(?:i|we)|recommend(?:ation|ations)?|trade\s+block|worth\s+(?:me\s+)?trading)\b/i.test(message)) {
     return null
   }
   /*

@@ -21,9 +21,9 @@
 
 export const ADVANCED_KEY = 'guillotine_advanced'
 export const MAX_CHOPS_PER_WEEK = 4
-export const MAX_WEEK = 30
+const MAX_WEEK = 30
 
-export type ImmunityRule = 'off' | 'top_scorer'
+type ImmunityRule = 'off' | 'top_scorer'
 export const MAX_FAAB_AMOUNT = 10_000
 
 /** After each chop: survivors keep their FAAB, get `amount` added, or are reset to `amount`. */

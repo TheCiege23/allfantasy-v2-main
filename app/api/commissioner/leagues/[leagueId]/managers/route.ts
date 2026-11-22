@@ -1,12 +1,14 @@
+import { commissionerAccessResponse, type CommissionerNeed } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
-import { tournamentCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
+import { teamlessCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { trackDiscoveryOrphanAdoption } from '@/lib/discovery-analytics/server'
 import { assignLeagueSeat, releaseLeagueSeat } from '@/lib/league/leagueSeats'
+import { endManagedForNewOwners } from '@/lib/inactive-manager/inactiveManagerService'
 
 type SessionWithUser = { user?: { id?: string } } | null
 
@@ -50,7 +52,7 @@ export async function GET(
   ])
   // Co-commissioners the tournament that created this league granted (no team needed). A team's own
   // flag only covers people holding a seat, so the list would otherwise show them as plain managers.
-  const tournamentCoIds = new Set(tournamentCoCommissionerIds(leagueRow?.settings))
+  const tournamentCoIds = new Set(teamlessCoCommissionerIds(leagueRow?.settings))
   const teams = teamRows.map(({ claimedByUserId, ...t }) => ({
     ...t,
     isCoCommissioner: t.isCoCommissioner || (!t.isCommissioner && Boolean(claimedByUserId) && tournamentCoIds.has(claimedByUserId as string)),
@@ -103,6 +105,22 @@ export async function GET(
   })
 }
 
+/**
+ * Releasing or reassigning a seat is league setup — except a commissioner's own seat (the owner's team, or a team
+ * flagged commissioner or co-commissioner), which only the head commissioner may touch. Both handlers let ANY
+ * co-commissioner through, including one limited to chat, and a co-commissioner could release the head commissioner's
+ * team (2026-11-16).
+ */
+async function seatNeed(leagueId: string, rosterId: string): Promise<CommissionerNeed> {
+  const [league, roster, team] = await Promise.all([
+    prisma.league.findFirst({ where: { id: leagueId }, select: { userId: true } }),
+    prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { platformUserId: true } }),
+    prisma.leagueTeam.findFirst({ where: { leagueId, externalId: rosterId }, select: { isCommissioner: true, isCoCommissioner: true } }),
+  ])
+  const ownersSeat = Boolean(league?.userId && roster?.platformUserId === league.userId)
+  return ownersSeat || team?.isCommissioner || team?.isCoCommissioner ? 'head' : 'league'
+}
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ leagueId: string }> }
@@ -112,13 +130,10 @@ export async function DELETE(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
 
-  const delRole = await getLeagueRole(leagueId, userId)
-  if (delRole !== 'commissioner' && delRole !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   const rosterId = req.nextUrl.searchParams?.get('rosterId') ?? (await req.json().catch(() => ({}))).rosterId
   if (!rosterId) return NextResponse.json({ error: 'rosterId required' }, { status: 400 })
+  const refused = await commissionerAccessResponse(leagueId, userId, await seatNeed(leagueId, rosterId))
+  if (refused) return refused
 
   // Releases every record of the seat — roster, team, entry slot, membership, season roster.
   // Renaming the roster's owner alone left the removed manager's team claim, membership and
@@ -145,17 +160,14 @@ export async function PATCH(
   if (!commissionerId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { leagueId } = await params
-  const patchRole = await getLeagueRole(leagueId, commissionerId)
-  if (patchRole !== 'commissioner' && patchRole !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   const body = await req.json().catch(() => ({}))
   const rosterId = body?.rosterId ?? null
   const userId = body?.userId ?? null
   if (!rosterId || !userId) {
     return NextResponse.json({ error: 'rosterId and userId required' }, { status: 400 })
   }
+  const refused = await commissionerAccessResponse(leagueId, commissionerId, await seatNeed(leagueId, String(rosterId)))
+  if (refused) return refused
 
   const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
@@ -177,6 +189,13 @@ export async function PATCH(
     const status = seat.code === 'ROSTER_NOT_FOUND' || seat.code === 'USER_NOT_FOUND' ? 404 : 409
     return NextResponse.json({ error: seat.message, code: seat.code }, { status })
   }
+
+  // The team has a real manager now: if Chimmy was running it, Chimmy steps off at once (not at the
+  // next hourly sweep), and the commissioner who handed it to Chimmy is told.
+  const leagueName = (await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }))?.name ?? null
+  await endManagedForNewOwners(leagueId, commissionerId, leagueName).catch((error) => {
+    console.warn('[commissioner managers] Chimmy hand-back failed; the hourly sweep will retry', error instanceof Error ? error.message : error)
+  })
 
   if (wasOrphan) {
     await trackDiscoveryOrphanAdoption(

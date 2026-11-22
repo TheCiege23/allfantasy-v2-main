@@ -11,9 +11,9 @@ import {
   type SportSlug,
 } from '@/lib/seo-landing/config'
 import type { ToolCategoryId } from './types'
-import { getToolsByCategory, getFeaturedToolSlugs, getTrendingToolSlugs } from './FeaturedToolResolver'
+import { getToolsByCategory } from './FeaturedToolResolver'
 
-export type ToolHubTool = {
+type ToolHubTool = {
   slug: ToolSlug
   headline: string
   description: string
@@ -24,7 +24,7 @@ export type ToolHubTool = {
   badge?: string
 }
 
-export type ToolHubSport = {
+type ToolHubSport = {
   slug: SportSlug
   headline: string
   leagueSport: string
@@ -95,9 +95,10 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
     '/trade-analyzer': '/trade-evaluator',
     '/waiver-wire': '/waiver-ai',
     '/social-pulse': '/social-pulse',
-    // The matchup tool opens /core/matchup (its openToolHref) since /matchup-simulator became a 308.
-    '/matchup-simulator': '/core/matchup',
-    '/app/simulation-lab': '/core/matchup',
+    // Both hrefs mean the simulation-lab card (slug `matchup-simulator` until 2026-10-20), which
+    // opens the lab (its openToolHref). From 2026-09-29 to 2026-10-20 they aliased to /core/matchup.
+    '/matchup-simulator': '/app/simulation-lab',
+    '/app/simulation-lab': '/app/simulation-lab',
     '/bracket': '/brackets',
     '/app/power-rankings': '/power-rankings',
   }
@@ -112,12 +113,3 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
   return filtered.length > 0 ? filtered : all
 }
 
-export function getFeaturedTools(): ToolHubTool[] {
-  const featured = new Set(getFeaturedToolSlugs())
-  return getAllTools().filter((tool) => featured.has(tool.slug))
-}
-
-export function getTrendingTools(): ToolHubTool[] {
-  const trending = new Set(getTrendingToolSlugs())
-  return getAllTools().filter((tool) => trending.has(tool.slug))
-}

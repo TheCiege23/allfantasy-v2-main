@@ -18,7 +18,14 @@ const db = {
   redraftTradeProposal: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
   tradeExecutionSnapshot: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
   tradeReversal: { findUnique: vi.fn(), create: vi.fn() },
-  redraftRoster: { findUnique: vi.fn(), update: vi.fn() },
+  redraftRoster: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    // lib/league/faabMirror.ts reads the restored balances back to copy them onto the linked roster.
+    findMany: vi.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.map((id) => ({ id, faabBalance: ({ r1: 100, r2: 50 } as Record<string, number>)[id] ?? null }))),
+  },
+  roster: { updateMany: vi.fn(async () => ({ count: 1 })) },
   redraftRosterPlayer: { findMany: vi.fn(), updateMany: vi.fn() },
   survivorIdol: { findMany: vi.fn(async () => []) },
   iDPCapTransaction: { findMany: vi.fn(), create: vi.fn() },
@@ -125,6 +132,13 @@ describe('native trade reversal readiness', () => {
     expect(await evaluateNativeTradeReversalReadiness(db as never, 'p-1')).toEqual({ ok: true, blockers: [], drift: [] })
   })
 
+  it('holds item-containing trades for complete commissioner reconciliation instead of reversing players alone', async () => {
+    db.tradeExecutionSnapshot.findUnique.mockResolvedValueOnce({ id: 'snap', tradeSource: 'redraft_native', assetSummary: { zombieItems: [{ id: 'serum' }] }, afterState: AFTER })
+    const { evaluateNativeTradeReversalReadiness } = await load()
+    expect(await evaluateNativeTradeReversalReadiness(db as never, 'p-1')).toMatchObject({ ok: false, blockers: ['ZOMBIE_ITEMS_REQUIRE_REVIEW'] })
+    expect(db.redraftTradeProposal.updateMany).not.toHaveBeenCalled()
+  })
+
   it('🛑 refuses when roster membership changed after the trade', async () => {
     serveRosters({
       rosters: [
@@ -220,6 +234,10 @@ describe('reverseNativeTrade', () => {
     const updates = db.redraftRoster.update.mock.calls.map((c) => c[0])
     expect(updates).toContainEqual({ where: { id: 'r1' }, data: { faabBalance: 100 } })
     expect(updates).toContainEqual({ where: { id: 'r2' }, data: { faabBalance: 50 } })
+    // ...and the native waiver engine's copy, Roster.faabRemaining, follows.
+    const copies = db.roster.updateMany.mock.calls.map((c) => c[0])
+    expect(copies).toContainEqual({ where: { redraftRosterId: 'r1' }, data: { faabRemaining: 100 } })
+    expect(copies).toContainEqual({ where: { redraftRosterId: 'r2' }, data: { faabRemaining: 50 } })
   })
 
   it('moves the salary record back and APPENDS reversing ledger rows, never editing the originals', async () => {

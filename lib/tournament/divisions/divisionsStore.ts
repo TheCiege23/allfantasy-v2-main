@@ -20,6 +20,7 @@ import { defaultFormatSettings, divisionsCalendar, type FormatSettings, type Gam
 import { readSeasonSummaries } from './weekScores'
 import { presetIdentity, type DivisionIdentity } from './identity'
 import { divisionsRulesLabels } from './rules'
+import { leagueBracketWeek, type LeagueBracketWeek } from './leagueBracketWeek'
 
 export const DIVISIONS_FORMAT = 'divisions'
 const CONFIG_ACTIONS = ['divisions_blueprint_created', 'divisions_blueprint_updated']
@@ -238,4 +239,18 @@ export async function loadDivisionsBlueprint(tournamentId: string): Promise<Divi
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   })
   return (row?.data as DivisionsBlueprint | undefined) ?? null
+}
+
+/**
+ * The tournament bracket week for a conference league's own matchup screen: the round and each of
+ * this league's entrants' bracket opponents, from the same state the hub reads. Null when the league
+ * is not a divisions conference league, or `week` is not a bracket week. The caller checks access.
+ */
+export async function loadLeagueBracketWeek(leagueId: string, userId: string, week: number): Promise<LeagueBracketWeek | null> {
+  const link = await prisma.tournamentLeague.findUnique({ where: { leagueId }, select: { tournamentId: true } })
+  if (!link) return null
+  const state = await readDivisionsState(link.tournamentId)
+  if (!state || !state.calendar.weeks.some(w => w.week === week)) return null
+  const ids = new Set(state.teams.filter(t => t.leagueId === leagueId).map(t => t.id))
+  return leagueBracketWeek(viewFromState(state, userId), ids, week)
 }

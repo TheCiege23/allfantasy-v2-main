@@ -79,7 +79,16 @@ export function SurvivorVoteCast({
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const mounted = useRef(true)
-  useEffect(() => () => { mounted.current = false }, [])
+  /*
+   * ⚠ SET IT BACK ON MOUNT, NOT ONLY OFF ON UNMOUNT. React re-runs effects on a component it keeps — Strict
+   * Mode's mount → cleanup → mount in development, and a hidden-then-shown subtree — and the ref survives.
+   * With only the cleanup, the flag stayed false after that cycle and every `refresh` threw its response
+   * away: the ballot sat on its loading skeleton forever with a 200 in hand and no error (2026-11-07).
+   */
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   const refresh = useCallback(async (adopt: boolean) => {
     try {

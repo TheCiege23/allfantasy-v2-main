@@ -13,6 +13,7 @@ import {
   buildOrphanTeamEvaluationPreview,
   getOrphanAdoptionRequests,
 } from "@/lib/orphan-marketplace"
+import { publicReputationForLeagues } from "@/lib/commish-reputation/reputationService"
 
 export const dynamic = "force-dynamic"
 
@@ -272,7 +273,11 @@ export async function GET(req: NextRequest) {
       })
 
     const total = cards.length
-    const paginated = cards.slice(skip, skip + limit)
+    // Commish reputation badge for commissioners who made it public on that league; a failed read
+    // drops the badge, never the card.
+    const page_ = cards.slice(skip, skip + limit)
+    const reputations = await publicReputationForLeagues(page_.map((c) => c.leagueId)).catch(() => new Map())
+    const paginated = page_.map((c) => ({ ...c, commissionerReputation: reputations.get(c.leagueId) ?? null }))
 
     return NextResponse.json(
       {

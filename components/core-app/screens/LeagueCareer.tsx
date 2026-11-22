@@ -13,8 +13,11 @@ import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
 import { leagueCareerChimmyPrompts, leagueWeeklyCareerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-league-career.css'
 import '@/components/core-app/af-career-live.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 38a·6 — your career inside ONE league.
@@ -30,7 +33,7 @@ import '@/components/core-app/af-career-live.css'
  * came from, or shows the reason there isn't one.
  */
 
-export type LeagueCareerProps = {
+type LeagueCareerProps = {
   data: LeagueCareerResult
   /** The cross-league trophy room, which this does not replace. */
   allLeaguesHref: string
@@ -39,11 +42,8 @@ export type LeagueCareerProps = {
 export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
   if (!data.available) {
     return (
-      <div className="af-lc">
-        <header className="af-lc-head">
-          <p className="af-label af-lc-eyebrow">{data.leagueName}</p>
-          <h1 className="af-display af-lc-title">Your career here</h1>
-        </header>
+      <div className="af-lcareer">
+        <PageHeader className="af-lc-head" eyebrowClassName="af-lc-eyebrow" titleClassName="af-lc-title" eyebrow={data.leagueName} title="Your career here" />
         <div className="af-lc-blocked">
           <span className="af-lc-blocked-mark af-num" aria-hidden>
             —
@@ -70,47 +70,61 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
   )
 
   return (
-    <div className="af-lc">
-      <header className="af-lc-head">
-        <p className="af-label af-lc-eyebrow">{league.name}</p>
-        <h1 className="af-display af-lc-title">Your career here</h1>
-        <p className="af-lc-sub">
-          Every season you have played in this league, since {firstSeason}.{' '}
-          <Link href={allLeaguesHref}>Across every league →</Link>
-        </p>
-      </header>
+    <div className="af-lcareer">
+      <PageHeader
+        className="af-lc-head"
+        eyebrowClassName="af-lc-eyebrow"
+        titleClassName="af-lc-title"
+        subClassName="af-lc-sub"
+        eyebrow={league.name}
+        title="Your career here"
+        sub={
+          <>
+            Every season you have played in this league, since {firstSeason}.{' '}
+            <Link href={allLeaguesHref}>Across every league →</Link>
+          </>
+        }
+      />
 
       {/* ── Identity banner ─────────────────────────────────────────── */}
-      <div className="af-lc-banner">
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{seasons.length}</span>
-          <span className="af-label">{seasons.length === 1 ? 'Season' : 'Seasons'}</span>
-          <span className="af-lc-stat-s af-num">
-            {firstSeason}–{lastSeason}
-          </span>
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">
-            {totals.wins}—{totals.losses}
-          </span>
-          <span className="af-label">All-time record</span>
-          <span className="af-lc-stat-s">{totals.games} completed games</span>
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">
-            {totals.winPct != null ? `${(totals.winPct * 100).toFixed(1)}%` : '—'}
-          </span>
-          <span className="af-label">Win rate</span>
-          <span className="af-lc-stat-s">{describeWinRate(totals.winPct)}</span>
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString()}</span>
-          <span className="af-label">Points scored</span>
-          <span className="af-lc-stat-s af-num">
-            {totals.games > 0 ? `${(totals.pointsFor / totals.games).toFixed(1)} per game` : '—'}
-          </span>
-        </div>
-      </div>
+      <StatStrip
+        className="af-lc-banner"
+        order="value-first"
+        items={[
+          {
+            key: 'seasons',
+            value: seasons.length,
+            label: seasons.length === 1 ? 'Season' : 'Seasons',
+            sub: (
+              <span className="af-num">
+                {firstSeason}–{lastSeason}
+              </span>
+            ),
+          },
+          {
+            key: 'record',
+            value: (
+              <>
+                {totals.wins}—{totals.losses}
+              </>
+            ),
+            label: 'All-time record',
+            sub: `${totals.games} completed games`,
+          },
+          {
+            key: 'win-rate',
+            value: totals.winPct != null ? `${(totals.winPct * 100).toFixed(1)}%` : '—',
+            label: 'Win rate',
+            sub: describeWinRate(totals.winPct),
+          },
+          {
+            key: 'points',
+            value: Math.round(totals.pointsFor).toLocaleString(getAppIntlLocale()),
+            label: 'Points scored',
+            sub: <span className="af-num">{totals.games > 0 ? `${(totals.pointsFor / totals.games).toFixed(1)} per game` : '—'}</span>,
+          },
+        ]}
+      />
 
       {/*
         ⚠ NO TITLE COUNT ON THIS SCREEN, DELIBERATELY. Championships are not in
@@ -256,57 +270,64 @@ function WeeklyLeagueCareer({
   const alive = elimination && current.choppedAfterWeek == null
 
   return (
-    <div className="af-lc">
-      <header className="af-lc-head">
-        <p className="af-label af-lc-eyebrow">{league.name}</p>
-        <h1 className="af-display af-lc-title">Your career here</h1>
-        <p className="af-lc-sub">
-          {elimination ? 'A guillotine league' : 'A league scored against the whole field'}, so every week is your
-          score against everyone still playing — since {firstSeason}.{' '}
-          <Link href={allLeaguesHref}>Across every league →</Link>
-        </p>
-      </header>
+    <div className="af-lcareer">
+      <PageHeader
+        className="af-lc-head"
+        eyebrowClassName="af-lc-eyebrow"
+        titleClassName="af-lc-title"
+        subClassName="af-lc-sub"
+        eyebrow={league.name}
+        title="Your career here"
+        sub={
+          <>
+            {elimination ? 'A Guilly league' : 'A league scored against the whole field'}, so every week is your
+            score against everyone still playing — since {firstSeason}.{' '}
+            <Link href={allLeaguesHref}>Across every league →</Link>
+          </>
+        }
+      />
 
-      <div className="af-lc-banner">
-        <div className="af-lc-stat">
-          {elimination ? (
-            <>
-              <span className="af-lc-stat-v af-num">{alive ? current.weeks : `Wk ${current.choppedAfterWeek}`}</span>
-              <span className="af-label">{alive ? `${current.weeks === 1 ? 'Week' : 'Weeks'} survived` : 'Chopped after'}</span>
-              <span className="af-lc-stat-s af-num">
-                {alive ? `still alive in ${current.season}` : `${current.season} · ${current.weeks} ${current.weeks === 1 ? 'week' : 'weeks'} played`}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="af-lc-stat-v af-num">{totals.weeks}</span>
-              <span className="af-label">{totals.weeks === 1 ? 'Week played' : 'Weeks played'}</span>
-              <span className="af-lc-stat-s af-num">
-                {firstSeason === lastSeason ? firstSeason : `${firstSeason}–${lastSeason}`}
-              </span>
-            </>
-          )}
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">
-            {totals.averageFinish != null ? totals.averageFinish.toFixed(1) : '—'}
-          </span>
-          <span className="af-label">Average weekly finish</span>
-          <span className="af-lc-stat-s af-num">of up to {Math.max(...seasons.map((s) => s.fieldSize))} teams</span>
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{totals.topScores}</span>
-          <span className="af-label">{totals.topScores === 1 ? 'Top score' : 'Top scores'}</span>
-          <span className="af-lc-stat-s">weeks you outscored everyone</span>
-        </div>
-        <div className="af-lc-stat">
-          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString()}</span>
-          <span className="af-label">Points scored</span>
-          <span className="af-lc-stat-s af-num">
-            {totals.weeks > 0 ? `${(totals.pointsFor / totals.weeks).toFixed(1)} per week` : '—'}
-          </span>
-        </div>
-      </div>
+      <StatStrip
+        className="af-lc-banner"
+        order="value-first"
+        items={[
+          elimination
+            ? {
+                key: 'weeks',
+                value: alive ? current.weeks : `Wk ${current.choppedAfterWeek}`,
+                label: alive ? `${current.weeks === 1 ? 'Week' : 'Weeks'} survived` : 'Chopped after',
+                sub: (
+                  <span className="af-num">
+                    {alive ? `still alive in ${current.season}` : `${current.season} · ${current.weeks} ${current.weeks === 1 ? 'week' : 'weeks'} played`}
+                  </span>
+                ),
+              }
+            : {
+                key: 'weeks',
+                value: totals.weeks,
+                label: totals.weeks === 1 ? 'Week played' : 'Weeks played',
+                sub: <span className="af-num">{firstSeason === lastSeason ? firstSeason : `${firstSeason}–${lastSeason}`}</span>,
+              },
+          {
+            key: 'finish',
+            value: totals.averageFinish != null ? totals.averageFinish.toFixed(1) : '—',
+            label: 'Average weekly finish',
+            sub: <span className="af-num">of up to {Math.max(...seasons.map((s) => s.fieldSize))} teams</span>,
+          },
+          {
+            key: 'top',
+            value: totals.topScores,
+            label: totals.topScores === 1 ? 'Top score' : 'Top scores',
+            sub: 'weeks you outscored everyone',
+          },
+          {
+            key: 'points',
+            value: Math.round(totals.pointsFor).toLocaleString(getAppIntlLocale()),
+            label: 'Points scored',
+            sub: <span className="af-num">{totals.weeks > 0 ? `${(totals.pointsFor / totals.weeks).toFixed(1)} per week` : '—'}</span>,
+          },
+        ]}
+      />
 
       <p className="af-lc-note">
         No win-loss record or rival here: this league never pairs teams, so there is no opponent to count. Finishes
@@ -370,7 +391,7 @@ function WeeklyLeagueCareer({
                         : ''}
                       {elimination ? (s.choppedAfterWeek != null ? ` · chopped after week ${s.choppedAfterWeek}` : ' · still alive') : ''}
                       {' · '}
-                      {Math.round(s.pointsFor).toLocaleString()} pts
+                      {Math.round(s.pointsFor).toLocaleString(getAppIntlLocale())} pts
                     </span>
                   </span>
                 </li>
@@ -475,8 +496,8 @@ function TradeMoment({ title, moment, tone }: { title: string; moment: CareerTra
 }
 
 function signed(value: number): string {
-  const rounded = Math.round(value).toLocaleString('en-US')
-  return value > 0 ? `+${rounded}` : value < 0 ? `−${Math.abs(Math.round(value)).toLocaleString('en-US')}` : '0'
+  const rounded = Math.round(value).toLocaleString(getAppIntlLocale())
+  return value > 0 ? `+${rounded}` : value < 0 ? `−${Math.abs(Math.round(value)).toLocaleString(getAppIntlLocale())}` : '0'
 }
 
 function formatDate(value: string): string {

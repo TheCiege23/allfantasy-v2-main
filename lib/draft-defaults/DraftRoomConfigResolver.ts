@@ -38,6 +38,9 @@ function normalizeDraftRuntimeType(value: unknown): DraftRoomConfig['draft_type'
     raw === 'auto' ||
     raw === 'team'
   ) return 'snake'
+  // A devy / C2C league switched to linear stores its format's own id (draftTypeRegistry); without
+  // this it read back as the sport default draft type.
+  if (raw === 'devy_linear' || raw === 'c2c_linear') return 'linear'
   if (raw === 'devy_auction' || raw === 'c2c_auction') return 'auction'
   return null
 }

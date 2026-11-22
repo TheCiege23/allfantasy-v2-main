@@ -1,8 +1,10 @@
+import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 /**
  * League size limits by sport — aligned with common ESPN / Sleeper-style caps
  * (every team has one manager; no duplicate slots).
  */
 
+import { DYNASTY_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
 import { TOURNAMENT_TEAMS_PER_LEAGUE } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 
 const MAX_TEAMS_BY_SPORT: Record<string, number> = {
@@ -16,17 +18,44 @@ const MAX_TEAMS_BY_SPORT: Record<string, number> = {
 }
 
 const NFL_TEAM_COUNT_OPTIONS = [16, 20, 24] as const
-
-/** Survivor cast sizes (one manager per team) — same for all sports in this flow. */
-export const SURVIVOR_CAST_SIZE_OPTIONS = [16, 17, 18, 19, 20] as const
+/** Dynasty offers every size from 4 to the native maximum, the same for every sport. */
+export const NFL_DYNASTY_TEAM_COUNTS: readonly number[] = DYNASTY_TEAM_COUNTS
 
 /**
- * The cast sizes a NEW Survivor league is offered (user's call, 2026-10-12): 16 or 20, four tribes
- * of four or five. A subset of SURVIVOR_CAST_SIZE_OPTIONS, which stays the full range the season
- * engine accepts so existing 17–19 leagues and the legacy create route are untouched. 24 joins
- * here once the engine supports it — adding it to this list alone would be clamped to 20 on save.
+ * The cast sizes a NEW Survivor league is offered (owner's call, 2026-10-20): 12, 15, 16, 18, 20,
+ * 21, 22 or 24 managers, split into 2, 3 or 4 EQUAL tribes. Which tribe counts a cast allows
+ * follows from that: see `survivorTribeCountOptions`.
  */
-export const SURVIVOR_CREATE_CAST_SIZES = [16, 20] as const
+export const SURVIVOR_CREATE_CAST_SIZES = [12, 15, 16, 18, 20, 21, 22, 24] as const
+
+/**
+ * Every cast size the season engine accepts: the creation sizes plus 17 and 19, which existing
+ * leagues from the 16–20 era still carry. `POST /api/league/create` clamps to this list.
+ */
+export const SURVIVOR_CAST_SIZE_OPTIONS = [12, 15, 16, 17, 18, 19, 20, 21, 22, 24] as const
+
+export const SURVIVOR_CAST_SIZE_MIN = 12
+export const SURVIVOR_CAST_SIZE_MAX = 24
+
+/** A Survivor cast is split into this many tribes, never more. */
+export const SURVIVOR_TRIBE_COUNT_CHOICES = [2, 3, 4] as const
+
+/**
+ * The tribe counts a cast may be split into: the choices that divide it EQUALLY. So 15 and 21 are
+ * three tribes only, 22 is two, 16 and 20 are two or four, 18 is two or three, and 12 and 24 may be
+ * any of the three. A legacy cast with no equal split (17, 19) keeps any split that leaves at least
+ * three managers in the smallest tribe, so those leagues are not orphaned.
+ */
+export function survivorTribeCountOptions(castSize: number): number[] {
+  const equal = SURVIVOR_TRIBE_COUNT_CHOICES.filter((t) => castSize % t === 0)
+  if (equal.length > 0) return [...equal]
+  return SURVIVOR_TRIBE_COUNT_CHOICES.filter((t) => Math.floor(castSize / t) >= 3)
+}
+
+/** Managers per tribe for an equal split; null when the cast does not split that way. */
+export function survivorTribeSize(castSize: number, tribeCount: number): number | null {
+  return tribeCount > 0 && castSize % tribeCount === 0 ? castSize / tribeCount : null
+}
 
 export function clampSurvivorCastSize(raw: number): number {
   const n = Number.isFinite(raw) ? Math.round(raw) : 20
@@ -46,18 +75,9 @@ function evenTeamRange(min: number, max: number): number[] {
   return out
 }
 
-const ZOMBIE_TEAM_COUNT_OPTIONS = [8, 10, 12, 14, 16] as const
-
-/** Preferred Zombie sizes; capped per sport max. */
+/** Shared with the active wizard, catalog and server validation. */
 export function getZombieTeamCountOptionsForSport(sport: string): number[] {
-  const max = getMaxTeamsForSport(sport)
-  const filtered = ZOMBIE_TEAM_COUNT_OPTIONS.filter((n) => n <= max)
-  if (filtered.length > 0) return filtered
-  const fallback: number[] = []
-  for (let n = max; n >= 4 && fallback.length < 3; n -= 2) {
-    fallback.unshift(n)
-  }
-  return fallback.length > 0 ? fallback : [Math.min(22, max)]
+  return getZombieCreationTeamCounts(sport)
 }
 
 /** Every integer team count from 4 through the sport maximum (one manager per team). */
@@ -103,7 +123,7 @@ export function clampTeamCountForSport(sport: string, teamCount: number, leagueT
   }
   if (String(leagueType ?? '').toLowerCase() === 'zombie') {
     const opts = getZombieTeamCountOptionsForSport(sport)
-    const n = Number.isFinite(teamCount) ? Math.round(teamCount) : opts[1] ?? 20
+    const n = Number.isFinite(teamCount) ? Math.round(teamCount) : 20
     return opts.reduce((closest, opt) => (Math.abs(opt - n) < Math.abs(closest - n) ? opt : closest), opts[0] ?? 20)
   }
   if (String(leagueType ?? '').toLowerCase() === 'survivor') {

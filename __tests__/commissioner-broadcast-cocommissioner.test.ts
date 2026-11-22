@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 type League = { id: string; userId: string; platform: string; name: string; sport: string; leagueType: string | null; scoringPresetId: string | null; settings: unknown }
-type Team = { leagueId: string; claimedByUserId: string | null; isCommissioner: boolean; isCoCommissioner: boolean; role: string | null }
+type Team = { id?: string; leagueId: string; claimedByUserId: string | null; isCommissioner: boolean; isCoCommissioner: boolean; role: string | null }
 
 const fx = vi.hoisted(() => ({
   session: { user: { id: '' } } as { user?: { id?: string } } | null,
@@ -139,6 +139,24 @@ describe('POST /api/commissioner/broadcast', () => {
     expect(body.results).toEqual([{ leagueId: 'HOME', sent: true }])
     expect(fx.chatPosts).toEqual([{ leagueId: 'HOME', userId: co, text: '@everyone Draft moved to Sunday' }])
     expect(fx.notified).toEqual(['HOME'])
+  })
+
+  it('a co-commissioner the head commissioner limited sends only with the chat permission', async () => {
+    const co = signIn('co')
+    setup({ owner: 'owner-x', co, member: 'member-x' })
+    fx.teams[1].id = 'coTeam'
+    fx.leagues[0].settings = { co_commissioner_scopes: { coTeam: ['trades'] } }
+
+    const refused = await post(['HOME'])
+    expect((await refused.json()).results).not.toEqual([{ leagueId: 'HOME', sent: true }])
+    expect(fx.chatPosts).toEqual([])
+    const { listSendableLeagueIds } = await import('@/lib/commissioner/broadcastAccess')
+    expect(await listSendableLeagueIds(co, ['HOME'])).toEqual([])
+
+    fx.leagues[0].settings = { co_commissioner_scopes: { coTeam: ['trades', 'chat'] } }
+    expect(await listSendableLeagueIds(co, ['HOME'])).toEqual(['HOME'])
+    const ok = await post(['HOME'])
+    expect((await ok.json()).results).toEqual([{ leagueId: 'HOME', sent: true }])
   })
 
   it('still lets the head commissioner send', async () => {

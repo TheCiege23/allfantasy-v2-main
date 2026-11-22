@@ -75,15 +75,3 @@ export interface MockDraftPick {
   isBotPick?: boolean
 }
 
-export interface MockDraftMetadata {
-  sport?: string
-  leagueType?: string
-  draftType?: string
-  numTeams?: number
-  scoringFormat?: string
-  timerSeconds?: number
-  aiEnabled?: boolean
-  rosterSize?: number
-  poolType?: string
-  source?: string
-}

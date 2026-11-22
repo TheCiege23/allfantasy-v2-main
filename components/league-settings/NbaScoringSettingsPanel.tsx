@@ -31,6 +31,8 @@ import {
   type NbaScoringCategory,
   type NbaScoringRow,
 } from '@/lib/nba-scoring/NbaScoringCategories'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
+import { ScoringTypeEditor } from '@/components/league-settings/ScoringTypeEditor'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +95,7 @@ interface Props {
 
 export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, BASKETBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NbaScoringPreset[]>([])
@@ -110,6 +113,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
   const [categoryMode, setCategoryMode] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('general')
+  /** Bumped when the scoring type changes, so this panel reloads (points table vs categories). */
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   // All categories: 9 standard + 1 premium
   const allCategories: NbaScoringCategory[] = useMemo(
@@ -139,7 +144,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [leagueId, allCategories])
+  }, [leagueId, allCategories, reloadNonce])
 
   // ----- derived -----
   const currentPreset = useMemo(() => presets.find((p) => p.key === selectedPreset), [presets, selectedPreset])
@@ -188,7 +193,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     if (!leagueId) return
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nba-scoring`, {
+      const res = await confirmFetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nba-scoring`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         // Rules only for a custom table. The route treats any `rules` in the body as a premium
@@ -208,7 +213,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       setTimeout(() => setSuccess(false), 3000)
     } catch { setError(t('lsScore.err.request')) }
     finally { setSaving(false) }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -218,7 +223,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   }, [config])
 
   // ----- loading state -----
-  if (categoryMode) return <ScoringSettingsPanel leagueId={leagueId} />
+  const typeEditor = <ScoringTypeEditor leagueId={leagueId} isCommissioner={isCommissioner} onChanged={() => setReloadNonce((n) => n + 1)} />
+  if (categoryMode) return <div className="space-y-5">{typeEditor}<ScoringSettingsPanel key={reloadNonce} leagueId={leagueId} /></div>
 
   if (loading) {
     return (
@@ -230,6 +236,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -240,6 +248,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
             : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
+
+      {typeEditor}
 
       {/* Plate only: the translated preset select below names the option. */}
       <ScoringLabel id={scoringLabelId} size="md" showText={false} />
@@ -434,5 +444,6 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NBA')}
       />
     </div>
+    </>
   )
 }

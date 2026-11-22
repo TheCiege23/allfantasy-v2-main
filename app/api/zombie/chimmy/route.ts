@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     leagueId?: string
     message?: string
     week?: number
+    commandId?: string
   }
   if (!body.leagueId || !body.message) {
     return NextResponse.json({ error: 'leagueId and message required' }, { status: 400 })
@@ -29,6 +30,6 @@ export async function POST(req: NextRequest) {
   const week =
     typeof body.week === 'number' && Number.isFinite(body.week) ? body.week : Math.max(1, z?.currentWeek ?? 1)
 
-  const result = await handleZombieChimmyAction(body.leagueId, userId, body.message, week)
+  const result = await handleZombieChimmyAction(body.leagueId, userId, body.message, week, body.commandId)
   return NextResponse.json(result)
 }

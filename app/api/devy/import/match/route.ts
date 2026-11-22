@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const teams = await prisma.leagueTeam.findMany({ where: { leagueId: row.leagueId } })
@@ -52,12 +52,19 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(row.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  const [players, managers, conflicts] = await Promise.all([
+  const [players, managers, conflicts, teams] = await Promise.all([
     prisma.devyPlayerMapping.findMany({ where: { sessionId } }),
     prisma.devyManagerMapping.findMany({ where: { sessionId } }),
     prisma.devyMergeConflict.findMany({ where: { sessionId } }),
+    prisma.leagueTeam.findMany({ where: { leagueId: row.leagueId } }),
   ])
 
-  return NextResponse.json({ players, managers, conflicts })
+  // The league's claimed teams, so the commissioner can link an unmatched external manager to the
+  // AllFantasy user who should receive that roster. Unclaimed teams have no user to link.
+  const leagueManagers = teams
+    .filter(t => Boolean(t.claimedByUserId))
+    .map(t => ({ userId: t.claimedByUserId as string, label: t.ownerName || t.teamName || (t.claimedByUserId as string) }))
+
+  return NextResponse.json({ players, managers, conflicts, leagueManagers })
 }
 

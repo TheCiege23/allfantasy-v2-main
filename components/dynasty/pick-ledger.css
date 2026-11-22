@@ -1,0 +1,60 @@
+/*
+ * Dynasty Era pick ledger (components/dynasty/LeaguePickBoard.tsx). The board only renders on the
+ * Dynasty tab, so nothing here reaches a non-dynasty league. Every colour reads the Dynasty Era
+ * token contract WITH its fallback, so the ledger looks the same inside the dynasty workspace
+ * (where the tokens are defined) and outside it (the legacy shell, a test page).
+ */
+.dyn-pl{color:var(--dyn-text,#E8ECF2);font-family:Inter,system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;min-width:0}
+.dyn-pl-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.dyn-pl-title{margin:0;font-family:var(--font-archivo,'Archivo'),system-ui,sans-serif;font-stretch:112%;font-weight:800;font-size:28px;line-height:1.05}
+.dyn-pl-sub{margin:6px 0 0;font-size:14px;color:var(--dyn-text2,#C3CAD5);max-width:62ch}
+.dyn-pl-propose{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;background:color-mix(in srgb,var(--dyn-teal,#2DD4BF) 14%,transparent);color:#7FE9D8;transition:background-color .15s}
+.dyn-pl-propose:hover{background:color-mix(in srgb,var(--dyn-teal,#2DD4BF) 22%,transparent)}
+.dyn-pl-propose:focus-visible,.dyn-pl-ask:focus-visible{outline:2px solid var(--dyn-gold,#D4A24C);outline-offset:2px}
+
+.dyn-pl-note{margin:0;border-radius:10px;padding:8px 12px;font-size:12px;background:color-mix(in srgb,var(--dyn-ember,#F07A4A) 12%,transparent);color:var(--dyn-text,#E8ECF2)}
+
+.dyn-pl-board{border:1px solid var(--dyn-rail,#1C2333);background:var(--dyn-vault,#121826);border-radius:16px;overflow:hidden}
+.dyn-pl-list{list-style:none;margin:0;padding:0}
+.dyn-pl-cols,.dyn-pl-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;padding:12px 14px}
+.dyn-pl-cols{display:none;font-family:var(--font-archivo,'Archivo'),system-ui,sans-serif;font-stretch:75%;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--dyn-faint,#9AA4B2)}
+.dyn-pl-row{border-top:1px solid var(--dyn-rail,#1C2333);align-items:start}
+.dyn-pl-list>.dyn-pl-row:first-child{border-top:0}
+.dyn-pl-row[data-viewer=true]{background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 7%,transparent);box-shadow:inset 3px 0 0 var(--dyn-gold,#D4A24C)}
+.dyn-pl-team{grid-column:1;margin:0;font-weight:600;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+.dyn-pl-you{margin-left:8px;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-pl-held{grid-column:2;grid-row:1;text-align:right}
+.dyn-pl-held-n{font-family:var(--font-archivo,'Archivo'),system-ui,sans-serif;font-stretch:112%;font-weight:800;font-size:22px;line-height:1}
+.dyn-pl-held-f{font-size:11px;color:var(--dyn-faint,#9AA4B2);margin-top:4px;white-space:nowrap}
+.dyn-pl-season{grid-column:1 / -1;min-width:0}
+.dyn-pl-season-label{display:block;margin-bottom:6px;font-family:var(--font-archivo,'Archivo'),system-ui,sans-serif;font-stretch:75%;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dyn-faint,#9AA4B2)}
+.dyn-pl-chips{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;margin:0;padding:0;list-style:none}
+.dyn-pl-empty{font-size:12px;color:var(--dyn-faint,#9AA4B2)}
+
+/* Pick chips: first round gold, later rounds the line colour, traded away dashed and struck. */
+.dyn-pl-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--dyn-line,#2A3345);color:var(--dyn-text2,#C3CAD5);border-radius:999px;padding:3px 8px;font-family:var(--font-archivo,'Archivo'),system-ui,sans-serif;font-stretch:75%;font-weight:700;font-size:12px;letter-spacing:.04em;line-height:1.25;white-space:nowrap}
+.dyn-pl-chip[data-round="1"]{border-color:var(--dyn-gold,#D4A24C);color:var(--dyn-gold-soft,#F3D79F)}
+.dyn-pl-chip[data-traded=true]{border-style:dashed;border-color:var(--dyn-line,#2A3345);color:var(--dyn-faint,#9AA4B2);text-decoration:line-through}
+.dyn-pl-via{color:var(--dyn-faint,#9AA4B2);font-weight:600}
+
+.dyn-pl-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px;font-size:12px;color:var(--dyn-faint,#9AA4B2)}
+.dyn-pl-legend{display:flex;flex-wrap:wrap;gap:10px 20px;margin:0;padding:0;list-style:none}
+.dyn-pl-legend li{display:inline-flex;align-items:center;gap:8px}
+.dyn-pl-swatch{width:14px;height:14px;border-radius:999px;border:1px solid var(--dyn-line,#2A3345)}
+.dyn-pl-swatch[data-kind=first]{border-color:var(--dyn-gold,#D4A24C)}
+.dyn-pl-swatch[data-kind=traded]{border-style:dashed}
+.dyn-pl-insight{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 auto;color:var(--dyn-text2,#C3CAD5)}
+.dyn-pl-ask{display:inline-flex;align-items:center;gap:5px;border:1px solid color-mix(in srgb,var(--dyn-gold,#D4A24C) 45%,transparent);background:transparent;color:var(--dyn-gold-soft,#F3D79F);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer}
+
+@media (min-width:768px){
+  .dyn-pl-title{font-size:36px}
+  .dyn-pl-cols,.dyn-pl-row{grid-template-columns:minmax(120px,200px) repeat(var(--dyn-pl-seasons,3),minmax(0,1fr)) 110px;gap:16px;padding:14px 20px;align-items:center}
+  .dyn-pl-cols{display:grid}
+  .dyn-pl-cols[data-totals=false],.dyn-pl-row[data-totals=false]{grid-template-columns:minmax(120px,200px) repeat(var(--dyn-pl-seasons,3),minmax(0,1fr))}
+  .dyn-pl-team{grid-column:auto}
+  .dyn-pl-season{grid-column:auto}
+  .dyn-pl-held{grid-column:auto;grid-row:auto}
+  /* The column headers name the season on a wide screen; the label stays for screen readers. */
+  .dyn-pl-season-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+}
+@media (prefers-reduced-motion:reduce){.dyn-pl-propose{transition:none}}

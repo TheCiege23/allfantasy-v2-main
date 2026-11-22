@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultSGConfig } from '@/lib/survivor-guillotine/config'
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/survivor-guillotine/commissionerRuntime', () => ({ sgAutomationAllowed: vi.fn(async () => true), recordSGAutomation: vi.fn(async () => undefined) }))
 const live = vi.hoisted(() => ({ executeChop: vi.fn() }))
 vi.mock('@/lib/survivor-guillotine/live', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/survivor-guillotine/live')>(),
@@ -25,7 +26,7 @@ import { advanceSGHostedCeremony, advanceSGPeriod, chooseSGStartingTribe, pickSG
 const row = (start: string, end: string, ceremony: string) => ({ scoringStartsAt: start,
   scoringEndsAt: end, ceremonyAt: ceremony, selectionDeadlineAt: start })
 
-describe('Survivor Guillotine calendar and concealed rewards', () => {
+describe('Survivor Guilly calendar and concealed rewards', () => {
   beforeEach(() => {
     db.findUniqueOrThrow.mockReset().mockResolvedValue({ config: defaultSGConfig(), currentPeriod: 0,
       periodCalendar: {}, rewardPeriods: [], revision: 1 })

@@ -121,6 +121,7 @@ export interface MatchupSlotComparisonRow {
 }
 
 export interface MatchupProviderInsights {
+  aiUsed?: boolean
   deepseek: string
   grok: string
   openai: string
@@ -156,32 +157,3 @@ export interface MatchupSimulationOutput {
   providerInsights?: MatchupProviderInsights
 }
 
-export interface SeasonSimulationInput {
-  leagueId: string
-  sport: string
-  season: number
-  weekOrPeriod: number
-  totalWeeks?: number
-  playoffSpots?: number
-  byeSpots?: number
-  simulations?: number
-}
-
-export interface SeasonSimulationTeamOutput {
-  teamId: string
-  playoffProbability: number
-  championshipProbability: number
-  expectedWins: number
-  expectedRank: number
-}
-
-export interface SeasonSimulationOutput {
-  resultId?: string
-  sport: string
-  leagueId: string
-  season: number
-  weekOrPeriod: number
-  teamResults: SeasonSimulationTeamOutput[]
-  simulationsRun: number
-  createdAt?: string
-}

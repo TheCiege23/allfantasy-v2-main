@@ -5,7 +5,7 @@
 
 import type { RunPresetEngineInput } from '@/lib/league-creation/preset-engine/runPresetEngine'
 
-export type EngineTestScenarioId =
+type EngineTestScenarioId =
   | 'standard_redraft_nfl'
   | 'dynasty_nfl'
   | 'devy_nfl'
@@ -79,8 +79,8 @@ export const LEAGUE_ENGINE_SCENARIO_FIXTURES: LeagueEngineScenarioFixture[] = [
   },
   {
     id: 'guillotine_nfl',
-    label: 'Guillotine',
-    preset: base({ concept: 'guillotine', leagueName: 'Guillotine', teamCount: 17, scoringPreset: 'half_ppr' }),
+    label: 'Guilly',
+    preset: base({ concept: 'guillotine', leagueName: 'Guilly', teamCount: 17, scoringPreset: 'half_ppr' }),
   },
   {
     id: 'keeper_superflex',

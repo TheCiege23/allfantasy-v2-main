@@ -561,8 +561,8 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
         : specialty
           ? ({
               survivor: 'Survivor has no standard playoff objective; it requires the transaction window, tribe relationship, merge phase, voting position, immunity, and advantages before a letter can be calculated.',
-              survivor_guillotine: 'The supplied Survivor Guillotine rules prohibit trades. A configurable trade-enabled version would still require the exact elimination phase, expanding lineup, tribe, idols, swap tokens, and FAAB market.',
-              guillotine: 'Guillotine has no standard playoff objective; a letter is withheld until survival probability, weekly floor, field size, chop-line distance, and FAAB purchasing power are scored.',
+              survivor_guillotine: 'The supplied Survivor Guilly rules prohibit trades. A configurable trade-enabled version would still require the exact elimination phase, expanding lineup, tribe, idols, swap tokens, and FAAB market.',
+              guillotine: 'Guilly has no standard playoff objective; a letter is withheld until survival probability, weekly floor, field size, chop-line distance, and FAAB purchasing power are scored.',
               best_ball: 'Best ball uses the automatically optimized whole roster; a letter is withheld until weekly score distributions, depth, bye overlap, and correlation are scored under this league’s trade settings.',
               salary_cap: 'Salary-cap dynasty requires post-trade cap legality, every contract term, dead money, rollover, and replacement spending power before a letter can be calculated.',
               zombie: 'Zombie requires both teams’ infection state at execution, the current matchup, trade window, items, weekly money, and infection-adjusted outcome simulation.',

@@ -1,6 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react"
 
+
+/** Fetch doubles preserve native clone/header semantics used by billing retry transport. */
+function asHttpFetch(implementation: typeof fetch): typeof fetch {
+  return vi.fn(async (...args: Parameters<typeof fetch>) => {
+    const response = await implementation(...args)
+    if (typeof response.clone === 'function') return response
+    return Response.json(await response.json(), { status: response.status ?? (response.ok ? 200 : 400) })
+  })
+}
+
 const clientApiMocks = vi.hoisted(() => ({
   listEntries: vi.fn(),
   getEntry: vi.fn(),
@@ -170,7 +180,7 @@ describe("World Cup commissioner UI modules", () => {
     expect(m.default).toBeDefined()
   })
 
-  it("lets AI commissioners generate, preview, and post a finalized-only recap", async () => {
+  it("lets Chimmy commissioners generate, preview, and post a finalized-only recap", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (!init?.method) {
         return {
@@ -234,13 +244,13 @@ describe("World Cup commissioner UI modules", () => {
         json: async () => ({ lines: body.lines, posted: true }),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
     const panel = await screen.findByTestId("world-cup-ai-recap-panel")
     fireEvent.change(within(panel).getByLabelText(/Tone/i), { target: { value: "serious" } })
-    fireEvent.click(within(panel).getByRole("button", { name: /Generate AI Recap/i }))
+    fireEvent.click(within(panel).getByRole("button", { name: /Generate Chimmy Recap/i }))
 
     const preview = await screen.findByTestId("world-cup-ai-recap-preview")
     expect(preview).toHaveTextContent("Finalized entries included: 1")
@@ -262,7 +272,7 @@ describe("World Cup commissioner UI modules", () => {
     expect(brainResult).toHaveTextContent("Hype line two")
   })
 
-  it("shows locked recap CTA for non-AI commissioners and does not generate", async () => {
+  it("shows locked recap CTA for non-Chimmy commissioners and does not generate", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -294,16 +304,16 @@ describe("World Cup commissioner UI modules", () => {
         bracketBrainEnabled: true,
       }),
     } as Response))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
     const panel = await screen.findByTestId("world-cup-ai-recap-panel")
     expect(within(panel).getByText("Tokens or AF Commissioner")).toBeInTheDocument()
     expect(within(panel).getByText(/Token users can confirm a one-off spend before generation/i)).toBeInTheDocument()
-    expect(within(panel).getByRole("button", { name: /Generate AI Recap/i })).not.toBeDisabled()
+    expect(within(panel).getByRole("button", { name: /Generate Chimmy Recap/i })).not.toBeDisabled()
     const callsBeforeClick = fetchMock.mock.calls.length
-    fireEvent.click(within(panel).getByRole("button", { name: /Generate AI Recap/i }))
+    fireEvent.click(within(panel).getByRole("button", { name: /Generate Chimmy Recap/i }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(callsBeforeClick + 1))
   })
 
@@ -312,7 +322,7 @@ describe("World Cup commissioner UI modules", () => {
       ok: false,
       json: async () => ({ error: "Commissioner snapshot unavailable" }),
     } as Response))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupCommissionerBrainPanel = (await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")).default
     render(<WorldCupCommissionerBrainPanel challengeId="c1" />)
 
@@ -375,7 +385,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -432,7 +442,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -480,7 +490,7 @@ describe("WorldCupBracketSettingsPanel", () => {
           earlyPublicPicksAllowed: false,
         }),
       })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketSettingsPanel = (await import("@/components/brackets/world-cup/WorldCupBracketSettingsPanel"))
       .default
     render(<WorldCupBracketSettingsPanel challengeId="ch1" />)
@@ -647,7 +657,7 @@ describe("World Cup mobile polish — matchup card & guided picker", () => {
     expect(screen.getByTestId("wc-match-pick-visual")).toHaveAttribute("data-state", "correct")
   })
 
-  it("uses real team names in unlocked AI matchup insights", async () => {
+  it("uses real team names in unlocked Chimmy matchup insights", async () => {
     const WorldCupMatchupCard = (await import("@/components/brackets/world-cup/WorldCupMatchupCard")).default
     render(
       <WorldCupMatchupCard
@@ -658,7 +668,7 @@ describe("World Cup mobile polish — matchup card & guided picker", () => {
       />
     )
 
-    fireEvent.click(screen.getByText("AI Insights"))
+    fireEvent.click(screen.getByText("Chimmy Insights"))
     expect(screen.getByText(/Safer pick:/i).parentElement).toHaveTextContent("Brazil based on current bracket slot order.")
     expect(screen.getByText(/Upside pick:/i).parentElement).toHaveTextContent("France if you need a differentiated path.")
   })
@@ -674,7 +684,7 @@ describe("World Cup mobile polish — matchup card & guided picker", () => {
       />
     )
 
-    fireEvent.click(screen.getByText("AI Insights"))
+    fireEvent.click(screen.getByText("Chimmy Insights"))
     const freeInsight = screen.getByTestId("world-cup-match-free-insight-m1")
     expect(freeInsight).toHaveTextContent("Basic pick signal")
     expect(freeInsight).toHaveTextContent("Seed-model chance")
@@ -1157,7 +1167,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         warnings: [],
       },
     })
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", asHttpFetch(vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes("/api/brackets/world-cup/admin/readiness")) {
         return {
@@ -1191,7 +1201,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         ok: true,
         json: async () => ({}),
       }
-  }))
+  })))
   })
 
   it("renders the cinematic World Cup background and dismissible entry video once per session", async () => {
@@ -1324,7 +1334,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(screen.getByText(/Changing Group Stage picks may unfinalize your entry/i)).toBeInTheDocument()
   })
 
-  it("groups all 6 AI cards in a single Bracket AI Report section with Pro tier chip and no upgrade banner for Pro users", async () => {
+  it("groups all 6 Chimmy cards in a single Bracket Chimmy Report section with Pro tier chip and no upgrade banner for Pro users", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(
       <WorldCupBracketShell
@@ -1336,8 +1346,8 @@ describe("WorldCupBracketShell fixture readiness", () => {
 
     const report = await screen.findByTestId("world-cup-review-ai-report")
     expect(report).toBeInTheDocument()
-    expect(within(report).getByText(/Your Bracket AI Report/i)).toBeInTheDocument()
-    expect(within(report).getByText(/Six AI signals computed from your own picks/i)).toBeInTheDocument()
+    expect(within(report).getByText(/Your Bracket Chimmy Report/i)).toBeInTheDocument()
+    expect(within(report).getByText(/Six Chimmy signals computed from your own picks/i)).toBeInTheDocument()
     // Pro tier chip.
     expect(within(report).getByTestId("world-cup-review-ai-report-tier").textContent).toMatch(/AF Pro active/i)
     // No consolidated upgrade banner for Pro users.
@@ -1351,7 +1361,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(report).getByTestId("world-cup-ai-share-card")).toBeInTheDocument()
   })
 
-  it("suppresses per-card tier chips inside the consolidated Bracket AI Report (canonical chip lives at section header only)", async () => {
+  it("suppresses per-card tier chips inside the consolidated Bracket Chimmy Report (canonical chip lives at section header only)", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(
       <WorldCupBracketShell
@@ -1430,7 +1440,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(badge.textContent).toMatch(/until picks lock/i)
   })
 
-  it("AI Confidence Check renders deterministic lines for AI/Pro users on Review", async () => {
+  it("Chimmy Confidence Check renders deterministic lines for Chimmy/Pro users on Review", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView() as any} defaultTab="review" initialEntryId="entry-1" />)
 
@@ -1447,7 +1457,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(card.textContent?.toLowerCase()).not.toMatch(/\bdfs\b|\bbetting\b|\bwager|\bsportsbook\b|\bodds\b/)
   })
 
-  it("AI Confidence Check hides Pro details for free users (locked CTA only)", async () => {
+  it("Chimmy Confidence Check hides Pro details for free users (locked CTA only)", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(
       <WorldCupBracketShell
@@ -1469,7 +1479,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(card).queryByText(/Bracket shape:/i)).toBeNull()
   })
 
-  it("AI Confidence Check surfaces missing-pick guidance for incomplete brackets", async () => {
+  it("Chimmy Confidence Check surfaces missing-pick guidance for incomplete brackets", async () => {
     clientApiMocks.fetchCompletionReview.mockResolvedValueOnce({
       challengeId: "c1",
       entryId: "entry-1",
@@ -1758,11 +1768,11 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(screen.getByText(/Free users can create one bracket entry in this pool/i)).toBeInTheDocument()
     expect(screen.getByText(/AF Commissioner Tools/i)).toBeInTheDocument()
     expect(screen.getByText(/Export Leaderboard/i)).toBeInTheDocument()
-    expect(screen.getByText(/AI Bracket Builder/i)).toBeInTheDocument()
-    expect(screen.getByText(/AI Matchup Preview/i)).toBeInTheDocument()
-    expect(screen.getByText(/AI What-If Scenarios/i)).toBeInTheDocument()
+    expect(screen.getByText(/Chimmy Bracket Builder/i)).toBeInTheDocument()
+    expect(screen.getByText(/Chimmy Matchup Preview/i)).toBeInTheDocument()
+    expect(screen.getByText(/Chimmy What-If Scenarios/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Requires AF Commissioner/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Requires AI\/Pro/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Requires Chimmy\/Pro/i).length).toBeGreaterThan(0)
     expect(screen.getByTestId("world-cup-chat-bubble")).toBeInTheDocument()
     expect(screen.queryByTestId("world-cup-community-foundation")).not.toBeInTheDocument()
     const community = await openWorldCupChatDrawer()
@@ -1796,17 +1806,19 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(drawer).getByRole("button", { name: /Mention/i })).toBeInTheDocument()
     expect(within(drawer).getByRole("button", { name: /Hashtag/i })).toBeInTheDocument()
 
+    // The mode tabs are a tablist above the drawer (components/brackets/world-cup/chat/WorldCupChatModeTabs.tsx).
     // Tab label is "Chimmy" (brand voice — was "Chimmy AI").
-    fireEvent.click(within(drawer).getByRole("button", { name: /^Chimmy\b/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /^Chimmy\b/i }))
     expect(screen.getByPlaceholderText(/Ask Chimmy about the bracket/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Ask Chimmy/i })).toBeDisabled()
+    // The send button (aria-label), not the "Ask Chimmy" call-to-action above the prompts.
+    expect(screen.getByLabelText("Ask Chimmy")).toBeDisabled()
 
-    fireEvent.click(within(drawer).getByRole("button", { name: /DM Chat/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /DM Chat/i }))
     expect(within(drawer).getByTestId("wc-dm-panel")).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Message this private chat/i)).toBeDisabled()
     expect(within(drawer).getByText(/No private chats yet/i)).toBeInTheDocument()
 
-    fireEvent.click(within(drawer).getByRole("button", { name: /Pool Chat/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /Pool Chat/i }))
     expect(screen.getByPlaceholderText(/Message the pool or ask Chimmy/i)).toBeInTheDocument()
   })
 
@@ -1849,7 +1861,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -1898,7 +1910,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -1911,7 +1923,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(suggestions).getByText(/reserved for pool commissioners/i)).toBeInTheDocument()
   })
 
-  it("keeps mobile pick help manual and does not expose active AI builder controls", async () => {
+  it("keeps mobile pick help manual and does not expose active Chimmy builder controls", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView() as any} />)
 
@@ -2041,7 +2053,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2057,7 +2069,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         expect.stringContaining("/api/brackets/world-cup/c1/chat"),
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ body: "Let us go" }),
+          body: JSON.stringify({ body: "Let us go", confirmedTokenSpend: false }),
         })
       )
     })
@@ -2083,7 +2095,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2165,7 +2177,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2257,7 +2269,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2344,7 +2356,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2370,7 +2382,10 @@ describe("WorldCupBracketShell fixture readiness", () => {
         })
       )
     })
-    expect(await screen.findAllByAltText(/Uploaded World Cup chat image/i)).toHaveLength(1)
+    // Sent: the composer's preview clears and the message bubble shows it (alt "Shared image",
+    // components/brackets/world-cup/chat/WorldCupChatMessageBubble.tsx).
+    expect(await screen.findAllByAltText(/^Shared image$/i)).toHaveLength(1)
+    expect(screen.queryByAltText(/Uploaded World Cup chat image/i)).toBeNull()
   })
 
   it("creates and votes on World Cup chat polls", async () => {
@@ -2468,7 +2483,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
 
@@ -2584,7 +2599,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         json: async () => makeReadinessResponse(),
       } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false, hasBracketBrainAi: true }) as any} defaultTab="home" />)
 
@@ -2641,7 +2656,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       }
       return { ok: true, json: async () => ({}) } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupInviteJoinPanel = (await import("@/components/brackets/world-cup/WorldCupInviteJoinPanel")).default
     render(<WorldCupInviteJoinPanel />)
 
@@ -2689,7 +2704,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       }
       return { ok: true, json: async () => ({}) } as Response
     })
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupInviteJoinPanel = (await import("@/components/brackets/world-cup/WorldCupInviteJoinPanel")).default
     render(<WorldCupInviteJoinPanel />)
 
@@ -2750,9 +2765,9 @@ describe("WorldCupBracketShell fixture readiness", () => {
     await waitFor(() => expect(clientApiMocks.listEntries).toHaveBeenCalled())
     const panel = screen.getByTestId("world-cup-premium-access-panel")
     expect(within(panel).getByText(/Requires AF Commissioner/i)).toBeInTheDocument()
-    expect(within(panel).getByText(/AI Bracket Builder/i)).toBeInTheDocument()
+    expect(within(panel).getByText(/Chimmy Bracket Builder/i)).toBeInTheDocument()
     expect(within(panel).getAllByText(/Unlocked/i).length).toBeGreaterThan(0)
-    expect(within(panel).getAllByText(/Requires AI\/Pro/i).length).toBeGreaterThan(0)
+    expect(within(panel).getAllByText(/Requires Chimmy\/Pro/i).length).toBeGreaterThan(0)
     const community = await openWorldCupChatDrawer()
     expect(within(community).getByTestId("wc-chat-active-panel")).toBeInTheDocument()
     expect(within(community).getByPlaceholderText(/Message the pool or ask Chimmy/i)).toBeInTheDocument()
@@ -2762,18 +2777,18 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(community).queryByText(/^Moderation$/i)).toBeNull()
   })
 
-  it("shows AI affordances unlocked for all-access users", async () => {
+  it("shows Chimmy affordances unlocked for all-access users", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: true, hasBracketBrainAi: false }) as any} defaultTab="home" />)
 
     await waitFor(() => expect(clientApiMocks.listEntries).toHaveBeenCalled())
     const panel = screen.getByTestId("world-cup-premium-access-panel")
     expect(within(panel).getByText(/AF Commissioner active/i)).toBeInTheDocument()
-    expect(within(panel).getByText(/AI\/Pro active/i)).toBeInTheDocument()
+    expect(within(panel).getByText(/Chimmy\/Pro active/i)).toBeInTheDocument()
     expect(within(panel).getAllByText(/Unlocked/i).length).toBeGreaterThanOrEqual(6)
   })
 
-  it("passes locked World Cup AI insight access to group stage for free users", async () => {
+  it("passes locked World Cup Chimmy insight access to group stage for free users", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false, hasBracketBrainAi: false }) as any} defaultTab="group-stage" />)
 
@@ -2781,7 +2796,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(clientApiMocks.fetchCompletionReview).not.toHaveBeenCalled()
   })
 
-  it("passes unlocked World Cup AI insight access to group stage for AI/Pro users", async () => {
+  it("passes unlocked World Cup Chimmy insight access to group stage for Chimmy/Pro users", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false, hasBracketBrainAi: true }) as any} defaultTab="group-stage" />)
 
@@ -2862,7 +2877,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
         },
       }),
     }))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: true }) as any} />)
 
@@ -2904,7 +2919,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
       ok: true,
       json: async () => makeReadinessResponse(),
     }))
-    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("fetch", asHttpFetch(fetchMock))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: true }) as any} />)
 
@@ -2993,7 +3008,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(panel).toHaveTextContent("Other users' unfinalized picks stay hidden.")
   })
 
-  it("shows leaderboard AI win probability only for AF Pro users", async () => {
+  it("shows leaderboard Chimmy win probability only for AF Pro users", async () => {
     const leaderboard = [{
       rank: 1,
       entryId: "entry-1",
@@ -3017,7 +3032,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
     render(<WorldCupBracketShell initialView={makeShellView({ hasBracketBrainAi: true, leaderboard }) as any} defaultTab="leaderboard" />)
 
-    expect(await screen.findByTestId("wc-lb-ai-health-entry-1")).toHaveTextContent("AI Win")
+    expect(await screen.findByTestId("wc-lb-ai-health-entry-1")).toHaveTextContent("Chimmy Win")
     expect(screen.queryByTestId("wc-lb-ai-locked-entry-1")).not.toBeInTheDocument()
   })
 

@@ -27,6 +27,7 @@ import { syncFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresen
  * maps onto it by name. A team that cannot be mapped is DROPPED, never numbered
  * by guess — a wrong roster id files somebody else's week under your team.
  */
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { applySchedule, type ScheduleWeekInput } from './externalMatchupParity'
 import {
@@ -34,13 +35,17 @@ import {
   getFantraxLeagueInfo,
 } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { fantraxCategoryPairs } from './fantraxCategorySnapshots'
+import { importedCategoryCacheKey } from './importedCategorySnapshots'
 
 const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 /** Fantrax costs one request per played period, so refresh less often than Sleeper. */
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
 const FAILURE_RETRY_MS = 30 * 60 * 1000
+/** `settings.current_week` is trusted for weeks 1-30 (`leagueWeekFromSettings`); a longer calendar is daily scoring. */
+const MAX_WEEKLY_PERIODS = 30
 
-export interface FantraxMatchupConnection {
+interface FantraxMatchupConnection {
   /** `League.platformLeagueId` — for Fantrax this is the `FantraxLeague` row's uuid. */
   platformLeagueId: string
   /** Fantrax's own league id, the only thing the API can be called with. */
@@ -142,8 +147,17 @@ async function readRosterIdsByTeamName(
   return map.size > 0 ? map : null
 }
 
+/**
+ * The cadence row is per IMPORT (`platformLeagueId`), because that is what the rows are written under.
+ *
+ * 🛑 IT WAS KEYED ON THE FANTRAX LEAGUE ALONE. One Fantrax league imported twice is two snapshots with one
+ * `sourceLeagueId`, so both shared a cadence row: the first wrote its weeks and recorded "synced", and the second
+ * read that row as its own and was never due. Production 2026-11-19: a league's state read `synced, weeksWritten: 10`
+ * while `WeeklyMatchup` held zero rows for its `platformLeagueId`, and its matchup and schedule screens were empty.
+ * Each import costs its own Fantrax read every interval; that is the price of every import having its weeks.
+ */
 function cacheKeyFor(connection: FantraxMatchupConnection): string {
-  return `${CACHE_KEY_PREFIX}:${connection.sourceLeagueId}:${connection.season}`
+  return `${CACHE_KEY_PREFIX}:${connection.sourceLeagueId}:${connection.season}:${connection.platformLeagueId}`
 }
 
 async function recordSyncState(
@@ -244,9 +258,28 @@ export async function runFantraxMatchupParity(input?: {
        * zero, which is the exact ambiguity `played` was added to remove. Unplayed
        * fixtures are simply not written; the week appears when it has a score.
        */
+      /*
+       * ⚠ EXCEPT THE GAMES STILL TO COME, IN A SEASON THAT IS UNDER WAY.
+       *
+       * Results-only hid part of a week that had already started. Production 2026-11-20, a league whose teams
+       * play three games a week: week 11 listed 47 of its 51 games, because the other four were between teams
+       * with no player in action yet — a manager saw two of his three games — and no later week had a game at
+       * all, so there was no season schedule. A fixture in the current period or a later one is therefore
+       * written as 0-0, which every reader already shows as not started (it is how a Sleeper schedule is stored).
+       *
+       * The ambiguity above is kept out of the PAST: a period that has ended still gets only its results, so no
+       * finished week carries a row that reads as unplayed. And "which week is it" stops depending on these
+       * rows — the league's Fantrax period is saved as `settings.current_week` below, which the week resolver
+       * prefers. Only for a league of at most 30 periods, the range that setting is trusted for; a league with
+       * more (daily scoring) keeps results-only, as before.
+       */
+      const lastPeriod = fetched.rows.reduce((max, row) => Math.max(max, row.week), 0)
+      const upcomingFrom =
+        fetched.position?.state === 'in_progress' && lastPeriod <= MAX_WEEKLY_PERIODS ? fetched.position.period : null
       const byWeek = new Map<number, ScheduleWeekInput>()
       for (const row of fetched.rows) {
-        if (!row.played || row.awayScore == null || row.homeScore == null) continue
+        const scored = row.played && row.awayScore != null && row.homeScore != null
+        if (!scored && (upcomingFrom == null || row.week < upcomingFrom)) continue
         const away = rosterIds.get(normalizeFantraxTeamName(row.awayTeam))
         const home = rosterIds.get(normalizeFantraxTeamName(row.homeTeam))
         if (away == null || home == null) continue
@@ -258,13 +291,27 @@ export async function runFantraxMatchupParity(input?: {
         week.matchups.push({
           teamId1: away,
           teamId2: home,
-          points1: row.awayScore,
-          points2: row.homeScore,
+          points1: scored ? (row.awayScore ?? 0) : 0,
+          points2: scored ? (row.homeScore ?? 0) : 0,
         })
       }
 
       if (fetched.periodsFailed > 0) throw new Error('Fantrax period reads incomplete; preserving previous native presentation')
       const linked = await prisma.league.findMany({ where: { platform: { equals: 'fantrax', mode: 'insensitive' }, platformLeagueId: connection.platformLeagueId, season: connection.season }, select: { id: true } })
+      if (linked.length && fetched.periodScores?.length) {
+        const teams = await prisma.leagueTeam.findMany({ where: { leagueId: linked[0]!.id },
+          select: { externalId: true, teamName: true, ownerName: true }, take: 100 })
+        for (const period of fetched.periodScores) {
+          const pairs = fantraxCategoryPairs(period, teams)
+          if (!pairs.length) continue
+          const cacheKey = importedCategoryCacheKey('fantrax', connection.platformLeagueId, connection.season, period.period)
+          const data = { provider: 'fantrax', leagueId: connection.platformLeagueId,
+            season: connection.season, week: period.period, fetchedAt: now.toISOString(), pairs }
+          const expiresAt = new Date(now.getTime() + 10 * 365 * 86_400_000)
+          await prisma.sportsDataCache.upsert({ where: { cacheKey },
+            create: { cacheKey, data, expiresAt }, update: { data, expiresAt } })
+        }
+      }
       for (const league of linked) await syncFantraxNativePresentation(league.id, info.data, fetched.rows, now)
 
       const schedule = Array.from(byWeek.values()).sort((a, b) => a.week - b.week)
@@ -277,6 +324,18 @@ export async function runFantraxMatchupParity(input?: {
         summary.results.push({ runKey, status: 'skipped', note })
         await recordSyncState(cacheKey, SYNC_INTERVAL_MS, { status: 'skipped', note })
         continue
+      }
+
+      /*
+       * The league's own period, saved where the week resolver looks first. Without it the current week is
+       * "the earliest week with an unscored row", which moves to NEXT week the moment every game this week has a
+       * point on the board, now that next week's fixtures are on file. Merged into settings, never replacing them.
+       */
+      if (upcomingFrom != null && linked.length) {
+        await prisma.$executeRaw`
+          UPDATE leagues SET settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object('current_week', ${upcomingFrom}::int)
+          WHERE id IN (${Prisma.join(linked.map((league) => league.id))})
+            AND (settings->>'current_week') IS DISTINCT FROM ${String(upcomingFrom)}`
       }
 
       const { weeksWritten, weeksUnchanged } = await applySchedule(

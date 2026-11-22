@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { survivorPhaseWords } from '@/lib/survivor/survivorPhaseWords'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -21,17 +22,36 @@ import {
   ChevronRight,
   ScanEye,
   Send,
+  Gavel,
 } from 'lucide-react'
 import { SurvivorIslandAmbient } from '@/components/survivor/SurvivorIslandAmbient'
 import {
   WarRoomHeroCard,
-  WarRoomPanel,
+  WarRoomPanel as WarRoomPanelBase,
   WarRoomStatOrb,
   WarRoomTabButton,
 } from '@/components/tournament/TournamentWarRoomPrimitives'
 import { TournamentSubscriptionTokensPanel } from '@/components/tournament/TournamentSubscriptionTokensPanel'
 import { SurvivorPremiumCommandCenterPanel } from '@/components/survivor/SurvivorPremiumCommandCenterPanel'
 import { SurvivorCouncilControl } from '@/components/survivor/SurvivorCouncilControl'
+import { SurvivorFinaleControls } from '@/components/survivor/SurvivorFinaleControls'
+import { SurvivorChallengeBuilderPanel } from '@/components/survivor/SurvivorChallengeBuilderPanel'
+import { SurvivorRewardsHubPanel } from '@/components/survivor/SurvivorRewardsHubPanel'
+import { Gift } from 'lucide-react'
+import { useMessages } from '@/components/i18n/useMessages'
+import { survivorHubTabMessages } from '@/components/survivor/survivorHubTabMessages'
+import type { ComponentProps } from 'react'
+
+/** Every Hub panel's title and subtitle through the EN/ES lookup (falls back to the English text). */
+function WarRoomPanel(props: ComponentProps<typeof WarRoomPanelBase>) {
+  const hub = useMessages(survivorHubTabMessages)
+  return <WarRoomPanelBase {...props} title={hub.text(props.title)} subtitle={hub.text(props.subtitle)} />
+}
+import { SurvivorSeasonFixPanel } from '@/components/survivor/SurvivorSeasonFixPanel'
+import { SurvivorCommissionerTodoCard } from '@/components/survivor/SurvivorCommissionerTodoCard'
+import { SurvivorGovernanceHubPanel } from '@/components/survivor/SurvivorGovernanceHubPanel'
+import { SurvivorSideGamesHubPanel } from '@/components/survivor/SurvivorSideGamesHubPanel'
+import type { SurvivorCommissionerTodo } from '@/lib/survivor/survivorCommissionerTodo'
 import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import {
   SURVIVOR_TRIBE_ICON_CHOICES,
@@ -45,7 +65,9 @@ type TabId =
   | 'operations'
   | 'tribes'
   | 'tribal'
+  | 'governance'
   | 'minigames'
+  | 'rewards'
   | 'exile'
   | 'jury'
   | 'settings'
@@ -60,12 +82,14 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'operations', label: 'Operations', icon: <Scale className="h-4 w-4" /> },
   { id: 'tribes', label: 'Tribes', icon: <Users className="h-4 w-4" /> },
   { id: 'tribal', label: 'Elimination Council', icon: <Vote className="h-4 w-4" /> },
+  { id: 'governance', label: 'Rules & conduct', icon: <Gavel className="h-4 w-4" /> },
   { id: 'minigames', label: 'Mini Games', icon: <Zap className="h-4 w-4" /> },
+  { id: 'rewards', label: 'Rewards', icon: <Gift className="h-4 w-4" /> },
   { id: 'exile', label: 'Exile Island', icon: <Skull className="h-4 w-4" /> },
   { id: 'jury', label: 'Jury', icon: <Scale className="h-4 w-4" /> },
   { id: 'settings', label: 'Settings', icon: <Settings2 className="h-4 w-4" /> },
   { id: 'chat', label: 'Communications', icon: <MessageSquare className="h-4 w-4" /> },
-  { id: 'ai', label: 'AI & Automation', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'ai', label: 'Chimmy & Automation', icon: <Sparkles className="h-4 w-4" /> },
   { id: 'premium', label: 'Premium intel', icon: <ScanEye className="h-4 w-4" /> },
   { id: 'subscription', label: 'Access · Tokens', icon: <CreditCard className="h-4 w-4" /> },
   { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
@@ -74,7 +98,7 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
 type DashboardPayload = {
   ok: true
   role?: string
-  privacy?: { blindModeActive: boolean; canSeeHiddenIdolAssignments: boolean; canSeePrivateVotes: boolean }
+  privacy?: { blindModeActive: boolean; canSeeHiddenIdolAssignments: boolean; canSeePrivateVotes: boolean; commissionerParticipationMode?: string }
   league: { id: string; name: string; sport: string; leagueSize: number | null }
   config?: { visualThemeId?: string | null } | null
   shell: { draftSessionExists: boolean; survivorChatChannels: number; exileLeagueLinked: boolean }
@@ -100,8 +124,10 @@ type DashboardPayload = {
     tribalDeadline: string | null
   } | null
   week: number
-  tribes: { id: string; name: string; emoji?: string | null; members: unknown[] }[]
-  tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null } | null
+  tribes: { id: string; name: string; emoji?: string | null; inGameCount?: number; members: { rosterId: string; userId?: string | null; displayName?: string | null }[] }[]
+  tribeRedraw: { id: string; week: number | null; minTribeSize: number | null; maxTribeSize: number | null; defaultDecision?: string; options?: string[] } | null
+  /** Older servers omit it. */
+  todo?: SurvivorCommissionerTodo
   council: unknown
   privateBallots: []
   privateIdols: { id: string; ownerName: string; powerLabel: string }[]
@@ -113,10 +139,26 @@ type DashboardPayload = {
   monetization: { afPlan: AfPlanId | null; afTokensRemaining: number; subscriptionStatus: string }
 }
 
+/** "3 in the game" (and how many were voted out), not the tribe's all-time membership. */
+function tribeInGameText(tribe: { inGameCount?: number; members?: unknown[] }): string {
+  const all = Array.isArray(tribe.members) ? tribe.members.length : 0
+  const inGame = typeof tribe.inGameCount === 'number' ? tribe.inGameCount : all
+  const out = all - inGame
+  return out > 0 ? `${inGame} in the game · ${out} voted out` : `${inGame} in the game`
+}
+
 export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
-  const [tab, setTab] = useState<TabId>(searchParams?.get('tab') === 'tribes' ? 'tribes' : 'overview')
+  // A to-do or alert link names the tab to open (?tab=tribes, ?tab=operations, ?tab=tribal).
+  const hubText = useMessages(survivorHubTabMessages)
+  const [tab, setTab] = useState<TabId>(() => TABS.find(t => t.id === searchParams?.get('tab'))?.id ?? 'overview')
+  const tabParam = searchParams?.get('tab') ?? null
+  useEffect(() => {
+    // The to-do links stay on this page, so follow the URL when it changes too.
+    const next = TABS.find(t => t.id === tabParam)?.id
+    if (next) setTab(next)
+  }, [tabParam])
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tribeDrafts, setTribeDrafts] = useState<Record<string, { name: string; emoji: string }>>({})
@@ -125,6 +167,8 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
   const [redrawPending, setRedrawPending] = useState(false)
   const [redrawMessage, setRedrawMessage] = useState<string | null>(null)
+  const [moveDrafts, setMoveDrafts] = useState<Record<string, { userId: string; toTribeId: string }>>({})
+  const [movePending, setMovePending] = useState<string | null>(null)
 
   const base = `/survivor/${leagueId}`
 
@@ -192,24 +236,52 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
     await load()
   }, [leagueId, load, tribeDrafts])
 
-  const decideRedraw = useCallback(async (decision: 'approve' | 'postpone') => {
+  const decideRedraw = useCallback(async (decision: 'approve' | 'postpone' | 'manual' | 'merge') => {
     if (!data?.tribeRedraw || redrawPending) return
     setRedrawPending(true)
     setRedrawMessage(null)
+    const action = { approve: 'approve_redraw', postpone: 'postpone_redraw', manual: 'manual_redraw', merge: 'merge_redraw' }[decision]
+    const saved = {
+      approve: 'Tribes were randomly redrawn. New private huddles are ready.',
+      postpone: 'The redraw was postponed. Current tribes stay in place until the next elimination.',
+      manual: 'Reassign by hand: move managers between tribes below. Nothing changes until you do.',
+      merge: 'The merge is under way. Every remaining manager now sits in one tribe.',
+    }[decision]
     try {
       const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/tribes`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: decision === 'approve' ? 'approve_redraw' : 'postpone_redraw', recommendationId: data.tribeRedraw.id }),
+        body: JSON.stringify({ action, recommendationId: data.tribeRedraw.id }),
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok || !result.ok) setRedrawMessage(result.error ?? 'The redraw decision could not be saved.')
-      else { setRedrawMessage(decision === 'approve' ? 'Tribes were randomly redrawn. New private huddles are ready.' : 'The redraw was postponed. Current tribes stay in place.'); await load() }
+      else { setRedrawMessage(saved); await load() }
     } catch {
       setRedrawMessage('Network error. Reload the dashboard to check whether the decision saved.')
     } finally {
       setRedrawPending(false)
     }
   }, [data?.tribeRedraw, leagueId, load, redrawPending])
+
+  const moveMember = useCallback(async (tribeId: string) => {
+    const draft = moveDrafts[tribeId]
+    if (!draft?.userId || !draft.toTribeId || movePending) return
+    setMovePending(tribeId)
+    setRedrawMessage(null)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/survivor/tribes`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'move_member', userId: draft.userId, toTribeId: draft.toTribeId }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.ok) setRedrawMessage(result.error ?? 'The manager could not be moved.')
+      else { setRedrawMessage('Manager moved. Huddles were updated and Chimmy announced it in league chat.'); setMoveDrafts((current) => ({ ...current, [tribeId]: { userId: '', toTribeId: '' } })); await load() }
+    } catch {
+      setRedrawMessage('Network error. Reload the dashboard to check whether the move saved.')
+    } finally {
+      setMovePending(null)
+    }
+  }, [leagueId, load, moveDrafts, movePending])
+  const hostCanReassign = data?.privacy?.commissionerParticipationMode === 'non_participating_host'
 
   const sendAnnouncement = useCallback(async () => {
     const message = announcement.trim()
@@ -255,7 +327,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                     {data ? (
                       <>
                         {data.league.sport} · Week {data.week} ·{' '}
-                        <span className="font-medium text-amber-100/90">{gs?.phase ?? 'loading'}</span>
+                        <span className="font-medium text-amber-100/90">{survivorPhaseWords(gs?.phase) ?? 'loading'}</span>
                       </>
                     ) : (
                       'Loading island…'
@@ -298,7 +370,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   active={tab === t.id}
                   onClick={() => setTab(t.id)}
                   icon={t.icon}
-                  label={t.label}
+                  label={hubText.tab(t.id, t.label)}
                   testId={`survivor-commissioner-tab-${t.id}`}
                 />
               ))}
@@ -319,8 +391,9 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
         <div className="mt-6 space-y-6">
           {tab === 'overview' && data && (
             <>
+              {data.todo ? <SurvivorCommissionerTodoCard todo={data.todo} /> : null}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <WarRoomStatOrb label="Phase" value={gs?.phase ?? '—'} hint="Game state" accent="emerald" />
+                <WarRoomStatOrb label="Phase" value={survivorPhaseWords(gs?.phase) ?? '—'} hint="Game state" accent="emerald" />
                 <WarRoomStatOrb
                   label="Players / roster"
                   value={`${Math.max(0, data.rosterCount - data.eliminatedCount)} active`}
@@ -421,6 +494,17 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                   <Link href={`${base}/exile`} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white">Exile status</Link>
                 </div>
               </WarRoomPanel>
+              <WarRoomPanel title="Fix a problem" subtitle="Score corrections, a manager who quit, or an early merge.">
+                <SurvivorSeasonFixPanel
+                  leagueId={leagueId}
+                  week={data.gameState?.currentWeek ?? data.week}
+                  merged={data.merged}
+                  managers={[...new Map(data.tribes.flatMap(tribe => tribe.members)
+                    .filter(member => member.userId)
+                    .map(member => [member.userId as string, { userId: member.userId as string, name: member.displayName || 'Manager' }])).values()]
+                    .sort((a, b) => a.name.localeCompare(b.name))}
+                />
+              </WarRoomPanel>
               {data.privacy?.canSeeHiddenIdolAssignments && !data.privacy.blindModeActive ? (
                 <WarRoomPanel title="Private idol oversight" subtitle="Visible only to a non-playing host. Managers see only their own idols.">
                   {data.privateIdols.length ? <ul className="space-y-2 text-sm text-white/75">{data.privateIdols.map(idol => <li key={idol.id}><strong>{idol.ownerName}</strong> · {idol.powerLabel}</li>)}</ul> : <p className="text-sm text-white/60">No active idols have been seeded.</p>}
@@ -437,11 +521,13 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
 
           {tab === 'tribes' && (
             <WarRoomPanel title="Tribes" subtitle="Roster-based tribe assignment runs after the startup draft completes.">
-              {data?.tribeRedraw && <div className="mb-5 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
+              {data?.tribeRedraw && <div className="mb-5 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4" data-testid="survivor-tribe-redraw-choice">
                 <p className="font-semibold text-amber-100">Tribe redraw recommended</p>
-                <p className="mt-1 text-sm text-white/70">A tribe has fallen to 40% or less of its original size. Current sizes range from {data.tribeRedraw.minTribeSize ?? '?'} to {data.tribeRedraw.maxTribeSize ?? '?'} active managers. Approve a system-randomized redraw or postpone it. The commissioner cannot choose teammates. Approval archives the old private huddles and opens fresh ones.</p>
+                <p className="mt-1 text-sm text-white/70">A tribe has fallen below half the size of the largest tribe. Current sizes range from {data.tribeRedraw.minTribeSize ?? '?'} to {data.tribeRedraw.maxTribeSize ?? '?'} active managers. Choose a random redraw, reassign by hand, or merge now. If nobody chooses, the random redraw runs on its own before the next council. A random redraw archives the old private huddles and opens fresh ones.{hostCanReassign ? '' : ' As a playing commissioner you cannot choose teammates.'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('approve')} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50">{redrawPending ? 'Saving…' : 'Approve random redraw'}</button>
+                  <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('approve')} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50">{redrawPending ? 'Saving…' : 'Random redraw (default)'}</button>
+                  {hostCanReassign && <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('manual')} className="rounded-lg border border-amber-300/50 px-3 py-2 text-sm text-amber-100 disabled:opacity-50">Reassign by hand</button>}
+                  <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('merge')} className="rounded-lg border border-amber-300/50 px-3 py-2 text-sm text-amber-100 disabled:opacity-50">Merge now</button>
                   <button type="button" disabled={redrawPending} onClick={() => void decideRedraw('postpone')} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white disabled:opacity-50">Postpone</button>
                 </div>
               </div>}
@@ -459,7 +545,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                       <div key={tribe.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <p className="text-sm font-semibold text-white">{tribe.name}</p>
-                          <span className="text-xs text-white/45">{Array.isArray(tribe.members) ? tribe.members.length : 0} members</span>
+                          <span className="text-xs text-white/45" data-testid="survivor-tribe-in-game">{tribeInGameText(tribe)}</span>
                         </div>
                         <div className="grid gap-3 lg:grid-cols-[120px_minmax(0,1fr)_auto]">
                           <div>
@@ -503,6 +589,40 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
                             </button>
                           </div>
                         </div>
+                        {hostCanReassign && tribe.members.some((member) => member.userId) && data.tribes.length > 1 && (
+                          <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-white/10 pt-3" data-testid={`survivor-tribe-move-${tribe.id}`}>
+                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
+                              Move manager
+                              <select
+                                value={moveDrafts[tribe.id]?.userId ?? ''}
+                                onChange={(event) => setMoveDrafts((current) => ({ ...current, [tribe.id]: { userId: event.target.value, toTribeId: current[tribe.id]?.toTribeId ?? '' } }))}
+                                className="min-h-10 rounded-lg border border-white/15 bg-black/40 px-2 text-sm font-normal normal-case tracking-normal text-white"
+                              >
+                                <option value="">Choose a manager</option>
+                                {tribe.members.filter((member) => member.userId).map((member) => <option key={member.rosterId} value={member.userId ?? ''}>{member.displayName ?? member.userId}</option>)}
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
+                              To tribe
+                              <select
+                                value={moveDrafts[tribe.id]?.toTribeId ?? ''}
+                                onChange={(event) => setMoveDrafts((current) => ({ ...current, [tribe.id]: { userId: current[tribe.id]?.userId ?? '', toTribeId: event.target.value } }))}
+                                className="min-h-10 rounded-lg border border-white/15 bg-black/40 px-2 text-sm font-normal normal-case tracking-normal text-white"
+                              >
+                                <option value="">Choose a tribe</option>
+                                {data.tribes.filter((other) => other.id !== tribe.id).map((other) => <option key={other.id} value={other.id}>{other.name}</option>)}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              disabled={movePending === tribe.id || !moveDrafts[tribe.id]?.userId || !moveDrafts[tribe.id]?.toTribeId}
+                              onClick={() => void moveMember(tribe.id)}
+                              className="min-h-10 rounded-lg border border-amber-300/50 px-3 text-sm text-amber-100 disabled:opacity-40"
+                            >
+                              {movePending === tribe.id ? 'Moving…' : 'Move'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -524,14 +644,27 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
             </div>
           )}
 
+          {tab === 'governance' && (
+            <WarRoomPanel title="Rules & conduct" subtitle="Conduct strikes, Rooks vs Vets and tribe swaps.">
+              <SurvivorGovernanceHubPanel leagueId={leagueId} />
+            </WarRoomPanel>
+          )}
+
           {tab === 'minigames' && (
             <WarRoomPanel
               title="Mini games"
               subtitle="Challenges pull real sport schedules for the active week — see Challenges hub."
             >
-              <Link href={`${base}/challenges`} className="text-emerald-300 hover:text-emerald-200">
+              <SurvivorChallengeBuilderPanel leagueId={leagueId} />
+              <Link href={`${base}/challenges`} className="mt-4 inline-block text-emerald-300 hover:text-emerald-200">
                 Go to challenges →
               </Link>
+            </WarRoomPanel>
+          )}
+
+          {tab === 'rewards' && (
+            <WarRoomPanel title="Rewards" subtitle="Grant, reverse and settle pending reward choices.">
+              <SurvivorRewardsHubPanel leagueId={leagueId} />
             </WarRoomPanel>
           )}
 
@@ -540,14 +673,15 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               <Link href={`${base}/exile`} className="text-emerald-300 hover:text-emerald-200">
                 Exile dashboard →
               </Link>
+              <div className="mt-4">
+                <SurvivorSideGamesHubPanel leagueId={leagueId} />
+              </div>
             </WarRoomPanel>
           )}
 
           {tab === 'jury' && (
             <WarRoomPanel title="Jury" subtitle="Jury phase and finale votes — see Jury hub.">
-              <Link href={`${base}/jury`} className="text-emerald-300 hover:text-emerald-200">
-                Jury chamber →
-              </Link>
+              <SurvivorFinaleControls leagueId={leagueId} />
             </WarRoomPanel>
           )}
 
@@ -578,7 +712,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
           )}
 
           {tab === 'ai' && (
-            <WarRoomPanel title="AI & automation" subtitle="@Chimmy ingests votes, timestamps picks, and posts official results.">
+            <WarRoomPanel title="Chimmy & automation" subtitle="@Chimmy ingests votes, timestamps picks, and posts official results.">
               <Link href={`${base}/chimmy`} className="text-emerald-300 hover:text-emerald-200">
                 @Chimmy command center →
               </Link>
@@ -593,6 +727,7 @@ export function SurvivorCommissionerDashboard({ leagueId }: { leagueId: string }
               leagueId={leagueId}
               plan={data.monetization.afPlan ?? null}
               tokensRemaining={data.monetization.afTokensRemaining ?? null}
+              isCommissioner
             />
           )}
 

@@ -22,7 +22,7 @@ const FORMAT_RULES: Record<string, string> = {
   best_ball:
     'BEST BALL: ceiling and spike weeks matter more than lineup-setting flexibility. Devalue fragile bench depth and boost big-play profiles with weekly eruption paths.',
   guillotine:
-    'GUILLOTINE: prioritize weekly floor, survival odds, and avoiding lineup landmines. Depth matters less than protecting against the lowest-score elimination risk.',
+    'GUILLY: prioritize weekly floor, survival odds, and avoiding lineup landmines. Depth matters less than protecting against the lowest-score elimination risk.',
   tournament:
     'TOURNAMENT: optimize for advancement equity and differentiated ceiling. Short-term spike outcomes matter more than safe median projections in knockout windows.',
   salary_cap:

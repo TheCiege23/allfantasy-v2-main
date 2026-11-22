@@ -3,7 +3,7 @@ import { getScoringLabel, type ScoringLabel as ScoringLabelData } from '@/lib/le
 export type LabelSize = 'sm' | 'md' | 'lg'
 
 /** The small pill drawn in code: family gradient + plate code. For chips, tables, league cards. */
-export function ScoringPill({ label, className = '' }: { label: ScoringLabelData; className?: string }) {
+function ScoringPill({ label, className = '' }: { label: ScoringLabelData; className?: string }) {
   return (
     <span
       className={`inline-flex min-h-6 items-center rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide text-white ${className}`}

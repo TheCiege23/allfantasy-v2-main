@@ -1,6 +1,7 @@
 'use client'
 
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 /**
  * The blue "C" beside a league the viewer commissions — in the crest's own
@@ -22,8 +23,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
  */
 export function CommissionerBadge({ className }: { className?: string }) {
   // Every importer is a client component; the label follows the language switch (2026-10-04).
-  const { language } = useOptionalLanguage()
-  const label = language === 'es' ? 'Eres comisionado' : "You're the commissioner"
+  const label = useMessages(corePartsMessages).commissionerBadge
   return (
     <span
       className={className ? `af-commish-c ${className}` : 'af-commish-c'}

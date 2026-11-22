@@ -11,7 +11,7 @@ function browserStorage(): PendingStorage | undefined {
 async function pendingKey(form: FormData): Promise<string> {
   const identity: unknown[] = []
   // History and home signals may refresh while recovering the same question.
-  for (const [key,value] of [...form.entries()].filter(([key]) => !['requestId','confirmTokenSpend','conversation','homeSignals'].includes(key)).sort(([a],[b]) => a.localeCompare(b))) {
+  for (const [key,value] of [...form.entries()].filter(([key]) => !['requestId','confirmTokenSpend','tokenQuote','analysisUnlock','conversation','homeSignals'].includes(key)).sort(([a],[b]) => a.localeCompare(b))) {
     if (typeof value === 'string') identity.push([key,value])
     else {
       const digest = await crypto.subtle.digest('SHA-256',await value.arrayBuffer())
@@ -33,6 +33,7 @@ export async function postChimmyRequest(form: FormData, fetcher: typeof fetch = 
   try {
     if (storage) { key = await pendingKey(form); pending = storage.getItem(key) }
   } catch { storage = undefined }
+  const suppliedRequestId = String(form.get('requestId'))
   if (pending) form.set('requestId',pending)
   try { if (storage && key) storage.setItem(key,String(form.get('requestId'))) } catch { storage = undefined }
   let response: Response
@@ -42,8 +43,15 @@ export async function postChimmyRequest(form: FormData, fetcher: typeof fetch = 
   }
   if (pending && form.get('confirmTokenSpend') !== 'true') {
     response = await fetcher(`/api/chat/chimmy?requestId=${encodeURIComponent(pending)}`,{cache:'no-store'})
-    const confirmation = response.status === 409 && (await inspectJson(response)).code === 'token_confirmation_required'
-    if (response.status === 404 || (confirmation && form.get('confirmTokenSpend') === 'true')) response = await post()
+    const body = await inspectJson(response)
+    // A reloaded page has no copy of the original conversation/files. A preview
+    // never spent anything, so start a fresh unconfirmed request instead of
+    // trying to authorize a receipt with a different fingerprint.
+    if (response.status === 409 && body.analysisPreview && suppliedRequestId !== pending) {
+      form.set('requestId', suppliedRequestId)
+      try { if (storage && key) storage.setItem(key, suppliedRequestId) } catch { /* optional */ }
+      response = await post()
+    } else if (response.status === 404) response = await post()
   } else response = await post()
   const started = Date.now()
   while (response.status === 202 && Date.now() - started < 5 * 60_000) {

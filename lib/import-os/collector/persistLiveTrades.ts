@@ -29,7 +29,11 @@
  * the same table through the same upsert, keyed on `historyId_transactionId`, so an overlap is a
  * no-op rather than a duplicate.
  */
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
+import { buildTradeContextSnapshot, withBoardValues, withInjuryStatus } from '@/lib/trade-market/tradeContextSnapshot'
+import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
 import type { NormalizedImportResult, NormalizedTransaction } from '@/lib/league-import/types'
@@ -98,14 +102,18 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
       }))
       .filter((p) => p.season !== '' && Number.isFinite(p.round)),
     created: Date.parse(t.completed_at ?? t.created_at) || 0,
+    // FAAB each way, only when the provider stated it — absent leaves `LeagueTrade.budgetGiven/Received` untouched.
+    ...(Array.isArray(t.waiver_budget) ? { waiverBudget: t.waiver_budget } : {}),
     /* Unused by `persistTradesForSeason`; present only to satisfy the shared type. */
     creator: '',
   }
 }
 
-export interface PersistLiveTradesResult {
+interface PersistLiveTradesResult {
   /** Completed trades present in this sync's payload. */
   tradesSeen: number
+  /** Trade rows given their context snapshot on this pass (first capture only — see `attachTradeContextSnapshots`). */
+  contextsSaved?: number
   /** Rows upserted — one PER SIDE of each trade, which is how LeagueTrade is keyed. */
   rowsWritten: number
   /** Trades skipped because no roster on either side mapped to a known owner. */
@@ -170,5 +178,122 @@ export async function persistLiveTrades(input: {
     normalized.league?.sport || undefined,
   )
 
-  return { tradesSeen: trades.length, rowsWritten, skippedNoOwner }
+  const contextsSaved = await attachTradeContextSnapshots({ platformLeagueId, normalized, trades }).catch(() => 0)
+
+  return { tradesSeen: trades.length, rowsWritten, skippedNoOwner, contextsSaved }
+}
+
+/** `TRADE_CONTEXT_SNAPSHOT=off` stops the capture; the trades themselves are still written. */
+export const TRADE_CONTEXT_SNAPSHOT_ENV = 'TRADE_CONTEXT_SNAPSHOT'
+
+/**
+ * Save each trade's context (`lib/trade-market/tradeContextSnapshot.ts`) beside its `LeagueTrade` rows — the
+ * learner's record of why a manager paid what they paid, which the rosters will not remember next week.
+ *
+ * ⚠ FIRST CAPTURE WINS. The live window shows the same trade on every sync for days; only a row whose snapshot is
+ * still empty is written, so the earliest capture — the one closest to the trade — is the one kept.
+ * ⚠ BEST EFFORT. A snapshot is an accelerator for learning, never a reason a sync fails: every error is swallowed and
+ * counted as not saved. The trade rows were already written above.
+ */
+/** A player's injury designation, null for "no report", undefined when it cannot be told. */
+export type InjuryLookup = (player: { position: string | null; team: string | null; name?: string | null; id: string }) => string | null | undefined
+
+/** Injury reports newer than this are read at capture; older ones are not news. */
+const INJURY_CAPTURE_FRESH_MS = 72 * 60 * 60 * 1000
+
+/** One league's value board, as a price per traded player (`withBoardValues`). */
+export type BoardPricer = { sport: string; unit: string; priceOf: (playerId: string, name: string | null) => number | null }
+
+/**
+ * The league's value board for a non-NFL Sleeper league, or null when the sport is not board-valued or the board cannot
+ * be read (the snapshot is then saved without values, exactly as before). One read per sync.
+ */
+export async function loadBoardPricer(platformLeagueId: string): Promise<BoardPricer | null> {
+  // The same Sleeper league can be imported by several members and in several seasons; the newest season is the live one.
+  const league = await prisma.league.findFirst({ where: { platformLeagueId, platform: 'sleeper' }, orderBy: { season: 'desc' }, select: { id: true } })
+  if (!league) return null
+  const { loadLeagueValueBoard, boardUnit } = await import('@/lib/sport-values/leagueValueBoard')
+  const { priceBoardPlayer } = await import('@/lib/decision-os/trade/sportPointsValue')
+  const board = await loadLeagueValueBoard(league.id)
+  if (board.kind !== 'ok') return null
+  const ctx = board.ctx
+  return {
+    sport: board.sport,
+    unit: boardUnit(ctx),
+    priceOf: (playerId, name) => {
+      const price = priceBoardPlayer({ rosterPlayerId: playerId, name }, ctx)
+      return price.ok ? price.value : null
+    },
+  }
+}
+
+/**
+ * The NFL injury designations as of now, matched to a roster player by name, VERIFIED by team and position
+ * (`createInjuryRowMatcher` — a name two players share is refused, never guessed). The newest claim wins.
+ */
+export async function loadInjuryLookup(now: Date, sport = 'NFL'): Promise<InjuryLookup | null> {
+  const rows = await prisma.sportsInjury.findMany({
+    where: { sport, expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
+    orderBy: { fetchedAt: 'desc' },
+    take: 5000,
+    select: { playerName: true, team: true, position: true, status: true, date: true, fetchedAt: true },
+  })
+  // No fresh report at all for this sport is "no feed", not "everyone is healthy": the snapshot is then saved unmarked.
+  if (rows.length === 0) return null
+  const match = createInjuryRowMatcher(rows, sport)
+  return (p) => {
+    const name = p.name
+    if (!name) return undefined
+    const hit = match({ name, team: p.team, position: p.position })
+    if (hit == null) return null
+    if ('ambiguous' in hit) return undefined
+    return hit.rows[0]?.status ?? null
+  }
+}
+
+export async function attachTradeContextSnapshots(
+  input: { platformLeagueId: string; normalized: NormalizedImportResult; trades: NormalizedTransaction[] },
+  deps: {
+    db?: Pick<typeof prisma, 'leagueTrade'>
+    now?: Date
+    env?: NodeJS.ProcessEnv
+    /** Injury designations for the league's sport; defaults to its fresh `SportsInjury` rows (`loadInjuryLookup`). */
+    injuries?: (now: Date, sport: string) => Promise<InjuryLookup | null>
+    /** NBA / MLB / NHL / NCAAB / soccer: the league's value board as a pricer; defaults to `loadBoardPricer`. */
+    board?: (platformLeagueId: string) => Promise<BoardPricer | null>
+  } = {},
+): Promise<number> {
+  const env = deps.env ?? process.env
+  if (String(env[TRADE_CONTEXT_SNAPSHOT_ENV] ?? '').trim().toLowerCase() === 'off') return 0
+  const db = deps.db ?? prisma
+  const now = deps.now ?? new Date()
+  const isNfl = String(input.normalized.league?.sport ?? '').toUpperCase() === 'NFL'
+  // One injury read per sync, best-effort: without it a snapshot is saved exactly as before, unmarked.
+  // Every sport (2026-11-22): who was out at the trade cannot be rebuilt later, so it is recorded wherever a feed exists.
+  const sport = String(input.normalized.league?.sport ?? '').trim().toUpperCase()
+  const injuries = sport && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now, sport).catch(() => null) : null
+  // Other sports have no dated market chart: the board's price at capture is the only record of the trade-day value.
+  const board = !isNfl && input.trades.length > 0 ? await (deps.board ?? loadBoardPricer)(input.platformLeagueId).catch(() => null) : null
+  let saved = 0
+  for (const trade of input.trades) {
+    const built = buildTradeContextSnapshot(input.normalized, trade, now)
+    if (!built) continue
+    const names = input.normalized.player_map ?? {}
+    const withInjuries = injuries ? withInjuryStatus(built, (p) => injuries({ ...p, name: names[p.id]?.name ?? null })) : built
+    const snapshot = board ? withBoardValues(withInjuries, trade, board, (id) => board.priceOf(id, names[id]?.name ?? null)) : withInjuries
+    try {
+      const r = await db.leagueTrade.updateMany({
+        where: {
+          transactionId: trade.source_transaction_id,
+          history: { sleeperLeagueId: input.platformLeagueId },
+          contextSnapshot: { equals: Prisma.DbNull },
+        },
+        data: { contextSnapshot: snapshot as unknown as Prisma.InputJsonValue },
+      })
+      saved += r.count
+    } catch {
+      // Not saved this pass; the next sync inside the capture window tries again.
+    }
+  }
+  return saved
 }

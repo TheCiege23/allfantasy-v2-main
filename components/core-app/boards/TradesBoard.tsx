@@ -14,11 +14,16 @@ import {
   LeagueCrest,
   PlayerFace,
   SectionHead,
-  StatPair,
   platformKey,
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
+import { messagesFor } from '@/lib/i18n/messages'
+import { tradesGuideMessages } from '@/lib/core-app/messages/tradesGuide'
+import { tradeTeamGradesMessages } from '@/lib/core-app/messages/tradeTeamGrades'
+import { letterTone, teamGrades, tradeVerdict, type Letter } from '@/lib/core-app/tradeTeamGrades'
+import '@/components/core-app/af-trade-team-grades.css'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * `/core/trades` with no league held.
@@ -37,20 +42,20 @@ import '@/components/core-app/af-core-boards.css'
  * screen where that distinction is the whole product.
  */
 
-export type TradesBoardProps = {
+type TradesBoardProps = {
+  /**
+   * Under the /core/trades guide (2026-11-13): no second page title (the guide headline is the page's
+   * h1), no Sleeper notice (the "Check a trade" card says it in one line), a plain section heading, and
+   * the grading notes folded behind "How grades work".
+   */
+  embedded?: boolean
+  /** The reader's language, for the embedded headings (this board renders on the server). */
+  language?: string | null
   data: TradesBoardData
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
   /** Leagues on this account. 0 shows the no-leagues next steps instead of an empty board. */
   totalLeagues?: number
-}
-
-const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
-  A: 'good',
-  B: 'good',
-  C: 'warn',
-  D: 'bad',
-  F: 'bad',
 }
 
 /**
@@ -95,7 +100,7 @@ function PickAsset({ a }: { a: TradeAsset }) {
         the seasons and rounds it covers. A redraft league, or a round past the book’s
         depth, has no price here and must never be shown a zero.
       */}
-      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString() : '—'}</span>
+      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString(getAppIntlLocale()) : '—'}</span>
     </span>
   )
 }
@@ -133,58 +138,87 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
         player name is a claim that he is worthless; a dash says we hold no
         price. The grade above already refuses the letter for the same reason.
       */}
-      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString() : '—'}</span>
+      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString(getAppIntlLocale()) : '—'}</span>
     </span>
   )
 }
 
+type TeamGradeCopy = (typeof tradeTeamGradesMessages)['en']
+
+/** One side of the trade: who got it, their grade beside their name, then what they got. */
+function TradeSide({
+  team,
+  assets,
+  letter,
+  leagueId,
+  copy,
+  testId,
+}: {
+  team: string
+  assets: TradeAsset[]
+  letter: Letter | null
+  leagueId: string
+  copy: TeamGradeCopy
+  testId: string
+}) {
+  return (
+    <div className="af-bd-side" data-testid={testId}>
+      <span className="af-bd-side-label af-tg-side-head">
+        <span>{copy.got(team)}</span>
+        {letter ? (
+          <span className="af-tg-grade" data-tone={letterTone(letter)} aria-label={copy.gradeFor(team, letter)} data-testid={`${testId}-grade`}>
+            <span className="af-tg-grade-k" aria-hidden>
+              {copy.grade}
+            </span>
+            <span className="af-tg-grade-v" aria-hidden>
+              {letter}
+            </span>
+          </span>
+        ) : null}
+      </span>
+      {assets.length > 0 ? (
+        assets.map((a) => <Asset key={`${testId}-${a.id}`} a={a} leagueId={leagueId} />)
+      ) : (
+        <span className="af-bd-asset">
+          {/*
+            ⚠ THIS SENTENCE USED TO READ "Picks or FAAB only — no players on this side", AND IT WAS
+            USUALLY FALSE. Picks render as assets now, so an empty side is genuinely empty: FAAB, or a
+            side the importer never captured.
+          */}
+          <span className="af-bd-asset-name">{copy.nothingOnRecord}</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 /*
- * Each side is named for the team that RECEIVED it (2026-10-01), so the reader's own column holds
- * what the grade above credited them with — the convention KeepTradeCut's "Team 1 gets…" uses. Read
- * as "<name> sent", the card put a manager's grade over the assets they gave away.
+ * Each side is named for the team that RECEIVED it (2026-10-01) — "<team> got" — and since 2026-11-14 each
+ * carries THAT team's grade beside its name. The board used to show one letter ("Latest grade A") for
+ * `fromName` only, with nothing saying whose it was.
+ *
+ * ⚠ `received` IS `fromName`'s SIDE AND `letter` IS `fromName`'s GRADE; `sent` went to `toName`, whose
+ * grade is `partnerLetter`. Pairing them the other way round silently inverts every grade on the board.
  */
-function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
+function TradeBody({ t, leagueId, copy }: { t: BoardTrade; leagueId: string; copy: TeamGradeCopy }) {
+  const grades = teamGrades(t.letter, t.partnerLetter)
+  const verdict = grades ? tradeVerdict(grades) : null
   return (
     <>
+      {verdict ? (
+        <p className="af-tg-verdict" data-tone={verdict.kind === 'fair' ? 'warn' : 'good'} data-testid="trade-verdict">
+          {verdict.kind === 'fair' ? copy.fair : copy.won(verdict.winner === 'first' ? t.fromName : t.toName)}
+        </p>
+      ) : null}
       <div className="af-bd-card-body">
-        <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.fromName} received</span>
-          {t.received.length > 0 ? (
-            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
-          ) : (
-            <span className="af-bd-asset">
-              {/*
-                ⚠ THIS SENTENCE USED TO READ "Picks or FAAB only — no players on this
-                side", AND IT WAS USUALLY FALSE. Picks render as assets now, so an
-                empty side is genuinely empty: FAAB, or a side the importer never
-                captured. It no longer blames a category we simply were not reading.
-              */}
-              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
-            </span>
-          )}
-        </div>
-        <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.toName} received</span>
-          {t.sent.length > 0 ? (
-            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
-          ) : (
-            <span className="af-bd-asset">
-              {/*
-                ⚠ THIS SENTENCE USED TO READ "Picks or FAAB only — no players on this
-                side", AND IT WAS USUALLY FALSE. Picks render as assets now, so an
-                empty side is genuinely empty: FAAB, or a side the importer never
-                captured. It no longer blames a category we simply were not reading.
-              */}
-              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
-            </span>
-          )}
-        </div>
+        <TradeSide team={t.fromName} assets={t.received} letter={grades?.first ?? null} leagueId={leagueId} copy={copy} testId="trade-side-first" />
+        <TradeSide team={t.toName} assets={t.sent} letter={grades?.second ?? null} leagueId={leagueId} copy={copy} testId="trade-side-second" />
       </div>
     </>
   )
 }
 
-function WindowCard({ row }: { row: TradeWindowRow }) {
+function WindowCard({ row, copy }: { row: TradeWindowRow; copy: TeamGradeCopy }) {
   const t = row.latest
   const urgent = row.weeksLeft != null && row.weeksLeft >= 0 && row.weeksLeft <= 1
 
@@ -254,88 +288,52 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
         </header>
 
         {t ? (
-          <TradeBody t={t} leagueId={row.leagueId} />
+          <TradeBody t={t} leagueId={row.leagueId} copy={copy} />
         ) : (
           <p className="af-bd-reason">No trade has been made in this league on any season we hold.</p>
         )}
 
-        <div className="af-bd-card-foot">
+        <div className="af-bd-card-foot af-tg-foot">
           {/*
-            ⚠ THE REFUSAL IS RENDERED HERE, NOT LEFT TO THE LOADER'S PROSE. The
-            loader also mentions it in `reasoning`, but a card that shows a
-            trade with an empty grade slot and no explanation is exactly the
-            shape this screen must not have — and prose is the wrong place to
-            carry a structural fact. Where a letter would be, the reason is.
+            2026-11-14: one line of numbers and the date, then the details folded. Gone from here: the lone
+            "Latest grade" letter (each side carries its own grade now), "Who got more value 60% · 40%" (the
+            same fact as the letters and the line below), and the league's deadline sentence, which sat
+            under the grade looking like an explanation of it — the header's tag already says it.
+
+            ⚠ THE REFUSAL IS STILL RENDERED HERE, NOT LEFT TO PROSE: an ungraded trade says why in the
+            slot where its grades would be, and shows no letter at all.
           */}
-          {t?.letter ? (
-            <StatPair k="Latest grade" v={t.letter} sev={GRADE_SEV[t.letter]} />
-          ) : t ? (
-            <span className="af-bd-kv">
-              <span className="af-bd-k">Latest grade</span>
-              <span className="af-bd-sub" style={{ maxWidth: 260 }}>
-                ungraded: {t.withheldReason ?? 'no reason recorded'}
-              </span>
-            </span>
+          {t && !t.letter ? (
+            <p className="af-tg-values" data-testid="trade-not-graded">
+              {copy.notGraded(t.withheldReason ?? 'no reason recorded')}
+            </p>
           ) : null}
+          {t?.letter && t.getValue != null && t.giveValue != null ? (
+            <p className="af-tg-values" data-testid="trade-values">
+              {copy.values(t.fromName, t.getValue.toLocaleString(getAppIntlLocale()), t.giveValue.toLocaleString(getAppIntlLocale()))}
+              {t.season != null ? <span className="af-tg-when"> · {copy.when(t.week, t.season)}</span> : null}
+            </p>
+          ) : t?.season != null ? (
+            <p className="af-tg-values af-tg-when">{copy.when(t.week, t.season)}</p>
+          ) : null}
+          {!t ? <p className="af-bd-reason">{row.reasoning}</p> : null}
           {/*
-            Who came out ahead, and by how much — the half of the verdict a letter alone
-            cannot carry. `sharePct` was already on `BoardTrade` and rendered nowhere.
+            WHY it graded that way, folded. The first breakdown line is the verdict in other words ("X came
+            out well ahead — …"), which the verdict line and the numbers above already say, so it is left
+            out; the rest (the most valuable asset, any league-specific prices, and the basis) is what a
+            reader opens this for.
 
-            A SHARE, NOT TWO TOTALS. The letter is THE grade — this league's values, and for
-            a completed trade the FROZEN original taken the first time AllFantasy graded it
-            (`gradeArchivedTrade` with `original`, in `lib/core-app/tradesBoard.ts`). Rank
-            space on share bands was retired on 2026-09-25; this note used to argue from it.
-            `sharePct` is that grade's own totals (getValue against getValue + giveValue), and
-            the per-asset numbers above are its own line values (`valuesOnTheGrade`). They are
-            NOT guaranteed to add up to it: when the grade's lines do not pair one-for-one with
-            the card's assets, `valuesOnTheGrade` keeps the book's display values instead. A
-            scale-free share states the result without inviting that addition.
-
-            ⚠ `sharePct` IS THE SHARE RECEIVED BY `fromName`, because the loader passes
-            their incoming side as side A. Naming the two managers in that order is what
-            keeps it readable; swapping them silently inverts every verdict on the board.
+            🛑 EMPTY FOR AN UNGRADED TRADE, BY CONSTRUCTION IN THE LOADER.
           */}
-          {t?.letter && t.sharePct != null ? (
-            <span className="af-bd-kv">
-              <span className="af-bd-k">Value split</span>
-              <span className="af-bd-sub" style={{ maxWidth: 260 }}>
-                {t.fromName} {Math.round(t.sharePct)}% · {t.toName} {100 - Math.round(t.sharePct)}%
-              </span>
-            </span>
-          ) : null}
-          {t?.season != null ? (
-            <span className="af-bd-tag" data-sev="muted">
-              LATEST
-              <span className="af-bd-tag-detail">
-                {' '}
-                {t.week != null ? `week ${t.week}, ` : ''}
-                {t.season}
-              </span>
-            </span>
-          ) : null}
-          {t ? <span className="af-bd-rule" aria-hidden /> : null}
-          <p className="af-bd-reason">{row.reasoning}</p>
-          {/*
-            WHY it graded that way, which is what a manager opens a trade card for.
-
-            ⚠ THE LINE ABOVE IS ABOUT THE LEAGUE'S DEADLINE, NOT ABOUT THE TRADE.
-            `reasoning` reads "3 weeks until the week 11 deadline. 14 trades on file
-            here." — it sits under the grade and looks like an explanation of it, which
-            is most of why the card read as unexplained. These sentences are the actual
-            account of the verdict, and they are deliberately BELOW that line rather than
-            replacing it: the deadline is the reason this row is on a board sorted by
-            closing window.
-
-            🛑 EMPTY FOR AN UNGRADED TRADE, BY CONSTRUCTION IN THE LOADER. Where there is
-            no letter the slot above already carries `withheldReason`, and a breakdown
-            there would be narrating assets the grader explicitly refused to count.
-          */}
-          {t && t.breakdown.length > 0 ? (
-            <ul className="af-bd-breakdown">
-              {t.breakdown.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+          {t && t.breakdown.length > 1 ? (
+            <details className="af-tg-fold" data-testid="trade-how-graded">
+              <summary>{copy.howGraded}</summary>
+              <ul className="af-bd-breakdown">
+                {t.breakdown.slice(1).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </details>
           ) : null}
         </div>
       </article>
@@ -343,7 +341,10 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
   )
 }
 
-export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
+export function TradesBoard({ data, allHref, totalLeagues, embedded = false, language = null }: TradesBoardProps) {
+  // A server component: the catalog is read directly, not through the client hook.
+  const guide = messagesFor(tradesGuideMessages, language)
+  const teamCopy = messagesFor(tradeTeamGradesMessages, language)
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
   /*
@@ -368,18 +369,26 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
   }
 
   return (
-    <div className="af-bd">
-      <BoardHead
-        eyebrow="Core · Trades"
-        title="Trades"
-        blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
-      />
+    <div className="af-bd" id={embedded ? 'af-tg-trades' : undefined}>
+      {embedded ? (
+        <div className="af-tg-sec-head">
+          <h2>{guide.tradesTitle}</h2>
+          <p>{guide.tradesSub}</p>
+        </div>
+      ) : (
+        <BoardHead
+          eyebrow="Core · Trades"
+          title="Trades"
+          blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
+        />
+      )}
 
       {/*
         Sleeper never shares an offer before it is accepted, so a manager looking here for one they
         were just sent must be told why it is missing and how to grade it (Guap, 2026-09-30).
+        Embedded, the guide's "Check a trade" card says this in one line with the upload link.
       */}
-      {data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
+      {!embedded && data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
 
       {/*
         ⚠ THIS SECTION IS WIRED AND ALMOST ALWAYS EMPTY, AND THAT IS CORRECT.
@@ -457,7 +466,13 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
               is a stated rule the list is not following. Found by rendering it.
             */
             label={
-              anyDeadline
+              embedded
+                ? anyFresh
+                  ? 'Newest trades first'
+                  : anyTrades
+                    ? 'Leagues with trades first'
+                    : 'No trades on file yet'
+                : anyDeadline
                 ? anyFresh
                   ? `Top ${data.windows.length} · newest trades first, then leagues with trades, then deadline`
                   : anyTrades
@@ -475,7 +490,7 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
           />
           <ul className="af-bd-cards af-bd-cards--rich">
             {data.windows.map((w) => (
-              <WindowCard key={w.leagueId} row={w} />
+              <WindowCard key={w.leagueId} row={w} copy={teamCopy} />
             ))}
           </ul>
         </section>
@@ -491,7 +506,26 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         board that silently treats those as open-all-season is telling a manager
         their window is safe on no evidence.
       */}
-      {data.deadlineUnknown > 0 ? (
+      {embedded ? (
+        <details className="af-bd-note af-bd-note--plain af-tg-how">
+          <summary>{guide.howGrades}</summary>
+          <p>
+            Grades price both sides on this league&rsquo;s own values. A completed trade keeps the grade it got
+            the first time AllFantasy graded it, so it does not change as values move. A trade whose assets could
+            not all be priced is shown with its reason instead of a letter.
+            {data.deadlineUnknown > 0
+              ? ` ${data.deadlineUnknown} of your leagues have never published a trade deadline; they sort below the ones that have.`
+              : ''}
+          </p>
+        </details>
+      ) : null}
+      {embedded ? (
+        <p className="af-tg-teach">
+          <b>{guide.why}</b> {guide.tradesTeach}
+        </p>
+      ) : null}
+
+      {!embedded && data.deadlineUnknown > 0 ? (
         <p className="af-bd-note">
           <strong>
             {data.deadlineUnknown} of your leagues have never published a trade deadline.
@@ -501,12 +535,14 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         </p>
       ) : null}
 
+      {embedded ? null : (
       <p className="af-bd-note af-bd-note--plain">
         Grades price both sides on this league&rsquo;s own values. A completed trade keeps the
         grade it got the first time AllFantasy graded it, so it does not change as values move.
         A trade whose assets could not all be priced is shown with its reason instead of a
         letter — a &ldquo;C&rdquo; from no data would read as &ldquo;an average trade&rdquo;.
       </p>
+      )}
 
       <FooterSummary
         hidden={Math.max(0, data.considered - data.windows.length)}

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'count must be 1–50' }, { status: 400 })
     }
 
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
 
     const league = await prisma.league.findFirst({
       where: { id: leagueId },

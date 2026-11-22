@@ -1,6 +1,7 @@
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
 import type { ResolvedRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
+import { benchCapacityWithEmptyStarters } from '@/lib/roster/benchCapacity'
 
 export type RedraftLineupIssueSeverity = 'error' | 'warning'
 
@@ -41,7 +42,7 @@ export type RedraftLineupMove = {
 }
 
 const REQUIRED_FOOTBALL_POSITIONS = ['QB', 'RB', 'WR'] as const
-const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE'])
+const NON_STARTER_SLOTS = new Set(['BENCH', 'BN', 'IR', 'TAXI', 'DEVY', 'RESERVE', 'IL', 'IL_PLUS', 'NA', 'PROSPECT', 'RIGHTS', 'MINORS'])
 const INJURY_ERROR_STATUSES = new Set([
   'OUT',
   'O',
@@ -104,7 +105,16 @@ function isStarterSlot(slotType: string, capacities: Map<string, number>): boole
   return capacities.has(normalizeToken(slotType))
 }
 
-function isNonStarterSlot(slotType: string): boolean {
+/**
+ * Whether a player's injury designation keeps them out of a starting lineup — the same test
+ * `validateRedraftLineup` applies, exported so other reads (the weekly commissioner checklist) flag
+ * exactly the lineups this validator would refuse.
+ */
+export function cannotStart(player: { injuryStatus?: string | null }): boolean {
+  return INJURY_ERROR_STATUSES.has(normalizeToken(player.injuryStatus)) || isRuledOut(player.injuryStatus)
+}
+
+export function isNonStarterSlot(slotType: string): boolean {
   return NON_STARTER_SLOTS.has(normalizeToken(slotType))
 }
 
@@ -313,13 +323,28 @@ export function validateRedraftLineup(args: {
     }
   }
 
+  // A slot nobody on the bench can play is a gap in the ROSTER, not a lineup mistake: refusing it
+  // refused every lineup the team could save until a player arrived. It stays a warning, so the
+  // manager is told; an empty slot a bench player could fill is still the manager's to fix.
+  const benchPositions = players
+    .filter((player) => normalizeToken(player.slotType) === 'BENCH')
+    .map((player) => normalizeToken(player.position))
+    .filter(Boolean)
+  const benchCanPlay = (slot: string) => {
+    const allowed = allowedPositionsForSlot(sport, slot)
+    return benchPositions.some((position) => allowed.includes(position))
+  }
   for (const [slot, capacity] of capacities) {
     const count = starterCounts.get(slot) ?? 0
     if (count < capacity) {
+      const fillable = benchCanPlay(slot)
       issues.push(
         issue({
           code: 'missing_starter_slot',
-          message: `${slot} requires ${capacity} starter${capacity === 1 ? '' : 's'}; currently ${count}.`,
+          ...(fillable ? {} : { severity: 'warning' as const }),
+          message: fillable
+            ? `${slot} requires ${capacity} starter${capacity === 1 ? '' : 's'}; currently ${count}.`
+            : `${slot} requires ${capacity} starter${capacity === 1 ? '' : 's'}; currently ${count}, and nobody on the roster can play it.`,
           slotType: slot,
         }),
       )
@@ -329,10 +354,14 @@ export function validateRedraftLineup(args: {
   for (const position of REQUIRED_FOOTBALL_POSITIONS) {
     if (!capacities.has(position)) continue
     if ((startedPositionCounts.get(position) ?? 0) === 0) {
+      const onBench = benchPositions.includes(normalizeToken(position))
       issues.push(
         issue({
           code: 'missing_required_position',
-          message: `${position} is required in every legal lineup.`,
+          ...(onBench ? {} : { severity: 'warning' as const }),
+          message: onBench
+            ? `${position} is required in every legal lineup.`
+            : `${position} is required in every legal lineup, and nobody on the roster plays it.`,
           slotType: position,
         }),
       )
@@ -352,8 +381,12 @@ export function validateRedraftLineup(args: {
       else if (slot === 'IR' || slot === 'RESERVE') ir += 1
       else if (slot === 'TAXI' || slot === 'DEVY') taxi += 1
     }
-    if (bench > rc.benchSlots) {
-      issues.push(issue({ code: 'bench_slot_overflow', message: `Bench has ${bench} players but only ${rc.benchSlots} bench slot${rc.benchSlots === 1 ? '' : 's'} are allowed.`, slotType: 'BENCH' }))
+    // One extra bench place for each starting slot left empty; `roster_over_max` below still holds.
+    const starterSlots = [...capacities.values()].reduce((sum, n) => sum + n, 0)
+    const startersFilled = [...starterCounts.values()].reduce((sum, n) => sum + n, 0)
+    const benchCapacity = benchCapacityWithEmptyStarters({ benchSlots: rc.benchSlots, starterSlots, startersFilled })
+    if (bench > benchCapacity) {
+      issues.push(issue({ code: 'bench_slot_overflow', message: `Bench has ${bench} players but only ${benchCapacity} bench slot${benchCapacity === 1 ? '' : 's'} are allowed.`, slotType: 'BENCH' }))
     }
     if (ir > rc.irSlots) {
       issues.push(issue({ code: 'ir_slot_overflow', message: `IR has ${ir} players but only ${rc.irSlots} IR slot${rc.irSlots === 1 ? '' : 's'} are allowed.`, slotType: 'IR' }))
@@ -380,4 +413,12 @@ export function validateRedraftLineup(args: {
     errorCount,
     warningCount,
   }
+}
+
+/** Preserve defense abbreviations while splitting dual positions. */
+export function redraftPlayerPositionTokens(position: string | null | undefined): string[] {
+  return String(position ?? '').split(/[,;]/).flatMap(part => {
+    const value = part.trim().toUpperCase()
+    return ['D/ST', 'DEF/ST'].includes(value) ? ['DEF'] : value.split('/').map(normalizeToken)
+  }).filter(Boolean)
 }

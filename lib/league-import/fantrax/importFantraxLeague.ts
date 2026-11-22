@@ -10,22 +10,35 @@
  */
 
 import 'server-only'
+import { getCachedFantraxPlayerIds } from './fantraxPlayerDirectoryCache'
 import { preserveSnapshotNames } from './preserveSnapshotNames'
+import { withFantraxDisplayNames } from './fantraxPlayerName'
 
-import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
+import { getFantraxDraftPicks, getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
+import {
+  buildStoredFantraxDraft,
+  buildStoredFantraxFuturePicks,
+  deriveFantraxMovesBetweenSnapshots,
+  mergeFantraxSnapshotHistory,
+  readStoredFantraxDraft,
+} from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
-import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
-import { fantraxImportSeason, isFantraxSplitSeasonSport } from './fantraxProSports'
+import { linkNflFantraxIdentities } from '@/lib/player-identity/linkNflFantraxIdentities'
+import { resolveFantraxIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
+import { fantraxScoringRules, isFantraxSoccerScoring, type FantraxScoringRule } from './fantraxScoring'
+import { fantraxImportSeason, isFantraxSplitSeasonSport, usesFantraxPeriodCalendar } from './fantraxProSports'
 import {
   fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
-  getFantraxPlayerIds,
   getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
   type FantraxFailure,
+  type FantraxLeagueInfo,
+  type FantraxPlayerRef,
+  type FantraxSport,
   type FantraxStandingRow,
   type ResolvedRoster,
 } from './fantraxApi'
@@ -45,16 +58,24 @@ export type FantraxImportOutcome =
        * and the live path re-reads getLeagueInfo on every import anyway.
        */
       scoringRules: FantraxScoringRule[]
-      sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> }
+      sourceSettings: {
+        scoringSystem: Record<string, unknown> | null
+        rosterInfo: Record<string, unknown>
+        lastPeriod?: number
+        firstPlayoffPeriod?: number
+        scoringPeriods?: FantraxLeagueInfo['scoringPeriods']
+        playoffs?: FantraxLeagueInfo['playoffs']
+        /** Fantrax team id → division name, when the league has two or more divisions. */
+        teamDivisions?: Record<string, string>
+      }
       scoringGaps: string[]
       /**
        * What the league's draft board actually contained.
        *
-       * ⚠ RETURNED RATHER THAN STORED, for the same reason `scoringRules` above
-       * is: `FantraxLeague` has no draft column. Adding one is a migration, and a
-       * migration is not this import's call — so the capability lands first and
-       * the persistence decision stays with the repo owner. A caller that wants
-       * the picks has them here; nothing silently half-writes them.
+       * ⚠ ALSO STORED NOW: the made picks are written to the snapshot's existing
+       * `transactions` column under `fantraxDraft` (see `fantraxSnapshotHistory.ts`),
+       * which is what reaches `DraftFact`. This summary is the same board, returned
+       * for callers that report on it.
        *
        * `picks` holds only the slots actually used —
        * `NormalizedDraftPick.source_player_id` is required and an unmade slot has
@@ -120,11 +141,19 @@ export async function importFantraxLeague(args: {
   ownershipVerified?: boolean
   /** Refresh an owned snapshot in place, retaining its downstream league identity. */
   refreshSnapshotId?: string
+  /**
+   * Fantrax's own id for the caller's team, when the caller knows it. Preferred over
+   * `teamName` — see the team lookup below for why a name is not an identity.
+   */
+  teamId?: string | null
 }): Promise<FantraxImportOutcome> {
   const refreshTarget = args.refreshSnapshotId
     ? await prisma.fantraxLeague.findUnique({
         where: { id: args.refreshSnapshotId },
-        select: { id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true },
+        select: {
+          id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true,
+          userTeam: true, standings: true, transactions: true,
+        },
       })
     : null
   if (args.refreshSnapshotId && (
@@ -135,11 +164,31 @@ export async function importFantraxLeague(args: {
   }
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message, kind: info.failure.kind }
+  // The EPL capture identifies the sport in its scoring groups.
+  const soccer = isFantraxSoccerScoring(info.data.scoringSystem)
+  if (refreshTarget?.sport?.toLowerCase() === 'soccer' && !soccer) {
+    return { ok: false, error: 'The source no longer confirms this is a Fantrax Soccer league', kind: 'unavailable' }
+  }
+  /* Shared between imports for a short while: the directories are the same for every league, and
+     downloading all six on every import was most of this function's traffic. */
+  /*
+   * 🛑 A REFRESH ALREADY KNOWS THE SPORT, AND USED TO DOWNLOAD ALL SIX DIRECTORIES ANYWAY. The six
+   * are fetched because a Fantrax league does not say what sport it is, so the import measures
+   * which directory names its players. A snapshot being refreshed was measured when it was first
+   * imported and a league does not change sport, so its own directory is asked for first and the
+   * other five only if that one turns out not to fit (see `knownDirectoryFits` below).
+   */
+  const knownSport: FantraxSport | null = refreshTarget
+    ? (KNOWN_SPORT_DIRECTORY[String(refreshTarget.sport ?? '').trim().toLowerCase()] ?? null)
+    : null
+  const loadDirectory = (sport: FantraxSport) => soccer ? Promise.resolve(null) : getCachedFantraxPlayerIds(sport)
+  const directoryFor = (sport: FantraxSport) =>
+    knownSport && sport !== knownSport ? Promise.resolve(null) : loadDirectory(sport)
   // The live endpoint can roll into another season. Never overwrite an archive
   // or stamp its old roster as freshly fetched when that happens.
   // NBA/NHL seasons are keyed by the year they begin, so compare in that key;
   // every other sport keeps the exact comparison it always had.
-  const liveSeasonForRefresh = refreshTarget && isFantraxSplitSeasonSport(refreshTarget.sport)
+  const liveSeasonForRefresh = refreshTarget && (soccer || isFantraxSplitSeasonSport(refreshTarget.sport))
     ? fantraxImportSeason(info.data, refreshTarget.sport)
     : Number(info.data.seasonYear)
   if (refreshTarget && liveSeasonForRefresh !== refreshTarget.season) {
@@ -166,6 +215,7 @@ export async function importFantraxLeague(args: {
    * It fails SOFT, like the sport maps and unlike rosters: a league that has not
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
+   * A failed read keeps the board already on file rather than erasing it.
    */
   /*
    * ⚠ NBA AND NHL ARE TWO MORE CANDIDATE MAPS, NOT A SPORT SWITCH. Fantrax's
@@ -174,49 +224,125 @@ export async function importFantraxLeague(args: {
    * Their `getPlayerIds` shape is not captured (contracts/fantrax/GAPS.md); a
    * map that fails to load fails soft below, exactly like the others.
    */
-  const [rosters, standings, cfb, nfl, mlb, nba, nhl, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst, schedule, draft, pickInventory] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
-    getFantraxPlayerIds('CFB'),
-    getFantraxPlayerIds('NFL'),
-    getFantraxPlayerIds('MLB'),
-    getFantraxPlayerIds('NBA'),
-    getFantraxPlayerIds('NHL'),
+    directoryFor('CFB'),
+    directoryFor('NFL'),
+    directoryFor('MLB'),
+    directoryFor('NBA'),
+    directoryFor('NHL'),
+    directoryFor('NCAAB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
+    /* Future-season picks and who holds them. Fails soft like the board: a league still imports
+       without them, and a failed read keeps the inventory already on file. */
+    Promise.resolve().then(() => getFantraxDraftPicks(args.leagueId)).catch(() => null),
   ])
+  let [cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw] = [cfbFirst, nflFirst, mlbFirst, nbaFirst, nhlFirst, ncaabFirst]
+  /*
+   * ⚠ THE SHORTCUT IS ONLY KEPT WHEN IT IS PLAINLY RIGHT. If the known sport's directory did not
+   * load, or names fewer than half of the league's players, every directory is fetched and the
+   * sport is measured from scratch exactly as on a first import. So a wrong stored sport, a league
+   * with nothing to measure, or one failed request costs the old six downloads — never a refresh
+   * that fails, or succeeds against the wrong player list.
+   */
+  if (knownSport && !soccer) {
+    const known = { CFB: cfbRaw, NFL: nflRaw, MLB: mlbRaw, NBA: nbaRaw, NHL: nhlRaw, NCAAB: ncaabRaw }[knownSport as 'CFB']
+    if (!knownDirectoryFits(known?.ok ? known.data : null, rosters.ok ? rosters.data : null, info.data.playerInfo)) {
+      ;[cfbRaw, nflRaw, mlbRaw, nbaRaw, nhlRaw, ncaabRaw] = await Promise.all([
+        loadDirectory('CFB'), loadDirectory('NFL'), loadDirectory('MLB'),
+        loadDirectory('NBA'), loadDirectory('NHL'), loadDirectory('NCAAB'),
+      ])
+    }
+  }
+  /*
+   * Fantrax's directories name players "Last, First"; the season rosters and the draft board store
+   * what is read from here on, so it is read in "First Last". The NFL identity link below takes the
+   * RAW names, because it tells a team defense from a player by the comma.
+   */
+  const inDisplayOrder = (r: typeof cfbRaw): typeof cfbRaw => (r?.ok ? { ...r, data: withFantraxDisplayNames(r.data) } : r)
+  const cfb = inDisplayOrder(cfbRaw), nfl = inDisplayOrder(nflRaw), mlb = inDisplayOrder(mlbRaw), nba = inDisplayOrder(nbaRaw), nhl = inDisplayOrder(nhlRaw), ncaab = inDisplayOrder(ncaabRaw)
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok && !mlb.ok && !nba.ok && !nhl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (cfb && !cfb.ok && !nfl?.ok && !mlb?.ok && !nba?.ok && !nhl?.ok && !ncaab?.ok) {
+    return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  }
+
+  const soccerMap: Record<string, FantraxPlayerRef> = {}
+  if (soccer) {
+    const ids = [...new Set(Object.values(rosters.data).flatMap((team) => (team.rosterItems ?? []).map((item) => item.id)))]
+    const identities = await resolveFantraxIdentities('SOCCER', ids)
+    for (const [id, identity] of identities) {
+      if (identity.name) {
+        soccerMap[id] = { fantraxId: id, name: identity.name, position: identity.position ?? '', team: identity.team ?? '' }
+      }
+    }
+  }
 
   /*
-   * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
-   * ASSUMED. `getLeagueInfo` returns a name, a season and teams — nothing that
-   * says college or pro. The id spaces do not overlap at all (measured on a real
+   * Outside Soccer, measure sport from the player maps. The league info cannot
+   * distinguish college from pro football. The id spaces do not overlap at all (measured on a real
    * college league: 0 of 38 ids in the NFL map, 447 of 466 in CFB), so whichever
    * map names more players IS the sport. Hardcoding CFB made every NFL Fantrax
    * league look empty, which is why the tile could only ever claim college.
    */
+  /*
+   * ⚠ `isDevy` IS FALSE FOR EVERY SPORT, COLLEGE INCLUDED. It was `true` for the CFB map, which filed
+   * every college-football league — a plain college redraft league too — as devy (devy scoring label,
+   * `isDynasty`, the devy count in chat context). A college player pool says what SPORT a league is,
+   * not that it is devy, and `getLeagueInfo` carries no devy/dynasty flag (contracts/fantrax/GAPS.md
+   * F-06). The CSV upload's explicit checkbox remains the only way a Fantrax league becomes devy.
+   */
   const candidates = [
-    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
-    nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
-    mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
-    nba.ok ? { sport: 'nba' as const, isDevy: false, resolved: resolveRosters(rosters.data, nba.data) } : null,
-    nhl.ok ? { sport: 'nhl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nhl.data) } : null,
+    cfb?.ok ? { sport: 'cfb' as const, isDevy: false, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
+    nfl?.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
+    mlb?.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
+    nba?.ok ? { sport: 'nba' as const, isDevy: false, resolved: resolveRosters(rosters.data, nba.data) } : null,
+    nhl?.ok ? { sport: 'nhl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nhl.data) } : null,
+    ncaab?.ok ? { sport: 'ncaab' as const, isDevy: false, resolved: resolveRosters(rosters.data, ncaab.data) } : null,
+    soccer ? { sport: 'soccer' as const, isDevy: false, resolved: resolveRosters(rosters.data, soccerMap) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
 
+  /*
+   * ⚠ A LEAGUE THAT HAS NOT DRAFTED HAS NO ROSTER IDS TO MEASURE, so every map names zero players
+   * and the import used to refuse it — the most common moment to move a league. The league's own
+   * player pool (`getLeagueInfo.playerInfo`, every player the league can roster) is the same id
+   * space, so when every roster is empty the pool is measured instead. Captured 2026-10-26 on four
+   * pre-draft public leagues: 1,287 of 1,287 NBA pool ids are in the NBA map and 0 in NHL; 8,757 of
+   * 8,757 NHL ids in NHL and 0 in NBA (tests/fixtures/fantrax/*-public-2026.json).
+   */
+  const rosterPlayers = candidates[0]?.resolved.reduce((a, r) => a + r.total, 0) ?? 0
+  const poolIds = rosterPlayers === 0 ? Object.keys(recordOf(info.data.playerInfo)) : []
+  const mapFor: Record<string, Record<string, unknown> | null> = {
+    cfb: cfb?.ok ? cfb.data : null, nfl: nfl?.ok ? nfl.data : null, mlb: mlb?.ok ? mlb.data : null,
+    nba: nba?.ok ? nba.data : null, nhl: nhl?.ok ? nhl.data : null, ncaab: ncaab?.ok ? ncaab.data : null,
+    soccer: soccerMap,
+  }
   const scored = candidates
-    .map((c) => ({ ...c, named: c.resolved.reduce((a, r) => a + r.resolved, 0) }))
+    .map((c) => ({
+      ...c,
+      named: poolIds.length > 0
+        ? poolIds.filter((id) => mapFor[c.sport]?.[id] != null).length
+        : c.resolved.reduce((a, r) => a + r.resolved, 0),
+    }))
     .sort((a, b) => b.named - a.named)
 
   const best = scored[0]
-  if (!best || best.named === 0 || scored[1]?.named === best.named) {
-    return { ok: false, error: 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.' }
+  if (!best || (!soccer && (best.named === 0 || scored[1]?.named === best.named))) {
+    return {
+      ok: false,
+      error: rosterPlayers === 0 && poolIds.length === 0
+        ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+        : best && best.named > 0
+          ? 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.'
+          : "This league's players do not match the college football, college basketball, NFL, MLB, NBA or NHL player lists, so it was not imported. Nothing was saved.",
+    }
   }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
-  const named = best.named
+  const named = resolved.reduce((sum, roster) => sum + roster.resolved, 0)
 
   /*
    * ⚠ A LEAGUE WHERE ALMOST NOTHING RESOLVED IS THE WRONG SPORT MAP, NOT AN
@@ -224,16 +350,28 @@ export async function importFantraxLeague(args: {
    * both maps are tried, reaching here means NEITHER fits — so the message says
    * that rather than blaming one of them.
    */
-  if (total > 0 && named / total < 0.5) {
+  if (!soccer && total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `Only ${named} of ${total} players could be named against the college, NFL, MLB, NBA or NHL player maps. Nothing was imported.`,
+      error: `Only ${named} of ${total} players could be named against the college football, college basketball, NFL, MLB, NBA or NHL player maps. Nothing was imported.`,
     }
   }
 
-  const mine = resolved.find(
-    (r) => r.teamName.toLowerCase() === args.teamName.trim().toLowerCase(),
-  )
+  /*
+   * ⚠ BY FANTRAX TEAM ID FIRST, NAME ONLY AS THE FALLBACK. A refresh is handed the
+   * snapshot's stored `userTeam` — the name the team had at the LAST import. Matching on
+   * that alone meant a manager who renamed their team on Fantrax could never be refreshed
+   * again ("no team named …"), and worse, if another manager had since taken the old
+   * name, the refresh silently attributed THAT team's roster to the importer. The stored
+   * standings carry each team's durable `fantraxTeamId` (written by `summarise` below),
+   * which survives a rename. CSV-era snapshots carry no id, and only they fall back.
+   */
+  const wantedTeamId =
+    String(args.teamId ?? '').trim() ||
+    storedTeamIdFor(refreshTarget?.standings, refreshTarget?.userTeam ?? args.teamName)
+  const mine =
+    (wantedTeamId ? resolved.find((r) => r.teamId === wantedTeamId) : undefined) ??
+    resolved.find((r) => r.teamName.toLowerCase() === args.teamName.trim().toLowerCase())
   if (!mine) {
     return {
       ok: false,
@@ -266,7 +404,7 @@ export async function importFantraxLeague(args: {
         season,
       },
     },
-    select: { appUserId: true },
+    select: { appUserId: true, sourceLeagueId: true, roster: true, standings: true, transactions: true },
   })
   /*
    * ⚠ THIS REFUSED PEOPLE THEIR OWN LEAGUES, AND THE IDENTITY IS WHY.
@@ -297,6 +435,51 @@ export async function importFantraxLeague(args: {
    * readable draft yields an empty summary rather than a thrown import.
    */
   const draftSummary = mapFantraxDraftResults(draft && draft.ok ? draft.data : null, { season })
+
+  /*
+   * ⚠ THE BOARD AND THE DERIVED MOVES ARE STORED NOW, in the snapshot's existing `transactions`
+   * column beside an uploaded export's groups (see `fantraxSnapshotHistory.ts`). The fetch service
+   * reads them into the payload, and `FantraxHistoricalBackfillService` writes them to `DraftFact`
+   * / `TransactionFact` like every other source. No migration: the column already exists.
+   *
+   * The previous roster is only trusted from a snapshot of THIS Fantrax league — a refresh, or a
+   * re-import of the row this upsert is about to overwrite. A CSV-era row carries no team names on
+   * its roster and derives nothing.
+   */
+  const prior = refreshTarget ?? (existing && existing.sourceLeagueId === args.leagueId ? existing : null)
+  const sportMap = (mapFor[best.sport] ?? null) as Record<string, FantraxPlayerRef | undefined> | null
+  const storedDraft = draft && draft.ok
+    ? buildStoredFantraxDraft(draft.data, Object.fromEntries(resolved.map((r) => [r.teamId, r.teamName])), sportMap)
+    : null
+  const boardOnFile = storedDraft ?? readStoredFantraxDraft((refreshTarget ?? existing)?.transactions)
+  const observedAt = new Date().toISOString()
+  const storedFuturePicks = pickInventory && pickInventory.ok
+    ? buildStoredFantraxFuturePicks(
+        pickInventory.data.future,
+        Object.fromEntries(resolved.map((r) => [r.teamId, r.teamName])),
+        observedAt,
+      )
+    : null
+  const observedPeriod = schedule.position?.period ?? null
+  const retainPeriodCalendar = usesFantraxPeriodCalendar(best.sport)
+  const derived = prior
+    ? deriveFantraxMovesBetweenSnapshots({
+        previousRoster: prior.roster,
+        previousStandings: prior.standings,
+        current: resolved,
+        draftedBy: new Map((boardOnFile?.picks ?? []).map((p) => [p.playerId, p.teamId])),
+        period: observedPeriod,
+        observedAt,
+      })
+    : { moves: [], suspectedTrades: [] }
+  const history = mergeFantraxSnapshotHistory((refreshTarget ?? existing)?.transactions, {
+    draft: storedDraft,
+    futurePicks: storedFuturePicks,
+    moves: derived.moves,
+    suspectedTrades: derived.suspectedTrades,
+    period: observedPeriod,
+    observedAt,
+  })
 
   const payload = {
     appUserId: args.appUserId,
@@ -343,6 +526,8 @@ export async function importFantraxLeague(args: {
      * so a null week arrives as "no score on file" instead of a scoreless tie.
      */
     matchups: schedule.rows as unknown as object,
+    /* The export's groups, the stored draft board and the derived moves — see above. */
+    transactions: history as unknown as object,
   }
 
   let row: { id: string }
@@ -370,6 +555,25 @@ export async function importFantraxLeague(args: {
 
   }
 
+  /*
+   * ⚠ NFL WAS THE ONE FANTRAX SPORT WHOSE IDS NEVER REACHED `PlayerIdentityMap.fantraxId`, so an
+   * NFL Fantrax roster resolved nobody by id. The ids and names are already in hand from the NFL
+   * map read above; link this league's rostered and drafted players (by id first, then exact name +
+   * team + position — `nflFantraxIdentityPlan.ts`). Never fails the import.
+   */
+  if (best.sport === 'nfl' && nflRaw?.ok) {
+    const nflMap = nflRaw.data as Record<string, FantraxPlayerRef | undefined>
+    const leaguePlayerIds = new Set([
+      ...resolved.flatMap((r) => r.players.map((p) => p.fantraxId)),
+      ...(boardOnFile?.picks ?? []).map((p) => p.playerId),
+    ])
+    const refs = [...leaguePlayerIds].flatMap((id) => {
+      const ref = nflMap[id]
+      return ref ? [{ ...ref, fantraxId: String(ref.fantraxId ?? id) }] : []
+    })
+    await linkNflFantraxIdentities(refs)
+  }
+
   return {
     ok: true,
     fantraxLeagueId: row.id,
@@ -387,11 +591,54 @@ export async function importFantraxLeague(args: {
       state: draftSummary.draftState,
     },
     scoringGaps: scoring.gaps,
-    sourceSettings: { scoringSystem: info.data.scoringSystem ?? null, rosterInfo: info.data.rosterInfo },
-    seasonState: schedule.position?.state ?? null,
+    sourceSettings: {
+      scoringSystem: info.data.scoringSystem ?? null,
+      rosterInfo: info.data.rosterInfo,
+      ...fantraxTeamDivisions(info.data),
+      ...(retainPeriodCalendar ? fantraxPeriodCalendar(info.data) : {}),
+    },
+    seasonState: schedule.position?.state ?? (retainPeriodCalendar ? fantraxSeasonDateState(info.data) : null),
     currentPeriod: schedule.position?.period ?? null,
     scoredPeriodsRead: schedule.periodsRead,
     scoredPeriodsFailed: schedule.periodsFailed,
+  }
+}
+
+/** Each team's division, by Fantrax team id. Nothing unless the league really is split in two or more. */
+function fantraxTeamDivisions(info: FantraxLeagueInfo): { teamDivisions?: Record<string, string> } {
+  const teamDivisions: Record<string, string> = {}
+  for (const [key, team] of Object.entries(recordOf(info.teamInfo))) {
+    const row = recordOf(team)
+    const id = String(row.id ?? key ?? '').trim()
+    const division = typeof row.division === 'string' ? row.division.trim() : ''
+    if (id && division) teamDivisions[id] = division
+  }
+  return new Set(Object.values(teamDivisions)).size >= 2 ? { teamDivisions } : {}
+}
+
+function fantraxSeasonDateState(info: FantraxLeagueInfo, now = new Date()) {
+  const start = new Date(info.startDate ?? '').getTime()
+  const endDate = info.endDate ?? ''
+  const end = new Date(endDate).getTime()
+  const endExclusive = /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? end + 86_400_000 : end
+  if (now.getTime() < start) return 'preseason'
+  if (now.getTime() >= endExclusive) return 'complete'
+  return Number.isFinite(start) || Number.isFinite(end) ? 'in_progress' : null
+}
+
+function fantraxPeriodCalendar(info: FantraxLeagueInfo) {
+  const periods = [
+    ...(info.scoringPeriods ?? []).map((period) => period.number),
+    ...(info.matchups ?? []).map((period) => period.period),
+  ].filter((period) => Number.isSafeInteger(period) && period > 0)
+  const firstPlayoffPeriod = info.playoffs?.used === true ? info.playoffs.firstPlayoffPeriod : null
+  return {
+    ...(periods.length > 0 ? { lastPeriod: Math.max(...periods) } : {}),
+    scoringPeriods: info.scoringPeriods ?? [],
+    playoffs: info.playoffs ?? null,
+    ...(typeof firstPlayoffPeriod === 'number' && Number.isSafeInteger(firstPlayoffPeriod) && firstPlayoffPeriod > 0
+      ? { firstPlayoffPeriod }
+      : {}),
   }
 }
 
@@ -409,11 +656,16 @@ export async function importFantraxLeague(args: {
  * fixing.
  */
 function summarise(resolved: ResolvedRoster[], standings: FantraxStandingRow[] | null) {
+  /* By team id first: both endpoints key teams on Fantrax's own id, and a display name
+     is the one field a manager can change. The name is the fallback for a row with no id. */
+  const byId = new Map(
+    (standings ?? []).filter((row) => row.teamId).map((row) => [row.teamId, row]),
+  )
   const byName = new Map(
     (standings ?? []).map((row) => [row.teamName.trim().toLowerCase(), row]),
   )
   return resolved.map((r) => {
-    const row = byName.get(r.teamName.trim().toLowerCase()) ?? null
+    const row = (r.teamId ? byId.get(r.teamId) : undefined) ?? byName.get(r.teamName.trim().toLowerCase()) ?? null
     return {
       team: r.teamName,
       rosterCount: r.total,
@@ -517,4 +769,50 @@ export async function attachToFranchise(args: {
   }
 
   return { ok: true, linkId: link.id }
+}
+
+/**
+ * The Fantrax team id a stored snapshot recorded for `teamName`, from its standings
+ * column (`summarise` writes `{ team, fantraxTeamId }` per team). Empty when the
+ * snapshot predates ids or never named that team.
+ */
+function storedTeamIdFor(standings: unknown, teamName: string | null | undefined): string {
+  const wanted = String(teamName ?? '').trim().toLowerCase()
+  if (!wanted || !Array.isArray(standings)) return ''
+  for (const row of standings) {
+    const r = recordOf(row)
+    if (String(r.team ?? '').trim().toLowerCase() !== wanted) continue
+    const id = r.fantraxTeamId
+    return typeof id === 'string' ? id.trim() : ''
+  }
+  return ''
+}
+
+/** Stored snapshot sport -> the Fantrax directory that names its players. Soccer has none here. */
+const KNOWN_SPORT_DIRECTORY: Record<string, FantraxSport> = {
+  cfb: 'CFB', nfl: 'NFL', mlb: 'MLB', nba: 'NBA', nhl: 'NHL', ncaab: 'NCAAB',
+}
+
+/**
+ * Whether one directory names at least half of a league's players — the same bar the import uses
+ * to accept a sport.
+ *
+ * Measured on the rostered players, or on the league's own player pool when nobody is rostered yet
+ * (a league that has not drafted). With nothing to measure the answer is no, so the caller falls
+ * back to measuring every directory.
+ */
+export function knownDirectoryFits(
+  directory: Record<string, unknown> | null,
+  rosters: Record<string, { rosterItems?: Array<{ id: string }> | null }> | null,
+  playerInfo: unknown,
+): boolean {
+  if (!directory) return false
+  let ids = [...new Set(Object.values(rosters ?? {}).flatMap((team) => (team?.rosterItems ?? []).map((item) => item.id)))]
+  if (ids.length === 0) ids = Object.keys(recordOf(playerInfo))
+  if (ids.length === 0) return false
+  return ids.filter((id) => directory[id] != null).length / ids.length >= 0.5
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }

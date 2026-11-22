@@ -3,6 +3,9 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 export const CHIMMY_AI_EVENT_NAMES = [
+  'bracket_entry_cta_click',
+  'bracket_alert_opt_in',
+  'bracket_alert_open',
   'chip_click',
   'followup_click',
   'mode_change',
@@ -17,9 +20,14 @@ export const CHIMMY_AI_EVENT_NAMES = [
    * was replaced or annotated, and the KPI rollup counts that name as a failure the user saw.
    */
   'guard_observed',
+  /**
+   * The second model's check of a decision answer (`lib/chimmy/decisionAnswerCheck.ts`): action is the outcome —
+   * clean, revised (a contradiction was corrected before the user saw it), kept or unavailable.
+   */
+  'decision_check',
 ] as const
 
-export const CHIMMY_AI_SURFACES = [
+const CHIMMY_AI_SURFACES = [
   'dashboard',
   'league',
   'draft_room',
@@ -30,7 +38,7 @@ export const CHIMMY_AI_SURFACES = [
   'chimmy_chat',
 ] as const
 
-export const CHIMMY_AI_MODES = [
+const CHIMMY_AI_MODES = [
   'fast_take',
   'deep_analysis',
   'commissioner_view',
@@ -38,7 +46,7 @@ export const CHIMMY_AI_MODES = [
   'dfs_upside',
 ] as const
 
-export const CHIMMY_AI_TOPICS = [
+const CHIMMY_AI_TOPICS = [
   'trade',
   'start_sit',
   'waiver',
@@ -63,7 +71,7 @@ export const ChimmyAIAnalyticsEventSchema = z.object({
 })
 
 export type ChimmyAIAnalyticsIngressEvent = z.infer<typeof ChimmyAIAnalyticsEventSchema>
-export type ChimmyAIAnalyticsEvent = Omit<ChimmyAIAnalyticsIngressEvent, 'user_id'> & {
+type ChimmyAIAnalyticsEvent = Omit<ChimmyAIAnalyticsIngressEvent, 'user_id'> & {
   user_id: string
 }
 

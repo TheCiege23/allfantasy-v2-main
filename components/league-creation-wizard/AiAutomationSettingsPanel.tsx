@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { StepHeader } from './StepHelp'
+import { DEFAULT_SELF_RUNNING_PRESET, offersSelfRunningPreset, SELF_RUNNING_OPTIONS } from '@/lib/league-creation-wizard/selfRunningPreset'
 
 export type AutomationDraftPreset = 'alerts_only' | 'standard' | 'full'
 
@@ -119,7 +120,7 @@ export function AiAutomationSettingsPanel({
     {
       key: 'leagueAutomation',
       label: 'League automation',
-      description: 'AI-assisted league cycles and commissioner workflows.',
+      description: 'Chimmy-assisted league cycles and commissioner workflows.',
     },
     {
       key: 'integrityMonitoring',
@@ -148,7 +149,7 @@ export function AiAutomationSettingsPanel({
     },
     {
       key: 'powerRankingsAi',
-      label: 'AI power rankings',
+      label: 'Chimmy power rankings',
       description: 'League power ranks with explanations.',
     },
     {
@@ -165,8 +166,8 @@ export function AiAutomationSettingsPanel({
   }[] = [
     {
       key: 'aiAdpEnabled',
-      label: 'AI rankings in draft room',
-      description: `Use AI-assisted player lists during the draft (${sport}).`,
+      label: 'Chimmy rankings in draft room',
+      description: `Use Chimmy-assisted player lists during the draft (${sport}).`,
     },
     {
       key: 'draftHelperEnabled',
@@ -184,16 +185,41 @@ export function AiAutomationSettingsPanel({
     <div className="space-y-8">
       <StepHeader
         title="Draft help & automation"
-        description="Free draft alerts and queue behavior. Advanced commissioner AI is optional and can be managed later in league settings."
+        description="Free draft alerts and queue behavior. Advanced commissioner Chimmy is optional and can be managed later in league settings."
         help={
           <>
             <strong>Free</strong> — draft notifications, autopick from queue, and slow-draft reminders (Sleeper-style draft
-            hygiene). <strong>AF Commissioner</strong> — optional AI tools for running the league; requires an active
+            hygiene). <strong>AF Commissioner</strong> — optional Chimmy tools for running the league; requires an active
             subscription.
           </>
         }
         helpTitle="How this step works"
       />
+
+      {offersSelfRunningPreset(leagueType) ? (
+        <section className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4" data-testid="self-running-preset">
+          <h4 className="text-sm font-semibold text-cyan-200/90">How much should AllFantasy run?</h4>
+          <p className="text-xs text-white/60">You can change any of this later on the Commissioner Hub, one switch at a time.</p>
+          <div className="space-y-2" role="radiogroup" aria-label="How much should AllFantasy run?">
+            {SELF_RUNNING_OPTIONS.map((o) => (
+              <label key={o.id} className="flex items-start gap-3 text-sm text-white/85">
+                <input
+                  type="radio"
+                  name="self-running-preset"
+                  className={CHECKBOX_CLASS}
+                  checked={(automationSettings.selfRunningPreset ?? DEFAULT_SELF_RUNNING_PRESET) === o.id}
+                  onChange={() => onAutomationChange({ selfRunningPreset: o.id })}
+                  data-testid={`self-running-${o.id}`}
+                />
+                <span>
+                  <strong>{o.label}</strong>
+                  <span className="block text-xs text-white/60">{o.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
         <h4 className="text-sm font-semibold text-cyan-200/90">Draft assistance (free)</h4>
@@ -254,7 +280,7 @@ export function AiAutomationSettingsPanel({
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-white">AF Commissioner AI</h4>
+          <h4 className="text-sm font-semibold text-white">AF Commissioner Chimmy</h4>
           {loading ? (
             <span className="text-xs text-white/45">Checking subscription…</span>
           ) : locked ? (
@@ -277,7 +303,7 @@ export function AiAutomationSettingsPanel({
         ) : null}
         {isC2c ? (
           <p className="rounded-lg border border-cyan-400/20 bg-cyan-500/[0.06] px-3 py-2 text-xs text-cyan-100/85">
-            <span className="font-semibold text-white/90">Campus to Canton:</span> commissioner AI can highlight pro and
+            <span className="font-semibold text-white/90">Campus to Canton:</span> commissioner Chimmy can highlight pro and
             college storylines, draft help across merged rounds, and fairness on cross-pool trades. Full C2C rules and
             pool sizes are tuned under <span className="text-white/80">League → Settings</span> after creation.
           </p>

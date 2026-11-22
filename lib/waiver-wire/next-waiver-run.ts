@@ -49,3 +49,29 @@ export function computeNextWaiverRunAtUtc(from: Date, input: NextRunInput): stri
   candidates.sort((a, b) => a.getTime() - b.getTime())
   return candidates[0]!.toISOString()
 }
+
+/**
+ * The latest scheduled waiver run at or before `at`, as a Date, or null if not enough config — the
+ * mirror of `computeNextWaiverRunAtUtc`. Used where a run must count as having cleared even though
+ * the processor wrote nothing (it records no run when no claim is pending).
+ */
+export function computePreviousWaiverRunAtUtc(at: Date, input: NextRunInput): Date | null {
+  const time = parseTimeUtc(input.processingTimeUtc ?? undefined)
+  if (!time) return null
+
+  const multi =
+    Array.isArray(input.processingDays) && input.processingDays.length > 0
+      ? input.processingDays.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : null
+
+  const targetDays = multi && multi.length > 0 ? multi : [input.processingDayOfWeek ?? 3]
+
+  for (let back = 0; back < 14; back += 1) {
+    const d = new Date(at.getTime())
+    d.setUTCDate(d.getUTCDate() - back)
+    if (!targetDays.includes(d.getUTCDay())) continue
+    d.setUTCHours(time.h, time.m, 0, 0)
+    if (d.getTime() <= at.getTime()) return d
+  }
+  return null
+}

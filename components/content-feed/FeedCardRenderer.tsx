@@ -2,20 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import {
-  Newspaper,
-  Users,
-  Sparkles,
-  Trophy,
-  User,
-  TrendingUp,
-  BookOpen,
-  BarChart3,
-  Zap,
-  Calendar,
-  Swords,
-  Bookmark,
-} from "lucide-react"
+import { Newspaper, Users, Sparkles, Trophy, User, TrendingUp, BookOpen, BarChart3, Swords, Bookmark } from "lucide-react"
 import type { ContentFeedItem, FeedItemType } from "@/lib/content-feed"
 
 const TYPE_ICONS: Record<FeedItemType, React.ComponentType<{ className?: string }>> = {
@@ -51,7 +38,7 @@ function getSafeHref(rawHref: string | null | undefined): string {
   return "/feed"
 }
 
-export interface FeedCardRendererProps {
+interface FeedCardRendererProps {
   item: ContentFeedItem
   onFollowCreator?: (creatorHandle: string) => void
   onSave?: (item: ContentFeedItem) => void

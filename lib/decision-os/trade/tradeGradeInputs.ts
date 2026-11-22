@@ -13,9 +13,10 @@
  * round has no price; leaving it out would grade the deal as though it were not in it.
  */
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
-import { parsePickLabel } from '@/lib/parsePickLabel'
+import { c2cDraftSide, parsePickLabel } from '@/lib/parsePickLabel'
+import type { PlayerIdSpace, ResolvedTradePlayer } from './tradePlayers'
 
-export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[] }
+export type GradeInputs = { assets: TradeAssetInput[]; unpriceable: string[]; valuationGap?: 'unresolved_player' }
 
 type PendingLike = {
   playerName: string
@@ -45,7 +46,7 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
     } else if (a.playerName?.trim()) {
       const id = a.playerId?.trim()
       out.assets.push({ kind: 'player', name: a.playerName.trim(),
-        ...(id && provider ? { providerIdentity: { provider, id,
+        ...(id && provider ? { rosterPlayerId: id, providerIdentity: { provider, id,
           ...(a.position?.trim() ? { position: a.position.trim() } : {}),
           ...(a.team?.trim() ? { team: a.team.trim() } : {}),
         } } : {}),
@@ -55,6 +56,39 @@ export function gradeInputsFromPending(assets: ReadonlyArray<PendingLike>, provi
     }
   }
   return out
+}
+
+/**
+ * Names for a trade's stored player ids (`loadNativePlayerNames`). In a provider league it also says
+ * which Sleeper id each provider id links to, because there the stored id is never a Sleeper id.
+ */
+export type NativeNameLookup = ((id: string) => string | null) & {
+  sleeperIdFor?: (id: string) => string | null
+  space?: PlayerIdSpace
+  sport?: string
+  identityFor?: (id: string) => ResolvedTradePlayer | undefined
+}
+
+export function gradePlayerFromRoster(args: {
+  id: string
+  name?: string | null
+  position?: string | null
+  space?: PlayerIdSpace | null
+  identity?: Extract<ResolvedTradePlayer, { ok: true }>
+}): Extract<TradeAssetInput, { kind: 'player' }> {
+  const { id, space, identity } = args
+  const name = identity?.name ?? args.name
+  const position = identity?.position ?? args.position
+  const sleeperId = identity?.sleeperId ?? (space === 'sleeper' ? id.replace(/^sleeper:/, '') : null)
+  return {
+    kind: 'player',
+    rosterPlayerId: id,
+    ...(name ? { name } : {}),
+    ...(identity?.externalId ? { playerId: identity.externalId } : {}),
+    ...(sleeperId ? { providerIdentity: { provider: 'sleeper' as const, id: sleeperId, ...(position ? { position } : {}) } }
+      : typeof space === 'object' && space?.provider === 'yahoo'
+        ? { providerIdentity: { provider: 'yahoo' as const, id, ...(position ? { position } : {}) } } : {}),
+  }
 }
 
 type NativeItemLike = {
@@ -87,8 +121,12 @@ const SELF_DESCRIBING_PICK = /^(?:fdp|pick):(\d{4}):(\d{1,2})(?::|$)/
  */
 export function gradeInputsFromNativeItems(
   items: ReadonlyArray<NativeItemLike>,
-  nameForId?: (id: string) => string | null | undefined,
+  nameForId?: NativeNameLookup | ((id: string) => string | null | undefined),
 ): GradeInputs {
+  // Present only for a provider league (Fantrax, ESPN, …): the stored id is that platform's, never a
+  // Sleeper id, so the Sleeper identity is whatever the player's identity row links to — or none.
+  const lookup = nameForId as NativeNameLookup | undefined
+  const sleeperIdFor = lookup?.sleeperIdFor
   const out: GradeInputs = { assets: [], unpriceable: [] }
   for (const item of items) {
     const meta = record(item.metadata)
@@ -104,7 +142,8 @@ export function gradeInputsFromNativeItems(
       const ref = SELF_DESCRIBING_PICK.exec(item.itemReference ?? '')
       const year = num(meta.pickSeason ?? meta.season) ?? (ref ? Number(ref[1]) : null)
       const round = num(meta.pickRound ?? meta.round) ?? (ref ? Number(ref[2]) : null)
-      if (year && round) out.assets.push({ kind: 'pick', year, round })
+      const draftSide = item.itemReference?.startsWith('fdp:') && ref ? 'canton' : c2cDraftSide(meta.pickSide) ?? parsePickLabel(str(meta.pickLabel ?? meta.label) ?? '')?.draftSide
+      if (year && round) out.assets.push({ kind: 'pick', year, round, ...(draftSide ? { draftSide } : {}) })
       // Named by its label, never by its id: a row id in a sentence tells a manager nothing.
       else out.unpriceable.push(str(meta.pickLabel ?? meta.label) ?? 'a draft pick with no season or round on file')
       continue
@@ -112,9 +151,23 @@ export function gradeInputsFromNativeItems(
     const ref = str(item.itemReference)
     const verifiedName = ref ? str(nameForId?.(ref)) : null
     const name = verifiedName ?? str(meta.playerName ?? meta.name)
+    if (ref && lookup?.space) {
+      const identity = lookup.identityFor?.(ref)
+      if (identity?.ok === false && identity.why === 'ambiguous') {
+        out.unpriceable.push(`${name ?? 'a player'} matches more than one identity`)
+        out.valuationGap = 'unresolved_player'
+      } else {
+        out.assets.push(gradePlayerFromRoster({ id: ref, name, position: str(meta.position), space: lookup.space,
+          ...(identity?.ok ? { identity } : {}),
+        }))
+      }
+      continue
+    }
+    // A Sleeper-keyed lookup verified `ref` itself as a Sleeper id; a provider lookup names the linked one.
+    const sleeperId = ref && verifiedName ? (sleeperIdFor ? str(sleeperIdFor(ref)) : ref) : null
     if (name) out.assets.push({ kind: 'player', name,
       // The lookup is specifically by SportsPlayer.sleeperId. Metadata alone does not verify a namespace.
-      ...(ref && verifiedName ? { providerIdentity: { provider: 'sleeper' as const, id: ref,
+      ...(sleeperId ? { providerIdentity: { provider: 'sleeper' as const, id: sleeperId,
         ...(str(meta.position) ? { position: str(meta.position)! } : {}),
       } } : ref?.includes(':') ? { playerId: ref } : {}),
     })
@@ -198,7 +251,7 @@ export function gradeInputsFromAssetLabels(
     }
     if (l.type === 'pick' || (l.type !== 'player' && LOOKS_LIKE_PICK.test(label))) {
       const pick = parsePickLabel(label)
-      if (pick) out.assets.push({ kind: 'pick', year: pick.year, round: pick.round, ...(pick.bucket ? { tier: pick.bucket } : {}), label })
+      if (pick) out.assets.push({ kind: 'pick', year: pick.year, round: pick.round, ...(pick.bucket ? { tier: pick.bucket } : {}), ...(pick.draftSide ? { draftSide: pick.draftSide } : {}), label })
       else out.unpriceable.push(`"${label}"`)
       continue
     }

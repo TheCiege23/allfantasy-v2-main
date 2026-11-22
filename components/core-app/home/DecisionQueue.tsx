@@ -6,8 +6,12 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { splitDecisionQueue, TOP_DECISION_LIMIT } from '@/lib/core-app/decisionQueue'
 import { usePersistentDisclosure } from '@/components/core-app/home/homeViewState'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { decisionQueueMessages } from '@/lib/core-app/messages/decisionQueue'
 import { scopeLabelText } from '@/lib/core-app/shellCopy'
 import { issueText } from '@/lib/core-app/decisionQueueCopy'
+import { groupByTier, stripVerificationStamp, teachLine, type DecisionTier, type TeachLine } from '@/lib/core-app/homeGuide'
+import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
 import '@/components/core-app/af-dash-3a.css'
 import '@/components/core-app/home/af-core-home.css'
 
@@ -48,23 +52,67 @@ function deadlineLabel(deadline: Date | string | null, nowMs: number): string | 
   return `${Math.floor(hrs / 24)}D`
 }
 
+/**
+ * The countdown block that leads each urgent row (2026-11-01 home redesign). The colour IS the
+ * countdown, not the category: past or inside a day is urgent, inside three days is this week, later
+ * is quiet — and an `info` row (a draft) keeps the accent whatever its date, because it is an event to
+ * prepare for rather than a hole to fill. `figure` null means "now", which the caller says in the
+ * reader's language.
+ */
+type ClockTone = 'now' | 'soon' | 'days' | 'later' | 'event'
+
+const DAY_MS = 86_400_000
+
+function clockOf(issue: CoreIssue, nowMs: number): { figure: string | null; tone: ClockTone } | null {
+  if (!issue.deadline) return null
+  const ms = new Date(issue.deadline).getTime() - nowMs
+  if (Number.isNaN(ms)) return null
+  const tone: ClockTone =
+    issue.severity === 'info' ? 'event' : ms <= 0 ? 'now' : ms < DAY_MS ? 'soon' : ms < 3 * DAY_MS ? 'days' : 'later'
+  if (ms <= 0) return { figure: null, tone }
+  const mins = Math.floor(ms / 60000)
+  if (mins < 60) return { figure: `${mins}M`, tone }
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return { figure: `${hrs}H`, tone }
+  return { figure: `${Math.floor(hrs / 24)}D`, tone }
+}
+
+/**
+ * "SUN 1:00 PM" under the countdown. ⚠ CLIENT ONLY: a weekday and a clock time are the reader's time
+ * zone, which the server does not know, so this renders after hydration and the first paint carries
+ * the relative figure alone — the same rule `deadlineLabel` follows with the server's clock.
+ */
+function clockWhen(deadline: Date | string, locale: string): string | null {
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+      .format(new Date(deadline))
+      .replace(/\./g, '')
+      .toUpperCase()
+  } catch {
+    return null
+  }
+}
+
 function ActionLink({
   action,
   label,
   severity,
-  es,
 }: {
   action: NonNullable<CoreIssue['action']>
   label: string
   severity: CoreIssue['severity']
-  es: boolean
 }) {
+  const t = useMessages(decisionQueueMessages)
   const className = `af3a-btn ${severity === 'info' ? '' : 'af3a-btn-accent'}`
   if (action.external) {
     return (
       <a className={className} href={action.href} target="_blank" rel="noopener noreferrer">
         {label}
-        <span className="af-sr-only">{es ? ' (abre la plataforma de la liga en una pestaña nueva)' : <> (opens the league&rsquo;s platform in a new tab)</>}</span>
+        <span className="af-sr-only">{t.opensInNewTab}</span>
       </a>
     )
   }
@@ -73,6 +121,33 @@ function ActionLink({
       {label}
     </Link>
   )
+}
+
+type GuideText = (typeof homeGuideMessages)['en']
+
+function teachText(line: TeachLine, g: GuideText): string {
+  switch (line.key) {
+    case 'emptySlot':
+      return g.teachEmptySlot
+    case 'starterOut':
+      return g.teachStarterOut
+    case 'injurySummary':
+      return g.teachInjurySummary
+    case 'drafting':
+      return g.teachDrafting
+    case 'draftUpcoming':
+      return g.teachDraftUpcoming
+    case 'bestBall':
+      return g.teachBestBall
+    case 'stale':
+      return g.teachStale(line.platform)
+  }
+}
+
+function tierText(tier: DecisionTier, g: GuideText): { title: string; hint: string } {
+  if (tier === 'now') return { title: g.tierNow, hint: g.tierNowHint }
+  if (tier === 'week') return { title: g.tierWeek, hint: g.tierWeekHint }
+  return { title: g.tierFyi, hint: g.tierFyiHint }
 }
 
 export function DecisionQueue({
@@ -84,7 +159,10 @@ export function DecisionQueue({
   freshness,
   children,
   noLeagues = false,
+  showCount = true,
 }: {
+  /** Draw the "N OPEN" pill. Off on the /core home, whose headline already says the count. */
+  showCount?: boolean
   issues: CoreIssue[]
   /** "All leagues", "NFL leagues"… — the queue always says what it covers. */
   scopeLabel: string
@@ -100,7 +178,9 @@ export function DecisionQueue({
   noLeagues?: boolean
 }) {
   const [nowMs, setNowMs] = useState(() => Date.parse(nowIso))
+  const [mounted, setMounted] = useState(false)
   useEffect(() => {
+    setMounted(true)
     setNowMs(Date.now())
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000)
     return () => window.clearInterval(timer)
@@ -109,17 +189,24 @@ export function DecisionQueue({
   const { top, rest, total } = splitDecisionQueue(issues)
   const restId = 'af-decisions-rest'
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const t = useMessages(decisionQueueMessages)
+  const g = useMessages(homeGuideMessages)
   const scopeText = scopeLabelText(scopeLabel, language)
+  /** Lesson kinds already explained above, in this render — so each is taught once. */
+  const taught = new Set<string>()
 
   return (
     <section className="af3a-sec af-decisions" aria-labelledby="af-decisions-title">
       <header className="af3a-sechead">
-        <h2 id="af-decisions-title">{es ? 'Decisiones principales' : 'Top decisions'}</h2>
+        <h2 id="af-decisions-title">{t.title}</h2>
         {help}
-        {total > 0 ? <span className="af3a-open">{es ? `${total} ${total === 1 ? 'ABIERTA' : 'ABIERTAS'}` : `${total} OPEN`}</span> : null}
+        {/*
+          The "N OPEN" pill (2026-11-12): the home's headline now says the same count above this card,
+          so it is drawn only where the queue stands alone (`showCount`) — never twice on one screen.
+        */}
+        {showCount && total > 0 ? <span className="af3a-open">{t.openCount(total)}</span> : null}
         <span className="af3a-note">
-          {es ? 'Lo más urgente primero' : 'Most urgent first'} · <b>{scopeText}</b>
+          {t.mostUrgentFirst} · <b>{scopeText}</b>
         </span>
       </header>
 
@@ -129,46 +216,79 @@ export function DecisionQueue({
          * "all good" to a user we cannot see anything for. The connect card above says what to do.
          */
         <div className="af3a-card af3a-empty">
-          <h3>{es ? 'Todavía no hay nada que decidir.' : 'Nothing to decide yet.'}</h3>
-          <p>
-            {es
-              ? 'Conecta una liga y esto se llena con lo que te necesita: puestos vacíos, titulares lesionados, drafts e intercambios.'
-              : 'Connect a league and this fills with what needs you: empty slots, injured starters, drafts and trades.'}
-          </p>
+          <h3>{t.nothingToDecide}</h3>
+          <p>{t.connectALeague}</p>
         </div>
       ) : total === 0 ? (
         <div className="af3a-card af3a-empty">
-          <h3>{es ? 'Nada te está esperando.' : 'Nothing is waiting on you.'}</h3>
-          {es ? (
-            <p>
-              Sin puestos vacíos, titulares lesionados, drafts ni ligas desactualizadas
-              {scopeLabel === 'All leagues' ? ' en ninguna liga' : <> en tus <b>{scopeText}</b></>} que podamos leer.
-            </p>
-          ) : (
-            <p>
-              No empty slots, injured starters, drafts or stale leagues
-              {scopeLabel === 'All leagues' ? ' in any league' : <> in your <b>{scopeLabel}</b></>} that we can read.
-            </p>
-          )}
+          <h3>{t.nothingWaiting}</h3>
+          {/* The bold scope is `scopeText`, which is `scopeLabel` itself outside Spanish (scopeLabelText). */}
+          <p>
+            {t.emptyNone}
+            {scopeLabel === 'All leagues' ? (
+              t.emptyInAnyLeague
+            ) : (
+              <>
+                {t.emptyInYour}
+                <b>{scopeText}</b>
+              </>
+            )}
+            {t.emptyWeCanRead}
+          </p>
         </div>
       ) : (
         <>
+          {/*
+            Tiers (2026-11-12, lib/core-app/homeGuide.ts): the same ranked top rows, grouped under
+            "Costs points now / Before this week's games / Good to know" so every platform's alerts
+            share one language of urgency. Each kind's "why it matters" line is shown on its FIRST
+            row only — it teaches once instead of repeating down the list.
+          */}
+          {groupByTier(top, nowMs).map(({ tier, issues: tierIssues }) => {
+            const tierCopy = tierText(tier, g)
+            return (
+          <div key={tier} className="af-decision-tier" data-tier={tier}>
+          <p className="af-decision-tierhead">
+            <b>{tierCopy.title}</b>
+            <span>{tierCopy.hint}</span>
+          </p>
           <ol
             className="af-decisions-top"
-            aria-label={
-              es
-                ? `Las ${Math.min(total, TOP_DECISION_LIMIT)} más urgentes`
-                : `The ${Math.min(total, TOP_DECISION_LIMIT)} most urgent`
-            }
+            aria-label={`${tierCopy.title} · ${t.topUrgentLabel(Math.min(total, TOP_DECISION_LIMIT))}`}
           >
-            {top.map((issue) => {
+            {tierIssues.map((issue) => {
               const when = deadlineLabel(issue.deadline, nowMs)
               const text = issueText(issue, language)
+              const lesson = teachLine(issue)
+              const lessonKey = lesson ? `${lesson.key}` : null
+              const showLesson = lessonKey != null && !taught.has(lessonKey)
+              if (showLesson) taught.add(lessonKey)
+              const clock = clockOf(issue, nowMs)
+              const clockAt = clock && mounted && issue.deadline ? clockWhen(issue.deadline, t.clockLocale) : null
+              const platform = issue.platform ? issue.platform.toLowerCase() : null
               return (
-                <li key={issue.id} className={`af3a-urgent af-decision ${SEV_CLASS[issue.severity]}`}>
-                  <span className="af3a-glyph" aria-hidden="true">
-                    {issue.glyph}
-                  </span>
+                <li
+                  key={issue.id}
+                  className={`af3a-urgent af-decision ${SEV_CLASS[issue.severity]}`}
+                  data-tone={clock?.tone ?? (issue.severity === 'info' ? 'event' : issue.severity === 'bad' ? 'soon' : 'later')}
+                >
+                  {clock ? (
+                    /* The meta line still says "IN 3D" for a screen reader; this is its visual form. */
+                    <span className="af-decision-clock" aria-hidden="true">
+                      <b>{clock.figure ?? t.now}</b>
+                      {clockAt ? <span>{clockAt}</span> : null}
+                    </span>
+                  ) : (
+                    <span className="af3a-glyph af-decision-clock" aria-hidden="true">
+                      {issue.glyph}
+                    </span>
+                  )}
+                  {platform ? (
+                    /* The meta line names the platform in words; the tile is for scanning a list. */
+                    <span className="af-decision-plat" data-platform={platform} aria-hidden="true">
+                      {platform.slice(0, 2).toUpperCase()}
+                    </span>
+                  ) : null}
                   <div className="af3a-urgent-body">
                     <h3>
                       {text.title}
@@ -180,21 +300,30 @@ export function DecisionQueue({
                       {/* The trailing space: on a phone the chip runs inline and read "IN 6DSleeper ›". */}
                       {when ? (
                         <>
-                          <b className="af3a-mono af-decision-when">
-                            {when === 'now' ? (es ? 'AHORA' : 'NOW') : `${es ? 'EN' : 'IN'} ${when}`}
+                          {/* Visually carried by the countdown block; still read aloud here. */}
+                          <b className={`af3a-mono af-decision-when${clock ? ' af-sr-only' : ''}`}>
+                            {when === 'now' ? t.now : t.inWhen(when)}
                           </b>{' '}
                         </>
                       ) : null}
-                      {text.meta}
+                      {stripVerificationStamp(text.meta)}
                     </p>
+                    {showLesson && lesson ? (
+                      <p className="af-decision-why">
+                        <b>{g.why}</b> {teachText(lesson, g)}
+                      </p>
+                    ) : null}
                   </div>
                   {issue.action ? (
-                    <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} es={es} />
+                    <ActionLink action={issue.action} label={text.actionLabel ?? issue.action.label} severity={issue.severity} />
                   ) : null}
                 </li>
               )
             })}
           </ol>
+          </div>
+            )
+          })}
 
           {rest.length > 0 ? (
             <>
@@ -205,7 +334,7 @@ export function DecisionQueue({
                 aria-controls={restId}
                 onClick={() => setShowAll(!showAll)}
               >
-                {showAll ? (es ? 'Mostrar menos' : 'Show fewer') : es ? `Mostrar ${rest.length} más` : `Show ${rest.length} more`}
+                {showAll ? t.showFewer : t.showMore(rest.length)}
               </button>
               <ol id={restId} className="af3a-card af3a-rows af-decisions-rest" hidden={!showAll} start={top.length + 1}>
                 {rest.map((issue) => {
@@ -226,7 +355,7 @@ export function DecisionQueue({
                           title
                         )}
                       </span>
-                      <span className="af3a-row-league">{issue.leagueName ?? (es ? 'En todas tus ligas' : 'Across your leagues')}</span>
+                      <span className="af3a-row-league">{issue.leagueName ?? t.acrossYourLeagues}</span>
                       <span className="af3a-row-when af3a-mono">{deadlineLabel(issue.deadline, nowMs) ?? '—'}</span>
                     </li>
                   )
@@ -242,4 +371,3 @@ export function DecisionQueue({
   )
 }
 
-export default DecisionQueue

@@ -11,6 +11,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import {
   sourceLinkActionForScope,
@@ -34,7 +35,7 @@ export async function resolveActionLeagueWrite(
       resolveWriteAuthority(league.platform) === 'SHADOW'
         ? resolveSourceLink({
             platform: league.platform,
-            sourceLeagueId: league.platformLeagueId,
+            sourceLeagueId: linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league])),
             leagueName: league.name,
             season: league.season,
             action: sourceLinkActionForScope(scope),

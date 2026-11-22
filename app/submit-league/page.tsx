@@ -378,7 +378,7 @@ export default function SubmitLeaguePage() {
                   type="text"
                   value={form.leagueTypeName}
                   onChange={(e) => update("leagueTypeName", e.target.value)}
-                  placeholder="Zombie Dynasty, Pirate Guillotine, etc."
+                  placeholder="Zombie Dynasty, Pirate Guilly, etc."
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 focus:border-cyan-500/50 focus:outline-none"
                 />
               </div>

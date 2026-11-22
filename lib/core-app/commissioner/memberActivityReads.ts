@@ -3,6 +3,7 @@ import 'server-only'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
+import { readEliminatedTeams } from '@/lib/guillotine/eliminatedTeams'
 import type { MemberActivityReads } from './activity'
 
 /**
@@ -19,9 +20,11 @@ export async function readMemberActivityInputs(leagueId: string, native: boolean
     const health = await getLeagueManagerHealth(leagueId).catch(() => null)
     return { native: true, rows: health?.rows ?? null }
   }
-  const [managers, window] = await Promise.all([
+  const [managers, window, eliminated] = await Promise.all([
     readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS).catch(() => null),
     readActivityWindow(leagueId, true).catch(() => null),
+    // Never throws: a failed read leaves chopped teams in, as before.
+    readEliminatedTeams(leagueId),
   ])
-  return { native: false, managers, window }
+  return { native: false, managers, window, eliminatedNames: [...eliminated.names] }
 }

@@ -3,7 +3,7 @@ import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
-import { latestProjectionWeek } from './playerProjections'
+import { latestProjectionWeek, projectionSportScope } from './playerProjections'
 import type { SectionState } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
@@ -83,8 +83,8 @@ export type LeagueImpact = {
   isStarting: boolean
   afPoints: SectionState<{
     points: number
-    matchedKeys: number
-    scoredKeys: number
+    matchedKeys: number | null
+    scoredKeys: number | null
   }>
   replacements: SectionState<ReplacementOption[]>
   /**
@@ -259,11 +259,13 @@ export async function getPlayerImpact(
     ]
     const [players, projections, injuries] = await Promise.all([
       prisma.sportsPlayer.findMany({
-        where: { sleeperId: { in: rosterIds } },
+        // Scoped to this league's sport: Sleeper numbers its NFL and NBA pools independently.
+        where: { ...(sport ? { sport: sport.toUpperCase() } : {}), sleeperId: { in: rosterIds } },
         select: { sleeperId: true, name: true, position: true, team: true },
       }),
       prisma.fantasyProjection.findMany({
-        where: { playerId: { in: rosterIds }, season: at.season, week: at.week, source: { not: 'allfantasy' } },
+        // Same scope as the SportsPlayer read above: a non-NFL league never prices NFL rows (`projectionSportScope`).
+        where: { playerId: { in: rosterIds }, season: at.season, week: at.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },
         select: { playerId: true, stats: true },
       }),
       /*

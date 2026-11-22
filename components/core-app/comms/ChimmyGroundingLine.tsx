@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import { groundingFreshness } from '@/lib/chimmy/groundingFreshness'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * "Read from <league> · synced 12 min ago" under a grounded Chimmy answer, with a Refresh when the
@@ -59,7 +60,7 @@ export function ChimmyGroundingLine(props: {
     <p className="af-cm-grounding" data-grounded="true" data-stale={fresh.stale && state !== 'done' ? 'true' : undefined}>
       Read from {props.leagueName ?? 'your league'} · {fresh.label}
       {props.lastSyncedAt ? (
-        <span className="af-cm-grounding-exact"> ({new Date(props.lastSyncedAt).toLocaleString()})</span>
+        <span className="af-cm-grounding-exact"> ({new Date(props.lastSyncedAt).toLocaleString(getAppIntlLocale())})</span>
       ) : null}
       {canRefresh && state === 'idle' ? (
         <>

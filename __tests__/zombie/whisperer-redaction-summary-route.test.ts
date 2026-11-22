@@ -85,6 +85,7 @@ vi.mock('@/lib/prisma', () => ({
         { id: 'lt-3', teamName: 'Team Three', ownerName: null, externalId: 'x3', platformUserId: 'user-3', claimedByUserId: null },
       ]),
     },
+    zombieWeeklyResolution: { findUnique: vi.fn(async () => ({ status: 'complete', settlementSnapshot: null })), findFirst: vi.fn(async () => null) },
     zombieResourceLedger: { findMany: vi.fn(async () => []) },
     zombieWeeklyWinnings: { findMany: vi.fn(async () => [{ week: 2, amount: 300 }, { week: 3, amount: 412.5 }]) },
     zombieLeagueTeam: {

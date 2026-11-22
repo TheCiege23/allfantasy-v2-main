@@ -50,7 +50,8 @@ vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({
     tradeReviewMode: 'commissioner',
     tradeDeadlineWeek: null,
     tradeReviewHours: 48,
-    vetoThresholdPercent: 50,
+    vetoRule: { mode: 'count', value: 4 },
+    vetoThresholdPercent: null,
     processingDelayHours: 0,
     tradesAllowed: true,
     faabTradingAllowed: true,
@@ -88,7 +89,7 @@ beforeEach(() => {
   h.tradeUpdate.mockResolvedValue({})
 })
 
-async function offer(parentTradeId?: string) {
+async function offer(parentTradeId?: string, extraMetadata: Record<string, unknown> = {}) {
   h.rosterFindFirst.mockResolvedValueOnce(roster('rB', 'uB')).mockResolvedValueOnce(roster('rA', 'uA'))
   return createAfLeagueTrade({
     leagueId: L,
@@ -97,7 +98,7 @@ async function offer(parentTradeId?: string) {
     receiverRosterId: 'rA',
     parentTradeId: parentTradeId ?? null,
     assets: [{ itemType: 'player', itemReference: 'p1', fromRosterId: 'rB', toRosterId: 'rA' }],
-    metadata: { offerMessage: 'Fair for both of us?' },
+    metadata: { offerMessage: 'Fair for both of us?', ...extraMetadata },
   })
 }
 
@@ -110,6 +111,10 @@ describe('an offer lands in the DM', () => {
     await call.load()
     expect(h.loadNative).toHaveBeenCalledWith('new-trade')
     expect(h.postStatus).not.toHaveBeenCalled()
+    // The league's veto rule rides with the trade (lib/league-trade-engine/vetoRule.ts).
+    const created = h.tradeCreate.mock.calls[0][0] as { data: { metadata: { vetoRule?: unknown }; vetoThresholdPercent: unknown } }
+    expect(created.data.metadata.vetoRule).toEqual({ mode: 'count', value: 4 })
+    expect(created.data.vetoThresholdPercent).toBeNull()
   })
 
   it('🛑 a counter first closes the parent’s card ("countered"), THEN posts the new offer', async () => {
@@ -123,6 +128,25 @@ describe('an offer lands in the DM', () => {
       expect.objectContaining({ source: 'native', tradeId: 'parent', status: 'countered', actorUserId: 'uB' }),
     )
     expect(h.postStatus.mock.invocationCallOrder[0]).toBeLessThan(h.postOffer.mock.invocationCallOrder[0])
+  })
+
+  it('"Send direct message" off: the offer is created and no offer card is posted', async () => {
+    const created = await offer(undefined, { sendDirectMessage: false })
+    expect(created).toMatchObject({ id: 'new-trade' })
+    // Give the fire-and-forget DM step time to run; it must not post.
+    await new Promise((r) => setTimeout(r, 30))
+    expect(h.postOffer).not.toHaveBeenCalled()
+  })
+
+  it('"Send direct message" off on a counter still closes the parent’s card', async () => {
+    h.tradeFindFirst.mockResolvedValue({
+      id: 'parent', rootTradeId: null, status: 'pending', metadata: {}, proposedByUserId: 'uA',
+      proposerRosterId: 'rA', receiverRosterId: 'rB', items: [],
+    })
+    await offer('parent', { sendDirectMessage: false })
+    await vi.waitFor(() => expect(h.postStatus).toHaveBeenCalledWith(expect.objectContaining({ tradeId: 'parent', status: 'countered' })))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(h.postOffer).not.toHaveBeenCalled()
   })
 
   it('🛑 a DM path that throws or rejects never fails the trade', async () => {

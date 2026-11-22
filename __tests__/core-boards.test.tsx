@@ -30,14 +30,11 @@ import {
   personMark,
   rankLabel,
 } from '@/components/core-app/boards/BoardKit'
-import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
-import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import type { SeasonOutlook, OutlookLeague } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
-import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import { byTradeUrgency, managerLabel, type TradesBoardData } from '@/lib/core-app/tradesBoard'
 import { collapseMirroredTrades } from '@/lib/core-app/tradesBoard'
 import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
@@ -63,8 +60,8 @@ describe('BoardKit monograms', () => {
    * characters renders four identical marks and the rail becomes unreadable.
    */
   it('takes the first and last word, so near-identical names differ', () => {
-    expect(leagueMark('Guillotine League 26 ($20/1)')).toBe('G1')
-    expect(leagueMark('Guillotine League 26 ($20/2)')).toBe('G2')
+    expect(leagueMark('Guilly League 26 ($20/1)')).toBe('G1')
+    expect(leagueMark('Guilly League 26 ($20/2)')).toBe('G2')
     expect(leagueMark('Dynasty Dragons')).toBe('DD')
   })
 
@@ -121,7 +118,7 @@ describe('leagueArtUrl', () => {
   })
 })
 
-/* ── Standings ───────────────────────────────────────────────────────────── */
+/* ── Season Outlook fixtures (WeekBoard reads them) ─────────────────────── */
 
 function outlookLeague(over: Partial<OutlookLeague> = {}): OutlookLeague {
   const you = {
@@ -164,202 +161,6 @@ function outlook(over: Partial<SeasonOutlook> = {}): SeasonOutlook {
     ...(over as Partial<SeasonOutlook>),
   } as SeasonOutlook
 }
-
-describe('StandingsBoard', () => {
-  it('states the field size beside the seed, so #3 of 10 is not read as #3 of 32', () => {
-    const { container } = render(
-      <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
-    )
-    expect(container.textContent ?? '').toContain('#1 of 2')
-  })
-
-  /*
-   * ⚠ `modelled: false` MEANS TOO FEW WEEKS TO MODEL THAT TEAM, so the number
-   * beside it is the simulation's prior rather than a read on them. Marking it
-   * is the difference between a model output and an asserted fact.
-   */
-  it('marks a percentage that came from an unmodelled team', () => {
-    const l = outlookLeague()
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({ leagues: [{ ...l, you: { ...l.you!, modelled: false } }] })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    expect(container.textContent ?? '').toContain('94%*')
-    expect(container.textContent ?? '').toMatch(/too few completed weeks to model/i)
-  })
-
-  it('never prints 0-0 for a season with no games played', () => {
-    const l = outlookLeague()
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({ leagues: [{ ...l, you: { ...l.you!, wins: 0, losses: 0 } }] })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    expect(container.textContent ?? '').not.toContain('0-0')
-    expect(container.textContent ?? '').toContain('no games played yet')
-  })
-
-  it('counts and explains a league whose team could not be identified', () => {
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({ leagues: [outlookLeague(), outlookLeague({ leagueId: 'l2', you: null })] })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    expect(container.textContent ?? '').toMatch(/1 league could not be ranked/i)
-  })
-
-  it("adds this week's swing, who to root for and the schedule ahead — only from what was simulated", () => {
-    const sched = (rank: number) => ({
-      pastOpponentMu: null,
-      remainingOpponentMu: 110,
-      pastRank: null,
-      remainingRank: rank,
-      leagueMu: 105,
-      pastGames: 0,
-      remainingGames: 3,
-    })
-    const l = outlookLeague()
-    const league = {
-      ...l,
-      you: { ...l.you!, schedule: sched(2) },
-      teams: [1, 2, 3].map((r) => ({ ...l.you!, rosterId: String(r), isYou: r === 1, schedule: sched(r === 1 ? 2 : r === 2 ? 1 : 3) })),
-    } as OutlookLeague
-    const swing = {
-      leagueId: 'l1',
-      leagueName: l.leagueName,
-      week: 9,
-      opponentName: 'Gridiron Ghosts',
-      ifWin: 71.4,
-      ifLose: 38.2,
-      swing: 33.2,
-      clinchOnWin: false,
-      helpIfLose: [],
-      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
-    }
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({ leagues: [league], swingByLeague: { l1: swing } })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    expect(container.querySelector('.af-bd-sub3')?.textContent).toBe(
-      'Wk 9 vs Gridiron Ghosts: 71% with a win, 38% with a loss · root for Bench Mob · 2nd-hardest schedule left of 3',
-    )
-  })
-
-  it('draws no stakes line when there is neither a swing game nor a ranked schedule', () => {
-    const { container } = render(
-      <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
-    )
-    expect(container.querySelector('.af-bd-sub3')).toBeNull()
-  })
-
-  it('states that the odds are simulated, never bare', () => {
-    const { container } = render(
-      <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
-    )
-    expect(container.textContent ?? '').toMatch(/simulated over each league/i)
-  })
-
-  it('leads with the summary Season Outlook computed, over the leagues it could rank', () => {
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({
-          leagues: [outlookLeague(), outlookLeague({ leagueId: 'l2', you: null })],
-          summary: { makingPlayoffs: 1, clinched: 1, onTheBubble: 0, onByePace: 0, bestTitle: { pct: 22.4, leagueName: "Chimmy's Champions" } },
-        })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    const pulse = container.querySelector('.af-bd-pulse')?.textContent ?? ''
-    /* Of the ONE ranked league — not of the two simulated, nor the nine on the account. */
-    expect(pulse).toContain('On playoff pace in 1 of 1 league')
-    expect(pulse).toContain('22%')
-    expect(pulse).toContain('Best title shot')
-  })
-
-  it('draws no summary when there is nothing ranked', () => {
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({ leagues: [outlookLeague({ you: null })] })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    expect(container.querySelector('.af-bd-pulse')).toBeNull()
-  })
-
-  it("names the week's biggest game and links into its league", () => {
-    const swing = {
-      leagueId: 'l1',
-      leagueName: "Chimmy's Champions",
-      week: 9,
-      opponentName: 'Gridiron Ghosts',
-      ifWin: 88.4,
-      ifLose: 12.1,
-      swing: 76.3,
-      clinchOnWin: true,
-      helpIfLose: [],
-      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
-    }
-    const { container } = render(
-      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
-    )
-    const card = container.querySelector('a.af-bd-mustwin')
-    expect(card?.getAttribute('href')).toBe('/core/standings?league=l1')
-    expect(card?.textContent).toContain('Wk 9 vs Gridiron Ghosts')
-    expect(card?.textContent).toContain('88%')
-    expect(card?.textContent).toContain('12%')
-    expect(card?.textContent).toContain('Win and you are in. Root for Bench Mob.')
-  })
-
-  it('draws no biggest-game card for a league that is not on the board', () => {
-    const swing = {
-      leagueId: 'elsewhere',
-      leagueName: 'Not ranked',
-      week: 9,
-      opponentName: null,
-      ifWin: 60,
-      ifLose: 20,
-      swing: 40,
-      clinchOnWin: false,
-      helpIfLose: [],
-    }
-    const { container } = render(
-      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
-    )
-    expect(container.querySelector('.af-bd-mustwin')).toBeNull()
-  })
-
-  it('marks the seed and the playoff cutoff on the meter', () => {
-    const l = outlookLeague()
-    const { container } = render(
-      <StandingsBoard
-        outlook={outlook({
-          leagues: [{ ...l, playoffTeams: 6, you: { ...l.you!, seed: 9 }, teams: Array.from({ length: 12 }, (_, i) => ({ ...l.you!, rosterId: String(i + 1), seed: i + 1 })) }],
-        })}
-        allHref="/core/standings?all=1"
-        totalLeagues={9}
-      />,
-    )
-    const bar = container.querySelector('.af-bd-seedbar')
-    expect(bar?.getAttribute('aria-hidden')).toBe('true')
-    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-in') as HTMLElement | null)?.style.width ?? '')).toBeCloseTo(50, 1)
-    /* Seed 9 of 12 sits at the centre of the 9th slot: (9 − 0.5) / 12. */
-    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-dot') as HTMLElement | null)?.style.left ?? '')).toBeCloseTo(70.8, 1)
-  })
-})
-
-/* ── Week ────────────────────────────────────────────────────────────────── */
 
 function weekMatchup(over: Partial<WeekMatchup> = {}): WeekMatchup {
   return {
@@ -736,132 +537,6 @@ describe('WeekBoard', () => {
   })
 })
 
-/* ── Waivers ─────────────────────────────────────────────────────────────── */
-
-function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
-  return {
-    rows: [
-      {
-        leagueId: 'l1',
-        leagueName: 'Dynasty Dragons',
-        platform: 'sleeper',
-        logoUrl: null,
-        format: 'Dynasty · PPR',
-        netGain: 14.6,
-        add: {
-          playerId: 'p1',
-          name: 'Tank Bigsby',
-          position: 'RB',
-          team: 'JAX',
-          imageUrl: null,
-          projected: 15.8,
-          ownPct: 0.62,
-          startPct: 0.48,
-        },
-        drop: {
-          playerId: 'p2',
-          name: 'Roman Wilson',
-          position: 'WR',
-          team: 'PIT',
-          imageUrl: null,
-          projected: 1.2,
-          ownPct: null,
-          startPct: null,
-        },
-        faabRemaining: 42,
-        runsAt: 'Wednesday 09:00 UTC',
-        href: '/core/waivers?league=l1',
-        reasoning: 'Tank Bigsby (RB) projects 15.8 under this league’s own scoring.',
-      },
-    ],
-    considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
-    marketLeagues: 120,
-    at: { season: '2026', week: 3 },
-    ...over,
-  }
-}
-
-/* Fourteen fixtures around a fixed clock; the loader hands kickoffs, the board counts. */
-const NOW_MS = Date.parse('2026-09-28T12:36:00Z')
-const kickoffs = (played: number) =>
-  Array.from({ length: 14 }, (_, i) => new Date(NOW_MS + (i < played ? -1 : 1) * (i + 1) * 3_600_000).toISOString())
-const KICKOFFS_13_OF_14 = kickoffs(13)
-const KICKOFFS_2_OF_14 = kickoffs(2)
-
-describe('WaiversBoard', () => {
-  /*
-   * Production 2026-09-28, Monday: week-3 projections ranked with 13 of 14 week-3 games played, for
-   * claims that process for week 4. The feed holds one week, so the board says which one it prices.
-   */
-  it('says when the projection week is mostly played, and which week a claim is for', () => {
-    const { container } = render(
-      <WaiversBoard data={waiversData({ weekKickoffs: KICKOFFS_13_OF_14 })} nowMs={NOW_MS} allHref="/core/waivers?all=1" totalLeagues={65} />,
-    )
-    const note = container.querySelector('[data-testid="waivers-spent-week"]')?.textContent ?? ''
-    expect(note).toContain('Most of week 3 has been played (13 of 14')
-    expect(note).toContain('a claim that processes now is for week 4')
-  })
-
-  it('says nothing about a spent week early in the week, or with no schedule read', () => {
-    for (const weekKickoffs of [KICKOFFS_2_OF_14, null]) {
-      const { container, unmount } = render(
-        <WaiversBoard data={waiversData({ weekKickoffs })} nowMs={NOW_MS} allHref="/core/waivers?all=1" totalLeagues={65} />,
-      )
-      expect(container.querySelector('[data-testid="waivers-spent-week"]')).toBeNull()
-      unmount()
-    }
-  })
-
-  /*
-   * ⚠ A 0% OWN RATE COMPUTED OVER FOUR LEAGUES WOULD CALL A WIDELY-ROSTERED
-   * PLAYER A FREE AGENT. Below the denominator gate the loader carries null, and
-   * an em dash is the correct rendering of that.
-   */
-  it('renders an em dash, not 0%, for a market rate below the gate', () => {
-    const { container } = render(
-      <WaiversBoard data={waiversData()} allHref="/core/waivers?all=1" totalLeagues={65} />,
-    )
-    const text = container.textContent ?? ''
-    expect(text).toContain('62%')
-    expect(text).not.toContain('0%')
-  })
-
-  /*
-   * Four different exclusions, named separately. A single "N leagues excluded"
-   * is the shape that makes a board stop being trustworthy at sixty leagues.
-   */
-  it('names every reason a league is off the board, separately', () => {
-    const { container } = render(
-      <WaiversBoard data={waiversData()} allHref="/core/waivers?all=1" totalLeagues={65} />,
-    )
-    const text = container.textContent ?? ''
-    expect(text).toMatch(/10 leagues are not on this board/i)
-    expect(text).toMatch(/6 store player ids the projection feed does not use/i)
-    expect(text).toMatch(/3 have never published their scoring or lineup settings/i)
-    expect(text).toMatch(/1 has no roster of yours imported/i)
-  })
-
-  it('says the projections were re-scored under each league own rules', () => {
-    const { container } = render(
-      <WaiversBoard data={waiversData()} allHref="/core/waivers?all=1" totalLeagues={65} />,
-    )
-    expect(container.textContent ?? '').toMatch(/re-scored under that league/i)
-  })
-
-  it('says no drop was named rather than inventing one', () => {
-    const d = waiversData()
-    const { container } = render(
-      <WaiversBoard
-        data={{ ...d, rows: [{ ...d.rows[0], drop: null }] }}
-        allHref="/core/waivers?all=1"
-        totalLeagues={65}
-      />,
-    )
-    expect(container.textContent ?? '').toMatch(/No bench player here could be priced/i)
-  })
-})
-
 /* ── Trades ──────────────────────────────────────────────────────────────── */
 
 function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
@@ -950,8 +625,9 @@ describe('TradesBoard', () => {
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
     const text = container.textContent ?? ''
-    expect(text).toMatch(/ungraded: one side could not be priced/i)
-    expect(container.querySelector('.af-bd-v')?.textContent).not.toBe('C')
+    // 2026-11-14: "Not graded: <reason>", and no grade on either side.
+    expect(text).toMatch(/Not graded: one side could not be priced/i)
+    expect(container.querySelector('.af-tg-grade')).toBeNull()
   })
 
   /* An unpriced asset is a dash. A zero beside a real name says he is worthless. */
@@ -1147,7 +823,8 @@ describe('DraftHqBoard', () => {
         totalLeagues={65}
       />,
     )
-    expect(container.textContent ?? '').toMatch(/55 of your leagues carry no draft we can read/i)
+    // One footer clause since the 2026-11-13 guide (was "55 of your leagues carry no draft we can read").
+    expect(container.textContent ?? '').toMatch(/55 leagues have no draft we can read/i)
   })
 })
 
@@ -1587,7 +1264,7 @@ describe('TradesBoard — whose side is whose', () => {
   const sideLabels = (c: HTMLElement) =>
     Array.from(c.querySelectorAll('.af-bd-side-label')).map((n) => n.textContent)
 
-  it('says "You received" for the reader and names the other manager', () => {
+  it('says "You got" for the reader and names the other manager', () => {
     const { container } = render(
       <TradesBoard
         data={tradesData({
@@ -1599,8 +1276,9 @@ describe('TradesBoard — whose side is whose', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    expect(sideLabels(container)).toContain('You received')
-    expect(sideLabels(container)).toContain('Jordan received')
+    // 2026-11-14: "<team> got", with that team's grade beside it (none here: this trade is ungraded).
+    expect(sideLabels(container)).toContain('You got')
+    expect(sideLabels(container)).toContain('Jordan got')
     // Each side holds what its named manager RECEIVED, so the reader's grade sits over what they got.
     const [mine, theirs] = Array.from(container.querySelectorAll('.af-bd-side'))
     expect(mine.textContent).toContain('Dana Okoye')
@@ -1613,8 +1291,8 @@ describe('TradesBoard — whose side is whose', () => {
     const { container } = render(
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
-    expect(sideLabels(container)).toContain('TheCiege24 received')
-    expect(sideLabels(container)).not.toContain('You received')
+    expect(sideLabels(container)).toContain('TheCiege24 got')
+    expect(sideLabels(container)).not.toContain('You got')
   })
 })
 
@@ -1717,12 +1395,18 @@ describe('TradesBoard — a priced pick shows its price', () => {
     expect(row!.querySelector('.af-bd-asset-val')?.textContent).toBe('\u2014')
   })
 
-  it('names both managers in the value split, summing to 100', () => {
-    const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
-    const text = container.textContent ?? ''
-    expect(text).toContain('Value split')
-    expect(text).toContain('TheCiege24 42%')
-    expect(text).toContain('Jordan 58%')
+  /*
+   * 2026-11-14: the percentage split is gone — it restated the two grades. What replaced it is a grade
+   * beside EACH team, named, which is the half of the verdict one letter could not carry.
+   */
+  it('puts a grade beside each team, named', () => {
+    const d = withPick(1231, 'D', 42)
+    d.windows[0].latest = { ...d.windows[0].latest!, partnerLetter: 'B' }
+    const { container } = render(<TradesBoard data={d} allHref="/core/trades?all=1" />)
+    const [first, second] = [...container.querySelectorAll('.af-bd-side')] as HTMLElement[]
+    expect(first.querySelector('.af-tg-grade')?.getAttribute('aria-label')).toBe('TheCiege24: grade D')
+    expect(second.querySelector('.af-tg-grade')?.getAttribute('aria-label')).toBe('Jordan: grade B')
+    expect(container.textContent).not.toContain('Who got more value')
   })
 
   /*
@@ -1762,7 +1446,11 @@ describe('TradesBoard — the breakdown', () => {
     }
   }
 
-  it('renders every sentence of the breakdown', () => {
+  /*
+   * 2026-11-14: folded under "How this was graded", and without its first sentence — that one is the
+   * verdict in other words, which the verdict line and the grades beside each team already say.
+   */
+  it('folds the rest of the breakdown, leaving out the verdict sentence', () => {
     const { container } = render(
       <TradesBoard
         data={withBreakdown([
@@ -1772,11 +1460,11 @@ describe('TradesBoard — the breakdown', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    const items = [...container.querySelectorAll('.af-bd-breakdown li')].map((el) => el.textContent)
-    expect(items).toEqual([
-      'Jordan got the better end — TheCiege24 took 42%.',
-      'The most valuable asset was Dana Okoye, and Jordan got him.',
-    ])
+    const fold = container.querySelector('[data-testid="trade-how-graded"]') as HTMLDetailsElement
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.open).toBe(false)
+    const items = [...fold.querySelectorAll('.af-bd-breakdown li')].map((el) => el.textContent)
+    expect(items).toEqual(['The most valuable asset was Dana Okoye, and Jordan got him.'])
   })
 
   /*
@@ -1790,6 +1478,6 @@ describe('TradesBoard — the breakdown', () => {
       <TradesBoard data={withBreakdown([], null)} allHref="/core/trades?all=1" />,
     )
     expect(container.querySelector('.af-bd-breakdown')).toBeNull()
-    expect(container.textContent).toContain('ungraded')
+    expect(container.textContent).toContain('Not graded')
   })
 })

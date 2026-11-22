@@ -138,6 +138,7 @@ export default async function PublicStandingsPage({ params }: Params) {
                 <td className="ps-n">{t.average != null ? t.average.toFixed(1) : '—'}</td>
                 <td className="ps-n">
                   {t.wins}—{t.losses}
+                  {t.ties > 0 ? `—${t.ties}` : ''}
                 </td>
               </tr>
             ))}

@@ -30,7 +30,3 @@ export function getProductSwitchItems(): { productId: ProductId; href: string; l
   })
 }
 
-/** Resolve switch target for a product (for redirects or programmatic nav). */
-export function getSwitchTargetFromPath(_pathname: string | null, targetProductId: ProductId): string {
-  return getProductSwitchHref(targetProductId)
-}

@@ -12,7 +12,7 @@ import {
 } from '@/lib/commissioner-os/i18n/toolsCopy'
 import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
-export interface NotificationRowProps {
+interface NotificationRowProps {
   notification: CommissionerNotificationPayload
   read: boolean
   onMarkRead: (id: string) => void

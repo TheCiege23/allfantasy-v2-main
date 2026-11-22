@@ -58,7 +58,7 @@ describe('shell copy helpers', () => {
     expect(ageText('3y ago', 'es')).toBe('hace 3 años')
     expect(ageText('just now', 'es')).toBe('justo ahora')
     expect(platformsPhraseText('Sleeper, ESPN, Fantrax, MFL or Fleaflicker', 'es')).toBe('Sleeper, ESPN, Fantrax, MFL o Fleaflicker')
-    expect(leagueConceptText('Guillotine', 'es')).toBe('Guillotina')
+    expect(leagueConceptText('Guilly', 'es')).toBe('Guilly')
     expect(leagueConceptText('Dynasty', 'es')).toBe('Dynasty') // a format name kept as is
   })
 
@@ -74,6 +74,8 @@ describe('the shell follows en → es → en', () => {
     const leagues = [
       { id: 'L1', name: 'Its Just Too Deep!', sport: 'NFL', platform: 'sleeper', isCommissioner: false },
       { id: 'L2', name: 'Peach Bowl', sport: 'NFL', platform: 'espn', isCommissioner: false },
+      // No sport on record: filed under "Other", which is the picker's word and so translated.
+      { id: 'L3', name: 'Mystery League', sport: '', platform: 'sleeper', isCommissioner: false },
     ] as never
     const view = () => <ScopeSwitcher leagues={leagues} scopeValue={null} label="All leagues" selectedLeagueId={null} favoriteIds={[]} />
     const { rerender } = render(view())
@@ -86,13 +88,14 @@ describe('the shell follows en → es → en', () => {
     expect(text()).toContain('Viendo')
     fireEvent.click(screen.getByRole('button', { name: /Viendo/ }))
     expect(text()).toContain('¿Qué ligas?')
-    expect(text()).toContain('Las favoritas se guardan en este dispositivo.')
+    expect(text()).toContain('Las favoritas se guardan en tu cuenta, en todos tus dispositivos.')
     expect(screen.getByPlaceholderText('Busca una liga, deporte o plataforma')).toBeTruthy()
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Elige qué ligas ver')
-    expect(screen.getAllByLabelText(/^Añadir .* a favoritas$/).length).toBe(2)
+    expect(screen.getAllByLabelText(/^Añadir .* a favoritas$/).length).toBe(3)
+    expect(document.querySelector('[data-section="other"]')?.textContent).toContain('Otros')
     // League names are user content and stay exactly as written.
     expect(text()).toContain('Its Just Too Deep!')
-    expect(text()).not.toMatch(/Which leagues|Favorites are saved|Viewing/)
+    expect(text()).not.toMatch(/Which leagues|Favorites are saved|Viewing|Other/)
 
     h.language = 'en'
     rerender(view())
@@ -153,14 +156,18 @@ describe('the shell follows en → es → en', () => {
       />
     )
     const { rerender } = render(view())
+    fireEvent.click(screen.getByText('League details'))
     expect(text()).toContain('SLEEPER import · what’s on file')
-    expect(text()).toContain('Synced 4m ago')
+    expect(text()).toContain('Connected')
+    expect(text()).not.toContain('4m ago')
     expect(text()).toContain('League type')
 
     h.language = 'es'
     rerender(view())
     expect(text()).toContain('Importación de SLEEPER · qué hay registrado')
-    expect(text()).toContain('Sincronizado hace 4 min')
+    expect(text()).toContain('Conectado')
+    expect(text()).toContain('Detalles de la liga')
+    expect(text()).not.toContain('hace 4 min')
     expect(text()).toContain('Chimmy · Enfrentamiento')
     expect(text()).toContain('Tipo de liga')
     expect(text()).toContain('Análisis de la liga')
@@ -169,7 +176,8 @@ describe('the shell follows en → es → en', () => {
 
     h.language = 'en'
     rerender(view())
-    expect(text()).toContain('Synced 4m ago')
+    expect(text()).toContain('Connected')
+    expect(text()).not.toContain('4m ago')
   })
 
   it('SourceActionLink: visible label and tooltip, and the read-only note', () => {

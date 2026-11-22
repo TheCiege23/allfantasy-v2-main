@@ -41,6 +41,13 @@ vi.mock('@/lib/prisma', () => ({
           Object.assign(r, data)
           return { ...r }
         }),
+      // An unchanged roster is confirmed with a timestamp-only touch rather than rewritten.
+      updateMany: ({ where, data }: any) =>
+        lazy(() => {
+          const ids: string[] = where.id.in
+          for (const r of db.rosters) if (ids.includes(r.id)) Object.assign(r, data)
+          return { count: ids.length }
+        }),
       create: ({ data }: any) =>
         lazy(() => {
           const r = { id: `r-${++db.seq}`, ...data }

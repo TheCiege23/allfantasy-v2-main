@@ -3,6 +3,9 @@
  * Safe public data only; supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
  */
 
+import type { LeagueVibe, LeagueVibeFilter } from "./vibes"
+import type { PublicReputation } from "@/lib/commish-reputation/reputation"
+
 export type DiscoverySource = "fantasy" | "bracket" | "creator"
 
 export type DiscoverySort = "ranking_match" | "popularity" | "newest" | "filling_fast"
@@ -16,6 +19,8 @@ export type DiscoveryLeagueStyle =
   | "best_ball"
   | "keeper"
   | "survivor"
+  /** Guilly: the lowest score is chopped every week (`League.guillotineMode`). */
+  | "guillotine"
   | "bracket"
   | "community"
 export type LeagueStyleFilter = "all" | DiscoveryLeagueStyle
@@ -23,6 +28,21 @@ export type LeagueStyleFilter = "all" | DiscoveryLeagueStyle
 export type DraftTypeFilter = "all" | "snake" | "linear" | "auction"
 export type DraftStatusFilter = "all" | "pre_draft" | "in_progress" | "paused" | "completed"
 export type VisibilityFilter = "public" | "all"
+
+/** When a draft lands on the VIEWER's clock (lib/public-discovery/findLeagueFilters). */
+export type DraftWhenFilter = "any" | "upcoming" | "next_7_days" | "weeknight" | "weekend"
+/** US region of a league's official time zone. */
+export type TimeZoneRegionFilter =
+  | "any"
+  | "eastern"
+  | "central"
+  | "mountain"
+  | "pacific"
+  | "alaska_hawaii"
+  | "outside_us"
+/** Where a league sits against the viewer's rank. */
+export type RankBand = "step_up" | "your_level" | "chill"
+export type RankBandFilter = "all" | RankBand
 
 export interface DiscoveryCard {
   source: DiscoverySource
@@ -49,6 +69,11 @@ export interface DiscoveryCard {
   leagueType: DiscoverySource
   /** League style for discovery filtering (dynasty, redraft, best_ball, etc.). */
   leagueStyle?: DiscoveryLeagueStyle | null
+  /**
+   * Further styles the league also matches. A Guilly league's style is `guillotine`; one that is also
+   * best ball (or dynasty, keeper) keeps answering that filter too, as it did before Guilly had its own.
+   */
+  alsoStyles?: DiscoveryLeagueStyle[]
   /** Draft type when available (snake | linear | auction). */
   draftType: string | null
   /** Draft session status when available (pre_draft | in_progress | paused | completed). */
@@ -57,8 +82,12 @@ export interface DiscoveryCard {
   teamCount: number
   /** Draft or join deadline when available (ISO). */
   draftDate: string | null
+  /** The league's official IANA time zone, when it has one. */
+  timezone?: string | null
   /** Commissioner display name (same as ownerName). */
   commissionerName: string | null
+  /** Commish reputation, only when the commissioner made it public for this league (lib/commish-reputation). */
+  commissionerReputation?: PublicReputation | null
   /** AI-enabled features for display (e.g. ["ADP", "Trade"]). */
   aiFeatures: string[]
   /** Creator leagues only: FANTASY | BRACKET. */
@@ -71,10 +100,34 @@ export interface DiscoveryCard {
   inviteOnlyByTier?: boolean
   /** Whether the current viewer can join directly without an invite override. */
   canJoinByRanking?: boolean
+  leagueCareerLevel?: number
+  requiresCareerApproval?: boolean
   /** Ranking-fit score used for discovery ordering (higher = better fit). */
   rankingEffectScore?: number
   /** Absolute tier distance between viewer and league tier. */
   rankingTierDelta?: number
+  /** Step up / your level / chill against the signed-in viewer's rank; absent for anonymous viewers. */
+  rankBand?: RankBand | null
+  /**
+   * "invite": join here with the code. "request": the league plays elsewhere; ask the commissioner.
+   * "approval": a private AllFantasy league; ask, and join once the commissioner approves
+   * (lib/public-discovery/privateLeagueRequests.ts). An approval card carries no code and no page.
+   */
+  joinMode?: "invite" | "request" | "approval"
+  /** For a league that plays on another platform: which one (sleeper, espn, …). */
+  externalPlatform?: string | null
+  /** How the lister was shown to be the commissioner (lib/public-discovery/externalListing.ts). */
+  listingVerification?: "provider" | "attestation" | null
+  /** The commissioner's note on an external listing. */
+  listingNote?: string | null
+  /** Entry fee in dollars, when the league states one. AllFantasy never collects it. */
+  entryFee?: number | null
+  /** Up to three vibe tags the commissioner picked (lib/public-discovery/vibes.ts). */
+  vibes?: LeagueVibe[]
+  /** The commissioner card: their username, how many AllFantasy leagues they run, since when. */
+  commissionerUsername?: string | null
+  commissionerLeaguesRun?: number | null
+  commissionerSinceYear?: number | null
 }
 
 export interface DiscoverLeaguesInput {
@@ -92,6 +145,12 @@ export interface DiscoverLeaguesInput {
   draftType?: DraftTypeFilter
   draftStatus?: DraftStatusFilter
   aiEnabled?: boolean | null
+  draftWhen?: DraftWhenFilter
+  tzRegion?: TimeZoneRegionFilter
+  rankBand?: RankBandFilter
+  vibe?: LeagueVibeFilter
+  /** The viewer's IANA zone, so draft windows are judged on their clock. */
+  viewerTimeZone?: string | null
 }
 
 export interface DiscoverLeaguesResult {
@@ -104,4 +163,6 @@ export interface DiscoverLeaguesResult {
   viewerTier?: number
   viewerTierName?: string
   hiddenByTierPolicy?: number
+  /** Set when paid leagues were withheld because of where the viewer is (lib/geo/paidLeagueGeo.ts). */
+  paidLeaguesHidden?: { message: string } | null
 }

@@ -1,12 +1,24 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import type { Prisma } from "@prisma/client"
 
-import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
+import { isOwnerOrLeagueCommissioner } from "@/lib/commissioner/leagueCommissionerAccount"
 import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
 import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
+import { readCollusionValuation } from "@/lib/integrity/collusionValuationCoverage"
+import { NEW_LEAGUE_INTEGRITY_DEFAULTS } from "@/lib/integrity/integrityDefaults"
+import { resolveFlagManagers } from "@/lib/integrity/flagManagers"
+import { resolveWriteAuthority } from "@/lib/league/write-authority"
+import { readTradeAlertsEnabled, TRADE_ALERTS_KEY } from "@/lib/integrity/tradeAlerts"
+import { HOLD_FLAGGED_TRADES_KEY, parseHoldFlaggedTradesMode, readHoldFlaggedTradesMode } from "@/lib/integrity/holdFlaggedTrades"
+import { parseTankingPenaltyPolicyPatch, readTankingPenaltyPolicy, TANKING_PENALTIES_KEY } from "@/lib/integrity/tankingPenalties"
+import { isNativeFuturePickLeague } from "@/lib/league-trade-engine/nativeFuturePicks"
+import { tankingPenaltyRule } from "@/lib/league-rules-explainer/snapshot"
+import { diffRuleSnapshots } from "@/lib/league-rules-explainer/changeKeys"
+import { publishRuleChangesEvent } from "@/lib/league-rules-explainer/publishRuleChanges"
 
 export const dynamic = "force-dynamic"
 
@@ -18,21 +30,21 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true, settings: true, leagueType: true, isDynasty: true } })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const settings = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
-    create: { leagueId },
+    // A league with no row yet starts with the tanking monitor on (lib/integrity/integrityDefaults.ts).
+    create: { leagueId, ...NEW_LEAGUE_INTEGRITY_DEFAULTS },
     update: {},
   })
 
-  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking, nativeSeason] = await Promise.all([
+  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking, nativeSeason, collusionValuation] = await Promise.all([
     prisma.integrityFlag.findMany({
       where: { leagueId, status: "open" },
       orderBy: { createdAt: "desc" },
@@ -46,6 +58,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "collusion" } }),
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "tanking" } }),
     prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } }),
+    readCollusionValuation(leagueId),
   ])
 
   const coverage = buildIntegrityCoverage({
@@ -56,12 +69,33 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     lastTankingScanAt: settings.lastTankingScanAt,
   })
 
+  // Resolved at read time, so flags raised before the scan recorded manager names still say who.
+  const managers = await resolveFlagManagers([...openFlags, ...recentDismissed]).catch(() => new Map())
+  const withManagers = <T extends { id: string }>(flag: T) => ({ ...flag, affectedManagers: managers.get(flag.id) ?? [] })
+
   return NextResponse.json({
-    settings,
-    openFlags,
-    recentDismissed,
-    canReview: league.userId === userId,
+    // `tradeAlertsEnabled` lives in League.settings (lib/integrity/tradeAlerts.ts), shown beside these.
+    settings: {
+      ...settings,
+      tradeAlertsEnabled: readTradeAlertsEnabled(league.settings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(league.settings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(league.settings),
+      // Holding needs the trade to execute in AllFantasy; an imported league's trades go through on its host.
+      holdFlaggedTradesSupported: resolveWriteAuthority(league.platform) === "NATIVE",
+      // Penalties take an AllFantasy draft pick; an imported league's picks live on its host, so the
+      // control is not offered there (lib/integrity/tankingPenaltyService.ts refuses it too).
+      ...(resolveWriteAuthority(league.platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(league.settings) } : {}),
+      // Losing a draft pick and worse rookie-lottery odds take from a dynasty league's future picks; a
+      // redraft league has none, so only the FAAB penalty is offered there.
+      tankingPickPenaltiesSupported: isNativeFuturePickLeague(league),
+    },
+    openFlags: openFlags.map(withManagers),
+    recentDismissed: recentDismissed.map(withManagers),
+    // The head commissioner, by the shared rule: the owner, or a proven commissioner who joined a
+    // league someone else imported (a system-owned ESPN league has no owner who is a person).
+    canReview: await isOwnerOrLeagueCommissioner(league, leagueId, userId),
     coverage,
+    collusionValuation,
     stats: {
       totalFlagsAllTime: totalFlags,
       openCollusion,
@@ -81,7 +115,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch (e) {
     const st = (e as Error & { status?: number }).status ?? 403
     return NextResponse.json({ error: "Forbidden" }, { status: st })
@@ -94,10 +128,45 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
+  // Suspicious-trade alerts and "hold flagged trades": League.settings keys, merged inside a row lock
+  // like other settings writes (lib/integrity/tradeAlerts.ts, lib/integrity/holdFlaggedTrades.ts).
+  const settingsPatch: Record<string, unknown> = {}
+  // Anti-tanking penalties (lib/integrity/tankingPenalties.ts): a partial edit, merged onto the current policy.
+  let penaltyPatch: ReturnType<typeof parseTankingPenaltyPolicyPatch> = null
+  if (body.tankingPenalties !== undefined) {
+    penaltyPatch = parseTankingPenaltyPolicyPatch(body.tankingPenalties)
+    if (!penaltyPatch) return NextResponse.json({ error: "tankingPenalties: enabled (true/false), penalty (forfeit_pick, lottery_odds, faab), pickAtStrike and pickRound (1-10), lotteryOddsCutPct (25, 50, 75, 100), faabPercent (10, 25, 50, 100)" }, { status: 400 })
+    /*
+     * A pick penalty needs the league's future picks (lib/integrity/tankingPenaltyService.ts takes one from
+     * that inventory). A redraft league has none, so "Lose a draft pick" — the default — could never apply
+     * there, and a confirmed strike only told the manager "the commissioner will decide" (found by the
+     * redraft simulation, 2026-11-09). Refuse a pick penalty there; a policy edited without a penalty
+     * is stored as the FAAB one, the penalty such a league can enforce.
+     */
+    const penaltyLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, isDynasty: true } })
+    if (penaltyLeague && !isNativeFuturePickLeague(penaltyLeague)) {
+      if (penaltyPatch.penalty === "forfeit_pick" || penaltyPatch.penalty === "lottery_odds") {
+        return NextResponse.json({ error: "Losing a draft pick and worse rookie-lottery odds need a dynasty league's future picks, and this league has none. Choose Lose FAAB." }, { status: 400 })
+      }
+      penaltyPatch = { ...penaltyPatch, penalty: "faab" }
+    }
+  }
+  if (typeof body.tradeAlertsEnabled === "boolean") settingsPatch[TRADE_ALERTS_KEY] = body.tradeAlertsEnabled
+  // "Hold flagged trades": `off` / `severe` (the default) / `all`; the older on/off switch still works.
+  const holdInput = body.holdFlaggedTradesMode !== undefined ? body.holdFlaggedTradesMode : body.holdFlaggedTrades
+  if (holdInput !== undefined) {
+    const mode = parseHoldFlaggedTradesMode(holdInput)
+    if (!mode) return NextResponse.json({ error: "holdFlaggedTradesMode: off, severe or all" }, { status: 400 })
+    settingsPatch[HOLD_FLAGGED_TRADES_KEY] = mode
+  }
+  // Validated above, before anything is written, so a refused request changes nothing.
+
   const updated = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
     create: {
       leagueId,
+      // Defaults first; anything the commissioner sent below overrides them.
+      ...NEW_LEAGUE_INTEGRITY_DEFAULTS,
       ...(typeof body.collusionSensitivity === "string" ? { collusionSensitivity: body.collusionSensitivity } : {}),
       ...(typeof body.tankingMonitorEnabled === "boolean" ? { tankingMonitorEnabled: body.tankingMonitorEnabled } : {}),
       ...(typeof body.tankingSensitivity === "string" ? { tankingSensitivity: body.tankingSensitivity } : {}),
@@ -130,5 +199,48 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
     },
   })
 
-  return NextResponse.json({ settings: updated })
+  let leagueSettings: unknown
+  let settingsBefore: unknown = null
+  if (Object.keys(settingsPatch).length > 0 || penaltyPatch) {
+    leagueSettings = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+      const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      const current = (row?.settings as Record<string, unknown> | null) ?? {}
+      settingsBefore = current
+      const next = {
+        ...current,
+        ...settingsPatch,
+        ...(penaltyPatch ? { [TANKING_PENALTIES_KEY]: { ...readTankingPenaltyPolicy(current), ...penaltyPatch } } : {}),
+      }
+      await tx.league.update({ where: { id: leagueId }, data: { settings: next as Prisma.InputJsonValue } })
+      return next
+    })
+  } else {
+    leagueSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
+  }
+
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, leagueType: true, isDynasty: true } })
+  const platform = leagueRow?.platform ?? null
+
+  // A tanking-penalty edit is a rule members read in a dynasty league's rules popup: say what changed.
+  if (penaltyPatch && settingsBefore && resolveWriteAuthority(platform) === "NATIVE") {
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: "integrity",
+      changes: diffRuleSnapshots({ tankingPenalty: tankingPenaltyRule(settingsBefore) }, { tankingPenalty: tankingPenaltyRule(leagueSettings) }),
+    })
+  }
+
+  return NextResponse.json({
+    settings: {
+      ...updated,
+      tradeAlertsEnabled: readTradeAlertsEnabled(leagueSettings),
+      holdFlaggedTrades: readHoldFlaggedTradesMode(leagueSettings) !== "off",
+      holdFlaggedTradesMode: readHoldFlaggedTradesMode(leagueSettings),
+      holdFlaggedTradesSupported: resolveWriteAuthority(platform) === "NATIVE",
+      ...(resolveWriteAuthority(platform) === "NATIVE" ? { tankingPenalties: readTankingPenaltyPolicy(leagueSettings) } : {}),
+      tankingPickPenaltiesSupported: leagueRow ? isNativeFuturePickLeague(leagueRow) : false,
+    },
+  })
 }

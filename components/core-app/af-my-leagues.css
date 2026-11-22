@@ -15,6 +15,17 @@
   font-family: Archivo, system-ui, sans-serif;
 }
 
+/*
+ * Inside AfCoreShell (/core/leagues) the shell's `.af-content` already owns the gutter and the
+ * bottom inset for the floating buttons, so the screen drops its own centred cap and padding and
+ * fills the content column like every other /core screen. Standalone renders are untouched.
+ */
+.af-content .af-ml {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .af-ml-head {
   display: flex;
@@ -25,18 +36,7 @@
   margin-bottom: 18px;
 }
 
-.af-ml-title {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-}
-
-.af-ml-sub {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
+/* The title and the line under it are the shared PageHeader's (primitives/af-primitives.css). */
 
 .af-ml-sub strong {
   color: var(--text);
@@ -358,6 +358,23 @@
   grid-template-columns: 1fr;
 }
 
+/* A Survivor league and its Exile Island: one grid cell, the island under the league, joined by ↕. */
+.af-ml-exile-pair {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  align-content: start;
+}
+
+.af-ml-exile-link {
+  margin: 2px 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--accent);
+}
+
 /* ── Card ───────────────────────────────────────────────────────────────── */
 .af-ml-card {
   position: relative;
@@ -462,6 +479,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.af-ml-audience {
+  flex: 0 0 auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background-color: var(--chip);
+  color: var(--muted);
+}
+
+/* Public is the one worth noticing: anyone can find it in Find a League. */
+.af-ml-audience[data-audience='public'] {
+  background-color: var(--accent-soft);
+  color: var(--accent);
 }
 
 .af-ml-role {
@@ -794,10 +830,6 @@
 @media (max-width: 720px) {
   .af-ml {
     padding: 16px 14px 56px;
-  }
-
-  .af-ml-title {
-    font-size: 24px;
   }
 
   /* Chips scroll horizontally rather than wrapping into a tall block. */

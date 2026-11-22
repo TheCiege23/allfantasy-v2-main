@@ -1,4 +1,4 @@
-export type GuillotinePlayerValue = {
+type GuillotinePlayerValue = {
   guillotineValue: number
   normalFantasyValue: number
   floorScore: number
@@ -23,6 +23,6 @@ export async function getGuillotinePlayerValue(
     consistencyRating: 'B',
     survivalRating: 'Reliable',
     volatilityFlag: false,
-    valueJustification: 'Guillotine value emphasizes floor and health — full model pending.',
+    valueJustification: 'Guilly value emphasizes floor and health — full model pending.',
   }
 }

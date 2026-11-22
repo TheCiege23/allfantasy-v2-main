@@ -3,6 +3,7 @@
  * POST: Create a draft pick trade proposal.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -10,7 +11,6 @@ import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/liv
 import { getDraftSessionByLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveOverallForRoundSlot } from '@/lib/live-draft-engine/draftPickTradeInventory'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -26,6 +26,7 @@ import {
   saveCommissionerAiManagers,
 } from '@/lib/commissioner-ai-draft-manager'
 import { sendPrivateTradeAIDM } from '@/lib/trade-ai-dm/TradeAIDMService'
+import { tradeDeadlineRefusal } from '@/lib/trade-deadline/tradeDeadlineWindow'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function GET(
   if (!draftSession) return NextResponse.json({ proposals: [] })
 
   const myRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'view')
 
   let where: Record<string, unknown>
   if (commissioner) {
@@ -117,9 +118,21 @@ export async function POST(
     return NextResponse.json({ error: 'Draft pick trading is disabled in draft settings.' }, { status: 403 })
   }
 
+  /*
+   * The league's trade deadline binds the draft room too. A startup draft runs before the season, so
+   * it never trips this; a draft held mid-season (a supplemental or dispersal draft) would otherwise
+   * be a way to trade after trades closed. Same verdict as every other trade path.
+   */
+  const deadlineRefusal = await tradeDeadlineRefusal(leagueId, {}, { picksOnly: true })
+  if (deadlineRefusal) return NextResponse.json({ error: deadlineRefusal, code: 'TRADE_DEADLINE_PASSED' }, { status: 409 })
+
   const draftSession = await getDraftSessionByLeague(leagueId)
   if (!draftSession || draftSession.status !== 'in_progress') {
     return NextResponse.json({ error: 'No draft in progress' }, { status: 400 })
+  }
+
+  if (draftSession.draftType === 'auction' && draftSession.draftModeLabel === 'rookie') {
+    return NextResponse.json({ error: 'Rookie pick rights are fixed when the auction is created and cannot be traded during the auction.' }, { status: 400 })
   }
 
   const body = await req.json().catch(() => ({}))
@@ -287,7 +300,7 @@ export async function POST(
       category: 'trade_proposals',
       productType: 'app',
       type: 'draft_trade_ai_private_review',
-      title: `Private AI trade review${league?.name ? ` - ${league.name}` : ''}`,
+      title: `Private Chimmy trade review${league?.name ? ` - ${league.name}` : ''}`,
       body: `${aiReview.summary} Suggested action: ${aiReview.verdict.toUpperCase()}. Counter suggestion: ${privateAiDm.counterSuggestion}.`,
       actionHref: `/league/${leagueId}?tab=Draft`,
       actionLabel: 'Open draft trade panel',

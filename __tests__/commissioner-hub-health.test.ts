@@ -110,7 +110,7 @@ describe('commissioner hub health builder', () => {
         'Adjust Scores',
         'Reverse Trade',
         'Process Waivers',
-        'Lock Rosters',
+        'Lock all roster moves',
       ]),
     )
     expect(snapshot.actions.find((action) => action.key === 'process_waivers')?.enabled).toBe(false)

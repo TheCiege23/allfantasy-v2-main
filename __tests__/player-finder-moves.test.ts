@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { RecommendedMove } from '@/lib/core-app/playerFinder'
 import { composePlayerMoves, fixesTotal, readiness } from '@/lib/core-app/playerMoves'
+import { moveText } from '@/lib/core-app/playerMovesCopy'
 import { claimLink, lineupLink, movePath, tradeLink } from '@/lib/core-app/platformLinks'
 
 /*
@@ -146,6 +147,14 @@ const CLAIM: RecommendedMove = {
 }
 
 describe('composePlayerMoves', () => {
+  it('labels a daily-sport claim with league scoring in both languages', () => {
+    const daily: RecommendedMove = { ...CLAIM, scoringBasis: 'league', periodLabel: 'today' }
+    const [move] = composePlayerMoves({ playerName: 'Dalton Kincaid', injuryStatus: null, impact: [], freeAgents: [daily] })
+    expect(move.scoring).toBe('league')
+    expect(move.note).toContain('today · this league’s scoring')
+    expect(moveText(move, 'es').note).toContain('hoy · puntuación de esta liga')
+  })
+
   it('turns a benched player who out-projects a starter into a lineup fix with the platform link', () => {
     const [move] = composePlayerMoves({
       playerName: 'Dalton Kincaid',

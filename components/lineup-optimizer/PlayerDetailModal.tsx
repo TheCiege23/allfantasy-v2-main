@@ -42,7 +42,7 @@ export function PlayerDetailModal({
             </p>
           </section>
           <section className="rounded-xl border border-white/10 bg-black/25 p-3">
-            <h4 className="text-xs font-semibold uppercase text-white/45">News & AI outlook</h4>
+            <h4 className="text-xs font-semibold uppercase text-white/45">News & Chimmy outlook</h4>
             <p className="mt-2 text-white/55">
               Injury beats and Chimmy outlook will surface here for connected leagues.
             </p>

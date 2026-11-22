@@ -5,8 +5,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { RunBudget } from '@/lib/cron/runBudget'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
-import { listUserIdsPlayingSport } from '@/lib/notifications/sportAudience'
-import { withinDailyCap } from '@/lib/follows/teamFollowAlerts'
+import { listSportsAlertAudience } from '@/lib/notifications/sportAudience'
+import { isClickbait, newsDeliveryKey } from '@/lib/news/newsroomFilter'
 import { getTeamIndex, isTeamFollowSport, listFollowerIdsForTeam, listTeamsForSport } from '@/lib/follows/teamFollows'
 import { resolveTeam } from '@/lib/follows/teamResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
@@ -21,8 +21,8 @@ import {
 } from '@/lib/news/breakingNews'
 
 /**
- * Breaking-news alerts (2026-10-15): a trade, signing, firing, suspension or season-ending injury
- * reaches the people who care about it within one cron tick of the story landing in `sports_news`.
+ * Sports-news alerts: every fresh trusted story that qualifies for the admin newsroom
+ * reaches the sport audience by push and in-app within one cron tick of landing in `sports_news`.
  *
  * WHY THIS EXISTS. `notification-engine.ts` had a `breaking_news` type and a `breakingNews()`
  * factory that nothing called, and the player-news sender (PlayerNewsNotificationService) only
@@ -30,12 +30,11 @@ import {
  * case: Marvin Harrison Jr., Cardinals → Texans — sent nothing to anyone who did not already follow
  * one of the three. This is the sport-wide path.
  *
- * WHO GETS WHAT
- *   - `major` stories (trade, coaching change, suspension, season-ending injury, retirement, a big
- *     contract): everyone who plays the sport (lib/notifications/sportAudience) plus followers of
- *     the teams named.
- *   - `notable` stories (an ordinary signing, a release): followers of the teams named only.
- * Both under the `breaking_news` category, capped at BREAKING_NEWS_PER_DAY per person.
+ * Everyone who plays the sport, plus followers of named teams, receives each story.
+ * The category remains `breaking_news` for existing settings compatibility and is labelled
+ * "Sports news" in the settings UI. The editorial clickbait filter is shared with the admin page.
+ * PUSH + BELL ONLY, never email or text (owner's call, 2026-10-25): after the player-news fix it was
+ * the biggest email type left — 176 emails to 43 people in two and a half days, up to 5 a day each.
  *
  * DB-FIRST: reads `sports_news` only. The cron that calls this refreshes ESPN news first.
  *
@@ -45,10 +44,11 @@ import {
  * so concurrent runs cannot both send it either.
  */
 
+/** @deprecated Kept for import compatibility; newsroom alerts are no longer daily-capped. */
 export const BREAKING_NEWS_PER_DAY = 4
 const FRESH_WINDOW_MS = 3 * 60 * 60 * 1000
 const LEDGER_TTL_MS = 3 * 24 * 60 * 60 * 1000
-/** Stories considered per run, newest first. A trade deadline day is ~40. */
+/** The admin newsroom displays at most 60 stories; this sender uses the same bound. */
 const MAX_STORIES_PER_RUN = 60
 
 type NewsRow = {
@@ -65,7 +65,7 @@ type NewsRow = {
 
 export type BreakingCandidate = {
   row: NewsRow
-  classification: BreakingClassification
+  classification: BreakingClassification | null
   outlet: { host: string; name: string; handle: string | null }
   teams: string[]
   storyKey: string
@@ -84,7 +84,7 @@ async function teamsForStory(row: NewsRow): Promise<string[]> {
   return teamsMentioned(row.title, teams)
 }
 
-/** Fresh, trusted, breaking stories — classified and keyed, not yet claimed. */
+/** Fresh newsroom stories — classified and keyed, not yet claimed. */
 export async function findBreakingCandidates(now: Date = new Date()): Promise<BreakingCandidate[]> {
   const since = new Date(now.getTime() - FRESH_WINDOW_MS)
   const rows = (await prisma.sportsNews
@@ -117,18 +117,20 @@ export async function findBreakingCandidates(now: Date = new Date()): Promise<Br
     if (at.getTime() > now.getTime() + 10 * 60 * 1000) continue
     // A college story stored under a pro league would push to everyone who plays that league.
     if (isCollegeStoryForProSport(row.sport, row.sourceUrl)) continue
+    if (isClickbait(row.title)) continue
     const classification = classifyBreakingHeadline(row.title, row.description)
-    if (!classification) continue
     const outlet = trustedOutlet(row.sourceUrl)
     if (!outlet) continue
     const teams = await teamsForStory(row)
-    const storyKey = breakingStoryKey({ sport: row.sport.toUpperCase(), kind: classification.kind, teams, title: row.title, publishedAt: at })
+    const storyKey = classification
+      ? breakingStoryKey({ sport: row.sport.toUpperCase(), kind: classification.kind, teams, title: row.title, publishedAt: at })
+      : newsDeliveryKey(row.sport, row.title, at)
     if (seen.has(storyKey)) continue
     seen.add(storyKey)
     out.push({ row, classification, outlet, teams, storyKey })
-    if (out.length >= MAX_STORIES_PER_RUN) break
   }
-  return out
+  return out.sort((a, b) => Number(!!b.classification) - Number(!!a.classification) ||
+    (b.row.publishedAt ?? b.row.fetchedAt).getTime() - (a.row.publishedAt ?? a.row.fetchedAt).getTime()).slice(0, MAX_STORIES_PER_RUN)
 }
 
 /** Claim one story so no other run sends it. false = already sent. */
@@ -170,9 +172,7 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
     for (const team of c.teams) {
       for (const id of (await listFollowerIdsForTeam(sport, team).catch(() => null)) ?? []) audience.add(id)
     }
-    if (c.classification.tier === 'major') {
-      for (const id of await listUserIdsPlayingSport(sport)) audience.add(id)
-    }
+    for (const id of await listSportsAlertAudience(sport)) audience.add(id)
     if (audience.size === 0) continue
 
     if (!(await claimStory(c.storyKey, c.row, now).catch(() => false))) {
@@ -180,37 +180,48 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
       continue
     }
 
-    const allowed = await withinDailyCap([...audience], { provider: 'breaking_news_alerts', limit: BREAKING_NEWS_PER_DAY })
-    out.capped += audience.size - allowed.length
+    const allowed = [...audience]
     if (allowed.length === 0) continue
 
-    const title = breakingAlertTitle(sport, c.classification)
+    const title = c.classification ? breakingAlertTitle(sport, c.classification) : `${sport} news`
     const body = `${c.row.title} — via ${c.outlet.name}`
-    await dispatchNotification({
+    const deliveryKey = newsDeliveryKey(sport, c.row.title, c.row.publishedAt ?? c.row.fetchedAt)
+    const dispatched = await dispatchNotification({
       userIds: allowed,
       category: 'breaking_news',
-      type: 'breaking_news',
+      type: c.classification ? 'breaking_news' : 'sports_news',
       title,
       body,
       actionHref: c.row.sourceUrl ?? undefined,
       actionLabel: `Read on ${c.outlet.name}`,
       leagueId: null,
-      severity: c.classification.tier === 'major' ? 'high' : 'medium',
-      dedupePrefix: c.storyKey,
+      severity: c.classification?.tier === 'major' ? 'high' : 'medium',
+      dedupePrefix: deliveryKey,
+      skipChannels: { email: true, sms: true },
       meta: {
         sport,
-        kind: c.classification.kind,
-        tier: c.classification.tier,
-        confidence: c.classification.confidence,
+        eventKey: deliveryKey,
+        occurredAt: (c.row.publishedAt ?? c.row.fetchedAt).toISOString(),
+        detectedAt: now.toISOString(),
+        kind: c.classification?.kind ?? 'news',
+        tier: c.classification?.tier ?? 'notable',
+        confidence: c.classification?.confidence ?? null,
         teams: c.teams,
         source: c.outlet.name,
         sourceUrl: c.row.sourceUrl,
         newsId: c.row.id,
       },
-    }).catch((err) => console.error('[breaking-news] dispatch failed:', err instanceof Error ? err.message : err))
+    }).catch(async (err) => {
+      await prisma.sportsDataCache.delete({ where: { cacheKey: c.storyKey } })
+      throw err
+    })
+    if (dispatched && dispatched.failed > 0) {
+      await prisma.sportsDataCache.delete({ where: { cacheKey: c.storyKey } })
+      throw new Error('Breaking news recipient dispatch incomplete; retry on next tick')
+    }
     out.sent++
     out.recipients += allowed.length
-    out.stories.push({ sport, kind: c.classification.kind, tier: c.classification.tier, title: c.row.title, recipients: allowed.length })
+    out.stories.push({ sport, kind: c.classification?.kind ?? 'news', tier: c.classification?.tier ?? 'notable', title: c.row.title, recipients: allowed.length })
   }
   return out
 }

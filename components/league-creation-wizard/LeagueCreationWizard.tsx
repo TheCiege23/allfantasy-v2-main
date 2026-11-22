@@ -1,5 +1,6 @@
 'use client'
 
+import { getZombieCreationProfile } from '@/lib/zombie/creationPolicy'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -31,12 +32,12 @@ import type {
 import { getConceptIntroVideoUrl } from '@/lib/league-creation/concept-intro-videos'
 import { PlatformStyleSelector } from './PlatformStyleSelector'
 import { clampTeamCountForSport } from '@/lib/league-creation-wizard/sport-team-limits'
-import { COLLEGE_PAIR_WIZARD_PRIMARY_SPORTS } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import { readFetchJson } from '@/lib/http/readFetchJson'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
 import { useSportPreset } from '@/hooks/useSportPreset'
+import { wizardWaiverPreviewDefaults } from '@/lib/league-creation/wizardWaiverPreview'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import {
   getAllowedLeagueTypesForSport,
@@ -54,7 +55,6 @@ import { WizardStepNav } from './WizardStepNav'
 import { SportSelector } from './SportSelector'
 import { SoccerPipelineSelector } from './SoccerPipelineSelector'
 import { LeagueTypeSelector } from './LeagueTypeSelector'
-import { SURVIVOR_PAID_CREATION_ENABLED, SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE } from '@/lib/survivor/survivorCreationAvailability'
 import { DraftTypeSelector } from './DraftTypeSelector'
 import { TeamCountSelector, TeamSizeSelector } from './TeamSizeSelector'
 import { AiAutomationSettingsPanel } from './AiAutomationSettingsPanel'
@@ -77,6 +77,7 @@ import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mod
 import { getFeederLeagueCountForPool } from '@/lib/tournament-mode/tournament-sport-cutoffs'
 import type { WizardFormatOptions } from '@/lib/league-creation-wizard/wizard-format-options'
 import { LeagueFormatOptionsPanel } from './LeagueFormatOptionsPanel'
+import { DEFAULT_SELF_RUNNING_PRESET, offersSelfRunningPreset } from '@/lib/league-creation-wizard/selfRunningPreset'
 
 /** Lazy-loaded step panels to shrink initial bundle and improve mobile TTI. */
 const ScoringPresetSelector = dynamic(
@@ -104,10 +105,11 @@ function StepPanelSkeleton() {
   )
 }
 
-function ZombieTeamCountHint({ teamCount }: { teamCount: number }) {
+function ZombieTeamCountHint({ teamCount, sport }: { teamCount: number; sport: string }) {
+  const profile = getZombieCreationProfile(sport)
   return (
     <p className="mt-3 text-[11px] leading-relaxed text-white/45" data-testid="wizard-zombie-team-hint">
-      Zombie leagues support <span className="text-white/70">8, 10, 12, 14, or 16</span> teams (capped by this sport&apos;s max).
+      Zombie leagues default to 20 managers and support even sizes from <span className="text-white/70">4 to {profile.maxManagers}</span>.
       You selected <span className="text-white/70">{teamCount}</span> teams.
     </p>
   )
@@ -121,7 +123,7 @@ const STEP_LABELS: Record<ActiveWizardStepId, string> = {
   sport: 'Sport & setup',
   team_setup: 'League details',
   scoring: 'Scoring & rosters',
-  draft_privacy: 'AI & privacy',
+  draft_privacy: 'Chimmy & privacy',
   review: 'Review & create',
 }
 
@@ -445,10 +447,9 @@ export function LeagueCreationWizard({
         return 'Select a league timezone.'
       }
       if (state.leagueType === 'survivor' && state.formatOptions.survivorEntryFeeMode === 'paid') {
-        if (!SURVIVOR_PAID_CREATION_ENABLED) return SURVIVOR_PAID_CREATION_UNAVAILABLE_MESSAGE
-        const amt = Number(state.formatOptions.survivorEntryFeeUsd)
-        if (!Number.isFinite(amt) || amt <= 0) {
-          return 'Enter a buy-in amount greater than zero for a paid Survivor league.'
+        const usd = state.formatOptions.survivorEntryFeeUsd
+        if (usd != null && (!Number.isFinite(Number(usd)) || Number(usd) <= 0)) {
+          return 'Enter a dues amount greater than zero, or leave it blank.'
         }
       }
       return null
@@ -532,7 +533,7 @@ export function LeagueCreationWizard({
     zombieSportPresetRef.current = key
     setState((s) => ({
       ...s,
-      teamCount: clampTeamCountForSport(String(state.sport), 12, 'zombie'),
+      teamCount: clampTeamCountForSport(String(state.sport), 20, 'zombie'),
     }))
   }, [state.leagueType, state.sport])
 
@@ -788,7 +789,7 @@ export function LeagueCreationWizard({
     setError(null)
     try {
       if (state.leagueType === 'guillotine' && !state.formatOptions.guillotineRulesAcknowledged) {
-        setError('Confirm Guillotine elimination rules on the AI & privacy step.')
+        setError('Confirm Guilly elimination rules on Chimmy & privacy step.')
         setCreating(false)
         return
       }
@@ -1059,6 +1060,16 @@ export function LeagueCreationWizard({
           leagueType: state.leagueType,
           draftType: state.draftType,
         })
+        // Dynasty: apply the commissioner's "How much should AllFantasy run?" choice through the same
+        // presets the Commissioner Hub uses. Best-effort: the league exists either way, and every
+        // switch can be set later on the hub.
+        if (offersSelfRunningPreset(state.leagueType)) {
+          await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/automation-preset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preset: state.automationSettings.selfRunningPreset ?? DEFAULT_SELF_RUNNING_PRESET }),
+          }).catch(() => null)
+        }
         onSuccess?.(leagueId)
         router.push(
           buildPostCreateLeagueHomeHref({
@@ -1155,7 +1166,7 @@ export function LeagueCreationWizard({
 
   useEffect(() => {
     if (!creationPreset?.waiver) return
-    const key = `${state.sport}|${state.leagueVariant ?? state.scoringPreset ?? ''}`
+    const key = `${state.sport}|${state.leagueVariant ?? state.scoringPreset ?? ''}|${state.leagueType ?? ''}`
     if (skipInitialWaiverPresetSyncRef.current) {
       skipInitialWaiverPresetSyncRef.current = false
       lastWaiverPresetKeyRef.current = key
@@ -1169,9 +1180,13 @@ export function LeagueCreationWizard({
       return
     }
     if (lastWaiverPresetKeyRef.current === key) return
-    setState((s) => ({ ...s, waiverSettings: toWizardWaiverSettings(creationPreset.waiver) }))
+    setState((s) => ({
+      ...s,
+      // Redraft previews what creation writes (FAAB $100), not the scoring variant's preset.
+      waiverSettings: toWizardWaiverSettings(wizardWaiverPreviewDefaults(creationPreset.waiver, s.sport, s.leagueType)),
+    }))
     lastWaiverPresetKeyRef.current = key
-  }, [creationPreset?.waiver, state.sport, state.leagueVariant, state.scoringPreset])
+  }, [creationPreset?.waiver, state.sport, state.leagueVariant, state.scoringPreset, state.leagueType])
 
   useEffect(() => {
     if (!creationPreset?.defaultLeagueSettings) return
@@ -1365,7 +1380,7 @@ export function LeagueCreationWizard({
                     onTeamCountChange={handleTeamCountChange}
                   />
                   {state.leagueType === 'zombie' && (
-                    <ZombieTeamCountHint teamCount={state.teamCount} />
+                    <ZombieTeamCountHint teamCount={state.teamCount} sport={String(state.sport)} />
                   )}
                 </div>
               </div>

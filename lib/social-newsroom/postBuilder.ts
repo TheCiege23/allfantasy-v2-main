@@ -36,7 +36,7 @@ export const SOCIAL_CHAR_LIMITS: Record<SocialPlatform, number> = {
 /** X counts every link as 23 characters, whatever its length. */
 const X_LINK_WEIGHT = 23
 
-export type StoryInput = {
+type StoryInput = {
   sport: string
   title: string
   description?: string | null
@@ -61,6 +61,7 @@ export type SocialPost = {
 
 /** Flavour lines per kind. Generic on purpose — they state no fact. */
 const FUN_LEADS: Record<BreakingKind | 'news', readonly string[]> = {
+  championship_matchup: ['The stage is set'],
   trade: ['New city, who dis? 📦', 'Pack your bags 🧳', 'The group chat is about to explode 💥', 'Blockbuster alert 🎬'],
   signing: ['Pen meets paper ✍️', 'Locked in 🔒', 'Contract szn 💰', 'Ink is dry ✒️'],
   release: ['Roster shake-up 🔄', 'Moves are being made 👀', 'Plot twist incoming 🌀'],
@@ -73,6 +74,7 @@ const FUN_LEADS: Record<BreakingKind | 'news', readonly string[]> = {
 }
 
 const STRAIGHT_LEADS: Record<BreakingKind | 'news', string> = {
+  championship_matchup: 'CHAMPIONSHIP MATCHUP SET',
   trade: '🚨 TRADE',
   signing: '✍️ SIGNING',
   release: '🔄 ROSTER MOVE',
@@ -86,7 +88,7 @@ const STRAIGHT_LEADS: Record<BreakingKind | 'news', string> = {
 /** Topics that are never given a fun line, whatever the classifier said. */
 const SOMBRE = /\b(dies|died|death|dead|passed away|killed|arrest(ed)?|charged|shooting|assault|domestic|crash|hospitali[sz]ed|cancer|tragic|mourn|memorial)\b/i
 
-export function isSombre(title: string): boolean {
+function isSombre(title: string): boolean {
   return SOMBRE.test(title)
 }
 
@@ -116,7 +118,7 @@ const SPORT_TAGS: Record<string, string> = {
   SOCCER: '#MLS',
 }
 
-export function hashtagsFor(sport: string, teamNames: readonly string[]): string[] {
+function hashtagsFor(sport: string, teamNames: readonly string[]): string[] {
   const tags = [SPORT_TAGS[sport.toUpperCase()] ?? `#${sport.toUpperCase()}`, ...teamNames.slice(0, 3).map(hashtagForTeam)]
   return tags.filter((t, i) => t.length > 1 && tags.indexOf(t) === i)
 }
@@ -207,6 +209,7 @@ export function buildStoryPosts(story: StoryInput): SocialPost[] {
 
 /** Engagement prompts per kind. Questions to the audience — never claims. */
 const VIRAL_STORY_PROMPTS: Record<BreakingKind | 'news', readonly string[]> = {
+  championship_matchup: ['Who takes the title?'],
   trade: ['Who won this trade? 👇', 'Grade this trade A–F 👇', 'Winners and losers? Go 👇'],
   signing: ['Grade this deal A–F 👇', 'Worth it? 👍 or 👎', 'Bargain or overpay? 👇'],
   release: ['Where do they land next? 👇', 'Right call? 👍 or 👎'],
@@ -217,7 +220,7 @@ const VIRAL_STORY_PROMPTS: Record<BreakingKind | 'news', readonly string[]> = {
   news: ['Your reaction in one emoji 👇', 'Hot take time 🔥 Go 👇', 'Thoughts? 👇'],
 }
 
-export type HighlightInput = {
+type HighlightInput = {
   sport: string
   homeTeam: string
   awayTeam: string
@@ -243,7 +246,7 @@ export function buildHighlightPosts(h: HighlightInput): SocialPost[] {
 
 /* ── Tonight's games ─────────────────────────────────────────────────────────────────────────── */
 
-export type GameInput = {
+type GameInput = {
   sport: string
   homeTeam: string
   awayTeam: string

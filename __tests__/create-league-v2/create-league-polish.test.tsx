@@ -119,19 +119,24 @@ describe('timezones are named, and every listed one is valid', () => {
   })
 })
 
-describe('Survivor starts at 16 and offers 16 or 20', () => {
-  it('NBA Survivor offers 16 and 20, starts at 16, and both pass the server', () => {
-    expect(getTeamCountOptions('NBA', 'survivor')).toEqual([16, 20])
+describe('Survivor starts at 16 and offers 12–24 in equal tribe splits', () => {
+  it('NBA Survivor offers the eight cast sizes, starts at 16, and every size passes the server with a valid split', () => {
+    expect(getTeamCountOptions('NBA', 'survivor')).toEqual([12, 15, 16, 18, 20, 21, 22, 24])
     expect(getDefaultTeamCount('NBA', 'survivor')).toBe(16)
     const fresh = freshCreateLeagueState({ ...DEFAULT_V2_STATE, sport: 'NBA' })
     expect(fresh.leagueType).toBe('survivor')
     expect(fresh.teamCount).toBe(16)
     expect(fresh.survivorTribeCount).toBe(4)
-    for (const teamCount of [16, 20]) {
-      const result = validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount, draftType: 'snake', leagueName: 'Island', conceptSetup: { survivorTribeCount: 4 } })
-      expect(result.ok, `${teamCount}: ${JSON.stringify(result)}`).toBe(true)
+    const splits: Record<number, number[]> = { 12: [2, 3, 4], 15: [3], 16: [2, 4], 18: [2, 3], 20: [2, 4], 21: [3], 22: [2], 24: [2, 3, 4] }
+    for (const [teamCount, tribes] of Object.entries(splits).map(([k, v]) => [Number(k), v] as const)) {
+      for (const survivorTribeCount of tribes) {
+        const result = validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount, draftType: 'snake', leagueName: 'Island', conceptSetup: { survivorTribeCount } })
+        expect(result.ok, `${teamCount}/${survivorTribeCount}: ${JSON.stringify(result)}`).toBe(true)
+      }
+      const uneven = [2, 3, 4].find(t => !tribes.includes(t))
+      if (uneven) expect(validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount, draftType: 'snake', leagueName: 'Island', conceptSetup: { survivorTribeCount: uneven } }).ok).toBe(false)
     }
-    expect(validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount: 18, draftType: 'snake', leagueName: 'Island' }).ok).toBe(false)
+    expect(validateCreatePayload({ concept: 'survivor', sport: 'NBA', scoringPreset: 'nba_points', teamCount: 17, draftType: 'snake', leagueName: 'Island' }).ok).toBe(false)
   })
 })
 

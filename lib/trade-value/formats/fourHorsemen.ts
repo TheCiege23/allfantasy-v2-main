@@ -36,9 +36,6 @@
 import type { FormatAdjustment, FormatValueInput, FormatValueModel, TradeLegality } from './types'
 import { isPastTradeDeadline, stashCapacity } from '../leagueShape'
 
-/** Rules §9: "Trades are prohibited from after 13 through 17." */
-export const FOUR_HORSEMEN_DEADLINE_WEEK = 13
-
 /**
  * Rules §4: taxi is "for players with 3 years or less experience".
  *
@@ -65,7 +62,7 @@ export const STASH_OPTIONALITY_BONUS = 1.05
 export const ELIMINATOR_STRIKES_TO_ELIMINATION = 4
 
 /** Team state this model understands. Absent members simply switch the relevant effect off. */
-export interface FourHorsemenTeamState {
+interface FourHorsemenTeamState {
   /** Eliminator strikes accrued. 0–4. */
   eliminatorStrikes?: number | null
   /** True once the team is out of the Eliminator — its scores no longer count toward that pot. */
@@ -104,6 +101,7 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
       reason:
         'This team is out of the Eliminator, so its weekly scores no longer count toward that ' +
         'side pot. Weekly floor stops mattering; only the championship does.',
+      reasonCode: 'fourHorsemen.eliminatorOut',
     }
   }
   const strikes = state.eliminatorStrikes
@@ -118,6 +116,7 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
         `Three Eliminator strikes — one more low week and this team is out of the $50 side pot. ` +
         `A safe weekly floor is worth more than a boom/bust ceiling right now, which is the ` +
         `opposite of what the championship rewards.`,
+      reasonCode: 'fourHorsemen.eliminatorLastStrike',
     }
   }
   return {
@@ -125,6 +124,8 @@ function eliminatorPressure(state: FourHorsemenTeamState | null): FormatAdjustme
     reason:
       `${strikes} Eliminator strike${strikes === 1 ? '' : 's'} — ${remaining} from elimination. ` +
       `Weekly floor is starting to matter alongside season totals.`,
+    reasonCode: strikes === 1 ? 'fourHorsemen.eliminatorStrike' : 'fourHorsemen.eliminatorStrikes',
+    reasonParams: { strikes, remaining },
   }
 }
 
@@ -150,6 +151,8 @@ export const fourHorsemenModel: FormatValueModel = {
           `${stash} free taxi/IR slots and ${input.shape.benchSlots ?? '—'} bench spots mean ` +
           `holding a ${exp}-year player costs this roster nothing. Cheap to stash, so worth ` +
           `slightly more here than in a league where he occupies a contributor's seat.`,
+        reasonCode: 'fourHorsemen.stash',
+        reasonParams: { stash, bench: input.shape.benchSlots ?? '—', years: exp ?? '' },
       }
     }
 
@@ -160,11 +163,10 @@ export const fourHorsemenModel: FormatValueModel = {
   /**
    * Rules §9, two separate prohibitions, both legality rather than valuation.
    *
-   * ⚠ THE DEADLINE IS READ FROM THE SHAPE, NOT FROM THE CONSTANT. `FOUR_HORSEMEN_DEADLINE_WEEK`
-   * documents what the rulebook says; the shape carries what the league is actually configured
-   * with. If they disagree the configuration wins, because that is what will enforce it — and a
-   * model that trusted its own constant would tell a manager a trade is legal while the platform
-   * refuses it.
+   * ⚠ THE DEADLINE IS READ FROM THE SHAPE, NOT FROM A CONSTANT. The rulebook names a week; the
+   * shape carries what the league is actually configured with. If they disagree the configuration
+   * wins, because that is what will enforce it — and a model that trusted a constant would tell a
+   * manager a trade is legal while the platform refuses it.
    */
   canTrade(input: FormatValueInput): TradeLegality {
     if (isPastTradeDeadline(input.shape, input.currentWeek)) {
@@ -174,6 +176,8 @@ export const fourHorsemenModel: FormatValueModel = {
           `Trades are closed after week ${input.shape.deadlineWeek} in this league (rules §9: ` +
           `"Trades are prohibited from after 13 through 17"). They reopen the day after the ` +
           `championship game.`,
+        reasonCode: 'fourHorsemen.closed',
+        reasonParams: { week: input.shape.deadlineWeek ?? '' },
       }
     }
     return { ok: true }

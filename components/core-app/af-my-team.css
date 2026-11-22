@@ -38,8 +38,16 @@
   border-color: var(--bad);
   background: var(--bad-soft);
 }
-.af-mt-lock[data-locked='true'] {
-  opacity: 0.7;
+/*
+ * Games have started: quieter than a countdown, but still readable. This used to be `opacity: 0.7`
+ * on the whole strip, which faded the already-faint label with it — 2.4:1 contrast in light mode.
+ * The time steps down to the muted ink instead, and every line keeps its own contrast.
+ */
+.af-mt-lock[data-locked='true'] .af-mt-lock-time {
+  color: var(--muted);
+}
+.af-mt-lock[data-locked='true'] .af-mt-lock-label {
+  color: var(--muted);
 }
 
 .af-mt-lock-label {
@@ -497,6 +505,56 @@
   opacity: 1;
 }
 
+/*
+ * A column with no value in ANY row of its table leaves the grid, header included
+ * (`emptyProjectionColumns`, set per section as data-proj-engine / data-proj-market).
+ * A Fantrax NHL roster carried three columns of em dashes (live check 2026-11-05). The
+ * cells stay in the DOM — the narrow rules below hide headers by position — so each
+ * width restates its template here, after its base rule, at a higher specificity.
+ */
+.af-mt-section[data-proj-engine='off'] .af-mt-proj--engine,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead--engine,
+.af-mt-section[data-proj-market='off'] .af-mt-share,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead--market {
+  display: none;
+}
+.af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'] .af-mt-projhead {
+  grid-template-columns: 54px 44px 46px;
+}
+.af-mt-section[data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px 46px;
+}
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+.af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+  grid-template-columns: 54px;
+}
+@media (max-width: 720px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
+}
+@container af-mt (max-width: 500px) {
+  .af-mt-section[data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-section[data-proj-engine='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'] .af-mt-projhead,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projpair,
+  .af-mt-section[data-proj-engine='off'][data-proj-market='off'] .af-mt-projhead {
+    grid-template-columns: 50px;
+  }
+}
+
 /* ── Game context marks ──────────────────────────────────────────────── */
 .af-mt-venue {
   margin-left: 6px;
@@ -818,6 +876,28 @@
   font-size: 12.5px;
   color: var(--text2);
 }
+/*
+ * ⚠ THE BASE LOOK, FOR EVERY LEAGUE. This link was styled only under `[data-format=redraft]`
+ * (af-core-redraft-myteam.css), so best ball, dynasty and every other format got a raw 18px
+ * white anchor with no arrow. Redraft still recolours it to its sport accent on top of this.
+ */
+.af-mt-mu-go {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-mt-mu-go::after {
+  content: '\2192';
+  margin-left: 6px;
+}
+.af-mt-mu-go:hover,
+.af-mt-mu-go:focus-visible {
+  text-decoration: underline;
+}
 
 @media (max-width: 560px) {
   /* Stacked, with the divider between — a three-column scoreboard at this
@@ -941,6 +1021,18 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+/*
+ * Above the phone layout the name WRAPS rather than clipping. With the right-hand column open, the
+ * player column on a 1440px screen is ~110px, and a one-line nowrap name was cut mid-word with no
+ * ellipsis ("Sawyer Montc"), because text-overflow does not apply inside a flex row. A second line is
+ * cheaper than a name you cannot read. Phones keep their own one-line rule (the 720px block below,
+ * which carries the 44px tap-target fix).
+ */
+@media (min-width: 721px) {
+  .af-core .af-mt-player-name { flex-wrap: wrap; row-gap: 2px; overflow: visible; white-space: normal; }
+  .af-core .af-mt-player-name > .af-pc-trigger { display: block; min-width: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 }
 .af-mt-player-name .af-mt-bye {
   margin-left: 0;
@@ -1275,6 +1367,8 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-weight: 800;
   color: var(--text);
 }
+/* The swap's graded record: the shared EvidenceLine (primitives/af-evidence.css), on its own line under the call. */
+.af-mt-bench-check-record { margin-top: 5px; }
 
 /*
   "Fix Lineup in Sleeper ↗" — the one action on a read-only screen.
@@ -1419,6 +1513,10 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   color: var(--accent);
   padding: 8px 12px;
   text-align: left;
+  /* A <button> inherits My Team's 18px body size; the strip around it is 11.5px. */
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 .af-core .af-mt-bench-caveat { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .af-core .af-mt-bench-check { flex-wrap: wrap; }
@@ -1611,9 +1709,15 @@ a.af-mt-lock-fix:focus-visible {
   display: contents;
 }
 /* …except that byes and the scoring basis come AFTER the roster. They explain the week; the
-   lineup is the week. The matchup stays above the starters. */
+   lineup is the week. The matchup stays above the starters, EXCEPT on a narrow page: see "Phone:
+   the lineup right after the fix" at the end of this file (2026-11-07). */
 .af-mt-byes,
 .af-mt-basis {
+  order: 1;
+}
+/* The page's "More detail" fold now holds byes and basis (2026-11-20), so it takes their place:
+   after the roster on a narrow page, in the side column on a wide one. */
+.af-mt-more {
   order: 1;
 }
 
@@ -2578,4 +2682,213 @@ li[data-kind='questionable'] .af-mt-check-tag {
   .af-core .af-mt-tiles { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-left: 0; }
   .af-core .af-mt-tile { min-width: 0; padding: 7px; }
   .af-core .af-mt-tile-value { font-size: 19px; }
+  /*
+   * The source link takes its own full row. The rule above it in this file caps it at 260px, and a
+   * capped flex item fits beside the name, so the name was squeezed to one letter per line.
+   */
+  .af-core .af-mt-source { flex: 1 1 100%; max-width: none; }
+}
+
+/*
+ * ── Phone header tiles: the projection gets the whole row (2026-11-05) ────────────────────────
+ * The rule above splits the tiles into three equal columns at this width, while the lead tile's own
+ * rule (the 500px container block near "Compare projections") lays it out as value + label on the
+ * left and the toggle on the right, across the full row. Inside a 108px column that left column
+ * computed to 0px and "Compare projections" was drawn on top of "PROJECTED · SLEEPER · YOUR LEAGUE".
+ * Now the projection group spans the row it was written for, and Record and Roster value share
+ * the row below — half-width each, so the roster-value reason no longer runs to seven lines.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-core .af-mt-tiles > .af-mt-projgroup { grid-column: 1 / -1; }
+}
+
+/*
+ * The lineup check, inside the decision card: its list, without a second frame around it. The
+ * `.af-mt-decision` step outranks the redraft stamp's own `.af-mt-check` panel, which loads after
+ * this file and otherwise drew a yellow box inside the card.
+ */
+.af-core .af-mt-decision .af-mt-check--embedded,
+.af-core.af-shell[data-format=redraft] .af-mt-decision .af-mt-check--embedded {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* With the list inside, the card is tall: its buttons stay level with the headline, not mid-card. */
+.af-core .af-mt-decision {
+  align-items: flex-start;
+}
+
+/* ── Best lineup this week (lib/core-app/lineupOptimizer.ts) ───────────── */
+.af-mt-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.af-mt-opt[data-state='optimal'] {
+  border-color: var(--good);
+}
+.af-mt-opt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-mt-opt-head .af-label {
+  margin: 0;
+}
+.af-mt-opt-gain {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line, var(--accent));
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-mt-opt-gain[data-verdict='close'] {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+}
+.af-mt-opt-totals,
+.af-mt-opt-clear,
+.af-mt-opt-close {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-opt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-mt-opt-list li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface2);
+  font-size: 13px;
+}
+/* Start / Bench: the verb is the decision, so it leads the row. */
+.af-mt-opt-tag {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-mt-opt-list li[data-kind='start'] .af-mt-opt-tag {
+  border-color: var(--accent-line, var(--accent));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-mt-opt-slot {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+/* Benched, not removed: muted rather than struck through. */
+.af-mt-opt-out {
+  min-width: 0;
+  color: var(--text2);
+  overflow-wrap: anywhere;
+}
+.af-mt-opt-in {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-mt-opt-in strong {
+  font-weight: 800;
+}
+.af-mt-opt-moves {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 480px) {
+  .af-mt-opt-list li {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+  }
+}
+
+/*
+ * Phone pass (2026-11-06): the lineup check INSIDE the decision card. On a 375px phone the card was
+ * 731px, the tallest thing before the first starter, and part of that was saying things twice: a
+ * second "Lineup check" heading under the card's own "Replace <player>", and the confirm-on-your-
+ * platform caveat the card's paragraph already gives. On a phone those two go; the list, the free
+ * agents and the fix button stay. The standalone check (not embedded) keeps both. Appended at depth 0.
+ */
+@media (max-width: 720px) {
+  .af-mt-check--embedded > h2.af-label,
+  .af-mt-check--embedded > .af-mt-footnote {
+    display: none;
+  }
+}
+
+/*
+ * ── Phone: the lineup right after the fix (2026-11-07 phone pass) ──
+ *
+ * Measured live at 375px: STARTERS began 2,231px down, on the third screen. Between the countdown and
+ * the roster sat the Sleeper check strip (158px), the lineup decision (503px), the projected matchup
+ * (291px) and "Best lineup this week" (307px), which proposes the same swap as the decision card with
+ * a second "Fix in Sleeper".
+ *
+ * On a narrow page the order becomes: header, countdown, the decision (the fix), then Starters, Bench,
+ * IR and Taxi, and only then the check strip, the matchup and Best lineup. Byes and the scoring basis
+ * keep their `order: 1` and still come last.
+ *
+ * ⚠ THIS REVERSES "the matchup stays above the starters" (the rule further up) FOR A NARROW PAGE ONLY.
+ * On a phone the matchup is a 291px card you read once; the roster is what you came to set.
+ *
+ * Visual order only, the same as the countdown rule above: the DOM (and so Tab and screen-reader order)
+ * is unchanged, and each card is self-contained. A narrow PAGE, the same container query as the
+ * countdown, so an upright iPad keeps today's order. Its own top-level block at end of file.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt .af-mt-decision,
+  .af-core .af-mt #af-mt-starters,
+  .af-core .af-mt .af-mt-bench,
+  .af-core .af-mt .af-mt-ir,
+  .af-core .af-mt .af-mt-taxi {
+    order: -1;
+  }
+}
+
+/*
+ * ── Phone header tiles: Record takes only its own width (2026-11-07) ──
+ * After the rule above, Record and Roster value shared the row half and half. The roster-value reason
+ * ("7,396 above the median · QB is your best (1st) · WR your thinnest (9th) · priced 13 of your 15")
+ * then ran to 87px in a 143px column, and the grid stretched "5-3 · Record" to the same 157px.
+ * Record now takes its own width (88px floor), Roster value takes the rest, and the reason keeps its
+ * first two lines; the same per-position breakdown is in the Positional strength card further down.
+ * Measured live at 375px: header 365 -> 313px. Top-level, appended.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-head .af-mt-tiles { grid-template-columns: auto minmax(0, 1fr); }
+  .af-core .af-mt-head .af-mt-tiles > .af-mt-tile:not(.af-mt-tile--grade) { min-width: 88px; }
+  .af-core .af-mt-head .af-mt-tile--grade .af-mt-tile-why {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
 }

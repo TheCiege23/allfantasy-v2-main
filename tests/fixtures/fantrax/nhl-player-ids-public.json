@@ -1,0 +1,172 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-26T02:22:22Z",
+    "source": "https://www.fantrax.com/fxea/general/getPlayerIds?sport=NHL",
+    "note": "Slice of 20 of 9054 rows: exactly the players in nhl-public-2026.json playerInfo."
+  },
+  "players": {
+    "04qyi": {
+      "name": "Ragnarsson, Jacob",
+      "fantraxId": "04qyi",
+      "team": "NYR",
+      "position": "D"
+    },
+    "04qyh": {
+      "statsIncId": 7966,
+      "rotowireId": 5798,
+      "sportRadarId": "ab3a4a15-eaa8-4025-9cbd-a144d1487fd5",
+      "name": "Madden, Tyler",
+      "fantraxId": "04qyh",
+      "team": "MIN",
+      "position": "RW"
+    },
+    "04qyk": {
+      "rotowireId": 5799,
+      "sportRadarId": "66072bf9-665d-4021-a26a-057aa2625ccb",
+      "name": "Emberson, Ty",
+      "fantraxId": "04qyk",
+      "team": "EDM",
+      "position": "D"
+    },
+    "04qyj": {
+      "rotowireId": 5800,
+      "sportRadarId": "12d761d1-96e1-4647-9fe7-3ed44548c833",
+      "name": "Harris, Jordan",
+      "fantraxId": "04qyj",
+      "team": "BOS",
+      "position": "D"
+    },
+    "04qye": {
+      "statsIncId": 7963,
+      "rotowireId": 5761,
+      "sportRadarId": "6cebc9c4-e745-4e2f-8026-34dd01798bdc",
+      "name": "Jenik, Jan",
+      "fantraxId": "04qye",
+      "team": "LAK",
+      "position": "RW"
+    },
+    "04qyd": {
+      "statsIncId": 7962,
+      "rotowireId": 5794,
+      "sportRadarId": "0bc4a24a-7cf0-46d6-8c9c-d771873adf92",
+      "name": "Annunen, Justus",
+      "fantraxId": "04qyd",
+      "team": "NSH",
+      "position": "G"
+    },
+    "04qyg": {
+      "statsIncId": 7965,
+      "rotowireId": 5783,
+      "sportRadarId": "0e04ecf6-bf13-4aa6-9d61-873ea0ee941d",
+      "name": "Regula, Alec",
+      "fantraxId": "04qyg",
+      "team": "EDM",
+      "position": "D"
+    },
+    "04qyf": {
+      "statsIncId": 7964,
+      "rotowireId": 5725,
+      "sportRadarId": "08d8e479-92ab-4e39-be71-b85f8627171e",
+      "name": "Hillis, Cameron",
+      "fantraxId": "04qyf",
+      "team": "(N/A)",
+      "position": "C"
+    },
+    "04qya": {
+      "statsIncId": 7956,
+      "rotowireId": 5713,
+      "sportRadarId": "583d26f2-2efa-49a2-ad1f-7e64fc34c99e",
+      "name": "Hallander, Filip",
+      "fantraxId": "04qya",
+      "team": "EDM",
+      "position": "C"
+    },
+    "04qyc": {
+      "rotowireId": 5768,
+      "sportRadarId": "31df6c0c-b99e-43cb-b99c-8e13a680fda7",
+      "name": "Morozov, Ivan",
+      "fantraxId": "04qyc",
+      "team": "VGK",
+      "position": "RW"
+    },
+    "04qyb": {
+      "statsIncId": 7957,
+      "rotowireId": 5739,
+      "sportRadarId": "96bd5792-6ec8-4896-a815-56a5ec078326",
+      "name": "Fortier, Gabriel",
+      "fantraxId": "04qyb",
+      "team": "TBL",
+      "position": "LW"
+    },
+    "04qxx": {
+      "rotowireId": 6833,
+      "sportRadarId": "74ca5048-8e75-4ad3-b004-9f677c84ae68",
+      "name": "Dronov, Grigori",
+      "fantraxId": "04qxx",
+      "team": "(N/A)",
+      "position": "D"
+    },
+    "04qz9": {
+      "name": "Killinen, Lenni",
+      "fantraxId": "04qz9",
+      "team": "CAR",
+      "position": "RW"
+    },
+    "04qxz": {
+      "rotowireId": 5795,
+      "sportRadarId": "53c7d7d2-a554-4fca-bc1e-30e12930b940",
+      "name": "Lindbom, Olof",
+      "fantraxId": "04qxz",
+      "team": "(N/A)",
+      "position": "G"
+    },
+    "01yqh": {
+      "name": "Ridderwall, Stefan",
+      "fantraxId": "01yqh",
+      "team": "NYI",
+      "position": "G"
+    },
+    "04qxy": {
+      "statsIncId": 7936,
+      "rotowireId": 5856,
+      "sportRadarId": "91e5bfe0-73b9-4174-aa84-86f7a4e9fe18",
+      "name": "Romanov, Alexander",
+      "fantraxId": "04qxy",
+      "team": "NYI",
+      "position": "D"
+    },
+    "04qz6": {
+      "statsIncId": 7998,
+      "rotowireId": 5809,
+      "name": "Gross, Nico",
+      "fantraxId": "04qz6",
+      "team": "NYR",
+      "position": "D"
+    },
+    "04qz5": {
+      "statsIncId": 7997,
+      "rotowireId": 5741,
+      "sportRadarId": "8ed7d7f8-7497-45a9-9f18-32d27e953f07",
+      "name": "Demin, Slava",
+      "fantraxId": "04qz5",
+      "team": "MTL",
+      "position": "D"
+    },
+    "04qz8": {
+      "statsIncId": 8000,
+      "sportRadarId": "90fa9ded-a89b-4c03-8857-0c7a9a273b3d",
+      "name": "Pivonka, Jacob",
+      "fantraxId": "04qz8",
+      "team": "(N/A)",
+      "position": "C"
+    },
+    "04qz7": {
+      "rotowireId": 6583,
+      "sportRadarId": "739635ca-7059-497d-85c2-e75a9ddcc425",
+      "name": "Weatherby, Jasper",
+      "fantraxId": "04qz7",
+      "team": "(N/A)",
+      "position": "C"
+    }
+  }
+}

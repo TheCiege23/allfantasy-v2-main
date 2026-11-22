@@ -163,7 +163,7 @@ describe('TradeVisual', () => {
    * columns, the fairness band, "Send it on ESPN" — describes an action the manager cannot take.
    * Rendering them under a caveat is how a caveat gets skimmed.
    */
-  it('🛑 a guillotine league gets a BID card, and none of the trade furniture', () => {
+  it('🛑 a Guilly league gets a BID card, and none of the trade furniture', () => {
     render(
       <TradeVisual
         state={{

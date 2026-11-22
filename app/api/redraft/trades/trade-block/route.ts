@@ -22,13 +22,13 @@ const GRADED_BLOCK_OFFERS = 8
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const items = await listLeagueTradeBlock(leagueId)
 
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const body = (await req.json().catch(() => ({}))) as {
     leagueId?: string
@@ -92,10 +92,10 @@ export async function POST(req: NextRequest) {
   }
 
   const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const ctx = await resolveCallerContext(leagueId, userId)
-  if (!ctx.rosterId || !ctx.seasonId) return NextResponse.json({ error: 'You do not have a roster in this league' }, { status: 403 })
+  if (!ctx.rosterId || !ctx.seasonId) return NextResponse.json({ error: 'You do not have a roster in this league', code: 'no_roster' }, { status: 403 })
 
   const existed = await prisma.redraftTradeBlockItem.findUnique({
     where: { leagueId_rosterId_playerId: { leagueId, rosterId: ctx.rosterId, playerId } },
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ item })
   } catch (e) {
-    if (e instanceof TradeBlockValidationError) return NextResponse.json({ error: e.message }, { status: 422 })
-    return NextResponse.json({ error: 'Failed to update trade block' }, { status: 400 })
+    if (e instanceof TradeBlockValidationError) return NextResponse.json({ error: e.message, code: e.code }, { status: 422 })
+    return NextResponse.json({ error: 'Failed to update trade block', code: 'block_update_failed' }, { status: 400 })
   }
 }

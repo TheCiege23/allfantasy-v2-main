@@ -13,6 +13,7 @@
  *   trades awaiting review    `tradesAwaitingReview`
  *   pending waiver claims     `overdueWaiverClaims`
  *   no draft date             `draftDateMissing`
+ *   (new, 2026-11-22)         `wideGapTrades` — recent completed trades far from even on the day's values
  *   unreadable health         the stale / never-synced card
  *
  * ⚠ TWO OF THE OLD COUNTS DID NOT MEAN WHAT THEIR LABELS SAID.
@@ -32,6 +33,8 @@
  */
 
 import type { TaskCard } from './tasks'
+import { commissionerToolsMessages } from '@/lib/core-app/messages/commissionerTools'
+import { messagesFor } from '@/lib/i18n/messages'
 
 export type LeagueReviewSignals = {
   /** Open AI commissioner integrity alerts. */
@@ -42,19 +45,26 @@ export type LeagueReviewSignals = {
   overdueWaiverClaims: number
   /** A league AllFantasy runs, still before its draft, with no draft date saved. */
   draftDateMissing: boolean
+  /**
+   * Completed trades in the last `WIDE_GAP_TRADE_DAYS` whose audited value gap was `AUDIT_OUTSIDE_PCT` or more
+   * (`lib/integrity/tradeValueAudit.ts`). A count of trades worth a look — a fact about value on the day, never an
+   * accusation: the card says so, and sends the commissioner to the review that puts each one beside the market.
+   */
+  wideGapTrades: number
 }
 
 export const OVERDUE_CLAIM_DAYS = 7
+/** How far back a completed trade still counts as "recent" for the wide-gap card. */
+export const WIDE_GAP_TRADE_DAYS = 14
+/** The gap, in percent, the trade review already calls "outside" (`tradeAudit.AUDIT_OUTSIDE_PCT`). */
+export const WIDE_GAP_PCT = 40
 
 export const NO_REVIEW_SIGNALS: LeagueReviewSignals = {
   integrityAlerts: 0,
   tradesAwaitingReview: 0,
   overdueWaiverClaims: 0,
   draftDateMissing: false,
-}
-
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`
+  wideGapTrades: 0,
 }
 
 function leaguePage(leagueId: string, view: string): string {
@@ -66,7 +76,7 @@ function leaguePage(leagueId: string, view: string): string {
  * reader's language (default English) — see `health.ts` for why at the source, not at render.
  */
 export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, language = 'en'): TaskCard[] {
-  const es = language === 'es'
+  const m = messagesFor(commissionerToolsMessages, language)
   const id = encodeURIComponent(leagueId)
   const cards: TaskCard[] = []
 
@@ -75,14 +85,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:integrity',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? plural(s.integrityAlerts, 'alerta de integridad abierta', 'alertas de integridad abiertas')
-        : `${plural(s.integrityAlerts, 'open integrity alert')}`,
-      detail: es
-        ? 'Detectadas a partir de los valores de los intercambios y las alineaciones. Necesitan que una persona las revise antes de decidir nada.'
-        : 'Flagged from trade values and lineup cards. They need a person to look before anything is decided.',
+      title: m.signalsIntegrityTitle(s.integrityAlerts),
+      detail: m.signalsIntegrityDetail,
       due: null,
-      action: { label: es ? 'Revisar alertas' : 'Review alerts', href: `/league/${id}/commissioner/integrity`, external: false },
+      action: { label: m.signalsIntegrityAction, href: `/league/${id}/commissioner/integrity`, external: false },
     })
   }
 
@@ -91,14 +97,23 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:trades',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? `${plural(s.tradesAwaitingReview, 'intercambio espera', 'intercambios esperan')} tu revisión`
-        : `${plural(s.tradesAwaitingReview, 'trade')} awaiting your review`,
-      detail: es
-        ? 'Ambos mánagers aceptaron. El intercambio no se hace efectivo hasta que un comisionado lo apruebe o lo vete.'
-        : 'Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.',
+      title: m.signalsTradesTitle(s.tradesAwaitingReview),
+      detail: m.signalsTradesDetail,
       due: null,
-      action: { label: es ? 'Revisar intercambios' : 'Review trades', href: leaguePage(leagueId, 'trades'), external: false },
+      action: { label: m.signalsTradesAction, href: leaguePage(leagueId, 'trades'), external: false },
+    })
+  }
+
+  if (s.wideGapTrades > 0) {
+    cards.push({
+      id: 'review:trade-gaps',
+      // Info, not a warning: nothing is waiting on the commissioner and nothing has been found.
+      severity: 'info',
+      source: 'review',
+      title: m.signalsTradeGapsTitle(s.wideGapTrades, WIDE_GAP_PCT),
+      detail: m.signalsTradeGapsDetail(WIDE_GAP_TRADE_DAYS),
+      due: null,
+      action: { label: m.signalsTradeGapsAction, href: `/league/${id}/commissioner/integrity`, external: false },
     })
   }
 
@@ -107,14 +122,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:waivers',
       severity: 'warn',
       source: 'review',
-      title: es
-        ? `${plural(s.overdueWaiverClaims, 'reclamo lleva', 'reclamos llevan')} más de una semana esperando`
-        : `${plural(s.overdueWaiverClaims, 'waiver claim')} waiting over a week`,
-      detail: es
-        ? 'Estos reclamos ya deberían haberse resuelto en un procesamiento de reclamos. Procésalos para resolverlos.'
-        : 'These claims should have been decided by a waiver run by now. Run waivers to process them.',
+      title: m.signalsWaiversTitle(s.overdueWaiverClaims),
+      detail: m.signalsWaiversDetail,
       due: null,
-      action: { label: es ? 'Abrir agentes libres' : 'Open waivers', href: `/core/commissioner?league=${id}#ch-waivers`, external: false },
+      action: { label: m.signalsWaiversAction, href: `/core/commissioner?league=${id}#ch-waivers`, external: false },
     })
   }
 
@@ -123,12 +134,10 @@ export function reviewSignalCards(leagueId: string, s: LeagueReviewSignals, lang
       id: 'review:draft-date',
       severity: 'info',
       source: 'review',
-      title: es ? 'No hay fecha de draft' : 'No draft date set',
-      detail: es
-        ? 'Los mánagers no pueden organizarse para un draft sin fecha. Añádela en la configuración del draft.'
-        : 'Managers can’t plan around a draft that isn’t scheduled. Add the date in draft settings.',
+      title: m.signalsDraftTitle,
+      detail: m.signalsDraftDetail,
       due: null,
-      action: { label: es ? 'Poner la fecha' : 'Set the date', href: `/league/${id}/settings`, external: false },
+      action: { label: m.signalsDraftAction, href: `/league/${id}/settings`, external: false },
     })
   }
 

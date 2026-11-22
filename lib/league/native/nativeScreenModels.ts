@@ -11,6 +11,7 @@ import { computeOptimalLineup, type LineupSlotSpec } from '@/lib/lineup-optimize
 import { normalizePositionForStarterEligibility } from '@/lib/roster/LineupTemplateValidation'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import type { RosterLineupLists } from '@/lib/league/lineup-swap'
+import { detectPlayIn } from '@/lib/playoff-brackets/playIn'
 
 /* ── Shared formatting ───────────────────────────────────────────────── */
 
@@ -54,7 +55,7 @@ export function initialsOf(name: string): string {
 
 /* ── Position tones ──────────────────────────────────────────────────── */
 
-export type PositionTone = 'qb' | 'rb' | 'wr' | 'te' | 'k' | 'def' | 'flex' | 'bench' | 'ir' | 'other'
+type PositionTone = 'qb' | 'rb' | 'wr' | 'te' | 'k' | 'def' | 'flex' | 'bench' | 'ir' | 'other'
 
 /**
  * The handoff colours positions QB/RB/WR/TE. The tone is a NAME, mapped to a /core token in
@@ -101,7 +102,7 @@ export type ScoreboardRow = {
   opponentRosterId: string | null
 }
 
-export type ScoreboardPair = {
+type ScoreboardPair = {
   home: ScoreboardRow
   away: ScoreboardRow | null
   /** True when the viewer is one of the two teams. */
@@ -130,15 +131,24 @@ export function pairScoreboard(rows: ScoreboardRow[], viewerRosterId: string | n
 
 /* ── Standings ───────────────────────────────────────────────────────── */
 
-export type PlayoffFormat = {
+type PlayoffFormat = {
   teams: number | null
   byes: number | null
   startWeek: number | null
   weeks: number | null
   consolation: 'toilet_bowl' | 'consolation' | 'none' | null
+  /** A play-in week (lib/playoff-brackets/playIn.ts): `teams` counts the play-in seeds too. */
+  playIn?: { qualifiers: number; games: Array<[number, number]> } | null
+  /**
+   * Re-pair highest remaining seed vs lowest after each round. True for `reseed_behavior` naming a
+   * reseed or `seeding_rules: 'reseed'` (what the in-app panel saves), the two the playoff runtime
+   * reads; null when neither key was set.
+   */
+  reseed: boolean | null
 }
 
 function finiteInt(v: unknown): number | null {
+  if ((typeof v !== 'number' && typeof v !== 'string') || (typeof v === 'string' && !v.trim())) return null
   const n = Number(v)
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null
 }
@@ -148,8 +158,13 @@ function finiteInt(v: unknown): number | null {
  * `lib/playoff-defaults/PlayoffBracketConfigResolver.ts` does — `settings.playoff_structure.<key>`
  * first, then `settings.<key>` — plus the `League.playoffStartWeek` column. A key the league never
  * set comes back null so the card can say "League default" instead of inventing a number.
+ *
+ * ⚠ THE LOWER BRACKET COMES FROM THE `League.playoffLowerBracket` COLUMN when it is set — the column
+ * the bracket is built from (`getBracketConfigForLeague`) and the one the playoff settings panel
+ * writes. The JSON flags beside it go stale when the commissioner changes the column, so the card
+ * used to name a bracket the league would not play. The flags are read only when the column is unset.
  */
-export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null): PlayoffFormat {
+export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number | null, playoffLowerBracket?: string | null): PlayoffFormat {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
   const structure =
     s.playoff_structure && typeof s.playoff_structure === 'object' ? (s.playoff_structure as Record<string, unknown>) : {}
@@ -162,22 +177,71 @@ export function readPlayoffFormat(settings: unknown, playoffStartWeek?: number |
   }
   const teams = finiteInt(read('playoff_team_count', 'playoffTeams', 'playoff_teams'))
   const byes = finiteInt(read('first_round_byes', 'playoffByes'))
-  const startWeek = finiteInt(playoffStartWeek) ?? finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const columnStart = finiteInt(playoffStartWeek)
+  const settingsStart = finiteInt(read('playoff_start_week', 'playoffStartWeek', 'playoff_week_start'))
+  const startWeek = columnStart != null && columnStart > 0 ? columnStart : settingsStart != null && settingsStart > 0 ? settingsStart : null
   const explicitWeeks = finiteInt(read('playoff_weeks'))
-  const weeks = explicitWeeks ?? (teams != null && byes != null ? playoffRoundsFor(teams) : null)
+  const storedPlan = Array.isArray(s.playoff_bye_plan) ? (s.playoff_bye_plan as unknown[]).map((v) => Number(v)) : null
+  const playIn = teams != null ? detectPlayIn(teams, storedPlan) : null
+  const weeks = explicitWeeks ?? (playIn ? (playoffRoundsFor(playIn.qualifiers) ?? 0) + 1 : teams != null && byes != null ? playoffRoundsFor(teams) : null)
   const toilet = read('toilet_bowl_enabled')
   const consolation = read('consolation_bracket_enabled')
+  const column = String(playoffLowerBracket ?? '').trim().toLowerCase()
+  // Exactly the bracket config's reading of the column: any other set value plays no lower bracket.
+  const fromColumn: PlayoffFormat['consolation'] = !column
+    ? null
+    : column === 'toilet'
+      ? 'toilet_bowl'
+      : column === 'consolation' || column === 'consolation_bracket'
+        ? 'consolation'
+        : 'none'
+  const reseedBehavior = read('reseed_behavior')
+  const seedingRule = read('seeding_rules')
+  const reseed =
+    (typeof reseedBehavior === 'string' && reseedBehavior.toLowerCase().includes('reseed')) ||
+    (typeof seedingRule === 'string' && seedingRule.trim().toLowerCase() === 'reseed')
+      ? true
+      : reseedBehavior != null || seedingRule != null
+        ? false
+        : null
   return {
     teams,
     byes,
     startWeek,
     weeks,
-    consolation: toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null,
+    // Only present for a play-in, so a league without one reads exactly as before.
+    ...(playIn ? { playIn: { qualifiers: playIn.qualifiers, games: playIn.games } } : {}),
+    reseed,
+    consolation:
+      fromColumn ??
+      (toilet === true ? 'toilet_bowl' : consolation === true ? 'consolation' : toilet === false && consolation === false ? 'none' : null),
+  }
+}
+
+/**
+ * The playoff format as the bracket will actually run it in a league of `teamCount` teams.
+ *
+ * A league's stored playoff size can be larger than the league: a 4-team league created with the
+ * sport's default of 6. The playoff runtime plays every team that exists
+ * (`canonicalNflRedraftPlayoffRuntime.ts`: `min(configured, teamCount)`, byes filling the bracket to a
+ * power of two), but this screen drew the setting — "Teams 6 · 2 byes", a "top 6" cut line and BYE
+ * chips in a league where nobody gets a bye. Only a format larger than the league is changed; a
+ * play-in is left as stored.
+ */
+export function fitPlayoffFormatToLeague(format: PlayoffFormat, teamCount: number | null | undefined): PlayoffFormat {
+  const size = Number(teamCount)
+  if (!Number.isInteger(size) || size < 2 || format.teams == null || format.teams <= size || format.playIn) return format
+  const rounds = playoffRoundsFor(size)
+  return {
+    ...format,
+    teams: size,
+    byes: 2 ** (rounds ?? 0) - size,
+    weeks: format.weeks != null && rounds != null ? Math.min(format.weeks, rounds) : format.weeks,
   }
 }
 
 /** Single-elimination rounds for N playoff teams: ceil(log2 N). 6 → 3, 4 → 2, 8 → 3. */
-export function playoffRoundsFor(teams: number): number | null {
+function playoffRoundsFor(teams: number): number | null {
   if (!Number.isFinite(teams) || teams < 2) return null
   return Math.ceil(Math.log2(teams))
 }
@@ -210,7 +274,7 @@ export function allPlayShare(allPlay: string | null | undefined): number | null 
   return games > 0 ? (w + t / 2) / games : null
 }
 
-export type PowerInputRow = { rosterId: string; allPlay?: string | null; pointsFor: number }
+type PowerInputRow = { rosterId: string; allPlay?: string | null; pointsFor: number }
 
 /**
  * The "Power" toggle. A ranking by all-play record (how a team would fare against every other
@@ -231,8 +295,8 @@ export function powerOrder<T extends PowerInputRow>(rows: T[]): T[] {
 
 /* ── Waivers ─────────────────────────────────────────────────────────── */
 
-export type WaiverTxLike = { addPlayerId: string; dropPlayerId: string | null }
-export type WaiverClaimLike = { addPlayerId: string }
+type WaiverTxLike = { addPlayerId: string; dropPlayerId: string | null }
+type WaiverClaimLike = { addPlayerId: string }
 
 /**
  * League-activity trend, signed: +2 per processed add and +1 per pending claim, as the existing

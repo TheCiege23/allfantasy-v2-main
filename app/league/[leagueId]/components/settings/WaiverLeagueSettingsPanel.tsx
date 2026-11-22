@@ -10,6 +10,14 @@ import {
   controlClass,
   controlClassSm,
 } from './settings-ui'
+import {
+  readFaabRolloverRule,
+  readFreeAgencyMode,
+  type FaabRolloverRule,
+  type FreeAgencyMode,
+} from '@/lib/waiver-wire/hub-waiver-options'
+import { effectiveFaabRolloverRule, faabRolloverFamilyForLeague } from '@/lib/waiver-wire/faab-rollover'
+import { utcProcessTimeAsLocalLabel } from '@/lib/waivers/dailyWaiverSchedule'
 
 const WAIVER_TYPES = [
   { value: 'faab', label: 'FAAB bidding' },
@@ -17,6 +25,16 @@ const WAIVER_TYPES = [
   { value: 'reverse_standings', label: 'Reverse standings' },
   { value: 'fcfs', label: 'Continual / free-for-all (FCFS)' },
   { value: 'standard', label: 'Standard (scheduled batch)' },
+]
+
+const FREE_AGENCY_MODES: Array<{ value: FreeAgencyMode; label: string }> = [
+  { value: 'standard', label: "League's waiver rules" },
+  { value: 'after_run', label: 'Waivers until each run, then free agents (Sleeper-style)' },
+]
+
+const FAAB_ROLLOVER: Array<{ value: FaabRolloverRule; label: string }> = [
+  { value: 'reset', label: 'Reset to the starting budget' },
+  { value: 'carry_over', label: 'Carry over what each team has left' },
 ]
 
 const TIME_PRESETS = ['00:00', '01:00', '02:00', '03:00', '08:00', '10:00', '12:00', '18:00', '22:00']
@@ -33,6 +51,7 @@ export function WaiverLeagueSettingsPanel({
   debouncedSave: (partial: Record<string, unknown>) => void
 }) {
   const disabled = !canEdit
+  const leagueTimeZone = initialData.timezone?.trim() || 'America/New_York'
   const [waiverType, setWaiverType] = useState(initialData.waiverType ?? 'faab')
   const [budget, setBudget] = useState(initialData.waiverBudget ?? 100)
   const [minBid, setMinBid] = useState(initialData.waiverMinBid ?? 0)
@@ -40,6 +59,33 @@ export function WaiverLeagueSettingsPanel({
   const [hours, setHours] = useState(initialData.waiverHours ?? 24)
   const [customDaily, setCustomDaily] = useState(Boolean(initialData.customDailyWaivers))
   const [processTime, setProcessTime] = useState(initialData.waiverProcessTime ?? '03:00')
+  // These two live in the waiver-settings row's engine config, read from the effective settings.
+  const [freeAgencyMode, setFreeAgencyMode] = useState<FreeAgencyMode>('standard')
+  const [faabRollover, setFaabRollover] = useState<FaabRolloverRule | null>(null)
+  // Unset, a redraft renewal resets FAAB and a keeper / dynasty one carries it over. The server sends
+  // `faabRolloverDefault` from the family the renew route applies (faabRolloverFamilyForLeague); this
+  // form has no league variant or settings, so that answer replaces the first guess (league type and
+  // isDynasty — a keeper league already reads "carry over") as soon as it lands.
+  const [rolloverDefault, setRolloverDefault] = useState<FaabRolloverRule>(() =>
+    effectiveFaabRolloverRule(null, faabRolloverFamilyForLeague({ leagueType: initialData.leagueType ?? null, isDynasty: initialData.isDynasty ?? null })),
+  )
+
+  useEffect(() => {
+    let live = true
+    void fetch(`/api/waiver-wire/leagues/${encodeURIComponent(leagueId)}/settings`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((eff: { freeAgencyMode?: string | null; faabRolloverRule?: string | null; faabRolloverDefault?: string | null } | null) => {
+        if (!live || !eff) return
+        setFreeAgencyMode(readFreeAgencyMode(eff.freeAgencyMode))
+        setFaabRollover(readFaabRolloverRule(eff.faabRolloverRule))
+        const fallback = readFaabRolloverRule(eff.faabRolloverDefault)
+        if (fallback) setRolloverDefault(fallback)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [leagueId])
 
   useEffect(() => {
     setWaiverType(initialData.waiverType ?? 'faab')
@@ -112,6 +158,58 @@ export function WaiverLeagueSettingsPanel({
         </div>
       </div>
 
+      {waiverType !== 'fcfs' ? (
+        <div>
+          <SettingsSectionLabel>Free agency</SettingsSectionLabel>
+          <select
+            className={controlClass}
+            disabled={disabled}
+            value={freeAgencyMode}
+            onChange={(e) => {
+              const v = e.target.value as FreeAgencyMode
+              setFreeAgencyMode(v)
+              debouncedSave({ waiverFreeAgencyMode: v })
+            }}
+            data-testid="settings-waiver-free-agency-mode"
+          >
+            {FREE_AGENCY_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <SettingsHelper>
+            {freeAgencyMode === 'after_run'
+              ? 'Unrostered players are on waivers until the scheduled run, then free agents (first come, first served). A player goes back on waivers once his game starts, until the next run. Dropped players still serve the waiver period.'
+              : 'Free agents follow the waiver type above.'}
+          </SettingsHelper>
+        </div>
+      ) : null}
+
+      {waiverType === 'faab' ? (
+        <div>
+          <SettingsSectionLabel>FAAB at season rollover</SettingsSectionLabel>
+          <select
+            className={controlClass}
+            disabled={disabled}
+            value={faabRollover ?? rolloverDefault}
+            onChange={(e) => {
+              const v = e.target.value as FaabRolloverRule
+              setFaabRollover(v)
+              debouncedSave({ waiverFaabRollover: v })
+            }}
+            data-testid="settings-faab-rollover"
+          >
+            {FAAB_ROLLOVER.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <SettingsHelper>Applies when the league is renewed for next season. Current balances are not changed.</SettingsHelper>
+        </div>
+      ) : null}
+
       <SettingsToggleRow
         label="After games waivers clear"
         description="When enabled, players clear to free agency or the next waiver run after their game window (league policy)."
@@ -155,7 +253,12 @@ export function WaiverLeagueSettingsPanel({
       />
 
       <div>
-        <SettingsSectionLabel>Waiver processing time (league local / stored as HH:MM)</SettingsSectionLabel>
+        {/*
+          🛑 THIS SAID "LEAGUE LOCAL" AND SAVED UTC (2026-11-15). The time is stored as the engine's UTC run time, so a
+          commissioner in New York who picked 03:00 got a 10 PM run. The label now says UTC and shows the league's
+          own clock time beside each choice. League settings → Waivers sets the run in local time.
+        */}
+        <SettingsSectionLabel>Waiver processing time (UTC)</SettingsSectionLabel>
         <div className="flex flex-wrap gap-2">
           {TIME_PRESETS.map((t) => (
             <button
@@ -172,11 +275,17 @@ export function WaiverLeagueSettingsPanel({
                   : 'border border-white/15 bg-black/30 text-white/75 hover:bg-white/[0.06]'
               }`}
             >
-              {t}
+              {t} UTC
+              {utcProcessTimeAsLocalLabel(t, leagueTimeZone) ? (
+                <span className="ml-1 opacity-70" data-testid={`waiver-time-local-${t}`}>· {utcProcessTimeAsLocalLabel(t, leagueTimeZone)}</span>
+              ) : null}
             </button>
           ))}
         </div>
-        <SettingsHelper>Primary batch run time; cron and waiver engine also read LeagueWaiverSettings when present (leagueId: {leagueId}).</SettingsHelper>
+        <SettingsHelper>
+          Shown in your league&apos;s time zone ({leagueTimeZone.replace(/_/g, ' ')}) after each UTC time. To set the run in
+          local time by day, use League settings → Waivers.
+        </SettingsHelper>
       </div>
     </div>
   )

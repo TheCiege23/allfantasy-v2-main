@@ -16,6 +16,9 @@ import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
 import type { EliminationSettle } from './eliminationSettle'
 import { loadEliminationSettle } from './eliminationSettleLoader'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { readExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchup'
+import type { ExtraMatchupView } from '@/lib/redraft/oddTeamExtraMatchupRules'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -57,7 +60,6 @@ import { loadEliminationSettle } from './eliminationSettleLoader'
  * for why a shared threshold cannot live in this `server-only` module.
  */
 
-
 /*
  * The coin-flip threshold lives in `weekBoardRules.ts`, not here.
  *
@@ -69,7 +71,6 @@ import { loadEliminationSettle } from './eliminationSettleLoader'
  * here so server-side callers still have one obvious place to find it.
  */
 export { COIN_FLIP_POINTS } from './weekBoardRules'
-import { COIN_FLIP_POINTS } from './weekBoardRules'
 
 /**
  * Guillotine and survivor leagues eliminate the LOWEST score each week, so the
@@ -79,7 +80,7 @@ import { COIN_FLIP_POINTS } from './weekBoardRules'
  */
 export function isEliminationFormat(leagueType: string | null | undefined): boolean {
   const t = String(leagueType ?? '').toLowerCase()
-  return t.includes('guillotine') || t.includes('survivor')
+  return t.includes('guillotine') || t.includes('guilly') || t.includes('survivor')
 }
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -183,6 +184,8 @@ export type LeagueSideline = {
  */
 export type LeagueWeekBoard = {
   format?: WeeklyFormat
+  /** The league's sport (2026-11-14): "Week 10" for a weekly sport rather than "Period 10". Null when unknown. */
+  sport?: string | null
   leagueId: string
   leagueName: string
   platform: string
@@ -222,6 +225,11 @@ export type LeagueWeekBoard = {
   yourTeamName: string | null
   /** Your team's avatar, resolved the same way as `WeekOpponent.avatarUrl`. */
   yourAvatarUrl: string | null
+  /**
+   * An odd-team native league's extra matchup involving your team this week (the game the leftover
+   * team plays instead of a bye). Null otherwise.
+   */
+  extraMatchup?: ExtraMatchupView | null
 }
 
 export type WeekBoard = {
@@ -382,6 +390,11 @@ export type MatchupRow = {
 
 type History = {
   knownRosterIds: Map<string, Set<string>>
+  /**
+   * Scope → the most games (W + L + T) any team's PLATFORM record shows. Read by the outlook to tell
+   * a median-game league (two games a week) when the league's settings do not say.
+   */
+  reportedGames: Map<string, number>
   nativeRules: Map<string, { season: number; playoffStartWeek: number; medianGame: boolean }>
   periodsByLeague: Map<string, { season: number; week: number }>
   historyIncomplete: boolean
@@ -400,6 +413,7 @@ type History = {
 
 type LeagueMeta = {
   id: string
+  sport?: string | null
   name: string
   platform: string
   elimination: boolean
@@ -466,6 +480,9 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
          * platform, hence `league.platform` beside it.
          */
         avatarUrl: true,
+        wins: true,
+        losses: true,
+        ties: true,
         league: { select: { id: true, platformLeagueId: true, platform: true } },
       },
     }),
@@ -551,6 +568,7 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
   for (const l of leagues) {
     leagueByPlatformId.set(weeklyScopeKey(l), {
       id: l.id,
+      sport: l.sport ?? null,
       name: l.name?.trim() || 'League',
       platform: String(l.platform ?? 'manual').toLowerCase(),
       elimination: weeklyFormat(l) === 'elimination',
@@ -583,11 +601,14 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
   }
 
   const knownRosterIds = new Map<string, Set<string>>()
+  const reportedGames = new Map<string, number>()
   for (const t of teams) {
     const scope = scopeForTeam(t)
     if (!scope || !t.externalId) continue
     const ids = knownRosterIds.get(scope) ?? new Set<string>()
     ids.add(t.externalId); knownRosterIds.set(scope, ids)
+    const games = (Number(t.wins) || 0) + (Number(t.losses) || 0) + (Number(t.ties) || 0)
+    if (games > (reportedGames.get(scope) ?? 0)) reportedGames.set(scope, games)
   }
   const myRosters = new Map<string, string>()
   for (const t of mine) {
@@ -660,6 +681,7 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
 
   return {
     knownRosterIds,
+    reportedGames,
     nativeRules: native?.rules ?? new Map(),
     rows: (priorRows.length > 0 ? [...rows, ...priorRows] : rows).map((r) => {
       const progress = progressByLeague.get(r.leagueId)
@@ -1419,6 +1441,7 @@ export async function getWeekBoard(
 
       leagueBoard = {
         format: meta.format,
+        sport: meta.sport ?? null,
         leagueId: meta.id,
         leagueName: meta.name,
         platform: meta.platform,
@@ -1433,6 +1456,11 @@ export async function getWeekBoard(
           yourRosterId != null ? (rosterNames.get(`${pid}:${yourRosterId}`) ?? null) : null,
         yourAvatarUrl:
           yourRosterId != null ? (rosterAvatars.get(`${pid}:${yourRosterId}`) ?? null) : null,
+        // A native league's roster ids here are its season roster ids (nativeWeeklyHistory.ts).
+        extraMatchup:
+          yourRosterId != null && isNativePlatform(meta.platform)
+            ? await readExtraMatchupView({ leagueId: meta.id, season: period.season, week: period.week, redraftRosterId: yourRosterId })
+            : null,
       }
     }
   }

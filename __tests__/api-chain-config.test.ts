@@ -34,11 +34,4 @@ describe('sports api chain config', () => {
 
     expect(Object.values(states).every((tool) => tool.enabled)).toBe(true)
   })
-
-  it('runs the monthly team logo refresh only during the first week', async () => {
-    const { shouldRunMonthlyTeamLogoRefresh } = await import('@/lib/workers/image-importer')
-
-    expect(shouldRunMonthlyTeamLogoRefresh(new Date('2026-04-06T02:00:00.000Z'))).toBe(true)
-    expect(shouldRunMonthlyTeamLogoRefresh(new Date('2026-04-15T02:00:00.000Z'))).toBe(false)
-  })
 })

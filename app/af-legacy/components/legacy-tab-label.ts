@@ -3,7 +3,7 @@ export function getLegacyFeedbackToolLabel(activeTab: string): string | undefine
   if (activeTab === 'trade') return 'Trade Hub'
   if (activeTab === 'finder') return 'Trade Finder'
   if (activeTab === 'player-finder') return 'Player Finder'
-  if (activeTab === 'waiver') return 'Waiver AI'
+  if (activeTab === 'waiver') return 'Waiver Chimmy'
   if (activeTab === 'rankings') return 'League Rankings'
   if (activeTab === 'pulse') return 'Social Pulse'
   if (activeTab === 'compare') return 'Rankings / Percentiles'

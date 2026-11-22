@@ -18,8 +18,8 @@
 
 export const STANDINGS_DIVISIONS_KEY = 'standings_divisions'
 
-export type StandingsDivisions = {
-  source: 'sleeper' | 'espn'
+type StandingsDivisions = {
+  source: 'sleeper' | 'espn' | 'fantrax'
   /** Division key → display name. */
   names: Record<string, string>
   /** Provider team id (`LeagueTeam.externalId`) → division key. */
@@ -99,6 +99,22 @@ export function readEspnDivisions(
   return finish('espn', names, byTeam)
 }
 
+/**
+ * Fantrax: `getLeagueInfo.teamInfo[id].division` is the division's NAME (there is no division id), so
+ * the name is the key. `teams` is already keyed by our team id (`LeagueTeam.externalId`).
+ */
+export function readFantraxDivisions(divisionByTeamId: Readonly<Record<string, string>> | null | undefined): StandingsDivisions | null {
+  const names: Record<string, string> = {}
+  const teams: Record<string, string> = {}
+  for (const [teamId, raw] of Object.entries(divisionByTeamId ?? {})) {
+    const name = typeof raw === 'string' ? raw.trim() : ''
+    if (!teamId || !name) continue
+    names[name] = name
+    teams[teamId] = name
+  }
+  return finish('fantrax', names, teams)
+}
+
 /** Read the stored key back. Anything malformed reads as "no divisions". */
 export function parseStandingsDivisions(settings: unknown): StandingsDivisions | null {
   const raw = record(record(settings)?.[STANDINGS_DIVISIONS_KEY])
@@ -110,6 +126,6 @@ export function parseStandingsDivisions(settings: unknown): StandingsDivisions |
   for (const [k, v] of Object.entries(names)) if (typeof v === 'string') cleanNames[k] = v
   const cleanTeams: Record<string, string> = {}
   for (const [k, v] of Object.entries(teams)) if (typeof v === 'string') cleanTeams[k] = v
-  const source = raw.source === 'espn' ? 'espn' : 'sleeper'
+  const source = raw.source === 'espn' ? 'espn' : raw.source === 'fantrax' ? 'fantrax' : 'sleeper'
   return finish(source, cleanNames, cleanTeams)
 }

@@ -488,9 +488,9 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
     id: 'guillotine-trade',
     format: 'guillotine',
     source: 'synthetic',
-    question: 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?',
+    question: 'Should I trade Kyren Williams for Garrett Wilson in my Guilly league?',
     engine: {
-      trade: { 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
+      trade: { 'Should I trade Kyren Williams for Garrett Wilson in my Guilly league?': trade({ give: [p('kw', 'Kyren Williams', 'RB')], get: [p('gw', 'Garrett Wilson', 'WR')] }) },
     },
     /*
      * 🛑 A PLAIN GUILLOTINE LEAGUE TRADES. The catalog marks trading legal and `trade-intel/guillotine.ts`
@@ -498,7 +498,7 @@ export const DECISION_CORPUS: readonly DecisionCase[] = [
      * Player Finder's guillotine/survivor test, and this expectation encoded that mistake. It was caught
      * against the catalog before merge. Only survivor-guillotine and tournament forbid trades (below).
      */
-    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: 'Should I trade Kyren Williams for Garrett Wilson in my guillotine league?' },
+    expect: { kind: 'trade', status: 'ready', gap: 'none', verdict: 'YES', billing: 'charge', extraction: 'Should I trade Kyren Williams for Garrett Wilson in my Guilly league?' },
   },
   {
     id: 'survivor-guillotine-trade',

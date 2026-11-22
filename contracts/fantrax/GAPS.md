@@ -5,11 +5,30 @@ Per CLAUDE.md: do not call Fantrax to settle these. Each needs a committed captu
 no credentials — the `fxea/general` endpoints are unauthenticated) before the workaround can be
 replaced by a rule.
 
-The only committed league capture is MLB: `tests/fixtures/fantrax/mlb-points-public.json`
-(`getLeagueInfo` scoring + roster constraints, a `getPlayerIds?sport=MLB` slice, one
-`getTeamRosters` team) and `tests/fixtures/fantrax/mlb-player-map-public.json`.
+Committed league captures: MLB (`tests/fixtures/fantrax/mlb-points-public.json`,
+`mlb-player-map-public.json`) and, since 2026-10-26, four real public PRE-DRAFT leagues captured
+with the owner's consent — `nba-public-2026.json`, `nhl-public-2026.json`, `nfl-public-2026.json`
+(IDP) and `epl-public-2026.json`, each holding `getLeagueInfo` (scoring, roster, playoff settings
+verbatim; playerInfo trimmed), `getTeamRosters`, `getStandings`, `getDraftPicks`,
+`getDraftResults`, plus `nba-player-ids-public.json` / `nhl-player-ids-public.json` slices. League
+ids, names and team identities are replaced with placeholders. Pinned by
+`tests/fantrax-public-2026-captures.test.ts`.
 
-## F-01 — NBA / NHL `getPlayerIds` is not captured
+⚠ **A PRE-DRAFT LEAGUE HAS EMPTY ROSTERS**, so the roster-id sport detection named nothing and the
+import refused it. `getLeagueInfo.playerInfo` (the league's whole player pool) is the same id space
+and now decides the sport when every roster is empty: 1,287/1,287 NBA pool ids in the NBA map and 0
+in NHL; 8,757/8,757 NHL in NHL and 0 in NBA. Each scoring group's `group.code` also names the sport
+(`BASKETBALL_PLAYER`, `HOCKEY_SKATING`/`HOCKEY_GOALIE`, `FOOTBALL_OFFENSE`/`_DEFENSE`/`_KICKING`,
+`SOCCER_GOALIE`/`SOCCER_NON_GOALIE`, MLB `BASEBALL_HITTING`/`_PITCHING`), but football's does not
+separate NFL from college, so the pool is what is used.
+
+## F-01 — NBA / NHL `getPlayerIds` — **RESOLVED 2026-10-26**
+
+Same id-keyed shape as MLB/CFB, plus `rotowireId`, `sportRadarId` (and `statsIncId` on NHL). One
+position per row in the captured slices (`PG`, `SG`, … ; hockey `C`/`LW`/`RW`/`D`/`G`); a player
+with no club reads `team: "(N/A)"`. The original note follows.
+
+### (original) NBA / NHL `getPlayerIds` is not captured
 
 `getPlayerIds?sport=NBA` and `?sport=NHL` are read by `importFantraxLeague` for sport detection and by
 `ingestProFantraxIdentities` for identity links. They are assumed to have the same id-keyed
@@ -23,7 +42,13 @@ the identity matcher refuses on an unrecognised team label rather than guessing.
 **Needed:** a trimmed `getPlayerIds?sport=NBA` and `?sport=NHL` slice (a few rows each, including a
 two-position player and, for NHL, a goalie) committed under `tests/fixtures/fantrax/`.
 
-## F-02 — How an NBA/NHL league labels its season
+## F-02 — How an NBA/NHL league labels its season — **RESOLVED 2026-10-26**
+
+`seasonYear` is the number of the year the season BEGINS: `2026` for both the NBA league
+(`startDate` 2026-10-26) and the NHL league (2026-09-29) of 2026-27 — exactly the key we use.
+The original note follows.
+
+### (original) How an NBA/NHL league labels its season
 
 `seasonYear` is `2023` (a number) on the MLB capture. For a basketball/hockey league it is unknown
 whether Fantrax sends `2025`, `2026` or `"2025-26"` for the 2025-26 season. We key those seasons by the
@@ -33,7 +58,14 @@ year they BEGIN. `fantraxSplitSeasonStartYear` reads, in order: a range label �
 **Needed:** `getLeagueInfo` for one public NBA and one public NHL league (the `seasonYear`,
 `startDate`, `endDate` and first `scoringPeriods` entry are enough).
 
-## F-03 — NBA/NHL `rosterInfo.positionConstraints` slot codes
+## F-03 — NBA/NHL slot codes — **RESOLVED for these two leagues, 2026-10-26**
+
+NBA: `C`, `G`, `F`, `Flx` (all-position utility → `UTIL`). NHL: `D`, `F` (→ C/W flex), `G`.
+⚠ The NBA league sends **no `maxTotalReservePlayers`** (only 14 total / 10 active), which dropped
+its bench; total − active now stands in. Other leagues may use more codes; unknown ones still report.
+The original note follows.
+
+### (original) NBA/NHL `rosterInfo.positionConstraints` slot codes
 
 Only MLB's codes are captured (`C`, `1B`, …, `UT`, `CI`, `MI`, `P`). The NBA/NHL mapping in
 `mapFantraxRosterSlots` accepts our catalog's own codes plus `UT`, and reports anything else as
@@ -53,15 +85,29 @@ taxi/IR slot counts are not imported.
 **Needed:** `getTeamRosters` + `getLeagueInfo.rosterInfo` from a public dynasty league that uses
 minors and IR slots (any sport).
 
+**2026-10-26:** MLB `MINORS` is now carried as the taxi squad too (it was filed as bench, so a
+prospect counted against the roster limit). Still synthetic only — the committed MLB capture
+(`tests/fixtures/fantrax/mlb-points-public.json`) has `ACTIVE` and `RESERVE` and nothing else.
+
 ## F-05 — Future draft picks (dynasty)
 
-`getDraftPicks.futureDraftPicks` was EMPTY in the only league measured (see `fantraxApi.ts`), so its
-element shape — and whether it reflects traded ownership (original vs current team) — is unverified.
-`lib/league-trade-engine/importedFuturePicks.ts` therefore stays Sleeper/MFL only; a Fantrax league
-shows no future picks rather than listing every pick with its original team.
+**RESOLVED 2026-11-18.** Captured from three public dynasty leagues (34-team NFL, 36-team NBA,
+36-team MLB), with the owner's consent. Every `futureDraftPicks` row is exactly
+`{ year, round, originalOwnerTeamId, currentOwnerTeamId }`: one row per team per round per year for
+ten years, traded or not. A traded pick is a row whose two team ids differ (9 of 1,360 in the NFL
+league, 2 of 1,080 in the NBA league, 0 of 1,800 in the MLB league). There is no pick-in-round.
+A redraft league answers with `currentDraftPicks` only (no `futureDraftPicks` key).
 
-**Needed:** `getDraftPicks` from a public dynasty league in which at least one future pick has been
-traded.
+Committed capture: `tests/fixtures/fantrax/nfl-dynasty-future-picks-public.json` (team ids replaced
+with placeholders, trimmed to the first two seasons; pinned by `__tests__/fantrax-future-picks.test.ts`).
+
+The import stores the whole inventory on the snapshot (`fantraxFuturePicks` in
+`FantraxLeague.transactions`), the adapter carries it as `traded_picks` with a `traded` flag, and
+`lib/league-trade-engine/importedFuturePicks.ts` reads a Fantrax league's picks from those rows
+without inferring a round count.
+
+Still unknown: whether a pick's row disappears or stays once its draft is under way (the captured
+leagues' current drafts were either complete or not started).
 
 ## F-06 — No dynasty / keeper flag in `getLeagueInfo`
 
@@ -81,7 +127,16 @@ categories a Fantrax category league scores — and in which field — is not ca
 **Needed:** `getLeagueInfo.scoringSystem` from a public H2H-categories and a roto league (MLB first;
 NBA/NHL when F-02 is closed).
 
-## F-08 — NBA/NHL points scoring codes
+## F-08 — NBA/NHL points scoring codes — **RESOLVED 2026-10-26**
+
+`scoringSystem.type` is `HEAD_TO_HEAD_POINTS_BASED`. Codes are shared across sports and only the
+GROUP tells them apart — `INDIVIDUAL_SAVES` was being read as a baseball save in a hockey league.
+`fantraxScoringRules` now resolves by group first (`GROUP_CATEGORY_KEYS`). Captured: basketball
+PTS/REB/AST/ST/BLK/TO; hockey skater G/A/SOG/PPP/SHG/Hit/Blk/PIM, goalie W/SV/GA/SHO/A/PIM (goalie
+and skater PIM share one rule and a different value is reported). Football also gained FL, thrown
+INT, XP, FG and the IDP defence group. The original note follows.
+
+### (original) NBA/NHL points scoring codes
 
 `fantraxScoringRules` maps football and baseball `scoringCategory.code`s only. Basketball/hockey codes
 are unknown, so every NBA/NHL rule is reported as a gap (the import still completes; native conversion
@@ -94,3 +149,285 @@ would refuse).
 `previousSeasons` lists only snapshots this repo has already stored for the same league name. No
 captured endpoint maps a league id to its prior-season league ids, so multi-season backfill remains
 Sleeper-only.
+
+## F-10 — Does `getPlayerIds?sport=MLB` (or `NHL`) include minor leaguers / prospects? (recorded 2026-10-20, no probe)
+
+`ingestProFantraxIdentities` (`MLB`, and since its generalisation `NHL` and `NBA`) reads this universe weekly but keeps only players it can link to an
+existing Rolling Insights row, so any minor leaguer in it is counted as `unmatched` and discarded.
+There is **no `getPlayerIds` fixture**, and `FantraxPlayerRef` carries only id, name, team and
+position — no level, status or draft field. So even if minor leaguers are present, nothing would
+mark them as prospects.
+
+**Blocks:** an MLB prospect layer in the draft pool from data we already fetch.
+**Needed, without a probe first:** read the `sportsDataCache['fantrax:mlb-identities:last-run']`
+marker (`provided` vs `unmatched`; `fantrax:nhl-identities:last-run` for NHL) to size it. If it is worth pursuing, capture one
+`getPlayerIds?sport=MLB` response as a committed fixture and check for a level/status field.
+
+## F-11 — `getAdp?sport=MLB` / `?sport=NHL` response shape (recorded 2026-10-27, no probe)
+
+The scheduled ADP import (`lib/workers/adp-importer.ts`, via `loadFantraxAdp` in
+`lib/adp/fantraxNbaAdp.ts`) now reads Fantrax ADP for MLB and NHL as well as NBA. Only
+`getAdp?sport=NBA` (and NCAAF) has a verified response. MLB/NHL are ASSUMED to return the same
+`[{ id, name: "Last, First", pos, ADP }]` array.
+
+Workaround: `getFantraxAdp` drops any row it cannot read and returns `api_error` on an empty board,
+which the `adp-refresh` heartbeat reports as `Fantrax MLB ADP: …` / `Fantrax NHL ADP: …`. Rows match
+on `PlayerIdentityMap.fantraxId` first, then on name. So a different shape costs rows, never wrong ADP.
+Out of season (MLB in October) the board may be stale or empty; that is reported the same way.
+
+**Needed:** a trimmed `getAdp?sport=MLB` and `?sport=NHL` capture (a few rows each, including a
+pitcher and a goalie), committed under `contracts/fantrax/fixtures/`.
+
+## F-12 — `getPlayerIds?sport=NFL` shape and team spelling (recorded 2026-10-30, no probe)
+
+`importFantraxLeague` now links an NFL league's rostered and drafted Fantrax ids to
+`PlayerIdentityMap.fantraxId` (`lib/player-identity/nflFantraxIdentityPlan.ts`, called through
+`linkNflFantraxIdentities.ts`). The NFL map is ASSUMED to have the captured MLB/CFB/NBA/NHL shape —
+id-keyed `{ fantraxId, name: "Last, First", team, position }` — and there is **no NFL capture**: the
+committed `nfl-public-2026.json` is a pre-draft league whose `playerInfo` carries only
+`eligiblePos`/`status`, no name or team.
+
+Unknown: whether `team` is an abbreviation (`KC`), a full name or something else, what a free agent
+reads (`(N/A)` on NBA/NHL), how team defences are named, and whether `position` is one code or a
+list. Workaround: the planner requires a team that `lib/team-abbrev.ts` recognises (abbreviation,
+alias or full name) and a compatible position group, skips any row whose name has no comma or whose
+position is `DST`/`DEF`, and refuses rather than guesses — a different spelling costs links, never
+wrong ones.
+
+**Needed:** a trimmed `getPlayerIds?sport=NFL` slice (a QB, a two-position player, a free agent, a
+team defence, an IDP player) committed under `tests/fixtures/fantrax/`.
+
+## F-13 — Transaction history is INFERRED from refresh-to-refresh roster diffs (recorded 2026-10-30)
+
+Fantrax publishes no transactions endpoint. A live import now stores, in the snapshot's existing
+`FantraxLeague.transactions` JSON (`fantraxDerived`, see
+`lib/league-import/fantrax/fantraxSnapshotHistory.ts`), the difference between the roster the
+previous import stored and the rosters just fetched. These rows reach `TransactionFact` with
+`status: inferred` (adds/drops) or `suspected` (two-way exchanges) — never `completed`.
+
+Known limits, by construction: history starts at the first refresh after this change; a move made
+and reversed between two refreshes is invisible; an add cannot be told apart as a waiver claim or a
+free-agent pickup; the period stamped is the one current at the refresh, not the one the move
+happened in. `getTeamRosters&period=N` (per-period rosters, which `deriveFantraxTransactions` was
+written for) is still NOT called — it would cost one request per played period on every refresh,
+and no per-period capture exists to confirm that a past period returns that period's roster rather
+than today's.
+
+**Needed before replacing the inference:** a `getTeamRosters&period=N` capture for two consecutive
+past periods of one public in-season league, showing a known add/drop between them.
+
+The stored draft board (`fantraxDraft`) is the captured `getDraftResults` shape (made picks only);
+prior seasons' boards are still not imported (F-09).
+
+## F-14 — Team logos / manager pictures — **ANSWERED 2026-10-30: the `fxea` API has no picture field**
+
+Captured with the owner's consent from one of their own leagues by the new
+`contracts/fantrax/scripts/probe.sh` → `fixtures/cfb-league-2026.json`. The script prints every key
+path of the RAW `getLeagueInfo`, `getTeamRosters` and `getStandings` responses before redacting, and
+lists any key that looks like a picture (`logo|image|img|avatar|icon|photo|pic|url`). **There is
+none.** A team is `{ id, name }` in `teamInfo`, `{ id, name, shortName, seed }` in a matchup,
+`{ teamName, rosterItems }` in a roster and `{ teamId, teamName, rank, points, … }` in standings.
+
+So `logoUrl: null` in `FantraxLeagueFetchService` is correct, not a bug: there is nothing to map.
+Fantrax teams keep the lettered badge. ⚠ One league proves only that these three endpoints send no
+picture field for teams without one; a league whose teams DO have uploaded logos could still add a
+key. The probe answers that in one run (`probe.sh <leagueId> <label>`) if such a league turns up.
+The remaining `fxea` endpoints (`getLeagues` needs a user secret id; `getMatchupScores`) are
+uncaptured.
+
+The original note follows.
+
+### (original) Team logos / manager pictures (recorded 2026-10-30, no probe)
+
+Every Fantrax team renders a letter instead of a picture in the league list. Measured on production
+2026-10-30: **0 of 209** Fantrax `LeagueTeam` rows carry an `avatarUrl` (ESPN 106 of 106, Sleeper
+6,551 of 7,003). The cause is ours, not the data: `FantraxLeagueFetchService` builds every team with
+`logoUrl: null`, and `FantraxRosterMapper` passes that through as `avatar_url`.
+
+Unknown: whether any `fxea` endpoint (`getLeagueInfo`, `getTeamRosters`, `getStandings`) returns a
+team logo URL at all. No committed capture shows one, and per CLAUDE.md this is not probed to find
+out.
+
+**Needed:** a `getLeagueInfo` or `getTeamRosters` capture from a league whose teams have custom
+logos, committed under `contracts/fantrax/fixtures/`. If a logo field exists, map it in
+`FantraxLeagueFetchService` (one line) and the list shows it on the next scheduled refresh.
+
+## F-15 — NHL prospects come from "not in our NHL data", not from any Fantrax field (recorded 2026-10-31, no probe)
+
+NHL rookie drafts now offer Fantrax-only prospects (`lib/player-identity/nhlFantraxProspects.ts`).
+`ingestProFantraxIdentities('NHL')` stores the whole `getPlayerIds?sport=NHL` response, compacted,
+under `sportsDataCache['fantrax:nhl-player-universe']` — the same weekly read, no new endpoint.
+A row is a prospect when its `fantraxId` is on no NHL `PlayerIdentityMap` row, its name is no NHL
+identity's or pool player's, its team is a current NHL club or `(N/A)`, and its position is hockey.
+
+Still unknown (F-01 shape has no such field): age, draft year, league/level (AHL vs CHL vs Europe)
+and whether a `(N/A)` row is an unsigned draftee or a retired/European veteran. The `team` of an
+AHL player is his NHL parent club (Tyler Madden → MIN in the capture), never the affiliate.
+
+**Needed before ranking or age-gating prospects:** a field carrying level/draft data, which no
+committed Fantrax capture shows.
+
+## F-16 — MLB prospects: the same "not in our MLB data" rule, with a far larger unlinked registry (recorded 2026-10-31, no probe)
+
+MLB rookie drafts now offer Fantrax-only prospects — minor leaguers and unsigned players
+(`lib/player-identity/mlbFantraxProspects.ts`). `ingestProFantraxIdentities('MLB')` stores the whole
+`getPlayerIds?sport=MLB` response, compacted, under `sportsDataCache['fantrax:mlb-player-universe']`
+— the same weekly read, no new endpoint. Partly answers F-10: the universe is now kept, but nothing
+in it marks a prospect.
+
+**Sized from production, read 2026-10-31 (no probe):** the `fantrax:mlb-identities:last-run` marker of
+2026-10-25 reads provided 10,687, unchanged (already linked) 2,802, unmatched 7,882, ambiguous 3. MLB
+`PlayerIdentityMap` holds 7,320 rows, only 2,825 with a `fantraxId` (NHL: 4,386 and 2,388). So about
+**4,500 MLB players we already track carry no Fantrax id**, and "fantraxId on no identity" alone would
+list every one as a prospect. The rule therefore also excludes a row whose name is any MLB identity's
+name, or whose club + surname + first initial + role (pitcher / hitter) matches one — the second
+catching nicknames and initials spelt differently on the two sides. Names on the league's pool are
+excluded too, and two candidates sharing a name are both dropped.
+
+Still unknown, and assumed rather than captured:
+
+- **The MLB no-club marker.** `(N/A)` is captured for NBA and NHL (F-01). The only MLB capture
+  (`tests/fixtures/fantrax/mlb-player-map-public.json`) holds three major leaguers — Will Smith (LAD,
+  C), Aaron Judge (NYY, RF), Shohei Ohtani (LAD, DH) — and no unsigned row. If Fantrax MLB spells it
+  differently, those rows are refused as an unrecognised team, never guessed.
+- **What `team` means for a minor leaguer.** Assumed to be the parent MLB club, as it is for an AHL
+  player in the NHL capture. A minor-league affiliate name would be refused the same way.
+- **Two-way spelling.** The capture lists Ohtani as `DH`. A row carrying `TWP`, or both a pitching and
+  a hitting position, is listed as `TWP`.
+- Age, draft year, level (AAA … rookie ball, college, international) and a prospect flag: none exists
+  in the F-01 shape. So the `(N/A)` bucket also holds released veterans and retirees, a signed
+  minor-league veteran looks like a prospect, and the order (signed first, newest Fantrax id first,
+  cap 900 = 30 clubs × 30) is a proxy, not a ranking.
+
+**Needed:** one trimmed `getPlayerIds?sport=MLB` slice with a minor leaguer, an unsigned player and a
+two-way player, committed under `tests/fixtures/fantrax/` via `contracts/fantrax/scripts/probe.sh`
+when that combination is next added — and a level/draft field before ranking or age-gating.
+
+## F-17 — Soccer roster identity and scoring coverage
+
+The committed EPL capture identifies Soccer through its `SOCCER_GOALIE` and `SOCCER_NON_GOALIE`
+scoring groups. The roster and player pool supply IDs and positions. Import retains those IDs and
+uses existing Soccer `PlayerIdentityMap.fantraxId` links for names. Grades require the same
+one-to-one Fantrax ID across the Soccer registry, including identities without match rows.
+A read-only database audit on 2026-11-09 found 4,323 Soccer identities and zero Fantrax links.
+The public EPL directory returned 771 players. A dry run against the registry proposed 635
+unique name, club, and role matches, with 135 unmatched and one ambiguous. The weekly import
+fills verified links in the existing identity registry. The dry run wrote zero links.
+
+The capture gives position maxima that sum to 14 and a total of 11 starters. The maxima alone
+cannot define a fixed lineup. The capture also has different goalie and outfield weights for
+shared stats such as assists. The points scorer honors default weights for each group and explicit
+goalkeeper, defender, midfielder, and forward overrides for supported stats. It leaves an
+unsupported or conflicting position rule out of the projection and records the gap.
+
+The same audit found 44,271 Soccer match rows for 2,121 players, all from Rolling Insights. The
+stored fields cover 17 of the 60 rules in the captured league. TheSportsDB EPL timelines can
+supply own goals when every match in the pricing sample has a final-score-verified receipt and
+each own-goal scorer matches a unique participant. Secondary assists, clean-sheet eligibility,
+and result eligibility still need compatible events or verified scoring definitions.
+The season view reads published Fantrax team totals. Projections report partial scoring when
+source rules are omitted.
+
+A production backfill on 2026-11-09 applied 635 one-to-one links and left the 135 unmatched
+and one ambiguous player alone. No Fantrax Soccer league was present for a live grade check.
+
+The points grader can also use a complete Fantrax league player board without recreating each
+category. Run the operator script under tsx with the audit preload and target DB configured.
+Pass the AllFantasy league ID alone to get the source league ID, season, and scoring-rule digest.
+Prepare JSON with source set to fantrax-player-export, those three fields, a UTC through timestamp,
+fullPool set to true, and a players array. Each player needs fantraxId, name, position (GK, DEF,
+MID or FWD), fantasyPoints, appearances, and clubMatches over the same period. Include all
+rostered players and free agents. Pass the league ID and file for a dry run, then append --apply
+to save. The grader checks the current scoring digest, season and roster coverage on every read.
+The ordinary partial projection remains the fallback while a matching export is unavailable.
+
+## F-18 — College school codes are Fantrax's own, not ours — **CAPTURED 2026-11-19**
+
+`getPlayerIds?sport=NCAAB` and `?sport=CFB` are now captured (`fixtures/ncaab-player-ids.json`,
+`fixtures/cfb-player-ids.json`) via `scripts/probe.sh --player-ids <NCAAB|CFB>`: one sample row per team
+code plus the row and position counts, so the fixtures record each sport's whole school-code vocabulary.
+Same id-keyed `{ fantraxId, name: "Last, First", team, position }` shape as the pro maps; every sport also
+carries team rows (`position: "Tm"` and, in CFB, `DST`/`ST`/`TmD`/`TO`/`TQB`/`TK`).
+
+**The codes are Fantrax's, mixed case (`AzSt`, `ChaSo`, `PRINC`, `KAN`, `MIA-O`).** For NCAAB, 191 of the
+365 school codes match no `SportsTeam.shortName` (PRIN, KU, M-OH…), which is why 2,805 players at those
+schools never linked. `ncaabFantraxIdentityPlan.ts` now learns such a code only from three or more already-linked
+players who agree on the school, as the NCAAF matcher already did (124 CFB codes verified that way).
+
+**CFB positions are Fantrax's labels, not the registry's.** CB/S vs DB, OLB vs LB, DE vs EDGE, DL vs DE all
+occur for one player at one school; `ncaafFantraxIdentityPlan.ts` compares position GROUPS. Offensive
+labels stay exact.
+
+## F-19 — Transaction History is a logged-in page with a CSV download — **CAPTURED 2026-11-21**
+
+F-13 still holds for the public `fxea` API: it has no transactions endpoint. Completed claims, drops and
+trades are on the logged-in website, at `/fantasy/league/<leagueId>/transactions/history`, with three
+tabs (Claim/Drop, Trade, Lineup). Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-transaction-history-download.json`.
+
+- The page loads through `POST /fxpa/req` with `msgs[].method = getTransactionDetailsHistory` and
+  `data.view` of `CLAIM_DROP` or `TRADE`. Its response body was not captured.
+- "Download all as CSV" opens `GET /fxpa/downloadTransactionHistory` with `view`, `team=ALL`,
+  `positionOrGroup=ALL`, `pageNumber=1`, `adminMode=false`, `includeDeleted=false`, `executedOnly=true`.
+  Same family as `/fxpa/downloadTeamRosterStats`, which the browser connector already uses
+  (`tools/fantrax-browser-connector`).
+- The Claim/Drop CSV is `Player, Team, Position, Type, Team, Bid, Date (EST), Week`. Two columns are
+  named `Team` (NFL club, then fantasy team). `Type` is `Claim` or `Drop`. **There is no player id**, so
+  a row has to be matched by name, club and position, as the Trade CSV already is.
+- One download returned every row the page listed across its four pages (78 rows), not only page 1.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the download answers without a login. The score download answers `WARNING_NOT_LOGGED_IN`.
+- The download with `view=TRADE` and `view=LINEUP`. The Trade CSV's columns are known from a user
+  upload (`fantraxTradeHistoryCsv.ts`); its request parameters are assumed to match and were not seen.
+- **Why the export started in week 10 of an 11-week season** (earliest row Nov 12). A retention window,
+  a default date filter, or this league's own history would each explain it. Until that is known, an
+  import of this file must not be described as the league's whole history.
+- Whether `getTransactionDetailsHistory` returns player ids. If it does, it is the better source.
+
+Fantrax also sends each member alerts (push and email) for "Any trade has been executed" and "A player
+is successfully claimed", listed under My Team Settings → Notifications, with a history page at
+`/notification/all`. No trade or claim alert was seen, so their wording is unknown.
+
+## F-20 — Team logos are on the logged-in site: `getFantasyTeams` — **CAPTURED 2026-11-22**
+
+F-14 still holds for the public `fxea` API: no picture field. The logged-in website lists every team
+with a logo. Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-fantasy-teams-request.json`.
+
+- `POST /fxpa/req?leagueId=<id>` with the single message `getFantasyTeams` answers
+  `responses[0].data.fantasyTeams`: one `{ id, name, shortName, logoUrl128, logoUrl256, logoId,
+  commissioner }` per team. All 34 teams of the captured league had a logo.
+- The request carries no token: `Accept: application/json`, `Content-Type: text/plain`, the login
+  cookie, and a body of `msgs`, `uiv`, `refUrl`, `dt`, `at`, `tz`, `v`.
+- The logo files are public. `https://fantraximg.com/logos/<xxx>/tmLogo_<logoId>_128.webp` (and
+  `_256`) answered 200 `image/webp` with no cookie. Teams without an upload use stock icons under
+  `fantraximg.com/assets/images/icons/fantasyteams/`.
+- `id` is Fantrax's team id. Our `LeagueTeam.externalId` is the import's own id, so a logo is matched
+  to a team by NAME (`teamIndex`), as trades and claims are.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the request works without a login, with an out-of-date `v`, or when sent by a browser
+  extension rather than the site's own page. The connector has not been run in a browser.
+- The managers' names. A team's roster page sends `getTeamRosterInfo`, whose response has
+  `teamHeadingInfo.owners`; only its shape was seen, and it is one request per team.
+
+## F-21 — A rostered player missing from `getPlayerIds` has no name anywhere in the API (recorded 2026-11-22, no probe)
+
+Road To Glory NCAA Basketball rosters `06qaj` (F/C, RESERVE, #51 Butler Bulldogs). The snapshot refreshed
+2026-11-22 18:10 UTC, after the refresh switched to the league's own directory (`c3c3014ffa`), and the
+roster row still carries `name: null`, `team: null`. No `PlayerIdentityMap` row holds that `fantraxId`.
+
+What the contract says about other places a name could come from:
+- `getLeagueInfo.playerInfo` carries `eligiblePos` / `status` only, never a name (`cfb-league-2026.json`).
+- `getTeamRosters` items carry an id, position and status, not a name.
+
+So a player absent from `getPlayerIds?sport=NCAAB` cannot be named from the `fxea` API at all, and
+matching by name is ruled out. The page shows `Player 06qaj`.
+
+**Unknown:** why the directory omits a rostered id. Most likely the directory lists only players
+Fantrax currently tracks (a transfer, a departure, or a player off the active list), but that is a
+guess. **To resolve:** `scripts/probe.sh --player-ids NCAAB` and check whether `06qaj` is present; if
+not, the logged-in player page on Fantrax is the only other source, which the import does not read.

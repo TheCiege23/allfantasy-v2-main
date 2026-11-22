@@ -13,6 +13,7 @@
  * See lib/redraft-war-room/types.ts for the contract.
  */
 
+import { extraMatchupForRoster } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { resolveLeagueAccess } from '@/lib/league-access'
@@ -198,6 +199,7 @@ export async function buildRedraftWarRoomContext(
     awayScore: number
     homeProjected: number | null
     awayProjected: number | null
+    lineupSnapshots?: unknown
   }
   type SeasonWithRelations = {
     id: string
@@ -473,6 +475,12 @@ export async function buildRedraftWarRoomContext(
           : m.awayRosterId === userRosterId
             ? m.homeRosterId
             : null
+    const extra = userRosterId != null && isUser
+      ? extraMatchupForRoster(resolvedSeason.schedule, m.week, userRosterId, (id) => {
+          const t = teams.find((x) => x.rosterId === id)
+          return t?.teamName ?? t?.ownerName ?? null
+        })
+      : null
     return {
       matchupId: m.id,
       week: m.week,
@@ -484,7 +492,8 @@ export async function buildRedraftWarRoomContext(
       homeProjected: m.homeProjected ?? null,
       awayProjected: m.awayProjected ?? null,
       isUserMatchup: isUser,
-      opponentRosterId: opponent,
+      opponentRosterId: opponent ?? (extra?.role === 'leftover' ? extra.otherRosterId : null),
+      extraMatchup: extra?.line ?? null,
     }
   }
   const userSchedule = season.schedule

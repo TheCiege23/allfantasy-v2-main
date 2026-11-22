@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import { readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
@@ -40,6 +42,11 @@ export type WeekRow = {
   won: boolean
   /** Provider period advanced, league finished, or this is a past season; scores alone never prove completion. */
   completed?: boolean
+  /**
+   * An odd-team native league's extra matchup (lib/redraft/oddTeamExtraMatchupRules.ts): "Extra matchup
+   * vs <team> (<reason>)". For the leftover team the scores above are that game's.
+   */
+  extraMatchupLabel?: string
 }
 
 export type WeekAllData = {
@@ -339,6 +346,50 @@ async function nativeWeekRows(
       pointsAgainst,
       won: completed && pointsFor > pointsAgainst,
       completed,
+    })
+  }
+  /*
+   * The leftover team of an odd-team league has no game above — its bye is not a game against a
+   * manager — unless the league plays the extra matchup instead, which is a game, with a pick
+   * recorded on that bye row. The chosen team's own game is above; it carries the extra one's label.
+   */
+  const byes = await prisma.redraftMatchup
+    .findMany({
+      where: { leagueId: { in: nativeIds }, week: week.week, season: { season: week.seasonYear }, isMedianMatchup: false, awayRosterId: null },
+      select: { leagueId: true, seasonId: true, homeRosterId: true, lineupSnapshots: true },
+    })
+    .catch(() => [])
+  for (const bye of byes) {
+    const record = readExtraMatchupRecord(bye.lineupSnapshots)
+    if (!record) continue
+    const mine = await prisma.redraftRoster
+      .findFirst({ where: { seasonId: bye.seasonId, ownerId: userId, id: { in: [bye.homeRosterId, record.opponentRosterId] } }, select: { id: true } })
+      .catch(() => null)
+    if (!mine) continue
+    const extra = await readExtraMatchupViewForSeason({ seasonId: bye.seasonId, week: week.week, redraftRosterId: mine.id })
+    if (!extra) continue
+    const existing = rows.find((r) => r.leagueId === bye.leagueId)
+    if (existing) {
+      existing.extraMatchupLabel = extra.line
+      continue
+    }
+    if (extra.role !== 'leftover' || seen.has(bye.leagueId)) continue
+    if (extra.yourScore == null || (opts.previous && !extra.final)) {
+      unscored += 1
+      continue
+    }
+    const league = byId.get(bye.leagueId)
+    rows.push({
+      leagueId: bye.leagueId,
+      leagueName: league?.name?.trim() || 'League',
+      platform: league?.platform ?? null,
+      season: week.seasonYear,
+      week: week.week,
+      pointsFor: extra.yourScore,
+      pointsAgainst: extra.theirScore ?? 0,
+      won: extra.final && extra.yourScore > (extra.theirScore ?? 0),
+      completed: extra.final,
+      extraMatchupLabel: extra.line,
     })
   }
   return { rows, unscored }

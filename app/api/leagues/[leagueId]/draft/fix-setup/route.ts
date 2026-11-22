@@ -2,10 +2,10 @@
  * POST /api/leagues/[leagueId]/draft/fix-setup
  * Commissioner-only: apply default roster/scoring rows for pre-draft checklist.
  */
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { ensureLeagueDraftSetupDefaults } from '@/lib/league/ensureLeagueDraftSetupDefaults'
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'league')
     } catch {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

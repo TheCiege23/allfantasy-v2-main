@@ -1,5 +1,6 @@
 /* League chat channel strip (native league handoff §6, 2026-10-18). /core tokens first; the older
- * panel tokens are the fallback when the panel renders outside an .af-core scope. No hex here. */
+ * panel tokens are the fallback when the panel renders outside an .af-core scope. No hex here —
+ * except the Dynasty Era block at the end, whose --dyn-* tokens carry the shared contract's hex fallbacks. */
 .lcc-strip {
   display: flex;
   gap: 8px;
@@ -41,3 +42,166 @@
   background: color-mix(in srgb, var(--p-gold-fg, var(--accent-amber-strong)) 12%, transparent);
   color: var(--p-gold-fg, var(--accent-amber-strong));
 }
+
+/* The artwork belongs to the league conversation; the message bubbles remain opaque.
+ * Dynasty Era (2026-10-31): the ink veil is heavier so the room reads as ink, the artwork a texture. */
+[data-dynasty-background=true] [data-testid=league-chat-conversation]{background-color:#0a1018;background-image:linear-gradient(rgba(11,15,23,.86),rgba(11,15,23,.93)),url('/artwork/dynasty/dynasty-chat-background-v1.png');background-position:center;background-size:cover}
+
+/* ── Dynasty Era league chat (Chat.dc.html). Everything below is scoped to a dynasty league's panel,
+ * so every other league's chat is untouched. Tokens per the shared contract, each with its fallback. */
+[data-testid=league-chat-panel][data-dynasty-background=true] {
+  --border: var(--dyn-rail, #1C2333);
+  --text: var(--dyn-text, #E8ECF2);
+  --muted: var(--dyn-text2, #C3CAD5);
+  --muted2: var(--dyn-faint, #9AA4B2);
+  --panel2: var(--dyn-vault, #121826);
+  --accent-cyan-strong: var(--dyn-teal, #2DD4BF);
+  color: var(--dyn-text, #E8ECF2);
+}
+[data-dynasty-background=true] .lcc-dyn-title {
+  margin: 0;
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--dyn-text, #E8ECF2);
+}
+[data-dynasty-background=true] .lcc-dyn-clock {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dyn-gold, #D4A24C);
+}
+
+/* Channels: rounded pills, the open one on the rail colour. */
+[data-dynasty-background=true] .lcc-strip { border-bottom-color: var(--dyn-rail, #1C2333); }
+[data-dynasty-background=true] .lcc-chip {
+  border-color: transparent;
+  border-radius: 999px;
+  color: var(--dyn-faint, #9AA4B2);
+  font-size: 12px;
+}
+[data-dynasty-background=true] .lcc-chip[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--dyn-rail, #1C2333);
+  color: var(--dyn-text, #E8ECF2);
+}
+[data-dynasty-background=true] .lcc-chimmy,
+[data-dynasty-background=true] .lcc-chimmy > span { color: var(--dyn-gold-soft, #F3D79F); }
+[data-dynasty-background=true] .lcc-chimmy[aria-pressed='true'] {
+  background: rgba(212, 162, 76, 0.12);
+  color: var(--dyn-gold-soft, #F3D79F);
+}
+
+/* Bubbles: theirs on the rail colour, yours a teal tint, Chimmy on the vault.
+ * Theirs are painted by af-comms.css from `--af-bubble-in` (a high-specificity :not()/:has() rule),
+ * so the dynasty colours are set as that variable per row rather than fought with specificity. */
+[data-dynasty-background=true] .af-cm-row {
+  --af-bubble-in: var(--dyn-rail, #1C2333);
+  --line2: var(--dyn-line, #2A3345);
+}
+[data-dynasty-background=true] .af-cm-row[data-chimmy='true'] {
+  --af-bubble-in: var(--dyn-vault, #121826);
+  --line2: var(--dyn-rail, #1C2333);
+}
+[data-dynasty-background=true] .af-cm-bubble { color: var(--dyn-text, #E8ECF2); }
+[data-dynasty-background=true] .af-cm-row[data-chimmy='true'] .af-cm-bubble { color: var(--dyn-text2, #C3CAD5); box-shadow: none; }
+[data-dynasty-background=true] .af-cm-row[data-mine='true'] .af-cm-bubble {
+  background: rgba(45, 212, 191, 0.16);
+  color: var(--dyn-text, #E8ECF2);
+}
+[data-dynasty-background=true] .af-cm-avatar { background: var(--dyn-line, #2A3345); box-shadow: none; }
+[data-dynasty-background=true] .af-cm-avatar.af-cm-avatar-chimmy {
+  background: linear-gradient(135deg, var(--dyn-teal, #2DD4BF), var(--dyn-gold, #D4A24C));
+  box-shadow: none;
+  color: var(--dyn-ink, #0B0F17);
+}
+[data-dynasty-background=true] .af-cm-row[data-mine='true'] .af-cm-mention { color: var(--dyn-teal, #2DD4BF); }
+
+/* The completed trade card: vault, teal edge, "Trade accepted" over it. */
+[data-dynasty-background=true] .af-cm-trade[data-dynasty='true'] {
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dyn-rail, #1C2333);
+  border-left: 3px solid var(--dyn-teal, #2DD4BF);
+  border-radius: 12px;
+  background: var(--dyn-vault, #121826);
+  color: var(--dyn-text, #E8ECF2);
+}
+[data-dynasty-background=true] .af-cm-trade[data-dynasty='true'] .af-cm-trade-label { color: var(--dyn-faint, #9AA4B2); letter-spacing: 0.04em; }
+[data-dynasty-background=true] .af-cm-trade[data-dynasty='true'] .af-cm-trade-list { padding-left: 0; list-style: none; font-size: 13px; color: var(--dyn-text, #E8ECF2); }
+[data-dynasty-background=true] .lcc-dyn-trade-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7FE9D8;
+}
+
+/* Pick chips: R1 gold, later rounds (and a pick whose round was never recorded) the line. */
+.lcc-dyn-pick-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.lcc-dyn-pick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--dyn-line, #2A3345);
+  border-radius: 999px;
+  color: var(--dyn-text2, #C3CAD5);
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.lcc-dyn-pick[data-tone='first'] { border-color: var(--dyn-gold, #D4A24C); color: var(--dyn-gold-soft, #F3D79F); }
+.lcc-dyn-pick-label { text-transform: uppercase; }
+.lcc-dyn-pick-name { font-weight: 600; font-stretch: 100%; color: var(--dyn-text, #E8ECF2); }
+
+/* A draft-order announcement: the gold card. Its own words stay in the bubble, under the head. */
+[data-dynasty-background=true] .af-cm-row[data-message-id]:has(.lcc-dyn-order) {
+  --af-bubble-in: rgba(212, 162, 76, 0.08);
+  --line2: rgba(212, 162, 76, 0.35);
+}
+[data-dynasty-background=true] .af-cm-row[data-message-id] .af-cm-bubble:has(> .lcc-dyn-order) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(212, 162, 76, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(212, 162, 76, 0.35);
+  color: var(--dyn-text2, #C3CAD5);
+}
+[data-dynasty-background=true] .af-cm-row[data-message-id] .af-cm-bubble:has(> .lcc-dyn-order) > .lcc-dyn-order { order: -1; }
+.lcc-dyn-order { display: flex; flex-direction: column; gap: 8px; }
+.lcc-dyn-order-head { display: flex; align-items: center; gap: 12px; }
+.lcc-dyn-order-tile {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--dyn-gold, #D4A24C);
+  border-radius: 10px;
+  color: var(--dyn-gold-soft, #F3D79F);
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 75%;
+  font-weight: 800;
+  font-size: 13px;
+}
+.lcc-dyn-order-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dyn-gold, #D4A24C);
+}
+.lcc-dyn-order-slots { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }

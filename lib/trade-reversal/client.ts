@@ -20,11 +20,33 @@ export type ReversalReadiness = {
   drift?: { rosterId: string; expected: string; actual: string }[]
 }
 
-export type ReversalPreflight = { ok: true; readiness: ReversalReadiness } | { ok: false; message: string }
+/**
+ * Which refusal `message` is, so the dialog can say it in the reader's language
+ * (`tradeCenter.reverseDialog.message.<code>`). `message` stays the English, word for word.
+ *
+ *   unreachable / connection_dropped   the request never completed
+ *   not_commissioner                   403
+ *   server                             the server sent an `error`; it is in `serverError`, with its
+ *                                      own `code` in `serverCode` when it sent one
+ *   check_failed / reverse_failed      no usable answer at all
+ */
+export type ReversalMessageCode = 'unreachable' | 'connection_dropped' | 'not_commissioner' | 'server' | 'check_failed' | 'reverse_failed'
+
+export type ReversalRefusal = {
+  message: string
+  messageCode?: ReversalMessageCode
+  /** The server's own English `error` and `code`, when `messageCode` is `server`. */
+  serverError?: string | null
+  serverCode?: string | null
+  /** The HTTP status, 0 when the request did not complete. */
+  status?: number
+}
+
+export type ReversalPreflight = { ok: true; readiness: ReversalReadiness } | ({ ok: false } & ReversalRefusal)
 
 export type ReversalOutcome =
   | { ok: true }
-  | { ok: false; message: string; readiness: ReversalReadiness | null }
+  | ({ ok: false; readiness: ReversalReadiness | null } & ReversalRefusal)
 
 /**
  * Plain-language copy for every blocker either engine can return.
@@ -96,14 +118,35 @@ function errorText(body: unknown): string | null {
   return null
 }
 
+function errorCode(body: unknown): string | null {
+  if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'string') {
+    return (body as { code: string }).code
+  }
+  return null
+}
+
+/** The server's refusal, coded: `server` with its text when it sent one, otherwise `fallback`. */
+function serverRefusal(r: { status: number; body: unknown }, fallback: ReversalMessageCode) {
+  const serverError = errorText(r.body)
+  return serverError
+    ? { messageCode: 'server' as const, serverError, serverCode: errorCode(r.body), status: r.status }
+    : { messageCode: fallback, serverError: null, serverCode: null, status: r.status }
+}
+
 function toPreflight(r: { status: number; body: unknown }): ReversalPreflight {
   if (r.status >= 200 && r.status < 300) {
     const readiness = readReadiness((r.body as { readiness?: unknown } | null)?.readiness)
     if (readiness) return { ok: true, readiness }
   }
-  if (r.status === 0) return { ok: false, message: 'Could not reach AllFantasy to check this trade. Try again.' }
-  if (r.status === 403) return { ok: false, message: 'Only a commissioner can reverse a trade.' }
-  return { ok: false, message: errorText(r.body) ?? 'Could not check whether this trade can be reversed.' }
+  if (r.status === 0) {
+    return { ok: false, message: 'Could not reach AllFantasy to check this trade. Try again.', messageCode: 'unreachable', status: 0 }
+  }
+  if (r.status === 403) return { ok: false, message: 'Only a commissioner can reverse a trade.', messageCode: 'not_commissioner', status: 403 }
+  return {
+    ok: false,
+    message: errorText(r.body) ?? 'Could not check whether this trade can be reversed.',
+    ...serverRefusal(r, 'check_failed'),
+  }
 }
 
 function toOutcome(r: { status: number; body: unknown }): ReversalOutcome {
@@ -121,16 +164,19 @@ function toOutcome(r: { status: number; body: unknown }): ReversalOutcome {
     return {
       ok: false,
       message: 'The connection dropped before AllFantasy confirmed the result. Refresh to see whether the trade was reversed.',
+      messageCode: 'connection_dropped',
+      status: 0,
       readiness: null,
     }
   }
   const readiness = readReadiness((r.body as { readiness?: unknown } | null)?.readiness)
   if (r.status === 403) {
-    return { ok: false, message: 'Only a commissioner can reverse a trade. Nothing was changed.', readiness }
+    return { ok: false, message: 'Only a commissioner can reverse a trade. Nothing was changed.', messageCode: 'not_commissioner', status: 403, readiness }
   }
   return {
     ok: false,
     message: `${errorText(r.body) ?? 'The trade could not be reversed.'} Nothing was changed.`,
+    ...serverRefusal(r, 'reverse_failed'),
     readiness,
   }
 }

@@ -52,14 +52,24 @@ describe('af-matchup.css keys on the matchup’s own width', () => {
     expect(inAt(MATCHUP, '.af-mu', '')?.decls.container).toBe('af-mu / inline-size')
   })
 
-  it('🛑 the banner stacks to one column on a narrow MATCHUP, not only a narrow window', () => {
-    expect(inAt(MATCHUP, '.af-mu-h2h', '@container af-mu (max-width: 760px)')?.decls['grid-template-columns']).toBe('minmax(0, 1fr)')
+  /*
+   * Redesign 2026-11-01: a narrow matchup puts the two teams SIDE BY SIDE (two columns) with the win
+   * probability spanning under them — it no longer stacks to one. Still keyed on the matchup's width.
+   */
+  it('🛑 the banner drops to two columns on a narrow MATCHUP, not only a narrow window', () => {
+    expect(inAt(MATCHUP, '.af-mu-h2h', '@container af-mu (max-width: 760px)')?.decls['grid-template-columns']).toBe(
+      'minmax(0, 1fr) minmax(0, 1fr)',
+    )
     /* The viewport rule stays as the fallback for a browser without container queries. */
-    expect(inAt(MATCHUP, '.af-mu-h2h', '@media (max-width: 780px)')?.decls['grid-template-columns']).toBe('minmax(0, 1fr)')
+    expect(inAt(MATCHUP, '.af-mu-h2h', '@media (max-width: 780px)')?.decls['grid-template-columns']).toBe(
+      'minmax(0, 1fr) minmax(0, 1fr)',
+    )
+    /* …and the centre spans both, under the teams. */
+    expect(inAt(MATCHUP, '.af-mu-centre', '@container af-mu (max-width: 760px)')?.decls['grid-column']).toBe('1 / -1')
   })
 
-  it('🛑 the 36px score needs room in the MATCHUP — it is no longer a 1024px-window rule', () => {
-    expect(inAt(MATCHUP, '.af-mu-score', '@container af-mu (min-width: 860px)')?.decls['font-size']).toBe('36px')
+  it('🛑 the 60px scoreboard number needs room in the MATCHUP — it is no longer a 1024px-window rule', () => {
+    expect(inAt(MATCHUP, '.af-mu-score', '@container af-mu (min-width: 860px)')?.decls['font-size']).toBe('60px')
     expect(rules(MATCHUP, '.af-mu-score').some((r) => r.at.includes('min-width: 1024px'))).toBe(false)
   })
 
@@ -93,23 +103,7 @@ describe('af-matchup.css keys on the matchup’s own width', () => {
   })
 })
 
-describe('af-matchup-pulse.css keys on the board’s own width', () => {
-  it('🛑 the two-up stacked grid needs a wide BOARD, not a wide window', () => {
-    expect(inAt(PULSE, '.af-mp-cols[data-stack] .af-mp-rows', '@container af-board (min-width: 760px)')?.decls['grid-template-columns']).toBe(
-      'repeat(2, minmax(0, 1fr))',
-    )
-    expect(rules(PULSE, '.af-mp-cols[data-stack] .af-mp-rows').some((r) => r.at.includes('min-width: 781px'))).toBe(false)
-  })
-
-  it('a narrow board stacks its columns and drops the crest', () => {
-    expect(inAt(PULSE, '.af-mp-cols', '@container af-board (max-width: 760px)')?.decls['grid-template-columns']).toBe('minmax(0, 1fr)')
-    expect(inAt(PULSE, '.af-mp-crest', '@container af-board (max-width: 760px)')?.decls.display).toBe('none')
-  })
-
-  it('platform initials are darkened for the light theme', () => {
-    expect(inAt(PULSE, "html[data-mode='light'] .af-core .af-mp-face--none[data-platform='sleeper']", '')?.decls.color).toBe('#5b2fc9')
-  })
-})
+/* af-matchup-pulse.css's board-width rules went with the cross-league board (removed 2026-11-12). */
 
 describe('the Live strip and undefined tokens', () => {
   it('🛑 the leader’s score is chosen by data-side, never by :nth-of-type (which counts every span)', () => {

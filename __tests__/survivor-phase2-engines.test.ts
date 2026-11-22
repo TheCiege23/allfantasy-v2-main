@@ -33,24 +33,11 @@ describe('rocksEngine determinism', () => {
 
 // ── Token shop catalog ────────────────────────────────────────────────────────
 describe('token shop catalog', () => {
-  it('buy_clue costs 2 tokens and is available', async () => {
+  // Behaviour (nothing is for sale until it delivers) is in survivor-token-shop-unbuilt.test.ts.
+  it('the token shop route module loads', async () => {
     const mod = await import('../server/api-route-modules/league-survivor/token-shop/route') as any
     // token-shop route exports TOKEN_SHOP_CATALOG via a named export (or we parse it from GET)
     // Smoke: the module loads without error
-    expect(mod).toBeDefined()
-  })
-})
-
-// ── getSurvivorLeagueState type guards ───────────────────────────────────────
-describe('getSurvivorLeagueState module', () => {
-  it('exports getSurvivorLeagueState as a function', async () => {
-    const { getSurvivorLeagueState } = await import('../lib/survivor/getSurvivorLeagueState')
-    expect(typeof getSurvivorLeagueState).toBe('function')
-  })
-
-  it('exports SurvivorStatePhase values via types (compile-time only)', async () => {
-    // TypeScript types are erased at runtime; just verify the module doesn't throw on import
-    const mod = await import('../lib/survivor/getSurvivorLeagueState')
     expect(mod).toBeDefined()
   })
 })

@@ -1,3 +1,5 @@
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { rookieAuctionStructureChangeError } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET: Full draft variant settings (config + UI + session variant + orphan status for commissioner).
@@ -9,11 +11,11 @@ import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { validateDraftRoundsFitRoster } from '@/lib/live-draft-engine/RosterFitValidation'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
-import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
+import { sanitizeRoundList } from '@/lib/draft-defaults/draftRoundList'
+import { isDraftTypeAllowedOnSettingsTab, leagueSettingsDraftTypeFor } from '@/lib/draft-types/draftTypeRegistry'
 import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { validateLeagueSettings } from '@/lib/league-settings-validation'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
@@ -26,12 +28,17 @@ import { notifyOrphanAiManagerAssigned } from '@/lib/draft-notifications'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
-import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
+import { readLeagueDraftPlaylist } from '@/lib/draft-room/draftPlaylistRead'
 import { getComputedDraftRounds } from '@/lib/draft/computedDraftRounds'
+import { markDraftRoundsManual } from '@/lib/draft/syncDraftRoundsToRoster'
 import { slowDraftPauseAllowed, validateDraftTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 import { classifySeconds } from '@/lib/draft/timer-presets'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { copyLeagueDraftTimeToTournament } from '@/lib/tournament/divisions/leagueDraftTimeToTournament'
+import { publishRuleChangesEvent } from '@/lib/league-rules-explainer/publishRuleChanges'
+import { logAction } from '@/server/services/auditService'
+import { legacyDraftLotteryRestriction } from '@/lib/draft-lottery/dynastyYearGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,17 +62,14 @@ function parseSlotOrder(value: unknown): SlotOrderEntry[] {
   })
 }
 
-/** AF Commissioner entitlement — the same check `/api/league/settings` reports as `hasAfCommissionerSub`. */
-async function hasAfCommissionerSub(userId: string): Promise<boolean> {
-  const r = await new EntitlementResolver()
-    .resolveForUser(userId, 'commissioner_ai_tools')
-    .catch(() => ({ hasAccess: false }))
-  return Boolean(r.hasAccess)
+/** AF Commissioner plan — the one shared check (lib/entitlements/afCommissionerPlan.ts). */
+function hasAfCommissionerSub(userId: string): Promise<boolean> {
+  return hasAfCommissionerPlan({ id: userId })
 }
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
-type DraftOrderTeamSlot = { position: number; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
+type DraftOrderTeamSlot = { position: number; teamId: string | null; teamName: string | null; ownerName: string | null; avatarUrl: string | null; isEmpty: boolean }
 
 /**
  * The draft order as the settings panel lists it: the saved `LeagueSettings.draftOrderSlots` when
@@ -90,16 +94,16 @@ async function loadDraftOrderTeams(leagueId: string, savedSlots: unknown, league
       const team = ownerId ? byId.get(ownerId) : undefined
       if (team && !used.has(team.id)) {
         used.add(team.id)
-        out.push({ position: out.length + 1, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
+        out.push({ position: out.length + 1, teamId: team.id, teamName: team.teamName ?? null, ownerName: team.ownerName ?? null, avatarUrl: team.avatarUrl ?? null, isEmpty: false })
       }
     }
   }
   for (const t of teams) {
     if (used.has(t.id)) continue
-    out.push({ position: out.length + 1, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
+    out.push({ position: out.length + 1, teamId: t.id, teamName: t.teamName ?? null, ownerName: t.ownerName ?? null, avatarUrl: t.avatarUrl ?? null, isEmpty: false })
   }
   const size = typeof leagueSize === 'number' && leagueSize > 0 ? leagueSize : out.length
-  while (out.length < size) out.push({ position: out.length + 1, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
+  while (out.length < size) out.push({ position: out.length + 1, teamId: null, teamName: null, ownerName: null, avatarUrl: null, isEmpty: true })
   return out
 }
 
@@ -120,10 +124,13 @@ export async function GET(
   try {
     const [variant, commissioner, league, idpRosterSummary, orderModeAndLottery] = await Promise.all([
       getDraftVariantSettings(leagueId),
-      isCommissioner(leagueId, userId),
+      canCommissionerAct(leagueId, userId, 'view'),
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { sport: true, leagueVariant: true },
+        select: {
+          sport: true, leagueVariant: true, timezone: true,
+          leagueType: true, isDynasty: true, platform: true, survivorMode: true, guillotineMode: true,
+        },
       }),
       (async () => {
         const { isIdpLeague, getRosterDefaultsForIdpLeague, getIdpLeagueConfig } = await import('@/lib/idp')
@@ -142,9 +149,10 @@ export async function GET(
       })(),
       getDraftOrderModeAndLotteryConfig(leagueId),
     ])
+    const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
     const providerStatus = getProviderStatus()
 
-    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub] = await Promise.all([
+    const [lsRow, leagueMeta, draftSessionStatus, computedRounds, viewerHasSub, draftPlaylist] = await Promise.all([
       prisma.leagueSettings.findUnique({
         where: { leagueId },
         select: {
@@ -156,11 +164,32 @@ export async function GET(
       prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER, select: { status: true } }),
       getComputedDraftRounds(leagueId).catch(() => null),
       commissioner ? hasAfCommissionerSub(userId) : Promise.resolve(false),
+      // The commissioner's draft playlist rides on this poll so a change reaches every member's room (2026-11-17).
+      // undefined on a failed read: the key is left out and the room keeps what it has.
+      readLeagueDraftPlaylist(leagueId).catch(() => undefined),
     ])
     const teams = await loadDraftOrderTeams(leagueId, lsRow?.draftOrderSlots ?? null, leagueMeta?.leagueSize ?? null).catch(() => [])
 
     let orphanStatus: { orphanRosterIds: string[]; recentActions: Array<{ action: string; createdAt: string; reason: string | null }> } | null = null
     let commissionerAiDraft: ReturnType<typeof buildApiResponse> | null = null
+    /*
+     * Which teams Chimmy manages, for every member's room — not only the commissioner's. Each open
+     * room asks for a Chimmy-managed team's pick when it comes on the clock
+     * (`/draft/chimmy-manager-pick`), so it needs to know which teams those are. Roster ids only:
+     * the styles and trade rules stay commissioner-only, below.
+     */
+    const chimmyManagedRosterIds = await prisma.draftSession
+      .findFirst({
+        where: { leagueId },
+        orderBy: CURRENT_DRAFT_SESSION_ORDER,
+        select: { commissionerAiManagers: true },
+      })
+      .then((row) =>
+        parseCommissionerAiManagers(row?.commissionerAiManagers)
+          .assignments.filter((a) => a.active)
+          .map((a) => a.rosterId),
+      )
+      .catch(() => [] as string[])
     if (commissioner) {
       const [orphanRosterIds, recentLogs, dsAi] = await Promise.all([
         getOrphanRosterIdsForLeague(leagueId),
@@ -196,6 +225,8 @@ export async function GET(
       sessionVariant: variant.sessionVariant ?? null,
       sessionPreDraft: variant.sessionPreDraft ?? false,
       orphanStatus,
+      chimmyManagedRosterIds,
+      draftPlaylist,
       orphanAiProviderAvailable: providerStatus.anyAi,
       orphanDrafterEffectiveMode:
         variant.draftUISettings.orphanDrafterMode === 'ai' && !providerStatus.anyAi
@@ -211,6 +242,7 @@ export async function GET(
       idpScoringPreset: (idpRosterSummary as { scoringPreset?: string } | null)?.scoringPreset ?? undefined,
       idpPositionMode: (idpRosterSummary as { positionMode?: string } | null)?.positionMode ?? undefined,
       draftOrderMode: orderModeAndLottery?.draftOrderMode ?? 'randomize',
+      lotteryRestriction,
       lotteryConfig: orderModeAndLottery?.lotteryConfig ?? null,
       lotteryLastSeed: orderModeAndLottery?.lotteryLastSeed ?? null,
       lotteryLastRunAt: orderModeAndLottery?.lotteryLastRunAt ?? null,
@@ -219,7 +251,18 @@ export async function GET(
       teams,
       draftStatus: draftSessionStatus?.status ?? 'pre_draft',
       draftDate: lsRow?.draftDateUtc?.toISOString() ?? null,
+      // The draft date/time inputs are wall-clock in THIS zone, not the viewer's browser zone.
+      timezone: league?.timezone || 'America/New_York',
       autostartEnabled: lsRow?.autostart ?? false,
+      // What `startsAtScheduledTimeRegardlessOfAutostart` needs: the panel hides the Autostart toggle
+      // for leagues whose scheduled draft starts at its time whatever the toggle says.
+      scheduledStartLeague: league
+        ? {
+            sport: league.sport, leagueType: league.leagueType, isDynasty: league.isDynasty,
+            platform: league.platform, survivorMode: league.survivorMode,
+            guillotineMode: league.guillotineMode, leagueVariant: league.leagueVariant,
+          }
+        : null,
       slowDraftPauseEnabled: lsRow?.slowDraftPause ?? (variant.draftUISettings.timerMode === 'overnight_pause'),
       slowDraftPauseFrom: lsRow?.slowPauseFrom ?? variant.draftUISettings.slowDraftPauseWindow?.start ?? null,
       slowDraftPauseTo: lsRow?.slowPauseUntil ?? variant.draftUISettings.slowDraftPauseWindow?.end ?? null,
@@ -248,7 +291,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -256,6 +299,11 @@ export async function PATCH(
   if (await isSeasonTournamentDraft(leagueId)) return NextResponse.json({ error: SEASON_DRAFT_MUTATION_BLOCKED, code: 'TOURNAMENT_RULES_FROZEN' }, { status: 409 })
 
   const body = await req.json().catch(() => ({}))
+
+  if (body.draft_order_mode === 'weighted_lottery') {
+    const lotteryRestriction = await legacyDraftLotteryRestriction(leagueId)
+    if (lotteryRestriction) return NextResponse.json({ error: lotteryRestriction }, { status: 403 })
+  }
 
   // Resolve league format for draft-type validation so format-specific ids
   // (devy_snake, c2c_auction, salary_cap → auction, etc.) are accepted here
@@ -272,6 +320,7 @@ export async function PATCH(
   const currentVariant = async () => (currentVariantCache ??= await getDraftVariantSettings(leagueId))
 
   const configPatch: Record<string, unknown> = {}
+  let roundsManual: boolean | null = null
   if (typeof body.draft_type === 'string' && body.draft_type.trim().length > 0) {
     const normalizedDraftType = body.draft_type.trim().toLowerCase()
     if (isDraftTypeAllowedOnSettingsTab(leagueForFormat?.leagueType ?? null, normalizedDraftType)) {
@@ -282,13 +331,14 @@ export async function PATCH(
     let rounds = Math.round(body.rounds)
     // Rounds = draftable roster spots (IR excluded; taxi/devy counted for dynasty/devy/C2C/salary
     // cap). Only an AF Commissioner may override it; anyone else gets the computed count.
-    if (!(await viewerHasSub())) {
-      const computed = await getComputedDraftRounds(leagueId).catch(() => null)
-      if (computed) rounds = computed.rounds
-    }
+    const computed = await getComputedDraftRounds(leagueId).catch(() => null)
+    if (!(await viewerHasSub()) && computed) rounds = computed.rounds
     const roundsError = await validateDraftRoundsFitRoster(leagueId, rounds)
     if (roundsError) return NextResponse.json({ error: roundsError }, { status: 400 })
     configPatch.rounds = rounds
+    // Remember whether this is a deliberate override, so a later ROSTER change knows whether to
+    // carry the draft along with it (lib/draft/syncDraftRoundsToRoster.ts).
+    roundsManual = computed ? rounds !== computed.rounds : null
   }
   if (body.timer_seconds === null) configPatch.timer_seconds = null
   else if (body.timer_seconds !== undefined) {
@@ -362,6 +412,13 @@ export async function PATCH(
     lsSyncKeys.add('cpuAutoPick')
   }
   if (typeof configPatch.rounds === 'number') lsPatch.rounds = configPatch.rounds as number
+  // One draft type: the LeagueSettings copy follows the Draft tab (lib/draft-types/draftTypeRegistry.ts).
+  if (configPatch.draft_type !== undefined || configPatch.third_round_reversal !== undefined) {
+    const current = (await currentVariant()).config
+    const type = String(configPatch.draft_type ?? current?.draft_type ?? 'snake')
+    const reversal = (configPatch.third_round_reversal ?? current?.third_round_reversal ?? false) === true
+    lsPatch.draftType = leagueSettingsDraftTypeFor(type, reversal)
+  }
   if (typeof configPatch.timer_seconds === 'number') {
     const { preset, customSeconds } = classifySeconds(configPatch.timer_seconds as number)
     lsPatch.pickTimerPreset = preset
@@ -419,6 +476,8 @@ export async function PATCH(
     if (sv.devyConfig !== undefined) sessionVariantPatch.devyConfig = sv.devyConfig
     if (sv.c2cConfig !== undefined) sessionVariantPatch.c2cConfig = sv.c2cConfig
     if (sv.auctionBudgetPerTeam !== undefined) sessionVariantPatch.auctionBudgetPerTeam = sv.auctionBudgetPerTeam
+    // Devy / C2C: two startup drafts or one merged draft (lib/draft-defaults/startupCollegeDraft.ts).
+    if (sv.startupDraftMode === 'separate' || sv.startupDraftMode === 'merged') sessionVariantPatch.startupDraftMode = sv.startupDraftMode
   }
 
   let orderModePatch: { draftOrderMode?: string; lotteryConfig?: Record<string, unknown> } | null = null
@@ -484,8 +543,10 @@ export async function PATCH(
   const draftSessionRow = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true },
+    select: { id: true, status: true, draftModeLabel: true, draftType: true, rounds: true, auctionBudgetPerTeam: true },
   })
+  const rookieAuctionProblem = rookieAuctionStructureChangeError(draftSessionRow, { draftType: configPatch.draft_type, rounds: configPatch.rounds, auctionBudgetPerTeam: sessionVariantPatch.auctionBudgetPerTeam })
+  if (rookieAuctionProblem) return NextResponse.json({ error: rookieAuctionProblem, code: 'ROOKIE_AUCTION_STRUCTURE_LOCKED' }, { status: 409 })
   const isActiveDraft =
     draftSessionRow &&
     draftSessionRow.status === 'in_progress'
@@ -523,6 +584,19 @@ export async function PATCH(
     select: { settings: true },
   })
   const leagueSettings = (league?.settings ?? {}) as Record<string, unknown>
+  // Devy / C2C college rounds are normalised HERE, against the draft's round count, before the
+  // validator runs — so its "at least one round" rule judges the list that will actually be stored,
+  // not the raw body (`[0]` or `["x"]` is non-empty and stores as `[]`). Same normaliser as the draft
+  // room's devy / C2C config PATCHes: lib/draft-defaults/draftRoundList.ts.
+  const draftRoundCount = typeof configPatch.rounds === 'number' ? configPatch.rounds : current.config?.rounds
+  if (sessionVariantPatch.devyConfig && typeof sessionVariantPatch.devyConfig === 'object') {
+    const d = sessionVariantPatch.devyConfig as { enabled?: unknown; devyRounds?: unknown }
+    sessionVariantPatch.devyConfig = { enabled: Boolean(d.enabled), devyRounds: sanitizeRoundList(d.devyRounds, draftRoundCount) }
+  }
+  if (sessionVariantPatch.c2cConfig && typeof sessionVariantPatch.c2cConfig === 'object') {
+    const c = sessionVariantPatch.c2cConfig as { enabled?: unknown; collegeRounds?: unknown }
+    sessionVariantPatch.c2cConfig = { enabled: Boolean(c.enabled), collegeRounds: sanitizeRoundList(c.collegeRounds, draftRoundCount) }
+  }
   const effectiveForValidation: Record<string, unknown> = {
     league_type: leagueSettings.league_type,
     league_variant: leagueSettings.league_variant ?? null,
@@ -544,6 +618,14 @@ export async function PATCH(
       { status: 400 }
     )
   }
+
+  // The draft rules as members read them, before the writes — for the "What changed" card. Loaded
+  // lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const draftRules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
+  // The rookie lottery's own settings, only when this save writes them (the same keys the lottery
+  // config PUT diffs). Not suppressed by a completed draft: they govern the NEXT draw.
+  const lotteryRulesBefore = draftRules && orderModePatch?.lotteryConfig ? await draftRules.loadRookieLotteryRulesSafe(leagueId) : null
 
   try {
     if (hasOrderMode && orderModePatch) {
@@ -579,7 +661,11 @@ export async function PATCH(
       ])
     }
 
+    let draftTimeToNotify: Date | null = null
     if (hasLeagueSettings) {
+      const priorDraftTime = body.draftDate !== undefined
+        ? (await prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }))?.draftDateUtc ?? null
+        : null
       const lsRow = await prisma.leagueSettings.upsert({
         where: { leagueId },
         create: { leagueId, ...(lsPatch as unknown as Omit<Prisma.LeagueSettingsUncheckedCreateInput, 'leagueId'>) },
@@ -592,6 +678,7 @@ export async function PATCH(
       }
       // A tournament conference league's new draft time goes back onto the tournament's record for it.
       if (body.draftDate !== undefined) {
+        if (lsRow.draftDateUtc && lsRow.draftDateUtc.getTime() !== priorDraftTime?.getTime()) draftTimeToNotify = lsRow.draftDateUtc
         await copyLeagueDraftTimeToTournament(leagueId, lsRow.draftDateUtc ?? null, userId).catch((e) =>
           console.warn('[draft/settings PATCH] tournament draft time copy-back', e instanceof Error ? e.message : 'unknown error'),
         )
@@ -604,6 +691,38 @@ export async function PATCH(
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
       ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
+    if (draftTimeToNotify) {
+      const { notifyDraftTimeSet } = await import('@/lib/draft-notifications')
+      await notifyDraftTimeSet(leagueId, draftTimeToNotify).catch((e) => console.error('[draft/settings] time notification failed', e))
+    }
+    // After the settings write above, which rewrites League.settings wholesale.
+    if (roundsManual !== null) {
+      await markDraftRoundsManual(leagueId, roundsManual).catch((e) =>
+        console.warn('[draft/settings PATCH] rounds override flag', e instanceof Error ? e.message : 'unknown error'),
+      )
+    }
+    // Published silently (no push / email): the league home's "What changed" card is how members hear.
+    await publishRuleChangesEvent({
+      leagueId,
+      actorUserId: userId,
+      section: 'draft',
+      changes: draftRules
+        ? [
+            ...draftRules.draftRuleChanges(draftRulesBefore, await draftRules.loadDraftRulesSafe(leagueId)),
+            ...(lotteryRulesBefore ? draftRules.rookieLotteryRuleChanges(lotteryRulesBefore, await draftRules.loadRookieLotteryRulesSafe(leagueId)) : []),
+          ]
+        : [],
+    })
+    // The league log's "Changed the draft settings" (lib/league-log/leagueLog.ts): the "What changed" card above
+    // fades, and a draft change is exactly the kind of commissioner action the league must be able to look up.
+    await logAction({
+      leagueId,
+      userId,
+      actionType: 'settings_patch',
+      entityType: 'league',
+      entityId: leagueId,
+      metadata: { section: 'draft', source: 'draft-settings', updatedFields: Object.keys(body).filter((k) => k !== 'leagueId').slice(0, 40) },
+    }).catch(() => {})
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
       const orphanEnabledChanged =
@@ -653,7 +772,7 @@ export async function PATCH(
     })
   } catch (e) {
     const code = (e as Error & { code?: string })?.code
-    if (code === 'THIRD_ROUND_REVERSAL_LOCKED') {
+    if (code === 'THIRD_ROUND_REVERSAL_LOCKED' || code === 'ROOKIE_AUCTION_STRUCTURE_LOCKED') {
       return NextResponse.json(
         { error: (e as Error).message, code },
         { status: 409 },

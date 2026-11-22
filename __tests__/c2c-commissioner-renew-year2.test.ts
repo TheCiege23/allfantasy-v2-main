@@ -40,6 +40,7 @@ vi.mock('@/lib/commissioner/CommissionerRatingTrigger', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    zombieLeague: { findUnique: vi.fn().mockResolvedValue(null) },
     league: {
       findUnique: leagueFindUniqueMock,
       update: leagueUpdateMock,
@@ -47,6 +48,7 @@ vi.mock('@/lib/prisma', () => ({
     leagueSeason: {
       upsert: leagueSeasonUpsertMock,
     },
+    redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
     leagueTeam: {
       updateMany: leagueTeamUpdateManyMock,
       count: leagueTeamCountMock,
@@ -56,6 +58,7 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 describe('C2C commissioner renew / continue-to-next-year', () => {
   beforeEach(() => {
@@ -73,6 +76,7 @@ describe('C2C commissioner renew / continue-to-next-year', () => {
     leagueFindUniqueMock.mockResolvedValue({
       userId: 'commissioner-1',
       season: 2026,
+      status: 'complete', // renew refuses a season that is not over
       settings: {
         league_type: 'c2c',
         c2cTaxiLockMode: 'season_start',
@@ -142,6 +146,7 @@ describe('C2C commissioner renew / continue-to-next-year', () => {
     leagueFindUniqueMock.mockResolvedValueOnce({
       userId: 'commissioner-1',
       season: 2026,
+      status: 'complete', // renew refuses a season that is not over
       settings: {},
       leagueVariant: 'redraft',
       isDynasty: false,

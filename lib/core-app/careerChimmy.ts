@@ -165,7 +165,7 @@ export function leagueWeeklyCareerChimmyPrompts(data: LeagueWeeklyCareerData): C
     out.push({
       key: 'survive',
       label: 'How do I avoid the chop?',
-      ask: `In ${name} (a guillotine league) I have survived ${weeks(current.weeks)} this season, finishing ${current.averageFinish.toFixed(1)} of ${current.fieldSize} on average. How do I stay out of the bottom spot this week?`,
+      ask: `In ${name} (a Guilly league) I have survived ${weeks(current.weeks)} this season, finishing ${current.averageFinish.toFixed(1)} of ${current.fieldSize} on average. How do I stay out of the bottom spot this week?`,
     })
   } else {
     out.push({

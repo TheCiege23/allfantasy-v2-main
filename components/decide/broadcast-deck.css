@@ -27,6 +27,8 @@
   --bdx-warn: #ffc53d;
   --bdx-crit: #ff6b8b;
   --bdx-info: #7fb3ff;
+  /* The viewer's own pick / row highlight (LegacyHome's draft board). A token so a theme can re-point it. */
+  --bdx-me: #ff9d5c;
 
   position: relative;
   color: var(--bdx-ink);

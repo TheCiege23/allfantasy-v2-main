@@ -49,7 +49,8 @@ export async function loadLineupBoards(targets: readonly LineupShareTarget[], no
     const ids = [...new Set(starterRows.map((r) => r.playerId))]
     const identityRows = ids.length
       ? await prisma.sportsPlayer.findMany({
-          where: { sleeperId: { in: ids } },
+          // NFL league-weeks only (the fixtures above are NFL), so NFL players only.
+          where: { sport: 'NFL', sleeperId: { in: ids } },
           select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true, source: true, fetchedAt: true },
         })
       : []

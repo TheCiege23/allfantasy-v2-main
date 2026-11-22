@@ -20,10 +20,11 @@ const requireVerifiedUserMock = vi.fn()
 const assertImportCommissionerMock = vi.fn()
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
-vi.mock('@/lib/league-import/commissionerGate', () => ({
+vi.mock('@/lib/league-import/commissionerGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/league-import/commissionerGate')>()),
   assertImportCommissioner: assertImportCommissionerMock,
   recordImportAttestation: vi.fn(),
 }))

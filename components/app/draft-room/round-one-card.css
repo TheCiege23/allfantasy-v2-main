@@ -1,0 +1,112 @@
+/*
+ * Round 1 pick card — "alive" without video (Phase 6, 2026-11-19).
+ * ~3 seconds: the card slides in, the team colour sweeps across, the headshot scales in and then
+ * keeps breathing, the name reveals letter by letter, the pick number stamps on, and a light passes
+ * over the card. Only transform / opacity / clip-path animate, so it stays smooth on phones.
+ * Reduced motion: everything is shown at once, still.
+ */
+
+.af-r1-card {
+  --af-r1-team: #22d3ee;
+  animation: af-r1-slide-in 520ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+
+.af-r1-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--af-r1-team) 70%, transparent) 0%,
+      color-mix(in srgb, var(--af-r1-team) 28%, transparent) 38%, transparent 70%);
+  animation: af-r1-sweep 900ms cubic-bezier(0.3, 0.7, 0.2, 1) 160ms both;
+}
+
+.af-r1-shine {
+  position: absolute;
+  inset: -20% auto -20% -40%;
+  width: 35%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  transform: skewX(-18deg);
+  animation: af-r1-shine 2600ms ease-in-out 1100ms infinite;
+}
+
+.af-r1-headshot {
+  animation:
+    af-r1-headshot-in 760ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms both,
+    af-r1-breathe 2800ms ease-in-out 1100ms infinite alternate;
+  transform-origin: 50% 70%;
+}
+
+.af-r1-headshot-frame {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--af-r1-team) 55%, transparent), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.af-r1-letter {
+  display: inline-block;
+  white-space: pre;
+  animation: af-r1-letter 260ms ease-out both;
+  animation-delay: calc(650ms + var(--i) * 28ms);
+}
+
+.af-r1-stamp {
+  animation: af-r1-stamp 420ms cubic-bezier(0.2, 1.4, 0.4, 1) 1250ms both;
+  background: color-mix(in srgb, var(--af-r1-team) 30%, rgba(0, 0, 0, 0.4));
+  border-color: color-mix(in srgb, var(--af-r1-team) 65%, white 10%);
+}
+
+.af-r1-rise {
+  animation: af-r1-rise 420ms ease-out 1500ms both;
+}
+
+@keyframes af-r1-slide-in {
+  0% { opacity: 0; transform: translateX(48px) scale(0.97); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes af-r1-sweep {
+  0% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes af-r1-shine {
+  0% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  15% { opacity: 1; }
+  60%, 100% { transform: translateX(520%) skewX(-18deg); opacity: 0; }
+}
+@keyframes af-r1-headshot-in {
+  0% { opacity: 0; transform: scale(1.35) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes af-r1-breathe {
+  0% { transform: scale(1) translateY(0); }
+  100% { transform: scale(1.045) translateY(-2px); }
+}
+@keyframes af-r1-letter {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes af-r1-stamp {
+  0% { opacity: 0; transform: scale(2.1) rotate(-14deg); }
+  70% { opacity: 1; transform: scale(0.94) rotate(-6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-6deg); }
+}
+@keyframes af-r1-rise {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-r1-card,
+  .af-r1-sweep,
+  .af-r1-headshot,
+  .af-r1-letter,
+  .af-r1-stamp,
+  .af-r1-rise {
+    animation: none !important;
+  }
+  .af-r1-shine {
+    display: none;
+  }
+  .af-r1-stamp {
+    transform: rotate(-6deg);
+  }
+}

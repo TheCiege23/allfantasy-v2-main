@@ -41,12 +41,23 @@ export interface RunBudget {
   remainingMs(): number
 }
 
-export function createRunBudget(budgetMs: number = CRON_RUN_BUDGET_MS, now: () => number = Date.now): RunBudget {
+/**
+ * @param signal optional. Once aborted, the budget reads as spent: `exhausted()` is true and
+ *   `remainingMs()` is 0. Pass the signal `respondBeforeEdge` hands its work, so that after the
+ *   response has gone the handler stops at its next unit boundary instead of working through the
+ *   rest of its list in the background. Every `deadlineAt` derived from `remainingMs()` collapses
+ *   with it, so `remainingFor` refuses to start the next provider call too.
+ */
+export function createRunBudget(
+  budgetMs: number = CRON_RUN_BUDGET_MS,
+  now: () => number = Date.now,
+  signal?: AbortSignal,
+): RunBudget {
   const startedAt = now()
   return {
-    exhausted: () => now() - startedAt >= budgetMs,
+    exhausted: () => signal?.aborted === true || now() - startedAt >= budgetMs,
     elapsedMs: () => now() - startedAt,
-    remainingMs: () => Math.max(0, budgetMs - (now() - startedAt)),
+    remainingMs: () => (signal?.aborted ? 0 : Math.max(0, budgetMs - (now() - startedAt))),
   }
 }
 
@@ -183,9 +194,13 @@ export function rotateForFairness<T>(
  * seconds of headroom does not bound a unit that takes minutes, which the header above states in
  * its own words: it bounds the NUMBER of units, not the duration of one.
  *
- * ⚠ THIS DOES NOT CANCEL THE WORK, AND CANNOT. There is no cancellation to reach for — the unit is
- * awaiting provider calls deep in modules that accept no signal. What changes is what the CALLER
- * gets. Today the edge severs at 300s and answers 502: the work is killed anyway, no row is
+ * ⚠ IT CANNOT CANCEL THE UNIT IN FLIGHT. That unit is awaiting provider calls deep in modules that
+ * accept no signal, and it runs to its own end. What it CAN stop is everything after it: since
+ * 2026-10-24 the deadline also aborts the signal passed to `work`, and a `createRunBudget` built on
+ * that signal reads as spent, so the handler starts no further unit once the response has gone.
+ * Before that, nothing stopped it — on Railway, where `maxDuration` is not enforced, an overrun
+ * handler worked through its entire remaining list in the background, holding its rows in memory
+ * and overlapping the next fire. What changes for the CALLER is unchanged: Today the edge severs at 300s and answers 502: the work is killed anyway, no row is
  * written, no partial result survives, and the freshness probe then reports CONFIG. With this, the
  * handler answers at 270s naming what it finished and what it deferred, the dispatcher records a
  * run, and the next fire continues from the rotation.
@@ -207,13 +222,14 @@ export interface EdgeGuardResult<T> {
 /**
  * Race `work` against a hard deadline and return `onOverrun()` if it has not finished.
  *
- * @param work the handler's real work. Invoked immediately.
+ * @param work the handler's real work. Invoked immediately, with a signal that is aborted when the
+ *   deadline fires. Build the handler's `createRunBudget` on it so the work stops at its next unit.
  * @param onOverrun builds the partial response. Must not throw and must not await.
  * @param hardMs the response deadline.
  * @param label names the caller in the log lines below. Job name only — never a URL or a secret.
  */
 export async function respondBeforeEdge<T>(
-  work: () => Promise<T>,
+  work: (signal: AbortSignal) => Promise<T>,
   onOverrun: () => T,
   hardMs: number = CRON_HARD_RESPONSE_MS,
   label = 'cron',
@@ -227,6 +243,7 @@ export async function respondBeforeEdge<T>(
   const TIMED_OUT = Symbol('cron.respondBeforeEdge.deadline')
   let timer: ReturnType<typeof setTimeout> | undefined
   const startedAt = Date.now()
+  const controller = new AbortController()
 
   /*
    * 🛑 A LINE ON EVERY PATH, BECAUSE SILENCE HERE IS UNREADABLE. Measured 2026-09-07: after this
@@ -258,8 +275,9 @@ export async function respondBeforeEdge<T>(
   console.log(`[edge-guard] ${label} armed: deadline ${hardMs}ms`)
 
   try {
+    const pending = work(controller.signal)
     const raced = await Promise.race<T | typeof TIMED_OUT>([
-      work(),
+      pending,
       new Promise<typeof TIMED_OUT>((resolve) => {
         timer = setTimeout(() => resolve(TIMED_OUT), hardMs)
         /*
@@ -278,7 +296,16 @@ export async function respondBeforeEdge<T>(
 
     const elapsed = Date.now() - startedAt
     if (raced === TIMED_OUT) {
-      console.log(`[edge-guard] ${label} FIRED at ${elapsed}ms — returning the partial response`)
+      controller.abort()
+      console.log(`[edge-guard] ${label} FIRED at ${elapsed}ms — returning the partial response, work signalled to stop`)
+      /*
+       * How long the orphaned work actually ran on. This is the number that says whether the abort
+       * is doing its job: it should be about one unit's length, not the rest of the list.
+       */
+      pending.then(
+        () => console.log(`[edge-guard] ${label} abandoned work settled ${Date.now() - startedAt}ms after start`),
+        () => console.log(`[edge-guard] ${label} abandoned work rejected ${Date.now() - startedAt}ms after start`),
+      )
       return { result: onOverrun(), overran: true }
     }
     /*

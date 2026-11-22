@@ -1,4 +1,6 @@
 import type { TradeConsoleLeagueSnapshot } from './types'
+import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { leagueConceptLabel, readConfirmedLeagueConcept, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 export function buildQuickModeBadges(league: {
   isDynasty: boolean
@@ -13,16 +15,18 @@ export function buildQuickModeBadges(league: {
 
   const badges: string[] = []
   const variant = (league.leagueVariant ?? '').toLowerCase()
-  const lt = (league.leagueType ?? '').toLowerCase()
+  const confirmed = readConfirmedLeagueConcept(league.settings)
+  const lt = String(resolveLeagueConcept(league.settings, league.leagueType) ?? '').toLowerCase()
 
+  if (confirmed && !['redraft', 'dynasty', 'keeper'].includes(confirmed)) badges.push(leagueConceptLabel(confirmed))
   if (league.isDynasty) badges.push('Dynasty')
-  else if (lt.includes('keeper') || variant.includes('keeper')) badges.push('Keeper')
-  else if (league.bestBallMode || variant.includes('best_ball') || variant.includes('bestball')) badges.push('Best Ball')
-  else badges.push('Redraft')
+  else if (lt.includes('keeper') || (!confirmed && variant.includes('keeper'))) badges.push('Keeper')
+  else if (badges.length === 0 && (league.bestBallMode || (!confirmed && (variant.includes('best_ball') || variant.includes('bestball'))))) badges.push('Best Ball')
+  else if (badges.length === 0) badges.push('Redraft')
 
-  if (variant.includes('devy') || lt.includes('devy')) badges.push('Devy')
-  if (variant.includes('c2c') || lt.includes('c2c')) badges.push('C2C')
-  if (variant.includes('salary') || lt.includes('salary')) badges.push('Salary Cap')
+  if (!confirmed && (variant.includes('devy') || lt.includes('devy'))) badges.push('Devy')
+  if (!confirmed && (variant.includes('c2c') || lt.includes('c2c'))) badges.push('C2C')
+  if (!confirmed && (variant.includes('salary') || lt.includes('salary'))) badges.push('Salary Cap')
   if (variant.includes('idp') || lt.includes('idp')) badges.push('IDP')
 
   const starters = league.settings?.starters
@@ -52,26 +56,30 @@ export function buildQuickModeBadges(league: {
 export function snapshotFromLoaded(
   loaded: import('./league-loader').LoadedTradeLeague,
 ): TradeConsoleLeagueSnapshot {
+  const confirmed = readConfirmedLeagueConcept(loaded.settings)
+  const resolvedType = resolveLeagueConcept(loaded.settings, loaded.leagueType)
+  const isDynasty = leagueVariantFor(loaded.settings, loaded.leagueType).dynasty || (!confirmed && loaded.isDynasty)
+  const bestBallMode = confirmed ? confirmed === 'best_ball' : loaded.bestBallMode
   const snap: TradeConsoleLeagueSnapshot = {
     id: loaded.id,
     name: loaded.name ?? 'League',
     sport: loaded.sport,
     leagueSize: loaded.leagueSize,
-    isDynasty: loaded.isDynasty,
-    leagueType: loaded.leagueType,
+    isDynasty,
+    leagueType: resolvedType,
     scoring: loaded.scoring,
     isSuperFlexHint: false,
     tePremiumHint: false,
     waiverBudget: loaded.waiverBudget,
     taxiSlots: loaded.taxiSlots,
     leagueVariant: loaded.leagueVariant,
-    bestBallMode: loaded.bestBallMode,
+    bestBallMode,
     settings: loaded.settings,
     quickModeBadges: buildQuickModeBadges({
-      isDynasty: loaded.isDynasty,
-      leagueType: loaded.leagueType,
+      isDynasty,
+      leagueType: resolvedType,
       leagueVariant: loaded.leagueVariant,
-      bestBallMode: loaded.bestBallMode,
+      bestBallMode,
       taxiSlots: loaded.taxiSlots,
       settings: loaded.settings,
       scoring: loaded.scoring,

@@ -6,8 +6,9 @@ import { track } from '@/lib/analytics/dataLayer'
 import { resolvePlanTierFromSku } from '@/lib/monetization-analytics'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
-import { manageAppleSubscriptions, restoreApplePurchases, useAppleIapPrices } from '@/lib/monetization/apple-iap-client'
+import { manageNativeSubscriptions, restoreNativePurchases, useNativeIapPrices } from '@/lib/monetization/native-iap-client'
 import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/planIncludes'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
@@ -29,6 +30,23 @@ import { LaunchOfferStrip } from '@/components/launch/LaunchOfferStrip'
 // equivalent note. This screen was simply missed when those two were repaired.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
+import '@/components/core-app/af-pricing-redesign.css'
+import '@/components/core-app/af-pricing-compare.css'
+import { useMessages } from '@/components/i18n/useMessages'
+import { plansScreenMessages } from '@/lib/core-app/messages/plansScreen'
+import { pricingCardStatus, type PricingAccount } from '@/lib/core-app/pricingAccount'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import type { ComparisonCell, ComparisonGroup, ComparisonTier, PlanExample } from '@/lib/monetization/planComparison'
+import { pricingGuideMessages } from '@/lib/core-app/messages/pricingGuide'
+import { trialAppliesTo, useTrialOffer } from '@/lib/monetization/useTrialOffer'
+import {
+  pricingHeadline,
+  splitComingSoon,
+  supremeValue,
+  SUPREME_VALUE_BULLET,
+  yearlySavingsRange,
+} from '@/lib/core-app/pricingGuide'
+import '@/components/core-app/af-pricing-guide.css'
 
 /**
  * Screen 18a — pricing.
@@ -80,11 +98,206 @@ export type PricingPack = {
   tokenAmount: number | null
 }
 
-export type PricingV4Props = {
+type PricingV4Props = {
   plans: PricingPlan[]
   packs: PricingPack[]
-  /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */
-  savingsHeadline: string | null
+  /**
+   * Retired 2026-11-14: the chip is now the yearly saving as a RANGE, derived from `plans`
+   * (lib/core-app/pricingGuide.ts). Accepted and ignored so older callers still compile.
+   */
+  savingsHeadline?: string | null
+  signedIn?: boolean
+  /**
+   * The signed-in viewer's plan, renewal and token balance (lib/core-app/pricingAccount.ts), read on the
+   * server. Null for a visitor or a failed read: no banner and no YOUR PLAN chip, exactly as before.
+   */
+  account?: PricingAccount | null
+  /** The plain-language comparison table, computed on the server from the paywall's own checks. */
+  comparison?: ComparisonGroup[]
+  /** Retired 2026-11-14 with the "What you can do" boxes: the cards and the table already say it. */
+  examples?: Record<ComparisonTier, readonly PlanExample[]>
+}
+
+function ComparisonCellView({ cell }: { cell: ComparisonCell }) {
+  if (cell.kind === 'yes') return <span className="af-pr-cmp-yes" aria-label="Included">✓</span>
+  if (cell.kind === 'no') return <span className="af-pr-cmp-no" aria-label="Not included">—</span>
+  if (cell.kind === 'soon') return <span className="af-pr-cmp-soon">Coming soon</span>
+  return <span className="af-pr-cmp-text">{cell.text}</span>
+}
+
+/**
+ * Plain-language comparison. Every tick is what `hasFeatureAccessForPlans` answers for that plan
+ * (lib/monetization/planComparison.ts), so the table cannot promise what the paywall refuses.
+ * Scrolls sideways on a phone with the feature column pinned.
+ */
+function ComparisonTable({ groups: allGroups, columns }: { groups: ComparisonGroup[]; columns: { tier: ComparisonTier; name: string }[] }) {
+  const g = useMessages(pricingGuideMessages)
+  /*
+   * 2026-11-14 guide pass: folded, because the cards above already list what each plan adds — the
+   * table is for someone checking one feature, not a third reading of the same list. Rows that are
+   * "Coming soon" on every plan compare nothing, so they become one line under it.
+   */
+  const { groups, soon } = splitComingSoon(allGroups)
+  return (
+    <details className="af-pr-compare af-prg-compare" data-testid="pricing-compare">
+      <summary className="af-prg-compare-summary" id="af-pr-compare-h">
+        {g.compareSummary}
+      </summary>
+      <p className="af-pr-sub af-pr-sub--tight">
+        What each plan includes, in plain words. Commissioner features link to where{' '}
+        <Link href="/commissioners">Commissioner OS</Link> shows them working.
+      </p>
+      <div className="af-pr-compare-scroll" tabIndex={0} aria-label="Plan comparison table, scrolls sideways">
+        <table className="af-pr-compare-table">
+          <thead>
+            <tr>
+              <th scope="col" className="af-pr-compare-feature">
+                <span className="af-pr-visually-hidden">Feature</span>
+              </th>
+              {columns.map((c) => (
+                <th key={c.tier} scope="col">
+                  {c.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          {groups.map((g) => (
+            <tbody key={g.id} data-group={g.id}>
+              <tr className="af-pr-compare-group">
+                <th scope="colgroup" colSpan={columns.length + 1}>
+                  {g.title}
+                </th>
+              </tr>
+              {g.rows.map((r) => (
+                <tr key={r.id} data-testid={`pricing-compare-row-${r.id}`}>
+                  <th scope="row" className="af-pr-compare-feature">
+                    <span className="af-pr-compare-label">{r.label}</span>
+                    {r.detail ? <span className="af-pr-compare-detail">{r.detail}</span> : null}
+                    {r.learnMoreHref ? (
+                      <Link href={r.learnMoreHref} className="af-pr-examples-link">
+                        See it in Commissioner OS
+                      </Link>
+                    ) : null}
+                  </th>
+                  {columns.map((c) => (
+                    <td key={c.tier}>
+                      <ComparisonCellView cell={r.cells[c.tier]} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
+      {soon.length > 0 ? (
+        <p className="af-prg-soon" data-testid="pricing-coming-soon">
+          {g.comingSoon(soon.map((r) => r.label).join(', '))}
+        </p>
+      ) : null}
+    </details>
+  )
+}
+
+/** The Plans board's kicker over each lane: who the plan is for. Free sits outside the lane list. */
+const KICKER_KEY = {
+  af_pro: 'kickerPro',
+  af_commissioner: 'kickerCommissioner',
+  af_supreme: 'kickerSupreme',
+} as const
+
+/**
+ * The YOUR PLAN / "Included in AF Supreme" chip. Purely a marker: the checkout button beside it is
+ * untouched, because switching interval (monthly to yearly) on the plan you hold is a real purchase.
+ */
+function CardStatus({ status, supremeName }: { status: 'yours' | 'included' | null; supremeName: string }) {
+  const m = useMessages(plansScreenMessages)
+  if (status === 'yours') return <span className="af-pr-yours" data-status="yours">{m.yourPlan}</span>
+  if (status === 'included') return <span className="af-pr-yours" data-status="included">{m.includedIn(supremeName)}</span>
+  return null
+}
+
+/** The board's dark account banner: which plan you are on, when it renews, your tokens, and billing. */
+function AccountBanner({ account, nativeApp, onManageNative }: { account: PricingAccount; nativeApp: boolean; onManageNative: () => void }) {
+  const m = useMessages(plansScreenMessages)
+  const locale = getAppIntlLocale()
+  const renews = account.planName && account.renewsAt && !Number.isNaN(Date.parse(account.renewsAt))
+    ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(account.renewsAt))
+    : null
+  const detail = [
+    renews ? m.renews(renews) : null,
+    account.tokenBalance != null ? m.tokens(account.tokenBalance.toLocaleString(locale)) : null,
+  ].filter(Boolean).join(' · ')
+  return (
+    <section className="af-pr-account af-prg-account" data-testid="pricing-account" aria-label={account.planName ? m.youreOn(account.planName) : m.youreFree}>
+      {/* The headline already names the plan (2026-11-14), so this strip says only what it adds. */}
+      <span className="af-pr-account-text">
+        {detail ? <span className="af-pr-account-detail">{detail}</span> : null}
+      </span>
+      <span className="af-pr-account-actions">
+        <Link href="/tokens" className="af-pr-account-btn">{m.seeTokens}</Link>
+        {account.planName ? (
+          nativeApp ? (
+            <button type="button" className="af-pr-account-btn" onClick={onManageNative}>{m.manageBilling}</button>
+          ) : (
+            <Link href="/settings?tab=billing" className="af-pr-account-btn">{m.manageBilling}</Link>
+          )
+        ) : null}
+      </span>
+    </section>
+  )
+}
+
+/**
+ * Tokens spent per week, net of refunds (lib/tokens/weeklyTokenSpend.ts). One series, so the title
+ * names it and there is no legend box; every bar answers on hover and keyboard focus, and the same
+ * numbers sit in a table under "Show the numbers". The current week is partial and drawn lighter.
+ */
+function TokenSpendChart({ weeks }: { weeks: { weekStart: string; spent: number }[] }) {
+  const m = useMessages(plansScreenMessages)
+  const locale = getAppIntlLocale()
+  const day = (iso: string) => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`))
+  const total = weeks.reduce((sum, w) => sum + w.spent, 0)
+  const max = Math.max(1, ...weeks.map((w) => w.spent))
+  return (
+    <section className="af-pr-spend" data-testid="pricing-spend" aria-label={m.spendTitle}>
+      <header className="af-pr-spend-head">
+        <h2 className="af-pr-spend-title">{m.spendTitle}</h2>
+        {total > 0 ? <span className="af-pr-spend-total">{m.spendTotal(total.toLocaleString(locale))}</span> : null}
+      </header>
+      {total === 0 ? (
+        <p className="af-pr-spend-none">{m.spendNone}</p>
+      ) : (
+        <>
+          <ol className="af-pr-spend-bars">
+            {weeks.map((w, i) => {
+              const current = i === weeks.length - 1
+              const label = m.spendWeek(day(w.weekStart), w.spent.toLocaleString(locale)) + (current ? ` (${m.spendThisWeek})` : '')
+              return (
+                <li key={w.weekStart} className="af-pr-spend-col" data-current={current || undefined} data-testid="pricing-spend-bar">
+                  <span className="af-pr-spend-bar" tabIndex={0} aria-label={label} title={label}
+                    style={{ height: `${w.spent > 0 ? Math.max(4, Math.round((w.spent / max) * 100)) : 0}%` }}>
+                    <span className="af-pr-spend-tip" aria-hidden>{w.spent.toLocaleString(locale)}</span>
+                  </span>
+                  <span className="af-pr-spend-x" aria-hidden>{day(w.weekStart)}</span>
+                </li>
+              )
+            })}
+          </ol>
+          <p className="af-pr-spend-note">{m.spendNote}</p>
+          <details className="af-pr-spend-data">
+            <summary>{m.spendTable}</summary>
+            <table>
+              <thead><tr><th scope="col">{m.spendColWeek}</th><th scope="col">{m.spendColTokens}</th></tr></thead>
+              <tbody>
+                {weeks.map((w) => <tr key={w.weekStart}><td>{day(w.weekStart)}</td><td>{w.spent.toLocaleString(locale)}</td></tr>)}
+              </tbody>
+            </table>
+          </details>
+        </>
+      )}
+    </section>
+  )
 }
 
 type Interval = 'month' | 'year'
@@ -110,6 +323,7 @@ const FREE_INCLUDES = [
   'Drafts, trades, waivers and live scoring',
   'Commissioner basics: settings, invites and playoffs',
   'Every league you play, in one place',
+  `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy answers each day`,
 ]
 
 function money(n: number): string {
@@ -165,7 +379,7 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
   {
     q: 'Do you take league dues?',
-    a: "No. League dues and payouts are handled on FanCred — AllFantasy never holds your league's money.",
+    a: "No. AllFantasy never holds your league's money. Members pay dues straight to the league — Venmo, Cash App, PayPal, LeagueSafe or FanCred — and the commissioner tracks who has paid in the dues tracker.",
   },
   {
     q: 'Can I cancel?',
@@ -179,8 +393,12 @@ const FAQS: { q: string; a: string; appleA?: string }[] = [
   },
 ]
 
-export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
-  const { appleApp, prices: applePrices, needsUpdate } = useAppleIapPrices()
+export function PricingV4({ plans, packs, signedIn = false, account = null, comparison }: PricingV4Props) {
+  const pm = useMessages(plansScreenMessages)
+  const g = useMessages(pricingGuideMessages)
+  const { nativeApp, prices: nativePrices, needsUpdate, playApp, error: playError } = useNativeIapPrices()
+  // The AF Pro free trial — web only: a store build never asks, and never shows it (App Store 3.1.1 / 3.1.3).
+  const trialOffer = useTrialOffer(!nativeApp && !playApp)
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -222,14 +440,12 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   )
 
   /*
-   * Only lanes that are actually sold yearly. A plan with no yearly SKU has no
-   * annual price to show, and rendering it with a dash would read as "free
-   * yearly" rather than "not sold that way".
+   * 2026-11-14 guide pass: the answer first. A paid viewer is told their plan; anyone else the rule
+   * (every league is free) and the cheapest monthly price. All derived from the catalog plans.
    */
-  const yearlyLanes = useMemo(
-    () => ordered.filter((p) => p.yearlySku != null && p.yearlyPrice != null),
-    [ordered]
-  )
+  const headline = pricingHeadline(account, ordered)
+  const saveRange = yearlySavingsRange(ordered)
+  const value = supremeValue(ordered, interval)
 
   async function startCheckout(sku: string, productType: 'subscription' | 'token_pack') {
     setError(null)
@@ -257,7 +473,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   async function restorePurchases() {
     setError(null)
     try {
-      await restoreApplePurchases()
+      await restoreNativePurchases()
       window.location.reload()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to restore purchases.')
@@ -265,7 +481,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   }
 
   return (
-    <div className="af-core af-pr">
+    <div className="af-core af-pr" data-redesign="plans">
+      {playError && <p role="status">{playError}</p>}
       {needsUpdate && <p role="status">Update the AllFantasy iOS app to make purchases.</p>}
       {/*
         ⚠ THIS PAGE HAD NO NAVIGATION AT ALL. Measured on the live page: zero
@@ -277,17 +494,60 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         The wordmark is the way home, matching the auth screens.
       */}
       <nav className="af-pr-nav" aria-label="Main">
-        <Link href="/" className="af-pr-brand">
+        <Link href={signedIn ? '/core' : '/'} className="af-pr-brand">
           <Shield />
           <span className="af-pr-wordmark">Pricing</span>
         </Link>
         <div className="af-pr-nav-right">
-          <Link href="/login" className="af-pr-nav-link">
-            Sign in
-          </Link>
-          <Link href="/signup" className="af-pr-nav-cta">
-            Start free
-          </Link>
+          {/* Same destination as every other "For commissioners" link: what Commissioner OS does. */}
+          <Link href="/commissioners" className="af-pr-nav-link">For commissioners</Link>
+          {signedIn ? (
+            <Link href="/core" className="af-pr-nav-cta">Back to app</Link>
+          ) : !signedIn ? (
+            <>
+              <Link href="/login" className="af-pr-nav-link">Sign in</Link>
+              <Link href="/signup" className="af-pr-nav-cta">Start free</Link>
+            </>
+          ) : null}
+        </div>
+
+        {/*
+          Phones (≤780px): the landing page's header pattern — Sign in and Start free side by
+          side, the other links behind a menu. The desktop row above wrapped onto three lines
+          here and pushed "Start free" down onto the header's border. `details` keeps the menu
+          working in the server-rendered page and without JavaScript.
+        */}
+        <div className="af-pr-mobile-actions">
+          {signedIn ? (
+            <Link href="/core" className="af-btn af-pr-mobile-primary" data-testid="pricing-mobile-primary">
+              Back to app
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="af-btn af-btn--ghost af-pr-mobile-signin"
+                data-testid="pricing-mobile-sign-in"
+              >
+                Sign in
+              </Link>
+              <Link href="/signup" className="af-btn af-pr-mobile-primary" data-testid="pricing-mobile-primary">
+                Start free
+              </Link>
+            </>
+          )}
+          <details className="af-pr-mobile-menu">
+            <summary aria-label="Open navigation menu">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
+                <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </summary>
+            <div className="af-pr-mobile-panel">
+              <Link href={signedIn ? '/core' : '/'}>{signedIn ? 'Your leagues' : 'Home'}</Link>
+              <Link href="/commissioners">For commissioners</Link>
+              <Link href="/demo">Try the demo</Link>
+            </div>
+          </details>
         </div>
       </nav>
 
@@ -302,10 +562,15 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
 
       <header className="af-pr-hero">
         <span className="af-pr-eyebrow">Pricing</span>
-        <h1 className="af-pr-title">Win more with tools built for fantasy managers</h1>
-        <p className="af-pr-sub">
-          Creating, importing and running your leagues is free forever. Subscribe for Chimmy and
-          player tools or commissioner automation — or buy tokens when you need them.
+        <h1 className="af-pr-title af-prg-title" data-testid="pricing-headline">
+          {headline.kind === 'plan'
+            ? g.headPlan(headline.planName)
+            : headline.fromMonthly != null && !nativeApp
+              ? g.headFree(money(headline.fromMonthly))
+              : g.headFreeNoPrice}
+        </h1>
+        <p className="af-pr-sub" data-testid="pricing-intro">
+          {headline.kind === 'plan' ? (headline.supreme ? g.introSupreme : g.introPlan) : g.introFree}
         </p>
 
         <div className="af-pr-toggle-row">
@@ -332,9 +597,23 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             "yearly = 2 months free". That was true of the old prices and is not of
             these. Deriving it means the chip cannot outlive the prices it describes.
           */}
-          {!appleApp && savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
+          {!nativeApp && saveRange ? (
+            <span className="af-pr-savechip" data-testid="pricing-save-chip">
+              {g.saveRange(saveRange.min, saveRange.max)}
+            </span>
+          ) : null}
         </div>
       </header>
+
+      {account ? (
+        <AccountBanner
+          account={account}
+          nativeApp={nativeApp}
+          onManageNative={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))}
+        />
+      ) : null}
+      {/* Only when something was spent: an empty "no tokens spent" box answers a question nobody asked. */}
+      {account?.weeklySpend?.some((w) => w.spent > 0) ? <TokenSpendChart weeks={account.weeklySpend} /> : null}
 
       {blocked ? (
         <p className="af-pr-blocked">
@@ -352,16 +631,22 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
 
       <div className="af-pr-grid">
         {/* ── Free ─────────────────────────────────────────────── */}
-        <section className="af-pr-card">
+        <section className="af-pr-card" data-yours={pricingCardStatus('free', account) === 'yours' || undefined}>
+          <div className="af-pr-kicker-row">
+            <span className="af-pr-kicker">{pm.kickerFree}</span>
+            <CardStatus status={pricingCardStatus('free', account)} supremeName="AF Supreme" />
+          </div>
           <h2 className="af-pr-name">Free</h2>
           <p className="af-pr-desc">Create, import and run every league. No card, no trial clock.</p>
           <div className="af-pr-price">
             <span className="af-pr-amount">$0</span>
           </div>
           <p className="af-pr-per">free forever</p>
-          <a href="/signup" className="af-pr-cta af-pr-cta--ghost">
-            Create an account
-          </a>
+          {signedIn ? (
+            <Link href="/core" className="af-pr-cta af-pr-cta--ghost">Go to my leagues</Link>
+          ) : !signedIn ? (
+            <Link href="/signup" className="af-pr-cta af-pr-cta--ghost">Create an account</Link>
+          ) : null}
           <hr className="af-pr-rule" />
           <ul className="af-pr-features">
             {FREE_INCLUDES.map((f) => (
@@ -380,20 +665,34 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           const sku = interval === 'month' ? plan.monthlySku : plan.yearlySku
           const price = interval === 'month' ? plan.monthlyPrice : plan.yearlyPrice
           const best = plan.planFamily === 'af_supreme'
-          const includes = PLAN_FAMILY_INCLUDES[plan.planFamily as PlanFamilyKey] ?? []
+          // Supreme's "cheaper than both" bullet is said once, with numbers, as the card's description.
+          const includes = (PLAN_FAMILY_INCLUDES[plan.planFamily as PlanFamilyKey] ?? []).filter(
+            (f) => !(best && value && f === SUPREME_VALUE_BULLET)
+          )
+          const description =
+            best && value && !nativeApp
+              ? (interval === 'month' ? g.supremeMonth : g.supremeYear)(money(value.supreme), money(value.separately))
+              : plan.description
+          const status = pricingCardStatus(plan.planFamily, account)
+          const kickerKey = KICKER_KEY[plan.planFamily as keyof typeof KICKER_KEY]
+          const supremeName = ordered.find((p) => p.planFamily === 'af_supreme')?.name ?? 'AF Supreme'
 
           return (
-            <section key={plan.planFamily} className="af-pr-card" data-best={best}>
-              {best ? <span className="af-pr-tab">Best value</span> : null}
+            <section key={plan.planFamily} className="af-pr-card" data-best={best} data-yours={status === 'yours' || undefined}>
+              {best && !value ? <span className="af-pr-tab">Best value</span> : null}
+              <div className="af-pr-kicker-row">
+                {kickerKey ? <span className="af-pr-kicker">{pm[kickerKey]}</span> : <span />}
+                <CardStatus status={status} supremeName={supremeName} />
+              </div>
               {/* Named per interval so the card matches the App Store product it sells. */}
               <h2 className="af-pr-name">{plan.name} {interval === 'month' ? 'Monthly' : 'Yearly'}</h2>
-              <p className="af-pr-desc">{plan.description}</p>
+              <p className="af-pr-desc" data-testid={best ? 'pricing-supreme-value' : undefined}>{description}</p>
 
               <div className="af-pr-price">
                 {price == null ? (
                   <span className="af-pr-amount af-pr-amount--none">—</span>
                 ) : (
-                  <span className="af-pr-amount">{appleApp ? (sku ? applePrices[sku] ?? 'Loading Apple price…' : '—') : money(price)}</span>
+                  <span className="af-pr-amount">{nativeApp ? (sku ? nativePrices[sku] ?? 'Loading store price…' : '—') : money(price)}</span>
                 )}
               </div>
               <p className="af-pr-per">
@@ -410,7 +709,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 because .99 pricing makes "2 months free" a fudge in one direction
                 or the other.
               */}
-              {!appleApp && interval === 'year' && plan.savings ? (
+              {!nativeApp && interval === 'year' && plan.savings ? (
                 <p className="af-pr-save">
                   {money(plan.savings.effectiveMonthly)}/mo · save {money(plan.savings.savedUsd)} (
                   {plan.savings.savedPct}%)
@@ -430,15 +729,40 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 found" and the purchase flow lost its coverage silently. The
                 shards were already red for other reasons, so nothing surfaced it.
               */}
-              <button
-                type="button"
-                className="af-pr-cta"
-                data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
-                disabled={!sku || blocked || pendingSku === sku || (appleApp && !applePrices[sku])}
-                onClick={() => sku && startCheckout(sku, 'subscription')}
-              >
-                {pendingSku === sku ? 'Opening checkout…' : `Choose ${plan.name}`}
-              </button>
+              {/*
+                A plan already inside the viewer's AF Supreme is not for sale to them: buying it would
+                pay twice for the same tools. Their OWN card keeps its button — on the yearly view it is
+                a real purchase (monthly to yearly), which is why CardStatus is only a marker.
+              */}
+              {status === 'included' ? (
+                <p className="af-pr-cta af-prg-included" data-testid={`pricing-included-${plan.planFamily}`}>
+                  {g.inYourPlan}
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="af-pr-cta"
+                    data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
+                    disabled={!sku || blocked || pendingSku === sku || (nativeApp && !nativePrices[sku])}
+                    onClick={() => sku && startCheckout(sku, 'subscription')}
+                  >
+                    {pendingSku === sku
+                      ? 'Opening checkout…'
+                      : !nativeApp && trialOffer.eligible === true && trialAppliesTo(trialOffer, sku)
+                        ? g.trialCta(trialOffer.days)
+                        : `Choose ${plan.name}`}
+                  </button>
+                  {/* The trial's terms, said before the click. Web only; marked for the iOS hide rule too. */}
+                  {!nativeApp && price != null && trialAppliesTo(trialOffer, sku) ? (
+                    <p className="af-pr-trial" data-testid={`pricing-trial-${sku}`} data-ios-purchase>
+                      {trialOffer.eligible === true
+                        ? g.trialTerms(trialOffer.days, money(price), g.trialPer(interval))
+                        : g.trialNewMembers(trialOffer.days)}
+                    </p>
+                  ) : null}
+                </>
+              )}
 
               <hr className="af-pr-rule" />
               <ul className="af-pr-features">
@@ -456,69 +780,41 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         })}
       </div>
 
+      {comparison?.length ? (
+        <ComparisonTable
+          groups={comparison}
+          columns={[
+            { tier: 'free' as ComparisonTier, name: 'Free' },
+            ...ordered.map((p) => ({ tier: p.planFamily as ComparisonTier, name: p.name })),
+          ]}
+        />
+      ) : null}
+
       {/*
-        ── Yearly, beside the tokens card ─────────────────────────
-        The handoff pairs these two as a 2-up row, and they answer the two
-        questions the grid above leaves open: "what if I pay once a year" and
-        "what if I do not want a subscription at all".
-
-        ⚠ NO TOKEN COUNTS ON THE YEARLY CARDS. The handoff prints an allowance
-        under each one (3,500 / 1,500 / 15,000 / 3,500) and captions the panel
-        "tokens are granted for the whole year up front". Yearly grants are 0 for
-        every plan, exactly like the monthly ones — see the FAQS note above. The
-        prices here are real and come from the catalog; the token lines are not,
-        so they are absent rather than transcribed.
+        2026-11-14 guide pass: the separate "Yearly, if you'd rather pay once" box is gone. The toggle
+        above already shows every yearly price, per-month figure and saving on the cards themselves, so
+        the box was the same three prices a second time.
       */}
-      <div className="af-pr-row">
-        {yearlyLanes.length > 0 ? (
-          <section className="af-pr-yearly">
-            <div className="af-pr-tokens-head">
-              <h2 className="af-pr-h2">Yearly, if you&rsquo;d rather pay once</h2>
-              <p className="af-pr-sub af-pr-sub--tight">
-                The same plans billed annually. Every figure below is what the card is
-                charged.
-              </p>
-            </div>
-            <div className="af-pr-yearly-grid">
-              {yearlyLanes.map((plan) => (
-                <div key={plan.planFamily} className="af-pr-yearly-card">
-                  <span className="af-pr-yearly-name">{plan.name} Yearly</span>
-                  <span className="af-pr-yearly-price">{appleApp ? (plan.yearlySku ? applePrices[plan.yearlySku] ?? 'Loading Apple price…' : '—') : money(plan.yearlyPrice as number)}</span>
-                  {!appleApp && plan.savings ? (
-                    <span className="af-pr-yearly-save af-num">
-                      {money(plan.savings.effectiveMonthly)}/mo · save {plan.savings.savedPct}%
-                    </span>
-                  ) : (
-                    <span className="af-pr-yearly-save af-pr-yearly-save--empty" aria-hidden />
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
+      <div className="af-pr-row af-prg-row">
       {/* ── Tokens ─────────────────────────────────────────────── */}
       <section className="af-pr-tokens">
         <div className="af-pr-tokens-head">
-          <h2 className="af-pr-h2">Or pay only for what you use</h2>
-          <p className="af-pr-sub af-pr-sub--tight">
-            Tokens are for managers who do not want a subscription. Every action shows its cost
-            before you click, and what you buy never expires into a monthly reset.
-          </p>
+          <h2 className="af-pr-h2">{g.tokensTitle}</h2>
+          <p className="af-pr-sub af-pr-sub--tight">{g.tokensSub}</p>
         </div>
         <div className="af-pr-packs">
           {packs.map((pack) => (
             <div key={pack.sku} className="af-pr-pack">
               <span className="af-pr-pack-tokens">
-                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString() : '—'}
+                {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString(getAppIntlLocale()) : '—'}
               </span>
               <span className="af-pr-pack-label">tokens</span>
-              <span className="af-pr-pack-price">{appleApp ? (applePrices[pack.sku] ?? 'Loading Apple price…') : money(pack.amountUsd)}</span>
+              <span className="af-pr-pack-price">{nativeApp ? (nativePrices[pack.sku] ?? 'Loading store price…') : money(pack.amountUsd)}</span>
               <button
                 type="button"
                 className="af-pr-cta af-pr-cta--small"
                 data-testid={`pricing-token-cta-${pack.sku}`}
-                disabled={blocked || pendingSku === pack.sku || (appleApp && !applePrices[pack.sku])}
+                disabled={blocked || pendingSku === pack.sku || (nativeApp && !nativePrices[pack.sku])}
                 onClick={() => startCheckout(pack.sku, 'token_pack')}
               >
                 {pendingSku === pack.sku ? 'Opening…' : 'Buy'}
@@ -538,7 +834,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {FAQS.map((f) => (
             <article key={f.q} className="af-pr-faq-item">
               <h3 className="af-pr-faq-q">{f.q}</h3>
-              <p className="af-pr-faq-a">{appleApp && f.appleA ? f.appleA : f.a}</p>
+              <p className="af-pr-faq-a">{playApp && f.appleA ? "Google Play manages Android subscriptions, renewals and refund requests. Use Manage Subscriptions below to cancel future renewals; access continues until your paid period ends. Token packs are credited once and do not refill on restore." : nativeApp && f.appleA ? f.appleA : f.a}</p>
             </article>
           ))}
         </div>
@@ -550,18 +846,16 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         the part a hesitating buyer actually needs.
       */}
       <footer className="af-pr-foot">
-        {appleApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
-        {appleApp && <button type="button" onClick={() => void manageAppleSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
-        {!appleApp && <p>
-          Checkout is handled by Stripe — we never see your card details. League dues and payouts
-          are handled on FanCred, separately from your AllFantasy subscription.
+        {nativeApp && <button type="button" onClick={restorePurchases} className="af-pr-foot-cta">Restore Purchases</button>}
+        {nativeApp && <button type="button" onClick={() => void manageNativeSubscriptions().catch((cause) => setError(cause instanceof Error ? cause.message : 'Unable to open subscription settings.'))} className="af-pr-foot-cta">Manage Subscriptions</button>}
+        {!nativeApp && <p>
+          Checkout is handled by Stripe — we never see your card details. League dues are paid
+          straight to your league, never to AllFantasy, and are separate from your subscription.
         </p>}
-        <Link href="/signup" className="af-pr-foot-cta">
-          Start free
-        </Link>
+        {/* A signed-in viewer has Back to app in the header already; a visitor ends on the next step. */}
+        {!signedIn ? <Link href="/signup" className="af-pr-foot-cta">Start free</Link> : null}
       </footer>
     </div>
   )
 }
 
-export default PricingV4

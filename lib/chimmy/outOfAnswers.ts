@@ -16,11 +16,11 @@ import { CHIMMY_PLAN_DAILY_INCLUDED } from './planAllowanceView'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 
 /** The token store. `from` says where the buyer came from; the page ignores what it does not use. */
-export const CHIMMY_BUY_TOKENS_HREF = '/tokens?from=chimmy-drawer'
+const CHIMMY_BUY_TOKENS_HREF = '/tokens?from=chimmy-drawer'
 /** AF Pro on the purchase surface — `/upgrade` focuses the plan named by `plan`. */
-export const CHIMMY_AF_PRO_HREF = '/upgrade?plan=af_pro&from=chimmy-drawer'
+const CHIMMY_AF_PRO_HREF = '/upgrade?plan=af_pro&from=chimmy-drawer'
 
-export type OutOfAnswersAction = { label: string; href: string; primary: boolean }
+type OutOfAnswersAction = { label: string; href: string; primary: boolean }
 
 export type OutOfAnswers = {
   title: string
@@ -46,9 +46,9 @@ export type OutOfAnswers = {
  * app (3.1.1) — so the app shows this instead, built from the same status fields.
  */
 export function inIosAppAccessLine(status: { hasSubscription: boolean; tokenBalance: number }): string {
-  if (status.hasSubscription) return 'Premium AI active.'
+  if (status.hasSubscription) return 'Premium Chimmy active.'
   if (status.tokenBalance > 0) {
-    return `${status.tokenBalance} AI token${status.tokenBalance === 1 ? '' : 's'} available.`
+    return `${status.tokenBalance} Chimmy token${status.tokenBalance === 1 ? '' : 's'} available.`
   }
   return `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day.`
 }
@@ -58,13 +58,14 @@ export function describeOutOfAnswers(
   opts: { inIosApp?: boolean } = {},
 ): OutOfAnswers {
   const buyTokens = (primary: boolean): OutOfAnswersAction => ({ label: 'Buy tokens', href: CHIMMY_BUY_TOKENS_HREF, primary })
-  const free = FREE_CHIMMY_QUESTIONS_PER_DAY
+  const free = plan?.kind === 'free' ? plan.limit : FREE_CHIMMY_QUESTIONS_PER_DAY
+  const subscription = plan?.kind === 'free' ? null : plan
 
   if (opts.inIosApp) {
-    return plan
+    return subscription
       ? {
-          title: `Today's ${plan.limit} ${plan.planName} answers are used`,
-          body: `This answer was not bought. Your ${plan.planName} answers refill at midnight UTC.`,
+          title: `Today's ${subscription.limit} ${subscription.planName} answers are used`,
+          body: `This answer was not bought. Your ${subscription.planName} answers refill at midnight UTC.`,
           actions: [],
         }
       : {
@@ -76,12 +77,12 @@ export function describeOutOfAnswers(
         }
   }
 
-  if (plan) {
+  if (subscription) {
     return {
-      title: `Today's ${plan.limit} ${plan.planName} answers are used`,
+      title: `Today's ${subscription.limit} ${subscription.planName} answers are used`,
       body:
         'You are out of tokens too, so this answer was not bought. Buy tokens to keep going now — ' +
-        `your ${plan.planName} answers refill at midnight UTC.`,
+        `your ${subscription.planName} answers refill at midnight UTC.`,
       actions: [buyTokens(true)],
     }
   }

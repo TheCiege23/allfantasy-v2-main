@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * Matchup simulation API — deterministic, lineup-aware simulation output with optional AI overlays.
  *
@@ -53,7 +54,7 @@ type MatchupRequestBody = {
   deterministicSeed?: string
 }
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   let body: MatchupRequestBody = {}
   try {
     body = await req.json().catch(() => ({}))
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'Unauthorized',
-          message: 'Sign in and upgrade to AF Pro for matchup AI explanations.',
+          message: 'Sign in and upgrade to AF Pro for matchup Chimmy explanations.',
         },
         { status: 401 }
       )
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
       tokenRuleCode: 'ai_matchup_explanation_single',
       tokenSourceType: 'matchup_simulation_ai_explanation',
       tokenSourceId: `${body.leagueId ?? 'matchup'}:${weekOrPeriod}:${Date.now()}`,
-      tokenDescription: 'Matchup simulation AI explanation fallback',
+      tokenDescription: 'Matchup simulation Chimmy explanation fallback',
       tokenMetadata: {
         leagueId: body.leagueId ?? null,
         sport,
@@ -212,7 +213,8 @@ export async function POST(req: NextRequest) {
 
       if (providerInsights) {
         responseBody.providerInsights = providerInsights
-      }
+        if (!providerInsights.aiUsed) paidToolNotDelivered()
+      } else { paidToolNotDelivered() }
     }
     if (tokenFallbackSpend) {
       responseBody.tokenFallbackSpend = tokenFallbackSpend
@@ -251,3 +253,5 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

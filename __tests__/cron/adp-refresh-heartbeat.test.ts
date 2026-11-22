@@ -81,6 +81,36 @@ describe('adp-refresh heartbeat', () => {
     expect(outcome.errors).toEqual(['ADP import read 0 provider rows'])
   })
 
+  it('records an old FFC sample as a WARNING, not an error, so an off-season sample does not fail the run', async () => {
+    h.runAdpImporter.mockResolvedValue({
+      ...importResult(5589, 48),
+      ffcByFormat: {
+        ppr: { rows: 200, observedThrough: '2026-11-18T00:00:00.000Z', fresh: true },
+        dynasty: { rows: 200, observedThrough: '2026-10-20T00:00:00.000Z', fresh: false },
+        '2qb': { rows: 150, observedThrough: null, fresh: false },
+      },
+    })
+    await call()
+    const [, outcome] = h.recordSyncJobRun.mock.calls[0]!
+    expect(outcome.errors).toEqual([])
+    expect(outcome.warnings).toEqual([
+      'FFC dynasty draft sample is stale or undated',
+      'FFC 2qb draft sample is stale or undated',
+    ])
+    expect(outcome.metadata.ffcByFormat.dynasty.observedThrough).toBe('2026-10-20T00:00:00.000Z')
+  })
+
+  it('⚠ still FAILS when an FFC format returned no rows — that is the feed down, not ageing', async () => {
+    h.runAdpImporter.mockResolvedValue({
+      ...importResult(5000, 0),
+      ffcByFormat: { standard: { rows: 0, observedThrough: null, fresh: false } },
+    })
+    await call()
+    const [, outcome] = h.recordSyncJobRun.mock.calls[0]!
+    expect(outcome.errors).toEqual(['FFC standard draft sample returned no rows'])
+    expect(outcome.warnings).toEqual([])
+  })
+
   it('beats as FAILED when the import throws', async () => {
     h.runAdpImporter.mockRejectedValue(new Error('provider down'))
     const res = await call()

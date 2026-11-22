@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useLeagueSectionData } from '@/hooks/useLeagueSectionData'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 type ScoringRuleConfig = {
   statKey: string
@@ -49,6 +50,7 @@ function formatStatLabel(statKey: string): string {
 export default function ScoringSettingsPanel({ leagueId }: { leagueId: string }) {
   const router = useRouter()
   const { t } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const { data: config, loading, error, reload } = useLeagueSectionData<ScoringConfig>(
     leagueId,
     'scoring/config'
@@ -109,7 +111,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
     if (saving) return
     setSaving(true)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/scoring`,
         {
           method: 'PUT',
@@ -163,6 +165,8 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
   }
 
   return (
+    <>
+      {midSeasonDialog}
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-white">{t('scorePanel.title')}</h3>
@@ -199,7 +203,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         <div data-testid="category-scoring-settings" className="mt-3 rounded border border-white/15 p-3 text-sm">
           <p>{config.categoryScoring.recordMode === 'each' ? t('scorePanel.record.each') : config.categoryScoring.recordMode === 'roto' ? t('scorePanel.record.roto') : t('scorePanel.record.most')}</p>
           <ul className="mt-2 flex flex-wrap gap-3">{config.categoryScoring.categories.map(category => <li key={category.id}>{category.label} ({category.direction === 'lower' ? t('scorePanel.lowerWins') : t('scorePanel.higherWins')})</li>)}</ul>
-          <p className="mt-2 text-xs text-white/65">{t('scorePanel.pctNote')}</p>
+          <p className="mt-2 text-xs text-white/65">{t(String(config.sport).toUpperCase() === 'NHL' ? 'scorePanel.pctNote.nhl' : 'scorePanel.pctNote')}</p>
         </div>
       )}
       <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-3">
@@ -333,5 +337,6 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         </div>
       )}
     </section>
+    </>
   )
 }

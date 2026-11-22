@@ -164,9 +164,9 @@ describe('selectEligibleTeams', () => {
     expect(selectEligibleTeams(TWELVE, 'bottom_n', 0, 4)).toEqual([])
   })
 
-  it('a tie on the lottery line goes to the team the tiebreak puts lower (lower points for)', () => {
-    // Ranks 8 and 8 tie; lower_points_for orders the 1,500-PF team before the 1,700-PF one within
-    // the tie, the same order the fallback seats them in — so it is the one counted as the worse finish.
+  it('a tie on the lottery line goes to the team the tiebreak calls worse (lower points for)', () => {
+    // Ranks 8 and 8 tie; lower_points_for calls the 1,500-PF team the worse finish and places it LAST
+    // within the tie — the same team the fallback seats first — so it is the one in the pool.
     const rows = [row(1), row(2), row(3), row(4), row(5), row(6), row(7), { ...row(8), rosterId: 'hi', pointsFor: 1700, maxPf: 1700 }, { ...row(8), rosterId: 'lo', pointsFor: 1500, maxPf: 1500 }, row(10)]
     applyTiebreak(rows, 'lower_points_for', 's')
     expect(selectEligibleTeams(rows, 'non_playoff', 2, 4).map((r) => r.rosterId)).toEqual(['lo', 'r10'])

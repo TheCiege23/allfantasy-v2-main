@@ -14,6 +14,7 @@ import 'server-only'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { livePushTier, splitByLivePushBudget } from '@/lib/notifications/liveGamePushBudget'
 import { prisma } from '@/lib/prisma'
+import { playerProfileHref } from '@/lib/player-links/playerProfileHref'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
 // ── Event Types ──
@@ -260,6 +261,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       actionHref: event.actionHref,
       actionLabel: event.actionLabel,
       skipChannels,
+      leagueId: event.leagueId,
       meta: {
         ...event.meta,
         ...extraMeta,
@@ -269,7 +271,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       severity,
       productType: 'app',
       dedupePrefix: event.meta?.idempotencyKey ? sourceKey : undefined,
-    })
+    }).then(result => { if (result?.failed > 0) throw new Error('Notification dispatch failed') })
 
   try {
     /*
@@ -278,7 +280,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
      * only the push is held. The in-app row records which it was, which is what the next alert's
      * budget counts.
      */
-    if (event.type === 'live_score_swing' && !event.skipChannels?.push) {
+    if (event.type === 'live_score_swing' && event.source !== 'live-plays' && !event.skipChannels?.push) {
       const pushTier = livePushTier(severity)
       const { push, held } = await splitByLivePushBudget(userIds, pushTier)
       if (push.length > 0) await send(push, event.skipChannels, { pushBudget: 'pushed', pushTier })
@@ -337,7 +339,7 @@ export function injuryAlert(opts: {
     userIds: opts.userIds,
     leagueId: opts.leagueId,
     // A bare name slug used to bind to any namesake in any sport; the page now scopes by these.
-    actionHref: `/player/${encodeURIComponent(opts.playerName.toLowerCase().replace(/\s+/g, '-'))}?${new URLSearchParams({ sport: opts.sport ?? 'NFL', team: opts.team ?? '' })}`,
+    actionHref: playerProfileHref({ name: opts.playerName, sport: opts.sport ?? 'NFL', team: opts.team }) ?? '/players',
     actionLabel: 'View Player',
     meta: {
       playerName: opts.playerName,
@@ -471,7 +473,7 @@ export function storylineGenerated(opts: {
   return {
     type: 'storyline_generated',
     title: `New Storyline: ${opts.title}`,
-    body: 'A new AI-generated league storyline is ready.',
+    body: 'A new Chimmy-generated league storyline is ready.',
     leagueId: opts.leagueId,
     actionHref: `/league/${opts.leagueId}?tab=league`,
     actionLabel: 'Read Story',

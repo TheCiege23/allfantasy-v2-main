@@ -29,7 +29,10 @@ import {
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './core'
+import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, readSeasonBlend } from './seasonBlend'
 import { soccerSeasonLines } from './soccerSeasonLines'
+import { pickCollegeFootballSeasonLines } from './collegeBoxSeasonLines'
+import { pickNbaVerifiedSeasonLines, readVerifiedNbaInactiveSince, readVerifiedNbaTeam } from './nbaVerifiedSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
@@ -92,11 +95,18 @@ export interface WriteSnapshotsResult {
    * `players` counts the prior-season lines in the plan. Null when no blend happened.
    */
   priorSeasonBasis: { season: number; minCurrentSeasonGames: number; players: number } | null
+  /**
+   * Set when this season's and last season's lines were BLENDED per player (./seasonBlend.ts, NBA first):
+   * `players` lines carry w = g / (g + blendGames) of this season. Null when no blend happened.
+   */
+  seasonBlend: { season: number; blendGames: number; players: number } | null
   errors: string[]
 }
 
 export interface WriteSnapshotsOptions {
   sport?: string
+  /** Restrict a stat-line backfill to verified athletes. */
+  playerIds?: string[]
   /** Season to read production from. Defaults to the newest season present. */
   sourceSeason?: number
   /** Season the projection applies to. Defaults to sourceSeason + 1. */
@@ -175,9 +185,9 @@ async function soccerSeasonWithRows(where: { lt?: number } = {}): Promise<{ seas
   return row ? { season: String(row.season) } : null
 }
 
-async function loadSoccerSeasonLines(season: number): Promise<SeasonLine[]> {
+async function loadSoccerSeasonLines(season: number, playerIds?: string[]): Promise<SeasonLine[]> {
   const rows = await prisma.playerGameStat.findMany({
-    where: { sportType: 'SOCCER', season },
+    where: { sportType: 'SOCCER', season, ...(playerIds ? { playerId: { in: playerIds } } : {}) },
     select: { playerId: true, team: true, gameDate: true, normalizedStatMap: true },
   })
   const ids = [...new Set(rows.map((r) => r.playerId))]
@@ -320,11 +330,17 @@ export async function writeAfProjectionSnapshotsForSeason(
     }
   }
 
-  const statLines: SeasonLine[] = soccer
-    ? await loadSoccerSeasonLines(sourceSeason)
+  const scope = opts.playerIds ? { playerId: { in: opts.playerIds } } : {}
+  const loadedStatLines = soccer
+    ? await loadSoccerSeasonLines(sourceSeason, opts.playerIds)
     : await prisma.fantasyStatLine.findMany({
-        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
+        where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER, ...(sport === 'NCAAF' ? { week: 0 } : {}), ...scope },
+        // Only `playerId` and `stats` are read (see SeasonLine). Selecting them keeps the
+        // per-preset points JSON and the rest of each row out of memory for a whole season.
+        select: { playerId: true, stats: true, source: true, fetchedAt: true },
       })
+  const statLines: SeasonLine[] = sport === 'NCAAF' ? pickCollegeFootballSeasonLines(loadedStatLines)
+    : sport === 'NBA' ? pickNbaVerifiedSeasonLines(loadedStatLines) : loadedStatLines
 
   /*
    * ── THE PER-PLAYER BASIS, WHILE A SEASON IS BEING PLAYED ────────────────────────────────
@@ -341,18 +357,40 @@ export async function writeAfProjectionSnapshotsForSeason(
   const priorSeason = older ? Number(older.season) : null
   const seasonUnderway = statLines.some((l) => gamesPlayedOf(l.stats) >= 1)
   const blend = opts.sourceSeason == null && priorSeason != null && seasonUnderway
-  const priorLines: SeasonLine[] = !blend
+  const loadedPriorLines = !blend
     ? []
     : soccer
-      ? await loadSoccerSeasonLines(priorSeason as number)
+      ? await loadSoccerSeasonLines(priorSeason as number, opts.playerIds)
       : await prisma.fantasyStatLine.findMany({
-          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
+          where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER, ...(sport === 'NCAAF' ? { week: 0 } : {}), ...scope },
+          select: { playerId: true, stats: true, source: true, fetchedAt: true },
         })
+  const priorLines: SeasonLine[] = sport === 'NCAAF' ? pickCollegeFootballSeasonLines(loadedPriorLines)
+    : sport === 'NBA' ? pickNbaVerifiedSeasonLines(loadedPriorLines) : loadedPriorLines
   const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
   const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
   const planned = new Set<string>()
+  /*
+   * 🛑 NBA BLENDS INSTEAD OF SWITCHING (owner's decision, 2026-11-16 — ./seasonBlend.ts). A player with a
+   * line in both seasons gets ONE line whose per-game rates are w × this season + (1 − w) × last, w =
+   * g / (g + 20), and whose games are both seasons' — so his projection moves gradually, and the value
+   * board's sample bar reads the games it really rests on. Everyone else, and every other sport, keeps
+   * the switch below. The blended line is filed under this season, with this season's weekly evidence.
+   */
+  const blendSport = blend && BLEND_SPORTS.has(String(sport).toUpperCase())
+  let blendedPlanned = 0
   for (const line of statLines) {
-    const prior = blend && gamesPlayedOf(line.stats) < MIN_CURRENT_SEASON_GAMES ? priorByPlayer.get(line.playerId) : undefined
+    const priorLine = blend ? priorByPlayer.get(line.playerId) : undefined
+    if (blendSport && priorLine) {
+      const mixed = blendSeasonStats(line.stats, priorLine.stats)
+      if (mixed) {
+        plan.push({ line: { playerId: line.playerId, stats: mixed.stats }, season: sourceSeason })
+        planned.add(line.playerId)
+        blendedPlanned += 1
+        continue
+      }
+    }
+    const prior = blend && gamesPlayedOf(line.stats) < MIN_CURRENT_SEASON_GAMES ? priorLine : undefined
     plan.push(prior ? { line: prior, season: priorSeason as number } : { line, season: sourceSeason })
     planned.add(line.playerId)
   }
@@ -391,13 +429,18 @@ export async function writeAfProjectionSnapshotsForSeason(
     const rawBySleeper = new Map<string, WeeklyRawStats[]>()
     for (const g of seasonGames) {
       const obs = toWeeklyObservation(g.weekOrRound, g.normalizedStatMap)
-      if (obs) obsBySleeper.set(g.playerId, [...(obsBySleeper.get(g.playerId) ?? []), obs])
+      // Appended in place: copying the array per row was quadratic in a player's game count.
+      if (obs) {
+        const list = obsBySleeper.get(g.playerId)
+        if (list) list.push(obs)
+        else obsBySleeper.set(g.playerId, [obs])
+      }
       const statMap = g.normalizedStatMap as Record<string, unknown> | null
       if (statMap && typeof statMap === 'object') {
-        rawBySleeper.set(g.playerId, [
-          ...(rawBySleeper.get(g.playerId) ?? []),
-          { week: g.weekOrRound, statMap },
-        ])
+        const entry = { week: g.weekOrRound, statMap }
+        const list = rawBySleeper.get(g.playerId)
+        if (list) list.push(entry)
+        else rawBySleeper.set(g.playerId, [entry])
       }
     }
     obsBySeason.set(season, obsBySleeper)
@@ -474,13 +517,15 @@ export async function writeAfProjectionSnapshotsForSeason(
     string,
     { stats: Record<string, number>; position: string | null; opponent?: string | null }
   > | null = null
-  try {
-    const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
-    const board = await getWeekBoard(String(targetSeason), targetWeek)
-    weekBoard = board?.players ?? null
-    if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
-  } catch (err) {
-    errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+  if (sport === 'NFL') {
+    try {
+      const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
+      const board = await getWeekBoard(String(targetSeason), targetWeek)
+      weekBoard = board?.players ?? null
+      if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
+    } catch (err) {
+      errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // Weekly snapshots only when a real regular-season week is being played (or the caller
@@ -574,6 +619,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     priorSeasonBasis: blend
       ? { season: priorSeason as number, minCurrentSeasonGames: MIN_CURRENT_SEASON_GAMES, players: priorPlanned }
       : null,
+    seasonBlend: blendedPlanned > 0 ? { season: priorSeason as number, blendGames: BLEND_GAMES, players: blendedPlanned } : null,
     errors,
   }
 
@@ -649,11 +695,16 @@ export async function writeAfProjectionSnapshotsForSeason(
     const week: number | null = null
     const lookupKey = snapshotKey(line.playerId, targetSeason, week, null)
 
+    const verifiedNbaInactiveSince = sport === 'NBA' ? readVerifiedNbaInactiveSince(stats) : undefined
+    const verifiedNbaTeam = sport === 'NBA' ? readVerifiedNbaTeam(stats) : undefined
     const adjustmentFactors = {
       engine: 'af-projections/v1',
       basis: outcome.basis,
       scoringFormat,
       sourceSeason: lineSeason,
+      ...(typeof stats.verifiedBoxVersion === 'string' ? { verifiedBoxVersion: stats.verifiedBoxVersion, verifiedGameIds: stats.verifiedGameIds } : {}),
+      ...(verifiedNbaInactiveSince ? { verifiedNbaInactiveSince } : {}),
+      ...(verifiedNbaTeam ? { verifiedNbaTeam } : {}),
       idpPreset: outcome.idp ? idpPreset : null,
       weeklyWeeksUsed: outcome.weeklyWeeksUsed,
       confidenceScore: outcome.confidence.score,
@@ -664,6 +715,12 @@ export async function writeAfProjectionSnapshotsForSeason(
       perGameRates: aggregate ? perGameRatesFor(sport, aggregate) : null,
       idp: outcome.idp ?? null,
       accuracyCalibration: outcome.calibration ?? null,
+      /*
+       * A blended line's two seasons, so a reader can tell its games apart: baseball's board scales a
+       * pitcher by his share of TEAM games, and a blended line's games span two seasons (mlbTeamGame.ts).
+       * Absent on every unblended row, which therefore stays byte-identical.
+       */
+      ...(readSeasonBlend(stats) ? { seasonBlend: readSeasonBlend(stats) } : {}),
     }
     // Round-trip through JSON so Prisma's InputJsonValue is satisfied (a bare `null` inside
     // an object literal is not assignable) and so anything non-serializable fails here,

@@ -20,6 +20,8 @@ import {
   YahooImportLeagueNotFoundError,
 } from './yahoo/YahooLeagueFetchService'
 import { describeYahooRejection } from './yahoo/yahooRejection'
+import { isYahooSnapshotSourceId, parseYahooSnapshotSourceId } from './yahoo/snapshot/yahooSnapshotModel'
+import { loadYahooSnapshot } from './yahoo/snapshot/yahooSnapshotStore'
 import { fetchMflUserLeagues, parseMflSourceInput, MflImportLeagueNotFoundError } from './mfl/MflLeagueFetchService'
 import { MEMBERSHIP_VERIFIED_UNDETERMINED_COMMISSIONER } from './attestationProviders'
 
@@ -102,12 +104,12 @@ export interface CommissionerGateResult {
  * source for the whole import screen); the one override kept is MFL's short form, which reads
  * better mid-sentence than "MyFantasyLeague (MFL)".
  */
-export function gateProviderLabel(provider: ImportProvider): string {
+function gateProviderLabel(provider: ImportProvider): string {
   if (provider === 'mfl') return 'MFL'
   return getImportProviderLabel(provider)
 }
 
-export interface AttestationInput {
+interface AttestationInput {
   /** User explicitly confirmed they are the commissioner/co-commissioner. */
   accepted: boolean
   /** Their free-text statement, stored in the audit trail. */
@@ -216,7 +218,25 @@ async function checkSleeper(appUserId: string, sourceLeagueId: string): Promise<
   }
 }
 
+/**
+ * A league the user PASTED (`yahoo-snapshot:<id>`). There is no Yahoo account to ask, so nothing
+ * about membership or commissioner status is provable — exactly the open-read situation. It resolves
+ * the way OPEN_READ_PROVIDERS do: `ok` with `verification: 'api'` and commissioner unknown, which
+ * sends a full-league commit through the recorded commissioner ATTESTATION below and never past it.
+ * The snapshot itself is per-user (its cache key carries the user id), so this also proves the
+ * caller is the one who pasted it; anyone else's `yahoo-snapshot:<id>` resolves to not-found.
+ */
+async function checkYahooSnapshot(appUserId: string, sourceLeagueId: string): Promise<CommissionerGateResult> {
+  const leagueId = parseYahooSnapshotSourceId(sourceLeagueId)
+  const snapshot = leagueId ? await loadYahooSnapshot(appUserId, leagueId).catch(() => null) : null
+  if (!snapshot) {
+    return { ok: false, notFound: true, reason: 'That pasted Yahoo league was not found — paste your league pages again.' }
+  }
+  return { ok: true, verification: 'api' }
+}
+
 async function checkYahoo(appUserId: string, sourceLeagueId: string): Promise<CommissionerGateResult> {
+  if (isYahooSnapshotSourceId(sourceLeagueId)) return checkYahooSnapshot(appUserId, sourceLeagueId)
   try {
     const payload = await fetchYahooLeagueForImport(appUserId, sourceLeagueId)
     const viewerTeamKey = payload.viewerTeamKey?.trim() || null
@@ -405,7 +425,7 @@ export const OPEN_READ_PROVIDERS: readonly ImportProvider[] = [
  *  - OPEN_READ_PROVIDERS (fantrax, fleaflicker): public read, NO membership proof at all
  *    → attest. Closes the "any authenticated user can import" hole.
  */
-export const ATTESTATION_REQUIRED_PROVIDERS: readonly ImportProvider[] = [
+const ATTESTATION_REQUIRED_PROVIDERS: readonly ImportProvider[] = [
   ...MEMBERSHIP_VERIFIED_UNDETERMINED_COMMISSIONER,
   ...OPEN_READ_PROVIDERS,
 ]
@@ -565,7 +585,63 @@ export async function assertImportCommissioner(args: {
     }
   }
 
+  /*
+   * A Fantrax member proven by their own Secret ID (`checkFantrax`) passes as `member` and is
+   * never asked to attest — correct, most members are not the commissioner. But one who IS, and
+   * sends an accepted attestation anyway, must not have it ignored: Fantrax reports no commissioner
+   * at all, so the attestation is the only way that role can ever be recorded.
+   */
+  if (
+    base.verification === 'member' &&
+    base.isCommissioner === undefined &&
+    OPEN_READ_PROVIDERS.includes(args.provider) &&
+    args.attestation?.accepted === true &&
+    attestationMatchesThisRequest(args.attestation, args)
+  ) {
+    return { ...base, verification: 'attestation' }
+  }
+
   return base
+}
+
+/**
+ * The attestation an import route passes to the gate, read from its request body. It keeps the
+ * client's `confirmedProvider` / `confirmedSourceLeagueId`: the routes used to rebuild the object
+ * from `accepted` and `statement` only, so `attestationMatchesThisRequest` never had anything to
+ * compare and a confirmation made for one league was accepted for any other.
+ */
+export function attestationFromRequestBody(raw: unknown): AttestationInput | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const a = raw as Record<string, unknown>
+  if (a.accepted !== true) return undefined
+  return {
+    accepted: true,
+    ...(typeof a.statement === 'string' ? { statement: a.statement } : {}),
+    ...(typeof a.confirmedProvider === 'string'
+      ? { confirmedProvider: a.confirmedProvider as ImportProvider }
+      : {}),
+    ...(typeof a.confirmedSourceLeagueId === 'string'
+      ? { confirmedSourceLeagueId: a.confirmedSourceLeagueId.trim() }
+      : {}),
+  }
+}
+
+/**
+ * True when a passed gate leaves commissioner status UNKNOWN and an attestation would settle it:
+ * a proven member (Fantrax Secret ID) of a provider that reports no commissioner. The preview
+ * tells the import screen so it can offer "I'm the commissioner" — without it the user is never
+ * asked, the commit never carries an attestation, and the role can never be recorded.
+ */
+export function gateAllowsCommissionerConfirm(
+  gate: CommissionerGateResult,
+  provider: ImportProvider,
+): boolean {
+  return (
+    gate.ok &&
+    gate.verification === 'member' &&
+    gate.isCommissioner === undefined &&
+    OPEN_READ_PROVIDERS.includes(provider)
+  )
 }
 
 /**
@@ -739,7 +815,7 @@ export async function recordCommissionerVerificationMethod(args: {
  * from what a user would agree to today — the record itself is immutable
  * audit evidence, not something rewritten in place when copy changes.
  */
-export const COMMISSIONER_ATTESTATION_TEXT_VERSION = 'v1'
+const COMMISSIONER_ATTESTATION_TEXT_VERSION = 'v1'
 
 export async function recordImportAttestation(args: {
   leagueId: string
@@ -776,5 +852,43 @@ export async function recordImportAttestation(args: {
     })
   } catch (err) {
     console.warn('[commissionerGate] attestation audit write failed:', err)
+  }
+}
+
+/**
+ * Make an accepted attestation MEAN something: mark the importer's own team, and the league row
+ * they own, as commissioner.
+ *
+ * 🛑 RECORDING THE CLAIM WAS NOT ENOUGH, AND FOR FANTRAX IT WAS EVERYTHING. The C badge
+ * (`resolveViewerLeagueCommissioner`) and the commissioner hub (`leagueHome`) read only
+ * `LeagueTeam.isCommissioner` / `League.isCommissioner`. Sleeper, ESPN and Yahoo fill those from
+ * their own APIs; Fantrax has no commissioner field anywhere, so the attestation is the only
+ * evidence there will ever be — and it landed in `settings` as an audit note and nowhere else.
+ * Measured on production 2026-10-31: a 140-team Fantrax league, attestation accepted, zero
+ * commissioner teams, so its commissioner had no C and no hub.
+ *
+ * Scoped to the league row THIS user owns and the team THIS user has claimed — never another
+ * account's row (a cross-account join must not turn a checkbox into control of someone else's
+ * league) and never a team they have not claimed.
+ */
+export async function applyAttestedCommissioner(args: {
+  leagueId: string
+  appUserId: string
+}): Promise<{ teamsUpdated: number }> {
+  const { prisma } = await import('@/lib/prisma')
+  try {
+    const league = await prisma.league.updateMany({
+      where: { id: args.leagueId, userId: args.appUserId },
+      data: { isCommissioner: true },
+    })
+    if (league.count === 0) return { teamsUpdated: 0 }
+    const teams = await prisma.leagueTeam.updateMany({
+      where: { leagueId: args.leagueId, claimedByUserId: args.appUserId },
+      data: { isCommissioner: true },
+    })
+    return { teamsUpdated: teams.count }
+  } catch (err) {
+    console.warn('[commissionerGate] attested commissioner write failed:', err)
+    return { teamsUpdated: 0 }
   }
 }

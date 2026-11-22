@@ -83,7 +83,7 @@ function triageRow(over: Partial<TriageBookRow> = {}): TriageBookRow {
     imageUrl: null,
     leagues: [
       { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyjae Spears', position: 'RB' }, { name: 'Zach Charbonnet', position: 'RB' }] },
-      { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
+      { id: 'l2', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
       { id: 'l3', name: 'Work League', platform: 'espn', imageUrl: null, slot: 'ir' },
       { id: 'l4', name: 'Taxi Squad', platform: 'sleeper', imageUrl: null, slot: 'taxi' },
       ...Array.from({ length: 4 }, (_, i) => ({ id: `x${i}`, name: `Extra ${i}`, platform: 'sleeper', imageUrl: null, slot: null })),
@@ -129,7 +129,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
       expect(out).toContain('+2 más')
       expect(out).toContain('Buscar agentes libres en Bla bla bla')
       expect(out).toContain('+1 titulares señalados más: auditoría completa de exposición')
-      expect(out).toContain('Valores de FantasyCalc (dynasty, 1QB, PPR de 12 equipos)')
+      expect(out).toContain('Los valores son precios de mercado de FantasyCalc (dynasty, 1QB, solo NFL)')
       cleanup()
     }
     expect(es(<Dash3ATriage book={[triageRow({ nextKickoffAt: new Date(T_NOW.getTime() - 60_000).toISOString() })]} now={T_NOW} valueBasis={BASIS} />)).toContain('partido en curso')
@@ -158,7 +158,7 @@ describe('Starters in doubt (Dash3ATriage)', () => {
     expect(out).toContain('kickoff in 2h')
     expect(out).toContain('swap in Tyjae Spears or Zach Charbonnet')
     expect(out).toContain('Find free agents in Bla bla bla')
-    expect(out).toContain('Values from FantasyCalc (dynasty, 1QB, 12-team PPR). Not tuned to your league’s settings, and NFL only.')
+    expect(out).toContain('Trade values are FantasyCalc market prices (dynasty, 1QB, NFL only) — not tuned to your league’s scoring.')
   })
 })
 
@@ -326,7 +326,7 @@ describe('Dash34Carryover and Dash34Coverage', () => {
   it('coverage reads Spanish, every fixed item and the ambiguous names', () => {
     const out = es(<Dash34Coverage data={dash({ coverage: COVERAGE as never })} />)
     expectSpanish(out, ENGLISH, 'coverage')
-    expect(out).toContain('Lo que esta pantalla no vigila (7)')
+    expect(out).toContain('Lo que Inicio aún no sigue (7)')
     expect(out).toContain('Marcadores en vivo')
     expect(out).toContain('Estado de lesión de Josh Allen, Mike Williams, Josh Johnson y 2 más')
     expect(out).toContain('más de un jugador comparte ese nombre y no vamos a adivinar cuál')
@@ -354,7 +354,7 @@ describe('Dash34Carryover and Dash34Coverage', () => {
     ]) expect(out).toContain(s)
     cleanup()
     const cov = en(<Dash34Coverage data={dash({ coverage: COVERAGE as never })} />)
-    expect(cov).toContain('What this screen is not watching (7)')
+    expect(cov).toContain('What Home doesn’t track yet (7)')
     expect(cov).toContain('Injury status for Josh Allen, Mike Williams, Josh Johnson and 2 more — more than one player shares that name and we will not guess which')
   })
 })
@@ -365,7 +365,7 @@ const D_NOW = new Date('2026-08-24T20:00:00Z')
 function draft(over: Partial<DraftHqAllRow> = {}): DraftHqAllRow {
   return {
     leagueId: 'l1',
-    leagueName: 'Guillotine League 26',
+    leagueName: 'Guilly League 26',
     platform: 'sleeper',
     imageUrl: null,
     phase: 'live',
@@ -415,6 +415,13 @@ describe('Drafts on the clock (DashDraftsBand)', () => {
     const out = en(<DashDraftsBand data={{ rows: [draft(), draft({ leagueId: 'l2', rawStatus: 'paused', pickExpiresAt: null })] } as never} now={D_NOW} />)
     for (const s of ['Drafts on the clock', '2 drafts live now', 'DRAFTING', 'PAUSED', 'Your slot 4 · 22 picks made', '45 min on the pick clock', 'On the clock — no pick timer reported', 'Open draft room'])
       expect(out).toContain(s)
+  })
+
+  it('"Open draft room" goes to the live room, not back to Draft HQ', () => {
+    lang.language = 'en'
+    const { container } = render(<DashDraftsBand data={{ rows: [draft()] } as never} now={D_NOW} />)
+    const open = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Open draft room')
+    expect(open?.getAttribute('href')).toBe('/league/l1/draft')
   })
 })
 

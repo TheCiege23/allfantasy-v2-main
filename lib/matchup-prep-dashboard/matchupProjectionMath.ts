@@ -69,7 +69,7 @@ export function winProbabilityFromProjectionSpread(args: {
   return { pct, model: 'starter_spread_normal', z, combinedSigma }
 }
 
-export function normPos(p: string): string {
+function normPos(p: string): string {
   const u = p.toUpperCase()
   if (u.includes('QB')) return 'QB'
   if (u.includes('RB')) return 'RB'

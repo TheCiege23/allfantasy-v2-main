@@ -47,9 +47,10 @@ vi.mock("http2", () => {
 })
 
 /* ── Prisma and web-push stand-ins for the sender ── */
-const db = vi.hoisted(() => ({ rows: [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string; userAgent?: string | null; userId?: string }>, deleted: [] as unknown[], upserts: [] as unknown[] }))
+const db = vi.hoisted(() => ({ rows: [] as Array<{ id: string; endpoint: string; p256dh: string; auth: string; userAgent?: string | null; userId?: string }>, desktop: true, deleted: [] as unknown[], upserts: [] as unknown[] }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    userProfile: { findUnique: async () => ({ notificationPreferences: { pushDevices: { desktop: db.desktop } } }) },
     webPushSubscription: {
       findMany: vi.fn(async () => db.rows),
       deleteMany: vi.fn(async (args: unknown) => {
@@ -103,6 +104,11 @@ afterEach(() => {
 })
 
 describe("sendApns — what reaches Apple", () => {
+  it('does not retain game finals at Apple for offline delivery', async () => {
+    await sendApns([TOKEN_A], { title: 'Final', type: 'game_final' })
+    expect(apple.sent[0].headers['apns-expiration']).toBe('0')
+  })
+
   it("posts each token to Apple with the app's topic, a verifiable ES256 token and the payload", async () => {
     const res = await sendApns([TOKEN_A], { title: "Injury: Josh Allen", body: "Out for Sunday", href: "/core/players?id=1", tag: "injury-1", leagueId: "L1" })
     expect(res).toEqual([{ ok: true }])
@@ -165,6 +171,23 @@ describe("sendPushToUser — iPhones and browsers are separate", () => {
     expect(results.find((r) => r.subscriptionId === "ios-1")).toMatchObject({ ok: true })
     expect(results.filter((r) => r.error === "VAPID not configured")).toHaveLength(1)
     expect(webpushSend).not.toHaveBeenCalled()
+  })
+
+  it("keeps native and mobile browser alerts when desktop push is off", async () => {
+    process.env.VAPID_PUBLIC_KEY = "pub"
+    process.env.VAPID_PRIVATE_KEY = "priv"
+    db.rows = [
+      { id: "ios-1", endpoint: `apns:${TOKEN_A}`, p256dh: "", auth: "" },
+      { id: "mobile", endpoint: "https://fcm.googleapis.com/mobile", p256dh: "p", auth: "a", userAgent: "Android" },
+      { id: "desktop", endpoint: "https://fcm.googleapis.com/desktop", p256dh: "p", auth: "a", userAgent: "Windows NT" },
+    ]
+    db.desktop = false
+    try {
+      const results = await sendPushToUser("u1", { title: "New message" })
+      expect(results.map((result) => result.subscriptionId)).toEqual(["ios-1", "mobile"])
+    } finally {
+      db.desktop = true
+    }
   })
 
   it("control: a browser row still goes to web-push, never to Apple", async () => {

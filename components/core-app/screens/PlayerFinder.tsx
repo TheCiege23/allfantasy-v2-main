@@ -3,7 +3,18 @@
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import '@/components/core-app/af-core.css'
+import { PageHeader } from '@/components/core-app/primitives/PageHeader'
+import { StatStrip, type StatItem } from '@/components/core-app/primitives/StatStrip'
 import '@/components/core-app/af-player-finder.css'
+import '@/components/core-app/af-core-redraft-waivers-finder.css'
+import '@/components/core-app/af-player-finder-redesign.css'
+import '@/components/core-app/player-finder/af-finder-guide.css'
+import { finderGuideMessages } from '@/lib/core-app/messages/finderGuide'
+import { leagueCountOf } from '@/lib/core-app/finderGuide'
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { DynastyMarkersScope, DynastyNameLine } from '@/components/core-app/screens/DynastyRosterMarkers'
+import { markerKeyFor, type DynastyRosterMarker } from '@/lib/core-app/dynastyRosterMarkers'
 import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
@@ -15,6 +26,7 @@ import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
+import type { FinderSport } from '@/lib/core-app/finderSports'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
 import { GameDayBanner, type GameDayLeague } from '@/components/core-app/player-finder/GameDayBanner'
@@ -66,6 +78,8 @@ import { FollowButton } from '@/components/core-app/player-finder/FollowButton'
 import { LeagueActionCards } from '@/components/core-app/player-finder/LeagueActionCards'
 import { PhoneFold } from '@/components/core-app/player-finder/PhoneFold'
 import { PhoneSearchDock } from '@/components/core-app/player-finder/PhoneSearchDock'
+import { MatchPositionFilter, matchPositions } from '@/components/core-app/player-finder/MatchPositionFilter'
+import { redraftCorePosTone } from '@/lib/core-app/redraftCoreMyTeam'
 import { buildLeagueCards } from '@/lib/core-app/leagueActions'
 import { ExposureChip, FormSpark } from '@/components/core-app/player-finder/PlayerFunChips'
 import { CoinFlips, type FlipLink } from '@/components/core-app/player-finder/CoinFlips'
@@ -75,8 +89,9 @@ import type { WeeklyMvp } from '@/lib/core-app/weeklyMvp'
 import type { TrendingFreeIn } from '@/lib/core-app/trendingFree'
 import { leagueActionsCopy } from '@/lib/core-app/leagueActionsCopy'
 import { FollowingBoard } from '@/components/core-app/player-finder/FollowingBoard'
+import { HomeSportTabs } from '@/components/core-app/player-finder/HomeSportTabs'
+import type { HomeSport } from '@/lib/core-app/finderHomeSports'
 import { PushAsk } from '@/components/core-app/player-finder/PushAsk'
-import { followCopy } from '@/lib/core-app/finderFollowCopy'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
 import { FreeAgentBids } from '@/components/core-app/player-finder/FreeAgentBids'
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
@@ -92,6 +107,7 @@ import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
 import { PlayerNextGames } from '@/components/core-app/player-finder/PlayerNextGames'
 import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
+import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 
 /**
  * Screen 3 — Player Finder.
@@ -149,6 +165,7 @@ import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
 
 export type PlayerFinderProps = {
   query: string
+  sport?: FinderSport | null
   matches: PlayerMatch[]
   detail: PlayerDetail | null
   leagueCount: number
@@ -219,6 +236,8 @@ export type PlayerFinderProps = {
   depth?: PlayerDepth | null
   /** "Your shares" (Phase 2): the players you roster most across the picked leagues; home only. */
   shares?: SectionState<PlayerShares> | null
+  /** The sports the finder's leagues are in, with counts — the home's sport tabs (finderHomeSports.ts). Home only. */
+  homeSports?: HomeSport[]
   /** "Following" on the "My players" home (2026-10-08); null = follows unavailable, and the board is hidden. Home only. */
   following?: FollowingCardData | null
   /** Is the open player followed? Null = follows unavailable, and "Alert me" is not offered. */
@@ -266,6 +285,12 @@ export type PlayerFinderProps = {
    * Defaults to true so every existing signed-in call site is unchanged.
    */
   signedIn?: boolean
+  /**
+   * A held DYNASTY league only: age / ROOKIE chips (and, devy / C2C, PROSPECT) beside each match, filed
+   * under `markerKeyFor(match)`. One batched read by the page (lib/core-app/dynastyMarkerRead.ts); null
+   * everywhere else, and the results render exactly as before.
+   */
+  dynastyMarkers?: Record<string, DynastyRosterMarker> | null
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -308,7 +333,12 @@ function Headshot({ src, name }: { src: string | null; name: string }) {
   )
 }
 
-function StatTile({
+/**
+ * One stat tile as a StatStrip item (components/core-app/primitives): value first, then the label
+ * with its `?`, then why it is missing or what it is out of. The tile keeps `af-pf-tile` for the
+ * redraft stylesheet and the tests; layout and type are the shared strip's.
+ */
+function pfTile({
   label,
   help,
   tip,
@@ -326,22 +356,22 @@ function StatTile({
   tone?: 'good' | 'warn' | 'bad'
   /** A loader's reason in the reader's language (`reasonText`); English as written by default. */
   why?: (reason: string) => string
-}) {
+}): StatItem {
   const missing = state ? !state.available : value == null
-  return (
-    <div className="af-pf-tile" data-missing={missing} data-tone={missing ? undefined : tone}>
-      <div className="af-pf-tile-value af-num">{missing ? '—' : value}</div>
-      <div className="af-pf-tile-label">
-        <span className="af-label">{label}</span>
+  return {
+    key: label,
+    className: 'af-pf-tile',
+    label: (
+      <>
+        {label}
         {tip ? <HelpDot title={tip.title} body={tip.body} /> : null}
-      </div>
-      {missing && state && !state.available ? (
-        <div className="af-pf-tile-why">{why(state.reason)}</div>
-      ) : help ? (
-        <div className="af-pf-tile-why">{help}</div>
-      ) : null}
-    </div>
-  )
+      </>
+    ),
+    value: value ?? null,
+    missing,
+    tone,
+    reason: missing && state && !state.available ? why(state.reason) : help,
+  }
 }
 
 /*
@@ -377,6 +407,26 @@ const ROW_RANK: Record<string, number> = { bad: 0, warn: 1, none: 2, good: 3, ot
 
 /** Up to this many "someone else has him" rows render inline in the cross-league table. */
 export const OTHERS_FOLD_AFTER = 3
+
+/**
+ * The every-league list under one counting line that opens and closes it (2026-11-13 guide). Open by
+ * default — an injury alert opens the page FOR this list. With no count to show (a held league, signed
+ * out, rosters unread) the list renders as it always did.
+ */
+function EveryLeagueFold({ summary, toggleLabel, children }: { summary: string | null; toggleLabel: string; children: ReactNode }) {
+  if (!summary) return <>{children}</>
+  return (
+    <details className="af-pfg-leagues" open data-testid="finder-every-league">
+      <summary className="af-pfg-count" title={toggleLabel}>
+        <span className="af-pfg-count-text">{summary}</span>
+        <span className="af-pfg-count-caret" aria-hidden>
+          ▾
+        </span>
+      </summary>
+      {children}
+    </details>
+  )
+}
 
 function rowTone(r: LeagueRow): 'bad' | 'warn' | 'none' | 'good' | 'other' {
   if (!r.slot.isYours) return 'other'
@@ -419,8 +469,15 @@ function rowAction(r: LeagueRow, last: string, t: FinderCopy, language: string):
   )
 }
 
+/* 2026-11-20: what the player's "More detail" fold holds, named in a few words (MoreDetail `note`). */
+const finderMoreDetailMessages = defineMessages({
+  en: { note: 'Market value · this season · season stats' },
+  es: { note: 'Valor de mercado · esta temporada · estadísticas por temporada' },
+})
+
 export function PlayerFinder({
   query,
+  sport = null,
   matches,
   detail,
   leagueCount,
@@ -438,6 +495,7 @@ export function PlayerFinder({
   depthAccess = null,
   depth = null,
   shares = null,
+  homeSports = [],
   following = null,
   followingPlayer = null,
   weeklyMvp = null,
@@ -453,9 +511,16 @@ export function PlayerFinder({
   nowIso = new Date().toISOString(),
   liveGame = null,
   signedIn = true,
+  dynastyMarkers = null,
 }: PlayerFinderProps) {
   const { language } = useOptionalLanguage()
   const t = finderCopy(language)
+  const g = messagesFor(finderGuideMessages, language)
+  const moreDetailCopy = messagesFor(finderMoreDetailMessages, language)
+  /* The home's headline: how many of your starters may not play, when the game-day read is on the page. */
+  const flaggedStarters = triage?.available ? triage.data.rows.length : null
+  const homeTitle = flaggedStarters == null ? g.homeTitle : flaggedStarters > 0 ? g.homeFlagged(flaggedStarters) : g.homeClear
+  const [matchPos, setMatchPos] = useState<string | null>(null)
   /** A loader's reason, in the reader's language (whole, or English as written). */
   const why = (reason: string) => reasonText(reason, language)
   const depthLocked = depthAccess?.unlocked === false
@@ -468,6 +533,7 @@ export function PlayerFinder({
     !signedIn ? t.signInReason : why((state as { reason: string }).reason)
 
   const leagueParam = selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''
+  const sportParam = sport ? `&sport=${sport}` : ''
 
   // ── Derived, once, from the loaders' output ──────────────────────────────
   /*
@@ -478,7 +544,6 @@ export function PlayerFinder({
   const leagueMode = Boolean(signedIn && selectedLeagueId)
   // The signed-in home with no player open: "My players" (2026-10-08).
   const myPlayersHome = Boolean(signedIn && !detail && !compareRequested)
-  const fc = followCopy(language)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
   // The table's "someone else has him" rows fold once there are more than OTHERS_FOLD_AFTER of them.
   const [showOtherRows, setShowOtherRows] = useState(false)
@@ -491,12 +556,12 @@ export function PlayerFinder({
   const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId, detail.player.source) : null
   const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId, compare.player.source) : null
   const vsHref = (ref: string) =>
-    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${leagueParam}` : null
+    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${sportParam}${leagueParam}` : null
   const swapHref =
     detailRef && compareRef && compare
-      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${leagueParam}`
+      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}`
       : '/core/players'
-  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${leagueParam}` : '/core/players'
+  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${sportParam}${leagueParam}` : '/core/players'
 
   /** The trade visual's opening package, for the pitch on the trade-window card. */
   const pitchPackage: PitchPackage =
@@ -504,7 +569,7 @@ export function PlayerFinder({
       ? { give: tradeVisual.data.recommended.give.map((a) => a.name), fairness: tradeVisual.data.recommended.fairness }
       : null
   const allLeaguesHref = detail
-    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}`
+    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}`
     : '/core/players'
 
   const impactRows: LeagueImpact[] = (detail?.impact.available ? detail.impact.data : []).filter((i) =>
@@ -609,7 +674,7 @@ export function PlayerFinder({
       : []
   const stripLeagueHref = (leagueId: string) =>
     detail
-      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}&league=${encodeURIComponent(leagueId)}`
+      ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId, detail.player.source))}${sportParam}&league=${encodeURIComponent(leagueId)}`
       : '/core/players'
 
   /*
@@ -643,6 +708,23 @@ export function PlayerFinder({
       }),
     }))
   const benchedCount = yoursCount - startingLeagues.length
+  /*
+   * The every-league count (2026-11-13 guide). Starting counts every league where he is in your lineup,
+   * best ball included — the game-day banner's list leaves best ball out because it has no lineup to open.
+   */
+  const leagueCount4 =
+    detail && signedIn && !leagueMode && detail.leagues.available
+      ? leagueCountOf({
+          yours: yoursCount,
+          of: leagueCount,
+          starting: leagueRows.filter((r) => r.slot.isYours && (r.impact ? r.impact.isStarting : r.slot.slot === 'STARTER')).length,
+          others: leagueRows.filter((r) => !r.slot.isYours).length,
+        })
+      : null
+  const countPlatforms = detail && detail.player.platforms.length > 0 ? listPlatforms(detail.player.platforms, language) : null
+  const leagueCountText = leagueCount4
+    ? `${leagueCount4.yours > 0 ? g.countYours(leagueCount4) : g.countNone(leagueCount4.of)}${leagueCount4.yours > 0 && countPlatforms ? g.countOn(countPlatforms) : ''}${leagueCount4.others > 0 ? g.countOthers(leagueCount4.others) : ''}`
+    : null
   const elsewhereCount = leagueRows.filter((r) => !r.slot.isYours).length
   // In league mode the header's numbers are the league's own, when we have them.
   const leagueProj = leagueMode && leagueView ? leagueView.afPoints : null
@@ -670,10 +752,25 @@ export function PlayerFinder({
     ? matches.filter((m) => !(m.externalId === detail.player.externalId && m.sport === detail.player.sport))
     : matches
 
+  const sheet = Boolean(detail && signedIn)
+  const sheetCloseHref = `/core/players${query.trim() ? `?q=${encodeURIComponent(query)}${leagueParam}` : selectedLeagueId ? `?league=${encodeURIComponent(selectedLeagueId)}` : ''}`
+  const posOptions = matchPositions(matches)
+  // A new search keeps the component mounted; a pick that matches nobody in it falls back to All.
+  const activePos = matchPos && posOptions.includes(matchPos) ? matchPos : null
+  /*
+   * Your players first in a search (2026-11-13 guide): a team search lists the whole club, and the ones
+   * you roster are the ones a game-day search is for. Marked from the shares board's rows, which are your
+   * most-rostered players — a mark is a fact, its absence claims nothing.
+   */
+  const yourLeaguesBy = new Map<string, number>()
+  if (shares?.available) for (const r of shares.data.rows) if (r.player.sleeperId) yourLeaguesBy.set(`${r.player.sport}|${r.player.sleeperId}`, r.leagues)
+  const yourLeagues = (m: PlayerMatch) => (m.sleeperId ? yourLeaguesBy.get(`${m.sport}|${m.sleeperId}`) ?? 0 : 0)
+  const filteredMatches = activePos ? matches.filter((m) => (m.position ?? '').trim().toUpperCase() === activePos) : matches
+  const shownMatches = yourLeaguesBy.size > 0 ? [...filteredMatches].sort((a, b) => Number(yourLeagues(b) > 0) - Number(yourLeagues(a) > 0)) : filteredMatches
   return (
-    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)}>
-      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar owns that lane. */}
-      {detail && leagueView ? null : <PhoneSearchDock />}
+    <div className={`af-core af-pf af-pf--2a${myPlayersHome ? ' af-pf--home' : ''}`} data-public={!signedIn} data-has-detail={Boolean(detail)} data-sheet={sheet || undefined}>
+      {/* Phones: the search, within thumb reach once it scrolls away. The league-mode bar and the sheet own that lane. */}
+      {(detail && leagueView) || sheet ? null : <PhoneSearchDock />}
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -681,13 +778,13 @@ export function PlayerFinder({
         specifies.
       */}
       <aside className="af-pf-rail" aria-label={t.railLabel}>
-        <h1 className="af-display af-pf-h1">{t.h1}</h1>
+        <PageHeader className="af-pf-head" titleClassName="af-pf-title" title={t.h1} />
         {/*
           The search box: a GET form as before, with suggestions as you type
           layered on top (2026-09-05). See PlayerSearchBox for the rate-limit
           behaviour and why the form never depends on the suggestions.
         */}
-        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
+        <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
 
         {/*
           ── Matches ─────────────────────────────────────────────────
@@ -712,21 +809,30 @@ export function PlayerFinder({
                 {query.trim().length < 2 ? t.typeTwo : t.noMatch(query)}
               </p>
             ) : (
+              <>
+              {posOptions.length > 1 ? <MatchPositionFilter options={posOptions} value={activePos} onChange={setMatchPos} total={matches.length} /> : null}
+              <DynastyMarkersScope markers={dynastyMarkers}>
               <ul className="af-pf-match-list">
-                {matches.map((m) => (
+                {shownMatches.map((m) => (
                   <li key={`${m.sport}-${m.externalId}`} className="af-pf-match-li">
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
                       // sports and opened whichever athlete came back first.
-                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                      href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                       className="af-pf-match"
                       data-active={
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
                       }
                     >
+                      <span className="af-pf-match-pos" data-rd-pos={redraftCorePosTone(m.sport, m.position) ?? undefined}>
+                        {m.position ?? '–'}
+                      </span>
                       <PlayerAvatar src={m.imageUrl} name={m.name} size={32} />
                       <span className="af-pf-match-text">
-                        <span className="af-pf-match-name">{m.name}</span>
+                        {/* Held dynasty league: age / ROOKIE / PROSPECT after the name (the name alone otherwise). */}
+                        <DynastyNameLine markerKey={markerKeyFor(m)}>
+                          <span className="af-pf-match-name">{m.name}</span>
+                        </DynastyNameLine>
                         <span className="af-pf-match-meta">
                           {m.position || m.team ? (
                             <>
@@ -742,6 +848,8 @@ export function PlayerFinder({
                           ) : (
                             t.noPosition
                           )}
+                          {m.sport !== 'NFL' ? ` · ${m.sport}` : ''}
+                          {yourLeagues(m) > 0 ? <span className="af-pfg-yours"> · {g.yoursTag(yourLeagues(m))}</span> : null}
                         </span>
                       </span>
                     </Link>
@@ -754,6 +862,8 @@ export function PlayerFinder({
                   </li>
                 ))}
               </ul>
+              </DynastyMarkersScope>
+              </>
             )}
           </section>
         ) : null}
@@ -814,7 +924,7 @@ export function PlayerFinder({
             {otherMatches.slice(0, 4).map((m) => (
               <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
                 <Link
-                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${leagueParam}`}
+                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId, m.source))}${sportParam}${leagueParam}`}
                   className="af-chip af-pf-other"
                 >
                   {m.name}
@@ -832,13 +942,22 @@ export function PlayerFinder({
         ) : null}
 
         {/*
-          The live-data promise is pinned to the foot of the rail, where the
-          handoff puts it. It is a claim about every number on this screen, so
-          it belongs beside the search rather than buried under one section.
+          2026-11-14: the rail's foot no longer says "Stats, injuries and news come from live sports data —
+          never an invented number." It is a claim about the product, not something a manager can use, and
+          every number it vouched for already carries its own source line where it is drawn.
         */}
-        <p className="af-pf-rail-foot af-pf-d-only">{t.railFoot}</p>
       </aside>
 
+      {sheet ? <Link className="af-pf-psheet-backdrop" href={sheetCloseHref} aria-hidden tabIndex={-1} /> : null}
+      <div className="af-pf-psheet" data-open={sheet || undefined}>
+      {sheet ? (
+        <div className="af-pf-psheet-bar">
+          <span className="af-pf-psheet-grip" aria-hidden />
+          <Link className="af-pf-psheet-close" href={sheetCloseHref}>
+            {t.backToResults}
+          </Link>
+        </div>
+      ) : null}
       <section className="af-pf-main" aria-label={t.mainLabel}>
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
@@ -849,17 +968,21 @@ export function PlayerFinder({
         */}
         {myPlayersHome ? (
           <header className="af-pf-home-head">
-            <h2 className="af-display af-pf-home-title">{fc.homeTitle}</h2>
-            <p className="af-pf-home-sub">{fc.homeSub}</p>
+            {/* What the page is for (2026-11-13 guide): game-day alerts land here; search by name or team. */}
+            <h2 className="af-display af-pf-home-title" data-testid="pf-home-title">{homeTitle}</h2>
+            <p className="af-pf-home-sub">{g.homeSub}</p>
           </header>
         ) : null}
         {/* Push reaches 2 of 42 managers (2026-10-10); ask here on the days the game-day banner does not. */}
-        {myPlayersHome ? <PushAsk placement="finder_home" notOnGameDays /> : null}
-        {myPlayersHome ? <WeeklyMvpCard mvp={weeklyMvp} /> : null}
-        {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
+        {/* One tab per sport your leagues are in (2026-11-11): every list below is read for that sport's leagues. */}
+        {myPlayersHome ? <HomeSportTabs sports={homeSports} active={sport} leagueId={selectedLeagueId} /> : null}
+        {/* Game day first (2026-11-13 guide): your flagged starters sit right under the search; extras below. */}
         {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
+        {myPlayersHome ? <PushAsk placement="finder_home" notOnGameDays /> : null}
         {!detail && signedIn && shares ? <PlayerSharesBoard state={shares} league={leagueShares} valuesLocked={depthLocked} /> : null}
         {myPlayersHome ? <FollowingBoard data={following} /> : null}
+        {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
+        {myPlayersHome ? <WeeklyMvpCard mvp={weeklyMvp} /> : null}
 
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
@@ -957,7 +1080,8 @@ export function PlayerFinder({
                         {t.allLeaguesLink}
                       </Link>
                     </span>
-                  ) : signedIn && detail.leagues.available ? (
+                  ) : signedIn && detail.leagues.available && leagueCountText ? null : signedIn && detail.leagues.available ? (
+                    /* Said once (2026-11-13 guide): with the every-league count under him, this line would repeat it. */
                     <span className="af-pf-rostered">
                       {' · '}
                       {yoursCount > 0
@@ -1006,6 +1130,12 @@ export function PlayerFinder({
             {/* Live or final: his game this week and his points in your leagues, as each platform scored them. */}
             <LiveGameBadge data={liveGame} nowIso={nowIso} />
 
+            {/*
+              The every-league list, right under the player (2026-11-13 guide): this is what an injury alert
+              opens the page for, so it comes before his stats and news, under one line that counts it —
+              "In 4 of your 12 leagues · starting in 3 · benched in 1" — which opens and closes the list.
+            */}
+            <EveryLeagueFold summary={leagueCountText} toggleLabel={g.listToggle}>
             {/* Phones: your move in each league, one tap each — in place of the table below. */}
             <LeagueActionCards
               cards={leagueCards}
@@ -1029,169 +1159,6 @@ export function PlayerFinder({
                 </>
               }
             />
-
-            {/* Close start/sit calls as a quick pick — yours, then our lean and the lineup button (2026-10-08). */}
-            <CoinFlips flips={flips} linkFor={flipLink} />
-
-            {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
-            {detailRef ? (
-              <div className="af-pf-compare-entry">
-                <span className="af-label">{t.compareWith}</span>
-                <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
-              </div>
-            ) : null}
-
-            {/* Stat tiles — a missing one says why rather than showing a bare dash */}
-            <div className="af-pf-tiles af-pf-d-only">
-              {/*
-                ⚠ "STANDARD SCORING" IS SAID OUT LOUD BECAUSE THE FEED IS NOT
-                LEAGUE-SPECIFIC. This screen spans every league the user is in, and
-                the same player is worth different points in each. The per-league
-                number is in the table below; this tile is the one feed number.
-              */}
-              {/*
-                In league mode both tiles switch to the league's own scoring
-                (Guap, 2026-09-02). Standard scoring is the cross-league number.
-              */}
-              {leagueProj ? (
-                <StatTile
-                  label={leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek}
-                  state={leagueProj}
-                  value={leagueProj.available ? leagueProj.data.points.toFixed(1) : null}
-                  tone="good"
-                  tip={{ title: t.projectionTitle, body: t.projectionLeagueBody }}
-                  help={leagueProj.available ? t.leagueScoringOf(leagueView?.leagueName ?? null) : undefined}
-                  why={why}
-                />
-              ) : (
-                <StatTile
-                  label={detail.projection.available ? t.projWeek(detail.projection.data.week) : t.projThisWeek}
-                  state={detail.projection}
-                  value={detail.projection.available ? detail.projection.data.points.toFixed(1) : null}
-                  tone="good"
-                  tip={{ title: t.projectionTitle, body: t.projectionStandardBody }}
-                  help={detail.projection.available ? t.standardScoringSeason(detail.projection.data.season) : undefined}
-                  why={why}
-                />
-              )}
-              {/*
-                AllFantasy's own projection, beside the provider's. In league mode it is carried into
-                this league's scoring; across leagues it is the engine's standard-scoring number, like
-                the tile beside it.
-              */}
-              {detail.afProjection ? (
-                <StatTile
-                  label={detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj}
-                  state={detail.afProjection}
-                  value={afTile != null ? afTile.toFixed(1) : null}
-                  tone="good"
-                  tip={{ title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody }}
-                  help={detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined}
-                  why={why}
-                />
-              ) : null}
-              {leagueRank ? (
-                <StatTile
-                  label={t.posRank}
-                  state={leagueRank}
-                  value={leagueRank.available ? `${leagueRank.data.position}${leagueRank.data.rank}` : null}
-                  tone="warn"
-                  help={leagueRank.available ? t.ofPricedHere(leagueRank.data.outOf, leagueRank.data.position) : undefined}
-                  why={why}
-                />
-              ) : (
-                <StatTile
-                  label={t.posRank}
-                  state={detail.positionRank}
-                  value={
-                    detail.positionRank.available
-                      ? `${detail.positionRank.data.position}${detail.positionRank.data.rank}`
-                      : null
-                  }
-                  tone="warn"
-                  // The denominator lives here rather than in the value so the tile
-                  // reads "WR12 / of 143 projected" — a rank AND its universe.
-                  help={
-                    detail.positionRank.available
-                      ? t.ofProjected(detail.positionRank.data.outOf, detail.positionRank.data.position)
-                      : undefined
-                  }
-                  why={why}
-                />
-              )}
-              {/*
-                Only rendered when there IS a value. A defender with no cached board entry gets
-                no tile rather than an empty one — an unmeasured player and a worthless player
-                must not look the same, and "—" beside a value label reads as the latter.
-
-                ⚠ THE REFERENCE LEAGUE IS IN `help`, NOT OPTIONAL DECORATION. "3,284" is a fact
-                about a 12-team league starting three defenders, not about the world.
-              */}
-              {detail.idpValue ? (
-                <StatTile
-                  label={t.idpValue}
-                  value={detail.idpValue.value.toLocaleString()}
-                  tone="good"
-                  tip={{ title: t.idpValue, body: t.idpBody(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters) }}
-                  help={
-                    [
-                      detail.idpValue.positionRank ? t.idpRank(detail.idpValue.positionRank) : null,
-                      t.idpReference(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters),
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || undefined
-                  }
-                />
-              ) : null}
-              <StatTile
-                label={t.snapShare}
-                state={detail.snapShare}
-                value={
-                  detail.snapShare.available
-                    ? `${Math.round(detail.snapShare.data.share * 100)}%`
-                    : null
-                }
-                tip={{ title: t.snapShare, body: t.snapShareBody }}
-                help={detail.snapShare.available ? t.snapsHelp(detail.snapShare.data.basis, detail.snapShare.data.games) : undefined}
-                why={why}
-              />
-              <StatTile
-                label={t.age}
-                value={detail.bio.age != null ? String(detail.bio.age) : null}
-                help={detail.bio.age == null ? t.noBirthDate : undefined}
-              />
-            </div>
-
-            {/* ── Injury ────────────────────────────────────────────── */}
-            <section className="af-pf-block af-pf-d-only">
-              <h3 className="af-label">{t.injury}</h3>
-              {detail.injury.available ? (
-                <div className="af-pf-injury">
-                  <span className="af-chip af-pf-injury-status">
-                    {detail.injury.data.status != null ? designationText(detail.injury.data.status, language) : t.noDesignation}
-                  </span>
-                  {detail.injury.data.description ? (
-                    <p className="af-pf-injury-note">{detail.injury.data.description}</p>
-                  ) : null}
-                  {/* When the feed said it — the fact that tells a reader the news is fresh enough to act on. */}
-                  {reportedLabel(asIso(detail.injury.data.reportedAt), nowIso) ? (
-                    <span className="af-pf-injury-when af-num">
-                      {coreUiCopy(reportedLabel(asIso(detail.injury.data.reportedAt), nowIso)!, language)}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <Unavailable reason={why(detail.injury.reason)} />
-              )}
-            </section>
-
-            {/* ── Next game + news (Phase 1): every width — the late news IS the game-day story ── */}
-            {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} matchups={matchupOutlook} /> : null}
-            {depth ? (
-              <PhoneFold title={ac.foldNews}>
-                <PlayerNews state={depth.news} nowIso={nowIso} />
-              </PhoneFold>
-            ) : null}
 
             {/* ── Every platform, every league ──────────────────────── */}
             {/*
@@ -1238,7 +1205,7 @@ export function PlayerFinder({
                   </Link>
                 </>
               ) : detail.leagues.available ? (
-                shownRows.length === 0 ? (
+                shownRows.length === 0 && unmatched.length > 0 ? null : shownRows.length === 0 ? (
                   <p className="af-pf-unavailable">
                     {leagueRows.length > 0 ? t.notOnYourRosters : leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
@@ -1280,7 +1247,7 @@ export function PlayerFinder({
                                 {r.held ? <span className="af-pf-impact-held af-label">{t.thisLeagueBadge}</span> : null}
                                 {/* The phone table has no room for a Value column; the number rides in the league cell there. */}
                                 {leagueValues?.[l.leagueId] ? (
-                                  <span className="af-pf-value-inline af-num">{t.valueInline(leagueValues[l.leagueId]!.value.toLocaleString('en-US'))}</span>
+                                  <span className="af-pf-value-inline af-num">{t.valueInline(leagueValues[l.leagueId]!.value.toLocaleString(getAppIntlLocale()))}</span>
                                 ) : null}
                               </span>
                             </td>
@@ -1342,7 +1309,7 @@ export function PlayerFinder({
                                         : t.valueBasis(leagueValues[l.leagueId]!.mode, leagueValues[l.leagueId]!.numQbs === 2)
                                     }
                                   >
-                                    {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}
+                                    {leagueValues[l.leagueId]!.value.toLocaleString(getAppIntlLocale())}
                                     {leagueValues[l.leagueId]!.value !== leagueValues[l.leagueId]!.base ? <span className="af-pf-value-fit" aria-label={t.valueAdjusted}>*</span> : null}
                                   </span>
                                 ) : (
@@ -1387,6 +1354,181 @@ export function PlayerFinder({
                 </p>
               ) : null}
             </section>
+            </EveryLeagueFold>
+
+            {/* Close start/sit calls as a quick pick — yours, then our lean and the lineup button (2026-10-08). */}
+            <CoinFlips flips={flips} linkFor={flipLink} />
+
+            {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
+            {detailRef ? (
+              <div className="af-pf-compare-entry">
+                <span className="af-label">{t.compareWith}</span>
+                <PlayerSearchBox query={query} sport={sport} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
+              </div>
+            ) : null}
+
+            {/* Stat tiles — a missing one says why rather than showing a bare dash */}
+            <StatStrip
+              className="af-pf-tiles af-pf-d-only"
+              order="value-first"
+              items={[
+                /*
+                  ⚠ "STANDARD SCORING" IS SAID OUT LOUD BECAUSE THE FEED IS NOT
+                  LEAGUE-SPECIFIC. This screen spans every league the user is in, and
+                  the same player is worth different points in each. The per-league
+                  number is in the table below; this tile is the one feed number.
+
+                  In league mode both tiles switch to the league's own scoring
+                  (Guap, 2026-09-02). Standard scoring is the cross-league number.
+                */
+                ...(detail.player.sport !== 'NFL' && !leagueProj
+                  ? []
+                  : [
+                      leagueProj
+                        ? pfTile({
+                            label: leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek,
+                            state: leagueProj,
+                            value: leagueProj.available ? leagueProj.data.points.toFixed(1) : null,
+                            tone: 'good',
+                            tip: { title: t.projectionTitle, body: t.projectionLeagueBody },
+                            help: leagueProj.available ? t.leagueScoringOf(leagueView?.leagueName ?? null) : undefined,
+                            why,
+                          })
+                        : pfTile({
+                            label: detail.projection.available ? t.projWeek(detail.projection.data.week) : t.projThisWeek,
+                            state: detail.projection,
+                            value: detail.projection.available ? detail.projection.data.points.toFixed(1) : null,
+                            tone: 'good',
+                            tip: { title: t.projectionTitle, body: t.projectionStandardBody },
+                            help: detail.projection.available ? t.standardScoringSeason(detail.projection.data.season) : undefined,
+                            why,
+                          }),
+                    ]),
+                /*
+                  AllFantasy's own projection, beside the provider's. In league mode it is carried into
+                  this league's scoring; across leagues it is the engine's standard-scoring number, like
+                  the tile beside it.
+                */
+                ...(detail.player.sport === 'NFL' && detail.afProjection
+                  ? [
+                      pfTile({
+                        label: detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj,
+                        state: detail.afProjection,
+                        value: afTile != null ? afTile.toFixed(1) : null,
+                        tone: 'good',
+                        tip: { title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody },
+                        help: detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined,
+                        why,
+                      }),
+                    ]
+                  : []),
+                ...(detail.player.sport !== 'NFL' && detail.afBaseline
+                  ? [
+                      pfTile({
+                        label: t.afBaselineLabel,
+                        state: detail.afBaseline,
+                        value: detail.afBaseline.available ? detail.afBaseline.data.pointsPerGame.toFixed(1) : null,
+                        tone: 'good',
+                        tip: { title: t.afBaselineLabel, body: t.afBaselineBody },
+                        help: detail.afBaseline.available ? t.perGameSeason(detail.afBaseline.data.season) : undefined,
+                        why,
+                      }),
+                    ]
+                  : []),
+                leagueRank
+                  ? pfTile({
+                      label: t.posRank,
+                      state: leagueRank,
+                      value: leagueRank.available ? `${leagueRank.data.position}${leagueRank.data.rank}` : null,
+                      tone: 'warn',
+                      help: leagueRank.available ? t.ofPricedHere(leagueRank.data.outOf, leagueRank.data.position) : undefined,
+                      why,
+                    })
+                  : pfTile({
+                      label: t.posRank,
+                      state: detail.positionRank,
+                      value: detail.positionRank.available
+                        ? `${detail.positionRank.data.position}${detail.positionRank.data.rank}`
+                        : null,
+                      tone: 'warn',
+                      // The denominator lives here rather than in the value so the tile
+                      // reads "WR12 / of 143 projected" — a rank AND its universe.
+                      help: detail.positionRank.available
+                        ? t.ofProjected(detail.positionRank.data.outOf, detail.positionRank.data.position)
+                        : undefined,
+                      why,
+                    }),
+                /*
+                  Only rendered when there IS a value. A defender with no cached board entry gets
+                  no tile rather than an empty one — an unmeasured player and a worthless player
+                  must not look the same, and "—" beside a value label reads as the latter.
+
+                  ⚠ THE REFERENCE LEAGUE IS IN `help`, NOT OPTIONAL DECORATION. "3,284" is a fact
+                  about a 12-team league starting three defenders, not about the world.
+                */
+                ...(detail.idpValue
+                  ? [
+                      pfTile({
+                        label: t.idpValue,
+                        value: detail.idpValue.value.toLocaleString(getAppIntlLocale()),
+                        tone: 'good',
+                        tip: { title: t.idpValue, body: t.idpBody(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters) },
+                        help:
+                          [
+                            detail.idpValue.positionRank ? t.idpRank(detail.idpValue.positionRank) : null,
+                            t.idpReference(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || undefined,
+                      }),
+                    ]
+                  : []),
+                pfTile({
+                  label: t.snapShare,
+                  state: detail.snapShare,
+                  value: detail.snapShare.available ? `${Math.round(detail.snapShare.data.share * 100)}%` : null,
+                  tip: { title: t.snapShare, body: t.snapShareBody },
+                  help: detail.snapShare.available ? t.snapsHelp(detail.snapShare.data.basis, detail.snapShare.data.games) : undefined,
+                  why,
+                }),
+                pfTile({
+                  label: t.age,
+                  value: detail.bio.age != null ? String(detail.bio.age) : null,
+                  help: detail.bio.age == null ? t.noBirthDate : undefined,
+                }),
+              ]}
+            />
+
+            {/* ── Injury ────────────────────────────────────────────── */}
+            <section className="af-pf-block af-pf-d-only">
+              <h3 className="af-label">{t.injury}</h3>
+              {detail.injury.available ? (
+                <div className="af-pf-injury">
+                  <span className="af-chip af-pf-injury-status">
+                    {detail.injury.data.status != null ? designationText(detail.injury.data.status, language) : t.noDesignation}
+                  </span>
+                  {detail.injury.data.description ? (
+                    <p className="af-pf-injury-note">{detail.injury.data.description}</p>
+                  ) : null}
+                  {/* When the feed said it — the fact that tells a reader the news is fresh enough to act on. */}
+                  {reportedLabel(asIso(detail.injury.data.reportedAt), nowIso) ? (
+                    <span className="af-pf-injury-when af-num">
+                      {coreUiCopy(reportedLabel(asIso(detail.injury.data.reportedAt), nowIso)!, language)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <Unavailable reason={why(detail.injury.reason)} />
+              )}
+            </section>
+
+            {/* ── Next game + news (Phase 1): every width — the late news IS the game-day story ── */}
+            {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} matchups={matchupOutlook} /> : null}
+            {depth ? (
+              <PhoneFold title={ac.foldNews}>
+                <PlayerNews state={depth.news} nowIso={nowIso} />
+              </PhoneFold>
+            ) : null}
 
             {/*
               ── Available in your leagues ──: every league where he is a free agent, with where to
@@ -1394,20 +1536,13 @@ export function PlayerFinder({
             */}
             {signedIn ? <FreeAgentBids data={freeAgentBids} playerName={detail.player.name} access={depthAccess} /> : null}
 
-            {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
-            {valueTrend && valueTrend.books.length > 0 ? (
-              <PhoneFold title={ac.foldValue}>
-                <ValueTrend data={valueTrend} access={depthAccess} />
-              </PhoneFold>
-            ) : null}
-
             {/* ── Next man up ──: his depth chart, and where each player around him is in your leagues (free). */}
             {depthChart && depthChart.entries.length >= 2 ? (
               <PhoneFold title={ac.foldDepth}>
                 <DepthChartBackups
                   data={depthChart}
                   playerName={detail.player.name}
-                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${leagueParam}`}
+                  hrefFor={(ref, name) => `/core/players?q=${encodeURIComponent(name)}&player=${encodeURIComponent(ref)}${sportParam}${leagueParam}`}
                 />
               </PhoneFold>
             ) : null}
@@ -1416,13 +1551,6 @@ export function PlayerFinder({
             {signedIn && whoStartsHim ? (
               <PhoneFold title={ac.foldWhoStarts}>
                 <WhoStartsHim data={whoStartsHim} playerName={detail.player.name} access={depthAccess} />
-              </PhoneFold>
-            ) : null}
-
-            {/* ── This season: projected against scored, week by week (Phase 1) ── */}
-            {depth ? (
-              <PhoneFold title={ac.foldSeason}>
-                <PlayerSeasonCard state={depth.season} name={detail.player.name} />
               </PhoneFold>
             ) : null}
 
@@ -1444,27 +1572,54 @@ export function PlayerFinder({
               </div>
             ) : null}
 
-            {/* ── Season stats ──────────────────────────────────────── */}
-            <section className="af-pf-block af-pf-d-only">
-              <h3 className="af-label">{t.seasonStatistics}</h3>
-              {detail.seasonStats.available ? (
-                <ul className="af-pf-seasons">
-                  {detail.seasonStats.data.map((s) => (
-                    <li key={s.season} className="af-pf-season">
-                      <span className="af-num af-pf-season-year">{s.season}</span>
-                      <span className="af-pf-season-stats">
-                        {Object.entries(s.stats)
-                          .slice(0, 6)
-                          .map(([k, v]) => `${k} ${v}`)
-                          .join(' · ')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Unavailable reason={why(detail.seasonStats.reason)} />
-              )}
-            </section>
+            {/*
+              2026-11-20 — the page's one "More detail" fold (MoreDetail.tsx). The player, his leagues, the
+              tiles, injury, next game and news, free-agent bids, the depth chart, who'd start him and the
+              recommended moves stay on screen; the 30-day market value chart, the week-by-week season card
+              and the season-stat history are reference, not the next move, so they moved in here unchanged.
+            */}
+            {/* With no value chart and no season card, only the desktop-only stats are inside: skip the fold on a phone. */}
+            <MoreDetail
+              note={moreDetailCopy.note}
+              testId="finder-more"
+              className={(valueTrend && valueTrend.books.length > 0) || depth ? undefined : 'af-pf-d-only'}
+            >
+              {/* ── Market value, last 30 days ──: facts free; the buy-low / sell-high call is AF Pro. */}
+              {valueTrend && valueTrend.books.length > 0 ? (
+                <PhoneFold title={ac.foldValue}>
+                  <ValueTrend data={valueTrend} access={depthAccess} />
+                </PhoneFold>
+              ) : null}
+
+              {/* ── This season: projected against scored, week by week (Phase 1) ── */}
+              {depth ? (
+                <PhoneFold title={ac.foldSeason}>
+                  <PlayerSeasonCard state={depth.season} name={detail.player.name} />
+                </PhoneFold>
+              ) : null}
+
+              {/* ── Season stats ──────────────────────────────────────── */}
+              <section className="af-pf-block af-pf-d-only">
+                <h3 className="af-label">{t.seasonStatistics}</h3>
+                {detail.seasonStats.available ? (
+                  <ul className="af-pf-seasons">
+                    {detail.seasonStats.data.map((s) => (
+                      <li key={s.season} className="af-pf-season">
+                        <span className="af-num af-pf-season-year">{s.season}</span>
+                        <span className="af-pf-season-stats">
+                          {Object.entries(s.stats)
+                            .slice(0, 6)
+                            .map(([k, v]) => `${k} ${v}`)
+                            .join(' · ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Unavailable reason={why(detail.seasonStats.reason)} />
+                )}
+              </section>
+            </MoreDetail>
           </section>
         ) : myPlayersHome ? null : (
           <section className="af-card af-pf-detail af-pf-detail--empty">
@@ -1546,6 +1701,7 @@ export function PlayerFinder({
           <SwapCandidates impact={impactRows} kickoffs={detail.kickoffs ?? {}} nowIso={nowIso} />
         </aside>
       ) : null}
+      </div>
     </div>
   )
 }

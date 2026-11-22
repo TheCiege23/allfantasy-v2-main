@@ -322,12 +322,14 @@ describe('SurvivorSitOutEngine', () => {
   it('does not issue a duplicate shuffle recommendation in the same week', async () => {
     hm.getTribesWithMembers.mockResolvedValue([
       { id: 'tribe-a', name: 'Alpha', members: [{ rosterId: 'r1' }] },
-      { id: 'tribe-b', name: 'Beta', members: [{ rosterId: 'r2' }] },
+      { id: 'tribe-b', name: 'Beta', members: [{ rosterId: 'r2' }, { rosterId: 'r3' }, { rosterId: 'r4' }] },
     ])
     hm.leagueFindUnique.mockResolvedValue({ survivorPhase: 'tribe' })
     hm.survivorPlayerFindMany.mockResolvedValue([
       { redraftRosterId: 'r1' },
       { redraftRosterId: 'r2' },
+      { redraftRosterId: 'r3' },
+      { redraftRosterId: 'r4' },
     ])
     hm.getSurvivorConfig.mockResolvedValue({ tribeSize: 4, tribeShuffleEnabled: false })
     hm.survivorCommissionerActionFindFirst.mockResolvedValue({ id: 'shuffle-1', week: 9 })
@@ -346,7 +348,9 @@ describe('SurvivorSitOutEngine', () => {
     [4, 1, true],
     [5, 2, true],
     [6, 2, true],
-  ])('recommends a redraw at 40%% of original tribe size (%i original, %i active)', async (originalSize, survivingSize, expected) => {
+    [3, 1, true],
+    [2, 1, false],
+  ])('recommends a redraw once a tribe is below half the largest tribe (%i vs %i active)', async (originalSize, survivingSize, expected) => {
     const firstMembers = Array.from({ length: survivingSize }, (_, i) => ({ rosterId: `a-${i}` }))
     const secondMembers = Array.from({ length: originalSize }, (_, i) => ({ rosterId: `b-${i}` }))
     hm.getTribesWithMembers.mockResolvedValue([
@@ -360,5 +364,6 @@ describe('SurvivorSitOutEngine', () => {
     const result = await getSurvivorTribeBalanceState('league-1', 9)
 
     expect(result.shouldSuggestShuffle).toBe(expected)
+    expect(result.suggestionReason).toBe(expected ? `A tribe has dropped below half the size of the largest tribe (${survivingSize} vs ${originalSize} active managers).` : null)
   })
 })

@@ -115,7 +115,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 // Screen loaders: the spies whose silence during the page function is the whole point.
-vi.mock('@/lib/core-app/trades', () => ({ getTradesData: (screens.trades = vi.fn(async () => null)) }))
+vi.mock('@/lib/core-app/trades', () => ({ startTradesRead: (screens.trades = vi.fn(async () => null)) }))
 vi.mock('@/lib/core-app/dash34', () => ({ getDash34Data: (screens.dash34 = vi.fn(async () => null)), imageOf: () => null }))
 vi.mock('@/lib/core-app/urgencyBadges', () => ({
   getUrgencyBadges: (screens.urgency = vi.fn(async () => null)),
@@ -480,6 +480,30 @@ describe('/core with an unknown segment', () => {
   })
 
   /*
+   * 2026-11-12: five screens need a league. Their no-league views repeated Your week or Season
+   * Outlook, so with no `?league=` they redirect there — before the session read, like the unknown
+   * segment above. With a league they render as before.
+   */
+  it('redirects the league-only screens when no league is held, and only then', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const { getServerSession } = await import('next-auth')
+    vi.mocked(getServerSession).mockClear()
+
+    for (const screen of ['my-team', 'waivers', 'matchup', 'war-room']) {
+      expect(await redirectTarget(AfCorePage(pageArgs([screen], {}))), screen).toBe('/core/week')
+    }
+    expect(await redirectTarget(AfCorePage(pageArgs(['standings'], {})))).toBe('/core/season-outlook')
+    // An alias resolves first: /core/roster is My team.
+    expect(await redirectTarget(AfCorePage(pageArgs(['roster'], {})))).toBe('/core/week')
+    expect(getServerSession).not.toHaveBeenCalled()
+
+    // With a league held, the same screen renders.
+    expect(await redirectTarget(AfCorePage(pageArgs(['my-team'], { league: 'L1' })))).toBeNull()
+  })
+
+  /*
    * 🛑 THE FRAME'S FIRST READ ASKS FOR ROSTER IDS ONLY. Every lineup on a /core screen is read by
    * the loader that shows it; this list's rosters were ~1.1 MB of payload on every click for the
    * heaviest test account and nothing on the page read them. See `rosterDetail` in the loader.
@@ -490,7 +514,7 @@ describe('/core with an unknown segment', () => {
     vi.mocked(getDashboardLeagueListForUser).mockClear()
     const AfCorePage = await loadPage()
     await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
-    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+    expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count', requireCoreLeagues: true })
   })
 })
 
@@ -522,7 +546,8 @@ describe('/core when the league list cannot be read', () => {
     const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
     const AfCorePage = await loadPage()
     vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
-    await expect(AfCorePage(pageArgs(['my-team'], {}))).resolves.toBeTruthy()
+    // Trades, not My team: since 2026-11-12 /core/my-team with no league redirects to Your week.
+    await expect(AfCorePage(pageArgs(['trades'], {}))).resolves.toBeTruthy()
   })
 })
 
@@ -533,7 +558,35 @@ describe('/core when the league list cannot be read', () => {
  * waits it had no way to observe. Gated, each must have started while the rest are still pending.
  */
 vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: (shell.hubs = gatedValue(undefined)) }))
+vi.mock('@/lib/core-app/attachSurvivorExileLinks', () => ({ attachSurvivorExileLinks: async () => {} }))
 vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/chimmy/planAllowance')>()),
-  readChimmyPlanAllowance: (shell.planAllowance = gatedValue(null)),
+  readChimmyAnswerAllowance: (shell.planAllowance = gatedValue(null)),
 }))
+
+/*
+ * 🛑 THE RAIL'S SCORES NO LONGER HOLD THE SHELL (2026-11-22, owner's OK). Measured on the owner's 91-league
+ * account: the rail's matchup read was 12.5s of a 13.0s shell. The read still starts with the shell; the
+ * shell no longer waits for it, and its scores stream into the rail through RailScoresSlot.
+ */
+describe('/core paints its shell before the rail scores land', () => {
+  it('resolves while the rail read is still pending, and streams the scores in their own boundary', { timeout: 180_000 }, async () => {
+    h.gated = false
+    let releaseRail!: (value: null) => void
+    // The mock is created by the page's module factory, so load the page first.
+    const AfCorePage = await loadPage()
+    shell.railMatchups.mockImplementationOnce(() => new Promise<null>((resolve) => { releaseRail = resolve }))
+    try {
+      const tree = await Promise.race([
+        AfCorePage(pageArgs([], {})),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the shell waited for the rail scores')), 60_000)),
+      ])
+      // Positive control: the read the shell did not wait for was started.
+      expect(shell.railMatchups).toHaveBeenCalledTimes(1)
+      const slot = findElement(tree, (el) => typeof el.type === 'function' && el.type.name === 'RailScoresSlot')
+      expect(slot).not.toBeNull()
+    } finally {
+      releaseRail?.(null)
+    }
+  })
+})

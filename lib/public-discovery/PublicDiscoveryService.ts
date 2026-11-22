@@ -3,42 +3,38 @@
  * Aggregates public fantasy leagues, creator leagues, and bracket challenges.
  */
 
+import { isLeagueVibe, type LeagueVibeFilter } from "./vibes"
 import { prisma } from "@/lib/prisma"
 import { getCareerTierName, clampCareerTier, isLeagueVisibleForCareerTier } from "@/lib/ranking/tier-visibility"
-import { decideDivisionGate, getLeagueDivisions } from "@/lib/class-rating/divisionGate"
+import { getLeagueDivisions } from "@/lib/class-rating/divisionGate"
+import { decideCareerJoin, leagueCareerLevel, loadCareerXpLevels, savedLeagueCareerLevel } from "@/lib/league-join/careerJoinGate"
+import { hasClassException } from "@/lib/class-rating/exceptions"
 import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
-import { getDiscoverySports } from "./discovery-sports"
+import { isValidIanaTimeZone } from "@/lib/timezone"
+import { draftFitsWindow, rankBandFor, timeZoneRegionFor } from "./findLeagueFilters"
 import {
   getCachedBracketCards,
   getCachedComputedDiscoveryList,
   getCachedCreatorCards,
   getCachedFantasyCards,
+  getCachedPrivateFantasyCards,
   getComputedDiscoveryListCacheKey,
   setCachedBracketCards,
   setCachedComputedDiscoveryList,
   setCachedCreatorCards,
   setCachedFantasyCards,
+  setCachedPrivateFantasyCards,
   clearDiscoveryCache as clearDiscoveryCardCaches,
 } from "./DiscoveryCache"
 import {
   queryPublicBracketLeagueCards,
   queryPublicCreatorLeagueCards,
   queryPublicFantasyLeagueCards,
+  queryPrivateRequestableFantasyLeagueCards,
 } from "./DiscoveryQueryLayer"
-import type {
-  DiscoveryCard,
-  DiscoverLeaguesInput,
-  DiscoverLeaguesResult,
-  DiscoveryFormat,
-  DraftStatusFilter,
-  DraftTypeFilter,
-  DiscoveryLeagueStyle,
-  DiscoverySort,
-  EntryFeeFilter,
-  LeagueStyleFilter,
-} from "./types"
+import type { DiscoveryCard, DiscoverLeaguesInput, DiscoverLeaguesResult, DiscoveryFormat, DraftStatusFilter, DraftTypeFilter, DraftWhenFilter, DiscoverySort, EntryFeeFilter, LeagueStyleFilter, RankBand, RankBandFilter, TimeZoneRegionFilter } from "./types"
 
 export function clearDiscoveryCache(): void {
   clearDiscoveryCardCaches()
@@ -90,6 +86,7 @@ function normalizeStyle(value: unknown): LeagueStyleFilter {
     value === "best_ball" ||
     value === "keeper" ||
     value === "survivor" ||
+    value === "guillotine" ||
     value === "bracket" ||
     value === "community"
     ? value
@@ -135,11 +132,11 @@ export function calculateDiscoveryRankingEffectScore(
 }
 
 export function matchesDiscoveryLeagueStyle(
-  card: Pick<DiscoveryCard, "leagueStyle">,
+  card: Pick<DiscoveryCard, "leagueStyle" | "alsoStyles">,
   style: LeagueStyleFilter
 ): boolean {
   if (style === "all") return true
-  return card.leagueStyle === style
+  return card.leagueStyle === style || (card.alsoStyles ?? []).includes(style)
 }
 
 function applyVisibility(cards: DiscoveryCard[], visibility: "public" | "all"): DiscoveryCard[] {
@@ -179,6 +176,55 @@ function applyEntryFee(cards: DiscoveryCard[], entryFee: EntryFeeFilter): Discov
   if (entryFee === "all") return cards
   if (entryFee === "free") return cards.filter((card) => !card.isPaid)
   return cards.filter((card) => card.isPaid)
+}
+
+const DRAFT_WHEN_VALUES: DraftWhenFilter[] = ["any", "upcoming", "next_7_days", "weeknight", "weekend"]
+const TZ_REGION_VALUES: TimeZoneRegionFilter[] = [
+  "any",
+  "eastern",
+  "central",
+  "mountain",
+  "pacific",
+  "alaska_hawaii",
+  "outside_us",
+]
+const RANK_BAND_VALUES: RankBandFilter[] = ["all", "step_up", "your_level", "chill"]
+
+function normalizeDraftWhen(value: unknown): DraftWhenFilter {
+  return DRAFT_WHEN_VALUES.includes(value as DraftWhenFilter) ? (value as DraftWhenFilter) : "any"
+}
+
+function normalizeTimeZoneRegion(value: unknown): TimeZoneRegionFilter {
+  return TZ_REGION_VALUES.includes(value as TimeZoneRegionFilter) ? (value as TimeZoneRegionFilter) : "any"
+}
+
+function normalizeRankBand(value: unknown): RankBandFilter {
+  return RANK_BAND_VALUES.includes(value as RankBandFilter) ? (value as RankBandFilter) : "all"
+}
+
+function applyDraftWhen(cards: DiscoveryCard[], draftWhen: DraftWhenFilter, viewerTimeZone: string | null): DiscoveryCard[] {
+  if (draftWhen === "any") return cards
+  const now = new Date()
+  return cards.filter((card) => draftFitsWindow(card.draftDate, draftWhen, viewerTimeZone, now))
+}
+
+function applyTimeZoneRegion(cards: DiscoveryCard[], tzRegion: TimeZoneRegionFilter): DiscoveryCard[] {
+  if (tzRegion === "any") return cards
+  return cards.filter((card) => timeZoneRegionFor(card.timezone) === tzRegion)
+}
+
+function normalizeVibe(value: unknown): LeagueVibeFilter {
+  return isLeagueVibe(value) ? value : "all"
+}
+
+function applyVibe(cards: DiscoveryCard[], vibe: LeagueVibeFilter): DiscoveryCard[] {
+  if (vibe === "all") return cards
+  return cards.filter((card) => card.vibes?.includes(vibe) === true)
+}
+
+function applyRankBand(cards: DiscoveryCard[], rankBand: RankBandFilter): DiscoveryCard[] {
+  if (rankBand === "all") return cards
+  return cards.filter((card) => card.rankBand === rankBand)
 }
 
 function applyLeagueStyle(cards: DiscoveryCard[], style: LeagueStyleFilter): DiscoveryCard[] {
@@ -225,6 +271,11 @@ async function getFastSearchCandidateLeagueIds(options: {
       limit: DISCOVERY_TAKE,
       offset: 0,
     })
+    // No hits is not "no leagues": the index matches the whole phrase against names
+    // only, so "dynasty degens" or a commissioner's name misses it while the
+    // word-by-word scan in queryPublicFantasyLeagueCards would find them. An empty
+    // list here would restrict that scan to nothing.
+    if (result.hits.length === 0) return null
     return result.hits.map((hit) => hit.id)
   } catch {
     return null
@@ -251,6 +302,26 @@ async function fetchPublicFantasyLeagues(options: {
     take: DISCOVERY_TAKE,
   })
   setCachedFantasyCards(options.baseUrl, options.sport, options.query, cards)
+  return cards
+}
+
+/**
+ * Private leagues that are recruiting, as "ask to join" cards. Only the finder's "Public & private"
+ * view reads them (discoverPublicLeagues with visibility "all"); every other caller of discovery —
+ * Chimmy, saved-search alerts, creator pages, recommendations — keeps seeing public leagues only.
+ */
+async function fetchPrivateRequestableFantasyLeagues(options: {
+  sport: string | null
+  query: string | null
+}): Promise<DiscoveryCard[]> {
+  const cached = getCachedPrivateFantasyCards(options.sport, options.query)
+  if (cached) return cached
+  const cards = await queryPrivateRequestableFantasyLeagueCards({
+    sport: options.sport,
+    query: options.query,
+    take: DISCOVERY_TAKE,
+  })
+  setCachedPrivateFantasyCards(options.sport, options.query, cards)
   return cards
 }
 
@@ -369,18 +440,21 @@ async function getOwnedLeagueSets(viewerUserId: string | null) {
 }
 
 /**
- * Is this card inside the viewer's range? A fantasy card is in range exactly when an OPEN join to
- * it would pass the division gate; any other card keeps the career-tier window. Pure.
+ * Step up / your level / chill, for FANTASY cards only, and only when both sides have a
+ * Class division: the viewer is established and the league has rated members.
+ *
+ * Bracket and creator cards get none. Their only rank signal is a career tier that
+ * defaults to 1 when a league never set one, so a band there would call most of them
+ * "Chill" for any experienced viewer — and career XP measures volume, not skill
+ * (ADR F2.10a), which is exactly what a band claims to say.
  */
-export function isCardInViewerRange(
+function rankBandForCard(
   card: Pick<DiscoveryCard, "source" | "id">,
-  ctx: { viewerTier: number; leagueTier: number; viewerClass: ManagerClass; fantasyDivisions: Map<string, number | null> }
-): boolean {
-  if (card.source === "fantasy") {
-    const leagueDivision = ctx.fantasyDivisions.get(card.id) ?? null
-    return decideDivisionGate({ user: ctx.viewerClass, leagueDivision, path: "open" }).outcome !== "deny"
-  }
-  return isLeagueVisibleForCareerTier(ctx.viewerTier, ctx.leagueTier, 1)
+  viewerClass: ManagerClass,
+  fantasyDivisions: Map<string, number | null>
+): RankBand | null {
+  if (card.source !== "fantasy" || viewerClass.status !== "established") return null
+  return rankBandFor(fantasyDivisions.get(card.id) ?? null, viewerClass.division)
 }
 
 async function applyTierPolicy(
@@ -392,23 +466,55 @@ async function applyTierPolicy(
   const viewerUserId = viewerContext?.viewerUserId ?? null
   const owned = await getOwnedLeagueSets(viewerUserId)
 
-  /*
-   * ⚠ FANTASY LEAGUES ARE PLACED BY CLASS DIVISION, NOT CAREER XP (ADR F2.10a, 2026-10-01). A fantasy
-   * card is shown exactly when an open join to it would pass the division gate — the same decision
-   * POST /api/leagues/join makes, so discovery never offers a league the join then refuses. Bracket and
-   * creator cards keep the career-tier window: Class rates NFL fantasy managers and nothing else.
-   */
-  const viewerClass: ManagerClass = viewerUserId ? await getManagerClass(viewerUserId) : { status: 'unrated' }
   const fantasyIds = cards.filter((c) => c.source === 'fantasy').map((c) => c.id)
-  const fantasyDivisions =
-    viewerClass.status === 'established' && fantasyIds.length > 0 ? await getLeagueDivisions(fantasyIds) : new Map<string, number | null>()
+  const [viewerClass, fantasy] = await Promise.all([
+    viewerUserId ? getManagerClass(viewerUserId) : Promise.resolve({ status: 'unrated' } as const),
+    fantasyIds.length ? prisma.league.findMany({
+      where: { id: { in: fantasyIds } }, select: { id: true, userId: true, settings: true },
+    }) : [],
+  ])
+  const [fantasyDivisions, levels] = await Promise.all([
+    viewerClass.status === 'established' && fantasyIds.length > 0 ? getLeagueDivisions(fantasyIds) : new Map<string, number | null>(),
+    loadCareerXpLevels([
+      ...(viewerUserId ? [viewerUserId] : []),
+      ...fantasy.filter((league) => savedLeagueCareerLevel(league.settings) == null).map((league) => league.userId),
+    ]),
+  ])
+  const leagueById = new Map(fantasy.map((league) => [league.id, league]))
+  const viewerLevel = viewerUserId ? levels.get(viewerUserId) ?? 1 : null
 
   const resolved: DiscoveryCard[] = []
   let hiddenCount = 0
 
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
-    const inRange = isCardInViewerRange(card, { viewerTier, leagueTier, viewerClass, fantasyDivisions })
+    const rankBand = rankBandForCard(card, viewerClass, fantasyDivisions)
+    if (card.source === 'fantasy') {
+      const league = leagueById.get(card.id)
+      if (!league) continue
+      const level = leagueCareerLevel(league, levels)
+      const approved = viewerUserId != null && (league.userId === viewerUserId || hasClassException(league.settings, viewerUserId))
+      const gate = viewerLevel == null ? null : decideCareerJoin(viewerLevel, level, approved)
+      const canJoin = gate?.canJoin ?? true
+      const delta = gate ? Math.abs(gate.userLevel - gate.leagueLevel) : 0
+      const division = fantasyDivisions.get(card.id)
+      const classFit = viewerClass.status === 'established' && division != null
+        ? Math.max(0, 8 - 4 * Math.abs(viewerClass.division - division))
+        : 0
+      resolved.push({
+        ...card,
+        leagueTier,
+        leagueCareerLevel: level,
+        requiresCareerApproval: !canJoin,
+        inviteOnlyByTier: false,
+        canJoinByRanking: canJoin,
+        rankingTierDelta: delta,
+        rankingEffectScore: (canJoin ? 30 : 0) + Math.max(0, 18 - delta * 3) + classFit,
+        rankBand,
+      })
+      continue
+    }
+    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
 
     if (inRange) {
       const rankingTierDelta = Math.abs(leagueTier - viewerTier)
@@ -423,12 +529,12 @@ async function applyTierPolicy(
         canJoinByRanking: true,
         rankingTierDelta,
         rankingEffectScore,
+        rankBand,
       })
       continue
     }
 
     const ownerBypass =
-      (card.source === "fantasy" && owned.fantasyIds.has(card.id)) ||
       (card.source === "bracket" && owned.bracketIds.has(card.id)) ||
       (card.source === "creator" && owned.creatorIds.has(card.id))
 
@@ -445,6 +551,7 @@ async function applyTierPolicy(
         canJoinByRanking: false,
         rankingTierDelta,
         rankingEffectScore,
+        rankBand,
       })
     } else {
       hiddenCount += 1
@@ -473,6 +580,14 @@ export async function discoverPublicLeagues(
   const aiEnabled = input.aiEnabled === true
   const draftType = normalizeDraftType(input.draftType)
   const draftStatus = normalizeDraftStatus(input.draftStatus)
+  const draftWhen = normalizeDraftWhen(input.draftWhen)
+  const tzRegion = normalizeTimeZoneRegion(input.tzRegion)
+  const rankBand = normalizeRankBand(input.rankBand)
+  const vibe = normalizeVibe(input.vibe)
+  const viewerTimeZone =
+    typeof input.viewerTimeZone === "string" && isValidIanaTimeZone(input.viewerTimeZone)
+      ? input.viewerTimeZone
+      : null
   const viewerTierSeed = clampCareerTier(viewerContext?.viewerTier, 1)
   const viewerIdKey = viewerContext?.viewerUserId ? String(viewerContext.viewerUserId) : null
   const computedCacheKey = getComputedDiscoveryListCacheKey(baseUrl, {
@@ -488,6 +603,13 @@ export async function discoverPublicLeagues(
     aiEnabled,
     draftType,
     draftStatus,
+    draftWhen,
+    tzRegion,
+    rankBand,
+    vibe,
+    // Only the windows that read a wall clock depend on the viewer's zone; keeping it
+    // out of the key otherwise stops every zone from caching its own copy.
+    viewerTimeZone: draftWhen === "weeknight" || draftWhen === "weekend" ? viewerTimeZone ?? "" : "",
     viewerTier: viewerTierSeed,
     viewerIsAdmin: viewerContext?.viewerIsAdmin === true,
     viewerUserId: viewerIdKey ?? "anonymous",
@@ -511,9 +633,12 @@ export async function discoverPublicLeagues(
     }
   }
 
-  const [fantasyCards, bracketCards, creatorCards] = await Promise.all([
+  const [fantasyCards, privateFantasyCards, bracketCards, creatorCards] = await Promise.all([
     format === "all" || format === "fantasy"
       ? fetchPublicFantasyLeagues({ sport, query, baseUrl })
+      : Promise.resolve([]),
+    visibility === "all" && (format === "all" || format === "fantasy")
+      ? fetchPrivateRequestableFantasyLeagues({ sport, query })
       : Promise.resolve([]),
     format === "all" || format === "bracket"
       ? fetchPublicBracketLeagues({ sport, query, baseUrl })
@@ -523,7 +648,7 @@ export async function discoverPublicLeagues(
       : Promise.resolve([]),
   ])
 
-  let combined = [...fantasyCards, ...bracketCards, ...creatorCards]
+  let combined = [...fantasyCards, ...privateFantasyCards, ...bracketCards, ...creatorCards]
   combined = applyVisibility(combined, visibility)
   const tierResolved = await applyTierPolicy(combined, viewerContext)
   combined = tierResolved.cards
@@ -533,6 +658,10 @@ export async function discoverPublicLeagues(
   combined = applyDraftStatus(combined, draftStatus)
   combined = applyAiEnabled(combined, aiEnabled)
   combined = applyEntryFee(combined, entryFee)
+  combined = applyDraftWhen(combined, draftWhen, viewerTimeZone)
+  combined = applyTimeZoneRegion(combined, tzRegion)
+  combined = applyRankBand(combined, rankBand)
+  combined = applyVibe(combined, vibe)
   combined = applySort(combined, sort)
   setCachedComputedDiscoveryList(computedCacheKey, {
     cards: combined,

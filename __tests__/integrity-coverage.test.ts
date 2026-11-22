@@ -11,8 +11,23 @@ describe('integrity coverage', () => {
   }
 
   it('does not call an imported or uninitialized league clean', () => {
-    expect(buildIntegrityCoverage({ ...base, platform: 'sleeper' }).collusion.status).toBe('unsupported')
+    expect(buildIntegrityCoverage({ ...base, platform: 'espn' }).collusion.status).toBe('unsupported')
+    expect(buildIntegrityCoverage({ ...base, platform: 'espn' }).tanking.status).toBe('unsupported')
     expect(buildIntegrityCoverage({ ...base, hasNativeRedraftSeason: false }).tanking.status).toBe('unsupported')
+  })
+
+  it("covers an imported Sleeper league's trades, which the trade sweep scans", () => {
+    expect(buildIntegrityCoverage({ ...base, platform: 'sleeper' }).collusion.status).toBe('never_scanned')
+    const at = new Date('2026-10-26T12:00:00.000Z')
+    expect(buildIntegrityCoverage({ ...base, platform: 'Sleeper', hasNativeRedraftSeason: false, lastCollusionScanAt: at }).collusion).toEqual({
+      status: 'scanned',
+      lastScannedAt: at.toISOString(),
+    })
+  })
+
+  it("covers an imported Sleeper league's lineups, which the daily lineup audit scans", () => {
+    expect(buildIntegrityCoverage({ ...base, platform: 'sleeper', hasNativeRedraftSeason: false }).tanking.status).toBe('never_scanned')
+    expect(buildIntegrityCoverage({ ...base, platform: 'sleeper', tankingEnabled: false }).tanking.status).toBe('disabled')
   })
 
   it('distinguishes disabled, never scanned and scanned', () => {

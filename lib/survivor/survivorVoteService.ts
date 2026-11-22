@@ -72,7 +72,11 @@ export async function submitVote(
     if (council.phase === 'revote' && past) {
       return { ok: false, status: 409, code: 'revote_closed', error: 'The two-hour revote window has closed. Uncast ballots do not count.' }
     }
-    const late = past
+    // Ballots may be due before the ceremony (votesDueHoursBeforeCeremony). After that a new
+    // ballot is late, and a counted ballot cannot be changed: the first submission stands.
+    const dueAt = ctx.ballotsDueAt ?? council.voteDeadlineAt
+    const pastDue = now.getTime() > dueAt.getTime()
+    const late = past || pastDue
     if (late && !settings.lateVotesAllowed && !opts.allowLateOverride) {
       // Still record the ballot but flag it does-not-count — truthful, not silently dropped.
     }
@@ -101,6 +105,9 @@ export async function submitVote(
     const firstValidLocks = settings.voteChangePolicy === 'first_valid_locks'
     if (existing && firstValidLocks && !existing.doesNotCount) {
       return { ok: false, status: 409, code: 'vote_locked', error: 'Your first valid vote is locked and cannot be changed.' }
+    }
+    if (existing && !existing.doesNotCount && pastDue && !past && !opts.allowLateOverride) {
+      return { ok: false, status: 409, code: 'ballots_due_passed', error: 'Ballots were due before the ceremony. Your vote stands.' }
     }
 
     const doesNotCount = late && !settings.lateVotesAllowed

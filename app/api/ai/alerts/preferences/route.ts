@@ -22,7 +22,7 @@ const TypeOverrideSchema = z.object({
 })
 
 const LeaguePrefSchema = z.object({
-  leagueId: z.string().uuid(),
+  leagueId: z.guid(),
   disabled: z.boolean().optional(),
   mutedClasses: z.array(z.string()).optional(),
 })
@@ -46,8 +46,8 @@ const PatchSchema = z.object({
   frequency: z.enum(['normal', 'reduced', 'minimal']).optional(),
   mutedClasses: z.array(z.string()).optional(),
   mutedTypes: z.array(z.string()).optional(),
-  classPrefs: z.record(ClassPrefSchema).optional(),
-  typeOverrides: z.record(TypeOverrideSchema).optional(),
+  classPrefs: z.record(z.string(), ClassPrefSchema).optional(),
+  typeOverrides: z.record(z.string(), TypeOverrideSchema).optional(),
   channelPreferences: ChannelPreferencesSchema.optional(),
   commissionerPrefs: CommissionerPrefSchema.optional(),
   leaguePrefs: z.array(LeaguePrefSchema).optional(),

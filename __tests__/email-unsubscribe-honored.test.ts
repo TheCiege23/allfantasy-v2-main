@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   updateMany: vi.fn(async () => ({ count: 1 })),
 }))
 
+vi.mock('@/lib/notifications/durableTransport', () => ({ deliverDurably: async (_message: unknown, send: () => Promise<void>) => { await send(); return 'sent' } }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: { emailPreference: { findFirst: h.findFirst, updateMany: h.updateMany } },
@@ -29,7 +30,7 @@ vi.mock('@/lib/resend-client', () => ({
 }))
 vi.mock('@/lib/twilio-client', () => ({ sendSms: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/notifications/smsDailyCap', () => ({ reserveSmsToday: vi.fn(async () => true) }))
-vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => ({})) }))
+vi.mock('@/lib/push-notifications', () => ({ sendPushToUser: vi.fn(async () => []) }))
 
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import {

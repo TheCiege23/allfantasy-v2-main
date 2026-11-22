@@ -3,13 +3,14 @@
  * Commissioner only. Optionally clear per-league overrides (default: keep).
  */
 
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { isIdpLeague, getIdpLeagueConfig, upsertIdpLeagueConfig } from '@/lib/idp'
 import { writeIdpSettingsAudit } from '@/lib/idp/IdpSettingsAudit'
 import type { IdpScoringPreset } from '@/lib/idp/types'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export async function POST(
   req: Request,
@@ -18,14 +19,14 @@ export async function POST(
   const { leagueId } = await params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  try {
-    await assertCommissioner(leagueId, session.user.id)
-  } catch {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'scoring')
+  if (refused) return refused
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })
 
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+
+  if (locked) return locked
   const body = (await req.json().catch(() => ({}))) as { preset?: string; clearOverrides?: boolean }
   const preset = (body.preset ?? 'balanced') as IdpScoringPreset
   if (!['balanced', 'tackle_heavy', 'big_play_heavy'].includes(preset)) {

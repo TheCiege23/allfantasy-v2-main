@@ -9,10 +9,16 @@ const m = vi.hoisted(() => ({
   findPackages: vi.fn(),
   getMarketValues: vi.fn(),
   readFormatRules: vi.fn(),
+  tradeBanReason: vi.fn(),
+  survivorPlayers: vi.fn(),
+  survivorGame: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: { survivorPlayer: { findMany: m.survivorPlayers }, survivorGameState: { findUnique: m.survivorGame } },
+}))
+vi.mock('@/lib/league-rules/tradeLegality', () => ({ tradeBanReason: m.tradeBanReason }))
 vi.mock('@/lib/trade-value-console/league-loader', () => ({ loadLeagueForTrade: m.loadLeagueForTrade }))
 vi.mock('@/lib/trade-intel/marketValueService', () => ({ getMarketValues: m.getMarketValues }))
 vi.mock('@/lib/trade-intel/marketContext', () => ({ marketContextFor: () => ({ scoring: { settings: {} }, variant: {}, teams: 12 }) }))
@@ -80,6 +86,9 @@ beforeEach(() => {
   m.readLeagueTradeRows.mockResolvedValue(rows)
   m.getMarketValues.mockResolvedValue({})
   m.readFormatRules.mockReturnValue({ concept: 'dynasty' })
+  m.tradeBanReason.mockReturnValue(null)
+  m.survivorPlayers.mockResolvedValue([])
+  m.survivorGame.mockResolvedValue(null)
   m.findPartners.mockReturnValue([{ rosterId: 'r2' }, { rosterId: 'r3' }])
   m.findPackages.mockImplementation(({ partnerRoster }: { partnerRoster: { rosterId: string } }) =>
     partnerRoster.rosterId === 'r2' ? [pkg('1', '2'), pkg('3', '4', 'lopsided')] : [pkg('5', '6')],
@@ -129,6 +138,42 @@ describe('runTradeAgentForLeague', () => {
     const out = await runTradeAgentForLeague('L1', '2026-09-28', { createGrader, save, shouldStop: () => ++calls > 2 })
     expect(out.partial).toBe(true)
     expect(save).not.toHaveBeenCalled()
+  })
+
+  it('a Survivor league trades: before the merge only tribemates still in the game are partners', async () => {
+    m.loadLeagueForTrade.mockResolvedValue(league({ leagueType: 'survivor', isDynasty: false }))
+    m.readFormatRules.mockReturnValue({ concept: 'survivor' })
+    m.readLeagueTradeRows.mockResolvedValue({
+      ...rows,
+      teams: [
+        { platformUserId: 'r1', externalId: '1', claimedByUserId: 'u1', teamName: 'Mine' },
+        { platformUserId: 'r2', externalId: '2', claimedByUserId: 'u2', teamName: 'Rival tribe' },
+        { platformUserId: 'r3', externalId: '3', claimedByUserId: 'u3', teamName: 'Tribemate' },
+      ],
+    })
+    m.survivorPlayers.mockResolvedValue([
+      { userId: 'u1', playerState: 'active', tribeId: 't1' },
+      { userId: 'u2', playerState: 'active', tribeId: 't2' },
+      { userId: 'u3', playerState: 'active', tribeId: 't1' },
+    ])
+    m.findPartners.mockImplementation(({ otherRosters }: { otherRosters: Array<{ rosterId: string }> }) => otherRosters.map((r) => ({ rosterId: r.rosterId })))
+    const { createGrader } = graderFrom(() => view('C', 5))
+    const save = vi.fn(async () => 1)
+    const out = await runTradeAgentForLeague('L1', '2026-09-28', { createGrader, save })
+    expect(out.skipped).toBeUndefined()
+    const partnersAsked = m.findPartners.mock.calls.map(([a]) => (a as { otherRosters: Array<{ rosterId: string }> }).otherRosters.map((r) => r.rosterId))
+    // u1 sees only its tribemate; u3 sees only u1; u2 has nobody on its tribe.
+    expect(partnersAsked).toContainEqual(['r3'])
+    expect(partnersAsked).toContainEqual(['r1'])
+    expect(partnersAsked).toContainEqual([])
+  })
+
+  it('a format whose catalog bans trades is skipped with that reason', async () => {
+    m.tradeBanReason.mockReturnValue('There are no trades allowed in this league.')
+    const { grade, createGrader } = graderFrom(() => view('C', 5))
+    const out = await runTradeAgentForLeague('L1', '2026-09-28', { createGrader, save: vi.fn(async () => 0) })
+    expect(out.skipped).toMatch(/does not allow trades/)
+    expect(grade).not.toHaveBeenCalled()
   })
 
   it.each([

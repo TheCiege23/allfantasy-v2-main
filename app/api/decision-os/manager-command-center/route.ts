@@ -13,7 +13,7 @@
  * window Commissioner OS's own route counts from — not new intelligence, just counted across a
  * different (broader) league set.
  */
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -22,6 +22,7 @@ import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
 import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
+import { loadSurvivorFormatSignals } from '@/lib/survivor/survivorFormatSignals'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,11 +71,25 @@ async function countDraftsApproaching(leagueIds: string[], now: Date): Promise<n
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const tournamentId = request.nextUrl.searchParams.get('tournamentId')
+  if (tournamentId !== null) {
+    const headers = { 'Cache-Control': 'private, no-store' }
+    const leagueId = request.nextUrl.searchParams.get('leagueId')
+    if (!tournamentId.trim() || tournamentId.length > 200 || (leagueId !== null && (!leagueId.trim() || leagueId.length > 200))) {
+      return NextResponse.json({ error: 'Choose a tournament.' }, { status: 400, headers })
+    }
+    const { loadSeasonAssistantContext } = await import('@/lib/tournament/seasonAssistantContext')
+    const context = await loadSeasonAssistantContext(tournamentId.trim(), userId, leagueId?.trim())
+    return context
+      ? NextResponse.json({ tournament: context }, { headers })
+      : NextResponse.json({ error: 'Tournament context not found.' }, { status: 404, headers })
   }
 
   const now = new Date()
@@ -84,9 +99,17 @@ export async function GET() {
   // line. Read once here from the same rows; null (never a throw) when the career read fails.
   // Started, not awaited: the snapshot awaits it only after its own per-league reads.
   const career = loadCareerDecisionInput({ userId, leagueRows, now })
+  // Survivor leagues: ONE format-signal argument carries every Survivor signal source — the
+  // manager's own reward state (a choice to make, a free trade held, a prize won), the governance
+  // signals (trade window closing, the viewer's strikes, a swap this week), the finale/Tribal
+  // deadlines (votes due, closing speech), open challenges ("locks in 2h, you haven't answered") and
+  // the side games (a pool pick due, an auction closing, the shop open, Exile claims closing).
+  // Started, not awaited, like career; every source is read in parallel inside the loader and fails
+  // closed to [] on its own, so one source failing never hides another and this never throws.
+  const survivorSignals = loadSurvivorFormatSignals({ userId, leagueIds, now })
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career, survivorSignals),
     countDraftsApproaching(leagueIds, now),
   ])
 

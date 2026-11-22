@@ -125,12 +125,13 @@ export async function createTribes(
 /**
  * Get all tribes with members for a league.
  */
-export async function getTribesWithMembers(leagueId: string): Promise<SurvivorTribeWithMembers[]> {
+export async function getTribesWithMembers(leagueId: string, opts: { activeOnly?: boolean } = {}): Promise<SurvivorTribeWithMembers[]> {
   const config = await getSurvivorConfig(leagueId)
   if (!config) return []
 
+  // activeOnly drops tribes a merge dissolved or a redraw retired (they keep their row, empty).
   const tribes = await prisma.survivorTribe.findMany({
-    where: { configId: config.configId },
+    where: { configId: config.configId, ...(opts.activeOnly ? { isActive: true } : {}) },
     orderBy: { slotIndex: 'asc' },
     include: { members: true },
   })

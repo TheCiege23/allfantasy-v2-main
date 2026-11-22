@@ -70,7 +70,7 @@ export type ActionAuthority = {
   blockedReason: string | null
 }
 
-export type ResolveActionAuthorityInput = {
+type ResolveActionAuthorityInput = {
   /** Raw `League.platform`. Untrusted text — no DB enum backs it. */
   platform: string | null | undefined
   scope: EffectScope
@@ -128,22 +128,3 @@ export function resolveActionAuthority(input: ResolveActionAuthorityInput): Acti
   }
 }
 
-/**
- * One sentence a surface can render under a planned action.
- *
- * ⚠ NEVER SAYS A WRITE HAPPENED. The C5 brief's rule 10 — read-only providers return guidance, not
- * pretend writes — is enforced here in the copy as well as in the flags, because a flag nobody
- * renders is not a safeguard.
- */
-export function describeActionAuthority(authority: ActionAuthority): string {
-  if (authority.canExecute) {
-    return authority.mode === 'CONNECTED' && authority.sourceLabel
-      ? `AllFantasy will apply this in ${authority.sourceLabel}.`
-      : 'AllFantasy will apply this.'
-  }
-  const source = authority.sourceLabel ?? 'your host platform'
-  if (authority.canVerify) {
-    return `Prepared for you to apply in ${source}. AllFantasy will confirm it on the next sync.`
-  }
-  return `Prepared for you to apply in ${source}. AllFantasy cannot confirm it afterwards — check it yourself.`
-}

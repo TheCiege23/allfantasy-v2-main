@@ -1,6 +1,5 @@
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
-import { buildBehaviorDramaContext } from './BehaviorDramaBridge'
 import { normalizeOptionalSportForRelationship } from './SportRelationshipResolver'
 import type { UnifiedStorylineRecord } from './types'
 
@@ -46,23 +45,11 @@ export async function resolveUnifiedStorylines(
     }),
   ])
 
-  const managerIds = new Set<string>()
-  rivalries.forEach((r) => {
-    managerIds.add(r.managerAId)
-    managerIds.add(r.managerBId)
-  })
-  dramaEvents.forEach((e) => e.relatedManagerIds.forEach((m) => managerIds.add(m)))
-
-  const behaviorContext = await buildBehaviorDramaContext({
-    leagueId: input.leagueId,
-    sport: sport ?? undefined,
-    season: input.season,
-    managerIds: [...managerIds],
-    limitPerManager: 3,
-  })
-  // Behaviour heat is built from profile trait scores, so it may rank storylines
-  // but is never printed as a reason (Milestone 32: no characterisation reaches users).
-  const behaviorHeatByManager = new Map(behaviorContext.map((row) => [row.managerId, row.behaviorHeat]))
+  /*
+   * Storylines rank on what happened — rivalry and drama scores. A "behaviour heat" boost built from the
+   * managers' personality-profile trait scores was removed 2026-11-19 with the profile engine (re-score build
+   * item 10): a label about a person, under the owner's facts-not-labels rule, even when it only ranked.
+   */
 
   const storylines: UnifiedStorylineRecord[] = []
   const seenDrama = new Set<string>()
@@ -88,15 +75,7 @@ export async function resolveUnifiedStorylines(
     const topDrama = linkedDrama[0] ?? null
     if (topDrama) seenDrama.add(topDrama.id)
 
-    const behaviorHeat =
-      ((behaviorHeatByManager.get(rivalry.managerAId) ?? 0) +
-        (behaviorHeatByManager.get(rivalry.managerBId) ?? 0)) /
-      2
-    const score = clamp0to100(
-      rivalry.rivalryScore * 0.62 +
-        (topDrama?.dramaScore ?? 0) * 0.28 +
-        Math.min(10, behaviorHeat * 0.1)
-    )
+    const score = clamp0to100(rivalry.rivalryScore * 0.62 + (topDrama?.dramaScore ?? 0) * 0.28)
 
     storylines.push({
       id: `rivalry:${rivalry.id}:${topDrama?.id ?? 'none'}`,
@@ -131,17 +110,12 @@ export async function resolveUnifiedStorylines(
     })
     if (!hasRivalryOverlap) continue
 
-    const behaviorHeat = event.relatedManagerIds.length
-      ? event.relatedManagerIds.reduce((sum, id) => sum + (behaviorHeatByManager.get(id) ?? 0), 0) /
-        event.relatedManagerIds.length
-      : 0
-
     storylines.push({
       id: `drama:${event.id}`,
       headline: event.headline,
       sport: event.sport,
       season: event.season,
-      storylineScore: clamp0to100(event.dramaScore * 0.9 + Math.min(10, behaviorHeat * 0.1)),
+      storylineScore: clamp0to100(event.dramaScore * 0.9),
       rivalryId: null,
       rivalryTier: null,
       dramaEventId: event.id,

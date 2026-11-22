@@ -16,16 +16,18 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
-import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
-import { getDangerTiers } from '@/lib/guillotine/GuillotineDangerEngine'
+import { resolveGuillotineLiveWeek, resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
+import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
+import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
+import { readGuillotineBestBall } from '@/lib/guillotine/guillotineBestBall'
 import type {
   DangerTier,
   DataState,
@@ -85,7 +87,7 @@ export async function buildGuillotineWarRoomContext(
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   const isGuillotine = league.guillotineMode === true || String(league.leagueVariant ?? '') === 'guillotine'
-  if (!isGuillotine) return { ok: false, status: 404, error: 'Not a guillotine league' }
+  if (!isGuillotine) return { ok: false, status: 404, error: 'Not a Guilly league' }
 
   const sport = String(league.sport ?? 'NFL')
   const season = Number(league.season ?? new Date().getFullYear())
@@ -95,7 +97,15 @@ export async function buildGuillotineWarRoomContext(
   const configState: DataState = config ? 'available' : 'missing'
 
   // Current period = latest GuillotinePeriodScore week, else config start, else 1 (shared rule).
-  const { week: currentWeek, latestScoredAt } = await resolveGuillotineWeekState(leagueId, config)
+  const { week: scoredWeek, latestScoredAt } = await resolveGuillotineWeekState(leagueId, config)
+  /*
+   * The war room is about the week being PLAYED: its danger tiers, projections and week label.
+   * It used the latest scored week for all of them, and a week is scored only when it is chopped, so
+   * from week 2 on it ranked the field on a week already settled and its tiers could never be live
+   * (`getLiveDangerTiers` previews the week still to chop). Settled season totals still come from the
+   * last scored week, which is what "scores as of" names.
+   */
+  const currentWeek = await resolveGuillotineLiveWeek(leagueId, config).catch(() => scoredWeek)
 
   // --- roster template → required starters ---
   const requiredByPosition: Record<string, number> = {}
@@ -138,12 +148,13 @@ export async function buildGuillotineWarRoomContext(
     .catch(() => [])) as RosterStateRow[]
   const stateByRoster = new Map(rosterStates.map((s) => [s.rosterId, s]))
 
-  const dangerRows = await getDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => [])
+  // Live while the week is played (lib/guillotine/chopWatch.ts): the engine's tiers ranked on last week's totals.
+  const { rows: dangerRows, live: dangerLive } = await getLiveDangerTiers({ leagueId, weekOrPeriod: currentWeek }).catch(() => ({ rows: [], live: false }))
   const dangerByRoster = new Map(dangerRows.map((d) => [d.rosterId, d]))
 
   type PeriodScoreRow = { rosterId: string; periodPoints: number; seasonPointsCumul: number }
   const periodScores = (await prisma.guillotinePeriodScore
-    .findMany({ where: { leagueId, weekOrPeriod: currentWeek }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
+    .findMany({ where: { leagueId, weekOrPeriod: scoredWeek }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
     .catch(() => [])) as PeriodScoreRow[]
   const periodByRoster = new Map(periodScores.map((s) => [s.rosterId, s]))
 
@@ -212,7 +223,7 @@ export async function buildGuillotineWarRoomContext(
       rosterId: r.id,
       ownerId: r.platformUserId ?? r.id,
       // An orphan's key is a placeholder, not a name.
-      ownerName: meta?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
+      ownerName: meta?.ownerName ?? (isSeatPlaceholderUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
       teamName: meta?.teamName ?? null,
       isUserTeam: r.platformUserId === userId,
       eliminated: Boolean(st?.choppedAt),
@@ -236,7 +247,10 @@ export async function buildGuillotineWarRoomContext(
       choppedInPeriod: stateByRoster.get(t.rosterId)?.choppedInPeriod ?? null,
       rank: t.eliminated ? null : (danger?.rank ?? null),
       seasonPointsCumul: danger?.seasonPointsCumul ?? score?.seasonPointsCumul ?? 0,
-      periodPoints: score?.periodPoints ?? null,
+      // This week's score is not saved until the chop; a live row carries it.
+      // A live row carries this week's score so far. The saved score is last week's unless the week
+      // on screen is itself the last one scored (a finished season), so it is used only then.
+      periodPoints: dangerLive && danger ? danger.projectedPoints : scoredWeek === currentWeek ? score?.periodPoints ?? null : null,
       tier,
       pointsFromChopZone: t.eliminated ? null : (danger?.pointsFromChopZone ?? null),
     }
@@ -260,7 +274,9 @@ export async function buildGuillotineWarRoomContext(
       take: 60,
     })
     .catch(() => [])) as ReleaseRow[]
-  const droppedPlayers: GuillotineDroppedPlayer[] = releases.map((r) => ({
+  // The pool is who is still out there: a released player on a team again has been claimed.
+  const claimedReleases = await claimedPlayerIds(leagueId, releases.map((r) => r.playerId)).catch(() => new Set<string>())
+  const droppedPlayers: GuillotineDroppedPlayer[] = releases.filter((r) => !claimedReleases.has(r.playerId)).map((r) => ({
     playerId: r.playerId,
     playerName: r.playerName,
     position: (r.position || 'UNK').toUpperCase(),
@@ -290,7 +306,7 @@ export async function buildGuillotineWarRoomContext(
   }
 
   const missingDataFlags: string[] = []
-  if (availability.config === 'missing') missingDataFlags.push('Guillotine config not found — elimination cadence unknown.')
+  if (availability.config === 'missing') missingDataFlags.push('Guilly config not found — elimination cadence unknown.')
   if (availability.eliminationLine === 'missing')
     missingDataFlags.push('No projected/period scores yet — the elimination line and survival margin cannot be computed (limited).')
   if (availability.periodScores === 'missing')
@@ -337,10 +353,12 @@ export async function buildGuillotineWarRoomContext(
       injuriesAsOf: injuryNews.injuriesAsOf ? injuryNews.injuriesAsOf.toISOString() : null,
     },
     missingDataFlags,
+    bestBallLineups: readGuillotineBestBall(league.settings),
     featureAvailability: {
       survivalRisk: survivalAvailable,
       rosterRisk: availability.rosters === 'available',
-      lineupSafety: availability.rosters === 'available' && rosterRulesState === 'available',
+      // A best ball Guilly league sets its own lineups (lib/guillotine/guillotineBestBall.ts): nothing to make safe.
+      lineupSafety: !readGuillotineBestBall(league.settings) && availability.rosters === 'available' && rosterRulesState === 'available',
       waivers: availability.rosters === 'available',
       faabPlan: availability.rosters === 'available',
       droppedPlayers: availability.droppedPlayerPool === 'available',

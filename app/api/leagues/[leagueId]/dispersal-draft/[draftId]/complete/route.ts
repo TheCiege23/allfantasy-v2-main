@@ -1,5 +1,5 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { requireDispersalDraftForLeague } from '@/lib/league/dispersal-draft-route-helpers'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
 import { prisma } from '@/lib/prisma'
@@ -21,7 +21,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ leagueId: str
     if (!leagueId || !draftId) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
 
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'league')
     } catch {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -33,7 +33,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ leagueId: str
       return NextResponse.json({ error: 'Draft not found' }, { status })
     }
 
-    await (prisma as any).dispersalDraft.update({
+    await prisma.dispersalDraft.update({
       where: { id: draftId },
       data: {
         status: 'completed',

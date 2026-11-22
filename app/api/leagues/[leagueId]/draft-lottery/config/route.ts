@@ -2,11 +2,11 @@
  * GET: Current draft order mode + weighted lottery config (league members).
  * PUT: Update lottery config (commissioner only, year 2+ dynasty guard on mode changes).
  */
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   getDraftOrderModeAndLotteryConfig,
   setDraftOrderModeAndLotteryConfig,
@@ -60,23 +60,52 @@ export async function PUT(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const lotteryEligibility = await checkDynastyLotteryEligibility(leagueId)
-  if (!lotteryEligibility.eligible) {
-    return NextResponse.json({ error: lotteryEligibility.reason }, { status: 403 })
-  }
-
   const body = (await req.json().catch(() => ({}))) as {
     draftOrderMode?: DraftOrderMode
     lotteryConfig?: Partial<WeightedLotteryConfig>
   }
 
+  // Startup leagues may plan future rookie lottery settings, but may not change the startup draft mode.
+  if (!lotteryEligibility.eligible && !(lotteryEligibility.isStartupLeague && body.draftOrderMode === undefined)) {
+    return NextResponse.json({ error: lotteryEligibility.reason }, { status: 403 })
+  }
+
+  // The rules as members read them, before the write — for the league home's "What changed" card.
+  // Loaded lazily and best-effort (lib/league-rules-explainer/loadDraftRules.ts): it never fails the save.
+  const rules = await import('@/lib/league-rules-explainer/loadDraftRules').catch(() => null)
+  const [draftBefore, lotteryBefore] = rules
+    ? await Promise.all([rules.loadDraftRulesSafe(leagueId), rules.loadRookieLotteryRulesSafe(leagueId)]).catch(() => [null, null] as const)
+    : ([null, null] as const)
+
   await setDraftOrderModeAndLotteryConfig(leagueId, {
     ...(body.draftOrderMode !== undefined ? { draftOrderMode: body.draftOrderMode } : {}),
     ...(body.lotteryConfig !== undefined ? { lotteryConfig: body.lotteryConfig } : {}),
   })
+
+  /*
+   * ONE silent event (no push / email) for the save. The two halves never name the same key:
+   *   draftOrderMethod     the main draft (Draft section); none once that draft is complete
+   *   rookieDraftLottery   the lottery's own settings (Dynasty section, beside the rookie order); kept
+   *                        after a completed draft, because the config governs the NEXT draw
+   */
+  if (rules) {
+    try {
+      const [draftAfter, lotteryAfter] = await Promise.all([rules.loadDraftRulesSafe(leagueId), rules.loadRookieLotteryRulesSafe(leagueId)])
+      const { publishRuleChangesEvent } = await import('@/lib/league-rules-explainer/publishRuleChanges')
+      await publishRuleChangesEvent({
+        leagueId,
+        actorUserId: userId,
+        section: 'draft-lottery',
+        changes: [...rules.draftRuleChanges(draftBefore, draftAfter), ...rules.rookieLotteryRuleChanges(lotteryBefore, lotteryAfter)],
+      })
+    } catch (e) {
+      console.warn('[draft-lottery/config PUT] change card', e instanceof Error ? e.message : 'unknown error')
+    }
+  }
 
   const next = await getDraftOrderModeAndLotteryConfig(leagueId)
   return NextResponse.json({ ok: true, ...next })

@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "types/**/*.d.ts",
+    "lib/engagement-alerts/**/*.ts",
+    "app/api/cron/import-injuries/route.ts",
+    "lib/notifications/NotificationDispatcher.ts",
+    "lib/notifications/outboxRelay.ts",
+    "lib/notifications/durableTransport.ts",
+    "lib/notifications/channelPolicy.ts",
+    "lib/notification-engine.ts",
+    "lib/live/bigPlayNotifier.ts",
+    "lib/live/playByPlayFeed.ts",
+    "lib/draft-notifications/**/*.ts",
+    "components/notification-settings/NotificationCategoryRenderer.tsx",
+    "app/api/cron/notification-outbox-relay/route.ts",
+    "lib/sms-engagement/sendCriticalSms.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "__tests__",
+    "tests"
+  ]
+}

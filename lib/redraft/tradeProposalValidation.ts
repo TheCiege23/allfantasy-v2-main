@@ -12,21 +12,45 @@
  * trade deadline and the league-wide move lock. This routes the Trade Center's path through the SAME
  * validator, so the two ways of proposing a trade can no longer disagree about what is legal.
  *
- * ⚠ THAT VALIDATOR IS NFL-REDRAFT ONLY. `resolveNflRedraftTradeRuntime` refuses any other sport or format
- * (production on 2026-09-13: 247 NFL redraft seasons, 1 NCAAF). Rather than leave those unvalidated, they get
- * the sport-agnostic core — ownership, duplicate players, and FAAB — read straight from the roster tables.
- * No lock or roster-limit check exists for them, because no lock source exists for them.
+ * ⚠ THAT VALIDATOR WAS NFL-REDRAFT ONLY. `resolveNflRedraftTradeRuntime` refuses any other sport or format,
+ * and those leagues — every dynasty league, NFL included, and every NBA / NHL / MLB league — fell to an
+ * ownership-only check: no deadline, no lineup lock, no roster limit. They now run the SAME validator through
+ * `resolveRedraftTradeRuntime`, the runtime with the NFL-redraft guard removed: the lineup lock is derived from
+ * each sport's own schedule, the roster limit from each sport's roster config. NFL redraft is untouched — it
+ * still takes the branch it always took, with the same inputs.
+ *
+ * The ownership-only check survives for the one case neither runtime can build: no season row or no league
+ * rules to build it from.
+ *
+ * THE DEADLINE (lib/trade-deadline/tradeDeadlineWindow.ts) is measured against the server's week for every
+ * branch. The league-wide runtime takes its verdict from there outright, so a dynasty offseason is never
+ * refused by last season's deadline. The NFL redraft branch keeps its own check first, unchanged, and then
+ * also answers to the server's week — which only differs for an imported season, whose stored week nothing
+ * maintains.
+ *
+ * THE MOVE LOCK (`League.lockAllMoves`, lib/redraft/tradeMoveLock.ts). The NFL redraft runtime checks it
+ * itself, first, and that branch is left alone so an NFL refusal stays exactly what it was. Every other branch
+ * checks it here, before the deadline — the ownership fallback never looked at it.
  */
 import type { PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { assertPirateTradeAllowed } from '@/lib/pirate/tradeGuard'
 import {
   REDRAFT_DRAFT_PICK_REFUSAL,
   resolveNflRedraftTradeRuntime,
+  resolveRedraftTradeRuntime,
   validateNflRedraftTradeProposal,
   type NflRedraftTradeAssetInput,
 } from '@/lib/trade-runtime'
+import { evaluateRedraftTradeDeadline, tradeDeadlinePassedMessage } from '@/lib/trade-deadline/tradeDeadlineWindow'
+import {
+  REDRAFT_MOVES_LOCKED_CODE,
+  REDRAFT_MOVES_LOCKED_MESSAGE,
+  isRedraftLeagueMovesLocked,
+} from '@/lib/redraft/tradeMoveLock'
+import { checkSurvivorTradeRules } from '@/lib/survivor/survivorTradeRuleHook'
 
-export type RedraftProposalValidationSource = 'nfl_runtime' | 'ownership_fallback'
+export type RedraftProposalValidationSource = 'nfl_runtime' | 'league_runtime' | 'ownership_fallback' | 'league_lock'
 
 export type RedraftProposalValidation =
   | { ok: true; warnings: string[]; source: RedraftProposalValidationSource }
@@ -37,28 +61,149 @@ export type RedraftProposalValidationInput = {
   seasonId: string
   proposerRosterId: string
   receiverRosterId: string
+  /** Multi-team trades: the teams beyond proposer and receiver. Omitted or empty = two-team, unchanged. */
+  additionalRosterIds?: string[]
   assets: NflRedraftTradeAssetInput[]
 }
 
-type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster'>
+type ValidationDb = Pick<PrismaClient, 'redraftRosterPlayer' | 'redraftRoster' | 'league'>
+
+async function pirateTradeRefusal(input: RedraftProposalValidationInput, source: RedraftProposalValidationSource): Promise<RedraftProposalValidation | null> {
+  try {
+    await assertPirateTradeAllowed(input.leagueId, input.assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId, assetType: asset.assetType, playerId: asset.playerId,
+    })))
+    return null
+  } catch (error) {
+    return { ok: false, code: 'PIRATE_TRADE_LOCK', message: error instanceof Error ? error.message : 'Pirate trade is locked.', source }
+  }
+}
+
+/**
+ * 🛑 THE AF TRADE ENGINE REFUSED TRADES IN A NATIVE BEST BALL OR GUILLY LEAGUE; THIS PATH DID NOT.
+ * `resolveLeagueTradeSettings().tradesAllowed` is false for native Classic Best Ball and for a
+ * guillotine league unless its settings enable trades, and `tradeValidationService` refuses with
+ * `TRADES_DISABLED` — but `/api/redraft/trade-proposals` and `/api/redraft/trade-runtime` create
+ * proposals through here and never asked. Scoped to those two formats on purpose: every other
+ * league's trade rules are already this validator's, and widening the check would move them.
+ */
+async function formatTradesDisabledRefusal(leagueId: string, db: ValidationDb): Promise<RedraftProposalValidation | null> {
+  const league = await db.league.findUnique({ where: { id: leagueId } })
+  if (!league || (!league.bestBallMode && !league.guillotineMode)) return null
+  // The commissioner's move lock has its own refusal further down; let it speak for itself.
+  if (league.lockAllMoves) return null
+  const { resolveLeagueTradeSettings } = await import('@/lib/league-trade-engine/tradeSettingsResolver')
+  if (resolveLeagueTradeSettings(league).tradesAllowed) return null
+  return {
+    ok: false,
+    code: 'TRADES_DISABLED',
+    message: league.guillotineMode ? 'Trades are turned off in this Guillotine league.' : 'Trades are turned off in this Best Ball league.',
+    source: 'league_lock',
+  }
+}
 
 export async function validateRedraftTradeProposalAtCreation(
   input: RedraftProposalValidationInput,
   db: ValidationDb = prisma,
 ): Promise<RedraftProposalValidation> {
+  const formatRefusal = await formatTradesDisabledRefusal(input.leagueId, db)
+  if (formatRefusal) return formatRefusal
+  const base = await validateRedraftTradeProposalCore(input, db)
+  if (!base.ok) return base
+  // Survivor leagues add their own trade rules (tribe windows, played players, the weekly freeze).
+  // One league read and out for every other league: lib/survivor/survivorTradeRuleHook.ts.
+  const survivor = await checkSurvivorTradeRules({
+    leagueId: input.leagueId,
+    rosterIds: [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])],
+    rosterIdSpace: 'redraft',
+    players: input.assets
+      .filter((a) => a.assetType === 'player' && a.playerId)
+      .map((a) => ({ playerId: String(a.playerId), playerName: a.playerName ?? null, fromRosterId: a.fromRosterId })),
+  })
+  if (!survivor.ok) return { ok: false, code: survivor.code, message: survivor.message, source: base.source }
+  return base
+}
+
+async function validateRedraftTradeProposalCore(
+  input: RedraftProposalValidationInput,
+  db: ValidationDb,
+): Promise<RedraftProposalValidation> {
+  const itemAssets = input.assets.filter(a => a.assetType === 'zombie_item')
+  if (itemAssets.length) {
+    try {
+      await (await import('@/lib/zombie/beta2025ItemTrades')).validateBetaTradeItems(db as never, input.leagueId, [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])], itemAssets)
+    } catch (error) {
+      return { ok: false, code: 'ZOMBIE_ITEM_TRADE_INVALID', message: error instanceof Error ? error.message : 'Item trade is unavailable.', source: 'league_runtime' }
+    }
+    // The normal runtime still checks deadlines, move locks, players, FAAB and roster limits.
+    // The synthetic consideration exists only in this validation call; real inventory assets are stored.
+    const ordinary = input.assets.filter(a => a.assetType !== 'zombie_item')
+    input = { ...input, assets: ordinary.length ? ordinary : [{ assetType: 'future_consideration', fromRosterId: input.proposerRosterId, toRosterId: input.receiverRosterId }] }
+  }
   const runtime = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (runtime.ok) {
     const result = validateNflRedraftTradeProposal({
       state: runtime.state,
       proposerRosterId: input.proposerRosterId,
       receiverRosterId: input.receiverRosterId,
+      ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
       assets: input.assets,
     })
-    return result.ok
-      ? { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
-      : { ok: false, code: result.code, message: result.message, source: 'nfl_runtime' }
+    if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'nfl_runtime' }
+    const deadline = await evaluateRedraftTradeDeadline(input.leagueId)
+    if (deadline.passed) {
+      return { ok: false, code: 'TRADE_DEADLINE_PASSED', message: tradeDeadlinePassedMessage(deadline), source: 'nfl_runtime' }
+    }
+    const pirateRefusal = await pirateTradeRefusal(input, 'nfl_runtime')
+    if (pirateRefusal) return pirateRefusal
+    return { ok: true, warnings: result.warnings, source: 'nfl_runtime' }
   }
-  return validateOwnershipFallback(db, input)
+
+  // Ahead of the deadline, as the runtime orders them: under the lock nothing else about the trade matters.
+  if (await isRedraftLeagueMovesLocked(input.leagueId, db)) {
+    return { ok: false, code: REDRAFT_MOVES_LOCKED_CODE, message: REDRAFT_MOVES_LOCKED_MESSAGE, source: 'league_lock' }
+  }
+
+  // The server's week, read even when no deadline is set: the lineup lock is derived at it. An imported
+  // season's stored week is one nothing maintains, and a lock read at a stale week locks every player
+  // whose game that week has long since kicked off.
+  const deadline = await evaluateRedraftTradeDeadline(input.leagueId, {}, { alwaysResolveWeek: true })
+  const leagueRuntime = await resolveRedraftTradeRuntime({
+    seasonId: input.seasonId,
+    leagueId: input.leagueId,
+    week: deadline.window?.inSeason ? deadline.window.week : null,
+    inSeason: deadline.window ? deadline.window.inSeason : true,
+  })
+  if (leagueRuntime.ok) {
+    const state = {
+      ...leagueRuntime.state,
+      // The deadline verdict is the server's, not `week > deadlineWeek` on whichever season row was read.
+      settings: { ...leagueRuntime.state.settings, deadlinePassed: deadline.passed },
+    }
+    const result = validateNflRedraftTradeProposal({
+      state,
+      proposerRosterId: input.proposerRosterId,
+      receiverRosterId: input.receiverRosterId,
+      ...(input.additionalRosterIds?.length ? { additionalRosterIds: input.additionalRosterIds } : {}),
+      assets: input.assets,
+    })
+    if (!result.ok) return { ok: false, code: result.code, message: result.message, source: 'league_runtime' }
+    const pirateRefusal = await pirateTradeRefusal(input, 'league_runtime')
+    if (pirateRefusal) return pirateRefusal
+    return { ok: true, warnings: result.warnings, source: 'league_runtime' }
+  }
+
+  if (deadline.passed) {
+    return {
+      ok: false,
+      code: 'TRADE_DEADLINE_PASSED',
+      message: tradeDeadlinePassedMessage(deadline),
+      source: 'ownership_fallback',
+    }
+  }
+  const ownership = await validateOwnershipFallback(db, input)
+  if (!ownership.ok) return ownership
+  return (await pirateTradeRefusal(input, 'ownership_fallback')) ?? ownership
 }
 
 function faabAmountOf(asset: NflRedraftTradeAssetInput): number {
@@ -106,7 +251,7 @@ async function validateOwnershipFallback(
   if (playerAssets.length > 0) {
     const rows = await db.redraftRosterPlayer.findMany({
       where: {
-        rosterId: { in: [input.proposerRosterId, input.receiverRosterId] },
+        rosterId: { in: [input.proposerRosterId, input.receiverRosterId, ...(input.additionalRosterIds ?? [])] },
         playerId: { in: playerAssets.map((asset) => asset.playerId) },
         droppedAt: null,
       },

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { leagueDisplayName } from './leagueHome'
 import { NO_CAREER_FILTER, normalizeCareerSport, type CareerFilter } from './careerModel'
 import { weeklyRecords, type CareerGame, type CareerRecordsData } from './careerRecordBook'
+import { headToHeadRecords } from './headToHeadRecords'
 
 export type { CareerRecord, CareerRecordsData, CareerRival } from './careerRecordBook'
 
@@ -154,7 +155,6 @@ export async function loadCareerGames(userId: string, filter: CareerFilter = NO_
     matchupId: number | null
     pointsFor: number
     pointsAgainst: number
-    win: number
   }
 
   const [facts, weeks, teams] = await Promise.all([
@@ -187,7 +187,6 @@ export async function loadCareerGames(userId: string, filter: CareerFilter = NO_
               matchupId: true,
               pointsFor: true,
               pointsAgainst: true,
-              win: true,
             },
             take: 80_000,
           })
@@ -293,21 +292,28 @@ export async function loadCareerGames(userId: string, filter: CareerFilter = NO_
     else byGame.set(k, [w])
   }
   for (const list of byGame.values()) {
+    /*
+     * 🛑 THE RESULT COMES FROM THE PAIRED SCORES, NEVER FROM THE STORED `win` FLAG (headToHeadRecords.ts).
+     * Pre-fix rows store a roster with no opponent as `win = 1, pointsAgainst = 0`; a roster alone in its
+     * matchup has no result and is not a game.
+     */
+    const results = headToHeadRecords(list)
     for (const w of list) {
       const league = leagueByProvider.get(w.leagueId)!
       if (!league.slots.has(String(w.rosterId))) continue
       if (w.pointsFor <= 0) continue
+      const rec = results.get(w.rosterId)
       const other = list.length === 2 ? list.find((x) => x !== w) ?? null : null
-      const opp = other ? opponent(league.id, String(other.rosterId)) : { key: null, name: null }
-      const result: CareerGame['result'] =
-        w.win === 1 ? 'W' : w.pointsAgainst > w.pointsFor ? 'L' : w.pointsFor > w.pointsAgainst ? 'W' : 'T'
+      if (!rec || !other) continue
+      const opp = opponent(league.id, String(other.rosterId))
+      const result: CareerGame['result'] = rec.wins ? 'W' : rec.losses ? 'L' : 'T'
       games.push({
         leagueId: league.id,
         leagueName: league.name,
         season: w.seasonYear,
         week: w.week,
         myScore: w.pointsFor,
-        oppScore: w.pointsAgainst,
+        oppScore: other.pointsFor,
         result,
         oppKey: opp.key,
         oppName: opp.name,

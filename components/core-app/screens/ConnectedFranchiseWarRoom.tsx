@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import '@/components/core-app/af-connected-war-room.css'
+import '@/components/core-app/af-core-redraft-trades.css'
 import { TopicTip } from '@/components/core-app/TopicTip'
 
 export type ConnectedFranchiseWarRoomSide = {

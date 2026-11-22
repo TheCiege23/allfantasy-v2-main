@@ -55,7 +55,7 @@ export function signChimmyActionToken(input: {
   return { token: `${encoded}.${sign(encoded, key)}`, payload }
 }
 
-export type VerifiedActionToken =
+type VerifiedActionToken =
   | { ok: true; payload: ChimmyActionTokenPayload }
   | { ok: false; reason: 'malformed' | 'bad_signature' | 'expired' | 'no_secret' }
 
@@ -87,6 +87,46 @@ function isSpec(value: unknown): value is ChimmyActionSpec {
       s.assets.every((a) => {
         const r = a as Record<string, unknown>
         return a && typeof r.playerId === 'string' && typeof r.fromRosterId === 'string' && typeof r.toRosterId === 'string'
+      })
+    )
+  }
+  if (s.kind === 'automation') {
+    const c = s.change as Record<string, unknown> | null
+    if (!c || typeof c !== 'object' || !Array.isArray(s.expectedKeys) || !s.expectedKeys.every((k) => typeof k === 'string')) return false
+    if (c.type === 'preset') return c.preset === 'recommended' || c.preset === 'run_it' || c.preset === 'hands_on'
+    if (c.type === 'handover') {
+      if (c.rule === null) return true
+      const r = c.rule as Record<string, unknown> | undefined
+      return Boolean(r) && (r!.days === 7 || r!.days === 14 || r!.days === 21) && (r!.to === 'lineups' || r!.to === 'autopilot')
+    }
+    return false
+  }
+  if (s.kind === 'settings') {
+    const SECTIONS = ['general', 'waivers', 'trades', 'playoffs', 'roster']
+    const value = (v: unknown) => v === null || typeof v === 'string' || typeof v === 'number'
+    return (
+      typeof s.section === 'string' &&
+      SECTIONS.includes(s.section) &&
+      typeof s.midSeason === 'boolean' &&
+      Array.isArray(s.changes) &&
+      s.changes.length > 0 &&
+      s.changes.every((c) => {
+        const r = c as Record<string, unknown>
+        return Boolean(c) && typeof r.key === 'string' && value(r.from) && value(r.to)
+      })
+    )
+  }
+  if (s.kind === 'queue') {
+    return (
+      typeof s.sessionId === 'string' &&
+      (s.addAt === 'top' || s.addAt === 'bottom') &&
+      typeof s.baseFingerprint === 'string' &&
+      Array.isArray(s.removeKeys) &&
+      s.removeKeys.every((k) => typeof k === 'string') &&
+      Array.isArray(s.add) &&
+      s.add.every((a) => {
+        const r = a as Record<string, unknown>
+        return Boolean(a) && typeof r.playerName === 'string' && typeof r.position === 'string'
       })
     )
   }

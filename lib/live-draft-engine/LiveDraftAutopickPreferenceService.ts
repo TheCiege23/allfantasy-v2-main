@@ -1,10 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { PRO_AUTOPICK_MODES, type AutopickMode } from './autopickModes'
+
+export { PRO_AUTOPICK_MODES, type AutopickMode }
 
 export type ViewerAutopickPreference = {
   enabled: boolean
-  mode: 'standard' | 'ai_queue'
+  mode: AutopickMode
   isProEligible: boolean
   updatedAt: string | null
 }
@@ -60,10 +63,10 @@ export async function getViewerAutopickPreference(
 
   if (!row) return defaults(isProEligible)
 
-  // Defensive downgrade: a stale ai_queue row from an expired Pro user falls back to standard at read time.
+  // Defensive downgrade: a stale Pro-mode row from an expired Pro user falls back to standard at read time.
   // The DB row is left untouched — re-upgrade is automatic if entitlement returns.
-  const mode: 'standard' | 'ai_queue' =
-    row.mode === 'ai_queue' && isProEligible ? 'ai_queue' : 'standard'
+  const mode: AutopickMode =
+    PRO_AUTOPICK_MODES.has(row.mode as AutopickMode) && isProEligible ? (row.mode as AutopickMode) : 'standard'
 
   return {
     enabled: row.enabled,
@@ -82,9 +85,9 @@ export async function setViewerAutopickPreference({
   draftSessionId: string
   viewerUserId: string
   enabled: boolean
-  mode?: 'standard' | 'ai_queue'
+  mode?: AutopickMode
 }): Promise<ViewerAutopickPreference> {
-  // When disabled, always coerce to standard so no stale ai_queue row survives a disable.
+  // When disabled, always coerce to standard so no stale Pro-mode row survives a disable.
   const persistMode: string = enabled ? (mode ?? 'standard') : 'standard'
 
   await prisma.liveDraftAutopickPreference.upsert({

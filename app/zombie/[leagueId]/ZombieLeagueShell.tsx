@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -13,7 +15,7 @@ type ZombiePendingSitOutResponse = {
   week: number
 }
 
-type ZMeta = {
+export type ZMeta = {
   league?: {
     name?: string | null
     universeId?: string | null
@@ -142,8 +144,11 @@ export default function ZombieLeagueShell({
         : t('zombie.shell.ready')
   const dangerStateLabel = hordeCount > survivorCount ? t('zombie.shell.escalating') : t('zombie.shell.contained')
 
-  function openOps() {
-    if (showComm) setOpsOpen(true)
+  function openOps(event?: { currentTarget: HTMLElement }) {
+    if (!showComm) return
+    // Safari does not focus a clicked button; the modal needs its trigger to restore focus on close.
+    event?.currentTarget.focus()
+    setOpsOpen(true)
   }
 
   async function refreshMeta() {
@@ -187,7 +192,7 @@ export default function ZombieLeagueShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="af-draft-dark flex min-h-screen flex-col md:flex-row">
       <aside className="hidden w-[270px] shrink-0 border-r border-[var(--zombie-border)] bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.14),_transparent_35%),linear-gradient(180deg,#0a0b10_0%,#12141c_52%,#0c0d12_100%)] p-4 md:block">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-[0_0_40px_rgba(220,38,38,0.08)]">
           <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--zombie-text-dim)]">{t('zombie.shell.ops')}</p>
@@ -201,6 +206,7 @@ export default function ZombieLeagueShell({
             </div>
           </div>
 
+          <LeagueFormatFaqLink league={{ leagueType: 'zombie' }} className="text-white" />
           <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
             <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-2">
               <p className="text-white/45">{t('zombie.shell.alive')}</p>
@@ -249,7 +255,8 @@ export default function ZombieLeagueShell({
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      className="rounded-md border border-emerald-300/40 bg-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-emerald-300/40 bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      aria-label="Accept horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('yes')}
                       disabled={Boolean(submittingDecision)}
                     >
@@ -257,14 +264,15 @@ export default function ZombieLeagueShell({
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border border-rose-300/40 bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      aria-label="Decline horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('no')}
                       disabled={Boolean(submittingDecision)}
                     >
                       {submittingDecision === 'no' ? 'Submitting...' : 'No, keep me active'}
                     </button>
                   </div>
-                  {notificationError ? <p className="mt-2 text-rose-200">{notificationError}</p> : null}
+                  {notificationError ? <p className="mt-2 text-rose-200" role="status">{notificationError}</p> : null}
                 </div>
               ) : (
                 <p className="text-white/50">No personal horde alerts right now.</p>
@@ -376,7 +384,8 @@ export default function ZombieLeagueShell({
               <button
                 type="button"
                 onClick={() => setNotificationsOpen((value) => !value)}
-                className="relative rounded-xl border border-white/10 bg-white/5 p-2 text-white/85"
+                className="relative flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2 text-white/85"
+                aria-expanded={notificationsOpen}
                 aria-label={notificationCount > 0 ? `Zombie notifications, ${notificationCount} items` : 'Zombie notifications'}
               >
                 <Bell className="h-4 w-4" />
@@ -390,7 +399,8 @@ export default function ZombieLeagueShell({
                 <button
                   type="button"
                   onClick={openOps}
-                  className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100"
+                  data-testid="zombie-mobile-ops"
+                  className="min-h-11 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100"
                 >
                   {t('zombie.shell.opsShort')}
                 </button>
@@ -406,7 +416,8 @@ export default function ZombieLeagueShell({
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      className="rounded-md border border-emerald-300/40 bg-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-emerald-300/40 bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold text-emerald-100 disabled:opacity-50"
+                      aria-label="Accept horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('yes')}
                       disabled={Boolean(submittingDecision)}
                     >
@@ -414,7 +425,8 @@ export default function ZombieLeagueShell({
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border border-rose-300/40 bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      className="min-h-11 min-w-11 rounded-md border border-rose-300/40 bg-rose-500/20 px-3 py-2 text-[11px] font-semibold text-rose-100 disabled:opacity-50"
+                      aria-label="Decline horde sit-out nomination"
                       onClick={() => void submitSitOutDecision('no')}
                       disabled={Boolean(submittingDecision)}
                     >
@@ -446,6 +458,7 @@ export default function ZombieLeagueShell({
               <div className="mt-1 font-black text-amber-100">{urgentOps || unreadOps}</div>
             </div>
           </div>
+          <LeagueFormatFaqLink league={{ leagueType: 'zombie' }} className="text-white" />
         </header>
 
         <nav className="grid grid-cols-5 border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] md:hidden">

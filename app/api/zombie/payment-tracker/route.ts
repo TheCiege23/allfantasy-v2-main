@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -84,8 +85,7 @@ export async function GET(req: Request) {
   )
 
   const entries = mergeTrackerWithRosters({ saved, rows })
-  const role = await getLeagueRole(leagueId, userId)
-  const isStaff = role === 'commissioner' || role === 'co_commissioner'
+  const isStaff = (await canCommissionerAct(leagueId, userId, 'view'))
 
   return NextResponse.json({
     isPaid: z.isPaid,
@@ -107,7 +107,7 @@ export async function PUT(req: Request) {
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'money')
   } catch (e) {
     if (e instanceof Response) return e
     throw e

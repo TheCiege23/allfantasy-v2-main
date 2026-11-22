@@ -18,13 +18,6 @@
  * point on.
  */
 
-/** Confirmed via ESPN_SLOT_LABELS (lib/league-import/espn/EspnLeagueFetchService.ts) and Sleeper's own raw token — both providers use this exact literal. */
-const SUPERFLEX_TOKENS = new Set(['SUPER_FLEX', 'SF'])
-/** ESPN uses 'BE' (ESPN_SLOT_LABELS[20]); Sleeper and Yahoo use 'BN' (confirmed via Yahoo's own YAHOO_RESERVE_POSITIONS set). */
-const BENCH_TOKENS = new Set(['BN', 'BE'])
-const IR_TOKENS = new Set(['IR', 'IL'])
-const TAXI_TOKENS = new Set(['TAXI', 'TX'])
-
 /**
  * Expands "SLOT:COUNT" pairs (ESPN/Yahoo) into `count` repeated flat tokens,
  * matching Sleeper's native one-token-per-slot shape. A token with no colon
@@ -57,35 +50,3 @@ export function expandRosterPositionTokens(rawPositions: string[]): string[] {
   return expanded
 }
 
-export function isSuperflexToken(token: string): boolean {
-  return SUPERFLEX_TOKENS.has(token.toUpperCase())
-}
-
-export function isBenchToken(token: string): boolean {
-  return BENCH_TOKENS.has(token.toUpperCase())
-}
-
-export function isIrToken(token: string): boolean {
-  return IR_TOKENS.has(token.toUpperCase())
-}
-
-export function isTaxiToken(token: string): boolean {
-  return TAXI_TOKENS.has(token.toUpperCase())
-}
-
-/**
- * Starter slot count = every expanded token that isn't bench or IR — mirrors
- * the assembler's original Sleeper-only logic exactly (`p !== 'BN' && p !== 'IR'`),
- * generalized across the bench/IR synonyms above.
- */
-export function countStarterSlots(expandedPositions: string[]): number {
-  return expandedPositions.filter((p) => !isBenchToken(p) && !isIrToken(p)).length
-}
-
-export function countBenchSlots(expandedPositions: string[]): number {
-  return expandedPositions.filter(isBenchToken).length
-}
-
-export function countTaxiSlotsFromPositions(expandedPositions: string[]): number {
-  return expandedPositions.filter(isTaxiToken).length
-}

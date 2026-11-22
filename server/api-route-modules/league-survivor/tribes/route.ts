@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 /**
  * POST: Create Survivor tribes (commissioner only). PROMPT 349 QA.
@@ -8,7 +9,6 @@ import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isSurvivorLeague } from '@/lib/survivor/SurvivorLeagueConfig'
 import { createTribes, getTribesWithMembers, setTribeName } from '@/lib/survivor/SurvivorTribeService'
 import { bootstrapTribeChatMembers } from '@/lib/survivor/SurvivorChatMembershipService'
@@ -16,6 +16,16 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { composeTribeName, extractLeadingTribeIcon, stripLeadingTribeIcon } from '@/lib/survivor/survivorVisuals'
 import { respondToTribeRedraw } from '@/lib/survivor/survivorTribeRedrawDecision'
+import { reassignSurvivorTribeMember } from '@/lib/survivor/survivorTribeReassign'
+import type { TribeRedrawDecision } from '@/lib/survivor/survivorTribeRedrawActions'
+
+/** Body `action` → the commissioner's answer to a tribe-imbalance recommendation. */
+const REDRAW_ACTIONS: Record<string, TribeRedrawDecision> = {
+  approve_redraw: 'approve',
+  postpone_redraw: 'postpone',
+  manual_redraw: 'manual',
+  merge_redraw: 'merge',
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +40,7 @@ export async function POST(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isSurvivor = await isSurvivorLeague(leagueId)
@@ -105,14 +115,22 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  if (body.action === 'approve_redraw' || body.action === 'postpone_redraw') {
+  const redrawDecision = typeof body.action === 'string' ? REDRAW_ACTIONS[body.action] : undefined
+  if (redrawDecision) {
     const recommendationId = typeof body.recommendationId === 'string' ? body.recommendationId.trim() : ''
     if (!recommendationId) return NextResponse.json({ error: 'recommendationId required' }, { status: 400 })
-    const result = await respondToTribeRedraw(leagueId, userId, recommendationId, body.action === 'approve_redraw' ? 'approve' : 'postpone')
+    const result = await respondToTribeRedraw(leagueId, userId, recommendationId, redrawDecision)
+    return NextResponse.json(result, { status: result.ok ? 200 : result.status })
+  }
+  if (body.action === 'move_member') {
+    const targetUserId = typeof body.userId === 'string' ? body.userId.trim() : ''
+    const toTribeId = typeof body.toTribeId === 'string' ? body.toTribeId.trim() : ''
+    if (!targetUserId || !toTribeId) return NextResponse.json({ error: 'userId and toTribeId required' }, { status: 400 })
+    const result = await reassignSurvivorTribeMember(leagueId, { userId: targetUserId, toTribeId, actorUserId: userId })
     return NextResponse.json(result, { status: result.ok ? 200 : result.status })
   }
   const tribeId = typeof body.tribeId === 'string' ? body.tribeId.trim() : ''

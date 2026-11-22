@@ -7,17 +7,17 @@
  * with `history.replaceState`, so switching views never costs a server round trip.
  */
 
-export type StandingsViewKey = 'official' | 'power'
+export type StandingsViewKey = 'official' | 'power' | 'playoffs'
 export type StandingsLayout = 'table' | 'cards'
 /** `all`, `group` (every division, grouped), or one division's key. */
-export type StandingsDivisionFilter = string
+type StandingsDivisionFilter = string
 
 /**
  * The league table's sortable columns. `seed` is the table's own order, the only one that draws the
  * playoff line — every other key is a lens on the same rows.
  */
 export type StandingsSortKey = 'seed' | 'pct' | 'pf' | 'pa' | 'streak' | 'odds' | 'sos' | 'proj'
-export type StandingsSortDir = 'asc' | 'desc'
+type StandingsSortDir = 'asc' | 'desc'
 export type StandingsSort = { key: StandingsSortKey; dir: StandingsSortDir }
 
 /**
@@ -74,7 +74,7 @@ export function parseStandingsView(get: (param: string) => string | string[] | u
   const dir = first(get(STANDINGS_VIEW_PARAMS.dir))
   const key = SORT_KEYS.includes(sortKey as StandingsSortKey) ? (sortKey as StandingsSortKey) : 'seed'
   return {
-    view: view === 'power' ? 'power' : 'official',
+    view: view === 'power' ? 'power' : view === 'playoffs' ? 'playoffs' : 'official',
     division: division && division.length <= 64 ? division : 'all',
     layout: layout === 'cards' ? 'cards' : 'table',
     sort: { key, dir: dir === 'asc' || dir === 'desc' ? dir : SORT_DEFAULT_DIR[key] },

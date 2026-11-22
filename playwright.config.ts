@@ -28,9 +28,51 @@ const PLAYWRIGHT_DIST_DIR =
  */
 const MOBILE_SPECS = /[\\/]e2e[\\/]mobile[\\/].*\.spec\.ts$/;
 const NBA_SURVIVOR_OPT_IN_SPEC = /[\\/]e2e[\\/]nba-survivor-authenticated-rehearsal\.spec\.ts$/;
-const DESKTOP_TEST_IGNORE = process.env.AF_NBA_SURVIVOR_BROWSER_DB === '1'
-  ? MOBILE_SPECS
-  : [MOBILE_SPECS, NBA_SURVIVOR_OPT_IN_SPEC];
+const ZOMBIE_REHEARSAL_SPEC = /[\\/]e2e[\\/]zombie-(?:four-sport-native|provider-week)-rehearsal\.spec\.ts$/;
+const DESKTOP_TEST_IGNORE = [
+  MOBILE_SPECS,
+  ...(process.env.AF_NBA_SURVIVOR_BROWSER_DB === '1' ? [] : [NBA_SURVIVOR_OPT_IN_SPEC]),
+  ...(process.env.AF_ZOMBIE_REHEARSAL === '1' ? [] : [ZOMBIE_REHEARSAL_SPEC]),
+];
+
+/**
+ * NODE_OPTIONS for the `next dev` web server: the runner's own, with any
+ * `--conditions` / `-C` flag removed. `PLAYWRIGHT_SERVER_NODE_OPTIONS`, when
+ * set, replaces it outright.
+ *
+ * Why the condition goes: isolated DB specs import services directly and need
+ * `--conditions=react-server` in the RUNNER, but the same flag in Next dev
+ * breaks react-dom/server in server components.
+ *
+ * 🛑 WHY EVERYTHING ELSE STAYS. This used to blank NODE_OPTIONS for the server
+ * entirely (`PLAYWRIGHT_SERVER_NODE_OPTIONS ?? ''`), which also threw away the
+ * `--max-old-space-size=8192` every CI lane sets for exactly this server (see
+ * the notes in .github/workflows/playwright.yml). scripts/playwright-dev-server.cjs
+ * then fell back to its 4096MB default, and next dev restarts itself once the
+ * heap passes 0.8 x heap_size_limit ("Server is approaching the used memory
+ * threshold, restarting..."). Measured on the Draft Room Regression lane: up to
+ * three restarts per run at 4096MB. Each one refuses connections for a few
+ * seconds (ChunkLoadError on a lazy draft-room chunk, a test failing on an
+ * element that chunk renders) and throws away every route global setup warmed,
+ * so the next lazy chunk took 15.6s to serve. The blanking landed 2026-10-15;
+ * the lane had 1 failed job in 215 over Oct 11-14 and 31 in 270 over Oct 16-19.
+ */
+function serverNodeOptions(): string {
+  const explicit = process.env.PLAYWRIGHT_SERVER_NODE_OPTIONS;
+  if (explicit !== undefined) return explicit;
+  const tokens = (process.env.NODE_OPTIONS ?? '').split(/\s+/).filter(Boolean);
+  const kept: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token === '--conditions' || token === '-C') {
+      i += 1; // the condition name is the next token
+      continue;
+    }
+    if (token.startsWith('--conditions=') || token.startsWith('-C=')) continue;
+    kept.push(token);
+  }
+  return kept.join(' ');
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -191,9 +233,9 @@ export default defineConfig({
     timeout: 300_000,
     env: {
       ...process.env,
-      // Direct service imports in isolated DB specs need this Node condition, but
-      // passing it to Next dev breaks react-dom/server in server components.
-      NODE_OPTIONS: process.env.PLAYWRIGHT_SERVER_NODE_OPTIONS ?? '',
+      // See serverNodeOptions() above: the runner's NODE_OPTIONS minus any
+      // `--conditions` flag, so CI's heap size still reaches `next dev`.
+      NODE_OPTIONS: serverNodeOptions(),
       PORT: String(PLAYWRIGHT_PORT),
       AF_NEXT_DIST_DIR: PLAYWRIGHT_DIST_DIR,
       DATABASE_URL:

@@ -1,8 +1,12 @@
 import 'server-only'
 
+import { loadLeagueRosterWeeks, type RosterWeekPlayer } from '@/lib/af-projections/leagueRosterWeek'
+
 import { prisma } from '@/lib/prisma'
 import { NATIVE_PLATFORM_VALUES } from '@/lib/dashboard/platform-label'
-import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall } from '@/lib/redraft/scoringEngine'
+import { buildLeagueStatScorer, isScoringStarterSlot, leagueIsBestBall, scoreRosterForWeek } from '@/lib/redraft/scoringEngine'
+import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
+import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { loadWeekLineups, weekSlotType, type WeekLineups } from '@/lib/redraft/weekLineupSlots'
 import { managerArtUrl } from './leagueArt'
 import { realManagerName } from './managerName'
@@ -216,12 +220,11 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
   const starters = players.filter((p) => isScoringStarterSlot(weekSlotType(p, lineupsByGroup.get(groupKeyByRoster.get(p.rosterId) ?? '') ?? new Map())))
 
   type StatRow = { playerId: string; sport: string; season: number; week: number; stats: unknown; updatedAt: Date }
-  type ProjRow = { playerId: string; sport: string; season: string; week: number; projectedPoints: number }
   const statOr = [...groups.values()].flatMap((g) => {
     const playerIds = [...new Set(starters.filter((p) => g.rosterIds.includes(p.rosterId)).map((p) => p.playerId))]
     return playerIds.length ? [{ season: g.season, week: g.week, playerIds, sport: g.sport }] : []
   })
-  const [statRows, projRows]: [StatRow[], ProjRow[]] = statOr.length
+  const [statRows, boards]: [StatRow[], Map<string, Map<string, RosterWeekPlayer>>] = statOr.length
     ? await Promise.all([
         prisma.playerWeeklyScore
           .findMany({
@@ -229,30 +232,12 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
             select: { playerId: true, sport: true, season: true, week: true, stats: true, updatedAt: true },
           })
           .catch((): StatRow[] => []),
-        prisma.fantasyProjection
-          .findMany({
-            where: {
-              source: { not: 'allfantasy' },
-              /* Sport-scoped: Sleeper's NBA and NFL ids are both short numbers and can collide. */
-              OR: statOr.map((g) => ({
-                sport: { in: [...new Set([g.sport.toUpperCase(), g.sport.toLowerCase(), g.sport])] },
-                season: String(g.season),
-                week: g.week,
-                playerId: { in: g.playerIds },
-              })),
-            },
-            select: { playerId: true, sport: true, season: true, week: true, projectedPoints: true },
-          })
-          .catch((): ProjRow[] => []),
+        loadLeagueRosterWeeks(live.map(l => ({ leagueId: l.leagueId, season: l.season, week: l.week,
+          ids: starters.filter(p => l.aliveIds.includes(p.rosterId)).map(p => p.playerId),
+        }))),
       ])
-    : [[], []]
+    : [[], new Map()]
   const statByKey = new Map(statRows.map((r) => [`${r.playerId}|${String(r.sport).toUpperCase()}|${r.season}|${r.week}`, r]))
-  /* First row per player-week: several scoring presets can sit side by side; the rail shows one baseline. */
-  const projByKey = new Map<string, number>()
-  for (const r of projRows) {
-    const key = `${r.playerId}|${r.season}|${r.week}`
-    if (!projByKey.has(key) && Number.isFinite(r.projectedPoints)) projByKey.set(key, r.projectedPoints)
-  }
 
   for (const l of live) {
     const league = leagues.find((x) => x.id === l.leagueId)!
@@ -277,7 +262,7 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
           points += scorer(row.stats as Record<string, number>, p.position)
           freshest = Math.max(freshest, row.updatedAt?.getTime?.() ?? 0)
         }
-        const proj = projByKey.get(`${p.playerId}|${l.season}|${l.week}`)
+        const proj = boards.get(l.leagueId)?.get(p.playerId)?.points
         if (proj != null) {
           projected += proj
           pricedFrom += 1
@@ -291,6 +276,18 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
         starterCount: lineup.length,
       }
     })
+
+    /*
+     * A daily-lineup league's week is Σ days of that day's starters, which the sum of this week's
+     * starters above cannot express (a player benched on Wednesday still has a whole-week row). Its
+     * line comes from the matchup scorer itself — one call per surviving team, daily leagues only.
+     */
+    if (!bestBall && isDailyLineupScoringEnabled(settings, String(league.sport ?? season.sport))) {
+      for (const t of teams) {
+        const r = await scoreRosterForWeek({ leagueId: l.leagueId, rosterId: t.rosterId, week: l.week, seasonYear: l.season }).catch(() => null)
+        t.points = r && r.scoredStarterCount > 0 ? r.points : null
+      }
+    }
 
     const eliminated = me.isEliminated || choppedWeekByRedraft.has(me.id)
     const mine = teams.find((t) => t.rosterId === me.id) ?? { rosterId: me.id, points: null, projected: null, pricedFrom: 0, starterCount: 0 }
@@ -308,7 +305,7 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
       yourScore: eliminated ? 0 : (mine.points ?? 0),
       yourProjection:
         !eliminated && mine.projected != null
-          ? { projected: mine.projected, afProjected: null, afEngine: null, afEngineFrom: 0, pricedFrom: mine.pricedFrom ?? 0, starterCount: mine.starterCount ?? 0 }
+          ? { projected: mine.projected, afProjected: mine.projected, afEngine: mine.projected, afEngineFrom: mine.pricedFrom ?? 0, pricedFrom: mine.pricedFrom ?? 0, starterCount: mine.starterCount ?? 0 }
           : null,
       opponentTeam: null,
       opponentAvatarUrl: null,
@@ -425,6 +422,31 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
       season: season.season,
       week: row.week,
       native: true,
+    }
+  }
+
+  /*
+   * An odd-team league's extra matchup (lib/redraft/oddTeamExtraMatchupRules.ts). The leftover team's
+   * row above is its bye — unpaired — so it becomes a pairing against the chosen team, with both
+   * scores; the chosen team keeps its own game and carries the extra game's line too.
+   */
+  for (const season of h2hSeasons) {
+    const row = byLeague[season.leagueId]
+    const me = season.rosters.find((r) => r.ownerId === userId)
+    // Only an odd-team league has a leftover team, so only it can hold a pick — no read for the rest.
+    if (!row || !me || row.guillotine || season.rosters.length % 2 === 0) continue
+    const extra = await readExtraMatchupViewForSeason({ seasonId: season.id, week: season.currentWeek, redraftRosterId: me.id })
+    if (!extra) continue
+    row.extraMatchup = { label: extra.label, line: extra.line, yourScore: extra.yourScore, theirScore: extra.theirScore }
+    if (extra.role === 'leftover' && row.unpaired) {
+      const them = season.rosters.find((r) => r.id === extra.otherRosterId) ?? null
+      const league = leagues.find((l) => l.id === season.leagueId)
+      row.unpaired = false
+      row.opponentTeam = extra.teamName
+      row.opponentAvatarUrl = them && league ? managerArtUrl({ avatarUrl: them.avatarUrl, platform: league.platform }) : null
+      row.yourScore = extra.yourScore ?? 0
+      row.opponentScore = extra.theirScore ?? 0
+      row.scored = extra.yourScore != null || extra.theirScore != null
     }
   }
 

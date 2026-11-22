@@ -42,6 +42,7 @@ export type SubscriptionFeatureId =
   | 'zombie_ai'
   // UI / monetization catalog keys (same strings as former FeatureKey — unified with matrix IDs)
   | 'commissioner_ai_tools'
+  | 'commissioner_draft_as_me'
   | 'commissioner_ai_narration'
   | 'commissioner_ai_recap'
   | 'commissioner_ai_copilot'
@@ -58,6 +59,7 @@ export type SubscriptionFeatureId =
   | 'commissioner_weather_projections'
   | 'commissioner_dispersal_draft'
   | 'commissioner_integrity_monitoring'
+  | 'commissioner_chimmy_autopilot'
   | 'pro_draft_ai'
   | 'pro_waiver_ai'
   | 'pro_trade_ai'
@@ -84,6 +86,10 @@ export type SubscriptionFeatureId =
   | 'legacy_manager_compare'
   | 'legacy_rankings_analysis'
   | 'legacy_social_pulse'
+  /** /af-legacy Trade Hub report + /af-legacy/trade-analyzer (POST /api/legacy/trade/analyze). AF Legacy, 2026-11-17. */
+  | 'legacy_trade_hub'
+  /** /af-legacy "Chimmy Analysis" career report (POST /api/legacy/ai/run). AF Legacy, 2026-11-17. */
+  | 'legacy_ai_report'
 
 /** Plan slugs returned by entitlements API; used for hasAccess. */
 export type SubscriptionPlanId =

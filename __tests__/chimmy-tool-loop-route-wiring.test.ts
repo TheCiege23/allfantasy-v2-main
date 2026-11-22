@@ -221,9 +221,21 @@ describe('live search fallback charges for what it costs', () => {
     expect(BLOCK).toContain('ledgerId')
   })
 
-  /* A failed charge must not also swallow the answer we already paid for. */
-  it('still returns the answer if the charge races and fails', () => {
-    expect(BLOCK).toMatch(/spendTokensForRule[\s\S]*?\.catch\(\(\) => null\)/)
+  it('withholds the locked result when any quoted unlock debit fails', () => {
+    // Cached older clients retain their existing fallback; the preview contract
+    // must stop before any full searched text or citations enter the response.
+    expect(BLOCK).toContain('searchChargeFailed = Boolean(analysisContract || requestReceipt)')
+    expect(BLOCK).toContain('requireQuotedChimmyReceipt(requestReceipt, searchQuotedCost)')
+    const debit = BLOCK.indexOf('spendTokensForRule')
+    const failure = BLOCK.indexOf('if (searchChargeFailed)')
+    const fullResponse = BLOCK.indexOf('const sourceLines =')
+    expect(failure).toBeGreaterThan(debit)
+    expect(fullResponse).toBeGreaterThan(failure)
+    const stop = BLOCK.slice(failure, fullResponse)
+    expect(stop).toContain("code: 'chimmy_unlock_failed'")
+    expect(stop).toContain('{ status: 503 }')
+    expect(stop).toContain('if (searchPriceChanged)')
+    expect(stop).toContain('await searchAccess(true, true)')
   })
 })
 
@@ -286,7 +298,8 @@ describe('the specialist agent is chosen from the orchestration intent', () => {
   })
 
   it('computes that intent before choosing the agent', () => {
-    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyIntent(')
+    // One classification for the turn (2026-11-20): the packet, the label and the agent all read it.
+    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyTurn(message, recentUserSnippet)')
     const chosen = ROUTE.indexOf('const specialistAgent = inferAgentFromMessage(')
     expect(classified).toBeGreaterThan(-1)
     expect(chosen).toBeGreaterThan(classified)
@@ -306,7 +319,7 @@ describe('tool loop system prompt', () => {
     expect(ROUTE).not.toContain('the calm, analytical fantasy sports assistant')
     expect(PROMPT_SRC).not.toContain('the calm, analytical fantasy sports assistant')
     expect(ROUTE).toMatch(/systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,[\s\S]{0,1200}?clockLine: userTemporalContext\.promptLine,[\s\S]{0,900}?styleLine: \[\s*\n\s*personalizationDirectives,/)
-    expect(ROUTE).toContain('groundingLine: decisionOsGrounding && leagueSnapshot')
+    expect(ROUTE).toContain('groundingLine: [selectedLeagueRules, decisionOsGrounding && leagueSnapshot')
   })
 
   /*
@@ -365,7 +378,8 @@ describe('tool loop system prompt', () => {
     /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
     /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
     /* `eliminationSettles` (2026-09-28) feeds the SAFE / OUT chip from a decided guillotine week. */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\] \}/)
+    /* `proToolsRefused` / `recalledPastChats` (2026-11-16): the Get AF Pro button and the past-chats chip. */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, currentQuestion: message, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: packetTradeGrades, faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\], eliminationSettles: \[\] as ChimmyEliminationSettleRun\[\], bracketEvidence: \[\] as BracketEvidence\[\], proToolsRefused: \[\] as string\[\], recalledPastChats: false as boolean, mockDraftBoard, mockQueueProposals: \[\] as MockQueueProposal\[\], musicCards: \[\] as MusicCard\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

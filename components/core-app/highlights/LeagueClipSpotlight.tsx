@@ -1,10 +1,11 @@
 'use client'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import RecentClips from './RecentClips'
+import { useMessages } from '@/components/i18n/useMessages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 export default function LeagueClipSpotlight({ leagueIds }: { leagueIds: string[] }) {
-  const { language } = useOptionalLanguage()
+  const m = useMessages(corePartsMessages)
   if (!leagueIds.length) return null
-  return <RecentClips key={leagueIds.join(',')} compact title={language === 'es' ? 'Clips de tus ligas' : 'Around your leagues'} request={{ kind: 'leagues', leagueIds: leagueIds.slice(0, 5) }} />
+  return <RecentClips key={leagueIds.join(',')} compact title={m.clipsAroundLeagues} request={{ kind: 'leagues', leagueIds: leagueIds.slice(0, 5) }} />
 }
 

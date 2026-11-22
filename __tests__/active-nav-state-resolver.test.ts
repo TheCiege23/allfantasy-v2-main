@@ -7,9 +7,12 @@ import {
 } from "@/lib/shell"
 
 describe("active nav state resolver", () => {
-  it("includes legacy in shell nav and product switcher", () => {
-    expect(SHELL_NAV_ITEMS.some((item) => item.href === "/af-legacy")).toBe(true)
-    expect(PRODUCT_SWITCHER_ITEMS.some((item) => item.href === "/af-legacy")).toBe(true)
+  // aafa6bf40 (Phase 7H shell rebrand) moved the "AF Legacy" nav entry from /af-legacy to
+  // /war-room in NavLinkResolver; the label is what the shell promises, the href followed it.
+  it("includes AF Legacy in shell nav and product switcher", () => {
+    for (const items of [SHELL_NAV_ITEMS, PRODUCT_SWITCHER_ITEMS]) {
+      expect(items.find((item) => item.label === "AF Legacy")?.href).toBe("/war-room")
+    }
   })
 
   it("treats legacy routes as active for af-legacy item", () => {
@@ -20,6 +23,6 @@ describe("active nav state resolver", () => {
 
   it("resolves active href for tools and legacy prefixes", () => {
     expect(getActiveNavHref("/tools/waiver-wire")).toBe("/tools-hub")
-    expect(getActiveNavHref("/legacy/players")).toBe("/af-legacy")
+    expect(getActiveNavHref("/war-room")).toBe("/war-room")
   })
 })

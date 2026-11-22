@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
@@ -48,7 +49,7 @@ function Row({
 export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSettingsTabProps) {
   const { t } = useLanguage()
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'ai', { enabled: canEdit })
+  const { queuePatch, saving, savedAt, lastError } = useLeagueSettingsSectionAutosave(leagueId, 'ai', { enabled: canEdit })
 
   const [chimmy, setChimmy] = useState(ctx.league.aiChimmyEnabled ?? true)
   const [waiver, setWaiver] = useState(ctx.league.aiWaiverSuggestions ?? true)
@@ -74,7 +75,7 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
 
   return (
     <div className="space-y-4">
-      {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</p> : null}
+      <p><AutosaveStatus saving={saving} savedAt={savedAt} error={lastError} /></p>
       <p className="text-[12px] text-white/45">
         {t('lsHub.ai.intro')}
       </p>

@@ -17,6 +17,8 @@ import {
 import { getLeagueWaiverState } from "./waiver-state-service"
 import { assertWaiverClaimEligibility } from "./transaction-eligibility"
 import { loadDailyTransactionPolicy } from "./daily-schedule-gate"
+import { loadWaiverPhasePolicy } from "./season-phase-gate"
+import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHold, maxHoldHours } from "./dropped-player-waivers"
 
 /**
  * Create a waiver claim. Validates that roster exists and belongs to the league (data consistency).
@@ -54,6 +56,13 @@ export async function createClaim(
   const leagueLock = await getLeagueWaiverState(leagueId).catch(() => null)
   if (leagueLock?.processingLocked) {
     throw new Error("Waiver adds and edits are locked until the commissioner unlocks processing.")
+  }
+
+  // Season phase (season-phase-policy.ts): a closed or first-come offseason, rosters locked for the
+  // playoffs, or a team out of the title bracket under the alive-only rule takes no claims.
+  const phase = await loadWaiverPhasePolicy(leagueId, rosterId)
+  if (!phase.claimsAllowed) {
+    throw new Error(phase.reason ?? "Waiver claims are closed right now.")
   }
 
   const devyCheck = await validateDevyWaiverClaim({ leagueId, addPlayerId: input.addPlayerId })
@@ -105,8 +114,22 @@ export async function createClaim(
 
   const league = await (prisma as any).league.findUnique({
     where: { id: leagueId },
-    select: { sport: true },
+    select: { sport: true, waiverHours: true },
   })
+
+  // A player this team dropped is on waivers for the league's waiver period (or his position's);
+  // it cannot claim him back until he clears (dropped-player-waivers.ts). A failed read lets the
+  // claim through — the processor checks again at the run.
+  const holdPolicy = droppedPlayerHoldPolicy({
+    normalizedWaiverType: settings.normalizedWaiverType,
+    waiverHours: league?.waiverHours ?? null,
+    waiverEngineConfig: settings.waiverEngineConfig,
+    sport: league?.sport ? String(league.sport) : null,
+  })
+  if (maxHoldHours(holdPolicy) > 0) {
+    const hold = await loadDroppedPlayerHold(leagueId, String(input.addPlayerId), holdPolicy).catch(() => null)
+    if (hold && hold.droppedByRosterId === rosterId) throw new Error(DROPPER_RECLAIM_MESSAGE)
+  }
 
   const maxOrder = await (prisma as any).waiverClaim.aggregate({
     where: { leagueId, status: "pending" },

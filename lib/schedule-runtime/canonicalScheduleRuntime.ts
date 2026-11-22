@@ -1,3 +1,8 @@
+import { createWeeklyPointsAgainst } from '@/lib/redraft/weeklyPointsAgainst'
+import { extraMatchupForRoster, extraMatchupResults, readExtraMatchupRecord } from '@/lib/redraft/oddTeamExtraMatchupRules'
+// Pure, import-free: the same league-median rule `updateStandings` applies (see the standings below).
+import { computeWeeklyMedianResults, medianEligibleRows } from '@/lib/redraft/medianGame'
+import { normalizeGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import type {
   CanonicalLeagueRules,
   CanonicalLeagueRuntimeEvent,
@@ -14,6 +19,8 @@ import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntim
 export type ScheduleRuntimeValidationIssue = {
   code:
     | 'DIVISION_SCHEDULE_PRESENT'
+    | 'DIVISION_REMATCHES_INCOMPLETE'
+    | 'MULTIPLE_GAMES_PER_WEEK'
     | 'ODD_TEAM_BYES_ASSIGNED'
     | 'REGULAR_SEASON_WEEKS_INVALID'
     | 'SCHEDULE_NOT_GENERATED'
@@ -44,6 +51,8 @@ export type ScheduleRuntimeMatchupInput = {
   awayScore?: number | null
   status?: string | null
   isMedianMatchup?: boolean | null
+  /** A bye row's `extraMatchup` pick lives here (lib/redraft/oddTeamExtraMatchupRules.ts). */
+  lineupSnapshots?: unknown
 }
 
 export type CanonicalScheduleRuntimeMatchup = {
@@ -67,6 +76,11 @@ export type CanonicalScheduleRuntimeMatchup = {
   locked: boolean
   homeScore: number | null
   awayScore: number | null
+  /**
+   * On a bye row of an odd-team league that plays the extra matchup instead: "Extra matchup vs
+   * <team> (<reason>) · 112.4–98.0", from the leftover (home) team's side. Absent otherwise.
+   */
+  extraMatchup?: { opponentRosterId: string; opponentName: string; line: string } | null
 }
 
 export type CanonicalScheduleRuntimeWeek = {
@@ -134,6 +148,8 @@ export type CanonicalScheduleRuntimeState = {
 }
 
 export type ScheduleRuntimeShapeOverrides = {
+  /** Head-to-head games each team plays per week (lib/schedule-runtime/gamesPerWeek.ts). Default 1. */
+  gamesPerWeek?: number | null
   totalWeeks?: number | null
   playoffStartWeek?: number | null
   regularSeasonWeeks?: number | null
@@ -150,6 +166,12 @@ type BuildScheduleInput = {
   currentWeek?: number | null
   status?: string | null
   now?: Date
+  /** The league plays a weekly game against the league median (`League.medianGame`). */
+  medianGame?: boolean | null
+  /** `settings.median_game_in_playoffs`; off unless the commissioner turned it on. */
+  medianInPlayoffs?: boolean | null
+  /** `division_config.rivalsTwice`, used only when no schedule is persisted yet (the preview). */
+  divisionRivalsTwice?: boolean | null
 } & ScheduleRuntimeShapeOverrides
 
 const BYE_ID = '__BYE__'
@@ -295,10 +317,125 @@ function orderRoundsForDivisions(rounds: RoundSlot[][], teams: ScheduleRuntimeTe
     .map((entry) => entry.slots)
 }
 
+/**
+ * "Play division rivals twice": one round per week in which every division plays its own round robin
+ * again, home and away swapped from the first meeting. A team its division leaves idle that week (an
+ * odd-sized division's bye, or a smaller division that has finished) plays an idle team from ANOTHER
+ * division; with an odd number of teams one idle team takes the league bye. Teams with no division are
+ * idle every rematch week.
+ */
+function buildDivisionRematchRounds(teams: ScheduleRuntimeTeamInput[], firstMeetings: RoundSlot[][], rotateIdle = false): RoundSlot[][] {
+  const groups = new Map<string, ScheduleRuntimeTeamInput[]>()
+  for (const team of teams) {
+    if (!team.divisionId) continue
+    groups.set(team.divisionId, [...(groups.get(team.divisionId) ?? []), team])
+  }
+  if (groups.size === 0) return []
+  // Who hosted each division pairing first, so the rematch can swap it.
+  const firstHome = new Map<string, string>()
+  for (const round of firstMeetings) {
+    for (const slot of round) {
+      if (slot.type === 'regular' && divisionGame(slot)) firstHome.set([slot.home.rosterId, slot.away.rosterId].sort().join('|'), slot.home.rosterId)
+    }
+  }
+  const perDivision = [...groups.values()].map((members) => (members.length >= 2 ? buildRoundRobinRounds(members) : []))
+  const roundCount = Math.max(0, ...perDivision.map((rounds) => rounds.length))
+  const rematch: RoundSlot[][] = []
+  const idlePairsUsed = new Set<string>()
+  for (let r = 0; r < roundCount; r += 1) {
+    const slots: RoundSlot[] = []
+    const busy = new Set<string>()
+    for (const rounds of perDivision) {
+      for (const slot of rounds[r] ?? []) {
+        if (slot.type !== 'regular') continue
+        const hostedFirst = firstHome.get([slot.home.rosterId, slot.away.rosterId].sort().join('|'))
+        const swap = hostedFirst ? hostedFirst === slot.home.rosterId : false
+        slots.push({ type: 'regular', home: swap ? slot.away : slot.home, away: swap ? slot.home : slot.away })
+        busy.add(slot.home.rosterId)
+        busy.add(slot.away.rosterId)
+      }
+    }
+    // Idle teams, paired across divisions: always take one from the division with the most idle teams.
+    const idle = new Map<string, ScheduleRuntimeTeamInput[]>()
+    for (const team of teams) {
+      if (busy.has(team.rosterId)) continue
+      const key = team.divisionId ?? `__none__:${team.rosterId}`
+      idle.set(key, [...(idle.get(key) ?? []), team])
+    }
+    const pick = (exclude?: string): [string, ScheduleRuntimeTeamInput] | null => {
+      let best: string | null = null
+      for (const [key, list] of idle) {
+        if (key === exclude || list.length === 0) continue
+        if (best === null || list.length > idle.get(best)!.length) best = key
+      }
+      if (best === null) return null
+      return [best, idle.get(best)!.shift()!]
+    }
+    let remaining = [...idle.values()].reduce((n, list) => n + list.length, 0)
+    // Division-first schedules give an idle team an opponent it has not already met while idle.
+    const pickUnmet = (first: [string, ScheduleRuntimeTeamInput]): [string, ScheduleRuntimeTeamInput] | null => {
+      if (!rotateIdle) return null
+      for (const [key, list] of idle) {
+        if (key === first[0]) continue
+        const at = list.findIndex((team) => !idlePairsUsed.has([first[1].rosterId, team.rosterId].sort().join('|')))
+        if (at >= 0) return [key, list.splice(at, 1)[0]!]
+      }
+      return null
+    }
+    while (remaining >= 2) {
+      const first = pick()!
+      const second = pickUnmet(first) ?? pick(first[0]) ?? pick()!
+      idlePairsUsed.add([first[1].rosterId, second[1].rosterId].sort().join('|'))
+      slots.push({ type: 'regular', home: first[1], away: second[1] })
+      remaining -= 2
+    }
+    if (remaining === 1) slots.push({ type: 'bye', team: pick()![1] })
+    rematch.push(slots)
+  }
+  return rematch
+}
+
+/**
+ * Big-league schedules (more than four divisions, or several games a week) open with every division's
+ * own round robin, all divisions at once, then move to the rest of the league. Leagues with up to four
+ * divisions and one game a week keep the ordering they have always had.
+ */
+function usesDivisionFirstRounds(teams: ScheduleRuntimeTeamInput[], gamesPerWeek: number): boolean {
+  const divisions = new Set(teams.map((team) => team.divisionId).filter(Boolean))
+  return divisions.size > 0 && (divisions.size > 4 || gamesPerWeek > 1)
+}
+
+function roundPairKeys(round: RoundSlot[]): string[] {
+  return round.flatMap((slot) => (slot.type === 'regular' ? [[slot.home.rosterId, slot.away.rosterId].sort().join('|')] : []))
+}
+
+/**
+ * Division rounds first, then league-wide rounds, fewest division rematches first. Within a week of
+ * several games, a league-wide round that repeats a pairing already in that week is passed over while
+ * another round is available.
+ */
+function buildDivisionFirstRounds(teams: ScheduleRuntimeTeamInput[], gamesPerWeek: number, roundsNeeded: number): RoundSlot[][] {
+  const ordered: RoundSlot[][] = buildDivisionRematchRounds(teams, [], true)
+  const pool = buildRoundRobinRounds(teams)
+    .map((slots, index) => ({ slots, index, divisionGames: slots.filter(divisionGame).length, keys: roundPairKeys(slots) }))
+    .sort((a, b) => a.divisionGames - b.divisionGames || a.index - b.index)
+  while (pool.length > 0 && ordered.length < Math.max(roundsNeeded, 1)) {
+    // The rounds already placed in the week this one lands in.
+    const weekStart = ordered.length - (ordered.length % gamesPerWeek)
+    const sameWeek = new Set(ordered.slice(weekStart).flatMap(roundPairKeys))
+    const pick = sameWeek.size === 0 ? 0 : pool.findIndex((round) => !round.keys.some((key) => sameWeek.has(key)))
+    ordered.push(pool.splice(pick >= 0 ? pick : 0, 1)[0]!.slots)
+  }
+  // A season longer than one pass repeats from the top; keep any unused league-wide rounds in order.
+  return [...ordered, ...pool.map((round) => round.slots)]
+}
+
 export function generateCanonicalRegularSeasonSchedule(input: {
   rules: CanonicalLeagueRules
   teams: ScheduleRuntimeTeamInput[]
   now?: Date
+  /** `division_config.rivalsTwice`: add a second meeting with every division rival after the round robin. */
+  divisionRivalsTwice?: boolean | null
 } & ScheduleRuntimeShapeOverrides): {
   matchups: CanonicalScheduleRuntimeMatchup[]
   regularSeasonWeeks: number
@@ -333,7 +470,19 @@ export function generateCanonicalRegularSeasonSchedule(input: {
     })
   }
 
-  const rounds = orderRoundsForDivisions(buildRoundRobinRounds(teams), teams)
+  const gamesPerWeek = normalizeGamesPerWeek(input.gamesPerWeek)
+  const firstMeetings = usesDivisionFirstRounds(teams, gamesPerWeek)
+    ? buildDivisionFirstRounds(teams, gamesPerWeek, regularSeasonWeeks * gamesPerWeek)
+    : orderRoundsForDivisions(buildRoundRobinRounds(teams), teams)
+  const rematchRounds = input.divisionRivalsTwice ? buildDivisionRematchRounds(teams, firstMeetings) : []
+  const rounds = [...firstMeetings, ...rematchRounds]
+  if (rematchRounds.length > 0 && regularSeasonWeeks < rounds.length) {
+    validationIssues.push({
+      code: 'DIVISION_REMATCHES_INCOMPLETE',
+      severity: 'warning',
+      message: `Playing division rivals twice needs ${rounds.length} regular-season weeks (${firstMeetings.length} for everyone once, ${rematchRounds.length} for the rematches); this season has ${regularSeasonWeeks}, so ${Math.min(rematchRounds.length, rounds.length - regularSeasonWeeks)} rematch week(s) will not be played.`,
+    })
+  }
   if (!rounds.length) {
     validationIssues.push({
       code: 'SCHEDULE_NOT_GENERATED',
@@ -343,13 +492,29 @@ export function generateCanonicalRegularSeasonSchedule(input: {
     return { matchups: [], regularSeasonWeeks, playoffStartWeek, validationIssues }
   }
 
+  if (gamesPerWeek > 1) {
+    validationIssues.push({
+      code: 'MULTIPLE_GAMES_PER_WEEK',
+      severity: 'info',
+      message: `Each team plays ${gamesPerWeek} games a week${teams.length % 2 === 1 ? '; with an odd number of teams, one team plays one fewer each round' : ''}.`,
+    })
+  }
+
   const matchups: CanonicalScheduleRuntimeMatchup[] = []
   for (let week = 1; week <= regularSeasonWeeks; week += 1) {
-    const roundIndex = (week - 1) % rounds.length
-    const repeatCycle = Math.floor((week - 1) / rounds.length)
+   let slotInWeek = 0
+   for (let game = 0; game < gamesPerWeek; game += 1) {
+    const sequence = (week - 1) * gamesPerWeek + game
+    const roundIndex = sequence % rounds.length
+    const repeatCycle = Math.floor(sequence / rounds.length)
     const round = rounds[roundIndex]!
-    round.forEach((slot, index) => {
+    const gameTag = gamesPerWeek > 1 ? `-game-${game + 1}` : ''
+    round.forEach((slot) => {
       if (slot.type === 'bye') {
+        // With several games a week the idle team simply plays one fewer; it still has games, so no bye row.
+        if (gamesPerWeek > 1) return
+        const index = slotInWeek
+        slotInWeek += 1
         matchups.push({
           id: `week-${week}-bye-${slot.team.rosterId}`,
           week,
@@ -377,8 +542,10 @@ export function generateCanonicalRegularSeasonSchedule(input: {
 
       const home = repeatCycle % 2 === 1 ? slot.away : slot.home
       const away = repeatCycle % 2 === 1 ? slot.home : slot.away
+      const index = slotInWeek
+      slotInWeek += 1
       matchups.push({
-        id: `week-${week}-matchup-${index + 1}-${home.rosterId}-${away.rosterId}`,
+        id: `week-${week}${gameTag}-matchup-${index + 1}-${home.rosterId}-${away.rosterId}`,
         week,
         slot: index + 1,
         type: 'regular',
@@ -400,9 +567,26 @@ export function generateCanonicalRegularSeasonSchedule(input: {
         awayScore: null,
       })
     })
+   }
   }
 
   return { matchups, regularSeasonWeeks, playoffStartWeek, validationIssues }
+}
+
+/** A bye row's extra matchup, named for the schedule (lib/redraft/oddTeamExtraMatchupRules.ts). */
+function extraMatchupOn(
+  rows: readonly ScheduleRuntimeMatchupInput[],
+  bye: ScheduleRuntimeMatchupInput,
+  teamsById: Map<string, ScheduleRuntimeTeamInput>,
+): { extraMatchup?: CanonicalScheduleRuntimeMatchup['extraMatchup'] } {
+  if (!readExtraMatchupRecord(bye.lineupSnapshots)) return {}
+  const view = extraMatchupForRoster(
+    rows.map((r) => ({ ...r, awayRosterId: r.awayRosterId ?? null, homeScore: r.homeScore ?? null, awayScore: r.awayScore ?? null, status: r.status ?? null })),
+    bye.week,
+    bye.homeRosterId,
+    (id) => { const t = teamsById.get(id); return t ? teamName(t) : null },
+  )
+  return view ? { extraMatchup: { opponentRosterId: view.otherRosterId, opponentName: view.teamName, line: view.line } } : {}
 }
 
 function materializePersistedMatchups(
@@ -443,6 +627,7 @@ function materializePersistedMatchups(
         locked: LOCKED_STATUSES.has(status) || matchup.week < currentWeek,
         homeScore: finiteScore(matchup.homeScore),
         awayScore: finiteScore(matchup.awayScore),
+        ...(bye ? extraMatchupOn(sorted, matchup, teamsById) : {}),
       } satisfies CanonicalScheduleRuntimeMatchup
     })
 }
@@ -480,6 +665,7 @@ function buildWeeks(input: {
 function validateWeeks(
   teams: ScheduleRuntimeTeamInput[],
   weeks: CanonicalScheduleRuntimeWeek[],
+  gamesPerWeek = 1,
 ): ScheduleRuntimeValidationIssue[] {
   const issues: ScheduleRuntimeValidationIssue[] = []
   const expectedTeamCount = teams.length
@@ -495,13 +681,19 @@ function validateWeeks(
     }
 
     const seen = new Set<string>()
+    const appearances = new Map<string, number>()
     for (const matchup of week.matchups) {
       for (const rosterId of [matchup.homeRosterId, matchup.awayRosterId].filter((id): id is string => Boolean(id))) {
-        if (seen.has(rosterId)) {
+        const count = (appearances.get(rosterId) ?? 0) + 1
+        appearances.set(rosterId, count)
+        // Reported once, the first time a team goes over its games for the week.
+        if (count === gamesPerWeek + 1) {
           issues.push({
             code: 'WEEK_TEAM_DUPLICATE',
             severity: 'blocking',
-            message: `${rosterId} appears more than once in week ${week.week}.`,
+            message: gamesPerWeek > 1
+              ? `${rosterId} has more than ${gamesPerWeek} games in week ${week.week}.`
+              : `${rosterId} appears more than once in week ${week.week}.`,
             week: week.week,
             rosterId,
           })
@@ -525,12 +717,29 @@ function recordString(row: Pick<CanonicalScheduleStanding, 'wins' | 'losses' | '
   return row.ties > 0 ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`
 }
 
+/**
+ * Standings from the schedule's own rows — what the schedule tab's leader line and playoff picture read.
+ *
+ * 🛑 THEY MUST BE THE STANDINGS' RECORDS, NOT A HEAD-TO-HEAD-ONLY COPY. This counted head-to-head games
+ * alone, so in an odd-team league — where league median is on by default, and the extra matchup can
+ * replace the bye — the schedule tab printed 10-4-0 for a team the standings had at 23-5-1, and named a
+ * different leader. Measured on simulated 9-team NFL and 11-team MLB seasons
+ * (__tests__/redraft/full-season-*.test.ts). Pass the persisted rows (`rows`) and the median flags, and
+ * the median games and extra matchups are counted by the same pure rules `updateStandings` uses
+ * (lib/redraft/medianGame.ts, lib/redraft/oddTeamExtraMatchupRules.ts). The order is the stored seed's:
+ * win percentage, then points for, then points against.
+ */
 export function buildCanonicalScheduleStandings(input: {
   teams: ScheduleRuntimeTeamInput[]
   matchups: CanonicalScheduleRuntimeMatchup[]
+  /** The persisted rows the matchups came from: bye rows carry the extra-matchup pick. */
+  rows?: readonly ScheduleRuntimeMatchupInput[]
+  medianGame?: boolean | null
+  medianInPlayoffs?: boolean | null
+  playoffStartWeek?: number | null
 }): CanonicalScheduleStanding[] {
   const standingsByRosterId = new Map<string, CanonicalScheduleStanding>()
-  const outcomesByRosterId = new Map<string, Array<'W' | 'L' | 'T'>>()
+  const outcomesByRosterId = new Map<string, Array<{ week: number; result: 'W' | 'L' | 'T' }>>()
 
   for (const team of input.teams) {
     standingsByRosterId.set(team.rosterId, {
@@ -555,6 +764,8 @@ export function buildCanonicalScheduleStandings(input: {
     outcomesByRosterId.set(team.rosterId, [])
   }
 
+  const pointsForCounted = new Set<string>()
+  const weeklyPointsAgainst = createWeeklyPointsAgainst()
   const byWeek = [...input.matchups].sort((a, b) => a.week - b.week || a.slot - b.slot)
   for (const matchup of byWeek) {
     if (matchup.bye) {
@@ -568,17 +779,27 @@ export function buildCanonicalScheduleStandings(input: {
 
     const homeScore = matchup.homeScore ?? 0
     const awayScore = matchup.awayScore ?? 0
-    home.pointsFor = round1(home.pointsFor + homeScore)
-    home.pointsAgainst = round1(home.pointsAgainst + awayScore)
-    away.pointsFor = round1(away.pointsFor + awayScore)
-    away.pointsAgainst = round1(away.pointsAgainst + homeScore)
+    // Points For counts a team's weekly score once, however many games it plays that week
+    // (lib/redraft/standingsEngine.ts has the reason); Points Against is each week's average
+    // opponent score, added after the loop.
+    if (!pointsForCounted.has(`${matchup.homeRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.homeRosterId}:${matchup.week}`)
+      home.pointsFor = round1(home.pointsFor + homeScore)
+    }
+    if (!pointsForCounted.has(`${matchup.awayRosterId}:${matchup.week}`)) {
+      pointsForCounted.add(`${matchup.awayRosterId}:${matchup.week}`)
+      away.pointsFor = round1(away.pointsFor + awayScore)
+    }
+    weeklyPointsAgainst.add(matchup.homeRosterId, matchup.week, awayScore)
+    weeklyPointsAgainst.add(matchup.awayRosterId, matchup.week, homeScore)
 
     const divisionGame = Boolean(home.divisionId && home.divisionId === away.divisionId)
+    const week = matchup.week
     if (homeScore > awayScore) {
       home.wins += 1
       away.losses += 1
-      outcomesByRosterId.get(home.rosterId)?.push('W')
-      outcomesByRosterId.get(away.rosterId)?.push('L')
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'W' })
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'L' })
       if (divisionGame) {
         home.divisionWins += 1
         away.divisionLosses += 1
@@ -586,8 +807,8 @@ export function buildCanonicalScheduleStandings(input: {
     } else if (awayScore > homeScore) {
       away.wins += 1
       home.losses += 1
-      outcomesByRosterId.get(away.rosterId)?.push('W')
-      outcomesByRosterId.get(home.rosterId)?.push('L')
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'W' })
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'L' })
       if (divisionGame) {
         away.divisionWins += 1
         home.divisionLosses += 1
@@ -595,8 +816,8 @@ export function buildCanonicalScheduleStandings(input: {
     } else {
       home.ties += 1
       away.ties += 1
-      outcomesByRosterId.get(home.rosterId)?.push('T')
-      outcomesByRosterId.get(away.rosterId)?.push('T')
+      outcomesByRosterId.get(home.rosterId)?.push({ week, result: 'T' })
+      outcomesByRosterId.get(away.rosterId)?.push({ week, result: 'T' })
       if (divisionGame) {
         home.divisionTies += 1
         away.divisionTies += 1
@@ -604,11 +825,65 @@ export function buildCanonicalScheduleStandings(input: {
     }
   }
 
+  const tally = (row: CanonicalScheduleStanding | undefined, week: number, result: 'W' | 'L' | 'T') => {
+    if (!row) return
+    if (result === 'W') row.wins += 1
+    else if (result === 'L') row.losses += 1
+    else row.ties += 1
+    outcomesByRosterId.get(row.rosterId)?.push({ week, result })
+  }
+  const persisted = (input.rows ?? []).filter((row) => !row.isMedianMatchup)
+  const asRows = persisted.map((row) => ({
+    id: row.id ?? null,
+    week: row.week,
+    type: row.type ?? null,
+    homeRosterId: row.homeRosterId,
+    awayRosterId: row.awayRosterId ?? null,
+    homeScore: finiteScore(row.homeScore),
+    awayScore: finiteScore(row.awayScore),
+    status: row.status ?? null,
+    lineupSnapshots: row.lineupSnapshots,
+  }))
+
+  // Points Against: each week's average opponent score (see the loop above).
+  for (const [id, against] of weeklyPointsAgainst.totals()) {
+    const row = standingsByRosterId.get(id)
+    if (row) row.pointsAgainst = round1(row.pointsAgainst + against)
+  }
+
+  // The extra matchup an odd-team league plays instead of the bye: counted for the leftover team, and
+  // for the chosen team too under "both count"; PF/PA move for the leftover team alone.
+  for (const extra of extraMatchupResults(asRows)) {
+    const leftover = standingsByRosterId.get(extra.leftoverRosterId)
+    if (!leftover) continue
+    leftover.pointsFor = round1(leftover.pointsFor + extra.leftoverScore)
+    leftover.pointsAgainst = round1(leftover.pointsAgainst + extra.opponentScore)
+    tally(leftover, extra.week, extra.outcome)
+    if (extra.scoring === 'both') {
+      tally(standingsByRosterId.get(extra.opponentRosterId), extra.week, extra.outcome === 'W' ? 'L' : extra.outcome === 'L' ? 'W' : 'T')
+    }
+  }
+
+  // League median: a second game each week against the week's median score (never in playoff weeks
+  // unless the league kept it on there).
+  if (input.medianGame) {
+    const eligible = medianEligibleRows(asRows, {
+      playoffStartWeek: input.playoffStartWeek ?? null,
+      medianInPlayoffs: Boolean(input.medianInPlayoffs),
+    })
+    for (const weekResult of computeWeeklyMedianResults(eligible)) {
+      for (const [rosterId, outcome] of weekResult.outcomes) tally(standingsByRosterId.get(rosterId), weekResult.week, outcome)
+    }
+  }
+
   const rows = Array.from(standingsByRosterId.values())
+  const exactPct = new Map<string, number>()
   for (const row of rows) {
     const played = row.wins + row.losses + row.ties
-    row.winPct = played > 0 ? round3((row.wins + row.ties * 0.5) / played) : 0
-    const outcomes = outcomesByRosterId.get(row.rosterId) ?? []
+    exactPct.set(row.rosterId, played > 0 ? (row.wins + row.ties * 0.5) / played : 0)
+    row.winPct = round3(exactPct.get(row.rosterId)!)
+    // Week order; within a week the head-to-head game, then the extra game, then the median (stable sort).
+    const outcomes = (outcomesByRosterId.get(row.rosterId) ?? []).sort((a, b) => a.week - b.week).map((o) => o.result)
     if (outcomes.length) {
       const last = outcomes[outcomes.length - 1]!
       let count = 0
@@ -617,11 +892,11 @@ export function buildCanonicalScheduleStandings(input: {
     }
   }
 
+  // The stored seed's order (lib/redraft/standingsEngine.ts): the exact win percentage — the rounded one
+  // calls different records equal — then points for, then points against.
   return rows
     .sort((a, b) =>
-      b.winPct - a.winPct ||
-      b.wins - a.wins ||
-      b.divisionWins - a.divisionWins ||
+      exactPct.get(b.rosterId)! - exactPct.get(a.rosterId)! ||
       b.pointsFor - a.pointsFor ||
       a.pointsAgainst - b.pointsAgainst ||
       a.displayName.localeCompare(b.displayName) ||
@@ -676,6 +951,8 @@ export function buildCanonicalScheduleRuntimeState(input: BuildScheduleInput): C
         playoffStartWeek: input.playoffStartWeek,
         regularSeasonWeeks: input.regularSeasonWeeks,
         now: input.now,
+        divisionRivalsTwice: input.divisionRivalsTwice,
+        gamesPerWeek: input.gamesPerWeek,
       })
   const resolvedShape = generatedSchedule
     ? { regularSeasonWeeks: generatedSchedule.regularSeasonWeeks, playoffStartWeek: generatedSchedule.playoffStartWeek, issues: [] as ScheduleRuntimeValidationIssue[] }
@@ -689,11 +966,18 @@ export function buildCanonicalScheduleRuntimeState(input: BuildScheduleInput): C
     currentWeek: Math.max(1, currentWeek || 1),
     status,
   })
-  const standings = buildCanonicalScheduleStandings({ teams, matchups })
+  const standings = buildCanonicalScheduleStandings({
+    teams,
+    matchups,
+    rows: generated ? input.persistedMatchups : undefined,
+    medianGame: input.medianGame,
+    medianInPlayoffs: input.medianInPlayoffs,
+    playoffStartWeek: resolvedShape.playoffStartWeek,
+  })
   const validationIssues = [
     ...(generatedSchedule?.validationIssues ?? []),
     ...resolvedShape.issues,
-    ...validateWeeks(teams, weeks),
+    ...validateWeeks(teams, weeks, normalizeGamesPerWeek(input.gamesPerWeek)),
   ]
   const playoffQualificationSnapshot = buildPlayoffQualificationSnapshot({
     rules: input.rules,

@@ -11,9 +11,11 @@ import { SURVIVOR_IDOL_PLAY_ENGINES } from '@/lib/survivor/survivorIdolEngines'
 import {
   balancedDrawViolations,
   drawBalancedIdolTypes,
-  pickRequirement,
+  pickBounds,
+  pickQuantities,
   resolveSurvivorIdolTypeIds,
   validatePickedIdolTypes,
+  withPickQuantity,
   type SurvivorRandomInt,
 } from '@/lib/survivor/survivorIdolDraw'
 import catalog from '@/lib/survivor/idols/catalog.json'
@@ -150,33 +152,48 @@ describe('draw once every engine lands: the full balanced draw comes back automa
 })
 
 describe('commissioner picks', () => {
-  it('with fewer playable types than slots, picks 1 to all of them and repeats them to fill the count', () => {
-    expect(pickRequirement(types, 7)).toEqual({ min: 1, max: 3, slots: 6 })
-    expect(validatePickedIdolTypes(types, 7, ['vote-steal'])).toEqual({ ok: true, typeIds: ['immunity', ...Array(6).fill('vote-steal')] })
-    expect(validatePickedIdolTypes(types, 6, ['vote-steal', 'extra-vote'])).toEqual({ ok: true, typeIds: ['immunity', 'vote-steal', 'vote-steal', 'vote-steal', 'extra-vote', 'extra-vote'] })
+  it('bounds: 1 to 12 idols in all, with every playable always-in idol kept at least once', () => {
+    expect(pickBounds(types)).toEqual({ min: 1, max: 12, alwaysIds: ['immunity'] })
+    expect(pickBounds(allPlayable)).toEqual({ min: 2, max: 12, alwaysIds: ['immunity', 'tribe-immunity'] })
+  })
+
+  it('a quantity per type: copies are kept, always-in idols lead, and the rest follow catalogue order', () => {
+    expect(validatePickedIdolTypes(types, 3, ['vote-steal', 'immunity', 'vote-steal'])).toEqual({ ok: true, typeIds: ['immunity', 'vote-steal', 'vote-steal'] })
+    expect(validatePickedIdolTypes(types, 5, ['extra-vote', 'immunity', 'steal-three', 'immunity', 'vote-steal']))
+      .toEqual({ ok: true, typeIds: ['immunity', 'immunity', 'steal-three', 'vote-steal', 'extra-vote'] })
+    expect(validatePickedIdolTypes(types, 12, ['immunity', ...Array(11).fill('steal-three')])).toMatchObject({ ok: true })
   })
 
   it('rejects coming-soon (non-playable) idols, even when the count would allow them', () => {
-    expect(validatePickedIdolTypes(types, 7, ['point-surge'])).toMatchObject({ ok: false, code: 'invalid_pick', error: expect.stringMatching(/coming soon/) })
-    expect(validatePickedIdolTypes(types, 7, ['vote-steal', 'captain'])).toMatchObject({ ok: false, code: 'invalid_pick' })
-    expect(validatePickedIdolTypes(types, 7, ['tribe-immunity'])).toMatchObject({ ok: false, code: 'invalid_pick' })
+    expect(validatePickedIdolTypes(types, 2, ['immunity', 'point-surge'])).toMatchObject({ ok: false, code: 'invalid_pick', error: expect.stringMatching(/coming soon/) })
+    expect(validatePickedIdolTypes(types, 2, ['immunity', 'captain'])).toMatchObject({ ok: false, code: 'invalid_pick' })
+    expect(validatePickedIdolTypes(types, 1, ['tribe-immunity'])).toMatchObject({ ok: false, code: 'invalid_pick' })
   })
 
-  it('refuses empty, duplicate and unknown picks', () => {
-    expect(validatePickedIdolTypes(types, 7, [])).toMatchObject({ ok: false, error: 'Pick between 1 and 3 idol types.' })
-    expect(validatePickedIdolTypes(types, 7, ['vote-steal', 'vote-steal'])).toMatchObject({ ok: false })
-    expect(validatePickedIdolTypes(types, 7, ['nope'])).toMatchObject({ ok: false })
+  it('refuses an empty list, more than 12, a count that disagrees with the list, unknown ids, and a missing always-in idol', () => {
+    expect(validatePickedIdolTypes(types, 0, [])).toMatchObject({ ok: false, code: 'invalid_count', error: 'Pick 1 to 12 idols.' })
+    expect(validatePickedIdolTypes(types, 13, Array(13).fill('immunity'))).toMatchObject({ ok: false, code: 'invalid_count' })
+    expect(validatePickedIdolTypes(types, 3, ['immunity', 'vote-steal'])).toMatchObject({ ok: false, code: 'invalid_pick', error: 'Pick 3 idols in total.' })
+    expect(validatePickedIdolTypes(types, 2, ['immunity', 'nope'])).toMatchObject({ ok: false, code: 'invalid_pick' })
+    expect(validatePickedIdolTypes(types, 1, ['vote-steal'])).toMatchObject({ ok: false, code: 'invalid_pick', error: expect.stringMatching(/immunity is in every league/) })
   })
 
-  it('once enough idols are playable, asks for exactly count minus the always-in idols, with no repeats', () => {
-    expect(pickRequirement(allPlayable, 7)).toEqual({ min: 5, max: 5, slots: 5 })
-    expect(validatePickedIdolTypes(allPlayable, 7, ['captain', 'silence', 'second-chance', 'first-claim', 'decoy']))
-      .toEqual({ ok: true, typeIds: ['immunity', 'tribe-immunity', 'captain', 'silence', 'second-chance', 'first-claim', 'decoy'] })
-    expect(validatePickedIdolTypes(allPlayable, 7, ['captain', 'silence'])).toMatchObject({ ok: false, error: 'Pick exactly 5 idol types.' })
+  it('once every idol is playable, both protection idols must be kept and repeats are still allowed', () => {
+    expect(validatePickedIdolTypes(allPlayable, 4, ['captain', 'immunity', 'captain', 'tribe-immunity']))
+      .toEqual({ ok: true, typeIds: ['immunity', 'tribe-immunity', 'captain', 'captain'] })
+    expect(validatePickedIdolTypes(allPlayable, 2, ['immunity', 'captain'])).toMatchObject({ ok: false, error: expect.stringMatching(/tribe-immunity is in every league/) })
+  })
+
+  it('quantity helpers count copies and rebuild a list for one type without touching the others', () => {
+    const picked = ['immunity', 'vote-steal', 'vote-steal', 'steal-three']
+    expect([...pickQuantities(picked)]).toEqual([['immunity', 1], ['vote-steal', 2], ['steal-three', 1]])
+    expect(withPickQuantity(picked, 'vote-steal', 0)).toEqual(['immunity', 'steal-three'])
+    expect(withPickQuantity(picked, 'extra-vote', 3)).toEqual(['immunity', 'vote-steal', 'vote-steal', 'steal-three', 'extra-vote', 'extra-vote', 'extra-vote'])
+    expect(withPickQuantity(picked, 'immunity', 40)).toHaveLength(3 + 12)
   })
 
   it('resolves pick mode from the picks and random mode from the draw', () => {
-    expect(resolveSurvivorIdolTypeIds(types, { mode: 'pick', count: 6, pickedTypeIds: ['steal-three'] }, seeded(1))).toEqual({ ok: true, typeIds: ['immunity', ...Array(5).fill('steal-three')] })
+    expect(resolveSurvivorIdolTypeIds(types, { mode: 'pick', count: 3, pickedTypeIds: ['immunity', 'steal-three', 'steal-three'] }, seeded(1))).toEqual({ ok: true, typeIds: ['immunity', 'steal-three', 'steal-three'] })
     expect(resolveSurvivorIdolTypeIds(types, { mode: 'random', count: 6, pickedTypeIds: ['steal-three'] }, seeded(1))).toMatchObject({ ok: true })
   })
 })

@@ -56,6 +56,7 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromAssert(() => assertCommissionerMock))
 
 describe('/api/commissioner/leagues/[leagueId]/invite route', () => {
   beforeEach(() => {

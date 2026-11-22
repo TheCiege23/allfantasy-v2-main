@@ -54,7 +54,18 @@ function read(rel: string): string {
 }
 
 describe('Queue PUT route — hygiene chain', () => {
-  const src = read('app/api/leagues/[leagueId]/draft/queue/route.ts')
+  /*
+   * The chain moved to lib/draft-room/saveDraftQueue.ts on 2026-11-16, shared by the route and a
+   * confirmed Chimmy queue card — so it is pinned THERE, and the route is pinned to delegate to it.
+   */
+  const src = read('lib/draft-room/saveDraftQueue.ts')
+  const routeSrc = read('app/api/leagues/[leagueId]/draft/queue/route.ts')
+
+  it('the route delegates the whole chain to the shared save, validating before any write', () => {
+    // Saved under the key of the team the room is about (the manager's own id with one team).
+    expect(routeSrc).toMatch(/const prepared = await prepareDraftQueueSave\(leagueId, queue\)[\s\S]+?await persistDraftQueue\(await draftQueueKeyForUser\(leagueId, userId\), prepared\.prepared\)/)
+    expect(routeSrc).not.toMatch(/prisma\.draftQueue\.upsert/)
+  })
 
   it('imports the canonical queue-engine helpers', () => {
     expect(src).toMatch(
@@ -86,8 +97,8 @@ describe('Queue PUT route — hygiene chain', () => {
   })
 
   it('GET returns leagueId, queue, and removedUnavailable so the client can banner', () => {
-    expect(src).toMatch(/loadDraftQueueForUser\(leagueId, userId\)/)
-    expect(src).toMatch(/removedUnavailable,/)
+    expect(routeSrc).toMatch(/loadDraftQueueForUser\(leagueId, userId\)/)
+    expect(routeSrc).toMatch(/removedUnavailable,/)
   })
 })
 
@@ -109,7 +120,7 @@ describe('autopick-expired route — lockout + fallback chain', () => {
 
   it('filters queue by starter-eligible positions before picking', () => {
     expect(src).toMatch(
-      /eligibleInQueue = filterEntriesByDraftEligiblePositions\(availableInQueue, draftEligiblePositions\)/,
+      /eligibleInQueue = filterEntriesByDraftEligiblePositions\(availableInQueue, draftEligiblePositions, rosterRules\?\.sport\)/,
     )
   })
 
@@ -164,7 +175,7 @@ describe('tryQueueAutoPick — race-aware candidate loop', () => {
 
   it('filters by starter-eligible positions before attempting submitPick', () => {
     expect(src).toMatch(
-      /eligibleQueueCandidates = filterEntriesByDraftEligiblePositions\(queueCandidates, draftEligiblePositions\)/,
+      /eligibleQueueCandidates = filterEntriesByDraftEligiblePositions\(queueCandidates, draftEligiblePositions, rosterRules\?\.sport\)/,
     )
   })
 

@@ -55,7 +55,7 @@ export type SleeperBracketGame = {
   t2_from?: { w?: number | null; l?: number | null } | null
 }
 
-export type BracketPlacements = {
+type BracketPlacements = {
   championRosterId: number | null
   runnerUpRosterId: number | null
   /** Final placement for every roster a DECIDED placement game settled. */
@@ -151,7 +151,7 @@ export function resolveBracketPlacements(bracket: readonly SleeperBracketGame[] 
   return { championRosterId, runnerUpRosterId, placementByRosterId, titleGame, source }
 }
 
-export type PlayoffFinishInfo = {
+type PlayoffFinishInfo = {
   isChampion: boolean
   isRunnerUp: boolean
   /** Wins on the path to the title — placement and consolation games do not count. */

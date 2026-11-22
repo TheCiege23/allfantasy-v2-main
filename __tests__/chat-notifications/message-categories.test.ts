@@ -1,13 +1,14 @@
 // @vitest-environment node
 /**
  * The two new settings categories (2026-09-25):
- *   direct_messages  "Direct messages & huddles" — bell + push + email ON, SMS OFF until opted in
+ *   direct_messages  "Direct messages & huddles" — bell and push ON, email and SMS OFF
  *   league_chat      "League chat messages"      — OFF on every channel until opted in
  */
 import { describe, expect, it } from 'vitest'
 
 import {
   NOTIFICATION_CATEGORY_IDS,
+  IMPORTED_NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
   EMAIL_DEFAULT_OFF_CATEGORY_IDS,
@@ -29,11 +30,11 @@ describe('direct_messages', () => {
     expect(isPushCategory('direct_messages')).toBe(true)
   })
 
-  it('🛑 defaults: bell, push and email ON; SMS OFF — for someone who never opened settings', () => {
+  it('🛑 defaults: bell and push ON; email and SMS OFF — for someone who never opened settings', () => {
     expect(resolveNotificationPreferences(null).categories?.direct_messages).toEqual({
       enabled: true,
       inApp: true,
-      email: true,
+      email: false,
       sms: false,
       push: true,
     })
@@ -84,15 +85,21 @@ describe('league_chat — opt-in', () => {
     expect(cat).toMatchObject({ enabled: true, inApp: true, email: false, sms: false })
   })
 
-  it('every other category keeps its on-by-default (only the opt-in list changed)', () => {
+  it('existing categories keep their defaults alongside opt-in imported alerts', () => {
     for (const id of NOTIFICATION_CATEGORY_IDS) {
       if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) continue
+      if ((IMPORTED_NOTIFICATION_CATEGORY_IDS as readonly string[]).includes(id)) {
+        expect(getDefaultCategoryPreferences(id)).toEqual({
+          enabled: false, inApp: true, email: false, sms: false, push: true,
+        })
+        continue
+      }
       // Live game moments start with EMAIL off (stale by the time an inbox is read) — the one other
       // default exception, listed in EMAIL_DEFAULT_OFF_CATEGORY_IDS.
-      const email = !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id)
+      const email = id !== "direct_messages" && id !== "chat_mentions" && !EMAIL_DEFAULT_OFF_CATEGORY_IDS.includes(id)
       expect(getDefaultCategoryPreferences(id)).toMatchObject({ enabled: true, inApp: true, email, sms: false })
     }
-    expect(EMAIL_DEFAULT_OFF_CATEGORY_IDS).toEqual(['live_game_alerts'])
+    expect(EMAIL_DEFAULT_OFF_CATEGORY_IDS).toEqual(expect.arrayContaining(['live_game_alerts', 'followed_team_scores', 'waiver_processing']))
   })
 
   it('the settings fingerprint sees a league_chat change', () => {

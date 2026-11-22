@@ -25,7 +25,7 @@
  * trade in this format and a good one in most others.
  */
 
-export type GuillotineHorizon = {
+type GuillotineHorizon = {
   teamsRemaining: number
   startingTeams: number
   /** Scoring periods until one team is left. */
@@ -85,7 +85,7 @@ export function guillotineHorizon(args: {
   }
 }
 
-export type ChopMargin = {
+type ChopMargin = {
   rank: number
   teams: number
   /** Points between this team and the chop line last period. */
@@ -142,7 +142,7 @@ export function chopMargin(args: {
   }
 }
 
-export type FaabPower = {
+type FaabPower = {
   /** Winning bids observed on released players in this league. */
   sampleSize: number
   median: number

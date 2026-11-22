@@ -17,12 +17,14 @@
  * row (EvalPlanQual), so exactly one of two racing reservations can succeed when only one fits.
  */
 import 'server-only'
+import { lockTokenWallet } from '@/lib/tokens/TokenWalletLock'
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { isSubscriptionEntitlementBypassUserId } from '@/lib/dev-admin/access'
+import { provenPrivilegedEmail } from '@/lib/auth/provenPrivilegedEmail'
 import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
-import { TokenInsufficientBalanceError } from '@/lib/tokens/TokenSpendService'
+import { TokenInsufficientBalanceError, TokenSpendIdempotencyConflictError } from '@/lib/tokens/TokenSpendService'
 
 /**
  * Deterministic, domain-separated, collision-resistant ledger identity for a canonical run key. A canonical
@@ -40,7 +42,7 @@ type PrismaLike = typeof defaultPrisma
 
 const DEFAULT_RESERVATION_TTL_MS = 5 * 60_000
 
-export type ReservationView = {
+type ReservationView = {
   id: string
   status: 'reserved' | 'finalized' | 'released'
   amount: number
@@ -105,12 +107,13 @@ export class TokenReservationService {
     expiresInMs?: number
     userEmail?: string | null
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'reserved') // platform-admin bypass — never touches DB
     }
     const ttlMs = input.expiresInMs ?? DEFAULT_RESERVATION_TTL_MS
 
     return this.db.$transaction(async (tx) => {
+      await lockTokenWallet(tx, input.userId)
       const now = new Date()
       const balance = await tx.userTokenBalance.upsert({
         where: { userId: input.userId },
@@ -122,6 +125,7 @@ export class TokenReservationService {
       await this.releaseExpiredForUser(tx as PrismaLike, input.userId, balance.id, now)
 
       const existing = await tx.tokenReservation.findUnique({ where: { idempotencyKey: input.idempotencyKey } })
+      if (existing && existing.userId !== input.userId) throw new TokenSpendIdempotencyConflictError()
       if (existing && existing.status === 'reserved') {
         return view(existing, true) // share the live hold — no new charge
       }
@@ -180,11 +184,13 @@ export class TokenReservationService {
     userEmail?: string | null
     description?: string
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'finalized')
     }
     return this.db.$transaction(async (tx) => {
+      await lockTokenWallet(tx, input.userId)
       const res = await tx.tokenReservation.findUnique({ where: { idempotencyKey: input.idempotencyKey } })
+      if (res && res.userId !== input.userId) throw new TokenSpendIdempotencyConflictError()
       if (!res) throw new Error(`No reservation for key ${input.idempotencyKey}`)
       if (res.status === 'finalized') return view(res, true) // idempotent
       if (res.status === 'released') return view(res, true) // cannot finalize a released hold; no-op
@@ -251,11 +257,13 @@ export class TokenReservationService {
     reason: string
     userEmail?: string | null
   }): Promise<ReservationView> {
-    if (isSubscriptionEntitlementBypassUserId(input.userId, input.userEmail)) {
+    if (isSubscriptionEntitlementBypassUserId(input.userId, await provenPrivilegedEmail(input.userId, input.userEmail))) {
       return devAdminReservation(input.idempotencyKey, 'released')
     }
     return this.db.$transaction(async (tx) => {
+      await lockTokenWallet(tx, input.userId)
       const res = await tx.tokenReservation.findUnique({ where: { idempotencyKey: input.idempotencyKey } })
+      if (res && res.userId !== input.userId) throw new TokenSpendIdempotencyConflictError()
       if (!res) return { id: '', status: 'released', amount: 0, idempotencyKey: input.idempotencyKey, ledgerId: null, alreadyExisted: false }
       if (res.status === 'released') return view(res, true) // idempotent
       if (res.status === 'finalized') return view(res, true) // consumed — cannot release; charge stands
@@ -284,14 +292,16 @@ export class TokenReservationService {
     const now = input?.now ?? new Date()
     const expired = await this.db.tokenReservation.findMany({
       where: { status: 'reserved', expiresAt: { lt: now } },
-      select: { id: true, amount: true, userTokenBalanceId: true },
+      select: { id: true, amount: true, userTokenBalanceId: true, userId: true },
       take: Math.max(1, Math.min(500, input?.limit ?? 100)),
     })
     let released = 0
     for (const r of expired) {
       await this.db.$transaction(async (tx) => {
+        await lockTokenWallet(tx, r.userId)
         const upd = await tx.tokenReservation.updateMany({
-          where: { id: r.id, status: 'reserved' },
+          // The snapshot predates this wallet lock: a retry may have renewed the same row.
+          where: { id: r.id, status: 'reserved', expiresAt: { lt: now }, amount: r.amount },
           data: { status: 'released', releasedAt: now, reason: 'expired_sweep' },
         })
         if (upd.count === 1) {

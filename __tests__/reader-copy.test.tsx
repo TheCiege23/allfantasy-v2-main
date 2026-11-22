@@ -55,7 +55,7 @@ describe('what a reader actually sees', () => {
               imageUrl: null,
               leagues: [
                 { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [{ name: 'Tyjae Spears', position: 'RB' }] },
-                { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
+                { id: 'l2', name: 'Guilly League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
               ],
               note: 'RB · Out',
               position: 'RB',
@@ -114,7 +114,7 @@ describe('what a reader actually sees', () => {
           leaning: [],
           unprojected: [
             { leagueId: 'l1', leagueName: 'Bla bla bla', platform: 'sleeper', season: 2026, week: 1, opponent: { rosterId: 7, name: 'DynastyDan' }, elimination: false, projection: null, yourSampleWeeks: 0, href: '/core/matchup?league=l1' },
-            { leagueId: 'l2', leagueName: 'Guillotine League 26', platform: 'sleeper', season: 2026, week: 1, opponent: { rosterId: 4, name: null }, elimination: true, projection: null, yourSampleWeeks: 0, href: '/core/matchup?league=l2' },
+            { leagueId: 'l2', leagueName: 'Guilly League 26', platform: 'sleeper', season: 2026, week: 1, opponent: { rosterId: 4, name: null }, elimination: true, projection: null, yourSampleWeeks: 0, href: '/core/matchup?league=l2' },
           ],
           model: { basis: 'x', sampleSize: 0 },
           withoutSchedule: 55,

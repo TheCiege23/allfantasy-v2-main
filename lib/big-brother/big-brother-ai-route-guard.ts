@@ -14,9 +14,8 @@ import type { BigBrotherAIPromptType } from '@/lib/big-brother/ai/BigBrotherAIPr
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
-import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 
-export const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
+const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
   'chimmy_host',
   'challenge_generator_hoh',
   'challenge_generator_veto',
@@ -27,7 +26,7 @@ export const BIG_BROTHER_AI_VALID_TYPES: readonly BigBrotherAIPromptType[] = [
   'rule_explain',
 ]
 
-export const BIG_BROTHER_AI_UNGATED_TYPES: readonly BigBrotherAIPromptType[] = ['rule_explain']
+const BIG_BROTHER_AI_UNGATED_TYPES: readonly BigBrotherAIPromptType[] = ['rule_explain']
 
 const HOST_TYPES: readonly BigBrotherAIPromptType[] = [
   'chimmy_host',
@@ -39,7 +38,7 @@ const HOST_TYPES: readonly BigBrotherAIPromptType[] = [
 const PLAYER_TYPES: readonly BigBrotherAIPromptType[] = ['recap', 'game_theory', 'social_strategy']
 
 /** Token rule per gated type — must exist in `TOKEN_SPEND_RULE_MATRIX`. */
-export const BIG_BROTHER_AI_TYPE_RULE_CODE: Record<
+const BIG_BROTHER_AI_TYPE_RULE_CODE: Record<
   Exclude<BigBrotherAIPromptType, (typeof BIG_BROTHER_AI_UNGATED_TYPES)[number]>,
   TokenSpendRuleCode
 > = {
@@ -65,7 +64,7 @@ function mustMeterSubscribedUsers(ruleCode: TokenSpendRuleCode): boolean {
   return tokenCostForRule(ruleCode) >= 2
 }
 
-export type BigBrotherAiAccessResult =
+type BigBrotherAiAccessResult =
   | {
       ok: true
       featureDecision: FeatureGateDecision
@@ -102,7 +101,7 @@ export async function resolveBigBrotherAiAccess(input: {
       entitlement,
       requiredPlan: null,
       upgradePath: '/settings',
-      message: 'Ungated Big Brother AI surface.',
+      message: 'Ungated Big Brother Chimmy surface.',
     }
     return {
       ok: true,
@@ -154,11 +153,12 @@ export async function resolveBigBrotherAiAccess(input: {
     userEmail: userEmail ?? null,
     featureId,
     allowTokenFallback: true,
+    forceTokenFallback: mustMeterSubscribedUsers(ruleCode),
     confirmTokenSpend,
     tokenRuleCode: ruleCode,
     tokenSourceType: 'big_brother_ai',
     tokenSourceId: `${leagueId}:${type}:${Date.now()}`,
-    tokenDescription: `Big Brother AI — ${type}`,
+    tokenDescription: `Big Brother Chimmy — ${type}`,
     tokenMetadata: { leagueId, bigBrotherAiType: type },
   })
 
@@ -176,68 +176,6 @@ export async function resolveBigBrotherAiAccess(input: {
     }
   }
 
-  if (gate.decision.allowed && mustMeterSubscribedUsers(ruleCode)) {
-    const svc = new TokenSpendService()
-    const balance = await svc.getBalance(userId, userEmail ?? null)
-    const preview = await svc.previewSpendWithEntitlement({
-      userId,
-      ruleCode,
-      entitlement: gate.decision.entitlement,
-      currentBalance: Number(balance.balance || 0),
-      userEmail: userEmail ?? null,
-    })
-    if (!preview.canSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Insufficient token balance',
-            code: 'insufficient_token_balance',
-            message: `This ${type} run costs ${preview.tokenCost} AF Tokens for subscribers (discounted where applicable).`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            upgradePath: gate.decision.upgradePath,
-          },
-          { status: 402 },
-        ),
-      }
-    }
-    if (!confirmTokenSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Token spend confirmation required.',
-            code: 'token_confirmation_required',
-            message: `Confirm spending ${preview.tokenCost} AF Token(s) for this ${type} run.`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            requiredPlan: gate.decision.requiredPlan,
-          },
-          { status: 409 },
-        ),
-      }
-    }
-
-    const spend = await svc.spendTokensForRule({
-      userId,
-      ruleCode,
-      confirmed: true,
-      sourceType: 'big_brother_ai_subscriber_metered',
-      sourceId: `${leagueId}:${type}:${Date.now()}`,
-      description: `Big Brother AI (subscriber metered) — ${type}`,
-      metadata: { leagueId, bigBrotherAiType: type, ruleCode },
-      userEmail: userEmail ?? null,
-    })
-
-    return {
-      ok: true,
-      featureDecision: gate.decision,
-      tokenSpend: spend,
-      tokenPreview: preview,
-      ruleCode,
-    }
-  }
 
   return {
     ok: true,

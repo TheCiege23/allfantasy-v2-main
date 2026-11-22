@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, Save, Share2 } from 'lucide-react'
+import { DraftBoardPreview } from '@/components/app/draft-room/DraftBoardPreview'
 import { DraftPlayerCard } from '@/components/app/draft-room/DraftPlayerCard'
+import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import { buildDraftPlayerDisplayModel } from '@/lib/draft-sports-models/build-display-model'
 
 type SessionPick = {
@@ -222,7 +224,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-white/12 bg-black/25 p-4 text-sm text-white/70">
+      <div className="af-draft-dark rounded-2xl border border-white/12 bg-[#08101f] p-4 text-sm text-white/70">
         <Loader2 className="h-4 w-4 animate-spin" />
       </div>
     )
@@ -231,7 +233,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
   if (!draft) return null
 
   return (
-    <section className="space-y-3 rounded-2xl border border-white/12 bg-black/25 p-4 text-xs text-white/80" data-testid="mock-draft-session-board">
+    <section className="af-draft-dark space-y-3 rounded-2xl border border-white/12 bg-[#08101f] p-4 text-xs text-white/80" data-testid="mock-draft-session-board">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-white">
           Mock Session - {draft.settings.sport} - {draft.status.replace('_', ' ')}
@@ -249,6 +251,8 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
           </p>
         </div>
       </div>
+
+      <DraftModeBanner mode={resolveDraftRoomMode({ isMock: true })} />
 
       {draft.progress?.currentOverall && draft.status === 'in_progress' && (
         <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
@@ -381,6 +385,17 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
         </div>
       )}
 
+      <DraftBoardPreview
+        teams={Array.from({ length: draft.settings.numTeams }, (_, index) => {
+          const seat = draft.slotConfig.find((entry) => entry.slot === index + 1)
+          return { id: String(index + 1), slot: index + 1, name: seat?.displayName || ('Team ' + (index + 1)), isCpu: seat?.type === 'cpu' }
+        })}
+        picks={draft.results.map((pick) => ({ ...pick, rosterId: String(pick.slot) }))}
+        teamCount={draft.settings.numTeams} rounds={draft.settings.rounds} sport={draft.settings.sport}
+        draftType={draft.settings.draftType === 'auction' ? 'auction' : draft.settings.draftType === 'linear' ? 'linear' : 'snake'}
+        currentOverall={draft.status === 'in_progress' ? draft.progress?.currentOverall : null}
+      />
+
       <div className="rounded-xl border border-white/10 bg-black/30 p-3">
         <p className="mb-2 text-[11px] font-semibold text-white/90">Recent picks</p>
         {recentPicks.length === 0 ? (
@@ -400,14 +415,16 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
               return (
                 <li key={`${pick.overall}-${pick.playerName}`} data-testid={`mock-draft-session-pick-${index}`}>
                   <p className="mb-1 text-[11px] text-white/60">#{pick.overall} · {pick.manager}</p>
-                  <DraftPlayerCard
-                    display={display}
-                    name={pick.playerName}
-                    position={pick.position}
-                    team={pick.team ?? null}
-                    byeWeek={pick.byeWeek ?? null}
-                    variant="row"
-                  />
+                  <ul>
+                    <DraftPlayerCard
+                      display={display}
+                      name={pick.playerName}
+                      position={pick.position}
+                      team={pick.team ?? null}
+                      byeWeek={pick.byeWeek ?? null}
+                      variant="row"
+                    />
+                  </ul>
                 </li>
               )
             })}

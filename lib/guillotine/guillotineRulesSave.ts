@@ -1,0 +1,238 @@
+import 'server-only'
+
+import { prisma } from '@/lib/prisma'
+import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { LeagueSport } from '@prisma/client'
+import { DEFAULT_END_WEEK_BY_SPORT, getGuillotineConfig, upsertGuillotineConfig } from './GuillotineLeagueConfig'
+import { resolveGuillotineEndgame } from './endgameRules'
+import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
+import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
+import { DEFAULT_ADVANCED } from './chopSchedule'
+import { hasFirstChopHappened } from './guillotineFirstChopWeek'
+import { normalizeGuillotineRulesPatch, paidFieldsChanged, RULE_DEFAULTS, AI_RECAP_AUTO_KEY, type GuillotineRuleField, type GuillotineRules } from './guillotineRules'
+import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
+import { hasGuillotineAiRecapPlan } from './weeklyRecap'
+import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
+import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
+import { isPeriodEndWeek, PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from './eliminationPeriods'
+
+/**
+ * Read and save the "League rules" page (rules and tiers in ./guillotineRules.ts).
+ *
+ * Where each value lives, and why it is written there:
+ *  - GuillotineLeagueConfig row: teams per chop, last chop week, tiebreakers, stat-correction wait,
+ *    danger margin, release timing. When no row exists yet, `getGuillotineConfig` DERIVES one from
+ *    League.settings, so the first save writes the whole derived config (as the first-chop editor
+ *    does) — a bare upsert would create the row with schema defaults for everything else.
+ *  - Endgame: `resolveGuillotineEndgame` reads `settings.guillotineEndgame` FIRST, ahead of the
+ *    creation-time copies and the column, so that is the key written; the column and threshold are
+ *    kept in step for the readers that use them (guillotineChopAudit reads the threshold).
+ */
+
+const ENDGAME_THRESHOLD = { last_team_standing: 1, final_two: 2, final_three: 3, final_four: 4 } as const
+
+export type GuillotineRulesView = {
+  rules: GuillotineRules
+  startWeek: number
+  seasonWeeks: number
+  /** The first chop has happened: the endgame is fixed for the season. */
+  endgameLocked: boolean
+  /** The draft has started: best ball lineups are fixed for the season. */
+  bestBallLocked: boolean
+  /** Two-week elimination periods can be chosen (MLB only, ./eliminationPeriods.ts). */
+  periodWeeksAvailable: boolean
+  /** The viewer can change the AF Commissioner fields — the same check the save enforces. */
+  canEditPaid: boolean
+  /** The viewer's plan includes Chimmy recaps (AF Pro or AF Commissioner), so `aiRecapAuto` takes effect. */
+  aiRecapAvailable: boolean
+}
+
+export async function viewerCanEditPaidGuillotineRules(userId: string): Promise<boolean> {
+  const access = await new FeatureGateService().evaluateUserFeatureAccess(userId, 'commissioner_automation').catch(() => null)
+  return Boolean(access?.allowed)
+}
+
+export async function readGuillotineRules(leagueId: string, userId: string): Promise<GuillotineRulesView | null> {
+  const [config, league] = await Promise.all([
+    getGuillotineConfig(leagueId),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, guillotineEndgame: true, status: true, lifecycleState: true } }),
+  ])
+  if (!config || !league) return null
+  const sport = normalizeToSupportedSport(league.sport) as LeagueSport
+  const seasonWeeks = DEFAULT_END_WEEK_BY_SPORT[sport] ?? 18
+  const [endgameLocked, canEditPaid, aiRecapAvailable] = await Promise.all([
+    hasFirstChopHappened(leagueId).catch(() => false),
+    viewerCanEditPaidGuillotineRules(userId),
+    hasGuillotineAiRecapPlan(userId).catch(() => false),
+  ])
+  const settings = (league.settings as Record<string, unknown> | null) ?? {}
+  return {
+    rules: {
+      teamsPerChop: config.teamsPerChop,
+      eliminationEndWeek: config.eliminationEndWeek ?? seasonWeeks,
+      endgame: resolveGuillotineEndgame(league).format,
+      tiebreakerOrder: config.tiebreakerOrder,
+      statCorrectionHours: config.statCorrectionHours ?? RULE_DEFAULTS.statCorrectionHours,
+      dangerMarginPoints: config.dangerMarginPoints ?? RULE_DEFAULTS.dangerMarginPoints,
+      // `custom_time` has no editor yet; show it as the default rather than an option nobody can pick.
+      rosterReleaseTiming: config.rosterReleaseTiming === 'immediate' ? 'immediate' : 'next_waiver_run',
+      aiRecapAuto: settings[AI_RECAP_AUTO_KEY] !== false,
+      faabOnChop: readFaabOnChop(settings),
+      bestBall: readGuillotineBestBall(settings),
+      periodWeeks: readPeriodWeeks(settings),
+    },
+    startWeek: config.eliminationStartWeek,
+    seasonWeeks,
+    endgameLocked,
+    // A league already on two weeks keeps the control, so it can always be put back to one.
+    periodWeeksAvailable: supportsTwoWeekPeriods(sport) || readPeriodWeeks(settings) === 2,
+    bestBallLocked: !canChangeGuillotineBestBall(league),
+    canEditPaid,
+    aiRecapAvailable,
+  }
+}
+
+export type SaveRulesResult =
+  | { ok: true; view: GuillotineRulesView }
+  | { ok: false; status: 400 | 402 | 404 | 409; error: string; field?: GuillotineRuleField | null; fields?: GuillotineRuleField[] }
+
+export async function saveGuillotineRules(leagueId: string, userId: string, raw: unknown): Promise<SaveRulesResult> {
+  const current = await readGuillotineRules(leagueId, userId)
+  if (!current) return { ok: false, status: 404, error: 'Not a guillotine league' }
+
+  const n = normalizeGuillotineRulesPatch(raw, { startWeek: current.startWeek, seasonWeeks: current.seasonWeeks })
+  if (!n.ok) return { ok: false, status: 400, error: n.error.message, field: n.error.field }
+  const patch = n.value
+
+  const paid = paidFieldsChanged(patch, current.rules)
+  if (paid.length > 0 && !current.canEditPaid) {
+    return { ok: false, status: 402, error: 'These rules are part of AF Commissioner.', fields: paid }
+  }
+  if (patch.endgame !== undefined && patch.endgame !== current.rules.endgame && current.endgameLocked) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'The first chop has happened, so how the season ends is fixed for this season.',
+      field: 'endgame',
+    }
+  }
+
+  /*
+   * Two-week periods (./eliminationPeriods.ts): MLB only, and fixed once a chop has happened — the
+   * periods are paired from the first chop week, so switching mid-season would re-pair weeks already scored.
+   */
+  if (patch.periodWeeks !== undefined && patch.periodWeeks !== current.rules.periodWeeks) {
+    if (current.endgameLocked) {
+      return { ok: false, status: 409, error: 'The first chop has happened, so the elimination period is fixed for this season.', field: 'periodWeeks' }
+    }
+    if (patch.periodWeeks === 2 && !current.periodWeeksAvailable) {
+      return { ok: false, status: 400, error: 'Two-week elimination periods are for MLB leagues.', field: 'periodWeeks' }
+    }
+  }
+
+  if (patch.bestBall !== undefined && patch.bestBall !== current.rules.bestBall && current.bestBallLocked) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'The draft has started, so best ball lineups are fixed for this season.',
+      field: 'bestBall',
+    }
+  }
+
+  /*
+   * Switching best ball lineups ON: every team's starter seats will then be filled from what it
+   * drafted, so the league's seats must fit the sport's player pool at its size
+   * (lib/bestball/poolCapacity.ts) — a 35-team NFL league cannot fill a K seat for every team.
+   */
+  if (patch.bestBall === true && !current.rules.bestBall) {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, settings: true, leagueSize: true } })
+    const teamCount = league?.leagueSize ?? (await prisma.roster.count({ where: { leagueId } })) ?? 0
+    const pool = league && teamCount > 0 ? checkLeagueBestBallPool(league, { teamCount, assumeBestBall: true }) : null
+    if (pool && pool.refusals.length > 0) return { ok: false, status: 400, error: pool.refusals[0]!.message, field: 'bestBall' }
+  }
+
+  // The calendar must still reach a champion with the patched end week, chops a week and endgame
+  // (lib/guillotine/calendarFit.ts). Checked against the league's chop schedule and team count.
+  if (patch.eliminationEndWeek !== undefined || patch.teamsPerChop !== undefined || patch.endgame !== undefined || patch.periodWeeks !== undefined) {
+    const nextEndgame = resolveGuillotineEndgame({ settings: { guillotineEndgame: patch.endgame ?? current.rules.endgame } })
+    const teamCount = (await prisma.roster.count({ where: { leagueId } })) ?? 0
+    const advanced = teamCount > 0 ? await readGuillotineAdvanced(leagueId) : null
+    const calendar = {
+      teamCount,
+      startWeek: current.startWeek,
+      endWeek: patch.eliminationEndWeek ?? current.rules.eliminationEndWeek,
+      baseChops: patch.teamsPerChop ?? current.rules.teamsPerChop,
+      advanced: advanced ?? DEFAULT_ADVANCED,
+      threshold: nextEndgame.threshold,
+      finalPeriods: nextEndgame.cumulativePeriods,
+      periodWeeks: patch.periodWeeks ?? current.rules.periodWeeks,
+    }
+    const deadWeek = Object.keys(calendar.advanced.overrides).map(Number).find((w) => !isPeriodEndWeek(w, calendar.startWeek, calendar.periodWeeks))
+    if (deadWeek != null) {
+      return { ok: false, status: 400, error: `Week ${deadWeek} has its own chop count under Chop rules, and with two-week periods only the second week of a period can chop. Move or clear it first.`, field: 'periodWeeks' }
+    }
+    const fit = teamCount > 0 ? guillotineCalendarFit(calendar) : null
+    if (fit && !fit.fits) {
+      return { ok: false, status: 400, error: calendarFitMessage(calendar, fit), field: patch.eliminationEndWeek !== undefined ? 'eliminationEndWeek' : patch.teamsPerChop !== undefined ? 'teamsPerChop' : patch.endgame !== undefined ? 'endgame' : 'periodWeeks' }
+    }
+  }
+
+  const { endgame, aiRecapAuto, faabOnChop, bestBall, periodWeeks, ...configPatch } = patch
+  if (Object.keys(configPatch).length > 0) {
+    const row = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } })
+    if (row) {
+      await upsertGuillotineConfig(leagueId, configPatch)
+    } else {
+      const derived = await getGuillotineConfig(leagueId)
+      if (!derived) return { ok: false, status: 404, error: 'Not a guillotine league' }
+      await upsertGuillotineConfig(leagueId, {
+        eliminationStartWeek: derived.eliminationStartWeek,
+        eliminationEndWeek: derived.eliminationEndWeek,
+        teamsPerChop: derived.teamsPerChop,
+        correctionWindow: derived.correctionWindow,
+        customCutoffDayOfWeek: derived.customCutoffDayOfWeek,
+        customCutoffTimeUtc: derived.customCutoffTimeUtc,
+        statCorrectionHours: derived.statCorrectionHours,
+        tiebreakerOrder: derived.tiebreakerOrder,
+        dangerMarginPoints: derived.dangerMarginPoints,
+        rosterReleaseTiming: derived.rosterReleaseTiming,
+        commissionerOverride: derived.commissionerOverride,
+        ...configPatch,
+      })
+    }
+  }
+
+  const endgameChanged = endgame !== undefined && endgame !== current.rules.endgame
+  const recapChanged = aiRecapAuto !== undefined && aiRecapAuto !== current.rules.aiRecapAuto
+  const faabChanged = faabOnChop !== undefined && faabOnChop !== current.rules.faabOnChop
+  const bestBallChanged = bestBall !== undefined && bestBall !== current.rules.bestBall
+  const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
+  if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged) {
+    // League.settings is shared by every settings writer: take the row lock (as chop rules do).
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
+      const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
+      if (endgameChanged) settings.guillotineEndgame = endgame
+      if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
+      if (faabChanged) settings[FAAB_ON_CHOP_KEY] = faabOnChop
+      if (bestBallChanged) settings[GUILLOTINE_BEST_BALL_KEY] = bestBall
+      // One week is the default: the key is removed rather than stored, so the league reads as before.
+      if (periodChanged) {
+        if (periodWeeks === 2) settings[PERIOD_WEEKS_KEY] = 2
+        else delete settings[PERIOD_WEEKS_KEY]
+      }
+      await tx.league.update({
+        where: { id: leagueId },
+        data: {
+          settings: settings as object,
+          ...(endgameChanged && endgame ? { guillotineEndgame: endgame, guillotineEndgameThreshold: ENDGAME_THRESHOLD[endgame] } : {}),
+        },
+      })
+    })
+  }
+
+  const view = await readGuillotineRules(leagueId, userId)
+  return view ? { ok: true, view } : { ok: false, status: 404, error: 'Not a guillotine league' }
+}

@@ -93,7 +93,9 @@ export const maxDuration = 300
  * warn log names the league so that case is visible rather than silent; if one leagueId recurs
  * across ticks, the cause is that league, not the container.
  */
-const CONCURRENCY = 3
+// Cold builds share the notification worker. Process one league at a time so
+// speculative warming does not amplify CPU/DB contention across three pools.
+const CONCURRENCY = 1
 const PER_LEAGUE_TIMEOUT_MS = 120_000
 const CACHE_CHECK_TIMEOUT_MS = 5_000
 /**

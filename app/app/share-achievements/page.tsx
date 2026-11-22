@@ -9,7 +9,7 @@ import {
   getAchievementSharePayload,
   ACHIEVEMENT_SHARE_TYPES,
 } from '@/lib/social-sharing';
-import { getTwitterShareUrl, getFacebookShareUrl, getRedditShareUrl } from '@/lib/social-sharing/SocialShareService';
+import { getTwitterShareUrl, getRedditShareUrl } from '@/lib/social-sharing/SocialShareService';
 import type { AchievementShareType, AchievementShareContext } from '@/lib/social-sharing/types';
 import { toast } from 'sonner';
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope';

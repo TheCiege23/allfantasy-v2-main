@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { SPOTIFY_SCOPES } from '@/lib/spotify/scopes'
+import { canConnectSpotify } from '@/lib/spotify/connectAccess'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,26 @@ export async function GET() {
   if (!SPOTIFY_CLIENT_ID) {
     return NextResponse.redirect(
       new URL('/settings?tab=connected&spotify=error', process.env.NEXTAUTH_URL ?? 'https://www.allfantasy.ai')
+    )
+  }
+
+  /*
+   * Same gate as the Settings button, enforced here so a typed URL cannot skip it.
+   * Without it a non-allowlisted user lands on Spotify's own developer-facing 403
+   * ("User not registered in the Developer Dashboard") with no way back.
+   */
+  const [user, profile, spotifyAccount] = await Promise.all([
+    prisma.appUser.findUnique({ where: { id: session.user.id }, select: { email: true } }),
+    prisma.userProfile.findUnique({ where: { userId: session.user.id }, select: { spotifyConnectedAt: true } }),
+    prisma.authAccount.findFirst({ where: { userId: session.user.id, provider: 'spotify' }, select: { id: true } }),
+  ])
+  const allowed = canConnectSpotify({
+    email: user?.email,
+    alreadyConnected: Boolean(profile?.spotifyConnectedAt || spotifyAccount),
+  })
+  if (!allowed) {
+    return NextResponse.redirect(
+      new URL('/settings?tab=connected&spotify=not-available', process.env.NEXTAUTH_URL ?? 'https://www.allfantasy.ai')
     )
   }
 

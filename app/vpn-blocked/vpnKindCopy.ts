@@ -17,7 +17,7 @@ export interface VpnKindCopy {
   steps: string[]
 }
 
-export const VPN_KIND_COPY = {
+const VPN_KIND_COPY = {
   privacy_relay: {
     title: "Turn off iCloud Private Relay to use AllFantasy.ai",
     detected: "iCloud Private Relay (or Cloudflare WARP)",

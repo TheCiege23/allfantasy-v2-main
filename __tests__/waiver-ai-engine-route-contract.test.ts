@@ -128,5 +128,7 @@ describe('POST /api/waiver-ai/engine contract', () => {
     expect(body.analysis?.sport).toBe('NFL')
     expect(body.analysis?.deterministic?.suggestions?.[0]?.playerName).toBe('Waiver RB')
     expect(runWaiverAIServiceMock).toHaveBeenCalledTimes(1)
+    expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+    expect(body.tokenSpend).toBeNull()
   })
 })

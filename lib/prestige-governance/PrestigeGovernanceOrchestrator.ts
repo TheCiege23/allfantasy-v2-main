@@ -4,11 +4,11 @@
  */
 
 import { buildCommissionerTrustContext } from './CommissionerTrustBridge'
-import { getUnifiedManagerSummary, getUnifiedManagerSummaries } from './UnifiedPrestigeQueryService'
+import { getUnifiedManagerSummaries } from './UnifiedPrestigeQueryService'
 import { buildAIPrestigeContext } from './AIPrestigeContextResolver'
 import type { CommissionerTrustContext, UnifiedManagerSummary, AIPrestigeContextPayload } from './types'
 
-export interface PrestigeGovernanceSnapshot {
+interface PrestigeGovernanceSnapshot {
   commissionerContext: CommissionerTrustContext
   /** Sample of unified manager summaries (e.g. top 20 by legacy or reputation). */
   sampleManagerSummaries: UnifiedManagerSummary[]
@@ -51,6 +51,5 @@ export {
   getUnifiedManagerSummary,
   getUnifiedTeamSummary,
   getUnifiedManagerSummaries,
-  getUnifiedTeamSummaries,
 } from './UnifiedPrestigeQueryService'
 export { buildAIPrestigeContext } from './AIPrestigeContextResolver'

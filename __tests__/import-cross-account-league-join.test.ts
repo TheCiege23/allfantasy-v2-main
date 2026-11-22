@@ -318,7 +318,8 @@ describe('persistImportedLeagueFromNormalization — wired to the join path end 
     const { persistImportedLeagueFromNormalization, ImportedLeagueConflictError } = await import(
       '@/lib/league-import/ImportedLeagueCommitService'
     )
-    h.prisma.league.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+    // Every lookup says no: not this user's, and no other account's (the league-mate join asks too).
+    h.prisma.league.findFirst.mockReset().mockResolvedValue(null)
 
     const normalized = {
       source: { source_league_id: '1359284500814647296', source_provider: 'sleeper' },

@@ -3,10 +3,10 @@
  * POST: Create or start draft session (commissioner).
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import {
   getOrCreateDraftSession,
@@ -26,7 +26,6 @@ import {
   syncPostDraftArtifactsIfCompletedThrottled,
 } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 import { getProviderStatus } from '@/lib/provider-config'
-import { notifyDraftStartingSoon } from '@/lib/draft-notifications'
 import {
   notifyDraftIntelOnClockUrgent,
   notifyDraftIntelQueueReady,
@@ -315,7 +314,7 @@ export async function POST(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -373,7 +372,6 @@ export async function POST(
         }
         return NextResponse.json({ error: 'Cannot start draft' }, { status: 400 })
       }
-      void notifyDraftStartingSoon(leagueId)
       await runKeeperAutomationTick(leagueId).catch(() => {})
       await runSlowDraftAutomationTick(leagueId).catch(() => {})
       const providerStatus = getProviderStatus()

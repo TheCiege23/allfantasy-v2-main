@@ -27,6 +27,14 @@ const DYNASTY_PICK_ROWS = [2027, 2028, 2029].flatMap((season, i) => [
   { player: { name: `${season} Round 1`, position: 'PICK' }, value: 3000 - i * 200 },
   { player: { name: `${season} Round 2`, position: 'PICK' }, value: 1500 - i * 100 },
 ])
+const metricRows = vi.fn()
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: (...args: unknown[]) => metricRows(...args) }))
+const leagueRows = (values: Record<string, number>, weekly: Record<string, number> = {}) => ({
+  sport: 'NFL', season: 2026, week: 4, unit: 'fantasy points',
+  rows: [...new Set([...Object.keys(values), ...Object.keys(weekly)])].map(id =>
+    ({ rosterPlayerId: id, tradeValue: values[id] ?? null, weekly: weekly[id] ?? null })),
+})
+beforeEach(() => { metricRows.mockResolvedValue(leagueRows({})) })
 const loadLeagueValues = vi.fn()
 vi.mock('@/lib/league-values/leagueTradeValues', () => ({
   loadLeagueTradeValues: (...args: unknown[]) => loadLeagueValues(...args),
@@ -170,7 +178,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     getServerSession.mockResolvedValue({ user: { id: 'user-a' } })
     /* Any real season will do here: these tests assert roster contents and the
        player-id fallback, not pick labelling. */
-    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026 })
     /* Empty is the honest default: these tests are about rosters, and the route
        must degrade to raw ids rather than depending on display-name lookups. */
     findManyAppUser.mockResolvedValue([])
@@ -197,10 +205,11 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map([
       ['p1', { value: 875, position: 'LB', basis: 'idp-vorp' }],
     ]) })
+    metricRows.mockResolvedValue({ ...leagueRows({}), rosterTradeQuotes: { p1: { value: 875 } } })
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const body = await res.json()
     expect(body.rosters[0].players[0]).toMatchObject({ value: 875, unpricedReason: null })
-    expect(loadLeagueValues).toHaveBeenCalledWith(expect.objectContaining({ platformLeagueId: 'provider-league' }))
+    expect(metricRows).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'league-1', rosterIds: ['p1'] }))
   })
 
   it('returns every roster in the league (not just the owner\'s) for a real league member', async () => {
@@ -321,7 +330,7 @@ describe('🛑 the payload the picker renders from', () => {
   beforeEach(() => {
     getServerSession.mockResolvedValue({ user: { id: 'u1' } })
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
-    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026 })
     findManyAppUser.mockResolvedValue([])
     findFirstLeagueTeam.mockResolvedValue(null)
     findUniqueUserProfile.mockResolvedValue(null)
@@ -496,6 +505,9 @@ describe('🛑 the bye week, which no column supplies', () => {
 
 describe('🛑 draft picks carry a value, in the players\' own units', () => {
   it('prices a pick off the league chart instead of returning nothing', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026, leagueType: 'dynasty' })
     /*
      * Guap's report: "the draft pick has no shown value". The route built picks as
      * `{ ...p, itemType }` with no `value` at all, so the builder rendered an em dash and reported
@@ -524,6 +536,9 @@ describe('🛑 draft picks carry a value, in the players\' own units', () => {
   })
 
   it('🛑 a pick the chart has no market for is null WITH the reason — not the formula curve, not "could not be loaded"', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026, leagueType: 'dynasty' })
     // A redraft chart (guillotine, survivor, zombie) carries no pick rows. The curve priced a 2027 1st
     // at 7,360 against FantasyCalc's ~2,900 (trade price coverage audit, 2026-09-28).
     getFantasyCalcValues.mockResolvedValue([{ player: { name: 'Some Receiver', position: 'WR', sleeperId: 'x' }, value: 3000 }])
@@ -573,7 +588,7 @@ describe('🛑 market value on the roster rows', () => {
     vi.clearAllMocks()
     getServerSession.mockResolvedValue({ user: { id: 'u1' } })
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
-    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026 })
     findManyAppUser.mockResolvedValue([])
     findManyLeagueTeam.mockResolvedValue([])
     findFirstLeagueTeam.mockResolvedValue(null)
@@ -593,6 +608,7 @@ describe('🛑 market value on the roster rows', () => {
      * engine has no price, which is exactly what makes it decline to judge a deal. Collapsing them
      * here would hide the reason downstream.
      */
+    metricRows.mockResolvedValue(leagueRows({ p1: 6552 }))
     getFantasyCalcValues.mockResolvedValue(new Map([['perry vance', { value: 6552 }]]))
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
@@ -615,14 +631,14 @@ describe('🛑 market value on the roster rows', () => {
 
     await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
 
-    expect(getFantasyCalcValues).toHaveBeenCalledTimes(1)
+    expect(metricRows).toHaveBeenCalledTimes(1)
   })
 
   it('🛑 uses the same settings as player-search, so one player cannot show two values', async () => {
     // The picker renders search results beside roster rows. Different settings would give the same
     // player two numbers on one screen with nothing saying which the engine used.
     findUniqueLeague.mockResolvedValue({
-      season: 2026,
+      sport: 'NFL', season: 2026,
       isDynasty: true,
       leagueSize: 12,
       leagueType: 'dynasty',
@@ -630,11 +646,12 @@ describe('🛑 market value on the roster rows', () => {
     })
     getFantasyCalcValues.mockResolvedValue(new Map())
     await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
-    expect(getFantasyCalcValues.mock.calls[0][0]).toEqual({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })
+    expect(metricRows).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'league-1', rosterIds: ['p1', 'p2'] }))
   })
 
-  it('prices roster and manual picks from one league chart, preserving season and evaluator freshness', async () => {
-    findUniqueLeague.mockResolvedValue({ season: 2026, leagueSize: 12, leagueType: 'dynasty',
+  it('prices roster players from AF and draft picks from their season-specific chart', async () => {
+    metricRows.mockResolvedValue(leagueRows({ p1: 1801 }))
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026, leagueSize: 12, leagueType: 'dynasty',
       settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'SUPER_FLEX'] } })
     findManyRoster.mockResolvedValue([{ id: 'roster-a', platformUserId: 'user-a',
       playerData: { players: ['p1'], draftPicks: [
@@ -705,6 +722,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
       row('k', 'Jake Bates', 'K'),
       row('PHI', 'Philadelphia Eagles', 'DEF'),
     ])
+    metricRows.mockResolvedValue(leagueRows({ wr: 6552 }))
     getFantasyCalcValues.mockResolvedValue(new Map([['perry vance', { value: 6552 }]]))
   })
 
@@ -745,6 +763,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   it('preserves a specific defensive refusal even when the league has no priced defenders', async () => {
     const gap = { code: 'idp_insufficient_sample', label: 'Too few recorded games to estimate a reliable defensive value' }
     loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), unpricedReasonBySleeperId: new Map([['lb', gap], ['ghost', gap]]) })
+    metricRows.mockResolvedValue({ ...leagueRows({ wr: 6552 }), rosterTradeQuotes: { lb: { value: null, reason: gap }, ghost: { value: null, reason: gap } } })
     const { r, code } = await load()
     expect(r.players.find((p) => p.id === 'lb')?.unpricedReason).toEqual(gap)
     expect(code('ghost')).toBe('unidentified')
@@ -753,6 +772,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   it('a priced player does not inherit a stale refusal from the diagnostics map', async () => {
     const gap = { code: 'idp_no_history', label: 'No defensive game history on file for this player' }
     loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), unpricedReasonBySleeperId: new Map([['wr', gap]]) })
+    metricRows.mockResolvedValue({ ...leagueRows({ wr: 6552 }), rosterTradeQuotes: { wr: { value: 6552, reason: gap } } })
     const { r, code } = await load()
     expect(r.players.find((p) => p.id === 'wr')?.value).toBe(6552)
     expect(code('wr')).toBeNull()
@@ -767,6 +787,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
     loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map([
       ['lb', { value: 1200, position: 'LB', basis: 'idp-vorp' }],
     ]) })
+    metricRows.mockResolvedValue(leagueRows({ wr: 9000, lb: 1200 }))
     const { r } = await load()
     expect(r.players.find(p => p.id === 'wr')?.value).toBe(9000)
     expect(r.players.find(p => p.id === 'lb')?.value).toBe(1200)
@@ -779,6 +800,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
     ])
     getFantasyCalcValues.mockResolvedValue(new Map([['justin jefferson', { value: 9000, sleeperId: 'wr', position: 'WR' }]]))
     loadLeagueValues.mockResolvedValue({ byNameLower: new Map(), bySleeperId: new Map(), unpricedReasonBySleeperId: new Map([['lb', gap]]) })
+    metricRows.mockResolvedValue({ ...leagueRows({ wr: 9000 }), rosterTradeQuotes: { lb: { value: null, reason: gap } } })
     const { r } = await load()
     expect(r.players.find(p => p.id === 'lb')?.value).toBeNull()
     expect(r.players.find(p => p.id === 'lb')?.unpricedReason).toEqual(gap)
@@ -790,6 +812,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
      * told he has no market; a defender's reason does not change.
      */
     getFantasyCalcValues.mockResolvedValue(new Map())
+    metricRows.mockResolvedValue(null)
     const { code } = await load()
     expect(code('wr')).toBe('feed_unavailable')
     expect(code('rb')).toBe('feed_unavailable')
@@ -798,6 +821,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
 
   it('a thrown lookup reads the same as an empty one', async () => {
     getFantasyCalcValues.mockRejectedValue(new Error('cache miss'))
+    metricRows.mockRejectedValue(new Error('AF read failed'))
     const { code } = await load()
     expect(code('wr')).toBe('feed_unavailable')
   })
@@ -808,6 +832,7 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
       { sleeperId: 'rb', name: 'Deep Bench', position: 'RB', team: null, imageUrl: null, sport: 'NCAAF', source: 'sleeper' },
     ])
     getFantasyCalcValues.mockResolvedValue(new Map())
+    metricRows.mockResolvedValue(null)
     const { r, code } = await load()
     // [control] he resolved, so this is not the "unidentified" reason under another name.
     expect(r.players.find((p) => p.id === 'rb')?.name).toBe('Deep Bench')
@@ -815,6 +840,9 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   })
 
   it('a pick with no round says so; a priced pick carries no reason', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty' })
     getFantasyCalcValues.mockResolvedValue(DYNASTY_PICK_ROWS)
     const { pickCode } = await load()
     expect(pickCode('pk-none')).toBe('pick_without_round')
@@ -822,6 +850,9 @@ describe('🛑 an unpriced row says WHY (item #5)', () => {
   })
 
   it('a pick with a round but no market row says THAT, not "could not be loaded"', async () => {
+    // A 2027 pick is a FUTURE pick: a redraft league no longer offers it (redraftDraftPicks.ts), so
+    // these pricing cases run on a dynasty league, where it is still listed.
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty' })
     // beforeEach's chart holds one player and no picks — the redraft-chart case.
     const { pickCode } = await load()
     expect(pickCode('pk-r1')).toBe('no_pick_market')
@@ -961,7 +992,8 @@ describe('🛑 an imported league lists its real draft picks', () => {
       { season: 2021, _max: { round: 20 }, _count: { _all: 40 } },
       { season: 2026, _max: { round: 2 }, _count: { _all: 4 } },
     ])
-    findManyFuturePick.mockResolvedValue([
+    // Only the `active` read returns rows; the `forfeited` read (penalty-lost picks) finds none.
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) => args.where.status !== 'active' ? [] : [
       // Bravo's 2027 1st now belongs to Alpha.
       { pickSeason: 2027, round: 1, originalRosterId: '2', currentOwnerId: '1' },
       // A 2026 pick: that draft is over, so the pick is spent.
@@ -1104,7 +1136,8 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
     findFirstDraftSession.mockResolvedValue(null)
     findUniqueDynastyConfig.mockResolvedValue({ rookieDraftRounds: 2 })
     // Bravo's 2027 1st now belongs to Alpha.
-    findManyFuturePick.mockResolvedValue([{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
+    findManyFuturePick.mockImplementation(async (args: { where: { status?: string } }) =>
+      args.where.status !== 'active' ? [] : [{ pickSeason: 2027, round: 1, originalRosterId: 'R-2', currentOwnerId: 'R-1' }])
   })
 
   type Pick = { pickId: string; season: number; round: number; label: string; proposable?: boolean; fromTeam?: string | null }
@@ -1147,7 +1180,7 @@ describe('AllFantasy projection on the roster players (display only)', () => {
   beforeEach(() => {
     getServerSession.mockResolvedValue({ user: { id: 'u1' } })
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
-    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findUniqueLeague.mockResolvedValue({ sport: 'NFL', season: 2026 })
     findManyAppUser.mockResolvedValue([])
     findFirstLeagueTeam.mockResolvedValue(null)
     findUniqueUserProfile.mockResolvedValue(null)
@@ -1160,6 +1193,7 @@ describe('AllFantasy projection on the roster players (display only)', () => {
       { sleeperId: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: null, sport: 'NFL', source: 'sleeper' },
       { sleeperId: 'p2', name: 'Otis Nell', position: 'RB', team: 'KC', imageUrl: null, sport: 'NFL', source: 'sleeper' },
     ])
+    metricRows.mockResolvedValue(leagueRows({}, { p1: 13.6 }))
     projOverride.week = { season: '2026', week: 4 }
     projOverride.provider = new Map([
       ['p1', { playerId: 'p1', projectedPoints: 12.4, name: null, position: 'WR', team: 'GB', componentStats: null }],
@@ -1173,16 +1207,95 @@ describe('AllFantasy projection on the roster players (display only)', () => {
     projOverride.engine = null
   })
 
-  it('puts AF beside the provider projection, and leaves the simulation input untouched', async () => {
+  it('uses the same AF figure for display and simulation, including a missing projection', async () => {
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const body = (await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }
     const byId = new Map(body.rosters[0]!.players.map((p) => [p.id, p]))
     // No league scoring is on file here, so AF stands as the engine wrote it.
     expect(byId.get('p1')?.afProjection).toBe(13.6)
-    // `weeklyProjection` feeds the proposal simulation and stays the provider number.
-    expect(byId.get('p1')?.weeklyProjection).toBe(12.4)
+    // The simulation and the displayed AF price use the identical projection.
+    expect(byId.get('p1')?.weeklyProjection).toBe(13.6)
     // No engine row: the key is absent, never a 0.
     expect(byId.get('p2') && 'afProjection' in byId.get('p2')!).toBe(false)
-    expect(byId.get('p2')?.weeklyProjection).toBe(8.1)
+    expect(byId.get('p2')?.weeklyProjection).toBeNull()
+  })
+})
+
+describe('a REDRAFT league lists this season’s draft picks only (redraftDraftPicks.ts)', () => {
+  const team = (id: string, externalId: string, platformUserId: string, teamName: string) => ({
+    id, externalId, platformUserId, claimedByUserId: null, teamName,
+    avatarUrl: null, wins: 0, losses: 0, ties: 0,
+  })
+  const SESSION = {
+    id: 'ds-1', status: 'in_progress', draftType: 'snake', rounds: 2, teamCount: 2, thirdRoundReversal: false, version: 1,
+    slotOrder: [{ slot: 1, rosterId: 'R-1', displayName: 'Alpha' }, { slot: 2, rosterId: 'R-2', displayName: 'Bravo' }],
+    // Bravo already sold its 2nd-rounder to Alpha in the draft room.
+    tradedPicks: [{ round: 2, originalRosterId: 'R-2', previousOwnerName: 'Bravo', newRosterId: 'R-1', newOwnerName: 'Alpha' }],
+    // Overall 1 (Alpha's 1st) is already made.
+    picks: [{ overall: 1, playerName: 'X', position: 'RB', pickMetadata: null }],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'user-1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NBA', platform: 'manual', leagueType: 'redraft', isDynasty: false, draftPickTrading: true, starters: null, settings: {},
+    })
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([team('t1', 'R-1', 'user-1', 'Alpha'), team('t2', 'R-2', 'user-2', 'Bravo')])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    findManyRoster.mockResolvedValue([
+      // A stray future pick in the JSON must not be offered in a redraft league.
+      { id: 'R-1', platformUserId: 'user-1', playerData: { players: [], draftPicks: [{ id: 'p2027r1', season: 2027, round: 1 }] }, faabRemaining: 100 },
+      { id: 'R-2', platformUserId: 'user-2', playerData: { players: [] }, faabRemaining: 100 },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    getFantasyCalcValues.mockResolvedValue(new Map())
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    resolveProviderPlayers.mockResolvedValue(new Map())
+    findFirstDraftSession.mockResolvedValue(SESSION)
+  })
+
+  type Pick = { pickId: string; season: number; round: number; label: string; itemType: string; proposable?: boolean; fromTeam?: string | null }
+  async function load() {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as {
+      rosters: Array<{ rosterId: string; picks: Pick[] }>
+      pickPolicy?: { mode: string; futurePicksAllowed: boolean; futurePicksReason: string | null; draftClosedReason: string | null }
+    }
+    return { body, picksOf: (id: string) => body.rosters.find((r) => r.rosterId === id)!.picks }
+  }
+
+  it('shows both sides’ unmade current-season picks, proposable, and no future pick', async () => {
+    const { body, picksOf } = await load()
+    // Alpha: own 2nd + Bravo's 2nd; its 1st is made. Bravo: its 1st.
+    expect(picksOf('R-1').map((p) => p.pickId).sort()).toEqual(['rdp:ds-1:2:R-1', 'rdp:ds-1:2:R-2'])
+    expect(picksOf('R-2').map((p) => p.pickId)).toEqual(['rdp:ds-1:1:R-2'])
+    for (const p of [...picksOf('R-1'), ...picksOf('R-2')]) {
+      expect(p).toMatchObject({ season: 2026, itemType: 'rookie_pick', proposable: true })
+    }
+    expect(picksOf('R-1').find((p) => p.pickId === 'rdp:ds-1:2:R-2')).toMatchObject({ fromTeam: 'Bravo' })
+    expect(picksOf('R-1').some((p) => p.season === 2027)).toBe(false)
+    expect(body.pickPolicy).toMatchObject({ mode: 'redraft_current_draft', futurePicksAllowed: false })
+    expect(body.pickPolicy?.futurePicksReason).toMatch(/Future draft picks cannot be traded in a redraft league/)
+  })
+
+  it('after the draft completes, lists nothing and says why', async () => {
+    findFirstDraftSession.mockResolvedValue({ ...SESSION, status: 'completed' })
+    const { body, picksOf } = await load()
+    expect(picksOf('R-1')).toEqual([])
+    expect(picksOf('R-2')).toEqual([])
+    expect(body.pickPolicy?.draftClosedReason).toMatch(/draft is complete/)
+  })
+
+  it('[control] a dynasty league keeps the standard policy and its future picks', async () => {
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty', isDynasty: true, draftPickTrading: true, starters: null, settings: {},
+    })
+    const { body, picksOf } = await load()
+    expect(body.pickPolicy).toMatchObject({ mode: 'standard', futurePicksAllowed: true })
+    expect(picksOf('R-1').some((p) => p.pickId === 'p2027r1')).toBe(true)
   })
 })

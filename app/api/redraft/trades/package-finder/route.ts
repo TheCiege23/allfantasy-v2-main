@@ -17,7 +17,7 @@ function isCommissionerOrOwner(leagueId: string, userId: string): Promise<boolea
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) return NextResponse.json({ error: 'Unauthorized', code: 'unauthorized' }, { status: 401 })
 
   const body = (await req.json().catch(() => ({}))) as {
     leagueId?: string
@@ -32,23 +32,23 @@ export async function POST(req: NextRequest) {
   if (!leagueId || !myRosterId || !partnerRosterId) {
     return NextResponse.json({ error: 'leagueId, myRosterId, partnerRosterId required' }, { status: 400 })
   }
-  if (myRosterId === partnerRosterId) return NextResponse.json({ error: 'Rosters must differ' }, { status: 400 })
+  if (myRosterId === partnerRosterId) return NextResponse.json({ error: 'Rosters must differ', code: 'rosters_must_differ' }, { status: 400 })
 
   const gate = await assertLeagueMember(leagueId, userId)
-  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden', code: 'forbidden' }, { status: gate.status })
 
   const league = await assembleDiscoveryLeague(leagueId)
-  if (!league) return NextResponse.json({ error: 'No redraft season for league' }, { status: 404 })
+  if (!league) return NextResponse.json({ error: 'No redraft season for league', code: 'no_season' }, { status: 404 })
 
   // Privacy: the "my" side must be the caller's own roster (or caller is commissioner/owner).
   const owner = league.ownerByRoster.get(myRosterId)
   if (owner !== userId && !(await isCommissionerOrOwner(leagueId, userId))) {
-    return NextResponse.json({ error: 'You can only build packages from your own team' }, { status: 403 })
+    return NextResponse.json({ error: 'You can only build packages from your own team', code: 'own_team_only' }, { status: 403 })
   }
 
   const myRoster = league.rosters.find((r) => r.rosterId === myRosterId)
   const partnerRoster = league.rosters.find((r) => r.rosterId === partnerRosterId)
-  if (!myRoster || !partnerRoster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
+  if (!myRoster || !partnerRoster) return NextResponse.json({ error: 'Roster not found', code: 'roster_not_found' }, { status: 404 })
 
   // T8: attach native trade-block signals so package ideas can flag "on the trade block".
   const signals = await discoverySignals(leagueId, myRosterId)

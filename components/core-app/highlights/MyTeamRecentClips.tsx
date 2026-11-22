@@ -1,10 +1,11 @@
 'use client'
 import type { MyTeamData } from '@/lib/core-app/myTeam'
 import RecentClips from './RecentClips'
-import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useMessages } from '@/components/i18n/useMessages'
+import { corePartsMessages } from '@/lib/core-app/messages/coreParts'
 
 export default function MyTeamRecentClips({ data }: { data: MyTeamData }) {
-  const { language } = useOptionalLanguage()
+  const m = useMessages(corePartsMessages)
   const players = [
     ...(data.starters.available ? data.starters.data.flatMap(slot => slot.player ? [slot.player] : []) : []),
     ...(data.bench.available ? data.bench.data : []),
@@ -13,6 +14,6 @@ export default function MyTeamRecentClips({ data }: { data: MyTeamData }) {
   ]
   const playerIds = [...new Set(players.filter(p => p.sport?.toUpperCase() === 'NFL').map(p => p.sleeperId).filter(Boolean))].sort().slice(0, 60)
   if (!playerIds.length) return null
-  return <RecentClips key={data.league.id + ':' + playerIds.join(',')} title={language === 'es' ? 'Clips de mi equipo' : 'My Team clips'} request={{ kind: 'roster', playerIds }} />
+  return <RecentClips key={data.league.id + ':' + playerIds.join(',')} title={m.clipsMyTeam} request={{ kind: 'roster', playerIds }} />
 }
 

@@ -12,18 +12,23 @@ const h = vi.hoisted(() => ({
   revive: vi.fn(async () => undefined),
   itemUpdate: vi.fn(),
   itemFindFirst: vi.fn(),
+  weapon: vi.fn(async () => ({ id: 'weapon-action', isValid: true, publicResponse: 'weapon used', privateResponse: null, validationError: null })),
+  ambush: vi.fn(async () => ({ id: 'ambush-action', isValid: true, publicResponse: 'ambush set', privateResponse: null, validationError: null })),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'u1' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: vi.fn(async () => ({ ok: true })) }))
 vi.mock('@/lib/zombie/serumEngine', () => ({ processSerumAction: h.serum, processRevive: h.revive }))
+vi.mock('@/lib/zombie/weaponEngine', () => ({ processWeaponAction: h.weapon }))
+vi.mock('@/lib/zombie/ambushEngine', () => ({ processAmbushFromChimmy: h.ambush }))
 vi.mock('@/lib/zombie/ZombieHordeSitOutEngine', () => ({
   applyZombieHordeSitOutToChallenges: vi.fn(async () => ({ blocked: false })),
   nominateZombieHordeSitOut: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    zombieLeague: { findUnique: vi.fn(async () => ({ sport: 'NBA' })) },
     zombieTeamItem: { update: h.itemUpdate, findFirst: h.itemFindFirst },
     zombieChimmyAction: { create: vi.fn(async () => ({ id: 'x' })) },
     roster: { findFirst: vi.fn(async () => ({ id: 'R1' })) },
@@ -36,16 +41,23 @@ import { handleZombieChimmyAction } from '@/lib/zombie/chimmyActionHandler'
 beforeEach(() => vi.clearAllMocks())
 
 describe('Chimmy zombie actions that have no effect this season', () => {
+  it('routes weapon and ambush commands through their engines without direct item writes', async () => {
+    const weapon = await handleZombieChimmyAction('L1', 'u1', '@Chimmy use knife', 3)
+    const ambush = await handleZombieChimmyAction('L1', 'u1', '@Chimmy ambush Brain Drain', 3)
+    expect(weapon.ok).toBe(true)
+    expect(ambush.ok).toBe(true)
+    expect(h.weapon).toHaveBeenCalledTimes(1)
+    expect(h.ambush).toHaveBeenCalledTimes(1)
+    expect(h.itemUpdate).not.toHaveBeenCalled()
+  })
+
   it.each([
-    ['@Chimmy use knife', 'Weapons are'],
-    ['@Chimmy 💣 detonate bomb', 'The bomb is'],
-    ['@Chimmy ambush Brain Drain', 'Ambushes are'],
-    ['@Chimmy activate dark whisper power', 'Whisperer powers are'],
-  ])('%s is refused and nothing is spent', async (cmd, lead) => {
+    ['@Chimmy 💣 detonate bomb'],
+    ['@Chimmy activate dark whisper power'],
+  ])('%s is refused without spending until its effect is implemented', async (cmd) => {
     const r = await handleZombieChimmyAction('L1', 'u1', cmd, 3)
     expect(r.ok).toBe(false)
     expect(r.error).toBe('not_active_this_season')
-    expect(r.privateMessage).toContain(lead)
     expect(r.privateMessage).toContain('nothing was spent')
     expect(h.itemUpdate).not.toHaveBeenCalled()
   })

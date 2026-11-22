@@ -74,7 +74,7 @@ export const NFL_ROSTER_TEMPLATES: NflRosterTemplate[] = [
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, SUPERFLEX: 1, K: 1, DEF: 1, BN: 8 } },
   { key: 'idp', label: 'IDP', leagueTypes: ['redraft', 'dynasty'], description: 'Individual Defensive Player roster.',
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, DL: 2, LB: 2, DB: 2, IDP_FLEX: 1, K: 0, DEF: 0, BN: 8, IR: 2 } },
-  { key: 'guillotine', label: 'Guillotine', leagueTypes: ['guillotine'], description: 'Lean guillotine roster.',
+  { key: 'guillotine', label: 'Guilly', leagueTypes: ['guillotine'], description: 'Lean Guilly roster.',
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 4 } },
   { key: 'survivor', label: 'Survivor', leagueTypes: ['survivor'], description: 'Standard survivor roster.',
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BN: 6 } },

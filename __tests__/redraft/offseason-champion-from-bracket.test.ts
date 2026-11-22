@@ -15,13 +15,18 @@ const m = vi.hoisted(() => ({
   season: null as any,
   tournament: false,
   contest: null as any,
+  lockedSnapshot: null as any,
 }))
 
 vi.mock('@/lib/prisma', () => {
   const tx = {
-    leagueSeason: { create: (args: any) => { m.seasonCreate(args); return { id: 'snap-1', ...args.data } } },
+    $executeRaw: vi.fn(async () => 1),
+    leagueSeason: { findUnique: vi.fn(async () => m.lockedSnapshot), create: (args: any) => { m.seasonCreate(args); return { id: 'snap-1', ...args.data } } },
     franchiseSeason: { upsert: (args: any) => m.franchiseUpsert(args) },
     leagueAuditLog: { create: vi.fn() },
+    // The archive also upserts SeasonResult rows keyed by generic Roster.id; none exist here.
+    roster: { findMany: vi.fn(async () => []) },
+    seasonResult: { upsert: vi.fn() },
   }
   return {
     prisma: {
@@ -72,6 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.tournament = false
   m.contest = null
+  m.lockedSnapshot = null
   m.season = {
     id: 'season-1',
     leagueId: 'L1',
@@ -99,6 +105,12 @@ beforeEach(() => {
 })
 
 describe('enterRedraftOffseason — the champion comes from the bracket', () => {
+  it('keeps an archive that another finalizer committed before the lock was acquired', async () => {
+    m.lockedSnapshot = { id: 'concurrent-archive', leagueId: 'L1', season: 2026 }
+    expect(await enterRedraftOffseason('season-1', 'system:week-roller')).toMatchObject({ ok: true, snapshotId: 'concurrent-archive' })
+    expect(m.seasonCreate).not.toHaveBeenCalled()
+    expect(m.franchiseUpsert).not.toHaveBeenCalled()
+  })
   it('names the bracket winner champion and keeps the standings leader as regular-season winner', async () => {
     const res = await enterRedraftOffseason('season-1', 'system:week-roller')
     expect(res.ok).toBe(true)

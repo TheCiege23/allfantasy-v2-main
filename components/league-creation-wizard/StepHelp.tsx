@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
-export type StepHelpProps = {
+type StepHelpProps = {
   /** Short tooltip on hover (native title). */
   title?: string
   /** Longer content shown in popover when clicking the icon. */
@@ -49,7 +49,7 @@ export function StepHelp({ title, children, className }: StepHelpProps) {
   )
 }
 
-export type StepHeaderProps = {
+type StepHeaderProps = {
   title: string
   /** One-line description under the title. */
   description: string

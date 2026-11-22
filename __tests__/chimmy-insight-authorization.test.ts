@@ -1,3 +1,8 @@
+import { quotedChimmyRequest } from '@/__tests__/helpers/quotedChimmyRequest'
+vi.mock('@/lib/chimmy/requestReceipts', async original => ({
+  ...await original<typeof import('@/lib/chimmy/requestReceipts')>(),
+  ...(await import('@/__tests__/helpers/quotedChimmyRequest')).receiptStorageFixture,
+}))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
@@ -57,6 +62,12 @@ const refundSpendByLedgerMock = vi.fn()
 
 /** The single observation point for the defect. */
 const getInsightBundleMock = vi.fn()
+vi.mock('@/lib/chimmy/planAllowance', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/chimmy/planAllowance')>(),
+  // The authorization fixture uses the paid-token path after today's free answers.
+  readChimmyAnswerAllowance: async () => ({ kind: 'free', planName: 'Free Chimmy', limit: 2,
+    used: 2, remaining: 0, resetsAt: '2026-10-26T00:00:00.000Z' }),
+}))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -171,10 +182,10 @@ const LEAKABLE = [
 
 const ALL_INSIGHT_TYPES = ['trade', 'waiver', 'dynasty', 'matchup', 'playoff', 'draft'] as const
 
-function request(fields: Record<string, string>) {
+async function request(fields: Record<string, string>) {
   const fd = new FormData()
   for (const [k, v] of Object.entries(fields)) fd.append(k, v)
-  return createMockNextRequest('http://localhost/api/chat/chimmy', { method: 'POST', body: fd })
+  return quotedChimmyRequest(fd, 'stranger-1')
 }
 
 /*
@@ -265,7 +276,7 @@ beforeEach(() => {
 
 async function post(fields: Record<string, string>) {
   const { POST } = await import('@/app/api/chat/chimmy/route')
-  const res = await POST(request(fields) as never)
+  const res = await POST(await request(fields) as never)
   const body = await res.text()
   return { res, body }
 }

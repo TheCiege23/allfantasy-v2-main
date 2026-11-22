@@ -1,4 +1,4 @@
-export interface AgreementAcceptanceInput {
+interface AgreementAcceptanceInput {
   disclaimerAgreed: boolean
   termsAgreed: boolean
 }

@@ -40,7 +40,7 @@ function railOrder(container: HTMLElement): string[] {
   const scroll = container.querySelector('#af-rail-scroll')!
   return Array.from(scroll.children).map((el) =>
     el.classList.contains('af-rail-sport')
-      ? `# ${el.textContent}`
+      ? `# ${el.querySelector('.af-rail-sport-label')?.textContent}`
       : (el.getAttribute('href') ?? '').replace(/^.*league=/, ''),
   )
 }

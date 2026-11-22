@@ -1,5 +1,5 @@
 import { ageMultiplier as sportAgeMultiplier } from '@/lib/dynasty-engine/AgingCurveService'
-import { getPeakAgeRange, hasNativeAgingCurve } from '@/lib/dynasty-engine/SportDynastyResolver'
+import { getPeakAgeRange, hasNativeAgingCurve, isCollegeDynastySport } from '@/lib/dynasty-engine/SportDynastyResolver'
 import type {
   PlayerDynastyAsset,
   DynastyLeagueContext,
@@ -51,6 +51,10 @@ function nflAgeMultiplier(position: string, age: number | null, horizon: Horizon
  * an MLB SP aged like an NFL WR. They now go through the sport-aware AgingCurveService.
  */
 function ageMultiplier(sport: string, position: string, age: number | null, horizon: Horizon): number {
+  // NCAAF / NCAAB used to run the NFL curve: a 23-year-old college RB "declined" at the five-year
+  // horizon (age 27 on the NFL RB curve) and 18-19-year-olds took the NFL pre-peak discount. College
+  // value is not age-driven, so the multiplier is flat (see COLLEGE_DYNASTY_SPORTS).
+  if (isCollegeDynastySport(sport)) return 1
   if (hasNativeAgingCurve(sport)) return sportAgeMultiplier(sport, position, age, horizon)
   return nflAgeMultiplier(position, age, horizon)
 }
@@ -63,6 +67,7 @@ function ageMultiplier(sport: string, position: string, age: number | null, hori
  */
 function ageRiskFor(sport: string, position: string, age: number): number {
   const pos = position.toUpperCase()
+  if (isCollegeDynastySport(sport)) return 0
   if (hasNativeAgingCurve(sport)) {
     const r = getPeakAgeRange(sport, pos)
     const span = Math.max(1, r.hardCliff - r.peakEnd)

@@ -86,11 +86,32 @@ describe('computeKeeperEligibility reads the league history', () => {
     expect(byId.get('p-early')).toMatchObject({ yearsKept: 0, projectedCostRound: 1, isEligible: true })
     // Kept once at round 4 → his cost starts from 4, not from his original draft round (9).
     expect(byId.get('p-kept')).toMatchObject({ yearsKept: 1, projectedCostRound: 3 })
-    // Never drafted → the draft's last round.
-    expect(byId.get('p-waiver')).toMatchObject({ yearsKept: 0, projectedCostRound: 14 })
+    // Never drafted → the league's waiver round, which defaults to the draft's last round. That
+    // round IS the cost: the one-round-up penalty applies to drafted players, not pickups (spec §1.2).
+    expect(byId.get('p-waiver')).toMatchObject({ yearsKept: 0, projectedCostRound: 15 })
     // Kept three times against a three-year limit.
     expect(byId.get('p-vet')).toMatchObject({ yearsKept: 3, isEligible: false, ineligibleReason: 'max_years_reached' })
     // Synthetic draft id, real roster id: matched by name and position.
     expect(byId.get('real-99')).toMatchObject({ projectedCostRound: 5 })
+  })
+})
+
+describe('"drafted players only" covers every pickup', () => {
+  it('refuses a waiver claim and a free-agent add alike; a drafted or traded-for player is still eligible', async () => {
+    m.leagueFindFirst.mockResolvedValue({ id: 'L1', keeperCostSystem: 'round_based', keeperRoundPenalty: 1, keeperMaxYears: 3, keeperWaiverAllowed: false })
+    m.rosterFindMany.mockResolvedValue([
+      { id: 'roster-a', players: [
+        rosterPlayer('p-early', 'Early Pick', 'RB'),
+        rosterPlayer('p-waiver', 'Waiver Add', 'TE', 'waiver'),
+        rosterPlayer('p-fa', 'Free Agent Add', 'WR', 'free_agent'),
+        rosterPlayer('p-kept', 'Kept Once', 'WR', 'trade'),
+      ] },
+    ])
+    const byId = new Map((await computeKeeperEligibility('L1', 'season-1')).map((r) => [r.playerId, r]))
+    expect(byId.get('p-waiver')).toMatchObject({ isEligible: false, ineligibleReason: 'not_drafted' })
+    expect(byId.get('p-fa')).toMatchObject({ isEligible: false, ineligibleReason: 'not_drafted' })
+    expect(byId.get('p-early')).toMatchObject({ isEligible: true })
+    // Traded for: he keeps the cost his history gives him, whoever holds him now.
+    expect(byId.get('p-kept')).toMatchObject({ isEligible: true, projectedCostRound: 3 })
   })
 })

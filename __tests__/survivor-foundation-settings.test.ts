@@ -15,8 +15,8 @@ describe('Survivor foundation settings', () => {
   it('normalizes the Phase 1 canonical defaults', () => {
     const settings = normalizeSurvivorFoundationSettings(null)
     expect(settings.defaultTeamCount).toBe(20)
-    expect(settings.minTeamCount).toBe(16)
-    expect(settings.maxTeamCount).toBe(20)
+    expect(settings.minTeamCount).toBe(12)
+    expect(settings.maxTeamCount).toBe(24)
     expect(settings.tribeCount).toBe(4)
     expect(settings.mergeTriggerType).toBe('active_player_count')
     expect(settings.mergeActivePlayerCount).toBe(10)
@@ -36,12 +36,12 @@ describe('Survivor foundation settings', () => {
   it('reads nested survivorFoundationSettings and clamps team counts', () => {
     const settings = normalizeSurvivorFoundationSettings({
       survivorFoundationSettings: {
-        defaultTeamCount: 24,
+        defaultTeamCount: 30,
         tribeCount: 9,
         commissionerParticipationMode: 'participating_player',
       },
     })
-    expect(settings.defaultTeamCount).toBe(20)
+    expect(settings.defaultTeamCount).toBe(24)
     expect(settings.tribeCount).toBe(5)
     expect(settings.commissionerParticipationMode).toBe('participating_player')
   })
@@ -70,10 +70,11 @@ describe('Survivor foundation settings', () => {
     )
   })
 
-  it('keeps draft type IDs aligned with the Survivor concept defaults', () => {
+  it('keeps draft type IDs aligned with the Survivor concept defaults: snake, linear, auction, offline, auto', () => {
     expect(SURVIVOR_DRAFT_TYPE_IDS).toEqual(SURVIVOR_CANONICAL_DRAFT_TYPE_IDS)
-    expect(SURVIVOR_DRAFT_TYPE_IDS).toContain('real_time')
-    expect(SURVIVOR_DRAFT_TYPE_IDS).toContain('by_team')
+    expect(SURVIVOR_DRAFT_TYPE_IDS).toEqual(['snake', 'linear', 'auction', 'offline', 'auto'])
+    expect(SURVIVOR_DRAFT_TYPE_IDS).not.toContain('real_time')
+    expect(SURVIVOR_DRAFT_TYPE_IDS).not.toContain('by_team')
   })
 
   it('builds NFL and NCAAF Survivor snapshots with the Phase 1 structure', () => {

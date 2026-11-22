@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import MockDraftSleeperRoomClient from '@/components/mock-draft/MockDraftSleeperRoomClient'
@@ -12,8 +13,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = buildMetadata(
   getSEOPageConfig('mock-draft') ?? {
     title: 'Mock Drafts – AllFantasy',
-    description: 'Create, run, and share unlimited AllFantasy mock drafts with AI-powered insights.',
-    canonical: 'https://allfantasy.ai/mock-draft',
+    description: 'Create, run, and share unlimited AllFantasy mock drafts with Chimmy-powered insights.',
+    canonical: `${getPublicSiteOrigin()}/mock-draft`,
   }
 )
 
@@ -68,10 +69,10 @@ export default async function MockDraftPage(props: MockDraftPageProps) {
               AllFantasy Mock Drafts
             </h1>
             <p className="mt-2 text-sm text-white/60 sm:text-base">
-              Run a full Sleeper-style AI mock room with league import, real manager slots, and shareable results.
+              Run a full Sleeper-style Chimmy mock room with league import, real manager slots, and shareable results.
             </p>
           </div>
-          <MockDraftSleeperRoomClient initialLeagueId={initialLeagueId} initialSport={initialSport} />
+          <MockDraftSleeperRoomClient key={`${session.user.id}:${initialLeagueId}`} viewerId={session.user.id} initialLeagueId={initialLeagueId} initialSport={initialSport} />
         </div>
       </div>
     </>

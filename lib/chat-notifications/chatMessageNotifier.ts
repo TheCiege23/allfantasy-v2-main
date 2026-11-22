@@ -5,10 +5,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { resolveNotificationPreferences } from '@/lib/notification-settings/NotificationPreferenceResolver'
 import type { NotificationPreferences } from '@/lib/notification-settings/types'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
-import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
-import { getBaseUrl } from '@/lib/get-base-url'
 import { buildMessagePreview } from './messagePreview'
-import { buildDirectMessageEmail } from './directMessageEmail'
 import { decideChatAlert, nextChatAlertState, type ChatAlertDecision } from './alertThrottle'
 import {
   chatAlertStateKey,
@@ -19,8 +16,8 @@ import {
 import { safeDisplayName } from './displayName'
 
 /**
- * "You got a message" — bell, push, email and (once Twilio is live) a text — for DMs, huddles and,
- * opt-in, league chat. SERVER-SIDE, fired after the message is saved.
+ * Message notifications run server-side after the message is saved. League chat uses
+ * opt-in bell and push alerts. DMs and huddles use the same channels.
  *
  * 🛑 WHY THE SERVER. @mentions are dispatched from the BROWSER after a send (`/api/shared/chat/
  * mentions`), which means a closed tab, a failed follow-up request or a different client silently
@@ -151,25 +148,13 @@ async function lastSentBy(threadId: string, userIds: string[]): Promise<Map<stri
   return out
 }
 
-/** A mail-level unsubscribe (the link in every notification email) also stops these. */
-async function emailUnsubscribed(email: string): Promise<boolean> {
-  const row = await prisma.emailPreference
-    .findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-      select: { unsubscribedAt: true },
-    })
-    .catch(() => null)
-  return Boolean(row?.unsubscribedAt)
-}
-
 type ThrottleResult =
   | { go: false; outcome: ChatRecipientOutcome }
-  | { go: true; email: boolean }
+  | { go: true }
 
 /**
  * Decide and CLAIM. A store that cannot be read or written fails OPEN for the bell and push —
- * a database blip must not silence a message — but CLOSED for email, which is the one channel
- * where an unthrottled burst lands in an inbox and stays there.
+ * a database blip must not silence a message.
  */
 async function throttle(args: {
   scope: string
@@ -185,8 +170,8 @@ async function throttle(args: {
   try {
     stored = await readStoredChatAlertState(key)
   } catch (e) {
-    console.warn('[chat-notifications] alert state unavailable; sending without email', { scope: args.scope, userId: args.userId, ...logSafe(e) })
-    return { go: true, email: false }
+    console.warn('[chat-notifications] alert state unavailable; sending alert', { scope: args.scope, userId: args.userId, ...logSafe(e) })
+    return { go: true }
   }
   const decision: ChatAlertDecision = decideChatAlert({
     now: args.now,
@@ -198,11 +183,11 @@ async function throttle(args: {
   })
   if (!decision.alert) return { go: false, outcome: decision.reason }
   try {
-    const won = await claimChatAlertState(stored, nextChatAlertState(stored.state, args.now, decision.email), args.now)
-    return won ? { go: true, email: decision.email } : { go: false, outcome: 'lost_race' }
+    const won = await claimChatAlertState(stored, nextChatAlertState(stored.state, args.now, false), args.now)
+    return won ? { go: true } : { go: false, outcome: 'lost_race' }
   } catch (e) {
-    console.warn('[chat-notifications] alert state write failed; sending without email', { scope: args.scope, userId: args.userId, ...logSafe(e) })
-    return { go: true, email: false }
+    console.warn('[chat-notifications] alert state write failed; sending alert', { scope: args.scope, userId: args.userId, ...logSafe(e) })
+    return { go: true }
   }
 }
 
@@ -235,7 +220,6 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
           isMuted: true,
           isBlocked: true,
           lastReadAt: true,
-          user: { select: { email: true } },
         },
       },
     },
@@ -260,7 +244,6 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
     metadata: input.metadata ?? null,
   })
   const href = conversationHref(thread.id, input.messageId)
-  const baseUrl = getBaseUrl()
   const report: ChatNotifyReport = { recipients: [] }
 
   for (const member of others) {
@@ -289,20 +272,6 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
         continue
       }
 
-      const email = member.user?.email?.trim() || null
-      const sendEmail = gate.email && Boolean(email) && !(await emailUnsubscribed(email!))
-      const emailOverride = sendEmail
-        ? buildDirectMessageEmail({
-            senderName,
-            preview,
-            threadTitle,
-            isGroup,
-            conversationUrl: `${baseUrl}${href}`,
-            baseUrl,
-            unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email!))}`,
-          })
-        : undefined
-
       await dispatchNotification({
         userIds: [userId],
         category: 'direct_messages',
@@ -311,10 +280,6 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
         // Push shows this as the notification's title: the sender, as the owner asked.
         title: isGroup ? `${senderName} · ${threadTitle}` : senderName,
         body: preview,
-        // Sender name, thread title and preview are all user-written; none of them goes over SMS.
-        smsBody: isGroup
-          ? 'New message in a group chat. Open AllFantasy to read it.'
-          : 'You have a new direct message. Open AllFantasy to read it.',
         actionHref: href,
         actionLabel: 'Open conversation',
         severity: 'low',
@@ -330,10 +295,9 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
           // The sender's face on the phone: the push icon (web), the attachment (iPhone).
           ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
         },
-        skipChannels: sendEmail ? undefined : { email: true },
-        emailOverride,
+        skipChannels: { email: true, sms: true },
       })
-      report.recipients.push({ userId, outcome: 'alerted', email: sendEmail })
+      report.recipients.push({ userId, outcome: 'alerted', email: false })
     } catch (e) {
       console.error('[chat-notifications] dm alert failed', { threadId: thread.id, userId, ...logSafe(e) })
       report.recipients.push({ userId, outcome: 'failed' })
@@ -367,7 +331,7 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
     const saved = p.notificationPreferences as NotificationPreferences | null
     if (saved?.globalEnabled === false) continue
     const cat = resolveNotificationPreferences(saved).categories?.league_chat
-    if (cat?.enabled && (cat.inApp || cat.email || cat.sms || (cat.push ?? cat.inApp))) optedIn.add(p.userId)
+    if (cat?.enabled && (cat.inApp || cat.push)) optedIn.add(p.userId)
   }
   const report: ChatNotifyReport = {
     recipients: memberIds.filter((id) => !optedIn.has(id)).map((userId) => ({ userId, outcome: 'not_opted_in' as const })),
@@ -376,22 +340,17 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
 
   const recipients = [...optedIn]
   const blockers = await blockersOf(input.senderUserId, recipients)
-  const [{ name: senderName, avatarUrl: senderAvatarUrl }, league, users] = await Promise.all([
+  const [{ name: senderName, avatarUrl: senderAvatarUrl }, league] = await Promise.all([
     senderOf(input.senderUserId),
     prisma.league.findUnique({ where: { id: input.leagueId }, select: { name: true } }).catch(() => null),
-    prisma.appUser
-      .findMany({ where: { id: { in: recipients } }, select: { id: true, email: true } })
-      .catch(() => [] as Array<{ id: string; email: string | null }>),
   ])
   const leagueName = safeDisplayName([league?.name], 'League chat', 60)
-  const emailOf = new Map(users.map((u) => [u.id, u.email?.trim() || null]))
   const preview = buildMessagePreview({
     messageType: input.messageType,
     body: input.body,
     metadata: input.metadata ?? null,
   })
-  const href = `/league/${encodeURIComponent(input.leagueId)}`
-  const baseUrl = getBaseUrl()
+  const href = `/league/${encodeURIComponent(input.leagueId)}?openChat=league&message=${encodeURIComponent(input.messageId)}`
   const messageAt = toDate(input.createdAt, now)
 
   for (const userId of recipients) {
@@ -412,8 +371,6 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
         report.recipients.push({ userId, outcome: gate.outcome })
         continue
       }
-      const email = emailOf.get(userId) ?? null
-      const sendEmail = gate.email && Boolean(email) && !(await emailUnsubscribed(email!))
       await dispatchNotification({
         userIds: [userId],
         category: 'league_chat',
@@ -421,8 +378,6 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
         type: 'league_chat_message',
         title: `${senderName} · ${leagueName}`,
         body: preview,
-        // Sender name and preview are user-written; neither goes over SMS.
-        smsBody: 'New message in your league chat. Open AllFantasy to read it.',
         actionHref: href,
         actionLabel: 'Open league chat',
         leagueId: input.leagueId,
@@ -435,20 +390,9 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
           pushTag: `league-chat-${input.leagueId}`,
           ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
         },
-        skipChannels: sendEmail ? undefined : { email: true },
-        emailOverride: sendEmail
-          ? buildDirectMessageEmail({
-              senderName,
-              preview,
-              threadTitle: leagueName,
-              isGroup: true,
-              conversationUrl: `${baseUrl}${href}`,
-              baseUrl,
-              unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(createEmailUnsubscribeToken(email!))}`,
-            })
-          : undefined,
+        skipChannels: { email: true, sms: true },
       })
-      report.recipients.push({ userId, outcome: 'alerted', email: sendEmail })
+      report.recipients.push({ userId, outcome: 'alerted', email: false })
     } catch (e) {
       console.error('[chat-notifications] league chat alert failed', { leagueId: input.leagueId, userId, ...logSafe(e) })
       report.recipients.push({ userId, outcome: 'failed' })

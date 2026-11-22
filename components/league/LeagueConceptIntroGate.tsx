@@ -27,7 +27,7 @@ type LeagueConceptIntroGateProps = {
   onSettled?: () => void
 }
 
-const REDRAFT_INTRO_VIDEO_URL = '/media/league-intros/redraft-league-intro.mp4'
+const REDRAFT_INTRO_VIDEO_URL = '/media/create-league/concept/videos/Redraft.mp4'
 
 const CONCEPT_SEED = new Map(
   LEAGUE_CREATE_OPTIONS_CATALOG_V1.concepts.map((concept) => [

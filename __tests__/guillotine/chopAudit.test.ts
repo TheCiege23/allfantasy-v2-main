@@ -24,6 +24,9 @@ const h = vi.hoisted(() => ({
   seasonFindUnique: vi.fn(),
   leagueFindUnique: vi.fn(),
   transition: vi.fn(),
+  txQueryRaw: vi.fn(),
+  txElimFindFirst: vi.fn(),
+  calls: [] as string[],
 }))
 
 vi.mock('server-only', () => ({}))
@@ -46,7 +49,8 @@ import {
 } from '@/lib/guillotine/guillotineChopAudit'
 
 const tx = {
-  guillotineElimination: { create: h.elimCreate },
+  $queryRaw: h.txQueryRaw,
+  guillotineElimination: { create: h.elimCreate, findFirst: h.txElimFindFirst },
   guillotineSurvivalLog: { upsert: h.survivalUpsert },
   guillotineSeason: { update: h.seasonUpdate },
 }
@@ -84,6 +88,9 @@ beforeEach(() => {
   // Default: field still large, so no transition.
   h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 10, isInFinalStage: false })
   h.leagueFindUnique.mockResolvedValue({ guillotineEndgameThreshold: 2 })
+  h.calls = []
+  h.txQueryRaw.mockImplementation(async (sql: TemplateStringsArray) => { h.calls.push(sql.join('?')); return [] })
+  h.txElimFindFirst.mockImplementation(async () => { h.calls.push('recheck'); return null })
 })
 
 describe('🛑 optional when there is no season row — the common case', () => {
@@ -125,6 +132,48 @@ describe('🛑 idempotency — the guard the automation engine never had', () =>
 
     expect(out).toEqual({ recorded: false, reason: 'already_recorded' })
     expect(h.transaction).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE RACE THE CHECK ABOVE CANNOT SEE (2026-10-29). Two runs of the same week — an elimination
+   * lock that expired under a slow run, or two worker replicas — both read "not recorded" before
+   * either writes. Each would record the chop and decrement the active count, and two decrements for
+   * one chop can start a final stage a week early.
+   */
+  it('🛑 locks the season row and checks again inside the transaction, before writing anything', async () => {
+    h.seasonFindFirst.mockResolvedValue({ id: 'gs1' })
+    h.elimFindFirst.mockResolvedValue(null)
+    await recordChopAudit(input())
+    expect(h.calls).toEqual(['SELECT id FROM guillotine_seasons WHERE id = ? FOR UPDATE', 'recheck'])
+    expect(h.txQueryRaw.mock.calls[0].slice(1)).toEqual(['gs1'])
+    expect(h.txElimFindFirst).toHaveBeenCalledWith({ where: { seasonId: 'gs1', scoringPeriod: 4 }, select: { id: true } })
+  })
+
+  it('🛑 the run that loses the race writes nothing and decrements nothing', async () => {
+    h.seasonFindFirst.mockResolvedValue({ id: 'gs1' })
+    h.elimFindFirst.mockResolvedValue(null)          // the fast path saw nothing…
+    h.txElimFindFirst.mockResolvedValue({ id: 'won' }) // …the other run committed while this one waited
+    const out = await recordChopAudit(input())
+    expect(out).toEqual({ recorded: false, reason: 'already_recorded' })
+    expect(h.elimCreate).not.toHaveBeenCalled()
+    expect(h.survivalUpsert).not.toHaveBeenCalled()
+    expect(h.seasonUpdate).not.toHaveBeenCalled()
+    expect(h.transition).not.toHaveBeenCalled()
+  })
+
+  it('the unique index is the backstop: a duplicate the database refuses reads as already recorded', async () => {
+    h.seasonFindFirst.mockResolvedValue({ id: 'gs1' })
+    h.elimFindFirst.mockResolvedValue(null)
+    h.transaction.mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }))
+    expect(await recordChopAudit(input())).toEqual({ recorded: false, reason: 'already_recorded' })
+    expect(h.transition).not.toHaveBeenCalled()
+  })
+
+  it('any other failure still throws (the caller logs it; the chop stands)', async () => {
+    h.seasonFindFirst.mockResolvedValue({ id: 'gs1' })
+    h.elimFindFirst.mockResolvedValue(null)
+    h.transaction.mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'P1001' }))
+    await expect(recordChopAudit(input())).rejects.toThrow('connection reset')
   })
 })
 

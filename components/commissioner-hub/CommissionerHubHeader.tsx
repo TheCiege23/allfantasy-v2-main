@@ -13,12 +13,12 @@ import { useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { AccentTone } from '@/lib/create-league-v2/theme'
 
-export interface CommissionerHubStat {
+interface CommissionerHubStat {
   label: string
   value: ReactNode
 }
 
-export interface CommissionerHubHeaderProps {
+interface CommissionerHubHeaderProps {
   /** Short chip label rendered above the title (e.g. "TOURNAMENT · Round 2"). */
   chip: string
   /** Main hub name (e.g. "The Gauntlet 2026"). */

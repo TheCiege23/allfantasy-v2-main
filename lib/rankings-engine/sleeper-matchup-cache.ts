@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueMatchups } from '@/lib/sleeper-client'
 import { readLeagueWeekMetadata } from '@/lib/core-app/leagueWeekMetadata'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
+import { changeAwareWritesEnabled } from '@/lib/league-import/changeAwareWrites'
 
 /*
  * ⚠ NO DEFAULT SEASON, ON PURPOSE. This module shipped with
@@ -95,6 +96,26 @@ export async function ensureMatchupsCached(
   )
   const results = await Promise.all(fetchPromises)
 
+  /*
+   * The stored rows of every refetched week that is already cached, read once, so an unchanged week
+   * can be recognised as unchanged. A week that is not cached yet has nothing to compare against.
+   */
+  /* Kill switch: `AF_CHANGE_AWARE_WRITES_OFF=matchups` restores the always-replace behaviour. */
+  const refetchedCachedWeeks = changeAwareWritesEnabled('matchups') ? missingWeeks.filter(w => cachedWeeks.has(w)) : []
+  const storedRows = refetchedCachedWeeks.length > 0
+    ? await prisma.weeklyMatchup.findMany({
+        where: { leagueId, seasonYear, week: { in: refetchedCachedWeeks } },
+        select: { week: true, rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
+      // Unreadable means "cannot prove unchanged": every week then takes the replace path, as before.
+      }).catch(() => null)
+    : []
+  const storedByWeek = new Map<number, MatchupRowShape[]>()
+  for (const row of storedRows ?? []) {
+    const list = storedByWeek.get(row.week) ?? []
+    list.push(row)
+    storedByWeek.set(row.week, list)
+  }
+
   for (const { week, matchups } of results) {
     const matchupMap = new Map<number, typeof matchups>()
     for (const m of matchups) {
@@ -106,10 +127,19 @@ export async function ensureMatchupsCached(
 
     const rows = matchups.map(m => {
       let oppPoints = 0
+      /*
+       * 🛑 NO OPPONENT, NO WIN. A roster alone in its matchup (a bye, or a league with no
+       * head-to-head pairing) used to be compared against a phantom 0, so every one that scored was
+       * stored `win = 1` — fifteen leagues read all twelve teams 1-0 (standingsModel.ts). `win` is 1
+       * only for beating a real opponent; a tie stays 0 for both sides, and readers tell it from a
+       * loss by the equal points (externalMatchupParity.ts writes the same encoding).
+       */
+      let hasOpponent = false
       if (m.matchup_id) {
         const group = matchupMap.get(m.matchup_id) || []
-        const opp = group.find(x => x.roster_id !== m.roster_id)
+        const opp = group.length === 2 ? group.find(x => x.roster_id !== m.roster_id) : undefined
         oppPoints = opp?.points || 0
+        hasOpponent = opp != null
       }
       const pts = m.points || 0
       return {
@@ -122,11 +152,31 @@ export async function ensureMatchupsCached(
         matchupId: m.matchup_id || null,
         pointsFor: pts,
         pointsAgainst: oppPoints,
-        win: pts > oppPoints ? 1 : 0,
+        win: hasOpponent && pts > oppPoints ? 1 : 0,
       }
     })
 
     if (rows.length > 0) {
+      /*
+       * 🛑 AN UNCHANGED WEEK IS NOT DELETED AND REINSERTED — BUT ITS `updatedAt` STILL MOVES.
+       *
+       * The active lane refreshes the current week every five minutes per league, and between
+       * games the provider answers with exactly what is stored. Replacing the week anyway cost a
+       * delete and an insert per roster, plus their index entries, every time.
+       *
+       * `updatedAt` is advanced regardless, in one statement, because it is load-bearing in four
+       * places: the staleness test at the top of this function (leave it behind and every call
+       * refetches from Sleeper), the season-outlook prewarm's "which leagues moved" scan, the
+       * league sync panel's "matchups updated N ago", and the admin pipeline-freshness board.
+       * All of them read it as "last confirmed", which is still true.
+       */
+      if (storedRows && refetchedCachedWeeks.includes(week) && sameWeekRows(storedByWeek.get(week) ?? [], rows)) {
+        await prisma.weeklyMatchup.updateMany({
+          where: { leagueId, seasonYear, week },
+          data: { updatedAt: new Date() },
+        })
+        continue
+      }
       // Keep the last usable scores until a non-empty replacement has arrived.
       // Replacing a week atomically also preserves them if the insert fails.
       await prisma.$transaction(async (tx) => {
@@ -137,6 +187,37 @@ export async function ensureMatchupsCached(
       })
     }
   }
+}
+
+type MatchupRowShape = {
+  rosterId: string
+  matchupId: number | null
+  pointsFor: number
+  pointsAgainst: number
+  win: number
+}
+
+/**
+ * True when replacing the stored week with `incoming` would leave the table exactly as it is.
+ *
+ * `createMany({ skipDuplicates: true })` keeps the FIRST row for a repeated roster, so the incoming
+ * side is collapsed the same way before comparing. Row order is not data.
+ */
+export function sameWeekRows(stored: MatchupRowShape[], incoming: MatchupRowShape[]): boolean {
+  const next = new Map<string, MatchupRowShape>()
+  for (const row of incoming) if (!next.has(row.rosterId)) next.set(row.rosterId, row)
+  if (stored.length !== next.size) return false
+  for (const row of stored) {
+    const other = next.get(row.rosterId)
+    if (!other) return false
+    if (
+      other.matchupId !== row.matchupId ||
+      other.pointsFor !== row.pointsFor ||
+      other.pointsAgainst !== row.pointsAgainst ||
+      other.win !== row.win
+    ) return false
+  }
+  return true
 }
 
 export async function getWeekStatsFromCache(

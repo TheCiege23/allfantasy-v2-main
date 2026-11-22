@@ -7,6 +7,10 @@ import {
 import { PROBES } from '../scripts/cron-freshness-check.mjs'
 
 describe('fast-tier operational overlays', () => {
+  it('runs Survivor Guillotine provider ingestion every five minutes', () => {
+    expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({ path: '/api/cron/survivor-guillotine-ingest', schedule: '*/5 * * * *' })
+    expect(PROBES['/api/cron/survivor-guillotine-ingest']).toEqual({ heartbeat: 'cron-survivor-guillotine-provider' })
+  })
   it('schedules the active provider lane every five minutes without a Vercel cron entry', () => {
     expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({
       path: '/api/cron/fantasy-os-active-sync',
@@ -21,6 +25,12 @@ describe('fast-tier operational overlays', () => {
       schedule: '*/2 * * * *',
     })
     expect(withFastTierOperationalOverlays([])).toEqual(FAST_TIER_OPERATIONAL_OVERLAYS)
+  })
+
+  it('runs NBA Cup live scores every minute and monitors its heartbeat', () => {
+    expect(FAST_TIER_OPERATIONAL_OVERLAYS).toContainEqual({ path: '/api/cron/nba-cup-live', schedule: '* * * * *' })
+    expect(PROBES['/api/cron/nba-cup-live']).toEqual({ heartbeat: 'cron-nba-cup-live' })
+    expect(readFileSync('app/api/cron/nba-cup-live/route.ts', 'utf8')).toContain('const JOB = "cron-nba-cup-live"')
   })
 
   it('does not duplicate a route if it later becomes a native cron', () => {

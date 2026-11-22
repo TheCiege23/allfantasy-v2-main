@@ -66,6 +66,23 @@ describe('fetchEspnScoreboard — basketball team box', () => {
     expect(row!.homeShooting?.threePointers).toEqual({ made: 13, attempted: 47, pct: '27.7' })
   })
 
+  it('keeps a real zero and leaves an absent in-game score unknown', async () => {
+    const event = nbaScoreboardEvent('in')
+    const competition = event.competitions[0]!
+    serve({
+      ...event,
+      competitions: [{
+        ...competition,
+        competitors: competition.competitors.map((side) => ({
+          ...side, score: side.homeAway === 'home' ? '0' : undefined,
+        })),
+      }],
+    })
+    const { fetchEspnScoreboard } = await import('@/lib/sports-live-scores-service')
+    const [row] = await fetchEspnScoreboard('NBA')
+    expect(row).toMatchObject({ homeScore: 0, awayScore: null })
+  })
+
   it('control: hockey competitors send `points` and `assists` too, and grow no team box', async () => {
     serve(nbaScoreboardEvent('post'))
     const { fetchEspnScoreboard } = await import('@/lib/sports-live-scores-service')

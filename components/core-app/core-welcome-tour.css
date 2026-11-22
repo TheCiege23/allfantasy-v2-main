@@ -3,10 +3,16 @@
  * card at 24px, the bubble at `--af-fab-bottom` — so during the tour a tap on the bubble
  * hit the card. Keep the guide in document flow at every width so it cannot cover
  * the weekly playoff path or sharing controls on tablets and desktops either.
+ *
+ * ⚠ NO Z-INDEX. 170 was left over from the corner-anchored card; in flow it only lifted the
+ * guide over every top-bar dropdown (account menu at 60, data menu at 45), hiding their links.
+ * `position: relative` stays because the close button is positioned against it.
  */
 .af-welcome {
+  flex: 0 0 auto;
+  min-width: 0;
+  scroll-margin-top: 90px;
   position: relative;
-  z-index: 170;
   width: 100%;
   margin-bottom: 18px;
   padding: 20px;
@@ -27,7 +33,7 @@
 .af-welcome-progress i { height: 3px; flex: 1; border-radius: 999px; background: var(--line2); }
 .af-welcome-progress i[data-active='true'] { background: var(--accent); }
 /*
- * 🛑 44x44, BECAUSE THIS IS THE ONLY WAY TO DISMISS THE TOUR. Found by the
+ * 44x44 for the close icon as well as the labeled footer action. Found by the
  * authenticated phone gate the day /core/my-team joined it (2026-09-19), at
  * 36x36 — the same "a few px short of a floor the rest of /core already holds"
  * shape as `.af-nav-support`, which was fixed rather than baselined for the same

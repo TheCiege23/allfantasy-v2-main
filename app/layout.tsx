@@ -3,20 +3,24 @@ import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
 import { cookies } from 'next/headers';
+import { getRequestNonce } from '@/lib/security/requestNonce';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
 import { DefaultJsonLd } from '@/components/seo/JsonLd';
 import { SafeGlobalChrome } from '@/components/shell/SafeGlobalChrome';
 import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar';
+import { SignInPushSheet } from '@/components/notifications/SignInPushSheet';
+import { AppMusicDock } from '@/components/app-music/AppMusicDock';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
-import { resolveEffectiveDataMode } from '@/lib/theme';
+import { resolveServerDataMode, THEME_SYSTEM_RESOLVED_COOKIE_KEY } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import { IOS_APP_HTML_FLAG_SCRIPT, IOS_APP_UA_TEST_JS } from '@/lib/platform/iosApp';
+import { APP_STORE_APP_ID } from '@/lib/platform/iosAppStore';
 import { AD_OPT_OUT_TEST_JS } from '@/lib/privacy/adMeasurementOptOut';
 import './globals.css';
 
@@ -25,6 +29,10 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: 'cover' as const,
+  // The browser / installed-app status bar. Matches the manifest's
+  // background_color and the dark default theme; it was unset here while the
+  // manifest said cyan, so the installed app wore a cyan bar over a navy app.
+  themeColor: '#020617',
 };
 
 /*
@@ -41,10 +49,13 @@ export const metadata: Metadata = {
     title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',
     description:
       'AllFantasy combines fantasy sports leagues, bracket challenges, and Chimmy-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
-    // canonicalPath, not a hardcoded host: the origin resolves through
-    // getPublicSiteOrigin like the sitemap does, so the homepage canonical can
-    // never name a host that redirects to the other one.
-    canonicalPath: '/',
+    // ⚠ NO canonical HERE. Next.js hands a layout's `alternates` down to every
+    // page that does not set its own, so `canonicalPath: '/'` in the ROOT layout
+    // told Google that /brackets, /world-cup, /discover/leagues, /creator-leagues,
+    // /af-legacy and every other page without a canonical was a duplicate of the
+    // homepage — the strongest available hint to drop them from the index.
+    // A page with no canonical is self-canonical, which is the safe default.
+    // The homepage sets its own in app/page.tsx; every other page sets its own.
     keywords: [
       'fantasy sports',
       'fantasy football tools',
@@ -69,6 +80,9 @@ export const metadata: Metadata = {
     apple: '/icons/icon-192.png',
   },
   manifest: metadataManifestPath,
+  // ⚠ NO `itunes` HERE — the Smart App Banner tag is rendered in the layout below. Next 15 streams this
+  // metadata object into <body> for ordinary browsers, and Safari reads apple-itunes-app only from <head>,
+  // so `itunes: { appId }` here served the right tag in the wrong place and no banner ever showed.
   robots: {
     index: true,
     follow: true,
@@ -100,11 +114,15 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
+  // This request's CSP nonce, set by middleware (lib/security/cspReportOnly.ts, Phase 3).
+  // Every inline script below carries it; under the nonce policy one that does not is
+  // refused. Undefined in `next dev` and in the allowlist-only modes, where it is unused.
+  const nonce = await getRequestNonce();
   const cookieLang = cookieStore.get('af_lang')?.value;
   const htmlLang = resolveLanguage(cookieLang);
   const htmlDir = getLanguageTextDirection(htmlLang);
   const cookieMode = cookieStore.get('af_mode')?.value;
-  const htmlMode = resolveEffectiveDataMode(cookieMode);
+  const htmlMode = resolveServerDataMode(cookieMode, cookieStore.get(THEME_SYSTEM_RESOLVED_COOKIE_KEY)?.value);
 
   // Always attempt to preload the session. `getServerSession` only reads the
   // NextAuth JWT from cookies, so it is safe and cheap on auth routes
@@ -248,6 +266,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Caveat:wght@500;600;700&family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;700;800&family=Bebas+Neue&family=Creepster&family=Pirata+One&display=swap"
         precedence="default"
       />
+      {/*
+        Safari on iPhone shows its own "Get the app" banner ("Open" once installed), but ONLY when this tag
+        is in <head>. As metadata (`itunes: { appId }`) Next 15 streamed it into <body> and Safari ignored it.
+        Rendered here, React hoists it into <head> like the stylesheet above (checked in the served HTML with
+        an iPhone Safari user agent). WKWebView never renders the banner, so the app is unaffected.
+        lib/platform/iosAppStore.ts holds the id.
+      */}
+      <meta name="apple-itunes-app" content={`app-id=${APP_STORE_APP_ID}`} />
       <body
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
@@ -258,11 +284,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           there (lib/platform/iosApp says why). Client-side on purpose: reading
           the User-Agent on the server would make every page dynamic.
         */}
-        <script id="af-ios-app-flag" dangerouslySetInnerHTML={{ __html: IOS_APP_HTML_FLAG_SCRIPT }} />
+        <script id="af-ios-app-flag" nonce={nonce} dangerouslySetInnerHTML={{ __html: IOS_APP_HTML_FLAG_SCRIPT }} />
 
         {metaPixelId ? (
           <script
             id="meta-pixel-immediate-bootstrap"
+            nonce={nonce}
             dangerouslySetInnerHTML={{
               __html: `
                 (function(f,b,e,v,pixelId,n,t,s) {
@@ -317,7 +344,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ) : null}
 
         {metaPixelId ? (
-          <Script id="meta-pixel-base" strategy="afterInteractive">
+          <Script id="meta-pixel-base" nonce={nonce} strategy="afterInteractive">
             {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
               !function(f,b,e,v,n,t,s)
               {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -382,7 +409,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {gaMeasurementId && (
           <>
             {/* Injected here rather than as <Script src> so the iOS app can skip it (lib/platform/iosApp). */}
-            <Script id="google-gtag" strategy="afterInteractive">
+            <Script id="google-gtag" nonce={nonce} strategy="afterInteractive">
               {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) {
                 var gtagJs = document.createElement('script');
                 gtagJs.async = true;
@@ -440,13 +467,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         {gtmId && (
           <>
-            <Script id="gtm-init" strategy="beforeInteractive">
+            <Script id="gtm-init" nonce={nonce} strategy="beforeInteractive">
               {`window.dataLayer = window.dataLayer || [];`}
             </Script>
-            <Script id="gtm-loader" strategy="afterInteractive">
+            <Script id="gtm-loader" nonce={nonce} strategy="afterInteractive">
               {`if (!${IOS_APP_UA_TEST_JS} && !(${AD_OPT_OUT_TEST_JS})) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;var n=d.currentScript&&d.currentScript.nonce;if(n)j.setAttribute('nonce',n);j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','${gtmId}');`}
             </Script>
@@ -454,7 +481,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         )}
 
         <DefaultJsonLd />
-        <Script id="analytics-healthcheck" strategy="afterInteractive">
+        <Script id="analytics-healthcheck" nonce={nonce} strategy="afterInteractive">
           {`
             (function() {
               try {
@@ -545,6 +572,20 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
                 league, player or settings page was ignored — the app just reopened where it was.
               */}
               <IosAppPushRegistrar />
+              {/*
+                After sign-up or sign-in: one "turn on phone alerts" sheet per visit, "Not now" asks
+                again later (up to three times). Rules in lib/push-notifications/signInPushAsk.ts.
+              */}
+              <SignInPushSheet />
+              {/*
+                App-wide music (YouTube + Apple Music). Here, in the ROOT layout,
+                because this is the one place that survives every client-side
+                navigation — music started in the draft room keeps playing on
+                lineups and trades. Renders nothing until the visitor is signed in.
+                Inside this crash-safe boundary so a music failure can never
+                blank a page.
+              */}
+              <AppMusicDock />
             </Suspense>
           </ErrorBoundaryClient>
 

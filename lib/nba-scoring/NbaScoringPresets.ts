@@ -70,8 +70,6 @@ export const NBA_STAT_KEYS = [
   'assist_turnover_bonus',
 ] as const
 
-export type NbaStatKey = (typeof NBA_STAT_KEYS)[number]
-
 /** Human-readable labels for each stat key. */
 export const NBA_STAT_LABELS: Record<string, string> = {
   // General
@@ -155,7 +153,7 @@ const SLEEPER_DEFAULT: NbaScoringPreset = {
   label: 'Sleeper Default',
   source: 'PLATFORM_PRESET',
   description: 'Sleeper-compatible NBA scoring categories. Based on Sleeper\'s documented default basketball scoring settings.',
-  warning: 'This scoring preset is based on Sleeper\'s default format. Specialty leagues (Zombie, Survivor, Tournament, Guillotine, Big Brother) are optimized for AllFantasy scoring and may not score exactly as intended under this preset.',
+  warning: 'This scoring preset is based on Sleeper\'s default format. Specialty leagues (Zombie, Survivor, Tournament, Guilly, Big Brother) are optimized for AllFantasy scoring and may not score exactly as intended under this preset.',
   rules: {
     points_scored: 1,
     rebound: 1,

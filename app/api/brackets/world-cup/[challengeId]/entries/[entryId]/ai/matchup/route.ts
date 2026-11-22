@@ -1,3 +1,4 @@
+import { withPaidToolBilling } from '@/lib/tokens/paidToolBilling'
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { userHasBracketBrainAi } from "@/lib/bracket-brain/bracketBrainAccess"
@@ -26,7 +27,7 @@ const bodySchema = z.object({
   confirmTokenSpend: z.boolean().optional().default(false),
 })
 
-export async function POST(
+async function paidToolPost(
   req: NextRequest,
   props: { params: Promise<{ challengeId: string; entryId: string }> }
 ) {
@@ -44,63 +45,6 @@ export async function POST(
   }
 
   const { matchId, strategy, intent } = body
-
-  const hasBracketBrainAi = await userHasBracketBrainAi(
-    userResult.user.id,
-    userResult.user.email ?? null
-  )
-  const explicitAiIntent = intent === "ask_ai" || intent === "explain"
-  const tokenAccess = explicitAiIntent
-    ? await prepareWorldCupAiTokenFallback({
-        userId: userResult.user.id,
-        userEmail: userResult.user.email ?? null,
-        entitled: hasBracketBrainAi,
-        ruleCode: WORLD_CUP_AI_TOKEN_RULES.matchup,
-        confirmTokenSpend: body.confirmTokenSpend,
-        sourceType: "world_cup_matchup_ai",
-        sourceId: `${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
-        idempotencyKey: `wc-matchup-ai:${userResult.user.id}:${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
-        description: "World Cup matchup AI analysis",
-        metadata: { challengeId, entryId, matchId, intent, strategy },
-        upgradePath: "/pricing?from=wc-matchup-ai",
-      })
-    : { ok: true as const, mode: "subscription" as const, tokenPreview: null, commitTokenSpend: null }
-
-  if (!tokenAccess.ok) {
-    return tokenAccess.response
-  }
-
-  // Daily cap for generative matchup AI (panel summary + ask_ai/explain narratives).
-  // Free users are already blocked above for ask_ai/explain; this cap applies to Pro+.
-  const isAdmin = await getWorldCupAdminState(req, userResult.user)
-  const aiEligible = Boolean(hasBracketBrainAi || tokenAccess.mode === "tokens")
-  const matchupTier = resolveWcCapTier({ isAdmin, hasPro: aiEligible })
-  let capExceededForExplicit = false
-
-  if (aiEligible) {
-    const capResult = await checkWcAiCap("wc_matchup_narrative", userResult.user.id, matchupTier)
-    if (!capResult.allowed) {
-      // ask_ai / explain: block explicitly — user is deliberately invoking AI.
-      if (intent === "ask_ai" || intent === "explain") {
-        return NextResponse.json(
-          {
-            error: "daily_ai_limit_reached",
-            message: capResult.message,
-            used: capResult.used,
-            limit: capResult.limit,
-            resetsAt: capResult.resetsAt.toISOString(),
-            upgradePath: capResult.upgradePath,
-          },
-          { status: 429 }
-        )
-      }
-      // panel: soft-cap — return deterministic data rather than blocking the panel.
-      capExceededForExplicit = true
-    }
-  }
-
-  // If panel cap exceeded, use deterministic path (bracketBrainAiEntitled: false).
-  const useGenerative = aiEligible && !capExceededForExplicit
 
   const challenge = await (prisma as any).worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
@@ -144,6 +88,65 @@ export async function POST(
   if (!entry) {
     return NextResponse.json({ error: "Entry not found" }, { status: 404 })
   }
+
+
+  const hasBracketBrainAi = await userHasBracketBrainAi(
+    userResult.user.id,
+    userResult.user.email ?? null
+  )
+  const explicitAiIntent = intent === "ask_ai" || intent === "explain"
+  const tokenAccess = explicitAiIntent
+    ? await prepareWorldCupAiTokenFallback({
+        userId: userResult.user.id,
+        userEmail: userResult.user.email ?? null,
+        entitled: hasBracketBrainAi,
+        ruleCode: WORLD_CUP_AI_TOKEN_RULES.matchup,
+        confirmTokenSpend: body.confirmTokenSpend,
+        sourceType: "world_cup_matchup_ai",
+        sourceId: `${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
+        idempotencyKey: `wc-matchup-ai:${userResult.user.id}:${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
+        description: "World Cup matchup Chimmy analysis",
+        metadata: { challengeId, entryId, matchId, intent, strategy },
+        upgradePath: "/pricing?from=wc-matchup-ai",
+      })
+    : { ok: true as const, mode: "subscription" as const, tokenPreview: null, commitTokenSpend: null }
+
+  if (!tokenAccess.ok) {
+    return tokenAccess.response
+  }
+
+  // Daily cap for generative matchup AI (panel summary + ask_ai/explain narratives).
+  // Free users are already blocked above for ask_ai/explain; this cap applies to Pro+.
+  const isAdmin = await getWorldCupAdminState(req, userResult.user)
+  const aiEligible = Boolean(hasBracketBrainAi || tokenAccess.mode === "tokens")
+  const matchupTier = resolveWcCapTier({ isAdmin, hasPro: aiEligible })
+  let capExceededForExplicit = false
+
+  if (aiEligible) {
+    const capResult = await checkWcAiCap("wc_matchup_narrative", userResult.user.id, matchupTier)
+    if (!capResult.allowed) {
+      // ask_ai / explain: block explicitly — user is deliberately invoking AI.
+      if (intent === "ask_ai" || intent === "explain") {
+        return NextResponse.json(
+          {
+            error: "daily_ai_limit_reached",
+            message: capResult.message,
+            used: capResult.used,
+            limit: capResult.limit,
+            resetsAt: capResult.resetsAt.toISOString(),
+            upgradePath: capResult.upgradePath,
+          },
+          { status: 429 }
+        )
+      }
+      // panel: soft-cap — return deterministic data rather than blocking the panel.
+      capExceededForExplicit = true
+    }
+  }
+
+  // If panel cap exceeded, use deterministic path (bracketBrainAiEntitled: false).
+  const useGenerative = aiEligible && !capExceededForExplicit
+
 
   const challengeMatches = Array.isArray((entry as any)?.challenge?.matches)
     ? ((entry as any).challenge.matches as unknown[])
@@ -230,7 +233,7 @@ export async function POST(
     } catch {
       return NextResponse.json(
         {
-          error: "Token spend failed after AI generation. No tokens were deducted.",
+          error: "Token spend failed after Chimmy generation. No tokens were deducted.",
           code: "token_spend_failed_no_deduction",
           upgrade: true,
           upgradePath: "/tokens?ruleCode=world_cup_ai_matchup_analysis",
@@ -248,3 +251,5 @@ export async function POST(
     tokenSpend,
   })
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

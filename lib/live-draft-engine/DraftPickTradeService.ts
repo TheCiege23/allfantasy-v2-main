@@ -4,7 +4,6 @@ import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/to
  */
 
 import { prisma } from '@/lib/prisma'
-import { buildSessionSnapshot } from './DraftSessionService'
 import type { TradedPickRecord } from './types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { updateSessionWithArchive } from '@/lib/draft-archive/events'
@@ -37,6 +36,7 @@ export async function appendDraftPickTrades(
     include: opts?.validate ? { picks: { select: { overall: true } } } : undefined,
   })
   if (!session) return { success: false, error: 'Draft session not found' }
+  if (session.draftType === 'auction' && session.draftModeLabel === 'rookie') return { success: false, error: 'Rookie pick rights are fixed when the auction is created and cannot be traded during the auction.' }
   if (opts?.sessionId && session.id !== opts.sessionId) return { success: false, error: 'This offer belongs to an earlier draft.' }
   const current = (session.tradedPicks as TradedPickRecord[] | null) ?? []
   if (opts?.validate) {

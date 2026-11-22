@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { AutosaveStatus } from '@/components/league-settings/AutosaveStatus'
+import { useSettingsSaveScope } from '@/components/league-settings/home/SettingsSaveScope'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
+import { RosterValidationBanner } from '@/components/league-settings/roster/RosterValidationBanner'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { SETTINGS_CARD_CLASS, SETTINGS_INPUT_CLASS, SETTINGS_LABEL_CLASS, WaiversSection } from './WaiversTab'
@@ -38,25 +41,37 @@ export function GeneralTab({
   showWaivers?: boolean
 }) {
   const { t } = useLanguage()
+  const manual = useSettingsSaveScope() != null
   const leagueId = ctx.league.id
-  const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
+  // Best ball: a new team count that saved but leaves the sport's player pool tight
+  // (lib/bestball/poolCapacity.ts) comes back as plain-English warnings, shown under the field.
+  const [poolWarnings, setPoolWarnings] = useState<string[]>([])
+  const { queuePatch, saving, lastError, savedAt } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
     enabled: canEdit,
+    onSuccess: (data) => {
+      const saved = data as { updatedFields?: unknown; bestBallPoolWarnings?: unknown }
+      if (!Array.isArray(saved.updatedFields) || !saved.updatedFields.includes('leagueSize')) return
+      setPoolWarnings(Array.isArray(saved.bestBallPoolWarnings) ? saved.bestBallPoolWarnings.map(String) : [])
+    },
   })
 
   const seedName = () => String(savedOr(leagueId, 'name', ctx.league.name ?? ''))
   const seedTz = () => String(savedOr(leagueId, 'timezone', ctx.league.timezone ?? DEFAULT_TZ) || DEFAULT_TZ)
   const seedLogo = () => String(savedOr<string | null>(leagueId, 'logoUrl', ctx.league.logoUrl ?? '') ?? '')
 
+  const [capacityError, setCapacityError] = useState<string | null>(null)
+  const [teamCount, setTeamCount] = useState(String(savedOr(leagueId, 'leagueSize', ctx.league.leagueSize ?? 12)))
   const [name, setName] = useState(seedName)
   const [timezone, setTimezone] = useState(seedTz)
   const [logoUrl, setLogoUrl] = useState(seedLogo)
 
   useEffect(() => {
+    setTeamCount(String(savedOr(leagueId, 'leagueSize', ctx.league.leagueSize ?? 12)))
     setName(seedName())
     setTimezone(seedTz())
     setLogoUrl(seedLogo())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl])
+  }, [ctx.league.name, ctx.league.timezone, ctx.league.logoUrl, ctx.league.leagueSize])
 
   // A league saved with a zone outside the presets must still show (and keep) that zone.
   const tzOptions = useMemo(
@@ -69,19 +84,37 @@ export function GeneralTab({
       <section className={SETTINGS_CARD_CLASS}>
         <div className="mb-4 flex items-center gap-2">
           <h3 className="text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">{t('lsHub.gen.basics')}</h3>
-          <span
+          {!manual ? <span
             className="inline-flex items-center gap-1 text-[11px] text-white/40"
             title={t('lsHub.gen.autosaveHint')}
           >
             <HelpCircle className="h-3 w-3" aria-hidden />
             {t('lsHub.gen.autosave')}
-          </span>
-          {saving ? (
-            <span className="ml-auto shrink-0 text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</span>
-          ) : null}
+          </span> : null}
+          {saving || savedAt != null ? <AutosaveStatus className="ml-auto" saving={saving} savedAt={savedAt} /> : null}
         </div>
 
+        {capacityError ? <p role="alert" className="mb-3 text-sm text-red-300">{capacityError}</p> : null}
+        {lastError ? <p role="alert" className="mb-3 text-sm text-red-300">{lastError}</p> : null}
         <div className="space-y-4">
+          <label className="block">
+            <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.teamCount')}</span>
+            <input type="number" inputMode="numeric" min={2} max={32} value={teamCount} disabled={!canEdit}
+              onChange={event => setTeamCount(event.target.value)}
+              onBlur={() => {
+                const size = Number(teamCount)
+                if (!Number.isInteger(size) || size < 2 || size > 32) { setCapacityError(t('lsHub.gen.teamCountRange')); return }
+                setCapacityError(null)
+                if (size !== ctx.league.leagueSize) queuePatch({ leagueSize: size })
+              }}
+              className={SETTINGS_INPUT_CLASS} data-testid="league-settings-general-team-count" />
+            <span className="mt-1 block text-xs text-white/60">{t('lsHub.gen.teamCountHint')}</span>
+            {poolWarnings.length > 0 ? (
+              <div className="mt-2" data-testid="league-settings-general-best-ball-pool-warning">
+                <RosterValidationBanner warnings={poolWarnings} />
+              </div>
+            ) : null}
+          </label>
           <label className="block">
             <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.leagueName')}</span>
             <input

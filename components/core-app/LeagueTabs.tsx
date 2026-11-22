@@ -6,10 +6,22 @@ import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
+import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
+import { navLabel } from '@/lib/core-app/navLabels'
+import { useMessages } from '@/components/i18n/useMessages'
+import { messagesFor } from '@/lib/i18n/messages'
+import { leagueTabsMessages } from '@/lib/core-app/messages/leagueTabs'
+import { leagueDestinationHidden } from '@/lib/core-app/leagueDestinations'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
  * The in-league tab bar — 38a's segmented control.
+ *
+ * ⚠ SINCE 2026-11-05 ITS VIEW LINKS ARE HIDDEN INSIDE THE SHELL. The argument below was right when
+ * the rail mixed league views with cross-league screens under no heading and dropped `?league=`.
+ * Neither is true now: the rail groups the league's views (This week · League · Plan ahead) from one
+ * list, lib/core-app/leagueDestinations.ts, and every league entry carries the league. Inside the
+ * shell this bar now draws only the Open League pill and the "why a view is missing" notes.
  *
  * ⚠ THIS IS THE MISSING NAVIGATION LAYER, NOT DECORATION. Every screen in the
  * 38a handoff carries one of these, and the suite shipped without it: all
@@ -25,7 +37,7 @@ import '@/components/core-app/af-league-tabs.css'
  * fixtures and saved rule dates; Moves groups the available trade/waiver flows.
  */
 
-export type LeagueTabsProps = {
+type LeagueTabsProps = {
   leagueId: string
   leagueName: string
   /** The active /core segment, e.g. 'standings'. */
@@ -51,38 +63,52 @@ export type LeagueTabsProps = {
    */
   compact?: boolean
   commissionerHref?: string | null
+  /**
+   * The page draws Open League in the league context bar's identity line instead (the bar is on
+   * this screen), so this row omits its own and, inside the shell, takes no space at all.
+   */
+  workspaceLinkElsewhere?: boolean
+}
+
+/**
+ * "Open League ↗" — the league's own workspace. Shared by this row and the context bar, which
+ * carries it when present so the pill does not cost a row of its own (2026-11-05).
+ */
+export function OpenLeagueLink({ leagueId, platform = null }: { leagueId: string; platform?: string | null }) {
+  const { language } = useOptionalLanguage()
+  const m = useMessages(leagueTabsMessages)
+  return (
+    <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)} title={leagueWorkspaceMode(platform, language).description}>
+      <span className="af-lt-workspace-label">{m.openLeague}</span> <span aria-hidden>↗</span>
+    </Link>
+  )
 }
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
-const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
-  { key: '', label: 'Overview', labelEs: 'Resumen' },
-  { key: 'my-team', label: 'My Team', labelEs: 'Equipo' },
-  { key: 'matchup', label: 'Matchup', labelEs: 'Partido' },
-  { key: 'players', label: 'Players', labelEs: 'Jugad.' },
-  { key: 'moves', label: 'Moves', labelEs: 'Movimientos' },
+const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
+  { key: '', label: navLabel('overview') },
+  { key: 'my-team', label: navLabel('my-team') },
+  { key: 'matchup', label: navLabel('matchup') },
+  { key: 'players', label: navLabel('players', 'short') },
+  /* Trades, not Moves (2026-11-14): Moves folded into Trades. Hidden where the league cannot trade. */
+  { key: 'trades', label: navLabel('trades') },
 ]
 
-type TabRequirement = 'scores' | 'trades' | 'draft'
-
-const TABS: Array<{
-  key: string
-  label: string
-  requires?: TabRequirement
-}> = [
-  { key: '', label: 'Overview' },
-  { key: 'moves', label: 'Moves' },
-  { key: 'schedule', label: 'Schedule' },
-  { key: 'my-team', label: 'My team' },
-  { key: 'matchup', label: 'Matchup', requires: 'scores' },
-  { key: 'trades', label: 'Trades', requires: 'trades' },
-  { key: 'waivers', label: 'Waivers' },
-  { key: 'players', label: 'Players' },
-  { key: 'war-room', label: 'War Room' },
-  { key: 'draft-hq', label: 'Draft HQ', requires: 'draft' },
-  { key: 'week', label: 'Your week', requires: 'scores' },
-  { key: 'live', label: 'Live' },
-  { key: 'standings', label: 'Standings', requires: 'scores' },
-  { key: 'season-outlook', label: 'Outlook', requires: 'scores' },
+/* Which of these a league can show is decided by lib/core-app/leagueDestinations.ts — the gates the rail applies too. */
+const TABS: Array<{ key: string; label: string }> = [
+  { key: '', label: navLabel('overview') },
+  { key: 'schedule', label: navLabel('schedule') },
+  { key: 'my-team', label: navLabel('my-team') },
+  { key: 'matchup', label: navLabel('matchup') },
+  { key: 'trades', label: navLabel('trades') },
+  { key: 'waivers', label: navLabel('waivers') },
+  { key: 'players', label: navLabel('players', 'short') },
+  { key: 'war-room', label: navLabel('war-room') },
+  { key: 'draft-hq', label: navLabel('draft-hq') },
+  { key: 'week', label: navLabel('week') },
+  { key: 'live', label: navLabel('live', 'short') },
+  { key: 'standings', label: navLabel('standings') },
+  { key: 'season-outlook', label: navLabel('season-outlook', 'short') },
 ]
 
 export function LeagueTabs({
@@ -95,9 +121,11 @@ export function LeagueTabs({
   platform = null,
   compact = false,
   commissionerHref,
+  workspaceLinkElsewhere = false,
 }: LeagueTabsProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const m = useMessages(leagueTabsMessages)
   const q = `?league=${encodeURIComponent(leagueId)}`
   const moreRef = useRef<HTMLDetailsElement>(null)
   /*
@@ -119,14 +147,12 @@ export function LeagueTabs({
       document.removeEventListener('keydown', close)
     }
   }, [])
-  const hiddenFor = (requires: TabRequirement): boolean =>
-    requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
-
-  const visibleTabs = TABS.filter((tab) => !tab.requires || !hiddenFor(tab.requires))
+  const caps = { hasScoredWeek, trades: tradeSupported, draft: draftSupported }
+  const visibleTabs = TABS.filter((tab) => !leagueDestinationHidden(tab.key, caps))
   const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform }, language)
 
   return (
-    <nav className="af-lt" aria-label={language === 'es' ? `Secciones de ${leagueName}` : `${leagueName} views`}>
+    <nav className="af-lt" aria-label={m.navAria(leagueName)}>
       {/*
         Warms My team and Matchup once the screen you asked for has landed.
 
@@ -136,12 +162,6 @@ export function LeagueTabs({
         what this league can show, used for both, rather than a prewarm list
         that can drift out of step with the tabs it is meant to anticipate.
       */}
-      <div className="af-lt-workspace">
-        <Link className="af-lt-workspace-open" href={leagueWorkspaceHref(leagueId)}>
-          {language === 'es' ? 'Abrir liga' : 'Open League'} <span aria-hidden>↗</span>
-        </Link>
-        <span>{leagueWorkspaceMode(platform, language).description}</span>
-      </div>
       <LeagueTabsPrewarm
         leagueId={leagueId}
         activeKey={activeKey}
@@ -170,21 +190,40 @@ export function LeagueTabs({
         }
         const restActive = rest.some((t) => t.key === activeKey)
         const restActiveTab = rest.find((t) => t.key === activeKey)
+        /*
+         * ⚠ ONE ROW, NOT THREE (2026-11-05). Measured on allfantasy.ai at 375px, this nav was a
+         * full-width "Open League" button, its explainer, five tabs that cut off at "Mo…", and
+         * Live / More wrapped onto a row of their own — the whole first screen before any content.
+         * "Open League" is now the row's last item, a compact pill whose explainer travels as its
+         * title everywhere and is printed only on the Overview, the one screen that is ABOUT the
+         * league. The destination itself is unchanged.
+         */
         return (
-          <div className="af-lt-compact" data-compact={compact}>
-            <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
-            {tab('live', language === 'es' ? 'En vivo' : 'Live')}
-            {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{language === 'es' ? 'Comisionado' : 'Commissioner'}</Link>}
-            {rest.length ? (
-              <details className="af-lt-more" ref={moreRef}>
-                {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
-                <summary className="af-lt-tab" data-active={restActive}>{copy('More')}{restActiveTab ? <span className="af-lt-more-active"> · {copy(restActiveTab.label)}</span> : null}</summary>
-                <div className="af-lt-more-list" onClick={() => { if (moreRef.current) moreRef.current.open = false }}>{rest.map((t) => tab(t.key, copy(t.label)))}</div>
-              </details>
-            ) : null}
+          <div className="af-lt-compact" data-compact={compact} data-workspace-elsewhere={workspaceLinkElsewhere ? 'true' : undefined}>
+            {/*
+              ⚠ THE VIEW LINKS ARE HIDDEN INSIDE THE SHELL (2026-11-05), NOT REMOVED. There the rail
+              (desktop), the icon nav (tablet) and the bottom bar + More sheet (phone) already list every
+              one of these views, read from the same list (lib/core-app/leagueDestinations.ts), so the
+              row was a second copy of the navigation on every page. Rendered outside the shell (the
+              dev previews) it is still the league's navigation. See af-league-tabs.css.
+            */}
+            <div className="af-lt-views">
+              <LeagueTabsScroller className="af-lt-compact-row" activeKey={activeKey}>{primary.map((t) => tab(t.key, m.compactTab(t.key, t.label)))}</LeagueTabsScroller>
+              {tab('live', copy(navLabel('live', 'short')))}
+              {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{m.commissioner}</Link>}
+              {rest.length ? (
+                <details className="af-lt-more" ref={moreRef}>
+                  {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
+                  <summary className="af-lt-tab" data-active={restActive}>{copy('More')}{restActiveTab ? <span className="af-lt-more-active"> · {copy(restActiveTab.label)}</span> : null}</summary>
+                  <div className="af-lt-more-list" onClick={() => { if (moreRef.current) moreRef.current.open = false }}>{rest.map((t) => tab(t.key, copy(t.label)))}</div>
+                </details>
+              ) : null}
+            </div>
+            {workspaceLinkElsewhere ? null : <OpenLeagueLink leagueId={leagueId} platform={platform} />}
           </div>
         )
       })()}
+      {activeKey === 'home' ? <p className="af-lt-workspace-note">{leagueWorkspaceMode(platform, language).description}</p> : null}
 
       {/*
         🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.
@@ -233,8 +272,8 @@ export function describeHiddenTabs({
   platform?: string | null
 }, language = 'en'): string[] {
   const notes: string[] = []
-  const es = language === 'es'
-  const label = (platform ?? '').trim() || (es ? 'esta plataforma' : 'this platform')
+  const m = messagesFor(leagueTabsMessages, language)
+  const label = (platform ?? '').trim() || m.thisPlatform
 
   /*
    * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
@@ -243,15 +282,13 @@ export function describeHiddenTabs({
    * scored" there states a fact we do not have.
    */
   if (hasScoredWeek === false) {
-    notes.push(
-      es ? 'Enfrentamiento, Tu semana, Clasificación y Pronóstico se abren cuando esta liga tenga una semana puntuada.' : 'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
-    )
+    notes.push(m.noScoredWeek)
   }
   if (!tradeSupported) {
-    notes.push(es ? `Aún no pudimos importar el historial de intercambios de ${label} para esta liga; la vista de Intercambios no está disponible.` : `We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
+    notes.push(m.noTrades(label))
   }
   if (!draftSupported) {
-    notes.push(es ? `Aún no pudimos importar los resultados del draft de ${label} para esta liga; la vista de Draft HQ no está disponible.` : `We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
+    notes.push(m.noDraft(label))
   }
   return notes
 }

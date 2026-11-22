@@ -1,0 +1,7 @@
+# Dedicated Railway bracket results cron image; no app build or npm install needed.
+FROM node:24-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY scripts/railway-bracket-results-cron.mjs ./scripts/
+USER node
+CMD ["node", "scripts/railway-bracket-results-cron.mjs"]

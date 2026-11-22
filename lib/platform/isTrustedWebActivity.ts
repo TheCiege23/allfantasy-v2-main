@@ -63,7 +63,7 @@ export function isTrustedWebActivity(): boolean {
 
   const referrer = document.referrer || ''
   const inTwa =
-    referrer.startsWith(`${ANDROID_APP_REFERRER}${TWA_PACKAGE}`) ||
+    referrer === `${ANDROID_APP_REFERRER}${TWA_PACKAGE}` ||
     /*
      * A TWA may report the referrer with a trailing path. Prefix-matching the
      * package covers both, while still refusing a different package.

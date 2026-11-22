@@ -110,11 +110,11 @@ export const DRAFT_TOPICS = {
   draftCardStats: {
     en: {
       title: 'Draft card',
-      body: 'Your slot is your original position in the order. Picks made counts every team’s recorded selections. The round and who is on the clock follow the stored next-pick position and the recorded pick trades. Queued here counts the targets saved in AllFantasy, which may differ from your host platform’s queue. A paused draft has no running countdown.',
+      body: 'Your slot is your original position in the order. The pick number on the tag, the round and who is on the clock follow the stored next-pick position and the recorded pick trades. Queued counts the targets saved in AllFantasy, which may differ from your host platform’s queue. A paused draft has no running countdown.',
     },
     es: {
       title: 'Tarjeta del draft',
-      body: 'Tu posición es tu lugar original en el orden. Los picks hechos cuentan las selecciones registradas de todos los equipos. La ronda y quién está en el reloj siguen la posición del siguiente pick guardada y los traspasos de picks registrados. En cola aquí cuenta los objetivos guardados en AllFantasy, que pueden no coincidir con la cola de tu plataforma. Un draft en pausa no tiene cuenta atrás.',
+      body: 'Tu turno es tu lugar original en el orden. El número de selección de la etiqueta, la ronda y quién está eligiendo siguen la posición del siguiente pick guardada y los traspasos de picks registrados. En tu cola cuenta los objetivos guardados en AllFantasy, que pueden no coincidir con la cola de tu plataforma. Un draft en pausa no tiene cuenta atrás.',
     },
   },
   draftHqScope: {

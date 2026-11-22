@@ -31,39 +31,6 @@ export function planEliminateRoster(
   }
 }
 
-export function planAdvancePhase(metadata: Record<string, unknown>): PlannedAction {
-  return { actionType: ActionTypes.advancePhase, metadata }
-}
-
-export function planTransitionPhase(from: string, to: string, metadata?: Record<string, unknown>): PlannedAction {
-  return {
-    actionType: ActionTypes.transitionPhase,
-    metadata: { from, to, ...(metadata ?? {}) },
-  }
-}
-
-export function planReleaseToWaiverPool(rosterId: string, playerId: string, metadata?: Record<string, unknown>): PlannedAction {
-  return {
-    actionType: ActionTypes.releaseToWaivers,
-    targetType: 'roster',
-    targetId: rosterId,
-    metadata: { playerId, ...(metadata ?? {}) },
-  }
-}
-
-export function planPromoteOrRelegate(
-  kind: 'promote' | 'relegate',
-  rosterId: string,
-  metadata?: Record<string, unknown>,
-): PlannedAction {
-  return {
-    actionType: kind === 'promote' ? ActionTypes.promoteTeam : ActionTypes.relegateTeam,
-    targetType: 'roster',
-    targetId: rosterId,
-    metadata,
-  }
-}
-
 export function planLeagueEvent(
   eventType: string,
   title: string,
@@ -74,9 +41,3 @@ export function planLeagueEvent(
   return { eventType, title, description, payload, visibility }
 }
 
-export function planCommissionerTask(title: string, payload?: Record<string, unknown>): PlannedAction {
-  return {
-    actionType: ActionTypes.commissionerTask,
-    metadata: { title, ...(payload ?? {}) },
-  }
-}

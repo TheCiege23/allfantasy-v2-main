@@ -21,7 +21,7 @@ const EventSchema = z.object({
     'memory_item_corrected',
     'memory_item_ignored',
   ]),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 export async function POST(req: Request) {

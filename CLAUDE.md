@@ -194,6 +194,15 @@ provider call is the cache-MISS path, exactly as this file already sanctions for
 | `app/api/music/track-info/route.ts:66` | `theaudiodb.com` |
 | `server/api-route-modules/legacy/trade/analyze/route.ts:434` | `thesportsdb.com` |
 
+✅ **RESOLVED — re-measured 2026-11-15 on `origin/main`: none of the six is a request-path finding any more.**
+`app/api/mfl/leagues/route.ts` no longer exists; `app/api/mfl/import` now goes through the import pipeline
+(ingestion, an explicit user action); the trade-analyze route no longer calls TheSportsDB. The music routes
+read `lib/music/musicCatalog.ts` (30-day `sportsDataCache` read-through) over the adapter
+`lib/music/theAudioDbFetch.ts`, the ONLY place TheAudioDB's key-in-path URL is built; live-roster reads
+`lib/sleeper/liveLeagueFeed.ts` (short shared cache: rosters 60s, picks 10s) over `lib/sleeper/liveLeagueFetch.ts`.
+Both adapters are allowlisted by exact path on a caller census. The only request-path findings left are the
+three accepted read-through caches above. The table below is kept as the 2026-09-12 record.
+
 ⚠ **THE TWO MFL ONES ALSO PUT A CREDENTIAL ON THE WIRE FROM A REQUEST PATH**, sending
 `Cookie: MFL_USER_ID=${connection.mflCookie}`. That is the `RSC_token`-in-a-query-parameter
 shape reached a different way — and note the `db-first-auth-exchange:` marker correctly
@@ -361,10 +370,11 @@ caught them.
     dead: nothing imported it, its own header declared its path as
     `weather/route.js`, and that path now holds a `route.ts` using
     `lib/weather/weatherService`. Next.js does not route a `X.route.js` sitting
-    beside the directory. Five identical strays remain in `app/api/start-sit/`
-    (`chimmy`, `injuries`, `leagues`, `matchups`, `roster`), each superseded by
-    a live directory route; they trip no guard and were left for a deliberate
-    dead-code pass.
+    beside the directory. The five identical strays beside it (`chimmy`,
+    `injuries`, `leagues`, `matchups`, `roster`) went the same day, and on
+    2026-09-30 the directory routes they shadowed went too, with their only
+    caller, `StartSitPopup`. `app/api/start-sit/` no longer exists — checked
+    against `origin/main` 2026-11-13, so there is nothing left to sweep.
   - `lib/weather/weatherService.ts` (geocode) — **resolved.** A geocode is
     immutable, so it is now a durable `sportsDataCache` entry with the vendor
     call isolated in `lib/weather/openWeatherGeocode.ts` (allowlisted).
@@ -2373,6 +2383,13 @@ on). Emergency escape hatch, for a genuine emergency only:
 
 ## Deploys cost money, and pushes are the meter
 
+⚠ **VERCEL IS RETIRED. PRODUCTION IS RAILWAY ONLY.** Production moved to Railway on
+2026-09-02; the Vercel account is now blocked, and `vercel.json` plus its CI gate
+were deleted 2026-10-29. The Vercel figures below are kept as the measurement that
+set push cadence, which still matters on Railway — but `vercel ls` measures nothing
+now, and a red `Vercel` commit status ("Account is blocked") is a dead GitHub
+integration, not a failure. It is not a required check.
+
 🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;
 push at the end of a work unit.
 
@@ -2448,7 +2465,11 @@ git ls-remote origin refs/heads/worker-release   # what the crons are actually r
 ```
 
 ⚠ Expect it to be behind `main` by up to a day. That is the design. If a cron fix is
-urgent, dispatch the workflow by hand rather than repointing the service. There is also
+urgent, dispatch the workflow by hand rather than repointing the service — **but a hand dispatch
+within 6 hours of the last advance is refused unless it passes `force=true` and a `reason`.**
+On 2026-11-22 the workflow ran 12 times in a day, 11 by hand from sessions each wanting its own
+fix live, so the "daily" worker redeployed about every two hours and two overlapping builds hung.
+Most cron fixes can wait for 21:20 UTC; say why yours cannot. There is also
 `/api/af-debug/sha` on either service, which answers `{branch, sha}` for the container
 actually serving you.
 
@@ -2549,13 +2570,9 @@ in flight. A burst of merges becomes at most two builds.
 
 ### What is enforced for you, and what is not
 
-- **`vercel.json` gates builds to `main` only.** `ignoreCommand` skips every
-  other ref, so feature branches cost seconds instead of ~4.6 minutes. This is
-  server-side and needs no cooperation.
-  🛑 **Never commit a working-tree `vercel.json`.** Most checkouts here predate
-  the gate and still hold `{}`; committing one silently reverts it and restores
-  ~$26/mo, with nothing failing or warning. Rebuild from
-  `git show origin/main:vercel.json` and re-apply your edit.
+- **`vercel.json` no longer exists.** It held only the Vercel branch-build gate,
+  deleted with Vercel's retirement on 2026-10-29. A checkout that still has one on
+  disk is stale; do not commit it back. Cron schedules live in `cron-schedule.json`.
 - **A pre-push hook refuses a push to `main` while a production build is running**
   (`.githooks/pre-push`, installed by `npm run hooks:install`). It fails open on
   every error, and only ever inspects pushes whose *remote* ref is

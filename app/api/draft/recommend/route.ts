@@ -1,3 +1,4 @@
+import { withPaidToolBilling, paidToolNotDelivered } from '@/lib/tokens/paidToolBilling'
 /**
  * POST /api/draft/recommend — deterministic draft recommendation.
  * Uses only provided pool and draft state; no invented players. For live and mock draft.
@@ -17,10 +18,11 @@ import { shouldRunShadow } from '@/lib/decision-os/core/shadow'
 import { emitShadowParity } from '@/lib/decision-os/core/parity'
 import { evaluateDraftShadow } from '@/lib/shared-services/draft'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { sharedDraftPickForUser } from '@/lib/shared-services/draft/pickDecision'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest) {
+async function paidToolPost(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string; email?: string | null }
   } | null
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest) {
       tokenRuleCode: 'ai_draft_pick_explanation',
       tokenSourceType: 'draft_prep_ai_explanation',
       tokenSourceId: `${typeof body.leagueId === 'string' ? body.leagueId : 'draft'}:${Date.now()}`,
-      tokenDescription: 'Draft prep AI explanation fallback',
+      tokenDescription: 'Draft prep Chimmy explanation fallback',
       tokenMetadata: {
         leagueId: typeof body.leagueId === 'string' ? body.leagueId : null,
         round,
@@ -93,8 +95,18 @@ export async function POST(req: NextRequest) {
           : null,
   }))
 
+  /*
+   * ONE ENGINE IN THE ROOM (build item 8): in a league draft, the pick is the draft card's own — the server's pool,
+   * this draft's context and the live pick rules (pickDecision.ts) — and the explanation is written about it.
+   * Only in the card's mode (`needs`): a manager who asked for best-available gets that, from the posted pool.
+   * No league, no roster for this user, an auction, or an unreadable draft: the posted pool, as before.
+   */
+  const sharedLeagueId = typeof body.leagueId === 'string' && body.leagueId.trim() ? body.leagueId.trim() : null
+  const shared =
+    sharedLeagueId && mode === 'needs' ? await sharedDraftPickForUser({ leagueId: sharedLeagueId, userId: session.user.id }) : null
   try {
     const result = await runDraftAIAssist({
+      precomputed: shared?.result ?? null,
       available: normalized,
       teamRoster,
       rosterSlots,
@@ -133,6 +145,7 @@ export async function POST(req: NextRequest) {
 
     const aiUsed = Boolean(result.aiExplanationUsed)
     const fallbackToDeterministic = includeAIExplanation && !aiUsed
+    if (fallbackToDeterministic) paidToolNotDelivered()
 
     // Slice 10 — Draft OS shadow: the FIRST production caller of
     // lib/shared-services/draft (previously test-only scaffolding). Gated by
@@ -187,6 +200,10 @@ export async function POST(req: NextRequest) {
       evidence: result.recommendation.evidence,
       caveats: result.recommendation.caveats,
       uncertainty: result.recommendation.uncertainty,
+      /** Where the pick came from: the draft card's decision, or the pool this request posted. */
+      engineSource: shared ? 'draft_decision' : 'posted_pool',
+      /** The user's own next turn the pick was planned for, when they are not on the clock. */
+      plannedFor: shared?.plannedFor ?? null,
       execution: buildDraftExecutionMetadata({
         feature: 'draft_helper_recommendation_engine',
         aiUsed,
@@ -229,3 +246,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate draft recommendation' }, { status: 500 })
   }
 }
+
+export const POST = withPaidToolBilling(paidToolPost)

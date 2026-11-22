@@ -27,7 +27,6 @@ import { runAllFixtures, runLeagueSimulationScenario } from '@/lib/engine-testin
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEngine'
-import { calculateFantasyPoints, normalizeSleeperNflStats } from '@/lib/scoring-engine/ScoringCalculator'
 import { getStandingsTiebreakerOrder } from '@/lib/scoring-engine/scoringSettingsResolved'
 import { validateConceptRulesShape } from '@/lib/specialty-automation/validation'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
@@ -40,21 +39,6 @@ function slotOrder(n: number): SlotOrderEntry[] {
     displayName: `T${i + 1}`,
   }))
 }
-
-describe('calculateFantasyPoints', () => {
-  it('sums stat keys by rules (NFL)', () => {
-    const rules = { passing_yards: 0.04, passing_td: 4 }
-    const pts = calculateFantasyPoints('NFL', { passing_yards: 300, passing_td: 2 }, rules)
-    expect(pts).toBe(300 * 0.04 + 2 * 4)
-  })
-
-  it('normalizes Sleeper NFL stats then scores', () => {
-    const raw = { pass_yd: 250, pass_td: 2, rec: 5, rec_yd: 40 }
-    const norm = normalizeSleeperNflStats(raw)
-    const rules = { passing_yards: 0.04, passing_td: 4, reception: 0.5, receiving_yards: 0.1 }
-    expect(calculateFantasyPoints('NFL', norm, rules)).toBeGreaterThan(0)
-  })
-})
 
 describe('getStandingsTiebreakerOrder', () => {
   it('returns default order when missing', () => {
@@ -150,7 +134,35 @@ describe('orderClaimsForProcessing', () => {
       roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u2' },
     }
     const out = orderClaimsForProcessing([c1, c2] as any, 'reverse_standings', rank)
-    expect(out[0]?.roster.platformUserId).toBe('u2')
+    // currentRank 1 is first place, so the rank-2 team (the worse one) claims first.
+    expect(out[0]?.roster.platformUserId).toBe('u1')
+  })
+
+  it('reverse_standings puts an unranked team after every ranked one', () => {
+    const rank = new Map<string, number>([['u1', 1]])
+    const c1 = { ...baseClaim, id: 'x', roster: { ...baseClaim.roster, platformUserId: 'u1' } }
+    const c2 = {
+      ...baseClaim,
+      id: 'y',
+      rosterId: 'r2',
+      roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u-unranked' },
+    }
+    const out = orderClaimsForProcessing([c2, c1] as any, 'reverse_standings', rank)
+    expect(out.map((c: any) => c.id)).toEqual(['x', 'y'])
+  })
+
+  it('FAAB reverse-standings tiebreak gives an equal bid to the worse team', () => {
+    const rank = new Map<string, number>([['u1', 1], ['u2', 4]])
+    const c1 = { ...baseClaim, id: 'x', faabBid: 10, roster: { ...baseClaim.roster, platformUserId: 'u1' } }
+    const c2 = {
+      ...baseClaim,
+      id: 'y',
+      faabBid: 10,
+      rosterId: 'r2',
+      roster: { ...baseClaim.roster, id: 'r2', platformUserId: 'u2' },
+    }
+    const out = orderClaimsForProcessing([c1, c2] as any, 'faab', rank, 'reverse_standings')
+    expect(out[0]?.id).toBe('y')
   })
 
   it('orders rolling by waiverPriority', () => {

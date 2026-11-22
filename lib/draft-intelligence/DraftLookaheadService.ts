@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import type { LeagueSport } from '@prisma/client'
 
 import {
@@ -13,12 +14,15 @@ import {
 import { getRosterSlotLabelsForLeagueDraft } from '@/lib/draft-room'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
-import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
+import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
-import type { DraftPickSnapshot, DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
+import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { buildDeterministicPostDraftRecap } from '@/lib/post-draft'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
+import { getWarmDraftPoolSnapshotFast } from '@/lib/draft-room/ensureDraftPoolReady'
+import type { NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 
 import { draftIntelStateStore } from './DraftIntelStateStore'
@@ -137,7 +141,7 @@ async function getAppUserIdForRosterId(rosterId: string): Promise<string | null>
     where: { id: rosterId },
     select: { platformUserId: true },
   })
-  if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) {
+  if (!roster?.platformUserId || isSeatPlaceholderUserId(String(roster.platformUserId))) {
     return null
   }
   // Unclaimed draft seats can carry placeholder/legacy owner IDs. Chimmy's platform DM
@@ -152,6 +156,16 @@ async function buildAvailablePlayers(
   sport: LeagueSport,
   draftedNames: Set<string>
 ): Promise<RecommendationPlayer[]> {
+  if (sport === 'NBA') {
+    const warm = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
+    const entries = warm.warm && warm.payload.sport === 'NBA' && Array.isArray(warm.payload.entries)
+      ? warm.payload.entries as NormalizedDraftEntry[]
+      : (await getResolvedDraftPoolForLeague(leagueId, { limit: 500 })).entries
+    return entries.filter(row => !draftedNames.has(row.name)).slice(0, 250).map(row => ({
+      name: row.name, position: row.position, team: row.team, playerId: row.playerId ?? null,
+      adp: row.adp ?? null, byeWeek: row.byeWeek ?? null,
+    }))
+  }
   const pool = await getPlayerPoolForLeague(leagueId, sport, { limit: 500 }).catch(() => [])
   const rows = pool
     .filter((row) => !draftedNames.has(String(row.full_name || '')))
@@ -559,14 +573,16 @@ async function buildActiveState(params: {
     leagueName: params.ctx.leagueName,
     sport: params.ctx.sport,
     sessionId: params.snapshot.id,
-    status: picksUntilUser === 0 ? 'on_clock' : 'active',
+    status: params.snapshot.status === 'in_progress' && picksUntilUser === 0 ? 'on_clock' : 'active',
     trigger: params.trigger,
     currentOverall,
     userNextOverall,
     picksUntilUser,
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    headline: buildDefaultHeadline(picksUntilUser, params.ctx.leagueName),
+    headline: params.snapshot.status === 'pre_draft' ? 'Pre-draft planning is ready.'
+      : params.snapshot.status === 'paused' ? 'Draft paused. Review your next turn.'
+      : buildDefaultHeadline(picksUntilUser, params.ctx.leagueName),
     queue,
     predictions,
     messages: {
@@ -668,6 +684,10 @@ export async function publishDraftIntelForUpcomingManagers(input: {
   if (!snapshot?.currentPick) return []
 
   const tradedPicks = Array.isArray(snapshot.tradedPicks) ? snapshot.tradedPicks : []
+  // A team on auto (Auto-pick me, Chimmy's autopilot, a timed-out empty seat) picks by itself within
+  // seconds of coming on the clock; "you're on the clock, draft X?" to its manager is a question nobody
+  // needs to answer (2026-11-21).
+  const autoRosters = new Set(Array.isArray(snapshot.autoDraftRosterIds) ? snapshot.autoDraftRosterIds : [])
   const uniqueUserIds = new Set<string>()
   for (
     let overall = snapshot.currentPick.overall;
@@ -682,7 +702,7 @@ export async function publishDraftIntelForUpcomingManagers(input: {
       thirdRoundReversal: snapshot.thirdRoundReversal,
     })
     const owner = resolvePickOwner(round, slot, snapshot.slotOrder, tradedPicks)
-    if (!owner?.rosterId) continue
+    if (!owner?.rosterId || autoRosters.has(owner.rosterId)) continue
     const userId = await getAppUserIdForRosterId(owner.rosterId)
     if (userId) uniqueUserIds.add(userId)
   }

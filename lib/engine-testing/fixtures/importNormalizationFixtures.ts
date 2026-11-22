@@ -98,7 +98,7 @@ export function buildDynastyDevyImportFixture(): NormalizedImportResult {
 export function buildGuillotineImportFixture(): NormalizedImportResult {
   return buildMinimalNormalizedImport({
     league: {
-      name: 'Guillotine League',
+      name: 'Guilly League',
       sport: 'nfl',
       season: 2026,
       leagueSize: 18,

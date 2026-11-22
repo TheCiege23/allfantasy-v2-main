@@ -14,7 +14,11 @@ import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
 import { shareCardImage } from '@/components/decide/shareCard'
 import { GuillotineSpecialtyHome } from './GuillotineSpecialtyHome'
+import { GuillotineSurvivalHistory } from './GuillotineSurvivalHistory'
+import { GuillotineNextChopPick } from './GuillotineNextChopPick'
+import type { NextChopPickState } from '@/lib/guillotine/nextChopPickStore'
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
+import './guillotine-identity.css'
 
 function leagueQueryPath(leagueId: string, params: Record<string, string>) {
   const q = new URLSearchParams(params)
@@ -42,6 +46,8 @@ type Summary = {
   myRosterId?: string | null
   /** Specialty-home extras (counts, chopped chips, next chop time, last chop). Null when unavailable. */
   home?: GuillotineHomeExtras | null
+  /** "Who's next?" for chopped managers (lib/guillotine/nextChopPick.ts). */
+  nextChopPick?: NextChopPickState | null
   config?: {
     eliminationStartWeek: number
     eliminationEndWeek: number | null
@@ -52,7 +58,7 @@ type Summary = {
   } | null
 }
 
-export interface GuillotineHomeProps {
+interface GuillotineHomeProps {
   leagueId: string
   /** Used for AI / intelligence deep links (tab availability varies by sport). */
   sport: string
@@ -85,7 +91,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       const data = await res.json()
       setSummary(data)
     } catch {
-      setError('Failed to load guillotine summary')
+      setError('Failed to load Guilly summary')
       setSummary(null)
     } finally {
       setLoading(false)
@@ -100,20 +106,20 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
 
   if (loading && !summary) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Guillotine League…</p>
+      <div className="gl gl-card flex min-h-[200px] items-center justify-center rounded-xl border p-8">
+        <p className="gl-text2 text-sm">Loading Guilly League…</p>
       </div>
     )
   }
 
   if (error && !summary) {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-        <p className="text-sm text-amber-200">{error}</p>
+      <div className="gl gl-card-warn rounded-xl border p-4">
+        <p className="text-sm">{error}</p>
         <button
           type="button"
           onClick={() => load()}
-          className="mt-2 text-xs text-cyan-400 hover:underline"
+          className="gl-accent-text mt-2 text-xs hover:underline"
         >
           Retry
         </button>
@@ -122,7 +128,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   }
 
   return (
-    <div className="space-y-6">
+    <div className="gl space-y-6">
       <GuillotineChopAnimation
         play={replayChop.play}
         displayName={replayChop.name}
@@ -138,14 +144,14 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       <div className="flex flex-wrap gap-2">
         <Link
           href={leagueQueryPath(leagueId, { openChat: 'league' })}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
           data-testid="guillotine-quick-chat"
         >
           <MessageSquare className="h-4 w-4" /> Chat
         </Link>
         <Link
           href={leagueQueryPath(leagueId, { view: 'settings' })}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
           title="League settings — everyone can view; only commissioner & co-commissioners can edit"
           data-testid="guillotine-quick-settings"
         >
@@ -153,14 +159,16 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         </Link>
         <Link
           href={leagueQueryPath(leagueId, { view: intelligenceViewForSport(sport) })}
-          className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200 hover:bg-cyan-950/50"
+          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
+          data-tone="accent"
           data-testid="guillotine-quick-ai"
         >
-          <Sparkles className="h-4 w-4" /> AI Tools
+          <Sparkles className="h-4 w-4" /> Chimmy Tools
         </Link>
         <Link
           href={leagueQueryPath(leagueId, { view: 'players' })}
-          className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2 text-sm text-amber-200 hover:bg-amber-950/50"
+          className="gl-chip inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
+          data-tone="warn"
           data-testid="guillotine-quick-waivers"
         >
           <Zap className="h-4 w-4" /> Waivers
@@ -173,11 +181,11 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
       */}
       {myEscape ? (
         <section
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4"
+          className="gl-card-good flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
           data-testid="guillotine-my-escape"
         >
-          <p className="text-sm text-emerald-100">
-            <span className="font-semibold">You survived week {myEscape.weekOrPeriod}&rsquo;s chop</span>{' '}
+          <p className="text-sm">
+            <span className="gl-good font-semibold">You survived week {myEscape.weekOrPeriod}&rsquo;s chop</span>{' '}
             {myEscape.margin === 0 ? 'on the tiebreaker' : `by ${myEscape.margin.toFixed(1)} pts`} ·{' '}
             <span className="tabular-nums">
               {myEscape.myPoints.toFixed(1)} vs {myEscape.chopLine.toFixed(1)}
@@ -194,7 +202,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
                 `Survived week ${myEscape.weekOrPeriod}'s chop`,
               ).then(setEscapeShare)
             }}
-            className="min-h-[36px] rounded-xl border border-emerald-400/40 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-60"
+            className="gl-btn-good min-h-[36px] rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
           >
             {escapeShare === 'working'
               ? 'Building card…'
@@ -209,29 +217,36 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         </section>
       ) : null}
 
-      {/* Chopped History */}
-      <section id="guillotine-history" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Skull className="h-5 w-5 text-rose-400" />
-          Chopped History
+      {/* Survival history: each chop and every team's path (lib/guillotine/survivalHistory.ts). */}
+      <section id="guillotine-history" className="gl-card rounded-2xl border p-4 sm:p-6">
+        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
+          <Skull className="gl-bad h-5 w-5" />
+          Survival history
         </h2>
-        {!summary?.recentChopEvents?.length ? (
-          <p className="text-sm text-white/50">No eliminations yet.</p>
+        {summary?.home?.history ? (
+          <GuillotineSurvivalHistory
+            history={summary.home.history}
+            myRosterId={summary.myRosterId}
+            closeCallMargin={summary.config?.dangerMarginPoints ?? 10}
+            onReplay={(week) => setReplayChop({ play: true, name: `Week ${week}` })}
+          />
+        ) : !summary?.recentChopEvents?.length ? (
+          <p className="gl-muted text-sm">No eliminations yet.</p>
         ) : (
           <ul className="space-y-2">
             {summary.recentChopEvents.map((ev) => (
               <li
                 key={`${ev.weekOrPeriod}-${ev.choppedRosterIds.join(',')}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-2"
+                className="gl-well flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
               >
-                <span className="text-sm text-white/80">Week {ev.weekOrPeriod}</span>
-                <span className="text-sm text-white/60">
+                <span className="gl-text text-sm">Week {ev.weekOrPeriod}</span>
+                <span className="gl-text2 text-sm">
                   {ev.choppedRosterIds.length} team(s) chopped
                 </span>
                 <button
                   type="button"
                   onClick={() => setReplayChop({ play: true, name: `Week ${ev.weekOrPeriod}` })}
-                  className="text-xs text-cyan-400 hover:underline"
+                  className="gl-accent-text text-xs hover:underline"
                 >
                   Replay animation
                 </button>
@@ -241,23 +256,25 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         )}
       </section>
 
+      {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
+
       {/* Waiver Fallout / Next release */}
-      <section id="guillotine-waivers" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Zap className="h-5 w-5 text-amber-400" />
+      <section id="guillotine-waivers" className="gl-card rounded-2xl border p-4 sm:p-6">
+        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
+          <Zap className="gl-warn h-5 w-5" />
           Waiver & FAAB
         </h2>
-        <p className="text-sm text-white/70">
+        <p className="gl-text2 text-sm">
           Released players from chopped rosters enter the waiver pool. Next processing per league settings.
         </p>
         {summary?.config?.rosterReleaseTiming && (
-          <p className="mt-2 text-xs text-white/50">
+          <p className="gl-muted mt-2 text-xs">
             Release timing: {summary.config.rosterReleaseTiming.replace(/_/g, ' ')}
           </p>
         )}
         <Link
           href={leagueQueryPath(leagueId, { view: 'players' })}
-          className="mt-3 inline-block text-sm text-cyan-400 hover:underline"
+          className="gl-accent-text mt-3 inline-block text-sm hover:underline"
           data-testid="guillotine-open-waivers"
         >
           Open Waivers →
@@ -282,36 +299,36 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         defaultType="survival"
       />
       </div>
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
+      <section className="gl-card rounded-2xl border p-4 sm:p-6">
         <Link
           href={leagueQueryPath(leagueId, { view: intelligenceViewForSport(sport) })}
-          className="text-sm text-cyan-400 hover:underline"
+          className="gl-accent-text text-sm hover:underline"
           data-testid="guillotine-more-ai-tools"
         >
-          More research &amp; AI tools →
+          More research &amp; Chimmy tools →
         </Link>
       </section>
 
       {/* Settings / Rules */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Settings className="h-5 w-5 text-white/60" />
+      <section className="gl-card rounded-2xl border p-4 sm:p-6">
+        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
+          <Settings className="gl-muted h-5 w-5" />
           Rules & Settings
         </h2>
         {summary?.config ? (
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-white/50">Elimination start</dt><dd className="text-white/80">Week {summary.config.eliminationStartWeek}</dd></div>
-            <div><dt className="text-white/50">Elimination end</dt><dd className="text-white/80">{summary.config.eliminationEndWeek ?? '—'}</dd></div>
-            <div><dt className="text-white/50">Teams per chop</dt><dd className="text-white/80">{summary.config.teamsPerChop}</dd></div>
-            <div><dt className="text-white/50">Danger margin</dt><dd className="text-white/80">{summary.config.dangerMarginPoints ?? '—'} pts</dd></div>
-            <div><dt className="text-white/50">Tiebreakers</dt><dd className="text-white/80">{summary.config.tiebreakerOrder?.join(' → ') ?? '—'}</dd></div>
+            <div><dt className="gl-muted">Elimination start</dt><dd className="gl-text">Week {summary.config.eliminationStartWeek}</dd></div>
+            <div><dt className="gl-muted">Elimination end</dt><dd className="gl-text">{summary.config.eliminationEndWeek ?? '—'}</dd></div>
+            <div><dt className="gl-muted">Teams per chop</dt><dd className="gl-text">{summary.config.teamsPerChop}</dd></div>
+            <div><dt className="gl-muted">Danger margin</dt><dd className="gl-text">{summary.config.dangerMarginPoints ?? '—'} pts</dd></div>
+            <div><dt className="gl-muted">Tiebreakers</dt><dd className="gl-text">{summary.config.tiebreakerOrder?.join(' → ') ?? '—'}</dd></div>
           </dl>
         ) : (
-          <p className="text-sm text-white/50">No config loaded.</p>
+          <p className="gl-muted text-sm">No config loaded.</p>
         )}
         <Link
           href={leagueQueryPath(leagueId, { view: 'settings' })}
-          className="mt-3 inline-block text-sm text-cyan-400 hover:underline"
+          className="gl-accent-text mt-3 inline-block text-sm hover:underline"
           data-testid="guillotine-league-settings"
         >
           League Settings

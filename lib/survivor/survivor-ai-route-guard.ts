@@ -24,14 +24,17 @@ export const SURVIVOR_AI_VALID_TYPES: readonly SurvivorAIType[] = [
   'tribal_help',
   'exile_help',
   'bestball_help',
+  'idol_timing_help',
+  'jury_help',
+  'weekly_plan',
 ]
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import { SURVIVOR_AI_TYPE_RULE_CODE } from '@/lib/survivor/survivor-ai-token-catalog'
 import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
-import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 
 /** Storyline / scroll / basic idol coaching — free surface (deterministic engine still authoritative). */
-export const SURVIVOR_AI_UNGATED_TYPES: readonly SurvivorAIType[] = ['host_intro', 'host_scroll', 'idol_help']
+const SURVIVOR_AI_UNGATED_TYPES: readonly SurvivorAIType[] = ['host_intro', 'host_scroll', 'idol_help']
 
 const HOST_NARRATION_TYPES: readonly SurvivorAIType[] = [
   'host_challenge',
@@ -45,22 +48,10 @@ const PLAYER_STRATEGY_TYPES: readonly SurvivorAIType[] = [
   'tribal_help',
   'exile_help',
   'bestball_help',
+  'idol_timing_help',
+  'jury_help',
+  'weekly_plan',
 ]
-
-/** Token rule per AI type — must exist in `TOKEN_SPEND_RULE_MATRIX`. */
-export const SURVIVOR_AI_TYPE_RULE_CODE: Record<
-  Exclude<SurvivorAIType, (typeof SURVIVOR_AI_UNGATED_TYPES)[number]>,
-  TokenSpendRuleCode
-> = {
-  host_challenge: 'survivor_ai_host_weekly_recap',
-  host_merge: 'survivor_ai_host_minigame_grade',
-  host_council: 'survivor_ai_host_vote_processing',
-  host_jury: 'survivor_ai_host_story_mode',
-  tribe_help: 'survivor_ai_vote_risk_quick',
-  tribal_help: 'survivor_ai_blindside_risk',
-  exile_help: 'survivor_ai_recap_short',
-  bestball_help: 'survivor_ai_challenge_strategy',
-}
 
 function ruleCodeForType(type: SurvivorAIType): TokenSpendRuleCode | null {
   if (SURVIVOR_AI_UNGATED_TYPES.includes(type as (typeof SURVIVOR_AI_UNGATED_TYPES)[number])) return null
@@ -75,7 +66,7 @@ function mustMeterSubscribedUsers(ruleCode: TokenSpendRuleCode): boolean {
   return tokenCostForRule(ruleCode) >= 2
 }
 
-export type SurvivorAiAccessResult =
+type SurvivorAiAccessResult =
   | {
       ok: true
       featureDecision: FeatureGateDecision
@@ -112,7 +103,7 @@ export async function resolveSurvivorAiAccess(input: {
       entitlement,
       requiredPlan: null,
       upgradePath: '/settings',
-      message: 'Ungated Survivor AI surface.',
+      message: 'Ungated Survivor Chimmy surface.',
     }
     return {
       ok: true,
@@ -164,11 +155,12 @@ export async function resolveSurvivorAiAccess(input: {
     userEmail: userEmail ?? null,
     featureId,
     allowTokenFallback: true,
+    forceTokenFallback: mustMeterSubscribedUsers(ruleCode),
     confirmTokenSpend,
     tokenRuleCode: ruleCode,
     tokenSourceType: 'survivor_ai',
     tokenSourceId: `${leagueId}:${type}:${Date.now()}`,
-    tokenDescription: `Survivor AI — ${type}`,
+    tokenDescription: `Survivor Chimmy — ${type}`,
     tokenMetadata: { leagueId, survivorAiType: type },
   })
 
@@ -186,68 +178,6 @@ export async function resolveSurvivorAiAccess(input: {
     }
   }
 
-  if (gate.decision.allowed && mustMeterSubscribedUsers(ruleCode)) {
-    const svc = new TokenSpendService()
-    const balance = await svc.getBalance(userId, userEmail ?? null)
-    const preview = await svc.previewSpendWithEntitlement({
-      userId,
-      ruleCode,
-      entitlement: gate.decision.entitlement,
-      currentBalance: Number(balance.balance || 0),
-      userEmail: userEmail ?? null,
-    })
-    if (!preview.canSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Insufficient token balance',
-            code: 'insufficient_token_balance',
-            message: `This ${type} run costs ${preview.tokenCost} AF Tokens for subscribers (discounted where applicable).`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            upgradePath: gate.decision.upgradePath,
-          },
-          { status: 402 }
-        ),
-      }
-    }
-    if (!confirmTokenSpend) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            error: 'Token spend confirmation required.',
-            code: 'token_confirmation_required',
-            message: `Confirm spending ${preview.tokenCost} AF Token(s) for this ${type} run.`,
-            preview,
-            entitlement: gate.decision.entitlement,
-            requiredPlan: gate.decision.requiredPlan,
-          },
-          { status: 409 }
-        ),
-      }
-    }
-
-    const spend = await svc.spendTokensForRule({
-      userId,
-      ruleCode,
-      confirmed: true,
-      sourceType: 'survivor_ai_subscriber_metered',
-      sourceId: `${leagueId}:${type}:${Date.now()}`,
-      description: `Survivor AI (subscriber metered) — ${type}`,
-      metadata: { leagueId, survivorAiType: type, ruleCode },
-      userEmail: userEmail ?? null,
-    })
-
-    return {
-      ok: true,
-      featureDecision: gate.decision,
-      tokenSpend: spend,
-      tokenPreview: preview,
-      ruleCode,
-    }
-  }
 
   return {
     ok: true,

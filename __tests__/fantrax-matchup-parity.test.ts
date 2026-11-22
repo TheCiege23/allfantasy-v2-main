@@ -21,9 +21,11 @@ const cacheUpsert = vi.fn()
 const weeklyFindMany = vi.fn()
 const weeklyDeleteMany = vi.fn()
 const weeklyCreateMany = vi.fn()
+const executeRaw = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $executeRaw: (...a: unknown[]) => executeRaw(...a),
     fantraxLeague: { findMany: (...a: unknown[]) => fantraxLeagueFindMany(...a) },
     league: { findMany: (...a: unknown[]) => leagueFindMany(...a) },
     leagueTeam: { findMany: (...a: unknown[]) => leagueTeamFindMany(...a) },
@@ -84,6 +86,7 @@ beforeEach(() => {
   weeklyFindMany.mockResolvedValue([])
   weeklyDeleteMany.mockResolvedValue({ count: 0 })
   weeklyCreateMany.mockResolvedValue({ count: 2 })
+  executeRaw.mockResolvedValue(0)
   getFantraxLeagueInfo.mockResolvedValue({ ok: true, data: { leagueName: 'Cream Bowl' } })
   fetchFantraxScheduleWithScores.mockResolvedValue({
     rows: [fixture()],
@@ -94,6 +97,25 @@ beforeEach(() => {
 })
 
 describe('writing a scored Fantrax week', () => {
+  it('retains verified per-category values from a played period for later history answers', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    fetchFantraxScheduleWithScores.mockResolvedValue({ rows: [fixture()],
+      position: { period: 1, state: 'in_progress', scoredThrough: 1 }, periodsRead: 1, periodsFailed: 0,
+      periodScores: [{ period: 1, matchups: [{
+        away: { teamId: 'a', teamName: 'Ciege82', score: 118.4, gamesPlayed: 1,
+          categories: { 'Passing Yards': 250, Touchdowns: 3 } },
+        home: { teamId: 'b', teamName: 'king gustov', score: 96.2, gamesPlayed: 1,
+          categories: { 'Passing Yards': 220, Touchdowns: 2 } },
+      }] }],
+    })
+    const out = await runFantraxMatchupParity({ now: NOW })
+    expect(out.synced).toBe(1)
+    const category = cacheUpsert.mock.calls.find(([arg]) => arg.where.cacheKey ===
+      'imported_category_matchup:fantrax:league-uuid:2026:1')
+    expect(category?.[0].create.data.pairs).toMatchObject([{ roster1: '1483920211',
+      roster2: '77120044', categories1: { 'Passing Yards': 250 } }])
+  })
+
   it('writes both sides of the pairing under the roster ids LeagueTeam holds', async () => {
     const out = await runFantraxMatchupParity({ now: NOW })
 
@@ -134,7 +156,7 @@ describe('writing a scored Fantrax week', () => {
  * treat `pointsFor === 0 && pointsAgainst === 0` as unplayed, so a FUTURE
  * fixture written as 0-0 is indistinguishable from a real result of zero.
  */
-describe('unplayed fixtures are not written at all', () => {
+describe('unplayed fixtures: past ones are never written, coming ones are', () => {
   it('skips a league whose season has not started, and says so', async () => {
     fetchFantraxScheduleWithScores.mockResolvedValue({
       rows: [fixture({ awayScore: null, homeScore: null, played: false })],
@@ -151,23 +173,67 @@ describe('unplayed fixtures are not written at all', () => {
     expect(weeklyCreateMany).not.toHaveBeenCalled()
   })
 
-  it('writes the played week and leaves the unplayed one absent', async () => {
+  const unplayed = { awayScore: null, homeScore: null, played: false }
+  const written = () =>
+    weeklyCreateMany.mock.calls.map((c) => {
+      const rows = (c[0] as { data: Array<{ week: number; pointsFor: number; pointsAgainst: number }> }).data
+      return { week: rows[0].week, rows: rows.length, points: rows.map((r) => [r.pointsFor, r.pointsAgainst]) }
+    })
+
+  /*
+   * Production 2026-11-20, three games a week: week 11 listed 47 of 51 games — the rest were between teams with
+   * nobody in action yet — and no later week had any. A fixture from the current period on is stored as 0-0,
+   * which readers show as not started; a period that has ended still gets its results only.
+   */
+  it('writes the games still to come, and never an unplayed one from a week that has ended', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
     fetchFantraxScheduleWithScores.mockResolvedValue({
       rows: [
         fixture({ week: 1 }),
-        fixture({ week: 2, awayScore: null, homeScore: null, played: false }),
+        fixture({ week: 2, ...unplayed }), // ended with no result on file: unknown, so absent
+        fixture({ week: 3 }), // this week, one game under way
+        fixture({ week: 3, ...unplayed }), // this week, a second game nobody has started
+        fixture({ week: 4, ...unplayed }), // next week
       ],
-      position: { period: 2, state: 'in_progress', scoredThrough: 2 },
-      periodsRead: 2,
+      position: { period: 3, state: 'in_progress', scoredThrough: 3 },
+      periodsRead: 3,
       periodsFailed: 0,
     })
 
     await runFantraxMatchupParity({ now: NOW })
 
-    const weeks = weeklyCreateMany.mock.calls.map(
-      (c) => (c[0] as { data: Array<{ week: number }> }).data[0].week,
-    )
-    expect(weeks).toEqual([1])
+    expect(written()).toEqual([
+      { week: 1, rows: 2, points: [[118.4, 96.2], [96.2, 118.4]] },
+      { week: 3, rows: 4, points: [[118.4, 96.2], [96.2, 118.4], [0, 0], [0, 0]] },
+      { week: 4, rows: 2, points: [[0, 0], [0, 0]] },
+    ])
+    // The league's own period is saved for the week resolver, so "this week" does not depend on those 0-0 rows.
+    expect(executeRaw).toHaveBeenCalledTimes(1)
+    expect(executeRaw.mock.calls[0].slice(1)).toEqual(expect.arrayContaining([3, '3']))
+  })
+
+  it('keeps results-only for a season that is over and for a calendar longer than 30 periods', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture({ week: 1 }), fixture({ week: 2, ...unplayed })],
+      position: { period: 2, state: 'complete', scoredThrough: 2 },
+      periodsRead: 2,
+      periodsFailed: 0,
+    })
+    await runFantraxMatchupParity({ now: NOW })
+    expect(written().map((w) => w.week)).toEqual([1])
+
+    weeklyCreateMany.mockClear()
+    cacheFindUnique.mockResolvedValue(null)
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture({ week: 1 }), fixture({ week: 2, ...unplayed }), fixture({ week: 31, ...unplayed })],
+      position: { period: 2, state: 'in_progress', scoredThrough: 2 },
+      periodsRead: 2,
+      periodsFailed: 0,
+    })
+    await runFantraxMatchupParity({ now: NOW })
+    expect(written().map((w) => w.week)).toEqual([1])
+    expect(executeRaw).not.toHaveBeenCalled()
   })
 
   /** A genuine scoreless week HAS been played, and must be stored. */
@@ -242,6 +308,30 @@ describe('enumeration and cadence', () => {
     leagueFindMany.mockResolvedValue([])
     const out = await runFantraxMatchupParity({ now: NOW })
     expect(out.enumerated).toBe(0)
+  })
+
+  it('gives every import of one Fantrax league its own weeks and its own cadence row', async () => {
+    // Production 2026-11-19: one Fantrax league, two imports. The first synced; the second shared its cadence row,
+    // was never due, and had no WeeklyMatchup rows — an empty matchup and schedule screen.
+    fantraxLeagueFindMany.mockResolvedValue([
+      { id: 'import-a', sourceLeagueId: 'v2kzedypmm8jp61b', season: 2026, leagueName: 'Cream Bowl' },
+      { id: 'import-b', sourceLeagueId: 'v2kzedypmm8jp61b', season: 2026, leagueName: 'Cream Bowl' },
+    ])
+    leagueFindMany.mockResolvedValue([
+      { platformLeagueId: 'import-a', season: 2026 },
+      { platformLeagueId: 'import-b', season: 2026 },
+    ])
+    // A cadence row written earlier in the run is read back as "not due", as the real table would.
+    const written = new Set<string>()
+    cacheUpsert.mockImplementation(async (arg: { where: { cacheKey: string } }) => { written.add(arg.where.cacheKey); return {} })
+    cacheFindUnique.mockImplementation(async (arg: { where: { cacheKey: string } }) =>
+      written.has(arg.where.cacheKey) ? { expiresAt: new Date(NOW.getTime() + 60_000) } : null)
+
+    const out = await runFantraxMatchupParity({ now: NOW })
+    expect(out).toMatchObject({ enumerated: 2, synced: 2, notDue: 0 })
+    expect(weeklyCreateMany.mock.calls.map(([arg]) => arg.data[0].leagueId)).toEqual(['import-a', 'import-b'])
+    const cadenceKeys = [...written].filter((key) => key.startsWith('fantrax_matchup_sync:'))
+    expect(cadenceKeys).toEqual(['fantrax_matchup_sync:v2kzedypmm8jp61b:2026:import-a', 'fantrax_matchup_sync:v2kzedypmm8jp61b:2026:import-b'])
   })
 
   it('does not re-read a league inside its cadence window', async () => {

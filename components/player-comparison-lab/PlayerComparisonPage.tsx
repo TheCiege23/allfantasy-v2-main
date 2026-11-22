@@ -1,5 +1,7 @@
 'use client';
 
+import { paidToolFetchWithConfirm } from '@/lib/tokens/paidToolClient'
+
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FlaskConical, Search, Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
@@ -24,6 +26,7 @@ import { PlayerStatCards } from './PlayerStatCards';
 import { CategoryWinnerHighlights } from './CategoryWinnerHighlights';
 import { AIExplanationPanel } from './AIExplanationPanel';
 import { SideBySideChart } from './SideBySideChart';
+import { LeagueStartVsCard } from './LeagueStartVsCard';
 import { InContextMonetizationCard } from '@/components/monetization/InContextMonetizationCard';
 
 const MIN_PLAYERS = 2;
@@ -79,15 +82,24 @@ export function PlayerComparisonPage() {
   const [initialInsight, setInitialInsight] = useState<ComparisonAIInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 2026-11-12: the Lab is the one player-comparison tool, and /player-compare redirects here with its
+   * query. From a league (`?leagueId=`) a two-player comparison also shows the league's start/sit read
+   * (LeagueStartVsCard); with both players in the link it runs on arrival, as that page did.
+   */
+  const [leagueId, setLeagueId] = useState<string | null>(null);
+  const [autoRunPending, setAutoRunPending] = useState(false);
 
   useEffect(() => {
     if (!searchParams) return;
     const pa = searchParams.get('playerA')?.trim();
     const pb = searchParams.get('playerB')?.trim();
     const sp = searchParams.get('sport')?.trim();
+    setLeagueId(searchParams.get('leagueId')?.trim() || null);
     if (sp) {
       setSport(normalizeToSupportedSport(sp));
     }
+    if (pa && pb) setAutoRunPending(true);
     if (pa || pb) {
       setPlayerSlots((prev) => {
         const next = [...prev];
@@ -229,7 +241,7 @@ export function PlayerComparisonPage() {
 
   const fetchAiInsight = useCallback(async (): Promise<ComparisonAIInsight | null> => {
     if (!comparison) return null;
-    const res = await fetch('/api/player-comparison/insight', {
+    const res = await paidToolFetchWithConfirm('/api/player-comparison/insight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -265,6 +277,13 @@ export function PlayerComparisonPage() {
     };
   }, [comparison]);
 
+  useEffect(() => {
+    if (!autoRunPending) return;
+    if (!playerSlots[0]?.selected || !playerSlots[1]?.selected) return;
+    setAutoRunPending(false);
+    void runComparison();
+  }, [autoRunPending, playerSlots, runComparison]);
+
   const playerNames = comparison?.players.map((p) => p.name) ?? [];
   const summaryLines = comparison?.summaryLines ?? [];
 
@@ -275,11 +294,11 @@ export function PlayerComparisonPage() {
         <h1 className="text-2xl font-semibold text-white" data-testid="player-comparison-lab-heading">Player Comparison Lab</h1>
       </div>
       <p className="text-sm text-white/60">
-        Compare 2–6 players using market value, projections, consistency, and AI insights.
+        Compare 2–6 players using market value, projections, consistency, and Chimmy insights.
       </p>
 
       <InContextMonetizationCard
-        title="Player AI recommendation access"
+        title="Player Chimmy recommendation access"
         featureId="player_ai_recommendations"
         tokenRuleCodes={[
           'ai_lineup_recommendation_explanation_single',
@@ -460,7 +479,7 @@ export function PlayerComparisonPage() {
               className="h-4 w-4 rounded border-white/20 bg-black/20"
               data-testid="ai-on-compare-toggle"
             />
-            Include AI explanation on compare (optional)
+            Include Chimmy explanation on compare (optional)
           </label>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -487,6 +506,14 @@ export function PlayerComparisonPage() {
           <ComparisonMatrix matrix={comparison.matrix} players={comparison.players} />
           <CategoryWinnerHighlights highlights={comparison.categoryWinners} />
           <PlayerStatCards players={comparison.players} scores={comparison.playerScores} />
+          {leagueId && comparison.players.length === 2 ? (
+            <LeagueStartVsCard
+              leagueId={leagueId}
+              playerA={comparison.players[0].name}
+              playerB={comparison.players[1].name}
+              sport={comparison.sport}
+            />
+          ) : null}
           <AIExplanationPanel
             playerNames={playerNames}
             summaryLines={summaryLines}

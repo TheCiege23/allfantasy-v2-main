@@ -22,6 +22,16 @@ describe('Survivor draft start cast gate', () => {
       i === 4 ? { ...roster, platformUserId: 'open-slot-league-5' } : roster),
     })).toMatchObject({ ready: false, error: expect.stringContaining('1 open Survivor cast seat') })
   })
+  it('counts a seat Chimmy runs as filled, and only that seat', () => {
+    const seats = rosters.map((roster, i) => (i >= 14 ? { ...roster, platformUserId: `orphan-${roster.id}` } : roster))
+    expect(evaluateSurvivorDraftCast({ ...base, rosters: seats, chimmyRosterIds: ['roster-14', 'roster-15'] }))
+      .toEqual({ ready: true })
+    // Control: the same empty seats without Chimmy, or with Chimmy on only one, still block the draft.
+    expect(evaluateSurvivorDraftCast({ ...base, rosters: seats }))
+      .toMatchObject({ ready: false, error: expect.stringContaining('2 open Survivor cast seats') })
+    expect(evaluateSurvivorDraftCast({ ...base, rosters: seats, chimmyRosterIds: ['roster-15'] }))
+      .toMatchObject({ ready: false, error: expect.stringContaining('1 open Survivor cast seat') })
+  })
   it('stops duplicate owners, missing real users, and a host-only commissioner in a cast seat', () => {
     expect(evaluateSurvivorDraftCast({ ...base, rosters: rosters.map((roster, i) =>
       i === 4 ? { ...roster, platformUserId: 'user-0' } : roster),

@@ -12,10 +12,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * "Tue, 07 Apr 2026 00:50:00 GMT", which is Monday 04-06 in the US.
  */
 
-const h = vi.hoisted(() => ({ upsert: vi.fn(), identities: vi.fn(), riFetchRows: vi.fn() }))
+const h = vi.hoisted(() => ({ upsert: vi.fn(), identities: vi.fn(), riFetchRows: vi.fn(), existing: vi.fn(), lock: vi.fn(), count: vi.fn() }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: async (run: (tx: unknown) => Promise<unknown>) => run({
+      $executeRaw: h.lock, playerGameStat: { findMany: h.existing, upsert: h.upsert, count: h.count },
+    }),
     playerIdentityMap: { findMany: h.identities },
     playerGameStat: { upsert: h.upsert },
   },
@@ -24,7 +27,7 @@ vi.mock('@/lib/workers/providers/rollingInsightsRest', () => ({
   riFetchRows: (...a: unknown[]) => h.riFetchRows(...a),
 }))
 
-import { ingestRollingInsightsGameLogs } from '@/lib/sports-data/rollingInsightsGameLogs'
+import { ingestRollingInsightsGameLogs, normalizeRiGameBox, writeRiGameRows } from '@/lib/sports-data/rollingInsightsGameLogs'
 
 const FIXTURE = path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', 'live.NCAABB.json')
 const games = (JSON.parse(readFileSync(FIXTURE, 'utf8')) as { data: { NCAABB: Array<Record<string, any>> } }).data.NCAABB
@@ -34,10 +37,43 @@ beforeEach(() => {
   const ids = [...Object.keys(games[0].player_box.home_team), ...Object.keys(games[0].player_box.away_team)]
   h.identities.mockResolvedValue(ids.map((id) => ({ id: `pim-${id}`, rollingInsightsId: id })))
   h.upsert.mockResolvedValue({})
+  h.count.mockResolvedValue(0)
   h.riFetchRows.mockResolvedValue({ rows: games, notModified: false, unsupported: false, error: null })
 })
 
 describe('ingestRollingInsightsGameLogs — the game_date it writes', () => {
+  it('retains a verified official NBA box when the regular refresh runs', async () => {
+    const raw = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', 'live.NBA.json'), 'utf8')).data.NBA as unknown[]
+    const game = raw.find(row => { const box = normalizeRiGameBox(row); return box?.seasonType === 'regular' && box.lines.length > 0 })!
+    expect(game).toBeDefined()
+    const box = normalizeRiGameBox(game)!
+    const ids = new Map(box.lines.map((line, i) => [line.providerPlayerId, `p-${i}`]))
+    const result = { games: 0, lines: 0, written: 0, unresolved: 0, unrecognizedSeasonTypes: [] as string[], errors: [] as string[] }
+    h.count.mockResolvedValue(1)
+    await writeRiGameRows({ sport: 'NBA', rows: [game], identityByRiId: ids, now: new Date(), result, persistSchedule: true })
+    expect(h.lock).toHaveBeenCalledOnce()
+    expect(h.count).toHaveBeenCalledOnce()
+    expect(h.upsert).not.toHaveBeenCalled()
+    expect(result.written).toBe(0)
+    expect(result.errors).toEqual([])
+  })
+  it('preserves an NHL row that arrived before the backfill acquired its game lock', async () => {
+    const raw = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts', 'rolling-insights',
+      'fixtures', 'live.NHL.json'), 'utf8')).data.NHL as unknown[]
+    const game = raw.find((row) => (normalizeRiGameBox(row)?.lines.length ?? 0) >= 2)!
+    const box = normalizeRiGameBox(game)!
+    const selected = box.lines.slice(0, 2)
+    const ids = new Map(selected.map((line, i) => [line.providerPlayerId, `p-${i}`]))
+    h.existing.mockResolvedValue([{ playerId: 'p-0', gameId: `${box.providerGameId}:${selected[0]!.group}` }])
+    const result = { games: 0, lines: 0, written: 0, unresolved: 0,
+      unrecognizedSeasonTypes: [] as string[], errors: [] as string[] }
+    await writeRiGameRows({ sport: 'NHL', rows: [game], identityByRiId: ids,
+      now: new Date(), result, insertOnly: true })
+    expect(h.lock).toHaveBeenCalledOnce()
+    expect(h.upsert).toHaveBeenCalledOnce()
+    expect(h.upsert.mock.calls[0]![0].create.playerId).toBe('p-1')
+    expect(result.written).toBe(1)
+  })
   it('REGRESSION: writes the Eastern DAY of a night game, not the next UTC day', async () => {
     const result = await ingestRollingInsightsGameLogs({ sport: 'NCAAB', dates: ['2026-04-06'], now: new Date('2026-09-24T12:00:00Z') })
 

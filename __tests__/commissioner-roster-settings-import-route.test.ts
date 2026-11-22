@@ -13,6 +13,26 @@ vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
+// The lifecycle gate (lib/league/settingsLifecycleGate.ts) is covered by
+// __tests__/settings-editors-lifecycle-gate.test.ts; here it always allows.
+vi.mock('@/lib/league/settingsLifecycleGate', () => ({
+  decideSettingsEdit: vi.fn(async () => ({ ok: true, state: 'pre_draft', midSeason: false })),
+  recordMidSeasonSettingsChange: vi.fn(async () => undefined),
+}))
+
+const applyRosterTemplateChangeMock = vi.hoisted(() => vi.fn(async () => ({ synced: true, rounds: 9, previousRounds: 13 })))
+vi.mock('@/lib/draft/syncDraftRoundsToRoster', () => ({ applyRosterTemplateChange: applyRosterTemplateChangeMock }))
+
+// The apply path reads the league for the best ball pool check (lib/bestball/leaguePoolCheck.ts, covered
+// by __tests__/settings-editors-lifecycle-gate.test.ts). A redraft league is never checked.
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    league: {
+      findUnique: vi.fn(async () => ({ sport: 'NFL', leagueType: 'redraft', leagueVariant: null, settings: {}, bestBallMode: false, guillotineMode: false, leagueSize: 12 })),
+    },
+  },
+}))
+
 vi.mock('@/lib/roster-engine', () => ({
   checkCommissionerPermission: checkCommissionerPermissionMock,
   mapImportedRosterToLeagueConfig: mapImportedRosterToLeagueConfigMock,
@@ -125,10 +145,15 @@ describe('/api/commissioner/leagues/[leagueId]/roster-settings/import route', ()
     )
 
     expect(mapImportedRosterToLeagueConfigMock).toHaveBeenCalledWith('l1', 'yahoo', { QB: 1 })
+    // An imported roster reshapes the draft and roster limits like any other roster change.
+    expect(applyRosterTemplateChangeMock).toHaveBeenCalledWith('l1', expect.objectContaining({ keepManualOverride: false }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       ok: true,
       action: 'apply',
+      draftRounds: { synced: true, rounds: 9, previousRounds: 13 },
+      // A redraft league is not best ball, so it is never pool-checked and carries no warnings.
+      bestBallPoolWarnings: [],
       unifiedConfig: {
         sport: 'NFL',
         leagueType: 'redraft',

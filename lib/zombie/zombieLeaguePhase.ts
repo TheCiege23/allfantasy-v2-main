@@ -9,7 +9,7 @@
  *
  * Pure and client-safe.
  */
-export type ZombieLeaguePhase = {
+type ZombieLeaguePhase = {
   status: string
   label: string
   meaning: string

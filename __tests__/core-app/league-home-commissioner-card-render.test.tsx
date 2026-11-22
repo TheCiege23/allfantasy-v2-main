@@ -71,7 +71,7 @@ function card(commissioner: unknown): HTMLElement {
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ')
 
 describe('Overview commissioner card', () => {
-  it('shows an imported league’s card without an at-risk tile, and says how it judged', () => {
+  it('says an imported league’s inactive managers in one sentence, without at-risk, and how it judged', () => {
     const el = card({
       available: true,
       data: {
@@ -84,17 +84,19 @@ describe('Overview commissioner card', () => {
       },
     })
     expect(text(el)).not.toContain('At risk')
-    expect(text(el)).toContain('Inactive: Ada, Bea, Cy, Di and 1 more')
+    expect(text(el)).toContain('5 of 12 managers are inactive: Ada, Bea, Cy, Di and 1 more.')
+    // The counts are in the sentence; the two count tiles that repeated them are gone.
+    expect(el.querySelector('.af-ch-tiles')).toBeNull()
     expect(text(el)).toContain('Judged by trades, waiver claims and roster moves in the last 14 days.')
     expect(el.querySelector(`a[href="${HREF}"]`)).not.toBeNull()
   })
 
-  it('keeps the at-risk tile where it is measured', () => {
+  it('says how many are at risk where it is measured', () => {
     const el = card({
       available: true,
       data: { inactiveCount: 0, atRiskCount: 2, totalManagers: 10, inactiveNames: [], basis: 'the last lineup or roster change', href: HREF },
     })
-    expect(text(el)).toContain('At risk')
+    expect(text(el)).toContain('2 are at risk of going quiet.')
     expect(text(el)).toContain('Nobody is inactive.')
   })
 
@@ -104,7 +106,7 @@ describe('Overview commissioner card', () => {
       data: { inactiveCount: 3, atRiskCount: null, totalManagers: 3, inactiveNames: ['A', 'B', 'C'], basis: 'moves', href: HREF },
     })
     expect(text(el)).toContain('a quiet stretch')
-    expect(text(el)).not.toContain('Inactive: A')
+    expect(text(el)).not.toContain('inactive: A')
   })
 
   it('gives a commissioner the reason and the way into the hub when activity can’t be judged', () => {
@@ -115,8 +117,19 @@ describe('Overview commissioner card', () => {
     expect(text(el)).not.toContain('Inactive')
   })
 
-  it('gives anyone else the reason and no link', () => {
-    const el = card({ available: false, reason: 'the commissioner hub is visible to this league’s commissioner and co-commissioners' })
-    expect(el.querySelector('a[href^="/core/commissioner"]')).toBeNull()
+  // 2026-11-13 guide: someone who does not run the league is not shown the card at all — a panel
+  // explaining that it is for commissioners was a section of the Overview about nothing they can use.
+  it('shows anyone else no commissioner card, and no link to the hub', () => {
+    const reason = 'the commissioner hub is visible to this league’s commissioner and co-commissioners'
+    const { queryByText, container } = render(<LeagueHome data={page({ available: false, reason })} otherLeagueIssueCount={0} identityInShell />)
+    expect(queryByText('Commissioner Hub')).toBeNull()
+    expect(container.querySelector('a[href^="/core/commissioner"]')).toBeNull()
   })
+})
+
+
+it('hides selected imported-dashboard cards and keeps Customize page available', () => {
+  const { queryByText, getByRole } = render(<LeagueHome data={page(off)} otherLeagueIssueCount={0} hiddenSections={['commissioner', 'chat', 'standings', 'timeline', 'matchups', 'insights', 'activity', 'draft']} />)
+  for (const title of ['Commissioner Hub', 'Ask Chimmy', 'Standings', 'League buzz', 'Power board', 'Draft HQ']) expect(queryByText(title)).toBeNull()
+  expect(getByRole('link', { name: 'Customize page' }).getAttribute('href')).toBe('/settings?tab=leagues&returnTo=%2Fcore%3Fleague%3Dlg-1')
 })

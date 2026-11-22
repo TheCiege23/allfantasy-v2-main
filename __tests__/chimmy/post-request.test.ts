@@ -34,3 +34,15 @@ it('recovers the same question after a page reload without a second POST', async
   expect(recovered).toHaveBeenCalledTimes(1)
   expect(values.size).toBe(0)
 })
+
+it('refreshes an unspent preview after reload without authorizing the changed conversation', async () => {
+ const values=new Map<string,string>();const storage={getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>{values.set(k,v)},removeItem:(k:string)=>{values.delete(k)}}
+ const original=new FormData();original.set('message','Same question');original.set('requestId','original-id');original.set('conversation','old-context')
+ const preview=()=>new Response(JSON.stringify({code:'token_confirmation_required',analysisPreview:{version:1}}),{status:409})
+ await postChimmyRequest(original,vi.fn().mockResolvedValue(preview()),storage)
+ const reload=new FormData();reload.set('message','Same question');reload.set('requestId','fresh-id');reload.set('conversation','new-context')
+ const fetcher=vi.fn().mockResolvedValueOnce(preview()).mockResolvedValueOnce(preview())
+ await postChimmyRequest(reload,fetcher,storage)
+ expect(fetcher.mock.calls[0][0]).toBe('/api/chat/chimmy?requestId=original-id')
+ expect(fetcher.mock.calls[1][1].body.get('requestId')).toBe('fresh-id');expect(fetcher.mock.calls[1][1].body.get('confirmTokenSpend')).toBeNull()
+})

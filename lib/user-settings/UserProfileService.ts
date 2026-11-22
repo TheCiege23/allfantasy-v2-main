@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { isAllowedSessionIdleMinutes } from "@/lib/auth/session-idle-constants"
-import { SUPPORTED_SPORTS, isSupportedSport } from "@/lib/sport-scope"
+import { SUPPORTED_SPORTS, LIVE_ONLY_SPORTS, isLiveSport } from "@/lib/sport-scope"
 import { isSelectableChimmyTtsVoiceId } from "@/lib/tts/voices"
 import { validateUsername } from "@/lib/auth/username-validation"
 import {
@@ -76,10 +76,10 @@ export async function updateUserProfile(
   if (payload.preferredSports !== undefined) {
     const normalizedSports =
       Array.isArray(payload.preferredSports) && payload.preferredSports.length > 0
-        ? SUPPORTED_SPORTS.filter((sport) =>
+        ? [...SUPPORTED_SPORTS, ...LIVE_ONLY_SPORTS].filter((sport) =>
             payload.preferredSports?.some(
               (candidate) =>
-                isSupportedSport(String(candidate).toUpperCase()) &&
+                isLiveSport(String(candidate).toUpperCase()) &&
                 String(candidate).toUpperCase() === sport
             )
           )

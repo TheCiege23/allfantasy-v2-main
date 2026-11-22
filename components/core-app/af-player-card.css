@@ -1,3 +1,7 @@
+/* My Team's highlights card sits OUTSIDE the player-card sheet, whose own base size these rules
+   lean on — so without this its line, picker and button inherited My Team's 18px body text. */
+.af-team-highlights { font-size: 13px; line-height: 1.5; }
+.af-team-highlights > .af-pc-faint { margin: 0 0 4px; }
 .af-team-highlights-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .af-team-highlights-controls select { min-height: 44px; margin-left: 8px; padding: 8px; background: var(--panel, #191b29); color: inherit; border: 1px solid var(--line, #303344); border-radius: 8px; }
 .af-team-highlights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 20px; }
@@ -844,4 +848,52 @@ a.af-pc-news-t:hover {
     transform: translateY(-50%);
     background: transparent;
   }
+}
+
+/* ── which games count (GamesCountWeekPanel.tsx) ─────────────────────────── */
+
+.af-pc-games-count {
+  display: grid;
+  gap: 6px;
+}
+
+.af-pc-games-count-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 500 12px/1.4 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+}
+
+.af-pc-games-count-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-pc-games-count-list button,
+.af-pc-games-count-actions button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.af-pc-games-count-list button:disabled,
+.af-pc-games-count-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-pc-games-count-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

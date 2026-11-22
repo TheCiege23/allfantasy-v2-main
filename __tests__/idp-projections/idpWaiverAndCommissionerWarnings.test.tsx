@@ -37,6 +37,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/hooks/useAfSubGate', () => ({
   useAfSubGate: () => ({ handleApiResponse: async () => true }),
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromAssert(() => mocks.assertCommissioner))
 
 import { IDPWaiverSection } from '@/components/idp/IDPWaiverSection'
 

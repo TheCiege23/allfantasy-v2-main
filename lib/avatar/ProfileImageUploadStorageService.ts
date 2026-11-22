@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
+import { UTApi, UTFile } from "uploadthing/server"
 import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 import {
   ALLOWED_PROFILE_IMAGE_TYPES,
@@ -54,6 +55,8 @@ export async function persistProfileImageBytes(params: {
   bytes: Uint8Array
   mimeType: string
   originalFilename?: string | null
+  /** Blob key folder; defaults to the avatar folder. Survivor tribe logos use their own. */
+  keyPrefix?: string
 }): Promise<{ url: string }> {
   if (params.bytes.byteLength > MAX_PROFILE_IMAGE_BYTES) {
     throw new Error(PROFILE_IMAGE_TOO_LARGE_MESSAGE)
@@ -62,7 +65,9 @@ export async function persistProfileImageBytes(params: {
     throw new Error(PROFILE_IMAGE_BAD_TYPE_MESSAGE)
   }
 
-  if (!getBlobReadWriteToken()) {
+  const blobToken = getBlobReadWriteToken()
+  const uploadThingToken = process.env.UPLOADTHING_TOKEN?.trim()
+  if (!blobToken && !uploadThingToken) {
     throw new Error("Storage not configured")
   }
 
@@ -72,15 +77,28 @@ export async function persistProfileImageBytes(params: {
     ? fileFromName
     : canonical
   const filename = `${randomUUID()}.${ext}`
-  const key = `avatars/${filename}`
+  const key = `${(params.keyPrefix ?? "avatars").replace(/^\/+|\/+$/g, "") || "avatars"}/${filename}`
 
   const body = Buffer.from(params.bytes)
 
-  const blob = await put(key, body, {
-    access: "public",
-    contentType: params.mimeType,
-    token: getBlobReadWriteToken(),
-  })
+  if (blobToken) {
+    const blob = await put(key, body, {
+      access: "public",
+      contentType: params.mimeType,
+      token: blobToken,
+    })
+    return { url: blob.url }
+  }
 
-  return { url: blob.url }
+  // Railway production has an UploadThing token but no Blob write token. Use its
+  // existing public file store for avatars instead of refusing every upload.
+  const uploader = new UTApi({ token: uploadThingToken })
+  const uploaded = await uploader.uploadFiles(
+    new UTFile([body], filename, { type: params.mimeType }),
+    { contentDisposition: "inline" },
+  )
+  if (uploaded.error || !uploaded.data?.url) {
+    throw new Error(uploaded.error?.message ?? "Picture upload failed")
+  }
+  return { url: uploaded.data.url }
 }

@@ -45,11 +45,11 @@ import type { ImportCoverage, ImportCoverageKey } from '@/lib/league-import/type
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 
-export type LeagueDataCoverageKey = 'seasons' | 'standings' | 'drafts' | 'trades' | 'transactions' | 'lineups'
+type LeagueDataCoverageKey = 'seasons' | 'standings' | 'drafts' | 'trades' | 'transactions' | 'lineups'
 
 export type LeagueDataCoverageStatus = 'available' | 'importing' | 'not_published' | 'unsupported' | 'none' | 'unknown'
 
-export type LeagueDataCoverageRow = {
+type LeagueDataCoverageRow = {
   key: LeagueDataCoverageKey
   label: string
   status: LeagueDataCoverageStatus
@@ -71,7 +71,7 @@ export type LeagueDataCoverage = {
  * rows are still data. Without it a league whose only trades are undated would read as having
  * none.
  */
-export type SeasonRead = { seasons: number[]; undated: number } | null
+type SeasonRead = { seasons: number[]; undated: number } | null
 
 export type LeagueDataCoverageInput = {
   platform: string | null | undefined
@@ -117,10 +117,11 @@ const PROVIDER_BUCKET: Partial<Record<LeagueDataCoverageKey, ImportCoverageKey>>
 /**
  * Which platforms any writer fills a row for. Absent means every imported platform.
  *
- * ⚠ LINEUPS ARE SLEEPER-ONLY TODAY: `ingestSleeperPlayerScores` is the one writer of
- * `LeaguePlayerWeeklyScore`, and the model's own comment says espn/yahoo "would each add
- * their own". An ESPN league with no lineups is our gap, not ESPN's — `unsupported`, never
- * `not_published`.
+ * ⚠ LINEUPS ARE SLEEPER-ONLY ON A SCHEDULE: `ingestSleeperPlayerScores` is the one scheduled writer
+ * of `LeaguePlayerWeeklyScore`. Fantrax rows exist only from a manual browser-download import
+ * (lib/import-os/collector/fantraxBrowserActuals.ts), and a league that has rows reads as available
+ * before this set is consulted. An ESPN league with no lineups is our gap, not ESPN's —
+ * `unsupported`, never `not_published` (docs/integrity/IMPORTED_LEAGUE_INTEGRITY.md).
  */
 const WRITTEN_FOR: Partial<Record<LeagueDataCoverageKey, ReadonlySet<string>>> = {
   lineups: new Set(['sleeper']),

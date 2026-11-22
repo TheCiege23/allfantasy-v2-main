@@ -6,15 +6,15 @@ import type { UserLeague } from '../types'
 import { ChatComposer, type LeagueComposerPayload } from './chat/ChatComposer'
 import { ChatSenderAvatar } from './chat/ChatSenderAvatar'
 import { isLeagueMessageThreaded } from './chat/chat-timestamps'
-import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
 import { RecapShareButton } from '@/components/core-app/comms/RecapShareButton'
 import { isWeeklyRecap } from '@/lib/league-chat/recapShare'
 import { survivorIdolArt } from '@/lib/survivor/survivorIdolTypes'
+import ShareChimmyAnswerButton, { isShareableChimmyAnswer, postChimmyShare } from '@/components/chat/ShareChimmyAnswerButton'
 
-export type LeagueChatMessage = {
+type LeagueChatMessage = {
   id: string
   authorId: string
   author_display_name: string
@@ -63,7 +63,7 @@ function readBbChannelFromMessage(meta: Record<string, unknown> | null | undefin
   return 'main'
 }
 
-export function formatChatTime(d: Date | string): string {
+function formatChatTime(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const diff = Date.now() - date.getTime()
   if (diff < 60_000) return 'just now'
@@ -403,7 +403,8 @@ export function LeagueChatInPanel({
             text: t,
             votes: [] as string[],
           })),
-          closeAt: payload.poll.closeAt.toISOString(),
+          ...(payload.poll.closeAt ? { closeAt: payload.poll.closeAt.toISOString() } : {}),
+          ...(payload.poll.resultsVisibility === 'after_close' ? { resultsVisibility: 'after_close' } : {}),
           allowMultiple: payload.poll.allowMultiple,
         }
       }
@@ -646,6 +647,17 @@ export function LeagueChatInPanel({
                       <div className="max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-tl-md bg-violet-500/10 px-3 py-2 text-[15px] leading-[1.42] text-white ring-1 ring-inset ring-violet-400/20">
                         {message.text}
                       </div>
+                      {/* Only a general answer is marked shareable — never a Survivor vote, power or host reply. */}
+                      {isShareableChimmyAnswer(meta) ? (
+                        <ShareChimmyAnswerButton
+                          shared={typeof meta?.sharedMessageId === 'string'}
+                          onShare={async () => {
+                            const ok = await postChimmyShare(selectedLeague.id, message.id)
+                            if (ok) await loadMessages()
+                            return ok
+                          }}
+                        />
+                      ) : null}
                       <span className="mt-0.5 text-[11px] text-white/30">{formatChatTime(message.createdAt)}</span>
                     </div>
                   </div>

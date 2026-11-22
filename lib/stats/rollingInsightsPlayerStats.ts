@@ -164,7 +164,7 @@ async function mirrorToPlayerSeasonStats(args: {
 
 const MIRROR_BATCH = 500
 
-export interface PlayerSeasonStatsMirrorValue {
+interface PlayerSeasonStatsMirrorValue {
   playerId: string
   playerName: string
   season: string
@@ -200,7 +200,7 @@ export function buildPlayerSeasonStatsMirrorValues(args: {
   return out
 }
 
-export interface RiPlayerStatsRow {
+interface RiPlayerStatsRow {
   providerPlayerId: string
   playerName: string
   teamName: string | null
@@ -243,7 +243,7 @@ export function normalizeRiPlayerStats(payload: unknown, sport = 'NFL'): RiPlaye
   return out
 }
 
-export interface RiPlayerInfo {
+interface RiPlayerInfo {
   position: string | null
   teamName: string | null
 }
@@ -268,7 +268,7 @@ export function normalizeRiPlayerInfo(payload: unknown, sport = 'NFL'): Map<stri
   return map
 }
 
-export interface RiStatSyncResult {
+interface RiStatSyncResult {
   sport: string
   seasonRequested: number
   /** The season actually ingested — differs from requested when the bootstrap

@@ -22,11 +22,13 @@ import { HOCKEY_STATS_ES } from '@/lib/i18n/scoring-stats/hockey'
 import {
   NHL_SCORING_CATEGORIES,
   NHL_PREMIUM_SCORING,
+  NHL_UNAVAILABLE_SCORING_KEYS,
   buildNhlScoringDefaults,
   type NhlScoringCategory,
   type NhlScoringRow,
 } from '@/lib/nhl-scoring/NhlScoringCategories'
 import type { NhlScoringPresetKey } from '@/lib/nhl-scoring/NhlScoringPresets'
+import { useMidSeasonConfirm } from '@/components/league-settings/useMidSeasonConfirm'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,6 +99,7 @@ interface Props {
 
 export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
   const { t, language } = useOptionalLanguage()
+  const { confirmFetch, dialog: midSeasonDialog } = useMidSeasonConfirm()
   const st = (s: string) => translateStat(s, language, HOCKEY_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NhlScoringPreset[]>([])
@@ -174,6 +177,8 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const handleRuleChange = useCallback(
     (statKey: string, rawValue: string) => {
       if (!isCommissioner) return
+      // A row the feed cannot supply never scores, so it is not editable either.
+      if (NHL_UNAVAILABLE_SCORING_KEYS.has(statKey)) return
       const isPremiumRow = NHL_PREMIUM_SCORING.rows.some((r: NhlScoringRow) => r.key === statKey)
       if (isPremiumRow && !isPremium) {
         setGateOpen(true)
@@ -192,7 +197,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     setError(null)
     setSuccess(false)
     try {
-      const res = await fetch(
+      const res = await confirmFetch(
         `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/nhl-scoring`,
         {
           method: 'PUT',
@@ -218,7 +223,7 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
     } finally {
       setSaving(false)
     }
-  }, [leagueId, selectedPreset, editedRules])
+  }, [leagueId, selectedPreset, editedRules, confirmFetch])
 
   const resetToSaved = useCallback(() => {
     if (config) {
@@ -239,6 +244,8 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   // ----- render -----
   return (
+    <>
+      {midSeasonDialog}
     <div className="space-y-5">
       {/* Header */}
       <div>
@@ -363,9 +370,9 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
           {/* Stat rows */}
           {activeCategory.rows.map((row: NhlScoringRow) => {
-            const value = editedRules[row.key] ?? row.defaultValue
+            const value = row.unavailable ? 0 : (editedRules[row.key] ?? row.defaultValue)
             const isEditable =
-              isCommissioner && (activeCategory.id !== 'advanced' || isPremium)
+              !row.unavailable && isCommissioner && (activeCategory.id !== 'advanced' || isPremium)
             const isNonZero = value !== 0
 
             return (
@@ -379,14 +386,24 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
                     <span className="break-words text-[12px] text-white/80">{st(row.label)}</span>
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
-                  {row.helper && (
+                  {row.unavailable ? (
+                    <p className="mt-0.5 text-[11px] text-amber-300/60">{t('lsScore.notAvailableHelp')}</p>
+                  ) : row.helper && (
                     <p className="mt-0.5 text-[11px] text-white/30">{st(row.helper)}</p>
                   )}
                 </div>
 
                 {/* Value input / display */}
                 <div className="shrink-0">
-                  {isEditable ? (
+                  {row.unavailable ? (
+                    <span
+                      title={t('lsScore.notAvailableHelp')}
+                      className="inline-flex w-[4.5rem] items-center justify-end gap-1 rounded-md border border-white/5 bg-white/[0.02] px-2 py-1.5 font-mono text-[12px] text-white/30"
+                    >
+                      <Lock className="h-3 w-3" aria-hidden />
+                      {t('lsScore.notAvailable')}
+                    </span>
+                  ) : isEditable ? (
                     <input
                       type="number"
                       step="any"
@@ -466,5 +483,6 @@ export function NhlScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
         featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NHL')}
       />
     </div>
+    </>
   )
 }

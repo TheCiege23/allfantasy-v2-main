@@ -9,7 +9,30 @@
  * Client-safe: no server imports, so the card component can import the display types.
  */
 
-export type ChimmyActionKind = 'lineup' | 'trade'
+type ChimmyActionKind = 'lineup' | 'trade' | 'automation' | 'queue' | 'settings'
+
+/** The league settings a commissioner can change through Chimmy (stage 5 of Chimmy, 2026-11-16). */
+export type ChimmySettingKey =
+  | 'name'
+  | 'waiverType'
+  | 'waiverBudget'
+  | 'waiverMinBid'
+  | 'tradeReviewHours'
+  | 'tradeDeadlineWeek'
+  | 'playoffTeams'
+  | 'playoffStartWeek'
+  | 'irSlots'
+
+/** One setting a card changes. `from` is what the card was built against; the confirm refuses if it moved. */
+export type SettingChangeSpec = { key: ChimmySettingKey; from: string | number | null; to: string | number | null }
+
+/** A player a queue card adds — resolved from the draft room's own pool, never from the model. */
+export type QueueAddSpec = { playerName: string; position: string; team: string | null; playerId: string | null }
+
+/** A league automation change a commissioner asked Chimmy for (phase 12, 2026-10-29). */
+export type AutomationChangeSpec =
+  | { type: 'preset'; preset: 'recommended' | 'run_it' | 'hands_on' }
+  | { type: 'handover'; rule: { days: 7 | 14 | 21; to: 'lineups' | 'autopilot' } | null }
 
 /** One lineup move, by player id. `to` is where the player ends up. */
 export type LineupMoveSpec = {
@@ -49,6 +72,40 @@ export type ChimmyActionSpec =
       week: number
       season: number
       assets: TradeAssetSpec[]
+    }
+  | {
+      kind: 'automation'
+      change: AutomationChangeSpec
+      /**
+       * The keys of what the card showed would change. The confirm recomputes the change against the
+       * league as it is then and refuses if the list differs, so a card never saves something the
+       * commissioner was not shown.
+       */
+      expectedKeys: string[]
+    }
+  | {
+      /** The user's own draft queue (stage 2 of drafts, 2026-11-16). Never a pick. */
+      kind: 'queue'
+      /** The draft session the card was made for; the confirm refuses if another draft is now current. */
+      sessionId: string
+      add: QueueAddSpec[]
+      addAt: 'top' | 'bottom'
+      /** `queueNameKey`s of players to take out. */
+      removeKeys: string[]
+      /** `queueFingerprint` of the queue the card was built against. */
+      baseFingerprint: string
+    }
+  | {
+      /**
+       * League settings a commissioner asked for. Saved through `executeLeagueSettingsPatch` — the same
+       * pipeline as the settings page, with its permission, lock and audit steps.
+       */
+      kind: 'settings'
+      /** The settings-page section these all belong to; one card never spans two. */
+      section: 'general' | 'waivers' | 'trades' | 'playoffs' | 'roster'
+      changes: SettingChangeSpec[]
+      /** The season had started when the card was made, so the card asked for a second tap. */
+      midSeason: boolean
     }
 
 /** The signed payload. `exp` is epoch seconds. */
@@ -93,6 +150,23 @@ export type ChimmyActionCard = {
     youGet: ActionCardPlayer[]
     /** How this league reviews trades once accepted — "commissioner review", "league vote"… */
     reviewNote: string | null
+  }
+  automation?: {
+    /** Each setting that will change, in plain words. */
+    changes: string[]
+  }
+  queue?: {
+    add: ActionCardPlayer[]
+    addAt: 'top' | 'bottom'
+    remove: ActionCardPlayer[]
+    /** The first few names of the queue as it will be after Confirm. */
+    resultingTop: string[]
+  }
+  settings?: {
+    /** Each setting as the commissioner reads it: "FAAB budget", "$100", "$200". */
+    changes: Array<{ label: string; from: string; to: string }>
+    /** The season is under way: the card needs a second tap, after a plain warning. */
+    midSeason: boolean
   }
   /** Plain-language caveats. Always rendered; never hidden behind a toggle. */
   warnings: string[]

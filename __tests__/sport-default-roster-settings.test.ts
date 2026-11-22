@@ -5,7 +5,6 @@ import {
   isPositionEligibleForSlot,
   getPositionsForSport,
 } from '@/lib/roster-defaults/PositionEligibilityResolver'
-import { validateRoster } from '@/lib/roster-defaults/RosterValidationEngine'
 import {
   getDefaultRosterSlotsForSport,
   getPositionFilterOptionsForSport,
@@ -38,7 +37,7 @@ describe('Default Roster Settings by Sport', () => {
       }
 
       if (sport === 'MLB') {
-        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'OF', 'DH', 'UTIL']) {
+        for (const slot of ['SP', 'RP', 'P', 'C', '1B', '2B', '3B', 'SS', 'CI', 'MI', 'OF', 'UTIL']) {
           expect(slotNames.includes(slot)).toBe(true)
         }
       }
@@ -50,9 +49,11 @@ describe('Default Roster Settings by Sport', () => {
       }
 
       if (sport === 'NCAAF') {
-        for (const slot of ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST']) {
+        for (const slot of ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K']) {
           expect(slotNames.includes(slot)).toBe(true)
         }
+        // No college team defense exists to draft — see redraftTeamDefenseEnabled.
+        expect(slotNames.includes('DST')).toBe(false)
       }
 
       if (sport === 'NCAAB') {
@@ -79,22 +80,6 @@ describe('Default Roster Settings by Sport', () => {
     expect(mlbP).toEqual(expect.arrayContaining(['SP', 'RP']))
   })
 
-  it('validates roster assignments against slot eligibility', () => {
-    const valid = validateRoster('NFL', [
-      { playerId: 'p1', position: 'QB', slotName: 'QB' },
-      { playerId: 'p2', position: 'RB', slotName: 'RB' },
-      { playerId: 'p3', position: 'WR', slotName: 'WR' },
-      { playerId: 'p4', position: 'TE', slotName: 'FLEX' },
-    ])
-    expect(valid.valid).toBe(true)
-
-    const invalid = validateRoster('NFL', [
-      { playerId: 'p5', position: 'QB', slotName: 'WR' },
-    ])
-    expect(invalid.valid).toBe(false)
-    expect(invalid.errors.some((e) => e.includes('not allowed'))).toBe(true)
-  })
-
   it('keeps draft-room filters and fallback slots sport-aware', () => {
     const nflIdpOptions = getPositionFilterOptionsForSport('NFL', 'DYNASTY_IDP').map((o) => o.value)
     expect(nflIdpOptions).toEqual(
@@ -108,7 +93,8 @@ describe('Default Roster Settings by Sport', () => {
     expect(ncaabFallback.includes('PG')).toBe(false)
 
     const ncaafPositions = getPositionsForSport('NCAAF')
-    expect(ncaafPositions).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'K', 'DST']))
+    expect(ncaafPositions).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'K']))
+    expect(ncaafPositions).not.toContain('DST')
 
     const nflDynastyIdpPositions = getRegistryPositionsForSport('NFL', 'DYNASTY_IDP')
     expect(nflDynastyIdpPositions).toEqual(expect.arrayContaining(['DE', 'DT', 'LB', 'CB', 'S']))

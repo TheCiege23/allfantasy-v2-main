@@ -1,9 +1,11 @@
 import Link from 'next/link'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import {
   getPlatformLanding,
+  getPlatformLandingForDisplay,
   platformLandingSlugs,
   PLATFORM_LANDINGS,
   WHAT_WE_READ,
@@ -39,7 +41,7 @@ export function generateStaticParams() {
   return platformLandingSlugs().map((platform) => ({ platform }))
 }
 
-const SITE = 'https://allfantasy.ai'
+const SITE = getPublicSiteOrigin()
 
 export async function generateMetadata({
   params,
@@ -47,7 +49,9 @@ export async function generateMetadata({
   params: Promise<{ platform: string }>
 }): Promise<Metadata> {
   const { platform } = await params
-  const landing = getPlatformLanding(platform)
+  // The coming-soon copy replaces the live copy while the platform is off, so the title, description
+  // and share card never advertise an import that is switched off.
+  const landing = getPlatformLandingForDisplay(platform)
   if (!landing) return {}
 
   const url = `${SITE}/import/${landing.slug}`
@@ -92,7 +96,7 @@ export default async function ImportPlatformLandingPage({
   params: Promise<{ platform: string }>
 }) {
   const { platform } = await params
-  const landing = getPlatformLanding(platform)
+  const landing = getPlatformLandingForDisplay(platform)
   if (!landing) notFound()
 
   const available = isImportProviderAvailable(landing.provider)
@@ -194,9 +198,12 @@ export default async function ImportPlatformLandingPage({
           <p className="af-lp-unavailable" role="status">
             <span className="af-label">Not connectable right now</span>
             <span>
-              {landing.name} imports are switched off while we fix the connection. Everything
-              below describes how it works when it is on &mdash; nothing here will import a
-              league today.
+              {/* The stated reason, when the platform has one: "while we fix the connection" was
+                  wrong for Yahoo, which is waiting on Yahoo's approval, not on a fix of ours. */}
+              {getPlatformLanding(landing.slug)?.comingSoon?.reason ??
+                `${landing.name} imports are switched off for now.`}{' '}
+              The steps below describe how it will work once it is on &mdash; nothing here will
+              import a league today.
             </span>
           </p>
         )}
@@ -219,7 +226,7 @@ export default async function ImportPlatformLandingPage({
 
         <section className="af-lp-section" aria-labelledby="how-it-works">
           <h2 id="how-it-works" className="af-lp-h2">
-            How importing {landing.article} {landing.name} league works
+            How importing {landing.article} {landing.name} league {available ? 'works' : 'will work'}
           </h2>
           <ol className="af-lp-steps">
             {landing.steps.map((step, i) => (

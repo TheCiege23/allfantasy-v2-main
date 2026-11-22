@@ -21,7 +21,7 @@
  *     it was created with. A median boss only ever comes from an explicit value.
  */
 
-export type SurvivorFinalistCount = 2 | 3
+type SurvivorFinalistCount = 2 | 3
 export type SurvivorMergeNamingMode = 'commissioner' | 'manager_vote'
 export type SurvivorExileBossMode = 'median' | 'fixed' | 'topN' | 'chimmy_roster'
 
@@ -36,9 +36,9 @@ export interface SurvivorLateSeasonSettings {
 /** Written into a new league's settings at creation. */
 export const NEW_LEAGUE_EXILE_BOSS_MODE = 'median' as const
 /** Read-time fallback when nothing is stored: the pre-existing (Chimmy roster) behaviour. */
-export const LEGACY_EXILE_BOSS_MODE = 'chimmy_roster' as const
+const LEGACY_EXILE_BOSS_MODE = 'chimmy_roster' as const
 
-export const SURVIVOR_LATE_SEASON_DEFAULTS: SurvivorLateSeasonSettings = {
+const SURVIVOR_LATE_SEASON_DEFAULTS: SurvivorLateSeasonSettings = {
   finalistCount: 3,
   mergeNamingMode: 'commissioner',
   exileBossMode: LEGACY_EXILE_BOSS_MODE,
@@ -91,6 +91,16 @@ export function readSurvivorLateSeasonSettings(
     exileBossFixedScore: fixed != null && fixed >= 0 ? Math.round(fixed * 100) / 100 : null,
     exileBossTopN: topN != null && topN >= 1 ? Math.min(20, Math.floor(topN)) : base.exileBossTopN,
   }
+}
+
+/**
+ * The boss a league actually plays against. The Chimmy roster boss only exists for NBA (it locks an
+ * NBA roster before tipoff), so an NFL or NHL league carrying the legacy value (a pre-score-boss
+ * league, or one with nothing stored) plays the default score boss, the league median. Without
+ * this, its Exile weeks waited for a Chimmy score that could never be produced and never settled.
+ */
+export function effectiveExileBossMode(mode: SurvivorExileBossMode, sport: string | null | undefined): SurvivorExileBossMode {
+  return mode === 'chimmy_roster' && String(sport ?? '').toUpperCase() !== 'NBA' ? NEW_LEAGUE_EXILE_BOSS_MODE : mode
 }
 
 /** Stamp late-season defaults onto a NEW league's settings (never overwrites a stored value). */

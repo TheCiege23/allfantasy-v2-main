@@ -331,8 +331,15 @@ test.describe("@db @mobile authenticated phone contract", () => {
     await expect(page.locator(".af-topbar")).toBeVisible({ timeout: 30_000 })
     await expect(page.locator(".af-sk-block")).toHaveCount(0, { timeout: 30_000 })
 
-    // The standard shell opens it from the floating handle; league-first from the header switcher.
-    await page.locator(".af-rail-handle:visible, .af-lf-switch:visible").first().click()
+    // League-first opens it from the header switcher; the standard shell from More → Leagues
+    // (Waivers took the bar's Leagues slot, 2026-11-07).
+    const leagueFirstSwitch = page.locator('.af-lf-switch:visible')
+    if (await leagueFirstSwitch.count()) {
+      await leagueFirstSwitch.first().click()
+    } else {
+      await page.locator('.af-tabbar button.af-tabbar-item', { hasText: 'More' }).click()
+      await page.locator('[data-testid="af-more-leagues"]').click()
+    }
     const rail = page.locator(".af-rail")
     await expect(rail).toBeVisible()
     await expect(page.locator(".af-rail-scroll .af-rail-tile").first(), "the tray opened with no leagues in it").toBeVisible()

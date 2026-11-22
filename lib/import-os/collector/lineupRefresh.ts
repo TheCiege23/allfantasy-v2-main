@@ -38,12 +38,12 @@ import type { ImportProvider } from '@/lib/league-import/types'
 /** A league refreshed inside this window is done for this round of clicks. */
 export const RECENT_ATTEMPT_MS = 3 * 60_000
 /** Stop STARTING leagues after this much of the request; the ones in flight still finish. */
-export const LINEUP_REFRESH_BUDGET_MS = 20_000
+const LINEUP_REFRESH_BUDGET_MS = 20_000
 /** Per-league bound. Well above the lane's p95 (7.3s), well below a request's patience. */
-export const LINEUP_REFRESH_LEAGUE_TIMEOUT_MS = 15_000
+const LINEUP_REFRESH_LEAGUE_TIMEOUT_MS = 15_000
 const CONCURRENCY = 5
 
-export type LineupRefreshOutcome = {
+type LineupRefreshOutcome = {
   runKey: string
   provider: string
   /** refreshed = rosters written; busy = the lane or another click holds the lock; skipped = the collector declined (no credentials, league gone); failed = it threw or failed. */
@@ -51,7 +51,7 @@ export type LineupRefreshOutcome = {
   reason?: string
 }
 
-export type LineupRefreshResult = {
+type LineupRefreshResult = {
   /** Distinct connected leagues this user can refresh. */
   total: number
   attempted: LineupRefreshOutcome[]

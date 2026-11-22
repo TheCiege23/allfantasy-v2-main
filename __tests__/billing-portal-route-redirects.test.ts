@@ -79,7 +79,10 @@ describe('GET /api/subscription/billing-portal', () => {
     await expectRedirect(await GET(req()), 'https://apps.apple.com/account/subscriptions')
     expect(portalCreateMock).not.toHaveBeenCalled()
     // Only LIVE rows count: the query excludes cancelled and expired subscriptions.
-    expect(findManyMock.mock.calls[0][0].where).toMatchObject({ userId: 'u1', status: { notIn: ['canceled', 'expired'] } })
+    expect(findManyMock.mock.calls[0][0].where).toMatchObject({ userId: 'u1', OR: [
+      { status: { notIn: ['canceled', 'expired'] } },
+      { source: 'google_play', status: 'canceled', currentPeriodEnd: { gt: expect.any(Date) } },
+    ] })
   })
 
   it('a long-cancelled Stripe plan does not pull a live Apple subscriber into the Stripe portal', async () => {
@@ -124,4 +127,10 @@ describe('GET /api/subscription/billing-portal', () => {
     geoMock.mockResolvedValue(NextResponse.json({ redirectTo: '//evil.example/x' }, { status: 451 }))
     await expectRedirect(await GET(req()), `${ORIGIN}/paid-restricted`)
   })
+})
+
+it("sends Play-only subscribers to Google instead of claiming they have no subscription", async () => {
+  findManyMock.mockResolvedValue([{ source: "google_play", stripeCustomerId: null }])
+  await expectRedirect(await GET(req()), "https://play.google.com/store/account/subscriptions?package=ai.allfantasy.app")
+  expect(portalCreateMock).not.toHaveBeenCalled()
 })

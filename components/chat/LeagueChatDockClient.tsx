@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
+import { usesDynastyBackground } from "@/lib/league-media/dynastyBackground"
 import LeagueChatDock from "@/components/chat/LeagueChatDock"
 
 /**
@@ -12,6 +13,7 @@ export default function LeagueChatDockClient() {
   const params = useParams<{ leagueId: string }>()
   const leagueId = params?.leagueId ?? ""
   const [isCommissioner, setIsCommissioner] = useState(false)
+  const [dynastyBackground, setDynastyBackground] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -22,10 +24,19 @@ export default function LeagueChatDockClient() {
           cache: "no-store",
         })
         const json = await res.json().catch(() => ({}))
-        if (active) setIsCommissioner(Boolean(json?.isCommissioner))
+        // Chat moderation is the chat area: a co-commissioner needs it (lib/league/commissionerAccess.ts).
+        const scopes = Array.isArray(json?.scopes) ? (json.scopes as string[]) : null
+        if (active) setIsCommissioner(Boolean(json?.isCommissioner) && (scopes == null || scopes.includes("chat")))
       } catch {
         if (active) setIsCommissioner(false)
       }
+    }
+    setDynastyBackground(false)
+    if (leagueId) {
+      fetch(`/api/leagues/${encodeURIComponent(leagueId)}`, { cache: "no-store" })
+        .then(res => res.ok ? res.json() : null)
+        .then(league => { if (active && league) setDynastyBackground(usesDynastyBackground(league)) })
+        .catch(() => {})
     }
     void loadCommissionerStatus()
     return () => {
@@ -38,6 +49,7 @@ export default function LeagueChatDockClient() {
   return (
     <LeagueChatDock
       leagueId={leagueId}
+      dynastyBackground={dynastyBackground}
       isCommissioner={isCommissioner}
     />
   )

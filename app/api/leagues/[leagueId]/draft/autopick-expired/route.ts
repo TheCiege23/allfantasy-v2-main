@@ -38,7 +38,7 @@ type AutoPickCandidate = {
   playerId: string | null
   byeWeek: number | null
   reason: string
-  strategy: 'queue-first' | 'need-based' | 'bpa' | 'ai-powered'
+  strategy: 'queue-first' | 'need-based' | 'bpa' | 'ai-powered' | 'draft-as-me'
 }
 
 export const dynamic = 'force-dynamic'
@@ -71,6 +71,9 @@ export async function POST(
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   if (!uiSettings.autoPickEnabled) {
     return NextResponse.json({ error: 'Auto-pick is disabled by the commissioner' }, { status: 400 })
+  }
+  if (uiSettings.executionMode === 'offline') {
+    return NextResponse.json({ error: 'This is an offline draft: the commissioner enters every pick.', code: 'DRAFT_PICK_OFFLINE_DRAFT' }, { status: 409 })
   }
 
   const { resolveCurrentOnTheClock } = await import('@/lib/live-draft-engine/CurrentOnTheClockResolver')
@@ -121,7 +124,7 @@ export async function POST(
   const { getAllowedPositionsAndRosterSize } = await import('@/lib/live-draft-engine/RosterFitValidation')
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const eligibleInQueue = filterEntriesByDraftEligiblePositions(availableInQueue, draftEligiblePositions)
+  const eligibleInQueue = filterEntriesByDraftEligiblePositions(availableInQueue, draftEligiblePositions, rosterRules?.sport)
   const firstAvailable = eligibleInQueue[0]
 
   const draftConfig = await getDraftConfigForLeague(leagueId)
@@ -163,7 +166,7 @@ export async function POST(
           team: aiResult.pick.team ?? null,
           playerId: aiResult.pick.playerId ?? null,
           byeWeek: aiResult.pick.byeWeek ?? null,
-          reason: aiResult.pick.reason || 'AI-powered pick (subscription)',
+          reason: aiResult.pick.reason || 'Chimmy-powered pick (subscription)',
           strategy: 'ai-powered',
         }
       }
@@ -237,7 +240,7 @@ export async function POST(
   }
   void notifyAutoPickFired(leagueId, rosterId, selected.playerName.trim())
   void notifyDraftIntelPickConfirmation(leagueId, rosterId, selected.playerName.trim()).catch(() => {})
-  void notifyOnTheClockAfterPick(leagueId)
+  await notifyOnTheClockAfterPick(leagueId)
 
   try {
     const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)

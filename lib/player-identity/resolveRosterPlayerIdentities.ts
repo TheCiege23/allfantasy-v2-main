@@ -26,7 +26,7 @@ import { lookupProviderIdentityNames } from '@/lib/core-app/providerIdentityName
  * in `lib/decision-os/grounding/packet.ts` raised `unresolved_identity` and Chimmy said "the roster
  * is synced but not readable" rather than guessing. The refusal was correct; the input to it was
  * not. The names were one join away the whole time, in the column
- * `lib/devy/ingestFantraxPlayerIdentities.ts` fills weekly.
+ * `lib/player-identity/ingestNcaafFantraxIdentities.ts` fills weekly for CFB.
  *
  * ⚠ SO THE VISIBLE SYMPTOM WAS "THE ASSISTANT IS STUPID", AND NOTHING WAS BROKEN ANYWHERE IT WOULD
  * BE LOOKED FOR. No error, no failed sync, no red test — `/core` renders the same roster with names
@@ -42,7 +42,7 @@ import { lookupProviderIdentityNames } from '@/lib/core-app/providerIdentityName
  * that is how `name: id` reached production once already (see the note on the inverted test in
  * `__tests__/chimmy-context/providers/RosterContextProvider.test.ts`).
  *
- * ⚠ PARTIAL COVERAGE IS EXPECTED AND STAYS VISIBLE. `ingestFantraxPlayerIdentities` linked 4,210 of
+ * ⚠ PARTIAL COVERAGE IS EXPECTED AND STAYS VISIBLE. The first CFB Fantrax writer linked 4,210 of
  * 16,904 Fantrax CFB ids on its first real run — the bottleneck is the NCAAF identity registry, not
  * the matching (`ambiguous: 0` across that run). So a college roster resolves in part, and the part
  * it cannot resolve is reported rather than filled in.
@@ -62,6 +62,12 @@ export type RosterPlayerIdentity = {
    */
   rollingInsightsId: string | null
   cfbdId: string | null
+  /**
+   * The linked row's Sleeper id, on the Fantrax path. NFL identity rows are Sleeper-keyed, so this is
+   * the bridge to an NFL headshot (`SportsPlayer.sleeperId`) and to Sleeper's season stats; it is
+   * null for the college/pro rows, which carry no Sleeper id.
+   */
+  sleeperId: string | null
   /** `SportsPlayer.imageUrl`, on the Sleeper-keyed path only. */
   imageUrl: string | null
 }
@@ -87,7 +93,24 @@ const EMPTY: RosterPlayerIdentity = {
   team: null,
   rollingInsightsId: null,
   cfbdId: null,
+  sleeperId: null,
   imageUrl: null,
+}
+
+/**
+ * A registry name as a reader expects to see it.
+ *
+ * The registry stores some names title-cased word by word, so production showed "Jaxon Smith-njigba" and
+ * "James Cook Iii" (2026-11-20). Only two things are changed, both unambiguous: the letter after a hyphen is
+ * capitalised, and a trailing generational numeral (II to V) is upper-cased. Nothing else is touched - a name
+ * that is already right comes back unchanged, and no spelling is guessed.
+ */
+export function tidyRegistryName(raw: string | null | undefined): string | null {
+  const name = String(raw ?? '').trim()
+  if (!name) return null
+  return name
+    .replace(/-(\p{Ll})/gu, (_, letter: string) => `-${letter.toUpperCase()}`)
+    .replace(/ (Ii|Iii|Iv|V)$/u, (_, numeral: string) => ` ${numeral.toUpperCase()}`)
 }
 
 function cleanIds(rawIds: readonly unknown[]): string[] {
@@ -108,14 +131,20 @@ function cleanIds(rawIds: readonly unknown[]): string[] {
  * rows means two people until proven otherwise, and refusing costs a gap where guessing costs a
  * wrong name.
  */
-async function resolveFantraxIdentities(
-  sport: string,
+export async function resolveFantraxIdentities(
+  /**
+   * The identity sport. `null` only for a caller that genuinely does not know it (Draft HQ's name
+   * resolver is not handed one): the one-to-one guard below then spans every sport, so an id held in
+   * two sports is refused rather than guessed.
+   */
+  sport: string | null,
   ids: string[],
 ): Promise<Map<string, RosterPlayerIdentity>> {
   const out = new Map<string, RosterPlayerIdentity>()
+  if (ids.length === 0) return out
   const rows = await prisma.playerIdentityMap
     .findMany({
-      where: { sport, fantraxId: { in: ids } },
+      where: { ...(sport ? { sport } : {}), fantraxId: { in: ids } },
       select: {
         fantraxId: true,
         canonicalName: true,
@@ -123,6 +152,7 @@ async function resolveFantraxIdentities(
         currentTeam: true,
         rollingInsightsId: true,
         cfbdId: true,
+        sleeperId: true,
       },
     })
     .catch(() => [])
@@ -137,11 +167,12 @@ async function resolveFantraxIdentities(
     const id = row.fantraxId?.trim()
     if (!id || counts.get(id) !== 1) continue
     out.set(id, {
-      name: row.canonicalName?.trim() || null,
+      name: tidyRegistryName(row.canonicalName),
       position: row.position?.trim() || null,
       team: row.currentTeam?.trim() || null,
       rollingInsightsId: row.rollingInsightsId ?? null,
       cfbdId: row.cfbdId ?? null,
+      sleeperId: row.sleeperId?.trim() || null,
       imageUrl: null,
     })
   }

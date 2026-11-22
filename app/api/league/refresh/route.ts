@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "leagueId required" }, { status: 400 });
     }
 
-    await requireCommissionerRole(leagueId, session.user.id);
+    await requireCommissionerRole(leagueId, session.user.id, 'league');
 
     const league = await prisma.league.findFirst({
       where: { id: leagueId },

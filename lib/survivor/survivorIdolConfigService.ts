@@ -4,9 +4,13 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { survivorIdolEnginePowerFor } from './survivorIdolEngines'
+import { normalizeSurvivorFoundationSettings } from './normalizeSurvivorSettings'
+import { SURVIVOR_TWIST_PRESET_SETTING, survivorTwistIdolConfig } from './survivorTwistPresets'
 import {
   BUNDLED_SURVIVOR_IDOL_TYPES,
   SURVIVOR_IDOL_CATEGORIES,
+  SURVIVOR_IDOL_PICK_COUNT_MAX,
+  SURVIVOR_IDOL_PICK_COUNT_MIN,
   isSurvivorIdolTypePlayable,
   SURVIVOR_IDOL_COUNT_DEFAULT,
   SURVIVOR_POINT_SURGE_DEFAULT_PCT,
@@ -60,9 +64,24 @@ export const secureRandomInt: SurvivorRandomInt = (maxExclusive) => (maxExclusiv
 
 const STARTED_DRAFT_STATUSES = ['in_progress', 'paused', 'completed']
 
-function clampCount(value: number | null | undefined): number {
+/** Random mode draws 6, 7 or 8; pick mode (a quantity per type) runs 1 to 12. */
+function clampCount(value: number | null | undefined, mode: SurvivorIdolDrawMode = 'random'): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return SURVIVOR_IDOL_COUNT_DEFAULT
+  if (mode === 'pick') return Math.min(SURVIVOR_IDOL_PICK_COUNT_MAX, Math.max(SURVIVOR_IDOL_PICK_COUNT_MIN, Math.round(value)))
   return Math.min(8, Math.max(6, Math.round(value)))
+}
+
+/**
+ * The setup a league without a saved row uses. A Simple twist preset picks one idol per tribe; any
+ * other league draws at random with the league's count (6 to 8).
+ */
+export function survivorIdolConfigFallback(league: { survivorIdolCount?: number | null; settings?: unknown } | null): SurvivorIdolConfigValues {
+  const raw = league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? league.settings as Record<string, unknown> : {}
+  if (raw[SURVIVOR_TWIST_PRESET_SETTING] === 'simple') {
+    const preset = survivorTwistIdolConfig('simple', normalizeSurvivorFoundationSettings(raw).tribeCount)
+    return { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, mode: 'pick', count: preset.count, pickedTypeIds: preset.pickedTypeIds }
+  }
+  return { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(league?.survivorIdolCount ?? null) }
 }
 
 type TypeRow = {
@@ -122,9 +141,10 @@ export async function isSurvivorDraftStarted(leagueId: string, db: Db = prisma):
 async function readConfigRow(leagueId: string, db: Db): Promise<ConfigRow | null> {
   const row = await (db as typeof prisma).survivorIdolConfig.findUnique({ where: { leagueId } })
   if (!row) return null
+  const mode: SurvivorIdolDrawMode = row.mode === 'pick' ? 'pick' : 'random'
   return {
-    mode: row.mode === 'pick' ? 'pick' : 'random',
-    count: clampCount(row.count),
+    mode,
+    count: clampCount(row.count, mode),
     hideFromCommish: row.hideFromCommish,
     pickedTypeIds: row.pickedTypeIds ?? [],
     pointSurgePct: row.pointSurgePct,
@@ -150,17 +170,27 @@ export function projectSurvivorIdolSetup(input: {
   types: SurvivorIdolTypeDef[]
   row: ConfigRow | null
   fallbackCount: number | null
+  /** The no-row setup (survivorIdolConfigFallback); defaults to a random draw of fallbackCount. */
+  fallback?: SurvivorIdolConfigValues
   isCommissioner: boolean
+  /**
+   * Whether the viewer may see the sealed draw (`resolvedTypeIds`). A commissioner who PLAYS is a
+   * manager for hidden information, so this is false for them even though `isCommissioner` is true
+   * and they still edit the setup. Defaults to `isCommissioner` for internal callers.
+   */
+  canSeeDraw?: boolean
   locked: boolean
 }): SurvivorIdolSetupView {
   const { row, isCommissioner } = input
+  const canSeeDraw = input.canSeeDraw ?? isCommissioner
   const values: SurvivorIdolConfigValues = row
     ? { mode: row.mode, count: row.count, hideFromCommish: row.hideFromCommish, pickedTypeIds: row.pickedTypeIds, pointSurgePct: row.pointSurgePct, tributePct: row.tributePct }
-    : { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(input.fallbackCount) }
+    : input.fallback ?? { ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count: clampCount(input.fallbackCount) }
   const resolved = Boolean(row?.resolvedTypeIds.length)
-  const canSeeTypes = isCommissioner && !values.hideFromCommish
+  const canSeeTypes = canSeeDraw && !values.hideFromCommish
   return {
-    types: input.types,
+    // Catalogue-only types (no play engine yet) stay out of sight until they can be played.
+    types: input.types.filter(isSurvivorIdolTypePlayable),
     isCommissioner,
     locked: input.locked,
     config: { ...values, pickedTypeIds: isCommissioner && values.mode === 'pick' ? values.pickedTypeIds : [] },
@@ -170,17 +200,17 @@ export function projectSurvivorIdolSetup(input: {
   }
 }
 
-export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCommissioner: boolean }, db: Db = prisma): Promise<SurvivorIdolSetupView> {
+export async function getSurvivorIdolSetupView(leagueId: string, viewer: { isCommissioner: boolean; canSeeDraw?: boolean }, db: Db = prisma): Promise<SurvivorIdolSetupView> {
   const [types, locked, league] = await Promise.all([
     loadSurvivorIdolTypes(db),
     isSurvivorDraftStarted(leagueId, db),
-    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true } }),
+    db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true, settings: true } }),
   ])
   let row: ConfigRow | null = null
   if (await survivorIdolTablesReady(db)) {
     try { row = await readConfigRow(leagueId, db) } catch { row = null }
   }
-  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, isCommissioner: viewer.isCommissioner, locked })
+  return projectSurvivorIdolSetup({ types, row, fallbackCount: league?.survivorIdolCount ?? null, fallback: survivorIdolConfigFallback(league), isCommissioner: viewer.isCommissioner, canSeeDraw: viewer.canSeeDraw, locked })
 }
 
 export type SaveSurvivorIdolConfigResult =
@@ -191,10 +221,12 @@ export function parseSurvivorIdolConfigInput(body: unknown): { ok: true; value: 
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}
   const mode = raw.mode === 'pick' ? 'pick' : raw.mode === 'random' || raw.mode == null ? 'random' : null
   if (!mode) return { ok: false, error: 'Mode must be random or pick.' }
-  const count = raw.count == null ? SURVIVOR_IDOL_COUNT_DEFAULT : Number(raw.count)
-  if (!isSurvivorIdolCount(count)) return { ok: false, error: 'Choose 6, 7 or 8 idols.' }
   const picked = raw.pickedTypeIds == null ? [] : raw.pickedTypeIds
   if (!Array.isArray(picked) || picked.some(id => typeof id !== 'string')) return { ok: false, error: 'Picked idol types must be a list of ids.' }
+  // Pick mode: the list IS the count (one entry per copy), 1 to 12. Random mode: 6, 7 or 8.
+  const count = mode === 'pick' ? picked.length : raw.count == null ? SURVIVOR_IDOL_COUNT_DEFAULT : Number(raw.count)
+  if (mode === 'pick' && (count < SURVIVOR_IDOL_PICK_COUNT_MIN || count > SURVIVOR_IDOL_PICK_COUNT_MAX)) return { ok: false, error: `Pick ${SURVIVOR_IDOL_PICK_COUNT_MIN} to ${SURVIVOR_IDOL_PICK_COUNT_MAX} idols.` }
+  if (mode === 'random' && !isSurvivorIdolCount(count)) return { ok: false, error: 'Choose 6, 7 or 8 idols.' }
   const surge = raw.pointSurgePct == null ? SURVIVOR_POINT_SURGE_DEFAULT_PCT : Number(raw.pointSurgePct)
   const tribute = raw.tributePct == null ? SURVIVOR_TRIBUTE_DEFAULT_PCT : Number(raw.tributePct)
   if (!Number.isInteger(surge) || surge < 1 || surge > 100) return { ok: false, error: 'Point surge must be a whole percent from 1 to 100.' }
@@ -253,11 +285,10 @@ export async function lockSurvivorIdolDraw(leagueId: string, db: Db = prisma, rn
     if (!row) {
       const legacy = await db.survivorLeagueConfig.findUnique({ where: { leagueId }, select: { idolPowerPool: true } })
       if (Array.isArray(legacy?.idolPowerPool) && legacy.idolPowerPool.length > 0) return null
-      const league = await db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true } })
-      const count = clampCount(league?.survivorIdolCount ?? null)
+      const league = await db.league.findUnique({ where: { id: leagueId }, select: { survivorIdolCount: true, settings: true } })
       await (db as typeof prisma).survivorIdolConfig.upsert({
         where: { leagueId },
-        create: { leagueId, ...SURVIVOR_IDOL_CONFIG_DEFAULTS, count },
+        create: { leagueId, ...survivorIdolConfigFallback(league) },
         update: {},
       })
       row = await readConfigRow(leagueId, db)
@@ -273,7 +304,7 @@ export async function lockSurvivorIdolDraw(leagueId: string, db: Db = prisma, rn
     const stale = row.resolvedTypeIds
     // Saved picks that are no longer valid fall back to the balanced draw: the draw never fails.
     let draw = resolveSurvivorIdolTypeIds(types, row, rng)
-    if (!draw.ok && row.mode === 'pick') draw = resolveSurvivorIdolTypeIds(types, { ...row, mode: 'random' }, rng)
+    if (!draw.ok && row.mode === 'pick') draw = resolveSurvivorIdolTypeIds(types, { ...row, mode: 'random', count: clampCount(row.count, 'random') }, rng)
     if (!draw.ok) return null
     // Only the first lock writes; a concurrent lock re-reads the winner's draw.
     const written = await (db as typeof prisma).survivorIdolConfig.updateMany({

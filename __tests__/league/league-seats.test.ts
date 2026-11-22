@@ -13,7 +13,12 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { assignLeagueSeat, countSeatsHeldByPeople, releaseLeagueSeat } from '@/lib/league/leagueSeats'
+import {
+  assignLeagueSeat,
+  countSeatsHeldByPeople,
+  countSeatsHeldByPeopleByLeague,
+  releaseLeagueSeat,
+} from '@/lib/league/leagueSeats'
 
 type Row = Record<string, any>
 
@@ -21,6 +26,7 @@ function matches(row: Row, where: Row | undefined): boolean {
   if (!where) return true
   return Object.entries(where).every(([key, cond]) => {
     if (key === 'NOT') return !matches(row, cond as Row)
+    if (key === 'OR') return (cond as Row[]).some((alt) => matches(row, alt))
     if (key === 'leagueId_userId') return row.leagueId === cond.leagueId && row.userId === cond.userId
     if (key === 'leagueId_externalId') return row.leagueId === cond.leagueId && row.externalId === cond.externalId
     if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
@@ -97,6 +103,7 @@ function nativeLeague() {
     ]),
     leagueEntrySlot: table([1, 2, 3, 4].map((n) => ({ id: `s${n}`, leagueId: 'L', slotNumber: n, rosterId: `r${n}`, status: n === 1 ? 'FILLED' : 'OPEN' }))),
     redraftLeagueMember: table([{ leagueId: 'L', userId: 'commish', role: 'COMMISSIONER', teamNumber: 1 }]),
+    draftSession: table([]),
     redraftRoster: table([
       { id: 'rr1', leagueId: 'L', seasonId: 'S', ownerId: 'commish', ownerName: 'Commish' },
       ...[2, 3, 4].map((n) => ({ id: `rr${n}`, leagueId: 'L', seasonId: 'S', ownerId: `open-slot-L-${n}`, ownerName: `Open Team ${n}` })),
@@ -113,7 +120,45 @@ describe('countSeatsHeldByPeople', () => {
   })
 })
 
+describe('countSeatsHeldByPeopleByLeague', () => {
+  // League discovery counted rosters, so every native league showed as Full with no Join button.
+  it('counts people per league, gives 0 to a league nobody has joined, and ignores open seats', async () => {
+    const db = nativeLeague()
+    db.league.rows.push({ id: 'M', platform: 'manual', userId: 'amy' })
+    db.roster.rows.push(
+      { id: 'm1', leagueId: 'M', platformUserId: 'amy', playerData: {}, settings: {} },
+      { id: 'm2', leagueId: 'M', platformUserId: 'ben', playerData: {}, settings: {} },
+      { id: 'm3', leagueId: 'M', platformUserId: 'open-slot-M-3', playerData: {}, settings: { openSlot: true } },
+    )
+    const counts = await countSeatsHeldByPeopleByLeague(db, ['L', 'M', 'EMPTY'])
+    expect(Object.fromEntries(counts)).toEqual({ L: 1, M: 2, EMPTY: 0 })
+  })
+})
+
 describe('assignLeagueSeat', () => {
+  // The dynasty simulation (2026-11-09) found every joined manager still labelled "Open Team N" in a
+  // dynasty draft room: the relabel ran for Survivor leagues only.
+  it('updates the reserved draft slot in a native league that is NOT Survivor, on join and on leave', async () => {
+    const db = nativeLeague()
+    expect(db.league.rows[0].survivorMode).toBeFalsy()
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'pre_draft',
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }, { slot: 3, rosterId: 'r3', displayName: 'Open Team 3', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Amy', open: false })
+    // Only the claimed seat changes.
+    expect(db.draftSession.rows[0].slotOrder[1]).toMatchObject({ rosterId: 'r3', displayName: 'Open Team 3', open: true })
+    expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
+  })
+
+  it('leaves a draft that has started alone', async () => {
+    const db = nativeLeague()
+    db.draftSession = table([{ id: 'draft', leagueId: 'L', status: 'in_progress',
+      slotOrder: [{ slot: 2, rosterId: 'r2', displayName: 'Open Team 2', open: true }] }])
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ displayName: 'Open Team 2', open: true })
+  })
+
   it('updates the reserved Survivor draft slot when a manager joins or leaves before the draft', async () => {
     const db = nativeLeague()
     db.league.rows[0].survivorMode = true
@@ -154,6 +199,13 @@ describe('assignLeagueSeat', () => {
     expect(await countSeatsHeldByPeople(db, 'L')).toBe(2)
   })
 
+  it('writes the manager avatar onto a native open team at claim', async () => {
+    const db = nativeLeague()
+    db.appUser.rows.find((u: Row) => u.id === 'amy').avatarUrl = 'https://cdn.allfantasy.ai/avatars/amy.png'
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true })
+    expect(db.leagueTeam.rows.find((t: Row) => t.id === 't3')).toMatchObject({ claimedByUserId: 'amy', avatarUrl: 'https://cdn.allfantasy.ai/avatars/amy.png' })
+  })
+
   it('is safe to run after a membership row already exists (no duplicate insert)', async () => {
     const db = nativeLeague()
     db.redraftLeagueMember.rows.push({ leagueId: 'L', userId: 'amy', role: 'MEMBER', teamNumber: null })
@@ -165,6 +217,29 @@ describe('assignLeagueSeat', () => {
   it('refuses a seat a person holds, and a second seat for the same person', async () => {
     const db = nativeLeague()
     expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r1', userId: 'amy' })).toMatchObject({ ok: false, code: 'ROSTER_TAKEN' })
+    await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: false, code: 'ALREADY_HOLDS_ROSTER' })
+  })
+
+  it('a league that allows it gives a manager a second team under a key of its own', async () => {
+    const db = nativeLeague()
+    db.league.rows[0]!.settings = { allow_multi_team_managers: true }
+    await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
+    const second = await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })
+    expect(second).toMatchObject({ ok: true, rosterId: 'r3', alreadyHeld: false })
+    // The first team keeps her user id as its key; the second has its own and names her as manager.
+    expect(db.roster.rows.find((r: Row) => r.id === 'r2')).toMatchObject({ platformUserId: 'amy', managerUserId: 'amy' })
+    expect(db.roster.rows.find((r: Row) => r.id === 'r3')).toMatchObject({ platformUserId: 'mgr:amy:r3', managerUserId: 'amy' })
+    expect(db.leagueTeam.rows.find((t: Row) => t.externalId === 'r3')).toMatchObject({ claimedByUserId: 'amy', platformUserId: 'mgr:amy:r3', isOrphan: false })
+    // Assigning the same team again is a no-op, not a third team.
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true, alreadyHeld: true })
+    expect(db.roster.rows.find((r: Row) => r.id === 'r3')).toMatchObject({ platformUserId: 'mgr:amy:r3', managerUserId: 'amy' })
+  })
+
+  it('a one-seat-per-person format refuses a second team even with the setting stored', async () => {
+    const db = nativeLeague()
+    db.league.rows[0]!.settings = { allow_multi_team_managers: true }
+    db.league.rows[0]!.leagueVariant = 'survivor'
     await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })
     expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: false, code: 'ALREADY_HOLDS_ROSTER' })
   })

@@ -12,12 +12,59 @@
  * unchanged until its entries are added here.
  *
  * `__tests__/core-app/commissioner-hub-copy.test.tsx` parses every hub component and fails on raw
- * English in JSX, and on any prose literal without Spanish. PURE and client-safe: no imports.
+ * English in JSX, and on any prose literal without Spanish. PURE and client-safe: its one import is
+ * the EN/ES locale catalog.
  */
 
+import { coreLocale } from './messages/coreLocale'
+
 const ES: Record<string, string> = {
+  'Season reports and automation': 'Informes y automatizaciones de temporada',
+  'Monitor league activity and health and automate weekly commissioner work.':
+    'Supervisa la actividad y la salud de tu liga y automatiza el trabajo de cada semana.',
+  // ── Storyline Studio (components/core-app/commissioner/StorylineStudio.tsx keeps its own strings) ──
+  'Storyline Studio': 'Estudio de historias',
+  // ── Fantrax trade history upload (components/core-app/commissioner/FantraxTradeHistoryUpload.tsx) ──
+  'Fantrax trade history': 'Historial de intercambios de Fantrax',
+  'Fantrax does not send completed trades to AllFantasy. Download the trade history from Fantrax (Transaction History, Trade) as a CSV and upload it here. Uploading the same file again does not add anything twice.':
+    'Fantrax no envía los intercambios completados a AllFantasy. Descarga el historial de intercambios desde Fantrax (Transaction History, Trade) como CSV y súbelo aquí. Subir el mismo archivo otra vez no agrega nada dos veces.',
+  'A trade that moved budget is graded only once this league’s waiver budget is set above.':
+    'Un intercambio que movió presupuesto se califica solo cuando el presupuesto de reclamos de la liga está configurado arriba.',
+  // ── Waiver budget of an imported league (components/core-app/commissioner/WaiverBudgetControl.tsx) ──
+  'Waiver budget': 'Presupuesto de reclamos',
+  'Your platform does not send AllFantasy the waiver budget. Enter the budget each team starts the season with, so trades that moved budget can be graded.':
+    'Tu plataforma no envía a AllFantasy el presupuesto de reclamos. Escribe el presupuesto con el que cada equipo empieza la temporada, para que se puedan calificar los intercambios que movieron presupuesto.',
+  'Not set: a trade that moved budget shows as not graded.': 'Sin configurar: un intercambio que movió presupuesto aparece sin calificar.',
+  'Budget per team': 'Presupuesto por equipo',
+  'Saving…': 'Guardando…',
+  'Save budget': 'Guardar presupuesto',
+  'The budget was not saved. Nothing was changed.': 'El presupuesto no se guardó. No se cambió nada.',
+  'Enter the budget as a whole number of at least 1.': 'Escribe el presupuesto como un número entero de al menos 1.',
+  'This league’s waiver budget comes from its platform or its own waiver settings, not from here.':
+    'El presupuesto de reclamos de esta liga viene de su plataforma o de sus propios ajustes de reclamos, no de aquí.',
+  'Uploading…': 'Subiendo…',
+  'Upload trade history CSV': 'Subir el CSV del historial de intercambios',
+  'The upload did not go through. Nothing was changed.': 'La subida no se completó. No se cambió nada.',
+  '1 trade added.': 'Se agregó 1 intercambio.',
+  '1 trade was not added:': 'No se agregó 1 intercambio:',
+  '1 line of the file could not be read.': 'No se pudo leer 1 línea del archivo.',
+  'Only two-team trades are imported.': 'Solo se importan intercambios entre dos equipos.',
+  'Only the commissioner can upload trade history.': 'Solo el comisionado puede subir el historial de intercambios.',
+  'Choose the trade history CSV.': 'Elige el CSV del historial de intercambios.',
+  'The file is too large for a trade history export.': 'El archivo es demasiado grande para un historial de intercambios.',
+  'This is not an imported Fantrax league.': 'Esta no es una liga importada de Fantrax.',
+  'Trade history upload is available for Fantrax NFL leagues only.': 'La subida del historial de intercambios solo está disponible para ligas de NFL de Fantrax.',
+  'The file is empty.': 'El archivo está vacío.',
   // ── Header, gate, footer ──────────────────────────────────────────────
   '← All leagues you run': '← Todas las ligas que diriges',
+  // ── The headline and the folds (2026-11-14) ──────────────────────────
+  'This league hasn’t synced yet': 'Esta liga aún no se ha sincronizado',
+  'Nothing needs you right now': 'Nada necesita de ti ahora mismo',
+  '1 thing needs you': '1 cosa necesita de ti',
+  '1 gone quiet': '1 sin actividad',
+  'Turn this week into league action': 'Convierte esta semana en acción para la liga',
+  'Find players for your league': 'Encuentra jugadores para tu liga',
+  'Lineup and roster autopilot': 'Piloto automático de alineaciones y plantillas',
   'Core · Commissioner': 'Core · Comisionado',
   Commissioner: 'Comisionado',
   'Co-commissioner': 'Cocomisionado',
@@ -58,6 +105,11 @@ const ES: Record<string, string> = {
   'Audit log': 'Registro de cambios',
   'Commissioner intelligence': 'Inteligencia del comisionado',
   'Trades and draft archive': 'Intercambios y archivo de drafts',
+  'Weighted lottery history': 'Historial de la lotería ponderada',
+  'Lottery history is temporarily unavailable.': 'El historial de lotería no está disponible temporalmente.',
+  Pick: 'Selección',
+  'Recorded AllFantasy draws; older or imported results may be missing.': 'Sorteos registrados por AllFantasy; pueden faltar resultados antiguos o importados.',
+  'odds at pick 1': 'probabilidad de la primera selección',
   'Step-by-step guides': 'Guías paso a paso',
   'This week’s lineups, projected': 'Alineaciones proyectadas de esta semana',
   'nothing here changes a standing or a ruling.': 'nada de esto cambia una clasificación ni una decisión.',
@@ -91,10 +143,18 @@ const ES: Record<string, string> = {
   '1 pick': '1 selección',
   'Correction:': 'Corrección:',
   'No draft sessions on file.': 'No hay drafts registrados.',
+  'Imported draft': 'Draft importado',
+  'Open in the draft archive': 'Abrir en el archivo de drafts',
   'Draft history unavailable.': 'El historial de drafts no está disponible.',
 
   // ── Rules and access ──────────────────────────────────────────────────
   Disputes: 'Disputas',
+  'Lineup integrity': 'Integridad de alineaciones',
+  'Deadline autopilot': 'Piloto automático de fechas límite',
+  'Weekly recap': 'Resumen semanal',
+  'Share the dispute desk with your league →': 'Comparte la mesa de disputas con tu liga →',
+  'League constitution and amendments →': 'Constitución de la liga y enmiendas →',
+  'League log: who can see your actions →': 'Registro de la liga: quién ve tus acciones →',
   'Open integrity monitor →': 'Abrir el monitor de integridad →',
   '1 person': '1 persona',
   you: 'tú',
@@ -193,13 +253,19 @@ const ES: Record<string, string> = {
   // ── Chimmy ────────────────────────────────────────────────────────────
   unknown: 'desconocido',
   'Ask Chimmy about this league': 'Pregúntale a Chimmy sobre esta liga',
-  'Guidance uses the selected league’s evidence. If this league belongs to a network you own, Chimmy also knows its member names. It cannot make rulings or change settings here.':
-    'La orientación usa los datos de la liga seleccionada. Si esta liga pertenece a una red tuya, Chimmy también conoce los nombres de sus miembros. No puede tomar decisiones ni cambiar la configuración aquí.',
+  'Chimmy answers as your assistant commissioner: it sees what is waiting on you — open tasks, trades in your review, stat corrections, inactive teams, dues and payouts — and links you to the screen to act on. It cannot make rulings or change settings itself.':
+    'Chimmy responde como tu comisionado adjunto: ve lo que tienes pendiente — tareas abiertas, intercambios en tu revisión, correcciones de estadísticas, equipos inactivos, cuotas y pagos — y te lleva a la pantalla donde actuar. No puede tomar decisiones ni cambiar la configuración por sí mismo.',
+  'Suggested questions': 'Preguntas sugeridas',
+  'What needs my attention this week?': '¿Qué necesita mi atención esta semana?',
+  'Is anything waiting on me in trades?': '¿Hay algún intercambio esperando por mí?',
+  'Which teams look inactive?': '¿Qué equipos parecen inactivos?',
+  'Are dues and payouts settled?': '¿Están al día las cuotas y los pagos?',
+  'Act on it': 'Actuar',
   Question: 'Pregunta',
   'Asking…': 'Preguntando…',
   'Ask Chimmy': 'Preguntar a Chimmy',
   'Template guidance': 'Orientación de plantilla',
-  'AI guidance': 'Orientación de IA',
+  'Chimmy guidance': 'Orientación de Chimmy',
   'review evidence before acting.': 'revisa los datos antes de actuar.',
   'Chimmy could not answer': 'Chimmy no pudo responder',
 
@@ -317,6 +383,22 @@ const es = (s: string) => hubCopy(s, 'es')
 
 /** Templates, each anchored to the whole string. Names and numbers they carry are kept as they are. */
 const PATTERNS: Pattern[] = [
+  // Fantrax trade history upload: counts, and the reasons a trade was not added (names kept as written).
+  [/^(\d+) trades added\.$/, (n) => `Se agregaron ${n} intercambios.`],
+  [/^Set to ([\d,]+)\.$/, (n) => `Configurado en ${n}.`],
+  [/^(\d+) trades were not added:$/, (n) => `No se agregaron ${n} intercambios:`],
+  [/^(\d+) lines of the file could not be read\.$/, (n) => `No se pudieron leer ${n} líneas del archivo.`],
+  [/^(.+) could not be matched to a player with a Fantrax id\.$/, (who) => `No se pudo emparejar a ${who} con un jugador con id de Fantrax.`],
+  [/^(.+) matches more than one player\.$/, (who) => `${who} coincide con más de un jugador.`],
+  [/^(.+) moves twice in one trade\.$/, (who) => `${who} aparece dos veces en el mismo intercambio.`],
+  [/^No team in this league is named "(.+)"\.$/, (team) => `Ningún equipo de esta liga se llama "${team}".`],
+  [/^Two teams in this league are named "(.+)"\.$/, (team) => `Dos equipos de esta liga se llaman "${team}".`],
+  [/^"(.+)" has no manager on file in this league\.$/, (team) => `"${team}" no tiene mánager registrado en esta liga.`],
+  [
+    /^This looks like the Claims\/Drops export, not Trades\. On Fantrax, open Transactions → History, choose Trades and download that CSV\.$/,
+    () => 'Este parece ser el archivo de Claims/Drops, no el de Trades. En Fantrax, abre Transactions → History, elige Trades y descarga ese CSV.',
+  ],
+  [/^This is not a Fantrax trade history export — missing columns?: (.+)\.$/, (cols) => `Este no es un historial de intercambios de Fantrax: faltan columnas: ${cols}.`],
   // gate
   [/^You are a member of (.+)\. Ask its commissioner to add you as a co-commissioner if you need this\.$/s, (l) => `Eres miembro de ${l}. Pide a su comisionado que te añada como cocomisionado si lo necesitas.`],
   [/^You have view-only access to (.+)\.$/s, (l) => `Tienes acceso de solo lectura a ${l}.`],
@@ -336,6 +418,8 @@ const PATTERNS: Pattern[] = [
   [/^week (\d+)$/, (w) => `semana ${w}`],
   // access
   [/^(\d+) people$/, (n) => `${n} personas`],
+  [/^(\d+) things need you$/, (n) => `${n} cosas necesitan de ti`],
+  [/^(\d+) gone quiet$/, (n) => `${n} sin actividad`],
   // A platform name only — a broader `On …` would turn a server sentence half Spanish.
   [/^Here and on ([A-Za-z0-9]+)$/, (p) => `Aquí y en ${p}`],
   [/^On ([A-Za-z0-9]+)$/, (p) => `En ${p}`],
@@ -432,6 +516,8 @@ const HEALTH_PROBLEM_ES: Array<[RegExp, (n: string) => string]> = [
   [/^(\d+) inactive managers — engagement at risk$/, (n) => `${n} mánagers inactivos: la participación está en riesgo.`],
   [/^(\d+) abandoned teams — immediate action needed$/, (n) => `${n} equipos abandonados: hace falta actuar de inmediato.`],
   [/^(\d+) unresolved disputes eroding trust$/, (n) => `${n} disputas sin resolver están minando la confianza.`],
+  [/^(\d+) managers said they might leave the league$/, (n) => `${n} mánagers dijeron que podrían dejar la liga.`],
+  [/^(\d+) collusion complaints — managers are losing trust in trades$/, (n) => `${n} denuncias de colusión: los mánagers pierden la confianza en los intercambios.`],
   [/^Low engagement — league activity is below healthy levels$/, () => 'Participación baja: la actividad de la liga está por debajo de lo saludable.'],
   [/^Poor lineup submission rate — managers are checked out$/, () => 'Pocas alineaciones enviadas: los mánagers se han desconectado.'],
 ]
@@ -474,5 +560,5 @@ export function hubCopy(english: string | null | undefined, language: string): s
 
 /** The locale dates on the hub are formatted in. */
 export function hubDateLocale(language: string): string {
-  return language === 'es' ? 'es-US' : 'en-US'
+  return coreLocale(language).usLocale
 }

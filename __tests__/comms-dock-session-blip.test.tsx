@@ -73,7 +73,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function openDockInLeague(leagueId: string) {
+async function openDockInLeague(leagueId: string) {
   render(
     <CommsDock
       leagues={leagues as never}
@@ -89,7 +89,7 @@ function openDockInLeague(leagueId: string) {
     />,
   )
   fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-  fireEvent.click(screen.getByRole('tab', { name: /League/ }))
+  fireEvent.click(await screen.findByRole('tab', { name: /League/ }))
   fireEvent.change(screen.getByRole('combobox', { name: 'League scope' }), { target: { value: leagueId } })
 }
 
@@ -98,8 +98,8 @@ const scope = () => (screen.getByRole('combobox', { name: 'League scope' }) as H
 const composer = () => document.querySelector('.af-cm textarea') as HTMLTextAreaElement
 
 describe('the chat drawer through a session re-check blip', () => {
-  it('🛑 keeps the tab, the league and what you typed when next-auth briefly reports nobody', () => {
-    openDockInLeague('L2')
+  it('🛑 keeps the tab, the league and what you typed when next-auth briefly reports nobody', async () => {
+    await openDockInLeague('L2')
     fireEvent.change(composer(), { target: { value: 'hello league' } })
     expect(activeTab()).toMatch(/League/)
 
@@ -111,8 +111,8 @@ describe('the chat drawer through a session re-check blip', () => {
     expect(composer().value).toBe('hello league')
   })
 
-  it('still starts fresh when a DIFFERENT person signs in — one account never sees another\'s chat', () => {
-    openDockInLeague('L2')
+  it('still starts fresh when a DIFFERENT person signs in — one account never sees another\'s chat', async () => {
+    await openDockInLeague('L2')
     fireEvent.change(composer(), { target: { value: 'private to me' } })
 
     act(() => auth.set({ user: { id: 'someone-else' } }))
@@ -145,10 +145,10 @@ function renderDock(pageLeagueId: string | null = null) {
 }
 
 describe('the chat across a /core navigation', () => {
-  it('🛑 comes back open, on the same tab and league, after the page replaces it', () => {
+  it('🛑 comes back open, on the same tab and league, after the page replaces it', async () => {
     const first = renderDock()
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-    fireEvent.click(screen.getByRole('tab', { name: /League/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /League/ }))
     fireEvent.change(screen.getByRole('combobox', { name: 'League scope' }), { target: { value: 'L2' } })
     first.unmount() // the screen change swaps the shell out
 
@@ -158,10 +158,10 @@ describe('the chat across a /core navigation', () => {
     expect(scope()).toBe('L2')
   })
 
-  it('a closed chat stays closed', () => {
+  it('a closed chat stays closed', async () => {
     const first = renderDock()
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
     first.unmount()
 
     renderDock()
@@ -169,10 +169,10 @@ describe('the chat across a /core navigation', () => {
     expect(screen.getByRole('button', { name: /Open communications/ })).toBeTruthy()
   })
 
-  it('moving to another league\'s page follows that page\'s league, not the remembered one', () => {
+  it('moving to another league\'s page follows that page\'s league, not the remembered one', async () => {
     const first = renderDock('L1')
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-    fireEvent.click(screen.getByRole('tab', { name: /League/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /League/ }))
     fireEvent.change(screen.getByRole('combobox', { name: 'League scope' }), { target: { value: 'L2' } })
     first.unmount()
 
@@ -189,10 +189,10 @@ describe('the chat across a /core navigation', () => {
     expect(scope()).toBe('L1')
   })
 
-  it('a request for a specific tab beats the remembered one', () => {
+  it('a request for a specific tab beats the remembered one', async () => {
     const first = renderDock()
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-    fireEvent.click(screen.getByRole('tab', { name: /League/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /League/ }))
     first.unmount()
 
     renderDock()
@@ -203,10 +203,10 @@ describe('the chat across a /core navigation', () => {
     expect(activeTab()).toMatch(/Chimmy/)
   })
 
-  it('never restores one account\'s chat for another', () => {
+  it('never restores one account\'s chat for another', async () => {
     const first = renderDock()
     fireEvent.click(screen.getByRole('button', { name: /Open communications/ }))
-    fireEvent.click(screen.getByRole('tab', { name: /League/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /League/ }))
     first.unmount()
 
     auth.set({ user: { id: 'someone-else' } })
@@ -214,7 +214,7 @@ describe('the chat across a /core navigation', () => {
     expect(document.querySelector('.af-cm')).toBeNull()
   })
 
-  it('still works when the browser blocks storage', () => {
+  it('still works when the browser blocks storage', async () => {
     const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
     })
@@ -245,14 +245,14 @@ describe('only the chat bubble goes back to where you were', () => {
     )
   }
 
-  it('a drawer opened on a tab opens on THAT tab, whatever was remembered', () => {
+  it('a drawer opened on a tab opens on THAT tab, whatever was remembered', async () => {
     writeCommsUi('me', { tab: 'chimmy', scopeId: 'L2', pageLeagueId: null })
     drawer({ initialTab: 'league' })
     expect(activeTab()).toMatch(/League/)
     expect(scope()).not.toBe('L2')
   })
 
-  it('an open request made as the bubble mounts beats the remembered tab', () => {
+  it('an open request made as the bubble mounts beats the remembered tab', async () => {
     writeCommsUi('me', { tab: 'league', scopeId: null, pageLeagueId: null })
     drawer({ rememberPlace: true, openRequest: { seq: 1, tab: 'chimmy', leagueId: null } })
     expect(activeTab()).toMatch(/Chimmy/)

@@ -106,7 +106,7 @@ export async function detectAndProcessMaulings(
     }).catch(() => {})
 
     if (mt === 'zombie_mauls_whisperer') {
-      await handleWhispererDefeat(zombieLeagueId, winOwner, week)
+      await handleWhispererDefeat(zombieLeagueId, winOwner, week, loseOwner)
       await prisma.zombieMaulingEvent.update({
         where: { id: row.id },
         data: { newWhispererTriggered: true },

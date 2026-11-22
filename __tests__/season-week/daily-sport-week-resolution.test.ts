@@ -157,14 +157,16 @@ describe('resolveSportWeek no longer refuses the daily sports', () => {
   })
 
   // The decline must survive for a sport with neither a feed week nor an
-  // anchor — widening the gate must not become "resolve everything".
-  it('still returns NO_WEEK_SIGNAL for a sport with no anchor', async () => {
+  // anchor — widening the gate must not become "resolve everything". A season
+  // past the curated table now names its hold (the opener is unrecorded) rather
+  // than the generic NO_WEEK_SIGNAL, but it still declines.
+  it('still declines for a sport with no anchor', async () => {
     const { resolveSportWeek } = await import('@/lib/season-week/seasonWeekService')
     const resolved = await resolveSportWeek('MLB', 2028, {
       prisma: fakeDb([game('2028-05-01T23:00:00Z')]),
       now: new Date('2028-05-02T12:00:00Z'),
     })
-    expect(resolved).toEqual({ ok: false, reason: 'NO_WEEK_SIGNAL' })
+    expect(resolved).toEqual({ ok: false, reason: 'SEASON_OPENER_UNRECORDED' })
   })
 
   // An unrecorded season must decline rather than borrow a nearby year's opener.
@@ -174,6 +176,6 @@ describe('resolveSportWeek no longer refuses the daily sports', () => {
       prisma: fakeDb([game('2031-10-01T23:00:00Z')]),
       now: new Date('2031-10-02T12:00:00Z'),
     })
-    expect(resolved).toEqual({ ok: false, reason: 'NO_WEEK_SIGNAL' })
+    expect(resolved).toEqual({ ok: false, reason: 'SEASON_OPENER_UNRECORDED' })
   })
 })

@@ -1,13 +1,18 @@
 'use client'
 
+import { useState } from 'react'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { WAIVER_EDGE_ES, waiverFactText } from '@/lib/core-app/playerCardCopy'
+import { waiverFactText } from '@/lib/core-app/playerCardCopy'
+import { useMessages } from '@/components/i18n/useMessages'
+import { waiverEdgeMessages } from '@/lib/core-app/messages/waiverEdge'
+import { waiversGuideMessages } from '@/lib/core-app/messages/waiversGuide'
+import { rivalPieces, type RivalPiece } from '@/lib/core-app/waiversGuide'
+import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { WaiverEdge } from '@/lib/competitive-edge/waiverEdge'
-import { getIntlLocale } from '@/lib/i18n/constants'
 
 /*
  * Competitive Edge on Waivers: who you are bidding against — how much FAAB each other manager has
@@ -20,6 +25,13 @@ import { getIntlLocale } from '@/lib/i18n/constants'
  * Spanish (2026-10-06): the facts are built from waiverEdge.ts's `parts` and the card's words come
  * from lib/core-app/playerCardCopy.ts; the loader's reasons are coreUiCopy's. English is unchanged.
  */
+
+/**
+ * ⚠ HOW MANY RIVALS SHOW BEFORE "SHOW ALL" (2026-11-07 phone pass). The list arrives ordered by claims
+ * won, so the first three are the managers you are most likely bidding against. Live at 375px all
+ * eleven took 995px — most of a 2,575px Waivers screen — under the one section you came to act on.
+ */
+export const RIVALS_PREVIEW = 3
 
 export type WaiverEdgeState = { available: true; data: WaiverEdge } | { available: false; reason: string }
 
@@ -44,14 +56,27 @@ export function WaiverCompetitiveEdge({
   edge: WaiverEdgeState | null | undefined
 }) {
   const { language } = useOptionalLanguage()
-  const es = language === 'es'
+  const m = useMessages(waiverEdgeMessages)
+  const g = useMessages(waiversGuideMessages)
+  const [showAllRivals, setShowAllRivals] = useState(false)
+  const money = (n: number) => `$${n.toLocaleString('en-US')}`
+  const pieceText = (p: RivalPiece) =>
+    p.kind === 'left'
+      ? g.rivalLeft(money(p.amount))
+      : p.kind === 'noClaims'
+        ? g.rivalNoClaims
+        : p.kind === 'claims'
+          ? g.rivalClaims(p.claims, p.zero, p.spent != null ? money(p.spent) : null)
+          : p.kind === 'biggest'
+            ? g.rivalBiggest(money(p.bid), p.position)
+            : g.rivalPosition(p.count, p.position)
   if (access && !access.unlocked) {
     return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   }
   if (!edge) return null
 
-  const aria = es ? WAIVER_EDGE_ES.aria : 'Competitive Edge · waivers'
-  const heading = es ? WAIVER_EDGE_ES.heading : <>Competitive Edge · other managers&apos; waiver activity</>
+  const aria = m.aria
+  const heading = m.heading
 
   if (!edge.available) {
     return (
@@ -63,7 +88,7 @@ export function WaiverCompetitiveEdge({
   }
 
   const { leagueFacts, rivals, coverage } = edge.data
-  const asOf = asOfLabel(coverage.asOf, es ? getIntlLocale('es') : 'en-US')
+  const asOf = asOfLabel(coverage.asOf, coreLocale(language).intlLocale)
 
   return (
     <section className="af-card af-wv-section" data-testid="waiver-competitive-edge" aria-label={aria}>
@@ -80,30 +105,40 @@ export function WaiverCompetitiveEdge({
           ))}
       </ul>
 
-      <ul className="af-wv-edge-rivals">
-        {rivals.map((r) => (
+      <ul className="af-wv-edge-rivals" id="af-wv-edge-rivals">
+        {(showAllRivals ? rivals : rivals.slice(0, RIVALS_PREVIEW)).map((r) => (
           <li key={r.manager.teamExternalId} className="af-wv-edge-rival" data-testid={`waiver-edge-rival-${r.manager.teamExternalId}`}>
             <div className="af-wv-edge-name">{r.manager.name}</div>
-            <ul className="af-wv-edge-facts">
-              {r.facts.map((f) => (
-                <li key={f.key}>{waiverFactText(f, language)}</li>
-              ))}
-            </ul>
+            {/*
+              One line per manager (2026-11-14), not four sentences that each began with his name and
+              ended "more than your $449" — the league line above says the comparison once.
+            */}
+            {rivalPieces(r.facts).length > 0 ? (
+              <p className="af-wv-edge-line" data-testid="waiver-edge-rival-line">{rivalPieces(r.facts).map(pieceText).join(' · ')}</p>
+            ) : (
+              <ul className="af-wv-edge-facts">
+                {r.facts.map((f) => (
+                  <li key={f.key}>{waiverFactText(f, language)}</li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
+      {rivals.length > RIVALS_PREVIEW ? (
+        <button
+          type="button"
+          className="af-wv-edge-more"
+          aria-expanded={showAllRivals}
+          aria-controls="af-wv-edge-rivals"
+          onClick={() => setShowAllRivals((open) => !open)}
+        >
+          {showAllRivals ? m.showFewerRivals : m.showAllRivals(rivals.length)}
+        </button>
+      ) : null}
 
       <p className="af-wv-edge-note" data-testid="waiver-competitive-edge-basis">
-        {es ? (
-          WAIVER_EDGE_ES.basis(coverage.season, asOf, coverage.stale)
-        ) : (
-          <>
-            Counted from winning waiver claims in this league&apos;s Sleeper history for the {coverage.season} season
-            {asOf ? `, as of ${asOf} ET` : ''}
-            {coverage.stale ? ' — may be out of date' : ''}. Sleeper doesn&apos;t publish losing bids, so these are wins only.
-            It shows what they did, not what they&apos;ll bid.
-          </>
-        )}
+        {m.basis(coverage.season, asOf, coverage.stale)}
       </p>
     </section>
   )

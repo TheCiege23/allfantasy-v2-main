@@ -100,19 +100,25 @@ describe('CommissionerControlCenterModal — timer UI (Slice B.1)', () => {
     expect(unit.value).toBe('seconds')
   })
 
-  it('Undo last pick opens a confirm prompt and sends resetTimer=true when commissioner picks "Undo and reset timer"', () => {
+  /*
+   * The undo prompt asks for a REASON (stored in the commissioner-only audit log; the controls route
+   * refuses an undo without one) and has no reset-timer choice — the route takes no such option.
+   * These two cases first described an earlier reset/keep prompt that never shipped.
+   */
+  it('Undo last pick opens a prompt that needs a reason before it can confirm', () => {
     const { onAction } = renderModal(15)
     fireEvent.click(screen.getByTestId('draft-commissioner-undo'))
     expect(screen.getByTestId('draft-commissioner-undo-prompt')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm-reset'))
-    expect(onAction).toHaveBeenCalledWith('undo_pick', { resetTimer: true })
+    expect((screen.getByTestId('draft-commissioner-undo-confirm') as HTMLButtonElement).disabled).toBe(true)
+    expect(onAction).not.toHaveBeenCalled()
   })
 
-  it('Undo last pick sends resetTimer=false when commissioner picks "keep remaining time"', () => {
+  it('Undo last pick sends the trimmed reason', () => {
     const { onAction } = renderModal(15)
     fireEvent.click(screen.getByTestId('draft-commissioner-undo'))
-    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm-keep'))
-    expect(onAction).toHaveBeenCalledWith('undo_pick', { resetTimer: false })
+    fireEvent.change(screen.getByTestId('draft-commissioner-undo-reason'), { target: { value: '  wrong player picked  ' } })
+    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm'))
+    expect(onAction).toHaveBeenCalledWith('undo_pick', { reason: 'wrong player picked' })
   })
 
   it('Undo prompt cancel does not call onAction', () => {

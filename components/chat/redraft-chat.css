@@ -1,0 +1,209 @@
+/* Redraft League chat — batch A4 of the redraft visual upgrade (docs/design/redraft-tab-inventory.md).
+ *
+ * ⚠ EVERY RULE IS SCOPED TWICE, ON PURPOSE. `.nl-workspace[data-format=redraft][data-sport]` is the
+ * foundation's gate (NativeLeagueWorkspace stamps it only for a native redraft league with a sport
+ * theme, and it is where the `--rd-*` tokens live); `.rdc` is LeagueChatSurface's own root, present
+ * only when LeagueShell passed `redraftSport`. Either alone is not enough: the drawer and the /core
+ * shell render the same conversation (`.af-cm`, af-comms.css) and must not change.
+ *
+ * ⚠ af-comms.css IS NOT EDITED. It is shared with the /core shell (AfCoreShell's comms drawer). These
+ * rules override its selectors from here, at higher specificity: the shortest prefix below is (0,4,0)
+ * before the af-comms selector it is aimed at, so no `!important` and no load-order dependence.
+ *
+ * ⚠ TOKENS, NOT COLOURS. No hex here. `.af-cm` defines its own palette (--bg, --surface, --text,
+ * --muted …, dark by default and `html[data-mode=light] .af-cm` in light) and its own teal --accent;
+ * inside the redraft chat the accent names are re-pointed at the sport, exactly as the foundation
+ * does for /core's names on the workspace root. Contrast of every pair drawn here is measured from
+ * the shipped files by __tests__/league-chat/redraftChatContrast.test.ts.
+ *
+ * ⚠ THE ART IS THE FOUNDATION'S, AT THE FOUNDATION'S OPACITY. `--rd-art` is the same SVG the
+ * workspace ground uses (2–8% ink). The conversation ground is `.af-cm`'s --bg, not /core's, so the
+ * contrast test re-measures every text token over that ground with the art's worst pixel under it.
+ *
+ * ⚠ 11px FLOOR. Nothing below 11px (CLAUDE.md / the type-floor test).
+ *
+ * ⚠ ONE TOP-LEVEL @media BLOCK, AT THE END, NOT NESTED IN ANYTHING. */
+
+/* ── The accent follows the sport inside the conversation ─────────────────────────────────────── */
+/* Own bubbles (`.af-cm-row[data-mine] .af-cm-bubble` = --accent / --accent-ink), the mention and link
+ * colours, the reaction chip you set, the focus ring and the flash all read these names. --accent is
+ * the TEXT-safe accent; --rd-accent equals it in both modes (redraft-identity.css), so a bubble fill
+ * of --accent with --accent-ink on it is the measured fill/ink pair. */
+.nl-workspace[data-format=redraft][data-sport] .rdc .af-cm {
+  --accent: var(--rd-accent-text);
+  --accent-ink: var(--rd-accent-ink);
+  --accent-soft: var(--rd-accent-soft);
+  --accent-line: var(--rd-accent-line);
+  /* The score / recap card's tint. NOT --rd-accent-soft: at its 16% (dark) the conversation's --muted
+   * fell to 3.9:1 on soccer's lime. 8% keeps every token here at >= 4.8:1 (the contrast test). Defined
+   * here so it mixes with THIS palette's --surface, not /core's. */
+  --rdc-tint: color-mix(in srgb, var(--rd-accent) 8%, var(--surface));
+}
+
+/* ── The panel takes /core's surfaces instead of the global panel palette ─────────────────────── */
+/* LeagueChatPanel paints itself with inline `var(--panel)` / `var(--border)` / `var(--muted2)`; an
+ * inline style cannot be outranked, but the variables it reads can be redefined on the element. */
+.nl-workspace[data-format=redraft][data-sport] .rdc [data-testid=league-chat-panel] {
+  --panel: var(--surface);
+  --panel2: var(--surface2);
+  --border: var(--line2);
+  --muted2: var(--muted);
+  --accent-cyan-strong: var(--rd-accent-text);
+  border-color: var(--rd-accent-line);
+}
+
+/* ── The sport ground under the conversation (Dynasty's mechanism, league-chat-channels.css) ──── */
+/* The art belongs to the conversation; the bubbles and cards stay opaque on top of it. A background
+ * on the non-scrolling conversation box, so the list scrolls over a still field. */
+.nl-workspace[data-format=redraft][data-sport] .rdc [data-testid=league-chat-conversation] {
+  background-color: var(--bg);
+  background-image: var(--rd-art);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: var(--rd-accent-line);
+}
+
+/* ── Channel strip: the active room is a filled sport pill, Chimmy stays gold ─────────────────── */
+.nl-workspace[data-format=redraft][data-sport] .rdc .lcc-chip { border-radius: 999px; }
+.nl-workspace[data-format=redraft][data-sport] .rdc .lcc-chip[aria-pressed='true']:not(.lcc-chimmy) {
+  border-color: var(--rd-accent);
+  background: var(--rd-accent);
+  color: var(--rd-accent-ink);
+  font-weight: 800;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .lcc-chip[aria-pressed='true']:not(.lcc-chimmy) > span { color: inherit; }
+
+/* ── The surface header: "AF-hosted" in the sport line ─────────────────────────────────────────── */
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-hosted {
+  border: 1px solid var(--rd-accent-line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--rd-accent-text);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-title { color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-members { color: var(--muted); }
+
+/* ── The pinned matchup score ──────────────────────────────────────────────────────────────────── */
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 10px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--rd-accent-line);
+  border-radius: 12px;
+  background: var(--rd-accent-soft);
+  color: var(--text);
+  min-width: 0;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--rd-accent-text);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score[data-live='true'] .rdc-score-tag::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rd-accent);
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-team { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-num { flex: none; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--text2); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score [data-lead='true'] { color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-dash { flex: none; color: var(--muted); }
+
+/* ── League events ─────────────────────────────────────────────────────────────────────────────── */
+/* A system row (`renderSystem`): an authorless trade / claim / score notice. */
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--rd-accent);
+  color: var(--text);
+  text-align: left;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event[data-rd-event=score] {
+  border-color: var(--rd-accent-line);
+  background: linear-gradient(110deg, var(--rdc-tint), var(--surface) 65%);
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-label { color: var(--rd-accent-text); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-head time {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-body { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-score {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text2);
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-side { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-side strong { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-side[data-lead='true'] { color: var(--text); }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-team { font-weight: 700; }
+.nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event-dash { color: var(--muted); }
+
+/* A Chimmy post that carries an event (the trade take, the weekly recap) stays a message — people
+ * react to and reply to it — and takes the card's frame (ChatMessageList `data-event-kind`). Aimed
+ * at af-comms' incoming-bubble rule, which this outranks: (0,7,0) against its (0,6,0). */
+.nl-workspace[data-format=redraft][data-sport] .rdc .af-cm-row[data-event-kind] .af-cm-bubble:not([data-deleted='true']) {
+  border: 1px solid var(--rd-accent-line);
+  border-radius: 16px;
+  outline: 0;
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--rd-accent);
+  padding-left: 16px;
+}
+.nl-workspace[data-format=redraft][data-sport] .rdc .af-cm-row[data-event-kind=recap] .af-cm-bubble:not([data-deleted='true']) {
+  background: linear-gradient(110deg, var(--rdc-tint), var(--surface) 65%);
+}
+
+/* ── Phone ─────────────────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* The tag takes its own line so both team names fit beside the score at 390px. */
+  .nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score { flex-wrap: wrap; row-gap: 4px; margin: 8px 8px 0; padding: 8px 10px; }
+  .nl-workspace[data-format=redraft][data-sport] .rdc .rdc-score-line { flex-basis: 100%; justify-content: space-between; gap: 6px; }
+  .nl-workspace[data-format=redraft][data-sport] .rdc .rdc-event { padding: 10px 12px 10px 14px; }
+}

@@ -113,10 +113,10 @@ describe('TournamentPlanFlow', () => {
     const checked = scoringRadios.filter(r => r.getAttribute('aria-checked') === 'true')
     expect(checked).toHaveLength(1)
     expect(within(checked[0]!).getByRole('img', { name: /^Half PPR scoring/ })).toBeTruthy()
-    // Backed options are choosable; labels with no live preset (and Custom) are not.
+    // Backed options and Custom (edited in the detail panel) are choosable; labels with no live preset are not.
     expect((screen.getByTestId('rules-label-option-ppr') as HTMLButtonElement).disabled).toBe(false)
     expect((screen.getByTestId('rules-label-option-six') as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByTestId('rules-label-option-custom') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('rules-label-option-custom') as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getByTestId('rules-label-option-nfl-std').getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('rules-plain-label').textContent).toBe('Half PPR · Standard roster')
     fireEvent.click(screen.getByTestId('rules-label-option-ppr'))

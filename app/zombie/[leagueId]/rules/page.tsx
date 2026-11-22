@@ -1,14 +1,20 @@
 import { prisma } from '@/lib/prisma'
 import { generateZombieRulesDocumentHtml } from '@/lib/zombie/rulesDocGenerator'
+import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { ZombieRulesClient } from './ZombieRulesClient'
 
 export default async function ZombieRulesPage({ params }: { params: Promise<{ leagueId: string }> }) {
   const { leagueId } = await params
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },
-    select: { sport: true, isPaid: true, name: true, currentWeek: true, season: true },
+    select: { sport: true, isPaid: true, name: true, currentWeek: true, season: true, experienceMode: true },
   })
-  const html = await generateZombieRulesDocumentHtml(leagueId, z?.sport ?? 'NFL')
+  const [html, rules, leagueConfig] = await Promise.all([
+    generateZombieRulesDocumentHtml(leagueId, z?.sport ?? 'NFL'),
+    getZombieRulesForSport(z?.sport ?? 'NFL'),
+    getZombieLeagueConfig(leagueId),
+  ])
 
   return (
     <ZombieRulesClient
@@ -19,6 +25,12 @@ export default async function ZombieRulesPage({ params }: { params: Promise<{ le
       currentWeek={z?.currentWeek ?? 1}
       season={z?.season ?? new Date().getFullYear()}
       rulesHtml={html}
+      rules={{ ...rules, reviveThreshold: leagueConfig?.serumReviveCount ?? rules.reviveThreshold }}
+      experienceMode={z?.experienceMode ?? null}
+      serumAwardHighScore={leagueConfig?.serumAwardHighScore ?? false}
+      serumAwardOnBashMaul={leagueConfig?.serumAwardOnBashMaul ?? false}
+      infectionLossToWhisperer={leagueConfig?.infectionLossToWhisperer ?? true}
+      infectionLossToZombie={leagueConfig?.infectionLossToZombie ?? true}
     />
   )
 }

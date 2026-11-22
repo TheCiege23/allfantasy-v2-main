@@ -1,6 +1,6 @@
-export type InactiveAlert = { rosterId: string; reason: string }
-export type RuleRec = { suggestion: string }
-export type ModerationResult = { allow: boolean; reason?: string; severity?: 1 | 2 | 3 }
+type InactiveAlert = { rosterId: string; reason: string }
+type RuleRec = { suggestion: string }
+type ModerationResult = { allow: boolean; reason?: string; severity?: 1 | 2 | 3 }
 
 export async function detectInactiveManagers(_seasonId: string): Promise<InactiveAlert[]> {
   return []

@@ -127,7 +127,7 @@ describe('slateDigestCopy', () => {
     expect(c.body).toBe('A League: won 100.0–90.0. B League: lost 90.0–100.0.')
   })
 
-  it('a guillotine league only appears when you are projected last', () => {
+  it('a Guilly league only appears when you are projected last', () => {
     const c = slateDigestCopy([{ kind: 'cut', leagueId: 'g', leagueName: 'Chopping Block', projectedFinish: 71.25 }], AFTERNOON, 6)!
     expect(c.title).toBe('After Sunday afternoon: projected last in Chopping Block')
     expect(c.body).toBe('Chopping Block: projected last (71.3 pts) — on the chopping block.')
@@ -219,6 +219,13 @@ describe('sendSlateDigests', () => {
     const { deps, loadState } = harness()
     await sendSlateDigests({ now: NOW, season: 2026 }, deps)
     expect(loadState).toHaveBeenCalledTimes(2)
+  })
+
+  it('hands the league sport to the state read, so its projection read is sport-scoped', async () => {
+    const { deps, loadState } = harness()
+    const leagues = await deps.loadLeagues()
+    await sendSlateDigests({ now: NOW, season: 2026 }, { ...deps, loadLeagues: async () => leagues.map((l) => ({ ...l, sport: 'NFL' })) })
+    for (const [args] of loadState.mock.calls) expect((args as { sport?: string }).sport).toBe('NFL')
   })
 
   it('🛑 asked every two minutes, sent once: a manager who already has it is skipped before anything is built', async () => {

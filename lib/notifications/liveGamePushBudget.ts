@@ -58,21 +58,47 @@ const findRecentPushed: FindRecent = ({ userIds, since }) =>
   })
 
 /**
- * Split recipients into those whose phone may buzz for this alert and those held to the bell.
- * Fails OPEN: if the history cannot be read, everyone pushes, exactly as before this existed —
- * a database hiccup must not silence a touchdown.
+ * Game alerts (lib/engagement-alerts) — scoring plays, big plays, period scores, close games — get
+ * their own hourly budget, separate from the starter alerts above. A follower of two teams playing
+ * at once on a Sunday is the case it exists for. Major alerts (finals, checkpoints, close games,
+ * clutch plays) push up to GAME_ALERT_PUSH_CAP an hour; minor plays (a 19-yard catch, a sack) only
+ * while under GAME_ALERT_PUSH_MINOR_CAP.
  */
-export async function splitByLivePushBudget(
+export const GAME_ALERT_PUSH_CAP = 10
+export const GAME_ALERT_PUSH_MINOR_CAP = 6
+
+const findRecentGamePushed: FindRecent = ({ userIds, since }) =>
+  prisma.platformNotification.findMany({
+    where: {
+      userId: { in: userIds },
+      type: { startsWith: 'game_' },
+      createdAt: { gte: since },
+      meta: { path: ['pushBudget'], equals: 'pushed' },
+    },
+    select: { userId: true, meta: true },
+  })
+
+type Caps = { total: number; minor: number }
+
+/** Pure: may one more alert of `tier` push under these caps? */
+export function pushAllowedUnder(history: LivePushHistory, tier: LivePushTier, caps: Caps): boolean {
+  if (history.total >= caps.total) return false
+  if (tier === 'minor' && history.minor >= caps.minor) return false
+  return true
+}
+
+async function splitByBudget(
   userIds: string[],
   tier: LivePushTier,
-  deps: { findRecent?: FindRecent; now?: Date } = {},
+  caps: Caps,
+  find: FindRecent,
+  now: Date,
 ): Promise<{ push: string[]; held: string[] }> {
   if (userIds.length === 0) return { push: [], held: [] }
-  const now = deps.now ?? new Date()
   const since = new Date(now.getTime() - LIVE_PUSH_WINDOW_MINUTES * 60_000)
   let rows: { userId: string; meta: unknown }[]
   try {
-    rows = await (deps.findRecent ?? findRecentPushed)({ userIds, since })
+    rows = await find({ userIds, since })
   } catch {
     return { push: [...userIds], held: [] }
   }
@@ -87,8 +113,30 @@ export async function splitByLivePushBudget(
   const push: string[] = []
   const held: string[] = []
   for (const id of userIds) {
-    if (livePushAllowed(history.get(id) ?? { total: 0, minor: 0 }, tier)) push.push(id)
+    if (pushAllowedUnder(history.get(id) ?? { total: 0, minor: 0 }, tier, caps)) push.push(id)
     else held.push(id)
   }
   return { push, held }
+}
+
+/**
+ * Split recipients into those whose phone may buzz for this alert and those held to the bell.
+ * Fails OPEN: if the history cannot be read, everyone pushes, exactly as before this existed —
+ * a database hiccup must not silence a touchdown.
+ */
+export async function splitByLivePushBudget(
+  userIds: string[],
+  tier: LivePushTier,
+  deps: { findRecent?: FindRecent; now?: Date } = {},
+): Promise<{ push: string[]; held: string[] }> {
+  return splitByBudget(userIds, tier, { total: LIVE_PUSH_CAP, minor: LIVE_PUSH_MINOR_CAP }, deps.findRecent ?? findRecentPushed, deps.now ?? new Date())
+}
+
+/** The same split for game alerts, under GAME_ALERT_PUSH_CAP / GAME_ALERT_PUSH_MINOR_CAP. Fails open. */
+export async function splitByGameAlertPushBudget(
+  userIds: string[],
+  tier: LivePushTier,
+  deps: { findRecent?: FindRecent; now?: Date } = {},
+): Promise<{ push: string[]; held: string[] }> {
+  return splitByBudget(userIds, tier, { total: GAME_ALERT_PUSH_CAP, minor: GAME_ALERT_PUSH_MINOR_CAP }, deps.findRecent ?? findRecentGamePushed, deps.now ?? new Date())
 }
