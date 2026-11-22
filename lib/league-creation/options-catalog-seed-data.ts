@@ -137,10 +137,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introVideoUrl: '/league-type-survivor-intro.mp4',
       introPosterUrl: '/league-type-survivor.png',
     },
-    // Tournament Mode retired from active creation (2026-07-23). Removing the
-    // catalog entry takes it out of every creation selector; the server also
-    // refuses the concept (lib/league-creation/retiredConcepts.ts). Existing
-    // tournaments keep working — this list only drives NEW league creation.
+    // Tournament Mode has no card here: a tournament is several leagues feeding one bracket, and it
+    // is created on its own screen (/tournament-hub/new), not through this single-league form. It was
+    // retired from creation on 2026-07-23 and brought back by the owner on 2026-11-22
+    // (lib/league-creation/retiredConcepts.ts).
     {
       id: 'big_brother',
       title: 'Big Brother',
