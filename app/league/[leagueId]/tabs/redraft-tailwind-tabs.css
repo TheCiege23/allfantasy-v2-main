@@ -129,6 +129,8 @@ html[data-mode='light'] .rdt{--rdt-on-bad:#ffffff}
 .rdt-cal-cell:not(:disabled):hover{border-color:var(--rdt-accent-line)}
 .rdt-cal-wk{font:800 15px/1 var(--rdt-mono);font-variant-numeric:tabular-nums;color:var(--rdt-text2)}
 .rdt-cal-tag{font:700 11px/1.1 var(--rdt-mono);letter-spacing:.04em;text-transform:uppercase}
+.rdt-cal-cell{container-type:inline-size}
+.rdt-cal-tag-short{display:none}
 .rdt-cal-cell[data-state=done]{background-color:var(--rdt-surface);color:var(--rdt-faint)}
 .rdt-cal-cell[data-state=done] .rdt-cal-wk{color:var(--rdt-muted)}
 .rdt-cal-cell[data-state=done]::after{content:'';position:absolute;inset:auto 8px 6px auto;width:6px;height:6px;border-radius:50%;background:var(--rdt-accent)}
@@ -175,6 +177,13 @@ html[data-mode='light'] .rdt-bridge :is(input,select,textarea){background-color:
   .rdt-cal{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:5px}
   .rdt-cal-cell{min-height:54px;padding:6px}
   .rdt-cal-tag{letter-spacing:0}
+}
+
+/* A tile too narrow for its word ("Deadline", "Playoffs") shows the short form instead — measured on the
+ * tile itself, so it holds at every grid width rather than only at one breakpoint (2026-11-05). */
+@container (width < 58px){
+  .rdt-cal-tag-full{display:none}
+  .rdt-cal-tag-short{display:inline}
 }
 
 @media (prefers-reduced-motion:reduce){

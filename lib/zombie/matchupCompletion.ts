@@ -75,6 +75,25 @@ export async function getFirstScheduledWeek(seasonId: string): Promise<number | 
   return first?.week ?? null
 }
 
+/**
+ * The first scheduled week with a head-to-head matchup that is not finished yet, or null when every
+ * scheduled week is played (or none is scheduled).
+ *
+ * 🛑 Activation must start the zombie season HERE, not at `getFirstScheduledWeek`. A league drafted
+ * mid-season can carry already-final weeks scored from the season's real games (Zombie Chimmy Test,
+ * 2026-11-22: drafted during NFL week 11 with weeks 1-10 final). Starting at week 1 made the resolver
+ * replay ten weeks of infections, serums and weapons from games played before the league existed, one
+ * week per five-minute tick, the moment the Whisperer was chosen.
+ */
+export async function getFirstUnplayedWeek(seasonId: string): Promise<number | null> {
+  const first = await prisma.redraftMatchup.findFirst({
+    where: { seasonId, awayRosterId: { not: null }, status: { notIn: ['final', 'complete', 'completed'] } },
+    orderBy: { week: 'asc' },
+    select: { week: true },
+  })
+  return first?.week ?? null
+}
+
 export type ZombieWeekReadiness =
   | { ready: true }
   | {

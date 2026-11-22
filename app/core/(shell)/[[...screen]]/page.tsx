@@ -290,6 +290,7 @@ import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { PublishRailScores } from '@/components/core-app/railScores'
+import { createRailGate, openRailGate } from '@/lib/core-app/railAfterCards'
 import { recordCompletedSpan, recordRootDuration, recordRootNumber } from '@/lib/observability/rootTiming'
 import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
@@ -1168,8 +1169,16 @@ export default async function AfCorePage({
    * The league-first landing still waits too: it needs the answer before it can redirect.
    *
    * A failure is null and the rail simply renders names and crests, as before.
+   *
+   * 🛑 ON THE CROSS-LEAGUE HOME IT NOW STARTS AFTER THE HOME'S CARDS (2026-11-22, owner's OK). Building the
+   * rail's boards beside the cards held the server at 90–95% busy and slowed every card; see railAfterCards.ts.
+   * Every other screen, and the league-first landing, starts it at once, as before.
    */
-  const railMatchupsRead = timeShell('railMatchups', getRailMatchups(
+  const railGate =
+    activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId && !leagueFirstLanding
+      ? createRailGate()
+      : openRailGate()
+  const railMatchupsRead = railGate.opened.then(() => timeShell('railMatchups', getRailMatchups(
     userId,
     playedLeagues.map((l) => ({
       id: l.id,
@@ -1185,7 +1194,7 @@ export default async function AfCorePage({
           isDynasty: l.isDynasty,
         }) === 'guillotine',
     })),
-  ).catch(() => null))
+  ).catch(() => null)))
   const shellReads = Promise.all([
     timeShell('activity', getCoreActivitySnapshot(
       playedLeagues.map((league) => league.id),
@@ -1743,6 +1752,7 @@ export default async function AfCorePage({
         homeScope,
         favoriteIds,
         weekLineups: null,
+        releaseRailAfter: railGate.releaseAfter,
         weekLineupsRead: railMatchupsRead.then((railMatchups) =>
           railMatchups ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek } : null,
         ),
@@ -2129,6 +2139,11 @@ type CoreScreenContext = {
    * never waits for it. The cross-league home shows no lineups and skips the wait.
    */
   weekLineupsRead: Promise<WeekLineups | null>
+  /**
+   * Lets the rail's matchup read start once these settle (lib/core-app/railAfterCards.ts). Only the cross-league
+   * home holds a closed gate; everywhere else this is a no-op.
+   */
+  releaseRailAfter: (cards: Promise<unknown>) => void
   /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
   hiddenHomeSections: ReadonlySet<HomeSectionId>
   hiddenLeagueSections: LeagueSectionId[]
@@ -4657,6 +4672,18 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
               }).catch(() => null),
         }
       })()
+
+  /*
+   * The rail's matchup read waits for these on the cross-league home (lib/core-app/railAfterCards.ts): the heavy
+   * cards the owner reads first — the summary behind Top decisions and the tab badges, Top decisions itself, the
+   * trades card and Since your last visit. Settled is enough; a failed card must not hold the rail back. Anywhere
+   * else the gate is already open and this does nothing.
+   */
+  ctx.releaseRailAfter(
+    homeLoads
+      ? Promise.allSettled([homeLoads.dash34, homeLoads.userOs, homeLoads.trades, homeLoads.brief])
+      : Promise.resolve(),
+  )
 
   /*
    * ⚠ THE CROSS-LEAGUE DRAFT HQ BOARD reads the same aggregate the home's drafts band does —

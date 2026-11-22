@@ -578,7 +578,8 @@ describe('/core paints its shell before the rail scores land', () => {
     shell.railMatchups.mockImplementationOnce(() => new Promise<null>((resolve) => { releaseRail = resolve }))
     try {
       const tree = await Promise.race([
-        AfCorePage(pageArgs([], {})),
+        // A league screen: there the rail's read still starts at once (the cross-league home waits; below).
+        AfCorePage(pageArgs(['trades'], { league: 'L1' })),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the shell waited for the rail scores')), 60_000)),
       ])
       // Positive control: the read the shell did not wait for was started.
@@ -588,5 +589,27 @@ describe('/core paints its shell before the rail scores land', () => {
     } finally {
       releaseRail?.(null)
     }
+  })
+})
+
+/*
+ * 🛑 ON THE CROSS-LEAGUE HOME THE RAIL WAITS FOR THE CARDS (2026-11-22, owner's OK; lib/core-app/railAfterCards.ts).
+ * Built beside the cards, the rail's boards held the server at 90–95% busy and slowed every card.
+ */
+describe('/core starts the rail scores after the home cards', () => {
+  it('has not started the rail read when the cross-league home shell resolves', { timeout: 180_000 }, async () => {
+    h.gated = false
+    const AfCorePage = await loadPage()
+    await AfCorePage(pageArgs([], {}))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(shell.railMatchups).not.toHaveBeenCalled()
+  })
+
+  it('still starts it at once on a league screen, which needs the week lineups', { timeout: 180_000 }, async () => {
+    h.gated = false
+    const AfCorePage = await loadPage()
+    await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(shell.railMatchups).toHaveBeenCalledTimes(1)
   })
 })
