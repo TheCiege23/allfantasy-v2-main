@@ -65,8 +65,11 @@ export default async function TradeMarketPage() {
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-section="other-sports">
               <h2 className="text-base font-bold">Other sports — NBA, MLB, NHL, NCAAB, soccer</h2>
               <p className="mt-0.5 text-xs text-white/55">
-                Measured only, not used by any grade yet. These sports have no dated market, so learning starts from trades
-                captured since their board values began being saved with each trade (2026-11-22).
+                {data.otherSports.switch.on
+                  ? `${data.otherSports.switch.env} is on: published numbers below reach the "for your team" grade in these sports.`
+                  : `Measured only: ${data.otherSports.switch.env} is off on this service, so no grade uses these yet.`}{" "}
+                These sports have no dated market, so learning starts from trades captured since their board values began
+                being saved with each trade (2026-11-22), and there is no later-trades check for them yet.
               </p>
               <p className="mt-1 text-xs text-white/55" data-testid="status-other-sports">
                 {data.otherSports.status.missing

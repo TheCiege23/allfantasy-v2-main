@@ -173,3 +173,69 @@ export function learnedPostureAdjustment(
     reason: `teams ${record} paid ${pct(row.premiumPct)} for ${what} over middle-of-the-table teams across ${row.trades} completed trades`,
   }
 }
+
+// ─── The board-valued sports (NBA, MLB, NHL, NCAAB, soccer) ──────────────────────────────────────────────────────
+
+/**
+ * TRADE_LEARNED_BOARD=on: what `boardSportLearner.ts` measured for a sport reaches the "for your team" letter in that
+ * sport's leagues (owner's call, 2026-11-22: build it now, switch it on when the numbers are there). OFF by default.
+ *
+ * The same two moves the NFL tables make, with what the board can measure:
+ *   need      an open slot at a position → the premium measured for teams with no spare there, in place of the hand-set one
+ *   posture   what a team with your record pays over a middle team — for every player you take on (no age split: the
+ *             board prices the games LEFT, so it has no veteran / youth question to ask)
+ *
+ * Only PUBLISHED premiums (20 effective trades on the group and on its baseline) from a table under 21 days old.
+ * ⚠ There is no hold-out check for these sports yet — they have no dated market to split — so the publish threshold
+ * and this switch are the only gates. Read /admin/trade-market before turning it on.
+ */
+export const LEARNED_BOARD_ENV = 'TRADE_LEARNED_BOARD'
+export const learnedBoardOn = (env: NodeJS.ProcessEnv = process.env) => on(env, LEARNED_BOARD_ENV)
+export const BOARD_SPORT_TABLE_KEY = 'af-trade-market:board-sports'
+
+export type BoardPremiumRow = { kind: 'posture' | 'need'; group: string; premiumPct: number | null; trades: number; published: boolean }
+export type LearnedBoard = { sport: string; premiums: BoardPremiumRow[] }
+
+/** One sport's published premiums from the stored document, or none when absent, stale or unreadable. PURE. */
+export function boardPremiumsOf(raw: unknown, sport: string, now: Date): BoardPremiumRow[] {
+  const d = raw && typeof raw === 'object' ? (raw as { generatedAt?: unknown; sports?: unknown }) : null
+  const at = d && typeof d.generatedAt === 'string' ? Date.parse(d.generatedAt) : NaN
+  if (!d || !Number.isFinite(at) || now.getTime() - at > LEARNED_MAX_AGE_MS || !Array.isArray(d.sports)) return []
+  const want = sport.trim().toUpperCase()
+  const m = (d.sports as Array<{ sport?: unknown; premiums?: unknown }>).find((x) => String(x?.sport ?? '').toUpperCase() === want)
+  return Array.isArray(m?.premiums) ? (m!.premiums as BoardPremiumRow[]).filter((p) => p && p.published === true && typeof p.premiumPct === 'number') : []
+}
+
+let boardMemo: { at: number; raw: unknown } | null = null
+
+/** The stored board-sport document, read once per ten minutes per process; one sport's published premiums from it. */
+export async function loadLearnedBoard(prisma: CacheDelegate, sport: string, now = new Date()): Promise<LearnedBoard> {
+  if (!boardMemo || now.getTime() - boardMemo.at >= MEMO_MS) {
+    const row = (await Promise.resolve(prisma.sportsDataCache.findUnique({ where: { cacheKey: BOARD_SPORT_TABLE_KEY } })).catch(() => null)) as { data?: unknown } | null
+    boardMemo = { at: now.getTime(), raw: row?.data ?? null }
+  }
+  return { sport: sport.trim().toUpperCase(), premiums: boardPremiumsOf(boardMemo.raw, sport, now) }
+}
+
+/** Test hook: forget the board memo. */
+export function resetLearnedBoardMemo(): void {
+  boardMemo = null
+}
+
+/** The measured premium for a team with no spare at this position — published and positive only. PURE. */
+export function learnedBoardNeedPremium(board: LearnedBoard, position: string): { pct: number; trades: number } | null {
+  const row = board.premiums.find((p) => p.kind === 'need' && p.group === position.toUpperCase())
+  return row && row.premiumPct != null && row.premiumPct > 0 ? { pct: row.premiumPct, trades: row.trades } : null
+}
+
+/** What teams with this record pay over middle teams in this sport, as an adjustment. PURE. */
+export function learnedBoardPostureAdjustment(board: LearnedBoard, posture: Posture | null): LeagueValueAdjustment | null {
+  if (!posture || posture === 'middle') return null
+  const row = board.premiums.find((p) => p.kind === 'posture' && p.group === posture)
+  if (!row || row.premiumPct == null || row.premiumPct === 0) return null
+  return {
+    kind: 'need',
+    factor: 1 + row.premiumPct / 100,
+    reason: `teams ${posture === 'contend' ? 'at .600 or better' : 'at .400 or worse'} paid ${pct(row.premiumPct)} over middle-of-the-table teams across ${row.trades} completed ${board.sport} trades`,
+  }
+}

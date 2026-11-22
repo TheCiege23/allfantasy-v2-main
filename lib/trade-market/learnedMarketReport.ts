@@ -1,5 +1,7 @@
 import {
   booksOf,
+  LEARNED_BOARD_ENV,
+  learnedBoardOn,
   LEARNED_NEED_ENV,
   LEARNED_PICKS_ENV,
   LEARNED_POSTURE_ENV,
@@ -82,8 +84,8 @@ export type LearnedMarketReport = {
   sections: ReportSection[]
   publishedRows: number
   totalRows: number
-  /** NBA / MLB / NHL / NCAAB / soccer (shadow — no grade reads these yet). Empty until trades with board values exist. */
-  otherSports: { status: TableStatus; sports: OtherSportReport[] }
+  /** NBA / MLB / NHL / NCAAB / soccer (read by grades only with `TRADE_LEARNED_BOARD=on`). Empty until trades with board values exist. */
+  otherSports: { status: TableStatus; sports: OtherSportReport[]; switch: SwitchState }
   /** When the hold-out check last ran, and whether the learned market is good enough to show partners. */
   holdout: { status: TableStatus; cutoff: string | null; releasedToPartners: boolean }
 }
@@ -228,7 +230,11 @@ export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now
   }))
   return {
     generatedAt: now.toISOString(), sections, publishedRows: all.filter((r) => r.published).length, totalRows: all.length,
-    otherSports: { status: statusOf('other sports', raw.boardSports, now), sports },
+    otherSports: {
+      status: statusOf('other sports', raw.boardSports, now),
+      sports,
+      switch: { env: LEARNED_BOARD_ENV, on: learnedBoardOn(env), what: 'uses the published premiums for need and record in the "for your team" grade of that sport\'s leagues' },
+    },
     holdout: {
       status: statusOf('hold-out check', raw.holdout, now),
       cutoff: raw.holdout && typeof raw.holdout === 'object' && typeof (raw.holdout as { cutoff?: unknown }).cutoff === 'string' ? (raw.holdout as { cutoff: string }).cutoff : null,
