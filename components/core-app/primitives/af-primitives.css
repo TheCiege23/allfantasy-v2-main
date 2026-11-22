@@ -190,36 +190,3 @@
   .af-core .af-empty-card { gap: 12px; padding: 16px; }
   .af-core .af-empty-card-mark { width: 30px; height: 30px; font-size: 15px; }
 }
-
-/* ── Evidence line: the measured "why" under a call (EvidenceLine.tsx) ──
- * One look for every screen's "this is measured" sentence: trade market evidence, a letter's record, the pickup
- * record, the bench check's record. Quiet by default — it sits UNDER the call and never competes with it.
- * No `.af-core` prefix on the base: it sits at (0,1,0) so a screen can still space it with its own class.
- */
-.af-evidence {
-  display: block;
-  margin: 6px 0 0;
-  padding: 1px 0 1px 9px;
-  border-left: 2px solid var(--accent-line, var(--line));
-  min-width: 0;
-}
-.af-evidence-label {
-  display: block;
-  color: var(--muted);
-  font: 600 10px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.af-evidence-text,
-.af-evidence-list li {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.af-evidence-text { display: block; margin: 2px 0 0; }
-.af-evidence-list { display: grid; gap: 3px; margin: 2px 0 0; padding: 0; list-style: none; }
-/* A weak record reads a step louder: it is the caveat, so it must not be the quietest thing on the card. */
-.af-evidence[data-tone='low'] .af-evidence-text,
-.af-evidence[data-tone='low'] .af-evidence-list li { color: var(--text2); }
-.af-evidence[data-tone='low'] { border-left-color: var(--line2, var(--line)); }

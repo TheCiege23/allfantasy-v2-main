@@ -1367,7 +1367,7 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-weight: 800;
   color: var(--text);
 }
-/* The swap's graded record: the shared EvidenceLine (primitives/af-primitives.css), on its own line under the call. */
+/* The swap's graded record: the shared EvidenceLine (primitives/af-evidence.css), on its own line under the call. */
 .af-mt-bench-check-record { margin-top: 5px; }
 
 /*
