@@ -67,8 +67,8 @@ function provider(defence: Map<string, Record<string, number>>) {
     fetchActiveGames: vi.fn(async () => [
       { gameId: 'g1', status: 'in_progress', startTime: new Date('2026-09-27T17:00:00Z'), homeTeam: 'KC', awayTeam: 'BUF' },
     ]),
-    fetchPlayerStatsForGames: vi.fn(async () => new Map([['qb1', { pass_yds: 250 }]])),
-    fetchTeamDefenseStatsForGames: vi.fn(async () => defence),
+    fetchPlayerStatsForGames: vi.fn(async (_query: Parameters<LiveStatsProvider['fetchPlayerStatsForGames']>[0]) => new Map([['qb1', { pass_yds: 250 }]])),
+    fetchTeamDefenseStatsForGames: vi.fn(async (_query: Parameters<LiveStatsProvider['fetchTeamDefenseStatsForGames']>[0]) => defence),
     normalizeGameStatus: vi.fn(() => 'in_progress' as const),
   }
 }
@@ -101,9 +101,9 @@ describe('live tick — a team defence is one defence, whichever id the roster h
       new Map([['nfl:def:KC', { def_sack: 3, def_int: 1 }]]),
     )
 
-    const offensive = p.fetchPlayerStatsForGames.mock.calls[0]![0] as { playerIds: string[] }
+    const offensive = p.fetchPlayerStatsForGames.mock.calls[0]![0]
     expect(offensive.playerIds).toEqual(['qb1'])
-    const defence = p.fetchTeamDefenseStatsForGames.mock.calls[0]![0] as { teamAbbrs: string[] }
+    const defence = p.fetchTeamDefenseStatsForGames.mock.calls[0]![0]
     expect(defence.teamAbbrs).toEqual(['KC'])
     expect(written.KC).toEqual({ def_sack: 3, def_int: 1 })
     expect(written['nfl:def:KC']).toBeUndefined()
@@ -121,8 +121,8 @@ describe('live tick — a team defence is one defence, whichever id the roster h
       ]),
     )
 
-    const defence = p.fetchTeamDefenseStatsForGames.mock.calls[0]![0] as { teamAbbrs: string[] }
-    expect([...defence.teamAbbrs].sort()).toEqual(['BUF', 'KC'])
+    const defence = p.fetchTeamDefenseStatsForGames.mock.calls[0]![0]
+    expect([...(defence.teamAbbrs ?? [])].sort()).toEqual(['BUF', 'KC'])
     expect(written['nfl:def:BUF']).toEqual({ def_sack: 1 })
     expect(written.KC).toEqual({ def_sack: 3 })
   })
