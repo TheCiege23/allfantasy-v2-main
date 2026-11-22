@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { gunzipSync } from 'node:zlib'
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -75,19 +76,19 @@ describe('draft session polling', () => {
     mock.snapshot.mockResolvedValue(board)
     mock.auth.mockResolvedValueOnce({ user: { id: 'alice' } }).mockResolvedValueOnce({ user: { id: 'bob' } })
     mock.held.mockImplementationOnce(async () => ['roster-alice']).mockImplementationOnce(async () => ['roster-bob'])
-    const poll = (encoding: string) => GET(
-      new NextRequest('https://example.invalid/api/leagues/large-league/draft/session', {
-        headers: { 'Accept-Encoding': encoding },
-      }),
+    const poll = (packed: boolean) => GET(
+      new NextRequest('https://example.invalid/api/leagues/large-league/draft/session' + (packed ? '?picksFormat=gzip' : '')),
       { params: Promise.resolve({ leagueId: 'large-league' }) },
     )
     try {
-      const [alice, bob] = await Promise.all([poll('gzip'), poll('gzip;q=0, identity')])
+      const [alice, bob] = await Promise.all([poll(true), poll(false)])
       expect(alice.headers.get('Content-Type')).toMatch(/application\/json/)
       expect(alice.headers.get('Cache-Control')).toBe('private, no-store')
       const a = await alice.json()
       const b = await bob.json()
-      expect(a.session).toMatchObject({ picks, currentUserRosterId: 'roster-alice', viewerAutopick: { enabled: true } })
+      expect(a.session.picks).toBeUndefined()
+      expect(JSON.parse(gunzipSync(Buffer.from(a.session.picksGzip, 'base64')).toString())).toEqual(picks)
+      expect(a.session).toMatchObject({ currentUserRosterId: 'roster-alice', viewerAutopick: { enabled: true } })
       expect(b.session).toMatchObject({ picks, currentUserRosterId: 'roster-bob', viewerAutopick: { enabled: false } })
       expect(releaseRepair).toBeTypeOf('function')
     } finally {

@@ -393,7 +393,7 @@ describe('Idempotency — finalizeRosterAssignments + draftPicks fallback', () =
 describe('No mechanics regression (sanity)', () => {
   it('PickSubmissionService still uses the canonical post-draft completion chain', () => {
     const sps = read('lib/live-draft-engine/PickSubmissionService.ts')
-    expect(sps).toMatch(/import \{ completeDraftSession \} from '\.\/DraftSessionService'/)
+    expect(sps).toMatch(/import \{ completeDraftSession(?:, [^}]+)? \} from '\.\/DraftSessionService'/)
     expect(sps).toMatch(/if \(overall >= totalPicks\)/)
     expect(sps).toMatch(/await completeDraftSession\(input\.leagueId\)/)
   })
@@ -403,6 +403,7 @@ describe('No mechanics regression (sanity)', () => {
     expect(ds).toMatch(
       /export async function completeDraftSession[\s\S]+?const \{ runPostDraftFinalizationArtifacts \} = await import\('@\/lib\/live-draft-engine\/postDraftFinalizeArtifacts'\)/,
     )
-    expect(ds).toMatch(/await runPostDraftFinalizationArtifacts\(leagueId\)/)
+    expect(ds).toMatch(/await finishDraftCompletion\(leagueId, outcome\.sessionId, outcome\.transitioned\)/)
+    expect(ds).toMatch(/await runPostDraftFinalizationArtifacts\(leagueId, options\)/)
   })
 })

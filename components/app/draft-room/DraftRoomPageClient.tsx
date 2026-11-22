@@ -16,6 +16,7 @@ import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
 import DraftRoomMusicBar from './DraftRoomMusicBar'
 import { readLivePlaylist, type DraftPlaylist } from '@/lib/draft-room/draftPlaylist'
+import { fetchDraftSessionResponse } from '@/lib/draft-room/readDraftSessionResponse'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
 import { useCommissionerActions } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
@@ -1571,8 +1572,7 @@ export function DraftRoomPageClient({
   const fetchSession = useCallback(async (): Promise<boolean> => {
     const hadSessionBeforeRequest = Boolean(sessionRef.current)
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/session`, { cache: 'no-store' })
-      const data = await res.json().catch(() => ({}))
+      const { response: res, data } = await fetchDraftSessionResponse(leagueId)
       if (res.status === 401) {
         setDraftSessionAccess("unauthorized")
         setSession(null)

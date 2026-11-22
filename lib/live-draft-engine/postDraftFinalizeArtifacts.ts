@@ -8,6 +8,7 @@ import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGat
 import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { dedupeInFlight } from '@/lib/api-performance'
+import { hasPendingDraftFinalization } from './DraftFinalizationJob'
 
 const POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS = 60_000
 const MAX_THROTTLE_KEYS = 200
@@ -38,20 +39,23 @@ function prunePostDraftArtifactThrottle() {
  *   RedraftSeason / RedraftRoster / RedraftRosterPlayer so league tabs,
  *   waivers, trades, scoring, and lineup tools see the drafted roster.
  */
-export async function runPostDraftFinalizationArtifacts(leagueId: string): Promise<void> {
-  return dedupeInFlight(`draft:finalization:${leagueId}`, () => finalizeArtifacts(leagueId))
+export async function runPostDraftFinalizationArtifacts(leagueId: string, options?: { requireSeason?: boolean }): Promise<void> {
+  const seasonReady = await dedupeInFlight(`draft:finalization:${leagueId}`, () => finalizeArtifacts(leagueId))
+  if (options?.requireSeason && !seasonReady) throw new Error('Could not finish setting up the draft season')
 }
 
-async function finalizeArtifacts(leagueId: string): Promise<void> {
-  if (await isSeasonTournamentDraft(leagueId)) return
+async function finalizeArtifacts(leagueId: string): Promise<boolean> {
+  if (await isSeasonTournamentDraft(leagueId)) return true
   const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
   await finalizeRosterAssignments(leagueId)
 
   let seasonSyncFailed = false
+  let seasonMaterialized = false
   try {
     const { syncCompletedDraftToRedraftSeason } = await import('@/lib/redraft/finalizeDraftToRedraftSeason')
     const summary = await syncCompletedDraftToRedraftSeason(leagueId)
     if (!summary.skipped) {
+      seasonMaterialized = true
       console.info('[postDraftFinalizeArtifacts] redraft season sync complete', {
         leagueId,
         seasonId: summary.seasonId,
@@ -157,6 +161,7 @@ async function finalizeArtifacts(leagueId: string): Promise<void> {
     postDraftArtifactOkAt.set(leagueId, Date.now())
     prunePostDraftArtifactThrottle()
   }
+  return seasonMaterialized
 }
 
 /**
@@ -167,7 +172,7 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { status: true },
+    select: { id: true, status: true },
   })
   if (session?.status !== 'completed') return
 
@@ -178,6 +183,7 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
   }
 
   try {
+    if (session.id && await hasPendingDraftFinalization(session.id)) return
     await runPostDraftFinalizationArtifacts(leagueId)
   } catch (err) {
     postDraftArtifactOkAt.delete(leagueId)
@@ -198,9 +204,11 @@ export async function repairDraftCompletionIfBoardFull(leagueId: string): Promis
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, rounds: true, teamCount: true, _count: { select: { picks: true } } },
+    select: { id: true, status: true, rounds: true, teamCount: true, updatedAt: true, _count: { select: { picks: true } } },
   })
   if (!session || session.status === 'completed') return false
+  // Let a just-committed final pick run its completion transition before the recovery reader tries.
+  if (session.updatedAt && Date.now() - session.updatedAt.getTime() < 2000) return false
   const totalPicks = session.rounds * session.teamCount
   if (session._count && session._count.picks < totalPicks) return false
   const rows = await prisma.draftPick.findMany({

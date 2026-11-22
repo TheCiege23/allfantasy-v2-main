@@ -31,6 +31,7 @@ import { reportSurvivorAutomationError } from '@/lib/survivor/survivorAutomation
 import { startScheduledDynastyDrafts, startScheduledRedraftDrafts } from '@/lib/draft/startScheduledRedraftDrafts'
 import { fillAutoDraftBoards, type FillAutoDraftBoardsSummary } from '@/lib/live-draft-engine/autoDraftFill'
 import { processExpiredDispersalPicks, type ExpiredDispersalPicksSummary } from '@/lib/dispersal-draft/expiredDispersalPicks'
+import { processDueDraftFinalizations } from '@/lib/live-draft-engine/DraftFinalizationJob'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +84,10 @@ export async function GET(request: NextRequest) {
     const tick = await withSyncJobRun(
       { jobName: 'cron-draft-tick', trigger: 'cron', sport: 'NFL' },
       async () => {
+        const draftFinalizationError = await processDueDraftFinalizations().then(() => 0, error => {
+          console.error('[cron/draft-tick] could not resume draft season setup', error)
+          return 1
+        })
         /*
          * MIRRORING RUNS FIRST, AND OUTSIDE THE FLAG.
          *
@@ -139,7 +144,7 @@ export async function GET(request: NextRequest) {
         const dispersal: ExpiredDispersalPicksSummary = await processExpiredDispersalPicks({ maxDrafts: 25 }).catch((error) => ({
           scanned: 0, advanced: 0, errors: [{ draftId: '', error: error instanceof Error ? error.message : String(error) }],
         }))
-        const startErrors = survivorStarts.errors.length + redraftStarts.errors.length + dynastyStarts.errors.length + autoDrafts.errors.length + dispersal.errors.length
+        const startErrors = draftFinalizationError + survivorStarts.errors.length + redraftStarts.errors.length + dynastyStarts.errors.length + autoDrafts.errors.length + dispersal.errors.length
 
         // Autopick is inert until deliberately enabled — see SAFETY above.
         if (!isEnabled()) return { disabled: true as const, mirror, survivorStarts, redraftStarts, dynastyStarts, autoDrafts, dispersal, startErrors, summary: null }

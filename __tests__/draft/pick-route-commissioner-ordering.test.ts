@@ -181,6 +181,7 @@ describe('POST /api/leagues/[leagueId]/draft/pick commissioner ordering', () => 
         source: 'commissioner',
         rosterId: 'roster-1',
       }),
+      expect.any(Function),
     )
     // …and the league log records who made it, for which team.
     expect(hm.recordCommissionerDraftAction).toHaveBeenCalledWith('league-1', 'user-1', 'commissioner_pick', expect.objectContaining({ rosterId: 'roster-1' }))

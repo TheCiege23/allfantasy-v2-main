@@ -9,6 +9,7 @@ import { controlSeasonDraft } from '@/lib/tournament/seasonDraftControls'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
+import { processDraftFinalizationJob, queueDraftFinalization } from './DraftFinalizationJob'
 /**
  * Draft session: get or create, build snapshot for client, start/pause/complete.
  */
@@ -1340,7 +1341,9 @@ export async function swapDraftManagers(
  * whose write changed the row (count 1) runs the once-only side effects. Under Postgres READ COMMITTED
  * the blocked second update re-checks its WHERE against the committed row and matches nothing.
  */
-export async function completeDraftSession(leagueId: string): Promise<boolean> {
+export type DraftFinalizationScheduler = (work: () => Promise<void>) => void
+
+export async function completeDraftSession(leagueId: string, scheduleFinalization?: DraftFinalizationScheduler): Promise<boolean> {
   const season = await completeSeasonDraftWithOutcome(leagueId)
   if (season !== null) {
     if (season.transitioned) await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', season.sessionId ?? undefined)).catch(err => console.error('[draft] completion notification failed', err))
@@ -1388,6 +1391,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
+    if (scheduleFinalization) await queueDraftFinalization(tx as Prisma.TransactionClient, leagueId, session.id)
     return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
   })
 
@@ -1406,14 +1410,35 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     }).catch(() => {})
   }
 
+  if (scheduleFinalization) {
+    if (outcome.transitioned) {
+      scheduleFinalization(async () => {
+        await processDraftFinalizationJob(outcome.sessionId).catch(error => {
+          console.error('[completeDraftSession] queued finalization could not start', { leagueId, error })
+        })
+      })
+    }
+    return true
+  }
+  await finishDraftCompletion(leagueId, outcome.sessionId, outcome.transitioned)
+  return true
+}
+
+export async function finishDraftCompletion(
+  leagueId: string,
+  sessionId: string,
+  transitioned: boolean,
+  options?: { requireSeason?: boolean },
+): Promise<void> {
   try {
     const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
-    await runPostDraftFinalizationArtifacts(leagueId)
+    await runPostDraftFinalizationArtifacts(leagueId, options)
   } catch (err) {
     console.error('[completeDraftSession] post-draft artifacts failed', {
       leagueId,
       error: err instanceof Error ? err.message : String(err),
     })
+    if (options?.requireSeason) throw err
   }
 
   // Idempotent specialty bootstrap runs after drafted players are mirrored into live rosters.
@@ -1426,12 +1451,12 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
   }
 
-  if (outcome.transitioned) {
-    await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', outcome.sessionId)).catch(err => console.error('[draft] completion notification failed', err))
+  if (transitioned) {
+    await import('@/lib/draft-notifications').then(m => m.notifyDraftLifecycle(leagueId, 'draft_ended', sessionId)).catch(err => console.error('[draft] completion notification failed', err))
     // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
     // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
     // still emitted from the Redraft path for the season-specific payload.
-    const draftId = outcome.sessionId
+    const draftId = sessionId
     getPlatformEvents().emit(EVENT.DRAFT_COMPLETED, {
       leagueId,
       idempotencyKey: `draft.completed:${draftId}`,
@@ -1458,7 +1483,6 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
   }
 
-  return true
 }
 
 /**

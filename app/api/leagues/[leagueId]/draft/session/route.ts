@@ -153,8 +153,9 @@ export async function GET(
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
+    const compressPicks = req.nextUrl.searchParams.get('picksFormat') === 'gzip'
     // Only share values that are independent of the viewer.
-    const shared = await dedupeInFlight(`draft:session-board:${leagueId}`, async () => {
+    const shared = await dedupeInFlight(`draft:session-board:${leagueId}:${compressPicks}`, async () => {
       const [snapshot, uiSettings, orphanRosterIds, orderMode, poolReadiness] = await Promise.all([
         buildSessionSnapshot(leagueId, new Date()),
         getDraftUISettingsForLeague(leagueId),
@@ -221,7 +222,7 @@ export async function GET(
 
       const providerStatus = getProviderStatus()
       const { viewerAutopick: _viewerAutopick, currentUserRosterId: _currentUserRosterId, ...sharedSnapshot } = snapshot
-      const response = prepareDraftSessionResponse({
+      const response = await prepareDraftSessionResponse({
         leagueId,
         session: {
           ...sharedSnapshot,
@@ -245,7 +246,7 @@ export async function GET(
         ...(canonical ? { canonicalDraftState: canonical.state } : {}),
         ...(parity ? { canonicalDraftStateParity: parity } : {}),
         ...(sportsContext ? { sportsContext } : {}),
-      })
+      }, compressPicks)
       return { snapshot, response }
     })
 

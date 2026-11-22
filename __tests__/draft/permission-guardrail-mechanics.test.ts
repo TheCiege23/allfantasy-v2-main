@@ -396,6 +396,7 @@ describe('Phase 4 Slice 3 - permission and guardrail mechanics', () => {
         rosterId: 'roster-member-1',
         source: 'user',
       }),
+      expect.any(Function),
     )
   })
 

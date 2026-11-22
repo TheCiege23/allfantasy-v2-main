@@ -3,7 +3,7 @@
  */
 
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { withTimedRoute } from '@/lib/logging/withTimedRoute'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -190,7 +190,7 @@ export const POST = withTimedRoute('draft_pick', async (
     assetType: body.assetType ?? body.asset_type ?? undefined,
     expectedOverall,
     commissionerOverride: source === 'commissioner' && isComm,
-  })
+  }, after)
 
   if (!result.success) {
     if (result.code === 'ROSTER_CONFIGURATION_INCOMPLETE') {

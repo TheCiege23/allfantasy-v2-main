@@ -21,7 +21,8 @@ import { resolveCurrentOnTheClock } from './CurrentOnTheClockResolver'
 import { resolvePickOwner } from './PickOwnershipResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getManagerColorBySeed } from '@/lib/draft-room'
-import { completeDraftSession } from './DraftSessionService'
+import { completeDraftSession, type DraftFinalizationScheduler } from './DraftSessionService'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordTrendSignalByPlayerId, resolveTrendPlayerIds } from '@/lib/player-trend/signal-integration'
 import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolver'
 import type { SlotOrderEntry } from './types'
@@ -79,6 +80,7 @@ export interface SubmitPickInput {
 
 export interface SubmitPickResult {
   success: boolean
+  idempotentReplay?: boolean
   error?: string
   code?: 'ROSTER_CONFIGURATION_INCOMPLETE' | PickAuthorityCode
   snapshot?: { sessionId: string; overall: number; pickLabel: string; rosterId: string }
@@ -112,7 +114,7 @@ async function resolveCurrentOverallForStalePreflight(leagueId: string): Promise
  * Internal: pick core logic — validation + transaction. Called under a distributed lock.
  * Not exported; external callers use the `submitPick` wrapper below.
  */
-async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult> {
+async function _submitPickCore(input: SubmitPickInput, scheduleFinalization?: DraftFinalizationScheduler): Promise<SubmitPickResult> {
   const session = await prisma.draftSession.findFirst({
     where: { leagueId: input.leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -197,7 +199,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   const league = input.source !== 'keeper' ? await prisma.league.findUnique({
     where: { id: input.leagueId },
-    select: { sport: true, leagueVariant: true },
+    select: { sport: true, leagueVariant: true, leagueType: true, platform: true },
   }) : null
   if (input.source !== 'keeper') {
     if (league?.sport === 'NBA' && league.leagueVariant === 'survivor') {
@@ -654,8 +656,16 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     // non-fatal
   }
 
+  const deferSeasonSetup = scheduleFinalization && session.teamCount >= 32 &&
+    !session.sleeperDraftId && !session.keeperConfig && !session.devyConfig && !session.c2cConfig &&
+    session.playerPool !== 'rookies_only' &&
+    (session.draftModeLabel == null || ['standard', 'startup'].includes(session.draftModeLabel)) &&
+    league?.sport === 'NFL' && ['redraft', 'dynasty'].includes(league.leagueType ?? '') &&
+    resolveWriteAuthority(league.platform) === 'NATIVE'
   const attemptCompletion = async () => {
-    if (!seasonContext) return completeDraftSession(input.leagueId)
+    if (!seasonContext) {
+      return deferSeasonSetup ? completeDraftSession(input.leagueId, scheduleFinalization) : completeDraftSession(input.leagueId)
+    }
     try { return await completeDraftSession(input.leagueId) } catch (error) {
       logStructured('error', 'submit_pick', 'tournament_completion_pending', { leagueId: input.leagueId, error: String(error) })
       return false // The pick is committed; checkpoint repair can retry without inserting another pick.
@@ -797,7 +807,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
  * If both lock layers fail (infra outage), the request proceeds without a
  * lock so active drafts are never blocked by a Redis/DB monitoring issue.
  */
-export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResult> {
+export async function submitPick(input: SubmitPickInput, scheduleFinalization?: DraftFinalizationScheduler): Promise<SubmitPickResult> {
   if (input.expectedOverall != null) {
     const currentOverall = await resolveCurrentOverallForStalePreflight(input.leagueId)
     if (currentOverall != null && currentOverall !== input.expectedOverall) {
@@ -823,7 +833,7 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
       // Best-effort: the pick is saved as it came.
     }
   }
-  const lockResult = await withPickLock(input.leagueId, () => _submitPickCore(input))
+  const lockResult = await withPickLock(input.leagueId, () => _submitPickCore(input, scheduleFinalization))
   if (!lockResult.acquired) {
     // Competing instance is writing — tell client to refresh and retry.
     recordEngineTelemetrySample(ENGINE.DRAFT_PICK_RACE, {
