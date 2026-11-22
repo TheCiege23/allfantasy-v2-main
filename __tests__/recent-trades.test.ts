@@ -785,3 +785,38 @@ it('overlaps visible grades while serializing receipt reuse writes', async () =>
   expect(writes).toBe(1)
   expect(rows.map(row => row.receiptId)).toEqual(Array(4).fill('reused-receipt'))
 })
+
+describe('visible trade grades: a pool of four, not lockstep batches (2026-11-22)', () => {
+  it('starts the fifth grade as soon as one of the first four finishes', async () => {
+    const template = payload().data.trades[0]!
+    cacheFindMany.mockResolvedValue([payload({ trades: Array.from({ length: 6 }, (_, index) => ({
+      ...template, id: `pool-${index}`, createdIso: new Date(NOW.getTime() - index * 60_000).toISOString(),
+    })) })])
+    let active = 0
+    let peak = 0
+    const releases: Array<() => void> = []
+    oneGradeForCompletedTrade.mockImplementation(() => {
+      active += 1
+      peak = Math.max(peak, active)
+      return new Promise((resolve) => {
+        releases.push(() => { active -= 1; resolve({ graded: false, reason: 'no complete grade', basis: null }) })
+      })
+    })
+    const pending = getRecentTrades(LEAGUES, NOW, 6)
+    try {
+      await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(4))
+      releases[0]!()
+      // Three of the first four are still pending: lockstep batches would not have started the fifth.
+      await vi.waitFor(() => expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(5))
+      expect(active).toBe(4)
+    } finally {
+      for (let i = 0; i < 20 && releases.some(Boolean); i++) {
+        releases.splice(0).forEach((release) => release())
+        await new Promise((r) => setTimeout(r, 0))
+      }
+    }
+    const rows = await pending
+    expect(peak).toBe(4)
+    expect(rows.map((row) => row.id)).toEqual(Array.from({ length: 6 }, (_, index) => `pool-${index}`))
+  })
+})
