@@ -104,16 +104,26 @@ function resolveSports(param: string | null): Sport[] {
 }
 
 /**
- * 🛑 NFL ONLY. THE SUBSCRIPTION DOES NOT COVER COLLEGE — confirmed by the account holder,
- * 2026-09-08.
+ * 🛑 NFL ONLY — BUT NOT BECAUSE THE KEY LACKS COLLEGE. CORRECTED 2026-11-22.
  *
- * The client can address NCAAF (league id 2) and an earlier version of this listed it here, which
- * would have been the worst possible way to find out: a plan gap is SILENT in the fanout. Every
- * team call throws, each is swallowed by a bare `catch { continue }`, the sync returns 0, and the
- * route reports a clean run. NCAAF would have looked like a sport where nobody is hurt, forever,
- * while quietly spending ~33 requests a run to learn nothing.
+ * This note used to say "the subscription does not cover college — confirmed by the account
+ * holder, 2026-09-08". Production data contradicts that: the same key wrote 5,508 NCAAF 2026
+ * `SportsGame` rows (source `api_sports`, 3,563 with scores, last write 2026-11-22), and college
+ * standings sync through it too. So the key DOES reach college for games and scores. Whether it
+ * returns college INJURIES is still unmeasured; no college `/injuries` call has been made.
  *
- * Listing only what is entitled turns that into ordinary "no coverage": the source is absent,
+ * What keeps NCAAF out is COST. `/injuries` answers only per team, and API-Sports carries every
+ * college division: 726 distinct NCAAF teams appear in its 2026 games. One sweep would be ~726
+ * calls, more than double the 300/hour guard in `lib/workers/rate-limit-manager.ts`, and this
+ * route runs every 30 minutes. A college source here would need its own bounded team list (FBS,
+ * or rostered schools only) before it is worth listing.
+ *
+ * And the original warning still holds for whenever that is tried: a plan gap is SILENT in the
+ * fanout. Every team call throws, each is swallowed by a bare `catch { continue }`, the sync
+ * returns 0, and the route reports a clean run. NCAAF would look like a sport where nobody is
+ * hurt, forever. Prove one college team returns rows before widening this.
+ *
+ * Listing only what is proven turns that into ordinary "no coverage": the source is absent,
  * `providerCoverage` says so, and nothing pretends to have looked.
  *
  * ⚠ SO NCAAF INJURIES REMAIN ESPN-ONLY, AND ESPN IS THIN — 3 rows for the whole of FBS when
