@@ -72,6 +72,23 @@ export type CollegeProScore = {
 
 const noScore = (week: number | null, note: string | null = null): CollegeProScore => ({ week, total: null, opponent: null, note })
 
+/**
+ * A linked half's `League.settings`, for scoring it under its own rules. Read only for a half the
+ * franchise link already resolved for this user; null when the half was never imported here.
+ */
+function leagueSettingsOf(leagueId: string | null | undefined): Promise<unknown> {
+  if (!leagueId) return Promise.resolve(null)
+  return Promise.resolve()
+    .then(() => prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))
+    .then((row) => row?.settings ?? null)
+    .catch(() => null)
+}
+
+/** ["wins", "ejections", "buzzer-beaters"] → "wins, ejections and buzzer-beaters". */
+function listInWords(items: string[]): string {
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
 /** An unlinked C2C / Devy league: which half it needs, and the viewer's leagues that could be it. */
 export type CollegeProLink = { needRole: 'pro' | 'college'; candidates: LinkCandidate[] }
 
@@ -164,6 +181,7 @@ export async function loadCollegeProRoster(
   const season = Number(nflState?.season) || now.getFullYear()
 
   const collegePlayers = collegeHalf?.players ?? []
+  const collegeSettings = leagueSettingsOf(collegeHalf?.leagueId)
   let proCtx: SleeperProContext | null = null
   const [pro, games, collegePoints, drafts, pipeline] = await Promise.all([
     loadSleeperProSide(league, userId, week).then((r) => {
@@ -172,11 +190,16 @@ export async function loadCollegeProRoster(
     }),
     loadTodaysGames([proSport, collegeSport], now),
     collegeHalf && week
-      ? loadCollegePoints({
-          season,
-          nflWeek: week,
-          players: collegePlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
-        }).catch(() => null)
+      ? collegeSettings
+          .then((settings) =>
+            loadCollegePoints({
+              season,
+              nflWeek: week,
+              players: collegePlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
+              settings,
+            }),
+          )
+          .catch(() => null)
       : Promise.resolve(null),
     loadDrafts(league.platformLeagueId, collegeHalf?.platform === 'fantrax' ? collegeHalf.memberLeagueId : null),
     collegeHalf?.platform === 'fantrax'
@@ -195,9 +218,13 @@ export async function loadCollegeProRoster(
           ? null
           : !collegePoints.statsOnFile
             ? "College stats for this week haven't come in yet."
-            : collegePoints.live
-              ? 'College points update live during games, using standard college scoring, so Fantrax may differ slightly.'
-              : 'College points use standard college scoring, so Fantrax may show slightly different numbers.'
+            : collegePoints.scoredWith === 'league'
+              ? collegePoints.live
+                ? 'College points update live during games.'
+                : null
+              : collegePoints.live
+                ? 'College points update live during games, using standard college scoring, so Fantrax may differ slightly.'
+                : 'College points use standard college scoring, so Fantrax may show slightly different numbers.'
         return {
           role: 'college' as const,
           sport: collegeSport,
@@ -257,6 +284,7 @@ export async function loadCollegeProRoster(
           season,
           nflWeek: week,
           wantEditor: canEditScoring,
+          collegeSettings: await collegeSettings,
         }).catch(() => null)
       : null
   return {
@@ -466,10 +494,14 @@ async function loadFantraxProPair(args: {
     ps.map((p) => ({ id: p.id, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position }))
 
   const rosterIds = [...new Set(proPlayers.map((p) => p.id).filter(Boolean))]
+  // Each half is scored under its OWN Fantrax league's rules: the NBA league's here, the college league's below.
+  const collegeSettings = await leagueSettingsOf(collegeHalf.leagueId)
   const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics] = await Promise.all([
-    period ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers) }).catch(() => null) : Promise.resolve(null),
+    period
+      ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers), settings: league.settings }).catch(() => null)
+      : Promise.resolve(null),
     period && collegeSport === 'NCAAB'
-      ? loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(collegePlayers) }).catch(() => null)
+      ? loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(collegePlayers), settings: collegeSettings }).catch(() => null)
       : Promise.resolve(null),
     loadTodaysGames([proSport, collegeSport], now),
     prisma.fantraxLeague
@@ -500,16 +532,20 @@ async function loadFantraxProPair(args: {
       (r) => lower((r as { teamName?: unknown }).teamName) === lower(oppName),
     )
     const oppPlayers = oppRows.length ? await connectedRosterPlayers('fantrax', 'NBA', oppRows).catch(() => []) : []
-    const oppPoints = await loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(oppPlayers) }).catch(() => null)
+    const oppPoints = await loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(oppPlayers), settings: league.settings }).catch(() => null)
     oppTotal = oppPoints ? sumStarterPoints(listsOf(oppPlayers, true).starters, oppPoints.points) : null
   }
 
-  const statsNote = (p: { statsOnFile: boolean } | null, label: string) =>
+  const statsNote = (p: { statsOnFile: boolean; scoredWith?: 'league' | 'standard'; unscored?: string[] } | null, label: string) =>
     !p
       ? null
       : !p.statsOnFile
         ? `${label} stats for this period haven't come in yet.`
-        : `${label} points use standard scoring, so Fantrax may show slightly different numbers.`
+        : p.scoredWith !== 'league'
+          ? `${label} points use standard scoring, so Fantrax may show slightly different numbers.`
+          : p.unscored?.length
+            ? `Your league also scores ${listInWords(p.unscored)}, which box scores don't show, so those aren't in these points.`
+            : null
 
   const pro: CollegeProSide = {
     role: 'pro',
@@ -584,7 +620,7 @@ async function loadFantraxProPair(args: {
           wantEditor: canEditScoring,
           collegeSport: 'NCAAB',
           scoreCollegePlayers: (players) =>
-            loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(players) }).then((r) => r.points),
+            loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(players), settings: collegeSettings }).then((r) => r.points),
         }).catch(() => null)
       : null
 

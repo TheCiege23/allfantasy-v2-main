@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
-import { NO_REVIEW_SIGNALS, OVERDUE_CLAIM_DAYS, type LeagueReviewSignals } from './signals'
+import { countWideGapAudits } from '@/lib/integrity/tradeValueAudit'
+import { NO_REVIEW_SIGNALS, OVERDUE_CLAIM_DAYS, WIDE_GAP_PCT, WIDE_GAP_TRADE_DAYS, type LeagueReviewSignals } from './signals'
 
 const BEFORE_DRAFT = new Set(['setup', 'pre_draft', 'predraft'])
 
@@ -83,12 +84,16 @@ export async function readReviewSignals(
       select: { leagueId: true, draftDateUtc: true },
     })
 
+  // Every league, not only native ones: the trade audit also prices trades in leagues imported from Sleeper.
+  const readGaps = () => countWideGapAudits(ids, new Date(now.getTime() - WIDE_GAP_TRADE_DAYS * 24 * 60 * 60 * 1000), WIDE_GAP_PCT)
+
   const none = new Map<string, number>()
-  const [alertMap, tradeMap, claimMap, drafts] = await Promise.all([
+  const [alertMap, tradeMap, claimMap, drafts, gapMap] = await Promise.all([
     settle(readAlerts(), none),
     nativeIds.length === 0 ? none : settle(readTrades(), none),
     nativeIds.length === 0 ? none : settle(readClaims(), none),
     preDraftIds.length === 0 ? null : settle<Awaited<ReturnType<typeof readDrafts>> | null>(readDrafts(), null),
+    settle(readGaps(), none),
   ])
 
   // A failed settings read says nothing about draft dates, so no league is flagged from it.
@@ -102,6 +107,7 @@ export async function readReviewSignals(
       tradesAwaitingReview: tradeMap.get(l.id) ?? 0,
       overdueWaiverClaims: claimMap.get(l.id) ?? 0,
       draftDateMissing: dated != null && preDraft.has(l.id) && !dated.has(l.id),
+      wideGapTrades: gapMap.get(l.id) ?? 0,
     })
   }
   return { byLeague, partial }

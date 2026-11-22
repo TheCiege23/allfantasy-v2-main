@@ -22,19 +22,24 @@ export function readVerifiedNbaInactiveSince(value: unknown): string | undefined
   return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === raw ? raw : undefined
 }
 
+export function readVerifiedNbaTeam(value: unknown): string | undefined {
+  const team = record(value).verifiedNbaTeam
+  if (typeof team === 'string' && /^[A-Z]{3}$/.test(team)) return team
+}
+
 /**
  * A reviewed NBA season line replaces the provider totals it corroborated.
- * Provider refreshes can add a DNP to the reported game count. Switch back
- * only when the provider has more actual playing time in at least as many games.
+ * For individually reviewed lines, switch back only if the provider adds real playing time.
+ * The hourly cohort's continuously verified final-box lines own their current season sample.
  */
 export function pickNbaVerifiedSeasonLines<T extends SeasonLine>(lines: T[]): T[] {
-  const reviewed = new Map<string, { line: T; basis: Sample; providerSeconds: number }>()
+  const reviewed = new Map<string, { line: T; basis: Sample; providerSeconds: number; managed: boolean }>()
   for (const line of lines) {
     if (line.source !== NBA_VERIFIED_BOX_SOURCE) continue
     const basis = sample(line.stats)
     const provider = record(record(line.stats).providerAtVerification).seconds
     if (!basis || typeof provider !== 'number' || !Number.isFinite(provider) || provider < 0) continue
-    reviewed.set(line.playerId, { line, basis, providerSeconds: provider })
+    reviewed.set(line.playerId, { line, basis, providerSeconds: provider, managed: record(line.stats).nbaRecheckVerified === true })
   }
 
   if (!reviewed.size) return lines.filter(line => line.source !== NBA_VERIFIED_BOX_SOURCE)
@@ -47,6 +52,7 @@ export function pickNbaVerifiedSeasonLines<T extends SeasonLine>(lines: T[]): T[
       untouched.push(line)
       continue
     }
+    if (review.managed) continue
     const next = sample(line.stats)
     if (!next || next.games < review.basis.games || next.seconds <= Math.max(review.basis.seconds, review.providerSeconds)) continue
     const current = sample(selected.get(line.playerId)?.stats)

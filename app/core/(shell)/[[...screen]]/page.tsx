@@ -289,6 +289,7 @@ import { getLiveLeagueGames } from '@/lib/core-app/liveLeagueScoreboard'
 import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
+import { PublishRailScores } from '@/components/core-app/railScores'
 import { recordCompletedSpan, recordRootDuration, recordRootNumber } from '@/lib/observability/rootTiming'
 import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
@@ -1156,6 +1157,35 @@ export default async function AfCorePage({
    * Each read keeps the fallback it had; one failure never blocks the others.
    */
   const timeShell = shellTimer.time
+  /*
+   * This week's head-to-head per league, for the expanded league rail.
+   *
+   * 🛑 STARTED WITH THE SHELL'S READS BUT NO LONGER AWAITED BY THE SHELL (2026-11-22, owner's OK).
+   * Measured on the owner's 91-league account: this one read was 12.5s of a 13.0s shell, and nothing
+   * on the page could paint until it finished. The rail now renders names, crests and records first,
+   * and the scores arrive when this read does (`RailScoresSlot` below → railScores.tsx). The screens
+   * that show this week's lineups still wait for it, inside their own boundary (`CoreScreenBody`).
+   * The league-first landing still waits too: it needs the answer before it can redirect.
+   *
+   * A failure is null and the rail simply renders names and crests, as before.
+   */
+  const railMatchupsRead = timeShell('railMatchups', getRailMatchups(
+    userId,
+    playedLeagues.map((l) => ({
+      id: l.id,
+      platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+      /* The rail must know this before it pairs a schedule. Some providers
+         publish matchup ids even for a guillotine field; those ids do not turn
+         an elimination race into head-to-head. */
+      elimination:
+        resolveLeagueCardTypeKey({
+          leagueType: l.leagueType,
+          leagueVariant: l.leagueVariant,
+          settings: l.settings ?? undefined,
+          isDynasty: l.isDynasty,
+        }) === 'guillotine',
+    })),
+  ).catch(() => null))
   const shellReads = Promise.all([
     timeShell('activity', getCoreActivitySnapshot(
       playedLeagues.map((league) => league.id),
@@ -1274,33 +1304,6 @@ export default async function AfCorePage({
      */
     timeShell('chatBadge', getChatBadge(userId)),
     /*
-     * This week's head-to-head per league, for the expanded league rail.
-     *
-     * ⚠ THE SHELL IS ON EVERY /core PAGE, SO THIS IS BUDGETED, NOT FREE. Three
-     * set-based reads regardless of league count — the same shape and cost as
-     * `getWeekAll`, which already runs on the home. It is loaded unconditionally
-     * because the rail is chrome: the user can expand it on any screen, and a
-     * rail that only carries scores on some pages is worse than one that never
-     * does. A failure is null and the rail simply renders names and crests.
-     */
-    timeShell('railMatchups', getRailMatchups(
-      userId,
-      playedLeagues.map((l) => ({
-        id: l.id,
-        platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-        /* The rail must know this before it pairs a schedule. Some providers
-           publish matchup ids even for a guillotine field; those ids do not turn
-           an elimination race into head-to-head. */
-        elimination:
-          resolveLeagueCardTypeKey({
-            leagueType: l.leagueType,
-            leagueVariant: l.leagueVariant,
-            settings: l.settings ?? undefined,
-            isDynasty: l.isDynasty,
-          }) === 'guillotine',
-      })),
-    ).catch(() => null)),
-    /*
      * The plan chip and token meter. The handoff is explicit that the meter must be
      * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
      * the number belongs in the chrome, not on the screen that happens to open the
@@ -1361,7 +1364,6 @@ export default async function AfCorePage({
     importCoverageSummary,
     [unreadNotifications, shellUser],
     chatUnread,
-    railMatchups,
     access,
     railRecords,
   ] = await shellReads
@@ -1375,6 +1377,8 @@ export default async function AfCorePage({
    * be the target — the same list the `?league=` authorisation check above uses.
    */
   if (leagueFirstLanding) {
+    // The landing needs this week's head-to-head before it can redirect, so it alone waits for the rail.
+    const railMatchups = await railMatchupsRead
     const landing = resolveLeagueFirstLanding({
       lastLeagueId: await lastLeagueRead,
       playedLeagueIds: playedLeagues.map((l) => l.id),
@@ -1738,9 +1742,10 @@ export default async function AfCorePage({
         leagueCtx,
         homeScope,
         favoriteIds,
-        weekLineups: railMatchups
-          ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
-          : null,
+        weekLineups: null,
+        weekLineupsRead: railMatchupsRead.then((railMatchups) =>
+          railMatchups ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek } : null,
+        ),
         hiddenHomeSections,
         hiddenLeagueSections,
       }}
@@ -1804,10 +1809,11 @@ export default async function AfCorePage({
       /* The screen publishes the week label, the tab badges and Chimmy's home signals when it
          arrives — see PublishShellSignals in CoreScreenBody and shellSignals.tsx. */
       weekLabel={null}
-      railMatchups={railMatchups?.byLeague}
+      /* The rail's scores arrive after the shell paints, published by `RailScoresSlot` below. */
+      railMatchups={undefined}
       railRecords={railRecords}
       railUnread={chatUnread?.byLeague ?? null}
-      railWeekLabel={railMatchups?.week != null ? `Week ${railMatchups.week}` : null}
+      railWeekLabel={null}
       plan={plan}
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
@@ -1946,6 +1952,15 @@ export default async function AfCorePage({
       ) : null}
 
       {/*
+        The rail's scores, published to the shell once their read lands (railScores.tsx). Its own
+        boundary with no fallback: until then the rail shows names, crests and records, exactly as
+        it does when the read fails.
+      */}
+      <Suspense fallback={null}>
+        <RailScoresSlot read={railMatchupsRead} />
+      </Suspense>
+
+      {/*
         The screen area — the only part that swaps to a skeleton the moment a tab is clicked,
         while the shell, league tabs and league bar above stay put (components/core-app/coreNavPending.tsx).
       */}
@@ -1973,6 +1988,18 @@ type LeagueOsSnapshot = Awaited<ReturnType<typeof resolveUserOsSnapshot>> | null
 async function LeagueDataCoverageSection({ record }: { record: LeagueDataCoverageRecord }) {
   const coverage = await getLeagueDataCoverage(record).catch(() => null)
   return coverage ? <LeagueDataCoverage coverage={coverage} /> : null
+}
+
+/** The rail's matchup scores and week label, published to the shell once the rail's read lands. */
+async function RailScoresSlot({ read }: { read: Promise<Awaited<ReturnType<typeof getRailMatchups>> | null> }) {
+  const railMatchups = await read
+  if (!railMatchups) return null
+  return (
+    <PublishRailScores
+      byLeague={railMatchups.byLeague}
+      weekLabel={railMatchups.week != null ? `Week ${railMatchups.week}` : null}
+    />
+  )
 }
 
 /** The Decision OS chip in the league context bar, once the league's snapshot has been read. */
@@ -2096,6 +2123,12 @@ type CoreScreenContext = {
    * Your Week screens show them without a second load. Null when the rail read failed.
    */
   weekLineups: WeekLineups | null
+  /**
+   * The rail's read itself, still running when the shell renders (2026-11-22). `CoreScreenBody` awaits
+   * it into `weekLineups` before the screen renders — inside the screen's own boundary, so the shell
+   * never waits for it. The cross-league home shows no lineups and skips the wait.
+   */
+  weekLineupsRead: Promise<WeekLineups | null>
   /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
   hiddenHomeSections: ReadonlySet<HomeSectionId>
   hiddenLeagueSections: LeagueSectionId[]
@@ -2123,7 +2156,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const timer = createRenderTimer('core-screen')
   try {
-    return await CoreScreenBodyRender({ ctx })
+    /*
+     * The rail's lineups, awaited HERE rather than by the shell. Every screen that reads
+     * `ctx.weekLineups` (Your week, the league Overview, War Room, Standings, Live) gets exactly the
+     * value it got before; only the cross-league home — which reads none of it — skips the wait.
+     */
+    const weekLineups = ctx.activeKey === 'home' && !ctx.selectedLeagueId ? null : await ctx.weekLineupsRead
+    return await CoreScreenBodyRender({ ctx: { ...ctx, weekLineups } })
   } finally {
     timer.done({ screen: ctx.activeKey, segment: ctx.segment, league: Boolean(ctx.selectedLeagueId) })
   }

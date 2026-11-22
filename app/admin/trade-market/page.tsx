@@ -52,7 +52,49 @@ export default async function TradeMarketPage() {
             <p className="text-sm text-white/70" data-testid="admin-trade-market-summary">
               {data.publishedRows} of {data.totalRows} measured numbers are published.
             </p>
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/70" data-testid="admin-trade-market-holdout">
+              <span className="font-semibold text-white">Checked on later trades: </span>
+              {data.holdout.status.missing
+                ? "not run yet. Until it runs, the publish thresholds alone decide what a grade uses."
+                : `last run ${data.holdout.status.generatedAt?.slice(0, 16).replace("T", " ")} UTC${data.holdout.cutoff ? `, testing on trades from ${data.holdout.cutoff.slice(0, 10)} on` : ""}. A number that made grades worse on those trades is ignored until it holds again.`}{" "}
+              {data.holdout.releasedToPartners
+                ? "The partner page shows the trade market panel."
+                : "The partner page keeps the trade market panel hidden until more of these hold than fail."}
+            </p>
             {data.sections.map((s) => <SectionView key={s.key} section={s} />)}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-section="other-sports">
+              <h2 className="text-base font-bold">Other sports — NBA, MLB, NHL, NCAAB, soccer</h2>
+              <p className="mt-0.5 text-xs text-white/55">
+                {data.otherSports.switch.on
+                  ? `${data.otherSports.switch.env} is on: published numbers below reach the "for your team" grade in these sports.`
+                  : `Measured only: ${data.otherSports.switch.env} is off on this service, so no grade uses these yet.`}{" "}
+                These sports have no dated market, so learning starts from trades captured since their board values began
+                being saved with each trade (2026-11-22), and there is no later-trades check for them yet.
+              </p>
+              <p className="mt-1 text-xs text-white/55" data-testid="status-other-sports">
+                {data.otherSports.status.missing
+                  ? "Not written yet — the daily market run has not stored this table."
+                  : `Written ${data.otherSports.status.generatedAt?.slice(0, 16).replace("T", " ")} UTC (${data.otherSports.status.ageDays} days ago).`}
+              </p>
+              {data.otherSports.sports.map((sp) => (
+                <div key={sp.sport} className="mt-4" data-sport={sp.sport}>
+                  <h3 className="text-sm font-semibold">
+                    {sp.sport}
+                    <span className="ml-2 font-normal text-white/50">{sp.tradesRead.toLocaleString("en-US")} trades with board values</span>
+                  </h3>
+                  <ul className="mt-1 text-sm">
+                    {sp.rows.map((r) => (
+                      <li key={r.label} className="border-t border-white/5 py-1.5">
+                        {r.label}: <span className="tabular-nums">{r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`}</span>
+                        <span className="ml-2 text-xs text-white/55">
+                          {r.trades} trades · {r.published ? "enough to state" : "not enough yet"} · {r.note}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
           </>
         )}
       </div>
@@ -89,22 +131,29 @@ function SectionView({ section: s }: { section: ReportSection }) {
               {b.label}
               {b.tradesUsed != null ? <span className="ml-2 font-normal text-white/50">{b.tradesUsed.toLocaleString("en-US")} observations</span> : null}
             </h3>
+            {b.holdout ? (
+              <p
+                className={`mt-1 rounded-lg border p-2 text-xs ${b.holdout.verdict === "not_held" ? "border-rose-400/40 bg-rose-400/10 text-rose-100" : b.holdout.verdict === "held" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-white/15 bg-white/5 text-white/65"}`}
+                data-testid={`holdout-${s.key}-${b.book}`}
+                data-verdict={b.holdout.verdict}
+              >
+                <span className="font-semibold">Checked on later trades. </span>
+                {b.holdout.says}
+              </p>
+            ) : null}
             {b.warnings.map((w) => (
               <p key={w} className="mt-1 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-100">{w}</p>
             ))}
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="text-xs uppercase text-white/50">
-                  <tr>
-                    <th className="py-1 pr-3 font-semibold">What</th>
-                    <th className="py-1 pr-3 font-semibold">Move</th>
-                    <th className="py-1 pr-3 font-semibold">Evidence</th>
-                    <th className="py-1 pr-3 font-semibold">Status</th>
-                    <th className="py-1 font-semibold">What a grade says</th>
-                  </tr>
-                </thead>
-                <tbody>{b.rows.map((r) => <RowView key={r.label} row={r} />)}</tbody>
-              </table>
+            {/* Stacked on a phone, columns from sm up — a wide table hid "what a grade says" off-screen (seen 2026-11-22). */}
+            <div className="mt-2 text-sm">
+              <div className={`hidden text-xs uppercase text-white/50 sm:grid ${ROW_GRID}`}>
+                <span className="py-1 font-semibold">What</span>
+                <span className="py-1 font-semibold">Move</span>
+                <span className="py-1 font-semibold">Evidence</span>
+                <span className="py-1 font-semibold">Status</span>
+                <span className="py-1 font-semibold">What a grade says</span>
+              </div>
+              {b.rows.map((r) => <RowView key={r.label} row={r} />)}
             </div>
           </div>
         ))
@@ -113,24 +162,29 @@ function SectionView({ section: s }: { section: ReportSection }) {
   )
 }
 
+const ROW_GRID = "sm:grid-cols-[1.3fr_0.5fr_0.8fr_1.3fr_1.7fr] sm:gap-3"
+
 function RowView({ row: r }: { row: ReportRow }) {
   const move = r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`
   return (
-    <tr className="border-t border-white/5 align-top" data-published={r.published ? "yes" : "no"}>
-      <td className="py-1.5 pr-3">
-        {r.label}
+    <div className={`grid gap-1 border-t border-white/5 py-2 ${ROW_GRID}`} data-published={r.published ? "yes" : "no"}>
+      <div>
+        <span className="font-medium">{r.label}</span>
+        <span className="ml-2 tabular-nums sm:hidden">{move}</span>
         <div className="text-xs text-white/45">{r.detail}</div>
-      </td>
-      <td className="py-1.5 pr-3 tabular-nums">{move}</td>
-      <td className="py-1.5 pr-3 text-xs text-white/70">
-        {r.trades.toLocaleString("en-US")} trades
-        <div className="text-white/45">effective {r.effectiveSample}</div>
-      </td>
-      <td className="py-1.5 pr-3 text-xs">
+      </div>
+      <div className="hidden tabular-nums sm:block">{move}</div>
+      <div className="text-xs text-white/70">
+        {r.trades.toLocaleString("en-US")} trades <span className="text-white/45">· effective {r.effectiveSample}</span>
+      </div>
+      <div className="text-xs">
         {r.published ? <span className="text-emerald-200">Published</span> : <span className="text-white/55">Not yet</span>}
-        <div className="text-white/45">{r.note}</div>
-      </td>
-      <td className="py-1.5 text-xs text-white/75">{r.gradeSays ?? <span className="text-white/40">Nothing — the grade uses its usual value.</span>}</td>
-    </tr>
+        <span className="text-white/45"> · {r.note}</span>
+      </div>
+      <div className="text-xs text-white/75">
+        <span className="text-white/45 sm:hidden">A grade says: </span>
+        {r.gradeSays ?? <span className="text-white/40">Nothing — the grade uses its usual value.</span>}
+      </div>
+    </div>
   )
 }

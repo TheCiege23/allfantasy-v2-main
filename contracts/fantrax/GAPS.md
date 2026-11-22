@@ -390,7 +390,31 @@ Fantrax also sends each member alerts (push and email) for "Any trade has been e
 is successfully claimed", listed under My Team Settings → Notifications, with a history page at
 `/notification/all`. No trade or claim alert was seen, so their wording is unknown.
 
-## F-20 — A rostered player missing from `getPlayerIds` has no name anywhere in the API (recorded 2026-11-22, no probe)
+## F-20 — Team logos are on the logged-in site: `getFantasyTeams` — **CAPTURED 2026-11-22**
+
+F-14 still holds for the public `fxea` API: no picture field. The logged-in website lists every team
+with a logo. Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-fantasy-teams-request.json`.
+
+- `POST /fxpa/req?leagueId=<id>` with the single message `getFantasyTeams` answers
+  `responses[0].data.fantasyTeams`: one `{ id, name, shortName, logoUrl128, logoUrl256, logoId,
+  commissioner }` per team. All 34 teams of the captured league had a logo.
+- The request carries no token: `Accept: application/json`, `Content-Type: text/plain`, the login
+  cookie, and a body of `msgs`, `uiv`, `refUrl`, `dt`, `at`, `tz`, `v`.
+- The logo files are public. `https://fantraximg.com/logos/<xxx>/tmLogo_<logoId>_128.webp` (and
+  `_256`) answered 200 `image/webp` with no cookie. Teams without an upload use stock icons under
+  `fantraximg.com/assets/images/icons/fantasyteams/`.
+- `id` is Fantrax's team id. Our `LeagueTeam.externalId` is the import's own id, so a logo is matched
+  to a team by NAME (`teamIndex`), as trades and claims are.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the request works without a login, with an out-of-date `v`, or when sent by a browser
+  extension rather than the site's own page. The connector has not been run in a browser.
+- The managers' names. A team's roster page sends `getTeamRosterInfo`, whose response has
+  `teamHeadingInfo.owners`; only its shape was seen, and it is one request per team.
+
+## F-21 — A rostered player missing from `getPlayerIds` has no name anywhere in the API (recorded 2026-11-22, no probe)
 
 Road To Glory NCAA Basketball rosters `06qaj` (F/C, RESERVE, #51 Butler Bulldogs). The snapshot refreshed
 2026-11-22 18:10 UTC, after the refresh switched to the league's own directory (`c3c3014ffa`), and the

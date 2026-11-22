@@ -42,6 +42,32 @@ async function main() {
     console.error(`Refusing to start: this would read the database at "${host}". Re-run with --confirm-host=${host} if that is the one you mean.`)
     process.exit(2)
   }
+  /*
+   * --sport=NBA|MLB|NHL|NCAAB|SOCCER (2026-11-22): the same question for the board-valued sports, graded by DATE —
+   * points scored in games after the day each grade was given (lib/chimmy-outcomes/sportTradeLedger.ts).
+   */
+  const sportArg = (arg('sport') ?? '').trim().toUpperCase()
+  if (sportArg && sportArg !== 'NFL') {
+    const { SPORT_LEDGER_SPORTS, SPORT_LEDGER_MIN_DAYS, loadSportTradeLedger } = await import('@/lib/chimmy-outcomes/sportTradeLedger')
+    if (!(SPORT_LEDGER_SPORTS as readonly string[]).includes(sportArg)) {
+      console.error(`--sport must be one of ${SPORT_LEDGER_SPORTS.join(', ')} (or omitted for NFL).`)
+      process.exit(2)
+    }
+    const out = await loadSportTradeLedger(sportArg as (typeof SPORT_LEDGER_SPORTS)[number], { limit, db: prisma })
+    console.log(`trade-ledger-report: ${host} (read-only), ${sportArg}, grades from the last 180 days, judged after ${SPORT_LEDGER_MIN_DAYS} days\n`)
+    console.log(`Receipts read: ${out.read} (limit ${limit}); gradable ${out.gradable}; skipped ${JSON.stringify(out.skips)}`)
+    console.log(`Players in gradable receipts: ${out.idsTotal}, found in the game-stats feed ${out.idsPlaced} (${out.idsTotal ? Math.round((out.idsPlaced / out.idsTotal) * 100) : 0}%) — a low share means little is measured here`)
+    console.log(`  of those, ${out.idsViaIdentity} were matched through the player identity map; ${out.idsAmbiguous} ids named more than one player there and were left out`)
+    console.log(`Scored ${out.result.scored} · too recent ${out.result.pending} · no player found in the feed ${out.result.unscored}`)
+    for (const letter of ['A', 'B', 'C', 'D', 'F']) {
+      const s = out.result.byLetter[letter]
+      if (!s) continue
+      console.log(`  ${letter}: ${String(s.n).padStart(4)} trades · net ${s.netPoints >= 0 ? '+' : ''}${s.netPoints} fantasy points for "you" · ahead ${s.ahead} / behind ${s.behind}${s.decided ? ` · held up ${s.held} of ${s.decided}` : ''}`)
+    }
+    console.log('\nPoints are the feed\'s own fantasy points, not each league\'s scoring; category leagues have none. Paste everything above back — counts and points only.')
+    await prisma.$disconnect()
+    return
+  }
   const cal = await loadNflWeekCalendar(season, prisma)
   if (cal.size === 0) {
     console.error(`No ${season} NFL regular-season weeks in the schedule table, so no week can be proven over. Nothing graded.`)

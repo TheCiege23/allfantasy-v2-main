@@ -47,6 +47,7 @@ import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/c
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { defineMessages, messagesFor, type Catalog } from '@/lib/i18n/messages'
 import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { EvidenceLine } from '@/components/core-app/primitives'
 import { useMessages } from '@/components/i18n/useMessages'
 import { myTeamScreenMessages } from '@/lib/core-app/messages/myTeamScreen'
 import { myTeamGuideMessages } from '@/lib/core-app/messages/myTeamGuide'
@@ -1146,9 +1147,17 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
         })}
         {/* The bench check's graded record for a swap of this size — said beside the call, never changing it. */}
         {check.verdict === 'swap' && check.record ? (
-          <span className="af-mt-bench-check-record" data-level={check.record.level}>
-            {m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low')}
-          </span>
+          /* The shared measured line (primitives/EvidenceLine.tsx) — inline, because it sits inside the call's own span. */
+          <EvidenceLine
+            inline
+            className="af-mt-bench-check-record"
+            label={m.benchCheckRecordLabel}
+            tone={check.record.level === 'low' ? 'low' : undefined}
+            lines={[{
+              text: m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low'),
+              data: { level: check.record.level },
+            }]}
+          />
         ) : null}
       </span>
       <button type="button" className="af-mt-bench-ask" onClick={() => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail: {

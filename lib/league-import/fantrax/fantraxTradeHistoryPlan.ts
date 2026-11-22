@@ -65,7 +65,7 @@ export function nflSeasonForTradeDate(at: Date): number {
   return month <= 2 ? year - 1 : year
 }
 
-function seasonForFantraxTrade(sport: SupportedSport, date: Date): number {
+export function seasonForFantraxTrade(sport: SupportedSport, date: Date): number {
   if (sport === 'NFL' || sport === 'NCAAF') return nflSeasonForTradeDate(date)
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(date)
   const year = Number(day.find((p) => p.type === 'year')?.value)
@@ -73,7 +73,7 @@ function seasonForFantraxTrade(sport: SupportedSport, date: Date): number {
   return sport === 'MLB' || month >= 7 ? year : year - 1
 }
 
-function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
+export function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
   const exact = new Map<string, FantraxLeagueTeamRef[]>()
   const stripped = new Map<string, FantraxLeagueTeamRef[]>()
   const add = (m: Map<string, FantraxLeagueTeamRef[]>, key: string, t: FantraxLeagueTeamRef) => {
@@ -92,7 +92,7 @@ function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
   }
 }
 
-function playerIndex(rows: readonly FantraxIdentityRow[], sport: SupportedSport) {
+export function playerIndex(rows: readonly FantraxIdentityRow[], sport: SupportedSport) {
   const byName = new Map<string, FantraxIdentityRow[]>()
   for (const row of rows) {
     const key = normalizePlayerName(row.canonicalName ?? '')

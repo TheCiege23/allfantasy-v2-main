@@ -13,6 +13,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: {
       findFirst: vi.fn(async (q: { where: { id: string } }) => h.leagues[q.where.id] ?? null),
+      findUnique: vi.fn(async (q: { where: { id: string } }) => (h.leagues[q.where.id] ? { settings: h.leagues[q.where.id]!.settings } : null)),
       findMany: vi.fn(async () => Object.values(h.leagues).filter((l) => l.sport === 'NCAAB')),
     },
     franchiseLeagueMember: { findMany: vi.fn(async () => []) },
@@ -62,7 +63,7 @@ vi.mock('@/lib/league/collegePro/dailyPoints', async (orig) => ({
 }))
 
 import { isCollegeSport, linkHalves, memberKeyFor, pairedSportFor } from '@/lib/league/collegePro/linkHalves'
-import { currentFantraxPeriod } from '@/lib/league/collegePro/dailyPoints'
+import { currentFantraxPeriod, loadDailyPoints } from '@/lib/league/collegePro/dailyPoints'
 import { buildFantraxLists } from '@/lib/league/collegePro/buildSides'
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -154,6 +155,19 @@ describe('the combined page for an NBA league on Fantrax', () => {
     expect(proSide.taxi).toEqual(['p3'])
     expect(proSide.score).toMatchObject({ week: 5, total: 10, opponent: { name: 'Boston Celtics', total: 10 } })
     expect(r.sides.find((s) => s.role === 'college')?.score.total).toBe(10)
+  })
+
+  it("scores each half under its own league's rules: the NBA league's for the pros, the college league's for college", async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    const nbaRules = { fantrax_scoring_periods: PERIODS, marker: 'nba-rules' }
+    const cbbRules = { marker: 'cbb-rules' }
+    h.leagues.nba!.settings = nbaRules
+    h.leagues.cbb!.settings = cbbRules
+    vi.mocked(loadDailyPoints).mockClear()
+    await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
+    const calls = vi.mocked(loadDailyPoints).mock.calls.map((c) => c[0])
+    expect(calls.filter((c) => c.sport === 'NBA').every((c) => c.settings === nbaRules)).toBe(true)
+    expect(calls.filter((c) => c.sport === 'NCAAB').map((c) => c.settings)).toEqual([cbbRules])
   })
 
   it('publishes the AF weekly totals by Fantrax roster ID, preserving zero and missing', async () => {

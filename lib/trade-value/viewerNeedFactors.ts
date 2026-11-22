@@ -19,7 +19,12 @@ import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import type { LeagueValueAdjustment } from './leagueTradeValue'
 import {
   learnedNeedOn,
+  learnedBoardNeedPremium,
+  learnedBoardOn,
+  learnedBoardPostureAdjustment,
   learnedNeedPremium,
+  loadLearnedBoard,
+  type LearnedBoard,
   learnedPostureAdjustment,
   learnedPostureOn,
   loadLearnedTables,
@@ -52,6 +57,11 @@ export type LearnedNeedInputs = {
   posture: Posture | null
   /** Players' ages today, by Sleeper id — for the posture move's "27 or older" / "24 or younger". */
   ages?: ReadonlyMap<string, number | null>
+  /**
+   * `TRADE_LEARNED_BOARD=on`, in an NBA / MLB / NHL / NCAAB / soccer league: that sport's published premiums. When set,
+   * need and posture read THESE and never the NFL tables.
+   */
+  board?: LearnedBoard | null
 }
 
 export type NeedFactors = {
@@ -65,7 +75,23 @@ export type NeedFactors = {
  * What the learned tables contribute, when a switch is on and the book is known; null otherwise (the need model then
  * runs exactly as before). Posture needs the team's record, read from `LeagueTeam`, and the incoming players' ages.
  */
-async function learnedInputsFor(args: { book: string | null; leagueId: string; teamExternalId: string | null; get: NeedLine[] }): Promise<LearnedNeedInputs | null> {
+async function learnedInputsFor(args: { book: string | null; leagueId: string; teamExternalId: string | null; get: NeedLine[]; sport?: string | null }): Promise<LearnedNeedInputs | null> {
+  const sport = String(args.sport ?? '').trim().toUpperCase()
+  if (sport && sport !== 'NFL') {
+    // The other sports have their own table and their own switch; the NFL tables never apply to them.
+    if (!learnedBoardOn()) return null
+    const board = await loadLearnedBoard(prisma, sport)
+    if (board.premiums.length === 0) return null
+    let posture: Posture | null = null
+    if (args.teamExternalId != null && board.premiums.some((p) => p.kind === 'posture')) {
+      const team = await prisma.leagueTeam.findUnique({
+        where: { leagueId_externalId: { leagueId: args.leagueId, externalId: args.teamExternalId } },
+        select: { wins: true, losses: true, ties: true },
+      })
+      posture = team ? postureOf(team, team.wins + team.losses + team.ties + 1) : null
+    }
+    return { book: `SPORT:${sport}`, tables: { picks: new Map(), need: new Map(), posture: new Map() }, need: true, posture, board }
+  }
   const needOn = learnedNeedOn()
   const postureOn = learnedPostureOn() && args.teamExternalId != null
   if (!args.book || (!needOn && !postureOn)) return null
@@ -164,11 +190,14 @@ export function allocateNeedFactors(args: {
       // Short only this week: the hole is a ruled-out starter, not missing depth.
       const thisWeek = depth != null && (depth.byPosition.find((p) => p.position === pos)?.deficit ?? 0) <= 0
       const level = thisWeek ? 'short_this_week' : 'short'
-      const measured = delta.factor > 1 && args.learned?.need ? learnedNeedPremium(args.learned.tables, args.learned.book, pos, level) : null
+      const board = args.learned?.board ?? null
+      const measured = !(delta.factor > 1) || !args.learned?.need ? null : board ? learnedBoardNeedPremium(board, pos) : learnedNeedPremium(args.learned.tables, args.learned.book, pos, level)
       const factor = measured ? 1 + measured.pct / 100 : delta.factor
-      const reason = measured
-        ? `${phrase(delta.basis)}; teams short at ${pos}${thisWeek ? ' this week (a starter ruled out)' : ''} paid ${measured.pct > 0 ? '+' : ''}${measured.pct}% over normal-depth teams across ${measured.trades} completed trades`
-        : phrase(delta.basis)
+      const reason = !measured
+        ? phrase(delta.basis)
+        : board
+          ? `${phrase(delta.basis)}; teams with no spare at ${pos} paid +${measured.pct}% over teams with depth there across ${measured.trades} completed ${board.sport} trades`
+          : `${phrase(delta.basis)}; teams short at ${pos}${thisWeek ? ' this week (a starter ruled out)' : ''} paid ${measured.pct > 0 ? '+' : ''}${measured.pct}% over normal-depth teams across ${measured.trades} completed trades`
       for (const i of covered) out[i] = { kind: 'need', factor, reason }
     }
   }
@@ -186,7 +215,8 @@ export function allocateNeedFactors(args: {
     args.get.forEach((l, i) => {
       const age = l.sleeperId ? L.ages?.get(l.sleeperId) ?? null : null
       const kind = l.isPick ? 'picks' : age == null ? null : age >= VETERAN_MIN_AGE ? 'veteran' : age <= YOUTH_MAX_AGE ? 'youth' : null
-      const move = learnedPostureAdjustment(L.tables, L.book, L.posture, kind)
+      // A board sport has one posture number per record, for every player taken on (never a pick: it measured players).
+      const move = L.board ? (l.isPick ? null : learnedBoardPostureAdjustment(L.board, L.posture)) : learnedPostureAdjustment(L.tables, L.book, L.posture, kind)
       if (!move) return
       const prior = get[i]
       get[i] = prior ? { kind: 'need', factor: prior.factor * move.factor, reason: `${prior.reason}; ${move.reason}` } : move
@@ -218,7 +248,7 @@ export async function loadViewerNeedFactors(args: {
 
     const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId)
     if (!viewer.ok) return none(give, get, viewer.gap)
-    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: viewer.team.externalId ?? null, get }).catch(() => null)
+    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: viewer.team.externalId ?? null, get, sport: args.sport }).catch(() => null)
     return await rosterNeedFactors({ ...args, requirements, playerData: viewer.roster.playerData, learned })
   } catch {
     return none(give, get, 'your roster in this league — it could not be read just now')
@@ -244,7 +274,7 @@ export async function loadRosterNeedFactors(args: {
     const requirements: SlotRequirements | null = readSlotRequirements(args.starters)
     if (!requirements) return none(give, get, "this league's starting lineup, so roster need is not priced")
     // A roster named directly has no claimed team, so no record: the learned need premium only, never posture.
-    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: null, get }).catch(() => null)
+    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: null, get, sport: args.sport }).catch(() => null)
     return await rosterNeedFactors({ ...args, requirements, learned })
   } catch {
     return none(give, get, 'this roster — it could not be read just now')
