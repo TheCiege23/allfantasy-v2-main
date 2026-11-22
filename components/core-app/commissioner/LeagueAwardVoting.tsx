@@ -104,10 +104,10 @@ export function LeagueAwardVoting({
           {canManage && <>
             <form onSubmit={publish} className="grid gap-3 rounded-lg border border-current p-4">
               <h2 className="text-xl font-semibold">New award ballot</h2>
-              <label className="grid gap-1">Award name<input name="name" required maxLength={120} className="rounded border border-current p-2" /></label>
-              <label className="grid gap-1">Choices, one per line<textarea name="choices" required rows={4} maxLength={1212} className="rounded border border-current p-2" /></label>
+              <label className="grid gap-1">Award name<input name="name" required maxLength={120} className="af-control px-3 py-2" /></label>
+              <label className="grid gap-1">Choices, one per line<textarea name="choices" required rows={4} maxLength={1212} className="af-control px-3 py-2" /></label>
               <label className="grid gap-1">Closes at<input name="closeAt" type="datetime-local" required
-                defaultValue={localDate(new Date(Date.now() + 7 * 86_400_000))} className="rounded border border-current p-2" /></label>
+                defaultValue={localDate(new Date(Date.now() + 7 * 86_400_000))} className="af-control px-3 py-2" /></label>
               <p>{native ? 'Publishing queues a private DM with the choices for eligible managers.' : 'Publishing shares the ballot in AllFantasy league chat.'}</p>
               <button type="submit" disabled={busy}>Publish ballot</button>
             </form>
@@ -115,7 +115,7 @@ export function LeagueAwardVoting({
               <summary>Connect a Google Sheet</summary>
               <p>Add the award sync script to the tracker’s Apps Script project. Run connectAfAwardVoting and paste this league’s connection.</p>
               <button type="button" disabled={busy} onClick={() => void connect()}>Generate connection</button>
-              {connection && <textarea className="w-full rounded border border-current p-2" aria-label="Award sheet connection"
+              {connection && <textarea className="af-control w-full px-3 py-2" aria-label="Award sheet connection"
                 readOnly value={connection} onFocus={(event) => event.currentTarget.select()} />}
             </details>
           </>}
