@@ -38,6 +38,8 @@ const LEAGUE_KEYS = [
   'current_week', 'start_week', 'regular_season_length', 'playoff_start_week', 'playoff_teams', 'playoff_team_count',
   'trade_deadline_week', 'faab_budget', 'waiver_type', 'reserve_slots', 'taxi_slots', 'taxi_years', 'pick_trading',
   'sleeper_league_type',
+  // The lineup's slots as the provider lists them (QB, RB, FLEX, SUPER_FLEX, BN…): the plainest test of superflex.
+  'roster_positions',
 ] as const satisfies readonly (keyof NormalizedLeagueSettings)[]
 
 export type TradeContextPlayer = {
@@ -47,8 +49,9 @@ export type TradeContextPlayer = {
   /** The lineup slot the player held before the trade, when the provider says (e.g. "SUPER_FLEX"); null on the bench. */
   slot: string | null
   starter: boolean
-  reserve: boolean
-  taxi: boolean
+  /** Null when the source cannot say — a roster rebuilt from weekly score rows carries no reserve or taxi flag. */
+  reserve: boolean | null
+  taxi: boolean | null
 }
 
 export type TradeContextSide = {
@@ -63,7 +66,13 @@ export type TradeContextSide = {
 
 export type TradeContextSnapshot = {
   version: typeof TRADE_CONTEXT_SNAPSHOT_VERSION
-  source: 'live_sync'
+  /**
+   * `live_sync`: captured from the sync that saw the trade — rosters exact.
+   * `backfill_rebuilt`: rebuilt later from stored weekly rows (`tradeContextBackfill.ts`) — rosters as of the week
+   * before, so moves made between that week and the trade are not in them. `rosterBasis` says which week.
+   */
+  source: 'live_sync' | 'backfill_rebuilt'
+  rosterBasis?: { kind: 'weekly_rows'; week: number }
   provider: string
   capturedAt: string
   tradeAt: string | null
