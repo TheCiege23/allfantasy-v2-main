@@ -26,12 +26,17 @@ export const ROSTER_WEEK_BOARD_TTL_MS = 3 * 60_000
  * a cold open rebuilt all 64 boards in 8.5s. The board is now kept in memory AND in `SportsDataCache`
  * (`sportsDataCacheTier`), so a board built before a deploy, or by the other replica, is reused.
  *
- * ⚠ THE TRADE, STATED. Up to three minutes old a board is served as-is, as before. From three to thirty-three
- * minutes old it is served at once and rebuilt in the background, so the next view has the new one. Past that
- * the caller waits for a rebuild, as before. Who is ruled out is NOT in the board: it is read fresh on every call
- * below (`loadUnavailableBySport`), so a stale board can never show an injured starter as playing.
+ * ⚠ THE TRADE, STATED. Up to three minutes old a board is served as-is, as before. From three minutes to three
+ * hours old it is served at once and rebuilt in the background, so the next view has the new one. Past that the
+ * caller waits for a rebuild, as before. Who is ruled out is NOT in the board: it is read fresh on every call below
+ * (`loadUnavailableBySport`), so a stale board can never show an injured starter as playing — what can be up to
+ * three hours old is the projected points, which come from AF projections recomputed once a day.
+ *
+ * ⚠ THREE HOURS, NOT THIRTY MINUTES (owner's OK, 2026-11-22). Measured: the owner's /core opens are usually more
+ * than half an hour apart (1.5h between the two on 11-22), so a 30-minute window never applied and every cold open
+ * rebuilt all 64 boards while the home cards were loading, on a server 95% busy.
  */
-export const ROSTER_WEEK_BOARD_SERVE_STALE_MS = 30 * 60_000
+export const ROSTER_WEEK_BOARD_SERVE_STALE_MS = 3 * 60 * 60_000
 
 /** `SportsDataCache` key family for these boards — listed in `PURGEABLE_KEY_PREFIXES` (lib/enrichment-cache.ts). */
 export const ROSTER_WEEK_BOARD_KEY_PREFIX = 'rail-board:v1:'
@@ -61,7 +66,7 @@ type Board = Awaited<ReturnType<typeof buildBoard>>
  * kept in Postgres, a stored read took longer than the old 5 ms "cached" cutoff and was counted as a rebuild.
  *   memory  this process already held it (or shared a read another render had in flight)
  *   stored  read from Postgres, under three minutes old
- *   stale   read from Postgres, 3–33 minutes old, served while a rebuild runs behind it
+ *   stale   read from Postgres, 3 minutes to 3 hours old, served while a rebuild runs behind it
  *   built   no usable board anywhere: this view waited for a build
  */
 export type BoardSource = 'memory' | 'stored' | 'stale' | 'built'

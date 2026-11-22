@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * The rail's week boards outlive a deploy (lib/af-projections/leagueRosterWeek.ts, 2026-11-22). A board built by
- * another process — or before a deploy — is read back from Postgres instead of rebuilt; one up to 33 minutes old is
+ * another process — or before a deploy — is read back from Postgres instead of rebuilt; one up to three hours old is
  * served at once and rebuilt behind it; an older one is rebuilt first. Who is ruled out is never cached.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -54,7 +54,7 @@ describe('rail week boards kept across deploys', () => {
     expect(metrics).not.toHaveBeenCalled()
   })
 
-  it('serves a board up to 33 minutes old at once, and rebuilds it behind the view', async () => {
+  it('serves a board past three minutes old at once, and rebuilds it behind the view', async () => {
     stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
     const result = await loadLeagueRosterWeeks(request)
     expect(result.get('L1')?.get('s1')?.points).toBe(12.5)
@@ -119,7 +119,7 @@ describe('the boards timing line says where each board came from (2026-11-22)', 
     expect(line).toMatchObject({ boards: 1, stored: 1, built: 0, stale: 0, memory: 0 })
   })
 
-  it('a 3–33 minute old board is "stale"', async () => {
+  it('a board between 3 minutes and 3 hours old is "stale"', async () => {
     stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
     const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
     expect(line).toMatchObject({ stale: 1, built: 0 })
@@ -129,5 +129,19 @@ describe('the boards timing line says where each board came from (2026-11-22)', 
   it('no board anywhere is "built", and the next call in this process is "memory"', async () => {
     expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ built: 1, stored: 0 })
     expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ memory: 1, built: 0 })
+  })
+})
+
+describe('the stale window is three hours (owner\'s OK, 2026-11-22)', () => {
+  it('serves a two-hour-old board at once instead of making the view wait for 64 rebuilds', async () => {
+    stored(12.5, 2 * 60 * 60_000)
+    const result = await loadLeagueRosterWeeks(request)
+    expect(result.get('L1')?.get('s1')?.points).toBe(12.5)
+    await vi.waitFor(() => expect(tier.write).toHaveBeenCalledTimes(1))
+  })
+
+  it('still rebuilds first past three hours and three minutes', async () => {
+    stored(12.5, 3 * 60 * 60_000 + ROSTER_WEEK_BOARD_TTL_MS + 60_000)
+    expect((await loadLeagueRosterWeeks(request)).get('L1')?.get('s1')?.points).toBe(20)
   })
 })
