@@ -20,7 +20,7 @@ import { resolveLeagueMembership } from '@/lib/league-access'
 import { resolveWaiverRules } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { buildManagerRecord, type ManagerRecord, type ManagerRecordInput } from './managerRecord'
-import type { SavedTradeContext } from './tradeSituationFacts'
+import type { SavedTradeContext, TradePriceAtTheTime } from './tradeSituationFacts'
 import type { EdgeWaiverClaim } from './waiverEdge'
 import { readSleeperTradeHistory } from './tradeEdgeLoader'
 import { readWaiverEdgeInput } from './waiverEdgeLoader'
@@ -181,6 +181,8 @@ export function managerTradeSituationOn(env: NodeJS.ProcessEnv = process.env): b
 export async function readTradeSituation(
   trades: ReadonlyArray<{ id: string; sides: ReadonlyArray<{ playersIn: ReadonlyArray<{ playerId?: string }> }> }>,
   now: Date,
+  /** The AllFantasy league whose trade audit prices these trades at the time they happened. */
+  leagueId?: string,
 ): Promise<NonNullable<Extract<ManagerRecordInput['trades'], { available: true }>['data']['situation']>> {
   const keys = trades.flatMap((t) => {
     const i = t.id.lastIndexOf(':')
@@ -204,7 +206,19 @@ export async function readTradeSituation(
     const rows = await prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids.slice(i, i + 1000) } }, select: { sleeperId: true, age: true } })
     for (const r of rows) if (r.sleeperId && !ages.has(r.sleeperId)) ages.set(r.sleeperId, r.age ?? null)
   }
-  return { contexts, ages, now }
+  // What each trade's sides were worth on the league's values when it happened — the commissioner audit's rows.
+  // Best-effort: without them the record simply has no price line.
+  const prices = new Map<string, TradePriceAtTheTime>()
+  if (leagueId && keys.length) {
+    const { readTradeValueAudits } = await import('@/lib/integrity/tradeValueAudit')
+    const byTx = new Map(keys.map((k) => [`sleeper:${k.tx}`, k.id]))
+    const rows = await readTradeValueAudits(leagueId, { tradeKeys: [...byTx.keys()] }).catch(() => [])
+    for (const r of rows) {
+      const id = byTx.get(r.tradeKey)
+      if (id) prices.set(id, { sideA: String(r.sideATeamId), sideB: String(r.sideBTeamId), gapPct: r.gapPct })
+    }
+  }
+  return { contexts, ages, prices, now }
 }
 
 const couldNotRead = (what: string) => ({ available: false as const, reason: `${what} history could not be read right now.` })
@@ -238,7 +252,7 @@ async function readHistory(input: {
     // The situation around each trade (record, roster, ages), best-effort: a failed read loses those lines only.
     const trades: ManagerRecordInput['trades'] =
       tradesRead.available && managerTradeSituationOn()
-        ? { available: true, data: { ...tradesRead.data, situation: (await readTradeSituation(tradesRead.data.trades, now).catch(() => null)) ?? undefined } }
+        ? { available: true, data: { ...tradesRead.data, situation: (await readTradeSituation(tradesRead.data.trades, now, league.id).catch(() => null)) ?? undefined } }
         : tradesRead
     return {
       trades,
