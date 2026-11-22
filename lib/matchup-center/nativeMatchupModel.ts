@@ -158,7 +158,7 @@ export type NativeMatchupExtras = {
 }
 
 type PlayerLike = { playerId: string; playerName: string; position: string; team: string | null; slotType: string }
-type ScoreRow = { playerId: string; points: number; isStarter: boolean }
+type ScoreRow = { playerId: string; points: number; isStarter: boolean; isFinalized?: boolean }
 
 export type NativeStarter = { playerId: string; name: string; position: string; team: string | null; points: number | null }
 
@@ -176,9 +176,17 @@ const positionRank = (position: string) => {
 /**
  * The lineup to draw for one team's week.
  *
- * When the week has been scored, the lineup is the players the scoring counted as starters, with the
- * points it counted — not who sits in the lineup today, which a manager may have changed since. When
- * it has not, it is the team's current starters with no points (a dash, never 0.0).
+ * FINISHED week (every score row finalized): the players the scoring counted as starters, with the
+ * points it counted — not who sits in the lineup today, which a manager may have changed since.
+ *
+ * LIVE or UNSCORED week: every current starter, each with the points counted so far, or a dash
+ * (never 0.0) while his game has produced nothing. Plus any player the scoring already counted as a
+ * starter who has since left the lineup: those points are in the team's total.
+ *
+ * 🛑 THE BUG THIS CLOSES (owner report, 2026-11-22, Zombie Chimmy Test week 11): the first branch ran
+ * as soon as ANY starter had a score row, so mid-week the matchup listed only the starters whose games
+ * had started — four of eight on one side, three on the other, a TE slot shown "Empty" — while the
+ * roster page showed all eight. Every sport's hosted matchup reads this.
  */
 export function buildNativeStarters(args: {
   /** The team's players, dropped ones included, so a scored player who has since left still has a name. */
@@ -190,8 +198,10 @@ export function buildNativeStarters(args: {
 }): NativeStarter[] {
   const byId = new Map(args.players.map((p) => [p.playerId, p]))
   const rows: NativeStarter[] = []
-  if (args.scores && args.scores.some((s) => s.isStarter)) {
-    for (const s of args.scores) {
+  const counted = (args.scores ?? []).filter((s) => s.isStarter)
+  const finished = counted.length > 0 && (args.scores ?? []).every((s) => s.isFinalized === true)
+  if (finished) {
+    for (const s of counted) {
       if (!s.isStarter) continue
       const p = byId.get(s.playerId)
       rows.push({
@@ -203,10 +213,29 @@ export function buildNativeStarters(args: {
       })
     }
   } else {
+    const pointsOf = new Map(counted.map((s) => [s.playerId, s.points]))
     for (const p of args.players) {
       if (!args.currentStarterIds.has(p.playerId)) continue
       if (rows.some((r) => r.playerId === p.playerId)) continue
-      rows.push({ playerId: p.playerId, name: p.playerName, position: (p.position ?? '').toUpperCase() || 'FLEX', team: p.team ?? null, points: null })
+      rows.push({
+        playerId: p.playerId,
+        name: p.playerName,
+        position: (p.position ?? '').toUpperCase() || 'FLEX',
+        team: p.team ?? null,
+        points: pointsOf.get(p.playerId) ?? null,
+      })
+    }
+    // Counted as a starter, then moved out of the lineup: his points stay in the total, so he stays here.
+    for (const s of counted) {
+      if (rows.some((r) => r.playerId === s.playerId)) continue
+      const p = byId.get(s.playerId)
+      rows.push({
+        playerId: s.playerId,
+        name: p?.playerName ?? 'Player',
+        position: (p?.position ?? '').toUpperCase() || 'FLEX',
+        team: p?.team ?? null,
+        points: s.points,
+      })
     }
   }
   return rows
