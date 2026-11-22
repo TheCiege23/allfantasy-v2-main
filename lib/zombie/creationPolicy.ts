@@ -1,4 +1,5 @@
 /** Shared creation policy: manager count does not control how many scoring periods are played. */
+import { PRO_LEAGUE_TEAMS } from '@/lib/league/teamCountLimits'
 import { getLeagueDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import type { SportType } from '@/lib/sport-defaults/types'
 
@@ -11,7 +12,8 @@ export function getZombieCreationProfile(sport: string) {
   const scoringPeriods = getLeagueDefaults(key).default_regular_season_length
   const suggestedManagers = Math.ceil((scoringPeriods + 2) / 2) * 2
   // Specialty rosters may support more fantasy teams than the professional sport has clubs.
-  const maxManagers = key === 'NFL' ? 20 : Math.max(32, suggestedManagers)
+  // Never past a pro sport's real league (lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS): NBA and MLB stop at 30.
+  const maxManagers = Math.min(key === 'NFL' ? 20 : Math.max(32, suggestedManagers), PRO_LEAGUE_TEAMS[key] ?? Number.POSITIVE_INFINITY)
   return { scoringPeriods, defaultManagers: ZOMBIE_DEFAULT_MANAGERS, suggestedManagers, minManagers: ZOMBIE_MIN_MANAGERS, maxManagers }
 }
 

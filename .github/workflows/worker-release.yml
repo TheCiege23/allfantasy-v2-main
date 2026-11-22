@@ -58,9 +58,20 @@ on:
         required: false
         default: false
         type: boolean
+      force:
+        description: 'Advance even though worker-release moved in the last 6 hours (say why below)'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Why this cron change cannot wait for the 21:20 UTC advance (required with force)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: worker-release
@@ -75,6 +86,42 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # 🛑 THE DAILY CADENCE IS ONLY REAL IF HAND DISPATCHES ARE RARE. On 2026-11-22 this workflow
+      # ran 12 times in 24 hours, 11 of them hand-dispatched (every one by sessions using the owner's
+      # token, each reasonably wanting its own cron fix live), so the worker redeployed roughly every
+      # two hours and two of those builds overlapped and hung. A manual run inside the cooldown is
+      # now refused unless it says why. The scheduled run is never refused.
+      - name: Refuse a manual advance inside the cooldown
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+          REASON: ${{ inputs.reason }}
+          COOLDOWN_HOURS: '6'
+        run: |
+          set -euo pipefail
+          if [ "${FORCE:-false}" = "true" ]; then
+            if [ -z "${REASON// /}" ]; then
+              echo "::error::force=true needs a reason, so the next person can tell why the worker redeployed."
+              exit 1
+            fi
+            echo "Forced inside the cooldown. Reason: $REASON"
+            exit 0
+          fi
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow worker-release.yml --status success             --limit 20 --json databaseId,createdAt             --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID)][0].createdAt // empty")
+          if [ -z "$last" ]; then
+            echo "No earlier successful advance found; proceeding."
+            exit 0
+          fi
+          age_h=$(( ( $(date -u +%s) - $(date -u -d "$last" +%s) ) / 3600 ))
+          echo "Last successful advance: $last (${age_h}h ago). Cooldown: ${COOLDOWN_HOURS}h."
+          if [ "$age_h" -lt "$COOLDOWN_HOURS" ]; then
+            echo "::error::worker-release advanced ${age_h}h ago. Every advance redeploys the cron worker and"
+            echo "::error::kills in-flight cron requests. Wait for the 21:20 UTC run, or re-run with"
+            echo "::error::force=true and a reason if this cron change genuinely cannot wait."
+            exit 1
+          fi
 
       - name: Report lag and fast-forward
         env:

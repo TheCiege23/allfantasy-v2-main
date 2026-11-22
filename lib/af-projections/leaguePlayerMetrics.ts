@@ -13,7 +13,7 @@ import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { boardPlayerValue, boardUnit, loadLeagueValueBoard, type LeagueValueBoard } from '@/lib/sport-values/leagueValueBoard'
-import { categoryLeagueReason, isFantraxNbaCampusLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
+import { categoryLeagueReason, isFantraxCampusProjectionLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
 import { leagueIdColumn, leagueIdOf, loadIdentityForKeys, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import { isDynastyLeagueType, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 import { loadNcaafClassYears, loadNcaafRedraftBase, ncaafTradeScoringRules } from '@/lib/decision-os/trade/ncaafRedraftContext'
@@ -260,8 +260,8 @@ export async function loadLeaguePlayerMetrics(args: {
   if (!league || !isSupportedSport(league.sport) || !league.season) return null
   const { id: leagueId, sport, season } = league
   const now = args.now ?? new Date()
-  const projectionOnly = isFantraxNbaCampusLeague(sport, league)
-  const includePlayerPool = Boolean(args.includePlayerPool && projectionOnly)
+  const projectionOnly = isFantraxCampusProjectionLeague(sport, league)
+  const includePlayerPool = Boolean(args.includePlayerPool && sport === 'NBA' && projectionOnly)
   const boardForLeague = async () => {
     const supplied = await args.valueBoard
     if (!projectionOnly) return supplied ?? loadLeagueValueBoard(leagueId)

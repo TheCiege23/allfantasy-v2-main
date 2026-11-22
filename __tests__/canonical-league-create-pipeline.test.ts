@@ -106,8 +106,8 @@ describe('Canonical native league creation pipeline', () => {
   })
 
   it.each([
-    ['NFL', 20, 'fb_half_ppr'], ['NBA', 32, 'nba_points'], ['NHL', 32, 'nhl_points'],
-    ['MLB', 32, 'mlb_points'], ['NCAAF', 32, 'ncaaf_half_ppr'], ['NCAAB', 32, 'ncaab_points'], ['SOCCER', 40, 'soc_points'],
+    ['NFL', 20, 'fb_half_ppr'], ['NBA', 30, 'nba_points'], ['NHL', 32, 'nhl_points'],
+    ['MLB', 30, 'mlb_points'], ['NCAAF', 32, 'ncaaf_half_ppr'], ['NCAAB', 32, 'ncaab_points'], ['SOCCER', 40, 'soc_points'],
   ])('accepts the expanded Zombie catalog through the actual handler: %s', async (sport, teamCount, scoringPreset) => {
     const { postCreateLeague } = await import('@/lib/league-creation/canonical/createLeagueHandler')
     const res = await postCreateLeague(new Request('http://localhost/api/leagues', {

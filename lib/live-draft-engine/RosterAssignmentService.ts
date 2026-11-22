@@ -213,7 +213,8 @@ export async function finalizeRosterAssignments(
 }
 
 /** Drafts that add to rosters a league already has, rather than building them. */
-const FOLLOW_UP_DRAFT_LABELS = new Set(['rookie', 'supplemental', 'dispersal'])
+// `college`: a Devy / C2C league's second startup draft (lib/draft-defaults/startupCollegeDraft.ts).
+const FOLLOW_UP_DRAFT_LABELS = new Set(['rookie', 'supplemental', 'dispersal', 'college'])
 
 function isNbaCollegePick(player: AssignedPlayer): boolean {
   return /^espn:ncaab:\d+$/.test(String(player.playerId ?? '')) && (player.assetType === 'c2c_college' || player.assetType === 'devy_pick')

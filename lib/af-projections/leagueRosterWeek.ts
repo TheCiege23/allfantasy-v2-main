@@ -124,7 +124,7 @@ const BOARD_TIMING_THRESHOLD_MS = 1500
  * BEFORE AF's learned factors (`afFactors.unadjusted`, kept on the same cached board), so every total, rank and win
  * probability built from these is the plain one. The board itself stays shared; nothing is read twice.
  */
-export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[], opts: { afIntelligence?: boolean } = {}) {
+export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[], opts: { afIntelligence?: boolean; fresh?: boolean } = {}) {
   const result = new Map<string, Map<string, RosterWeekPlayer>>()
   const cohorts = new Map<string, { sport: string; season: number; week: number; players: Map<string, RosterWeekPlayer[]> }>()
   /*
@@ -144,7 +144,9 @@ export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[], opts:
       const rosterIds = [...new Set(ids.filter(id => id && id !== '0' && !id.startsWith('name:')))]
       if (!rosterIds.length) return
       const boardStartedAt = Date.now()
-      const board = await leagueWeekBoard(leagueId, week, rosterIds).catch(() => null)
+      // Rechecks compare a freshly computed board to the other readers after verified stats may have changed.
+      const read = opts.fresh ? buildBoard : leagueWeekBoard
+      const board = await read(leagueId, week, rosterIds).catch(() => null)
       const ms = Date.now() - boardStartedAt
       boardMs.push(ms)
       timedBoards.push({ leagueId, ms })
