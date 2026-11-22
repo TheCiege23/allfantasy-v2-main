@@ -57,6 +57,7 @@ async function main() {
     console.log(`trade-ledger-report: ${host} (read-only), ${sportArg}, grades from the last 180 days, judged after ${SPORT_LEDGER_MIN_DAYS} days\n`)
     console.log(`Receipts read: ${out.read} (limit ${limit}); gradable ${out.gradable}; skipped ${JSON.stringify(out.skips)}`)
     console.log(`Players in gradable receipts: ${out.idsTotal}, found in the game-stats feed ${out.idsPlaced} (${out.idsTotal ? Math.round((out.idsPlaced / out.idsTotal) * 100) : 0}%) — a low share means little is measured here`)
+    console.log(`  of those, ${out.idsViaIdentity} were matched through the player identity map; ${out.idsAmbiguous} ids named more than one player there and were left out`)
     console.log(`Scored ${out.result.scored} · too recent ${out.result.pending} · no player found in the feed ${out.result.unscored}`)
     for (const letter of ['A', 'B', 'C', 'D', 'F']) {
       const s = out.result.byLetter[letter]
