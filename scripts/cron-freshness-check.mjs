@@ -123,6 +123,7 @@ export const PROBES = {
   // ── slow tier (GitHub Actions) ──
   '/api/cron/import-injuries': { table: 'SportsInjury', column: 'fetchedAt' },
   '/api/cron/import-players': { table: 'sports_players', column: 'last_updated' },
+  '/api/cron/import-players?sleeperRows=1&sport=NFL&currentRoster=1': { heartbeat: 'cron-nfl-draft-roster-refresh' },
   '/api/cron/import-projections': { table: 'fantasy_projections', column: 'fetched_at' },
   /*
    * PROMOTED FROM NO_PROBE 2026-08-27, once the route gained a heartbeat.

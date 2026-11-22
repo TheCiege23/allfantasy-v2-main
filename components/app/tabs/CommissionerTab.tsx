@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Shield, Users, FileEdit, Clock, ListChecks, Settings2, Loader2, Award, TrendingUp, Heart, Pause, Play, RotateCcw, Undo2, Bot, Megaphone, Crown } from 'lucide-react'
 import type { LeagueTabProps } from '@/components/app/tabs/types'
-import type { NflDraftPoolCapacity } from '@/lib/draft-room/nflDraftPoolCapacity'
 import TabDataState from '@/components/app/tabs/TabDataState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,7 +62,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
   const [lineupLockRuleDraft, setLineupLockRuleDraft] = useState('')
   const [forceCorrectRosterId, setForceCorrectRosterId] = useState('')
   const [draftState, setDraftState] = useState<DraftSessionState | null>(null)
-  const [draftPoolCapacity, setDraftPoolCapacity] = useState<NflDraftPoolCapacity | null>(null)
   const [runningWaiver, setRunningWaiver] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const [transferUserId, setTransferUserId] = useState('')
@@ -108,7 +106,7 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
           fetch(`${base}/invite`),
           fetch(`${base}/managers`),
           fetch(`${base}/lineup`),
-          fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/session?commissionerReadiness=1`, { cache: 'no-store' }),
+          fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/session`, { cache: 'no-store' }),
         ])
         if (!active) return
         if (pendingRes.status === 403 || settingsRes.status === 403) setError('Commissioner access denied')
@@ -120,7 +118,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
         if (draftRes.ok) {
           const data = await draftRes.json()
           setDraftState({ session: data?.session ?? null, leagueId })
-          setDraftPoolCapacity(data?.draftPoolCapacity ?? null)
         }
         void fetch(startNewSeasonUrl, { cache: 'no-store' })
           .then(async (res) => {
@@ -556,15 +553,6 @@ export default function CommissionerTab({ leagueId }: LeagueTabProps) {
           <p className="mt-1 text-xs text-white/60">
             {session ? `Status: ${draftStatus ?? 'unknown'}. Pause, resume, reset timer, undo last pick, override pick, or reset draft.` : 'No draft session. Start draft from the Draft tab.'}
           </p>
-          {session?.status === 'pre_draft' && draftPoolCapacity && (
-            <div className="mt-2 space-y-1 text-sm text-white/80">
-              <p>{draftPoolCapacity.eligiblePlayers} eligible players for {draftPoolCapacity.requiredPlayers} picks in the largest pool</p>
-              <p>{draftPoolCapacity.rosterFeedRefreshedAt
-                ? 'NFL roster feed last updated ' + new Date(draftPoolCapacity.rosterFeedRefreshedAt).toLocaleString()
-                : 'NFL roster feed update unavailable'}</p>
-              {draftPoolCapacity.error && <p className="text-amber-200">{draftPoolCapacity.error}</p>}
-            </div>
-          )}
           {session && (
             <div className="mt-3 flex flex-wrap gap-2">
               {canPause && (

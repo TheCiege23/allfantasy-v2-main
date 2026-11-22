@@ -131,6 +131,21 @@ export async function GET(
 
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+  if (req.nextUrl.searchParams.get('commissionerReadiness') === '1') {
+    try {
+      await assertCommissionerAccess(leagueId, userId, 'league')
+    } catch {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    try {
+      const { getNflDraftPoolCapacity } = await import('@/lib/draft-room/nflDraftPoolCapacity')
+      const draftPoolCapacity = await getNflDraftPoolCapacity(leagueId, undefined, true)
+      if (draftPoolCapacity?.eligiblePlayers === 0) triggerDraftPoolPrewarmBackground(leagueId)
+      return NextResponse.json({ draftPoolCapacity })
+    } catch {
+      return NextResponse.json({ error: 'Could not check draft pool readiness' }, { status: 503 })
+    }
+  }
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -279,12 +294,6 @@ export async function GET(
         source: poolReadiness.source,
         syncedAt: poolReadiness.syncedAt,
       },
-    }
-
-    if (req.nextUrl.searchParams.get('commissionerReadiness') === '1' && shared.snapshot.status === 'pre_draft') {
-      const { getNflDraftPoolCapacity } = await import('@/lib/draft-room/nflDraftPoolCapacity')
-      const capacity = await getNflDraftPoolCapacity(leagueId, undefined, true).catch(() => null)
-      if (capacity) Object.assign(responseBody, { draftPoolCapacity: capacity })
     }
 
     if (!canonicalParityCheckFailed) {

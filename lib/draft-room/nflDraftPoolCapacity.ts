@@ -38,9 +38,9 @@ export async function getNflDraftPoolCapacity(
   const session = known?.session ?? await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { rounds: true, teamCount: true, draftModeLabel: true, slotOrder: true },
+    select: { rounds: true, teamCount: true, draftModeLabel: true, slotOrder: true, status: true },
   })
-  if (!session || session.draftModeLabel === 'rookie') return null
+  if (!session || session.draftModeLabel === 'rookie' || ('status' in session && session.status !== 'pre_draft')) return null
 
   const [readiness, pools, freshness] = await Promise.all([
     getWarmDraftPoolSnapshotFast(leagueId),

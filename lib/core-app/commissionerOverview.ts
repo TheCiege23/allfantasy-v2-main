@@ -61,6 +61,7 @@ export type OverviewTone = 'good' | 'warn' | 'bad' | 'muted'
 
 export type OverviewLeagueCard = {
   scoringHandoff?: boolean
+  draftPoolReadiness?: boolean
   leagueId: string
   variant: string | null
   name: string
@@ -119,6 +120,7 @@ type LeagueRow = {
   name: string | null
   userId: string
   platform: string | null
+  sport?: string | null
   leagueSize: number | null
   leagueType: string | null
   leagueVariant: string | null
@@ -193,6 +195,7 @@ export async function getCommissionerOverview(input: {
               name: true,
               userId: true,
               platform: true,
+              sport: true,
               settings: true,
               leagueSize: true,
               leagueType: true,
@@ -385,6 +388,8 @@ export async function getCommissionerOverview(input: {
       name: b.name,
       platform: String(b.row.platform ?? '').toLowerCase(),
       scoringHandoff: Boolean(readCutover(b.row.settings,b.row.season ?? -1)),
+      ...(b.native && b.row.sport === 'NFL' && !inSeason &&
+        ['redraft', 'dynasty'].includes(b.row.leagueType ?? '') ? { draftPoolReadiness: true } : {}),
       sub,
       activity:
         measured ??

@@ -10,6 +10,7 @@ import { FocusComposerButton, HubBroadcast } from '@/components/core-app/hubs/Hu
 import { OverviewQueue } from '@/components/core-app/hubs/OverviewQueue'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
+import { NflDraftPoolReadiness } from '@/components/league-settings/NflDraftPoolReadiness'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` (five-doors restyle, 2026-09-17).
@@ -114,6 +115,7 @@ function LeagueCard({ l }: { l: OverviewLeagueCard }) {
         {l.variant === 'survivor_guillotine' && <Link href={`/survivor-guillotine/${encodeURIComponent(l.leagueId)}`}>Survivor control</Link>}
         <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>Standings</Link>
       </nav>
+      {l.draftPoolReadiness && <NflDraftPoolReadiness key={l.leagueId} leagueId={l.leagueId} />}
     </article>
   )
 }

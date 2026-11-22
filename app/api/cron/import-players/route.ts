@@ -167,12 +167,24 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         return NextResponse.json({ ok: false, error: 'sleeperRows requires a single sport (NFL or NBA) and cannot combine with intel.' }, { status: 400 })
       }
       const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
-      const result = await refreshSleeperPlayerRows({
+      const refresh = () => refreshSleeperPlayerRows({
         sport,
         currentRosterOnly,
         limit: currentRosterOnly ? 3500 : sport === 'NBA' ? 600 : 1500,
         isExhausted: () => budget.exhausted(),
       })
+      const result = currentRosterOnly
+        ? await withSyncJobRun(
+            { jobName: 'cron-nfl-draft-roster-refresh', sport, provider: 'sleeper', trigger: 'cron' },
+            refresh,
+            ({ scanned, updated, created, feedUnavailable }) => ({
+              rowsRead: scanned,
+              rowsWritten: updated + created,
+              status: feedUnavailable ? 'failed' : budget.exhausted() ? 'partial' : 'success',
+              ...(feedUnavailable ? { errors: ['Sleeper current roster feed unavailable'] } : {}),
+            }),
+          )
+        : await refresh()
       const nbaIdentities = sport === 'NBA' && !result.feedUnavailable && !budget.exhausted()
         ? await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
           .then(({ reconcileSleeperNbaIdentities }) => reconcileSleeperNbaIdentities({ isExhausted: () => budget.exhausted() }))
