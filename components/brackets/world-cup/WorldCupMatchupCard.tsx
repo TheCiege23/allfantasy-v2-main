@@ -170,7 +170,6 @@ export default function WorldCupMatchupCard({
   const isSimulated = match.apiStatusShort === "SIM"
   const isTestFixture = match.apiStatusShort === "TEST"
   const pickVisual = matchupPickVisualState(match, pick)
-  const openMatchupPicker = () => onOpenMatchupPicker?.(match.id)
 
   // Pick live state color helpers
   const pickStateBorderClass =

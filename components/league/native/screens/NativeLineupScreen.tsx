@@ -22,6 +22,7 @@ import {
 import type { LeagueTeam } from '@prisma/client'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { buildDisplayPlayerMap, type DisplayPlayerMap, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { buildPlayerRow, buildSwapCandidates, initOrSyncLineupLists, type RosterLineupLists } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
@@ -34,11 +35,12 @@ import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, projectedTotal } from '@/lib/league/native/nativeScreenModels'
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
-import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
 import { WelcomeBackCard } from '@/components/league/WelcomeBackCard'
+import { SLEEPER_PROJECTION_SOURCE, SLEEPER_PROJECTION_TITLE } from '@/lib/redraft/nflRosterOutlookModel'
 import { AF_FORM_PROJECTION_EXPLAINER, AF_FORM_PROJECTION_SOURCE, AF_POSITION_RANK_TITLE } from '@/lib/projections/dailySportFormLabels'
 import { buildOfflineLineupSnapshot, readOfflineLineupSnapshot, saveOfflineLineupSnapshot, snapshotAgeLabel, type OfflineLineupSnapshot } from '@/lib/pwa/offlineLineupSnapshots'
 import {
@@ -80,6 +82,7 @@ type DbRoster = {
   source?: string
   roster: unknown
   unifiedRoster?: UnifiedPlayerWireDto[]
+  nativePlayerFallback?: PlayerMap
   rosterId?: string
   /** Echoed back on save as `expectedLineupVersion` (lib/roster/lineupVersion.ts). */
   lineupVersion?: string
@@ -139,7 +142,7 @@ function DragHandle({ id, name }: { id: string; name: string }) {
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
-const TAP_HELP = 'Tap a player, then tap where he goes or who he swaps with. You can also drag by the handle.'
+const TAP_HELP = 'Tap a position badge, then tap where that player goes or who he swaps with. Tap a name for the player card. You can also drag by the handle.'
 
 function sameTap(a: LineupTap, b: LineupTap): boolean {
   if (a.kind === 'slot' && b.kind === 'slot') return a.slotIndex === b.slotIndex
@@ -152,7 +155,19 @@ function tapLabel(o: { name?: string; empty: boolean; slot: string; picked: bool
   const who = o.empty ? `Empty ${o.slot} slot` : `${o.name ?? 'Player'}, ${o.slot}`
   if (o.picked) return `${who}. Selected. Tap again to cancel.`
   if (o.waiting) return o.target === 'ok' ? `${who}. Tap to move here.` : `${who}. Not a legal move.`
-  return `${who}. Tap to select.`
+  return o.empty ? `${who}. Tap to select.` : `${who}. Open player card.`
+}
+
+/**
+ * The slot badge is the swap control, as in Sleeper: tap it, then tap where the player goes. The
+ * name beside it opens the player card, so one row no longer has to mean both things.
+ */
+function SlotTapButton({ picked, label, disabled, onTap, children }: { picked: boolean; label: string; disabled: boolean; onTap: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="nls-slotbtn" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={onTap} data-testid="lineup-slot-tap">
+      {children}
+    </button>
+  )
 }
 
 /** The player cell: a button while the lineup is editable, so a row is one tap target on a phone. */
@@ -200,6 +215,13 @@ function gameLine(p: DisplayPlayerRecord | undefined): string {
   return bits.join(' · ')
 }
 
+/** The game line, with the player's own club hidden on a phone when its crest is already on his picture. */
+function gameLineNode(p: DisplayPlayerRecord | undefined, crestShown: boolean): ReactNode {
+  const line = gameLine(p)
+  if (!line || !crestShown || !p?.team || !p.teamLogoUrl || !line.startsWith(`${p.team} · `)) return line
+  return <><span data-long>{p.team} · </span>{line.slice(p.team.length + 3)}</>
+}
+
 /** `2026-10-20` → `Tue 20`, read as the calendar day it names (not shifted by the viewer's zone). */
 function dayLabel(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -209,6 +231,13 @@ function dayLabel(day: string): string {
 function RankTag({ p }: { p: DisplayPlayerRecord | undefined }) {
   if (!p?.positionRankLabel) return null
   return <span className="nls-player-pos" title={AF_POSITION_RANK_TITLE} data-testid={`lineup-position-rank-${p.id}`}> {p.positionRankLabel}</span>
+}
+
+/** "Bye 7": the club's bye week, left off in the bye week itself (the game line already says so). */
+function ByeTag({ p, onBye }: { p: DisplayPlayerRecord | undefined; onBye: boolean }) {
+  // In the bye week itself the row already carries the "Bye" badge and the game line says "Bye week".
+  if (!p || p.byeWeek == null || onBye || String(p.opponent ?? '').toUpperCase() === 'BYE') return null
+  return <small className="nls-bye" data-testid={`lineup-bye-week-${p.id}`}>Bye {p.byeWeek}</small>
 }
 
 function untilLabel(ms: number): string {
@@ -228,6 +257,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
+  const openCard = useNativePlayerCard(league.sport)
   /** Tap to swap: the first tap, waiting for the second. */
   const [picked, setPicked] = useState<LineupTap | null>(null)
   const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
@@ -257,7 +287,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       const base = initOrSyncLineupLists(json.roster, slots)
       // A lineup saved with slot positions comes back slot-for-slot, holes included, and the re-seat
       // leaves it alone. One saved without them (before positions) is compacted; re-seat it.
-      const byId = buildDisplayPlayerMap(null, json.unifiedRoster ?? [])
+      const byId = buildDisplayPlayerMap(json.nativePlayerFallback, json.unifiedRoster ?? [])
       setLists({ ...base, starters: seatStartersInSlots(base.starters, slots, (pid) => byId[pid]?.position) })
     } else setLists(null)
   }, [])
@@ -355,7 +385,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     }
   }, [league.id])
 
-  const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(null, data?.unifiedRoster ?? []), [data])
+  const players: DisplayPlayerMap = useMemo(() => buildDisplayPlayerMap(data?.nativePlayerFallback, data?.unifiedRoster ?? []), [data])
   // Redraft (lib/league-media/redraftIdentity.ts): sport position chips and the bye / off-day badge.
   const rd = useRedraftScreen(league)
   // Daily leagues: players whose team has no game on the day shown — only when the day's schedule was read.
@@ -621,7 +651,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   if (!userTeam) {
     return (
       <div className="nls" data-testid="native-lineup-screen">
-        <ScreenHead eyebrow={`${league.name} · My team`} title="My team" />
+        <ScreenHead title="My team" />
         <Card><p>You have not claimed a team in this league yet. Ask your commissioner for an invite.</p></Card>
       </div>
     )
@@ -630,6 +660,8 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const record = formatRecord({ wins: userTeam.wins, losses: userTeam.losses, ties: userTeam.ties })
   const place = ordinal(userTeam.currentRank)
   const startersProj = lists ? projectedTotal(lists.starters, players) : null
+  // Headshots and crests are drawn when the roster carries any; a sport with none keeps its plain rows.
+  const showMedia = Object.values(players).some((p) => p.headshotUrl || p.teamLogoUrl)
   const afFormProjected = Object.values(players).some((p) => p.projectionsSource === AF_FORM_PROJECTION_SOURCE)
   const faab = data?.faabRemaining ?? null
   const runLabel = nextRunAt ? new Date(nextRunAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : null
@@ -719,25 +751,55 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     const cells = (
       <>
         {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
-        <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+        {editable ? (
+          <SlotTapButton
+            picked={isPicked}
+            label={isPicked ? `Cancel moving ${p?.name ?? `the empty ${pill} slot`}.` : `Move ${p?.name ?? `the empty ${pill} slot`}. Tap, then tap where he goes.`}
+            disabled={saving}
+            onTap={() => onTap(tap)}
+          >
+            <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+          </SlotTapButton>
+        ) : (
+          <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+        )}
         <PlayerCell
-          tappable={editable}
+          tappable={editable || Boolean(p)}
           picked={isPicked}
           label={tapLabel({ name: p?.name, empty: !id, slot: pill, picked: isPicked, target: tapTarget, waiting: Boolean(picked) })}
           disabled={saving}
-          onTap={() => onTap(tap)}
+          // While a badge is selected, a tap anywhere on a row finishes the move. Otherwise the
+          // name opens the player card (an empty slot has no card, so it is selected instead).
+          onTap={() => (editable && (picked || !p) ? onTap(tap) : openCard({ id: p?.id ?? id, name: p?.name, position: p?.position, team: p?.team, imageUrl: p?.headshotUrl ?? p?.imageUrl }))}
         >
-          <strong>
-            {p?.name ?? (id ? 'Unknown player' : 'Empty')}
-            {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
-            <RankTag p={p} />
-            <InjuryFlag status={p?.injuryStatus} />
-            {dayBadge(id)}
-          </strong>
-          {/* On the second line, so a long name truncating on a phone never hides them. */}
-          <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLine(p) || (id ? '—' : 'Open slot')}</small>
+          <span className="nls-pl" data-media={showMedia || undefined}>
+            {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} empty={!p} /> : null}
+            <span className="nls-pl-text">
+              <strong>
+                {p?.name ?? (id ? 'Unknown player' : 'Empty')}
+                {kind !== 'starter' && p?.position && !rdPill ? <span className="nls-player-pos"> {p.position}</span> : null}
+                <RankTag p={p} />
+                <InjuryFlag status={p?.injuryStatus} />
+                {dayBadge(id)}
+              </strong>
+              {/* On the second line, so a long name truncating on a phone never hides them. */}
+              <small>{kind === 'taxi' && dynasty && id ? renderTaxiBadges(id) : null}{isPicked ? 'Selected · tap where he goes' : gameLineNode(p, showMedia) || (id ? '—' : 'Open slot')}</small>
+              {isPicked ? null : (
+                <span className="nls-pl-meta">
+                  <OpponentRankChip id={p?.id} opponent={p?.opponent} rank={p?.opponentRank} />
+                  <WeatherChip id={p?.id} weather={p?.gameWeather} />
+                  <ByeTag p={p} onBye={isOnBye(p, data?.leagueWeek)} />
+                </span>
+              )}
+            </span>
+          </span>
         </PlayerCell>
-        <span className="nls-proj">{fmt1(p?.projectedPoints ?? null)}</span>
+        <span className="nls-proj" data-has={p?.projectedPoints != null || undefined}>
+          {fmt1(p?.projectedPoints ?? null)}
+          {p?.projectedPoints != null && p.projectionsSource === SLEEPER_PROJECTION_SOURCE ? (
+            <small data-testid={`lineup-proj-source-${p.id}`} title={SLEEPER_PROJECTION_TITLE}>Sleeper</small>
+          ) : showMedia && p?.projectedPoints != null ? <small>proj</small> : null}
+        </span>
         <span className="nls-lrow-action">
           {editable ? (
             isLocked ? (
@@ -873,15 +935,26 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-lineup-screen" data-rd-screen={rd ? 'lineup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · My team`} title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
-        <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>
+      <ScreenHead eyebrow="My team" title={userTeam.teamName} sub={`${record}${place ? ` · ${place} place` : ''} · PF ${fmt1(userTeam.pointsFor)}`}>
+        {/* Best ball has no trades and no lineup to set: neither button is offered (see the note below). */}
+        {league.bestBallMode ? null : <button type="button" className="nls-btn" onClick={() => onSelectTab('trades')}>Propose trade</button>}
         <button type="button" className="nls-btn" onClick={() => onSelectTab('waivers')}>Add / drop</button>
-        <button type="button" className="nls-btn" data-variant="primary" disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
+        <button type="button" className="nls-btn" data-variant="primary" hidden={Boolean(league.bestBallMode)} disabled={!optimal || saving} title={optimal ? 'Start the highest projected legal lineup' : 'Your lineup is already the best projected lineup'} onClick={() => optimal && void save(optimal)}>
           Optimize lineup
         </button>
       </ScreenHead>
 
       <Segmented label="Team view" value={tab} onChange={setTab} options={[{ id: 'lineup', label: 'Lineup' }, { id: 'roster', label: 'Full roster' }]} />
+
+      {/*
+        A best ball manager landed on a lineup to arrange and an Optimize button, with nothing saying
+        that neither changes a score: the week's best legal lineup is counted automatically.
+      */}
+      {league.bestBallMode ? (
+        <p className="nls-empty" role="note" data-testid="lineup-best-ball-note">
+          Best ball: you don&apos;t set a lineup. Each week your highest-scoring legal lineup is counted automatically, whoever is in these slots. See the Best Ball tab for the players that counted.
+        </p>
+      ) : null}
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {loading && !data ? <p className="nls-empty" role="status">Loading your roster…</p> : null}

@@ -42,7 +42,7 @@ const SOURCE_MODULE = 'lib/devy/devyValueBoard'
 /** Devy prices exist for college football only. NCAAB is paired for C2C but nothing prices it. */
 const DEVY_PRICED_SPORTS: ReadonlySet<string> = new Set(['NCAAF'])
 
-export interface DevyAdapterArgs {
+interface DevyAdapterArgs {
   sport: string
   currentSeason: number
   limit?: number
@@ -61,7 +61,7 @@ export interface DevyAdapterArgs {
  * it." With ADP coverage at ~337 of 1,720, most players land here — and a null confidence is the
  * honest answer for them, not a low one. `OsFactEnvelope` draws exactly this distinction.
  */
-export function confidenceFromCorroboration(
+function confidenceFromCorroboration(
   tier: 'corroborated' | 'mixed' | 'contested' | null | undefined,
 ): number | null {
   if (tier == null) return null

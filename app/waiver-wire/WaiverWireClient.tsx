@@ -269,7 +269,7 @@ export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverW
           {[
             { id: "available", label: "Available Players" },
             { id: "myClaims", label: "My Claims" },
-            { id: "recommendations", label: "AI Recommendations" },
+            { id: "recommendations", label: "Chimmy Recommendations" },
             { id: "watchlist", label: "Watchlist" },
           ].map((tab) => (
             <button
@@ -439,7 +439,7 @@ export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverW
             {/* AI Recommendations */}
             {activeTab === "recommendations" && (
               <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                <h3 className="mb-3 text-sm font-medium text-cyan-400">AI-Powered Recommendations</h3>
+                <h3 className="mb-3 text-sm font-medium text-cyan-400">Chimmy-powered Recommendations</h3>
                 <p className="mb-4 text-sm text-white/40">
                   Based on your roster needs, scoring settings, and player availability
                 </p>

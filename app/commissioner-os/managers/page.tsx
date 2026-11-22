@@ -15,7 +15,7 @@ export default async function ManagerIntelligencePage() {
   return (
     <CommissionerPageContainer>
       <CommissionerFreeUntilNote access={depth} />
-      <ManagerIntelligenceView managers={response.data ?? []} dataMode={adapter.mode} />
+      <ManagerIntelligenceView managers={response.data ?? []} dataMode={adapter.mode} errorMessage={response.error?.message} />
     </CommissionerPageContainer>
   )
 }

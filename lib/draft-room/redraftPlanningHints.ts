@@ -1,32 +1,4 @@
-import { getUpcomingPickOwners } from '@/lib/live-draft-engine/DraftOrderService'
-import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-
-/**
- * True when the viewer’s next two picks in the queue are consecutive (snake turn).
- */
-export function detectSnakeBackToBackSoon(
-  session: DraftSessionSnapshot,
-  viewerRosterId: string | null,
-): boolean {
-  if (!viewerRosterId || session.draftType !== 'snake' || !session.currentPick) return false
-  if (session.status !== 'in_progress') return false
-  const totalPicks = session.rounds * session.teamCount
-  const start = session.currentPick.overall + 1
-  if (start > totalPicks) return false
-  const upcoming = getUpcomingPickOwners(
-    start,
-    Math.min(session.teamCount + 3, totalPicks - start + 1),
-    session.teamCount,
-    session.draftType,
-    session.thirdRoundReversal,
-    session.slotOrder,
-    totalPicks,
-  )
-  const idx = upcoming.findIndex((u) => u.rosterId === viewerRosterId)
-  if (idx < 0 || idx >= upcoming.length - 1) return false
-  return upcoming[idx + 1]?.rosterId === viewerRosterId
-}
 
 export type RedraftStarterHint = {
   position: string

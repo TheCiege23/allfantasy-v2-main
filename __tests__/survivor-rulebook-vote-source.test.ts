@@ -25,6 +25,8 @@ vi.mock('@/lib/survivor/survivorIdolConfigService', () => ({
   getSurvivorIdolSetupView: vi.fn(async () => ({ config: { mode: 'random', count: 7, hideFromCommish: true, pickedTypeIds: [], pointSurgePct: 10, tributePct: 5 }, saved: true })),
   saveSurvivorIdolConfig: vi.fn(async () => ({ ok: true, config: {} })),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, POST } from '@/server/api-route-modules/league-survivor/settings-screen/route'
 import { nextTorchCeremonyDeadline, tribalVotesDueFromSettings } from '@/lib/survivor/survivorCeremonySchedule'

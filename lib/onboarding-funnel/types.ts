@@ -25,8 +25,3 @@ export interface OnboardingFunnelState {
   isComplete: boolean
 }
 
-export interface OnboardingStepProgressPayload {
-  step: OnboardingStepId
-  /** If true, mark funnel as fully completed (skip or finish). */
-  completeFunnel?: boolean
-}

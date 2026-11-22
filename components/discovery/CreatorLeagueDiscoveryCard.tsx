@@ -7,7 +7,7 @@ import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface CreatorLeagueDiscoveryCardProps {
+interface CreatorLeagueDiscoveryCardProps {
   league: DiscoveryCard
 }
 
@@ -40,7 +40,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
   return (
     <article
       data-testid={`creator-league-card-${league.id}`}
-      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[var(--accent)]/30 hover:shadow-lg"
+      className="group rounded-2xl border overflow-hidden flex flex-col h-full transition-all duration-200 hover:border-[color:color-mix(in_srgb,var(--accent)_30%,transparent)] hover:shadow-lg"
       style={{
         borderColor: "var(--border)",
         background: "var(--panel)",
@@ -133,7 +133,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
-              AI-enabled
+              Chimmy-enabled
             </span>
           )}
         </div>

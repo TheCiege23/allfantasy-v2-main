@@ -32,7 +32,7 @@ export const MLB_REGULAR_SEASON_GAMES = 162
 export const MLB_CLUBS = 30
 
 /** Innings an appearance at or above which a pitcher is a starter. */
-export const STARTER_INNINGS_PER_APPEARANCE = 3
+const STARTER_INNINGS_PER_APPEARANCE = 3
 
 /*
  * Who bats and who pitches, per appearance — never "any at-bat at all". A starter who batted twice in
@@ -54,21 +54,27 @@ export const MIN_AT_BATS = 100
 export const MIN_INNINGS = 30
 
 /** Engine stat keys that only a pitcher records (the `p_` keys, pitcher strikeouts `so`, …). */
-export const MLB_PITCHING_STAT_KEYS: ReadonlySet<string> = new Set([
+const MLB_PITCHING_STAT_KEYS: ReadonlySet<string> = new Set([
   'ip', 'outs', 'so', 'w', 'l', 'sv', 'hld', 'bs', 'er', 'qs', 'wp', 'bk', 'p_r', 'p_h', 'p_hr', 'p_bb', 'p_hbp',
 ])
 
-export type MlbLine = {
+type MlbLine = {
   id: string
   position: string
   /** Appearances behind the projection (its own confidence reasons). */
   sampleGames: number | null
   sourceSeason?: number | null
+  /**
+   * Set on a projection that BLENDS this season with last (`af-projections/seasonBlend.ts`): its games are
+   * both seasons' together, so they are counted against each season's own team games — never pooled with
+   * a single-season line's.
+   */
+  seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
   /** Per-APPEARANCE stat line in the engine's keys. */
   stats: Record<string, number>
 }
 
-export type MlbTeamGameLine<T extends MlbLine> = T & {
+type MlbTeamGameLine<T extends MlbLine> = T & {
   /** Per-TEAM-game stat line. */
   stats: Record<string, number>
   /** SP or RP for a pure pitcher, OF for any outfielder, DH for a two-way player; otherwise as filed. */
@@ -78,7 +84,7 @@ export type MlbTeamGameLine<T extends MlbLine> = T & {
   /** Share of team games this line counts for (1 for anyone who bats). */
   share: number
   /** At-bats or innings behind the projection, against `MIN_AT_BATS` / `MIN_INNINGS`. Absent when unknown. */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: { ok: boolean; has: string; needs: string; unit: 'at_bats' | 'innings'; count: number }
 }
 
 function sampleBarFor(l: MlbLine, hitter: boolean): MlbTeamGameLine<MlbLine>['sampleBar'] {
@@ -89,6 +95,8 @@ function sampleBarFor(l: MlbLine, hitter: boolean): MlbTeamGameLine<MlbLine>['sa
     ok: atBats >= MIN_AT_BATS || innings >= MIN_INNINGS,
     has: hitter ? `${atBats} at-bat${atBats === 1 ? '' : 's'}` : `${innings} inning${innings === 1 ? '' : 's'}`,
     needs: `${MIN_AT_BATS} at-bats or ${MIN_INNINGS} innings`,
+    unit: hitter ? 'at_bats' : 'innings',
+    count: hitter ? atBats : innings,
   }
 }
 
@@ -101,10 +109,22 @@ export function toTeamGameLines<T extends MlbLine>(lines: readonly T[]): Array<M
   // Team games in a season, read off the board: the most games any hitter played that season. Complete
   // seasons read ~162; a season in progress reads how far it has got, which a constant could not.
   const teamGames = new Map<number | null, number>()
+  const seen = (key: number | null, games: number) => teamGames.set(key, Math.max(teamGames.get(key) ?? 0, games))
   for (const l of lines) {
-    if (!bats(l) || l.sampleGames == null) continue
-    const key = l.sourceSeason ?? null
-    teamGames.set(key, Math.max(teamGames.get(key) ?? 0, l.sampleGames))
+    if (!bats(l)) continue
+    /*
+     * 🛑 A BLENDED LINE'S GAMES ARE TWO SEASONS'. Pooled into its filed season, a veteran's 162 + 10 would
+     * set that season's team games at 172, and every rookie pitcher filed under it — 2 starts in 10 team
+     * games — would get a share of 2/172 instead of 2/10. Each season counts its own games.
+     */
+    if (l.seasonBlend) {
+      const season = l.sourceSeason ?? null
+      seen(season, l.seasonBlend.currentGames)
+      if (season != null) seen(season - 1, l.seasonBlend.previousGames)
+      continue
+    }
+    if (l.sampleGames == null) continue
+    seen(l.sourceSeason ?? null, l.sampleGames)
   }
 
   const out: Array<MlbTeamGameLine<T>> = []
@@ -124,7 +144,12 @@ export function toTeamGameLines<T extends MlbLine>(lines: readonly T[]): Array<M
     }
     const season = teamGames.get(l.sourceSeason ?? null) ?? MLB_REGULAR_SEASON_GAMES
     if (l.sampleGames == null || l.sampleGames <= 0 || season <= 0) continue
-    const share = Math.min(1, l.sampleGames / season)
+    // A blended pitcher: his share in each season, weighted as his line is (this season's weight w).
+    const b = l.seasonBlend
+    const prevSeason = teamGames.get(l.sourceSeason != null ? l.sourceSeason - 1 : null) ?? MLB_REGULAR_SEASON_GAMES
+    const share = b
+      ? Math.min(1, b.currentWeight * Math.min(1, b.currentGames / season) + (1 - b.currentWeight) * Math.min(1, b.previousGames / prevSeason))
+      : Math.min(1, l.sampleGames / season)
     const stats: Record<string, number> = {}
     for (const [k, v] of Object.entries(l.stats)) stats[k] = v * share
     const role = (l.stats.ip ?? 0) >= STARTER_INNINGS_PER_APPEARANCE ? 'SP' : 'RP'

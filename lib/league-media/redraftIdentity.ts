@@ -38,7 +38,7 @@ export const REDRAFT_SPORT_THEMES = ['nfl', 'nba', 'nhl', 'mlb', 'ncaaf', 'ncaab
 export type RedraftSportTheme = (typeof REDRAFT_SPORT_THEMES)[number]
 
 /** Display name for the header's sport chip. */
-export const REDRAFT_SPORT_LABEL: Record<RedraftSportTheme, string> = {
+const REDRAFT_SPORT_LABEL: Record<RedraftSportTheme, string> = {
   nfl: 'NFL',
   nba: 'NBA',
   nhl: 'NHL',

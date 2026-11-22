@@ -9,9 +9,9 @@ import { deepseekChat } from '@/lib/deepseek-client';
 import { xaiChatJson, parseTextFromXaiChatCompletion } from '@/lib/xai-client';
 import { openaiChatText } from '@/lib/openai-client';
 import { isDeepSeekAvailable, isOpenAIAvailable, isXaiAvailable } from '@/lib/provider-config';
-import type { PowerRankingsOutput, PowerRankingTeam } from './types';
+import type { PowerRankingsOutput } from './types';
 
-export interface PowerRankingsCommentary {
+interface PowerRankingsCommentary {
   formulaExplanation: string | null;
   narrativeExplanation: string | null;
   rankingSummary: string | null;
@@ -39,7 +39,7 @@ ${top.join('\n')}`;
 }
 
 /** DeepSeek: interpret ranking math / formula. */
-export async function interpretRankingMath(data: PowerRankingsOutput): Promise<string | null> {
+async function interpretRankingMath(data: PowerRankingsOutput): Promise<string | null> {
   if (!isDeepSeekAvailable()) return null;
   const context = buildContext(data);
   const result = await deepseekChat({
@@ -53,7 +53,7 @@ export async function interpretRankingMath(data: PowerRankingsOutput): Promise<s
 }
 
 /** Narrative explanation (Grok role). */
-export async function summarizeNarrative(data: PowerRankingsOutput): Promise<string | null> {
+async function summarizeNarrative(data: PowerRankingsOutput): Promise<string | null> {
   if (!isXaiAvailable()) return null;
   const context = buildContext(data);
   try {
@@ -83,7 +83,7 @@ export async function summarizeNarrative(data: PowerRankingsOutput): Promise<str
 }
 
 /** OpenAI: clear ranking summary for users. */
-export async function buildRankingSummary(data: PowerRankingsOutput): Promise<string | null> {
+async function buildRankingSummary(data: PowerRankingsOutput): Promise<string | null> {
   if (!isOpenAIAvailable()) return null;
   const context = buildContext(data);
   try {

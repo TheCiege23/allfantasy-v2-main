@@ -99,6 +99,11 @@ export interface DynastySetupState {
   /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */
   devyRoundsEnabled: boolean
   devyRoundCount: number
+  /**
+   * Devy / C2C: one merged startup draft instead of a pro draft then a college draft. Off by default
+   * (owner's rule, 2026-11-22; lib/draft-defaults/startupCollegeDraft.ts).
+   */
+  mergedCollegeDraft: boolean
   waiverType: 'faab' | 'rolling' | 'reverse_standings'
   faabBudget: number
   visibility: DynastyVisibility
@@ -158,6 +163,8 @@ export interface CreateLeagueV2State {
   tournamentPoolSize: number
   /** Survivor-only: number of tribes. Ignored for other league types. */
   survivorTribeCount: number
+  /** Survivor Guilly only: starting tribes (2–4). Absent in a state restored from before it existed → 2. */
+  survivorGuillotineTribeCount?: number
   /** Whether the creator occupies one of the Survivor cast seats. */
   survivorCommissionerParticipationMode: 'participating_player' | 'non_participating_host'
   /** Survivor-only: a LABEL. Dues are collected off the app; AllFantasy takes no payments. */
@@ -178,6 +185,8 @@ export interface CreateLeagueV2State {
   medianGame: boolean
   /** Guilly only: lineups set themselves — every team plays its best lineup (lib/guillotine/guillotineBestBall.ts). */
   guillotineBestBall: boolean
+  /** MLB Guilly only: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Absent = one week. */
+  guillotineTwoWeekPeriods?: boolean
   draftDate: string
   draftTime: string
   /**
@@ -274,6 +283,7 @@ export function getDefaultDynastySetup(sport: SupportedSport, draftType: WizardD
     futurePickTradeYears: 3,
     devyRoundsEnabled: false,
     devyRoundCount: 2,
+    mergedCollegeDraft: false,
     waiverType: 'faab',
     faabBudget: 100,
     visibility: 'private',
@@ -307,7 +317,11 @@ export function getDefaultBestBallSetup(
   mode: BestBallModeId = 'standard',
   draftType: WizardDraftType = 'snake',
 ): BestBallSetupState {
-  return getDefaultBestBallSettings(sport, mode, draftType === 'auction' || draftType === 'linear' || draftType === 'offline' || draftType === 'auto' || draftType === 'snake' ? draftType : 'snake')
+  const settings = getDefaultBestBallSettings(sport, mode, draftType === 'auction' || draftType === 'linear' || draftType === 'offline' || draftType === 'auto' || draftType === 'snake' ? draftType : 'snake')
+  // The wizard starts every sport on WEEKLY lineups; daily is a choice the commissioner makes
+  // (NBA / NHL / MLB only — lib/create-league-v2/bestBallWizard.ts). The sport profile's "daily"
+  // default was never a choice anyone saw.
+  return { ...settings, scoringPeriod: 'weekly', tieRule: settings.scoringPeriod === 'weekly' ? settings.tieRule : 'max_week' }
 }
 
 /**
@@ -359,7 +373,9 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   zombieLeagueCount: 1,
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
-  survivorCommissionerParticipationMode: 'non_participating_host',
+  survivorGuillotineTribeCount: 2,
+  // Owner's call, 2026-11-21: the commissioner plays by default; "Host only" is the switch.
+  survivorCommissionerParticipationMode: 'participating_player',
   survivorEntryFeeMode: 'free',
   survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
   survivorDuesUsd: '',
@@ -394,13 +410,44 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
 
 export const V2_STORAGE_KEY = 'af:create-league-v2:state'
 
+/**
+ * Autosave. LOCAL storage, not session storage: a commissioner who closes the tab half-way and
+ * comes back tomorrow should find their league where they left it. Drafts from before this change
+ * (session storage) are still read once and migrated. A draft older than 30 days is dropped —
+ * by then the season, dates and defaults it captured are stale.
+ */
+export const V2_SAVED_AT_KEY = 'af:create-league-v2:savedAt'
+const V2_DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function readStore(store: Storage | undefined): Partial<CreateLeagueV2State> | null {
+  if (!store) return null
+  const raw = store.getItem(V2_STORAGE_KEY)
+  if (!raw) return null
+  const parsed = JSON.parse(raw) as Partial<CreateLeagueV2State>
+  return parsed && typeof parsed === 'object' ? parsed : null
+}
+
 export function loadPersistedV2State(): Partial<CreateLeagueV2State> | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(V2_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<CreateLeagueV2State>
-    return parsed && typeof parsed === 'object' ? parsed : null
+    const savedAt = getPersistedV2SavedAt()
+    if (savedAt !== null && Date.now() - savedAt > V2_DRAFT_TTL_MS) {
+      clearPersistedV2State()
+      return null
+    }
+    return readStore(window.localStorage) ?? readStore(window.sessionStorage)
+  } catch {
+    return null
+  }
+}
+
+/** When the draft was last saved (ms since epoch), or null when unknown. */
+export function getPersistedV2SavedAt(): number | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(V2_SAVED_AT_KEY)
+    const n = raw ? Number(raw) : NaN
+    return Number.isFinite(n) ? n : null
   } catch {
     return null
   }
@@ -409,7 +456,8 @@ export function loadPersistedV2State(): Partial<CreateLeagueV2State> | null {
 export function persistV2State(state: CreateLeagueV2State): void {
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.setItem(V2_STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(V2_STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(V2_SAVED_AT_KEY, String(Date.now()))
   } catch {
     // Quota / disabled storage — safe to ignore.
   }
@@ -417,6 +465,12 @@ export function persistV2State(state: CreateLeagueV2State): void {
 
 export function clearPersistedV2State(): void {
   if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(V2_STORAGE_KEY)
+    window.localStorage.removeItem(V2_SAVED_AT_KEY)
+  } catch {
+    // ignore
+  }
   try {
     window.sessionStorage.removeItem(V2_STORAGE_KEY)
   } catch {

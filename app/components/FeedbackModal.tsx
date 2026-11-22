@@ -1,21 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import {
-  X,
-  ThumbsUp,
-  Bug,
-  Lightbulb,
-  HelpCircle,
-  AlertTriangle,
-  MessageSquare,
-  Star,
-  Send,
-  Check,
-  Upload,
-  Image as ImageIcon,
-  Trash2,
-} from "lucide-react";
+import { X, ThumbsUp, Bug, Lightbulb, HelpCircle, AlertTriangle, MessageSquare, Star, Send, Check, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { logFeedbackOpened, logFeedbackSubmitted } from "@/lib/analytics/insight-events";
 import EarlyAccessUpsell from "./EarlyAccessUpsell";
@@ -37,10 +23,10 @@ const TOOLS = [
   "Trade Evaluator",
   "Trade Finder",
   "Trade Notifications",
-  "Waiver AI",
+  "Waiver Chimmy",
   "Player Finder",
   "Share / Social Cards",
-  "AI Chat",
+  "Chimmy Chat",
   "Other / Not sure",
 ];
 
@@ -251,7 +237,7 @@ export default function FeedbackModal({
       });
 
       setSuccess(true);
-      toast.success("Feedback submitted! Thanks for helping improve the AI.");
+      toast.success("Feedback submitted! Thanks for helping improve Chimmy.");
     } catch (e: any) {
       toast.error(e.message || "Something went wrong");
       setError(e.message || "Something went wrong");
@@ -275,7 +261,7 @@ export default function FeedbackModal({
       
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-white/10 bg-slate-900/95 backdrop-blur">
-          <h2 className="text-lg font-semibold text-white">Your feedback makes the AI smarter</h2>
+          <h2 className="text-lg font-semibold text-white">Your feedback makes Chimmy smarter</h2>
           <button
             onClick={handleClose}
             className="rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white transition"
@@ -290,10 +276,10 @@ export default function FeedbackModal({
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 shadow-lg">
                 <Check className="h-7 w-7 text-white" />
               </div>
-              <h3 className="text-lg font-semibold text-white">Thanks — this helps the AI learn</h3>
-              <p className="text-sm text-white/60">This feedback is read by the team and used to improve future AI models.</p>
+              <h3 className="text-lg font-semibold text-white">Thanks — this helps Chimmy learn</h3>
+              <p className="text-sm text-white/60">This feedback is read by the team and used to improve future Chimmy models.</p>
               {isBugOrIssue && (
-                <p className="text-xs text-white/40">Our AI is analyzing your report and will alert the team.</p>
+                <p className="text-xs text-white/40">Our Chimmy is analyzing your report and will alert the team.</p>
               )}
             </div>
 
@@ -368,7 +354,7 @@ export default function FeedbackModal({
               <textarea
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder="Something feel off? Surprisingly smart? One sentence from you helps the AI get better at reading leagues like this."
+                placeholder="Something feel off? Surprisingly smart? One sentence from you helps Chimmy get better at reading leagues like this."
                 rows={4}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:border-cyan-500/50 focus:outline-none resize-none"
               />

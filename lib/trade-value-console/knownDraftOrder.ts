@@ -24,7 +24,7 @@ import { draftOrderFromFinish, type DraftOrderSource, type StandingsTeam } from 
  * re-orders after it was mirrored is not followed here either. Named, measured, not fixed in this change.
  */
 
-export type KnownDraftOrder = { order: string[]; source: DraftOrderSource }
+type KnownDraftOrder = { order: string[]; source: DraftOrderSource }
 
 /** Rookie drafts are short; a startup draft is not this league's rookie order. */
 const MAX_ROOKIE_ROUNDS = 7

@@ -94,8 +94,17 @@ export function GlobalModeToggle() {
   const stacked = !createLeagueRoute && !marketingLanding
 
   return (
+    /*
+     * `data-hide-in-ios-app`: inside the native iOS app this floating pill is web chrome, not app
+     * chrome. Measured 2026-11-20 at 375x667 with the app's User-Agent: on `/` it sat over the
+     * landing card's "WAIVER" badge and over the footer beside the back-to-top button, and on
+     * `/vpn-blocked` over the instructions. Signed-in screens already carry the real switch (the
+     * /core top bar and Settings › Preferences), so nothing is lost in the app. The browser is
+     * unchanged — the globals.css rule only matches `html[data-ios-app]`.
+     */
     <div
       data-af-mode-toggle=""
+      data-hide-in-ios-app=""
       className={
         createLeagueRoute
           ? 'fixed right-4 top-4 z-40 sm:top-5'

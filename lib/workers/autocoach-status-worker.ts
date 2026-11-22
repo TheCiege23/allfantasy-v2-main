@@ -12,7 +12,7 @@ import { getRedisConnection, isRedisConfigured } from "@/lib/queues/bullmq";
 
 const SUPPORTED_SPORTS = ["NFL", "NBA", "MLB", "NHL", "NCAAF", "NCAAB", "SOCCER"] as const;
 
-export type AutoCoachStatusJobResult = {
+type AutoCoachStatusJobResult = {
   ok: boolean;
   sport?: string;
   statusUpdates?: number;

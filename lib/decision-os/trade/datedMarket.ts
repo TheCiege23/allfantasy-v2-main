@@ -55,7 +55,7 @@ export type MarketBook = { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'SUPERFLEX' 
  *   - `standard_12_ppr1` — FantasyCalc's 12-team PPR-1 book for the league's dynasty/SF combination,
  *     `PlayerValueSnapshot` (`loadDatedMarket`), the fallback when the league's own is missing.
  */
-export type DatedMarketSource = 'league_profile' | 'standard_12_ppr1'
+type DatedMarketSource = 'league_profile' | 'standard_12_ppr1'
 
 /** One day's capture of one book, in the shape the league chart prices from. */
 export type DatedMarket = {
@@ -197,7 +197,7 @@ export function loadDatedMarket(book: MarketBook, day: string): Promise<DatedMar
  */
 
 /** A profile's FantasyCalc book, in `PlayerValueSnapshot`'s terms. */
-export function marketBookForProfile(profile: ChartProfile): MarketBook {
+function marketBookForProfile(profile: ChartProfile): MarketBook {
   return { format: profile.isDynasty ? 'DYNASTY' : 'REDRAFT', qbFormat: profile.numQbs === 2 ? 'SUPERFLEX' : 'ONE_QB' }
 }
 

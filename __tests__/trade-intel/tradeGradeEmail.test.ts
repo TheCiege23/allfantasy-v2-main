@@ -247,6 +247,26 @@ describe('the one grade, and only the one grade', () => {
     expect(at('2026 1st round pick')).toBeLessThan(at('6,100'))
   })
 
+  /*
+   * Reported 2026-11-11: one side received two 2027 3rds and two 2028 1sts, and the email printed each
+   * name twice with nothing to tell them apart — it read as a duplicated row.
+   */
+  it('two picks of the same year and round each say whose pick they were', () => {
+    const own = { ...pick(3, true), originalRosterId: 2 }
+    const thirdTeam = { ...pick(3, true), originalRosterId: 9 }
+    const lone = { ...pick(1, true), originalRosterId: 2 }
+    const twoThirds = trade([
+      side({ rosterId: 1, ownerId: 'u1', managerName: 'managerOne', picksIn: [own, thirdTeam, lone], playersOut: [player('Rashid Shaheed', 0)], net: 0 }),
+      side({ rosterId: 2, ownerId: 'u2', managerName: 'managerTwo', playersIn: [player('Rashid Shaheed', 0)], picksOut: [own, thirdTeam, lone], net: 0 }),
+    ])
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: twoThirds, ledgerUrl: URL, grade: graded() })
+    const text = html.replace(/&#39;|&#x27;/g, "'")
+    expect(text).toContain("Draft pick · originally managerTwo's")
+    expect(text).toContain("Draft pick · originally another team's")
+    // A pick with no twin keeps the plain detail.
+    expect(text.match(/originally/g)).toHaveLength(2)
+  })
+
   it('a count mismatch prints names without values rather than values against the wrong asset', () => {
     const g = graded({ lines: [{ side: 'get', name: 'Brenton Strange', marketValue: 5170, leagueValue: 5170 }] })
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
@@ -273,7 +293,7 @@ describe('the one grade, and only the one grade', () => {
   it('no grade at all is not graded, never a neutral C', () => {
     const { subject, html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: null })
     expect(subject).toContain('not graded')
-    expect(html).toContain('could not be loaded')
+    expect(html).toContain('couldn’t load this league’s values')
     expect(html).not.toContain('Even on value')
   })
 
@@ -281,7 +301,7 @@ describe('the one grade, and only the one grade', () => {
     const three = trade([...PRESEASON.sides, side({ rosterId: 3, ownerId: 'u3', managerName: 'managerThree', net: 0 })])
     const { subject, html } = buildTradeGradeEmail({ leagueName: 'L', trade: three, ledgerUrl: URL, grade: graded() })
     expect(subject).toContain('not graded')
-    expect(html).toContain('Only two-team trades are graded')
+    expect(html).toContain('We only grade trades between two teams.')
     expect(html).toContain('managerThree')
   })
 })
@@ -301,7 +321,7 @@ describe('why these letters', () => {
     expect(m, 'why card present').not.toBeNull()
     expect(m![1]).toBe(
       'Both sides got a C: managerOne received 3,259 and managerTwo received 3,326 in this league’s values. ' +
-        'That is 67 apart, 2% of the bigger side — under 10%, so the trade reads as even and neither side earns a B.',
+        'That’s only 67 apart (2%), under 10%, so the trade counts as even.',
     )
     expect(m![2]).toBe('The scale: a gap under 10% is a C for both sides · 10–24% is a B and a D · 25% or more is an A and an F.')
   })
@@ -513,12 +533,12 @@ describe('a giveaway explains itself without the partial-deal line', () => {
   it('prints the giveaway reason and nothing after it', () => {
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: ZAY_GIVEAWAY, ledgerUrl: URL, grade: { graded: false, reason: REASON, basis: null } })
     expect(html).toContain(`>${REASON}</div>`)
-    expect(html).not.toContain('part of the deal')
+    expect(html).not.toContain('part of the trade')
   })
 
   it('every other withheld grade keeps the partial-deal line', () => {
     const g: TradeGradeView = { graded: false, reason: '1 asset has no value on this league’s chart.', basis: null }
     const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
-    expect(html).toContain('No letter is shown rather than one drawn from part of the deal.')
+    expect(html).toContain('We don’t show a grade based on only part of the trade.')
   })
 })

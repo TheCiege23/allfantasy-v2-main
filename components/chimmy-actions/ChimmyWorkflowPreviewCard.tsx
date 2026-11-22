@@ -178,7 +178,7 @@ function formatTargetLabel(target: string): string {
     drop_confirm_modal: 'Drop Confirmation',
     roster_move_modal: 'Roster Move',
     matchup_simulator: 'Matchup Simulator',
-    deep_dive_modal: 'AI Deep Dive',
+    deep_dive_modal: 'Chimmy Deep Dive',
     announcement_composer: 'Announcement',
     chimmy_chat: 'Chimmy Chat',
     league_chat_composer: 'League Chat',

@@ -11,7 +11,7 @@ export const NOTIFICATION_GROUP_ORDER: NotificationGroupKey[] = [
   "earlier",
 ]
 
-export function getGroupKey(dateStr: string, now?: Date): NotificationGroupKey {
+function getGroupKey(dateStr: string, now?: Date): NotificationGroupKey {
   const d = new Date(dateStr)
   const ref = now ?? new Date()
   const startOfToday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())

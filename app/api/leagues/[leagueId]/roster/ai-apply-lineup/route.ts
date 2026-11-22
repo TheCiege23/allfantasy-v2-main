@@ -1,4 +1,4 @@
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -27,7 +27,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
   const { leagueId } = await params
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
 
   const body = await req.json().catch(() => ({}))
   const aiValidation = validateAiActionExecution({ body, action: 'apply_lineup', leagueId })
@@ -54,10 +53,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
-  const roster = await prisma.roster.findFirst({
-    where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
-    select: { id: true, playerData: true },
-  })
+  // The manager's own team, a named one of several, or a co-owned team (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req, body))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  const roster = acting.ok
+    ? await prisma.roster.findFirst({ where: { leagueId, id: acting.rosterId }, select: { id: true, playerData: true } })
+    : null
   if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
 
   const chopped = await isRosterChopped(leagueId, roster.id)

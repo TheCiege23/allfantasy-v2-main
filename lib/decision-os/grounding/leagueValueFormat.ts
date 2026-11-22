@@ -1,4 +1,3 @@
-import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
 
 /**
@@ -12,8 +11,7 @@ import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
  *
  * `packet.ts` carries 17 imports including `ChimmyContextEngine` and all four OS feed loaders.
  * Importing one pure helper from it would evaluate that entire graph on every message, including
- * the ones that never build a packet. This module has exactly one import, and
- * `slotEligibility` itself has one.
+ * the ones that never build a packet. This module has exactly one import, a constant.
  *
  * ⚠ NO IO, NO CLOCK, NO PRISMA. Both functions take rules that a caller has already loaded. Keep
  * it that way — the moment this reaches for the database it stops being safe to call from the
@@ -21,23 +19,12 @@ import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
  */
 
 /**
- * The market format this league prices against.
- *
- * 🛑 THE ALTERNATIVE TO THIS IS GUESSING FROM THE QUESTION TEXT, WHICH SHIPPED AND WAS WRONG.
- * `lib/ai/deterministic.ts` used to derive dynasty/superflex with `/dynasty|keeper|future/i` and
- * `/superflex|\bsf\b|2qb/i` against the USER'S SENTENCE. Measured in production 2026-09-02: a
- * dynasty league asked about Jeremiyah Love was answered with the REDRAFT price — 3779 against a
- * correct 6644, a 43% understatement — because the word "dynasty" did not appear in the question.
- * "superflex" came out right only because the league's NAME contained "SF".
- *
- * ⚠ KEEPER MAPS TO DYNASTY. `PlayerValueSnapshot` holds exactly four buckets, measured on
- * production: DYNASTY|REDRAFT × SUPERFLEX|ONE_QB. Every league must land on one. A keeper league
- * carries assets across seasons, which is what the dynasty market prices; REDRAFT would value a
- * held asset as a rental.
- *
- * Returns null when the rules cannot be read — the caller must then say it does not know, never
- * fall back to a default. A stated default is a claim.
+ * 🛑 THE VALUE CHART IS NOT DERIVED HERE ANY MORE (2026-11-17). `deriveValueFormat` lived in this file and
+ * priced every keeper league on the dynasty chart; Chimmy now asks `valueBookFor` through
+ * ./leagueValueBook, the same rule as every screen. Do not re-add a chart rule here: a second copy is how
+ * the card and Chimmy came to quote two different values for one player.
  */
+
 /**
  * R1.5 — does this league want the devy board even though it is not an NCAAF league?
  *
@@ -48,7 +35,7 @@ import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
  *
  * ⚠ IT READS THE VARIANT, WHICH IS ALREADY IN THE RULES THE PACKET LOADS. `canonicalLeagueRules`
  * puts `leagueVariant` at `general.variant`, so this costs NO new query — the same argument
- * `deriveValueFormat` makes right below it. The alternative was calling `isDevyLeague` from the
+ * the league-size and scoring readers in this file make. The alternative was calling `isDevyLeague` from the
  * chat route, which is a DB round-trip on every turn and delays the packet kick.
  *
  * ⚠ IT MATCHES THE CANONICAL VARIANT CONSTANT, NOT A SUBSTRING. `lib/devy/types.ts` defines
@@ -67,19 +54,6 @@ export function deriveWantsDevyBoard(rules: unknown): boolean {
   const r = rules as { general?: { variant?: unknown } }
   const v = r.general?.variant
   return typeof v === 'string' && v.trim().toLowerCase() === DEVY_DYNASTY_VARIANT
-}
-
-export function deriveValueFormat(rules: unknown): { format: string; qbFormat: string } | null {
-  if (!rules || typeof rules !== 'object') return null
-  const r = rules as { general?: { format?: unknown }; roster?: { starters?: unknown } }
-  const raw = typeof r.general?.format === 'string' ? r.general.format : null
-  if (!raw) return null
-  return {
-    format: /dynasty|keeper/i.test(raw) ? 'DYNASTY' : 'REDRAFT',
-    // Shared with the trade shadow's own derivation rather than reimplemented — it reads
-    // SUPER_FLEX/SF slots and a second QB slot, both of which mean the same thing to the market.
-    qbFormat: detectQbFormat(r.roster?.starters),
-  }
 }
 
 /**
@@ -128,7 +102,7 @@ export function deriveIdpRules(rules: unknown): Record<string, number> | null {
  * not use. Caught by the typechecker after the tests were already green, which is the whole
  * argument for the gate.
  */
-export type MarketPpr = 0 | 0.5 | 1
+type MarketPpr = 0 | 0.5 | 1
 
 export function deriveLeagueSizeAndPpr(
   rules: unknown,

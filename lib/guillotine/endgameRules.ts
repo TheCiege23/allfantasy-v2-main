@@ -22,10 +22,16 @@ export function resolveCumulativeFinalWinner(
   rosterIds: string[], start: number, completedPeriod: number, periods: number,
   scores: Array<{ rosterId: string; weekOrPeriod: number; periodPoints: number }>,
   seasonTotals?: ReadonlyMap<string, number>,
+  /**
+   * Weeks per period (./eliminationPeriods.ts). Periods are keyed by their last week, so a two-week
+   * league's final periods are `start`, `start + 2`, `start + 4`. Default 1: unchanged.
+   */
+  periodWeeks = 1,
 ): string | null {
-  if (!rosterIds.length || completedPeriod < start + periods - 1) return null
+  const stride = Math.max(1, periodWeeks)
+  if (!rosterIds.length || completedPeriod < start + (periods - 1) * stride) return null
   const totals = rosterIds.map(rosterId => {
-    const rows = scores.filter(row => row.rosterId === rosterId && row.weekOrPeriod >= start && row.weekOrPeriod < start + periods)
+    const rows = scores.filter(row => row.rosterId === rosterId && row.weekOrPeriod >= start && row.weekOrPeriod < start + periods * stride)
     if (new Set(rows.map(row => row.weekOrPeriod)).size !== periods || rows.some(row => !Number.isFinite(row.periodPoints))) return null
     return { rosterId, points: rows.reduce((sum, row) => sum + row.periodPoints, 0) }
   })

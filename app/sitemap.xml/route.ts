@@ -1,6 +1,16 @@
 import { prisma } from '@/lib/prisma'
 import { SPORT_SLUGS, TOOL_SLUGS } from '@/lib/seo-landing/config'
 import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pages'
+import { LEAGUE_TYPE_SLUGS } from '@/lib/seo-landing/league-type-pages'
+import { liveArticleWhere } from '@/lib/automated-blog/liveArticles'
+
+function blogIndexUrl(baseUrl: string): string {
+  return `<url>
+    <loc>${baseUrl}/blog</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`
+}
 import { playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
@@ -41,14 +51,22 @@ export async function GET() {
   const baseUrl = getPublicSiteOrigin()
 
   const staticPages = [
-    { path: 'blog', priority: '0.8', changefreq: 'weekly' },
+    // `blog` is NOT here: it is listed below only when at least one article is live.
     { path: '', priority: '1.0', changefreq: 'weekly' },
-    { path: 'app', priority: '0.9', changefreq: 'weekly' },
-    { path: 'bracket', priority: '0.9', changefreq: 'weekly' },
-    { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
+    /*
+     * ⚠ ONLY PAGES A LOGGED-OUT CRAWLER CAN READ. Removed 2026-11-14, each measured
+     * on production as Googlebot:
+     *   app         the signed-in shell ("Your leagues"), not a landing page
+     *   bracket     a 307 to /brackets — a sitemap entry that redirects is a wasted crawl
+     *   mock-draft  serves the sign-in page with a canonical of /login; the public
+     *               mock draft lander is /tools/mock-draft-simulator, listed below
+     */
+    { path: 'brackets', priority: '0.9', changefreq: 'weekly' },
+    { path: 'world-cup', priority: '0.8', changefreq: 'weekly' },
+    { path: 'discover/leagues', priority: '0.8', changefreq: 'daily' },
+    { path: 'players', priority: '0.7', changefreq: 'daily' },
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },
-    { path: 'mock-draft', priority: '0.7', changefreq: 'weekly' },
     { path: 'waiver-ai', priority: '0.7', changefreq: 'weekly' },
     { path: 'tools-hub', priority: '0.85', changefreq: 'weekly' },
     { path: 'chimmy', priority: '0.8', changefreq: 'weekly' },
@@ -57,6 +75,8 @@ export async function GET() {
     { path: 'breathing', priority: '0.5', changefreq: 'weekly' },
     { path: 'horoscope', priority: '0.5', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
+    { path: 'league-types/faq', priority: '0.7', changefreq: 'monthly' },
+    { path: 'commissioners', priority: '0.7', changefreq: 'monthly' },
   ]
 
   const sportUrls = SPORT_SLUGS.map(
@@ -83,24 +103,49 @@ export async function GET() {
   </url>`
   ).join('\n  ')
 
+  // Format landers: the hub, then one per format. The /demo/formats/* samples are noindex
+  // (invented teams) and deliberately stay out.
+  const leagueTypeUrls = ['', ...LEAGUE_TYPE_SLUGS.map((s) => `/${s}`)]
+    .map(
+      (suffix) => `<url>
+    <loc>${baseUrl}/league-types${suffix}</loc>
+    <changefreq>monthly</changefreq>
+    <priority>${suffix ? '0.8' : '0.85'}</priority>
+  </url>`
+    )
+    .join('\n  ')
+
+  /*
+   * Blog: the /blog index plus every LIVE article — published, or scheduled and due
+   * (lib/automated-blog/liveArticles.ts). A plain `publishStatus: 'published'` filter here left
+   * scheduled posts out forever, because nothing ever flips them.
+   *
+   * ⚠ THE INDEX IS LISTED ONLY WHEN SOMETHING IS LIVE. Production had zero articles (2026-11-15) and
+   * this file still submitted /blog at 0.8 — an empty page Google was asked to crawl. app/blog/page
+   * applies the same condition to its robots tag. On a query FAILURE the index stays listed, the same
+   * fail-open choice that page makes, and the failure is logged rather than swallowed: the old empty
+   * `catch {}` is how "zero articles" and "the query broke" looked identical from outside.
+   */
   let blogUrls = ''
   try {
-    const published = await prisma.blogArticle.findMany({
-      where: { publishStatus: 'published' },
-      select: { slug: true, updatedAt: true },
+    const live = await prisma.blogArticle.findMany({
+      where: liveArticleWhere(),
+      select: { slug: true, updatedAt: true, publishedAt: true },
     })
-    blogUrls = published
-      .map(
-        (a) => `<url>
+    const articleUrls = live.map((a) => {
+      // A scheduled post's row is last touched when it was scheduled; it changed when it went live.
+      const changed = a.publishedAt && a.publishedAt > a.updatedAt ? a.publishedAt : a.updatedAt
+      return `<url>
     <loc>${baseUrl}/blog/${a.slug}</loc>
-    <lastmod>${a.updatedAt.toISOString().slice(0, 10)}</lastmod>
+    <lastmod>${changed.toISOString().slice(0, 10)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>`
-      )
-      .join('\n  ')
-  } catch {
-    // ignore
+    })
+    blogUrls = live.length > 0 ? [blogIndexUrl(baseUrl), ...articleUrls].join('\n  ') : ''
+  } catch (err) {
+    console.error('[sitemap] blog articles query failed; listing /blog without articles:', err instanceof Error ? err.message : err)
+    blogUrls = blogIndexUrl(baseUrl)
   }
 
   /*
@@ -172,6 +217,7 @@ export async function GET() {
   ${sportUrls}
   ${toolUrls}
   ${discoveryLeaguesUrls}
+  ${leagueTypeUrls}
   ${blogUrls}
   ${playerUrls}
 </urlset>`

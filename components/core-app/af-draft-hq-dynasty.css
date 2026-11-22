@@ -114,4 +114,7 @@
   .af-dh-dy-card{padding:14px}
   .af-dh-dy-rounds{grid-template-columns:repeat(2,minmax(0,1fr))}
   .af-dh-dy-cell{grid-template-columns:34px minmax(0,1fr);padding:6px 7px}
+  /* Two rounds side by side leave a name ~110px: "Waiver Wire Wizards" read "Waiver Wire Wiza…". A second line,
+     clamped, costs the board ~32px; one round per row would double it. (__tests__/dynasty/dynastyDraftHqBoard.test.ts) */
+  .af-dh-dy-cell-team{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:break-word}
 }

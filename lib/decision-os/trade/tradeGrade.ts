@@ -36,6 +36,7 @@ import {
   PROJECTED_EVEN_BAND,
   PROJECTED_STRONG_BAND,
   projectedLetterFor,
+  signedGapPct,
   type GradeLetter,
 } from '@/lib/trade-intel/gradeScale'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
@@ -102,6 +103,14 @@ export type TradeMarketGrade = {
   partnerLetter: GradeLetter
   percentDiff: number
   label: string
+  giveValue: number
+  getValue: number
+}
+
+export type TradeValuationGap = 'missing_projections' | 'missing_schedule' | 'projection_coverage' | 'unresolved_player' | 'at_replacement'
+
+export type TradeDivisionImpact = {
+  division: 'Campus' | 'Canton'
   giveValue: number
   getValue: number
 }
@@ -186,6 +195,8 @@ export type TradeGradeView =
     }
   | {
       graded: false
+      valuationGap?: TradeValuationGap
+      divisionImpacts?: readonly TradeDivisionImpact[]
       /** Why there is no letter, in words a manager can act on. */
       reason: string
       basis: string | null
@@ -197,18 +208,12 @@ export type TradeGradeView =
       kind?: 'pirate_steal'
     }
 
-/**
- * The signed gap, in whole percent of the larger side: + means the `give` side receives more.
- *
- * ⚠ ROUNDED SYMMETRICALLY, AND THAT IS WHAT MAKES THE MIRROR EXACT. `Math.round` rounds a half UP,
- * so −9.5 became −9 (a C) while +9.5 became 10 (a B): the two managers in one offer, each graded
- * from their own side, could read "you C, them C" and "you B, them D". Rounding the magnitude and
- * restoring the sign makes grading the swapped deal and mirroring the grade the same operation.
+/*
+ * `signedGapPct` lives in lib/trade-intel/gradeScale.ts (2026-11-14) so the browser-side 3–4 team grade
+ * (lib/trade-intel/multiTeamGrade.ts) uses the same function, not a copy. Re-exported here for every
+ * existing caller.
  */
-export function signedGapPct(giveValue: number, getValue: number): number {
-  const raw = ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
-  return raw < 0 ? -Math.round(-raw) : Math.round(raw)
-}
+export { signedGapPct }
 
 /** The label for a signed gap. Reads off the letter's own bands, so the two always agree. */
 export function tradeGradeLabel(percentDiff: number): { label: string; sideAdvantage: TradeGradeSideAdvantage } {
@@ -332,7 +337,7 @@ export function gradeTrade(args: {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
     giveValue: Math.round(args.giveValue),
     getValue: Math.round(args.getValue),
@@ -399,7 +404,7 @@ export function withYourTeamLetter(view: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter, giveValue: fit.giveValue, getValue: fit.getValue, basis: 'your_team' }),
     // `giveValue`/`getValue` stay the league-value totals the lines add up to — every asset table prints
     // them under the lines. The your-team totals the letter is taken on are `rosterFit`'s.
@@ -435,7 +440,7 @@ export function marketView(view: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[m.letter] === 'accept' ? 'review' : ACTION_BY_LETTER[m.letter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter: m.letter, giveValue: m.giveValue, getValue: m.getValue }),
     giveValue: m.giveValue,
     getValue: m.getValue,
@@ -447,9 +452,28 @@ export function marketLetterOf(view: Extract<TradeGradeView, { graded: true }>):
   return view.letterBasis === 'your_team' && view.market ? view.market.letter : view.letter
 }
 
+/** Values in separate standings have independent units and cannot be added. */
+export function separateStandingsTradeGrade(divisionImpacts: readonly TradeDivisionImpact[]): Extract<TradeGradeView, { graded: false }> {
+  const format = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 1 })
+  const impacts = divisionImpacts.map(({ division, giveValue, getValue }) =>
+    `${division} sends ${format(giveValue)} and receives ${format(getValue)} on its own scale.`,
+  )
+  return {
+    graded: false,
+    divisionImpacts,
+    reason: 'This league keeps separate Campus and Canton standings. ' + impacts.join(' '),
+    basis: 'Each division is valued separately under its own scoring and replacement rules.',
+  }
+}
+
 /** The same grade seen from the OTHER side of the deal: sides swapped, letters swapped. */
 export function mirrorTradeGrade(input: TradeGradeView): TradeGradeView {
-  if (!input.graded) return input
+  if (!input.graded) {
+    if (!input.divisionImpacts) return input
+    return { ...input, ...separateStandingsTradeGrade(input.divisionImpacts.map((impact) => ({
+      ...impact, giveValue: impact.getValue, getValue: impact.giveValue,
+    }))) }
+  }
   // The other side reads the deal on league value: a your-team headline is the viewer's roster alone.
   const view = marketView(input)
   if (!view.graded) return view
@@ -468,7 +492,7 @@ export function mirrorTradeGrade(input: TradeGradeView): TradeGradeView {
     sideAdvantage,
     action: packageReview && ACTION_BY_LETTER[view.partnerLetter] === 'accept' ? 'review' : ACTION_BY_LETTER[view.partnerLetter],
     recommendation: packageReview
-      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      ? `${label}. ${packageReview.note}`
       : tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
     giveValue: view.getValue,
     getValue: view.giveValue,

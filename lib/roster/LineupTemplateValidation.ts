@@ -1,6 +1,7 @@
 import type { RosterTemplateDto } from '@/lib/multi-sport/RosterTemplateService'
 import { withoutSlotIndex } from '@/lib/league/lineupSlotPositions'
 import { CAMPUS_SECTION, campusStartersAfterSave } from '@/lib/c2c/campusLineup'
+import { benchCapacityWithEmptyStarters } from '@/lib/roster/benchCapacity'
 
 export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
@@ -90,8 +91,22 @@ function getStarterAllowedSet(template: RosterTemplateDto): Set<string> {
 /** Persist lineup_sections + legacy starters/bench fields after AutoCoach or manual edits. */
 export function buildPlayerDataFromSections(
   existingPlayerData: unknown,
-  sections: Record<RosterSectionKey, Array<Record<string, unknown>>>
+  rawSections: Record<RosterSectionKey, Array<Record<string, unknown>>>
 ): Record<string, unknown> {
+  /*
+   * Rows written as bare ids by the old waiver helper (`syncLineupSections`) are still stored in live
+   * leagues. Read them as `{ id }` — as a string, `withoutSlotIndex` threw ("Cannot use 'in' operator")
+   * and `String(p.id)` named the player "undefined".
+   */
+  const asRows = (rows: unknown): Array<Record<string, unknown>> =>
+    (Array.isArray(rows) ? rows : []).map((r) => (typeof r === 'string' ? { id: r } : (r as Record<string, unknown>))).filter((r) => r && typeof r === 'object')
+  const sections = {
+    starters: asRows(rawSections.starters),
+    bench: asRows(rawSections.bench),
+    ir: asRows(rawSections.ir),
+    taxi: asRows(rawSections.taxi),
+    devy: asRows(rawSections.devy),
+  } as Record<RosterSectionKey, Array<Record<string, unknown>>>
   const base =
     existingPlayerData && typeof existingPlayerData === 'object' && !Array.isArray(existingPlayerData)
       ? (existingPlayerData as Record<string, unknown>)
@@ -142,7 +157,10 @@ export function collectTemplateSectionIssues(
   const slotLimits = getSlotLimitsFromTemplate(template)
   const issues: TemplateSectionIssue[] = []
   for (const section of Object.keys(sections) as RosterSectionKey[]) {
-    const max = slotLimits[section]
+    // A bench holds one extra for each starting slot left empty; the total limit below still holds.
+    const max = section === 'bench'
+      ? benchCapacityWithEmptyStarters({ benchSlots: slotLimits.bench, starterSlots: slotLimits.starters, startersFilled: sections.starters.length })
+      : slotLimits[section]
     if (sections[section].length > max) {
       issues.push({
         code: 'SECTION_OVERFLOW',

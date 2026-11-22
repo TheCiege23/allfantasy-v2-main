@@ -91,7 +91,7 @@ describe('handing teams to Chimmy', () => {
     expect(await applyChimmyAutopilot('L', 'commish', 'r1', undefined)).toMatchObject({ ok: true })
     const second = await applyChimmyAutopilot('L', 'commish', 'r2', undefined)
     expect(second).toMatchObject({ ok: false, status: 402 })
-    expect((second as { error: string }).error).toBe('Chimmy runs 1 team for free. The AF Commissioner plan lets it run up to 4.')
+    expect((second as { error: string }).error).toBe('Chimmy runs 1 team for free. AF Pro or AF Supreme lets it run up to 4.')
     expect(autopilotRosterIds(managed())).toEqual(['r1'])
     // Freeing the free team lets another take its place.
     expect((await applyChimmyAutopilot('L', 'commish', 'r1', null)).ok).toBe(true)

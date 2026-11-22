@@ -6,7 +6,6 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { getDraftTypeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { DRAFT_TYPES_BY_LEAGUE_FORMAT } from '@/lib/draft-types/draftTypeRegistry'
-import { resolveEliminationWindow } from '@/lib/guillotine/EliminationWindowResolver'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { buildPromptForType } from '@/lib/guillotine/ai/GuillotineAIPrompts'
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
@@ -159,11 +158,6 @@ describe('Guilly full regression matrix', () => {
       expect(profile!.waiverDay).toBeGreaterThanOrEqual(0)
       expect(profile!.waiverDay).toBeLessThanOrEqual(6)
       expect((profile!.waiverDay - profile!.chopDay + 7) % 7).toBe(1)
-
-      const window = resolveEliminationWindow(sport, new Date('2026-09-14T00:00:00.000Z'), 24)
-      expect(window).not.toBeNull()
-      expect(window!.waiversAt.getTime()).toBeGreaterThan(window!.opensAt.getTime())
-      expect(window!.closesAt.getTime()).toBeGreaterThan(window!.waiversAt.getTime())
     }
   })
 
@@ -452,10 +446,11 @@ describe('Guilly full regression matrix', () => {
     it('with "split", hands it to the teams still alive and says so in chat', async () => {
       chopLowOfTwo()
       prismaMock.league.findUnique.mockResolvedValue({ guillotineEndgame: 'last_team_standing', settings: { guillotineFaabOnChop: 'split' } })
-      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]) })
+      redistributeChoppedFaabMock.mockResolvedValue({ pool: 60, perTeam: 30, survivors: 2, shares: new Map([['r-mid', 30], ['r-top', 30]]), taken: new Map([['r-low', 60]]) })
       await runElimination({ leagueId: 'league-1', weekOrPeriod: 3, season: 2026, systemUserId: 'system' })
       expect(redistributeChoppedFaabMock).toHaveBeenCalledWith({ choppedRosterIds: ['r-low'], survivorRosterIds: ['r-mid', 'r-top'] })
-      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60 }))
+      // `taken` is what an undone chop gives back (lib/guillotine/chopUndo.ts).
+      expect(appendEventMock).toHaveBeenCalledWith('league-1', 'faab_split', expect.objectContaining({ pool: 60, taken: { 'r-low': 60 } }))
       expect(createLeagueChatMessageMock).toHaveBeenCalledWith('league-1', 'system', expect.stringContaining('$60'), expect.objectContaining({
         idempotencyKey: 'guillotine-faab-split:league-1:2026:w3',
       }))

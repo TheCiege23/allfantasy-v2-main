@@ -9,7 +9,7 @@ import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 
 export type TaxiLockMode = 'preseason' | 'start_of_season' | 'no_limit'
 
-export const TAXI_LOCK_MODES: readonly TaxiLockMode[] = [
+const TAXI_LOCK_MODES: readonly TaxiLockMode[] = [
   'preseason',
   'start_of_season',
   'no_limit',
@@ -19,7 +19,7 @@ export function isTaxiLockMode(x: unknown): x is TaxiLockMode {
   return typeof x === 'string' && (TAXI_LOCK_MODES as readonly string[]).includes(x)
 }
 
-export interface ResolvedTaxiLock {
+interface ResolvedTaxiLock {
   mode: TaxiLockMode
   /** null when mode === 'no_limit'; otherwise the concrete lock timestamp. */
   lockedAt: Date | null

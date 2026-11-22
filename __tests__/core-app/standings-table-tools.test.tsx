@@ -203,6 +203,8 @@ describe('StandingsBoardView — streak, median split and head to head', () => {
     })
     expect(median.medianGames).toBe(true)
     const { container } = render(<StandingsBoardView board={median} initial={DEFAULT_STANDINGS_VIEW} />)
+    // 2026-11-14: the median split is behind "More columns".
+    fireEvent.click(within(container).getByTestId('standings-more-columns'))
     const heads = [...leagueTable(container).querySelectorAll('thead th')].map((th) => th.textContent?.replace(/[▲▼↕]/g, ''))
     expect(heads).toEqual(expect.arrayContaining(['H2H', 'Median']))
     const you = leagueTable(container).querySelector('tr[data-you="true"]')!
@@ -253,22 +255,25 @@ describe('StandingsBoardView — if scores held', () => {
     const { container, unmount } = render(
       <StandingsBoardView board={final} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} live={live} />,
     )
-    const toggle = within(container).getByRole('radiogroup', { name: 'Which results' })
+    // 2026-11-14: one "If scores held" toggle, where there were two radio buttons.
+    const toggle = within(container).getByTestId('standings-if-scores-held')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
     expect(leagueTable(container).querySelector('.af-stb-odds')).not.toBeNull()
     const youRecord = () => [...leagueTable(container).querySelectorAll('tr[data-you="true"] td')][2].textContent
     expect(youRecord()).toBe('0-4')
 
-    fireEvent.click(within(toggle).getByRole('radio', { name: 'If scores held' }))
+    fireEvent.click(toggle)
     expect(container.querySelector('.af-stb-asif')?.textContent).toMatch(/Week 5 is counted as it stands right now/)
     expect(youRecord()).toBe('1-4')
     expect(leagueTable(container).querySelector('.af-stb-odds')).toBeNull()
 
-    fireEvent.click(within(toggle).getByRole('radio', { name: 'Final results' }))
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
     expect(youRecord()).toBe('0-4')
     unmount()
 
     const { container: none } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
-    expect(within(none).queryByRole('radiogroup', { name: 'Which results' })).toBeNull()
+    expect(within(none).queryByTestId('standings-if-scores-held')).toBeNull()
   })
 })
 

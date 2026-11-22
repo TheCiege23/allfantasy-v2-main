@@ -4,12 +4,122 @@
  * Auth: `requireCronAuth` (`CRON_SECRET`, `X-Cron-Secret`, or Bearer).
  */
 
+import { describeHoldout } from '@/lib/trade-market/holdoutCheck'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { recomputeAllFantasyAdp } from '@/lib/adp/recomputeAllFantasyAdp'
 import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/ingestion/referenceWriter'
-import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { prisma } from '@/lib/prisma'
+import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/lib/trade-market/scheduledMarketRecalc'
+import { describePickMarket } from '@/lib/trade-market/pickMarketLearner'
+import { describePostureMarket } from '@/lib/trade-market/postureMarketLearner'
+import { describeNeedMarket } from '@/lib/trade-market/needMarketLearner'
+import { describeBoardSportMarket } from '@/lib/trade-market/boardSportLearner'
+
+/*
+ * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
+ * did: main sits at the 60-cron ceiling (`scripts/cron-budget-check.mjs`), and this is the daily job
+ * that already computes an AllFantasy-owned market number from our own data with no provider call.
+ * It runs AFTER every sport, isolated: its own try/catch and its own heartbeat
+ * (`cron-af-market-values`), so a refused or failed rebuild never turns an ADP fire red and an ADP
+ * failure never hides a rebuild. See `lib/trade-market/scheduledMarketRecalc.ts`.
+ *
+ * ⚠ DEADLINE, BECAUSE THE DISPATCHER CUTS AT 300 s. This fire measured p50 45 s, max 113 s over the
+ * 30 days to 2026-11-11 (`sync_job_runs`). The rebuild only starts if the sports finished inside
+ * `TRADE_MARKET_START_BUDGET_MS`; a skipped day costs nothing — the read layer serves rows up to 21
+ * days old, and the next day's fire rebuilds. `?includeTradeMarket=false` turns it off without a deploy.
+ */
+const TRADE_MARKET_JOB = 'cron-af-market-values'
+const TRADE_MARKET_START_BUDGET_MS = 150_000
+
+async function rebuildTradeMarket(startedAt: number): Promise<
+  { ran: true; result: ScheduledMarketRecalcResult } | { ran: false; reason: string }
+> {
+  const elapsed = Date.now() - startedAt
+  if (elapsed > TRADE_MARKET_START_BUDGET_MS) {
+    const reason = `skipped: ADP recompute used ${Math.round(elapsed / 1000)}s of the start budget`
+    await recordHeartbeat({ jobName: TRADE_MARKET_JOB, trigger: 'cron' }, { rowsWritten: 0, rowsSkipped: 1, status: 'partial', warnings: [reason] }, 0)
+    return { ran: false, reason }
+  }
+  try {
+    const result = await withSyncJobRun(
+      { jobName: TRADE_MARKET_JOB, trigger: 'cron' },
+      () => runScheduledMarketRecalc(prisma),
+      (r) => ({
+        rowsWritten: r.written,
+        rowsSkipped: r.written > 0 ? 0 : 1,
+        // Every window refused is `partial`: it correctly declined a biased population, but the market is ageing out.
+        status: r.written > 0 ? ('success' as const) : ('partial' as const),
+        warnings: [
+          ...(r.written > 0 ? [] : ['no book published in any window']),
+          ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
+          ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
+          ...(r.tradesStamped ? [`trades given a league format: ${r.tradesStamped}`] : []),
+          // Every season's unlabelled trades: how many histories were drawn, resolved, left unresolved, and rows labelled.
+          ...(r.formatBackfill
+            ? [`league type, all seasons: ${r.formatBackfill.resolved} of ${r.formatBackfill.histories} trade histories resolved (${r.formatBackfill.unresolved} unresolved), ${r.formatBackfill.rowsStamped} trade rows labelled`]
+            : ['league type, all seasons: the pass failed this run']),
+          // FAAB filled onto older Sleeper trades from the transaction warehouse, before the markets read them.
+          ...(r.faabBackfill == null
+            ? ['FAAB backfill: the pass failed this run']
+            : r.faabBackfill.off
+              ? ['FAAB backfill: off (TRADE_FAAB_BACKFILL=off)']
+              : [`FAAB backfill: ${r.faabBackfill.rowsFilled} trade rows given their FAAB`]),
+          // Where the pick, posture and need markets read from, and what the historical series priced.
+          ...(r.structural
+            ? [
+                r.structural.ok
+                  ? `structural pass (picks, posture, need): every season from ${r.structural.sinceSeason}`
+                  : `structural pass failed: picks, posture and need read the market's widest window instead`,
+                ...r.structural.history.map(
+                  (h) => `history chart ${h.book}: ${h.tradesPriced} older trades priced on their own day; ${h.scale?.note ?? 'not measured'}`,
+                ),
+              ]
+            : []),
+          // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
+          ...(r.datedShadow ?? []).map(
+            (d) =>
+              `dated market ${d.concept} (${d.learner === 'dated' ? 'LIVE' : 'shadow'}, since ${d.sinceSeason}): ${d.published} published from ${d.tradesUsed} trades; ` +
+              `${d.bothPublished} also in the current market, median gap ${d.medianGapPercent ?? '—'} pts; ${d.onlyCurrent} only current, ${d.onlyDated} only dated; ` +
+              `not measured: ${Object.entries(d.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`,
+          ),
+          // Pick values learned from the trades (shadow) — read from sync_job_runs before anything uses them.
+          ...(r.pickMarkets ?? []).map(
+            (m) =>
+              `${describePickMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.pickMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What contenders and rebuilders pay over middle teams (shadow).
+          ...(r.postureMarkets ?? []).map(
+            (m) =>
+              `${describePostureMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.postureMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What teams short of (or deep at) a position pay for it over normal-depth teams (shadow).
+          ...(r.needMarkets ?? []).map(
+            (m) =>
+              `${describeNeedMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.needMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // Did each learner hold on later trades? A `not_held` book is ignored by the grades until it holds again.
+          ...(r.holdout?.rows ?? []).map((h) => `hold-out ${h.learner} ${h.book}: ${describeHoldout(h)}`),
+          // NBA / MLB / NHL / NCAAB / soccer: posture and need from the board values saved with each trade (shadow).
+          ...(r.boardSports?.markets ?? []).map(
+            (m) =>
+              `${describeBoardSportMarket(m)} not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.boardSports?.written ? '' : '; ⚠ not stored this run'}`,
+          ),
+        ],
+      }),
+    )
+    return { ran: true, result }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240)
+    console.error('[recompute-allfantasy-adp] trade market rebuild failed:', reason)
+    return { ran: false, reason: `failed: ${reason}` }
+  }
+}
 
 /*
  * MLB / NBA / NHL dynasty values. Only the bare (NFL) fire was scheduled, so the dynasty War Room had
@@ -66,7 +176,8 @@ async function handle(req: NextRequest) {
   const season = seasonParam?.trim() ? seasonParam.trim() : null
 
   const refs = { includeTest, dryRun, includeReferences: url.searchParams.get('includeReferences') !== 'false' }
-  if (sports.length > 1) return handleMultiSport({ sports, season, includeImported, ...refs })
+  const includeTradeMarket = url.searchParams.get('includeTradeMarket') !== 'false'
+  if (sports.length > 1) return handleMultiSport({ sports, season, includeImported, includeTradeMarket, ...refs })
   const sport = sports[0] ?? 'NFL'
 
   try {
@@ -114,7 +225,7 @@ async function recomputeOne(args: RunArgs & { sport: string }) {
 }
 
 /** One sport at a time, so one sport throwing still lets the others recompute. */
-async function handleMultiSport(args: RunArgs & { sports: string[] }) {
+async function handleMultiSport(args: RunArgs & { sports: string[]; includeTradeMarket: boolean }) {
   const startedAt = Date.now()
   const reports: Record<string, unknown> = {}
   const errors: string[] = []
@@ -143,8 +254,15 @@ async function handleMultiSport(args: RunArgs & { sports: string[] }) {
       Date.now() - startedAt,
     )
   }
+  /*
+   * The trade market rebuild — scheduled fires only (never a dry or test-draft run), and it does not
+   * touch `status`: its outcome lives in its own heartbeat and in `tradeMarket` below.
+   */
+  const tradeMarket = !args.dryRun && !args.includeTest && args.includeTradeMarket
+    ? await rebuildTradeMarket(startedAt)
+    : null
   const status = failed === args.sports.length ? 500 : errors.length > 0 ? 207 : 200
-  return NextResponse.json({ ok: errors.length === 0, reports }, { status })
+  return NextResponse.json({ ok: errors.length === 0, reports, tradeMarket }, { status })
 }
 
 export async function GET(req: NextRequest) {

@@ -133,7 +133,9 @@ export function ScheduleView({
         ) : null}
       </ul>
 
-      <div className="grid gap-2 md:grid-cols-2">
+      {/* Two-up at lg, not md: md is the VIEWPORT, and at 820 the content column is ~410px, which left each card ~190px
+          and cut both team names. */}
+      <div className="grid gap-2 lg:grid-cols-2">
         {(visibleWeek?.matchups ?? []).map((matchup) => {
           const scored = matchup.homeScore != null && matchup.awayScore != null
           return (
@@ -160,7 +162,7 @@ export function ScheduleView({
               ) : (
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold rdt-text">{matchup.homeName}</p>
+                    <p className="line-clamp-2 break-words text-sm font-semibold rdt-text">{matchup.homeName}</p>
                     <p className="text-[11px] rdt-faint">{matchup.homeDivisionName ?? 'League'}</p>
                   </div>
                   {scored ? (
@@ -171,7 +173,7 @@ export function ScheduleView({
                     <span className="text-[11px] uppercase rdt-faint">vs</span>
                   )}
                   <div className="min-w-0 text-right">
-                    <p className="truncate text-sm font-semibold rdt-text">{matchup.awayName}</p>
+                    <p className="line-clamp-2 break-words text-sm font-semibold rdt-text">{matchup.awayName}</p>
                     <p className="text-[11px] rdt-faint">{matchup.awayDivisionName ?? 'League'}</p>
                   </div>
                 </div>

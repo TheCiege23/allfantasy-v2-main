@@ -255,7 +255,7 @@ export function CommissionerScoringSettingsPanel({
     <div className="flex min-h-0 flex-1 flex-col" data-testid="commissioner-scoring-settings-panel">
       <div className="shrink-0 border-b border-white/[0.06] px-6 pb-4 pt-5">
         <h3 className="text-[17px] font-semibold tracking-tight text-white">Scoring Settings</h3>
-        <p className="mt-1 text-[12px] text-white/45">Custom values apply to live scoring, standings, projections, and AI</p>
+        <p className="mt-1 text-[12px] text-white/45">Custom values apply to live scoring, standings, projections, and Chimmy</p>
         <p className="mt-2 text-[11px] text-white/35">
           {scoringConfig.sport}
           {scoringConfig.leagueVariant ? ` · ${scoringConfig.leagueVariant}` : ''} · {scoringConfig.formatType} ·{' '}

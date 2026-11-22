@@ -32,6 +32,7 @@ vi.mock('@/lib/commissioner-settings', () => ({
 vi.mock('@/lib/commissioner-settings/CommissionerSettingsService', () => ({
   updateLeagueSettings: updateLeagueSettingsMock,
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromAssert(() => assertCommissionerMock))
 
 describe('/api/commissioner/leagues/[leagueId]/settings route', () => {
   beforeEach(() => {

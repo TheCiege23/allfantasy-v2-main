@@ -2,13 +2,13 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import type { SingleGameSport } from "./singleGameSchedule"
 
-export type BracketEventMap = { seriesNumber: number; eventId: string }
-export type BracketEventMapRecord = {
+type BracketEventMap = { seriesNumber: number; eventId: string }
+type BracketEventMapRecord = {
   sport: SingleGameSport; season: number; games: BracketEventMap[]
   enteredAt: string; enteredByUserId: string | null
 }
 
-export function bracketEventMapKey(sport: SingleGameSport, season: number): string {
+function bracketEventMapKey(sport: SingleGameSport, season: number): string {
   return `BRACKET:${sport}:espn_events:${season}`
 }
 

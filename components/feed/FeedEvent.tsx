@@ -46,7 +46,7 @@ function initials(name: string): string {
 }
 
 /** "4m ago" / "3h ago" / "2d ago". Absolute date once it stops being a live event. */
-export function relativeTime(iso: string): string {
+function relativeTime(iso: string): string {
   const then = new Date(iso).getTime()
   if (!Number.isFinite(then)) return ''
   const secs = Math.max(0, Math.floor((Date.now() - then) / 1000))

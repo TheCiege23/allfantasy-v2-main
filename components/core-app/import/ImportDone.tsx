@@ -46,7 +46,7 @@ export type ImportDoneStat = {
   tone?: 'accent' | 'bad' | 'good'
 }
 
-export type ImportDoneProps = {
+type ImportDoneProps = {
   providerLabel: string
   /** Where "open what I just imported" goes. Null when the run wrote nothing new. */
   leagueHref: string | null
@@ -214,9 +214,10 @@ export function ImportDone({
           </a>
         ) : null}
         {extraActions}
+        <Link href="/core/career" className="af-btn af-done-alt">Your Career</Link>
+        <Link href="/core/rankings?scope=portfolio" className="af-btn af-done-alt">View rankings</Link>
       </div>
     </div>
   )
 }
 
-export default ImportDone

@@ -6,10 +6,10 @@
  * etc. (Slices 2+) reuse it unchanged. No I/O here — pure types + invariants.
  */
 
-export type DeciderScope = 'user' | 'commissioner' | 'operator'
+type DeciderScope = 'user' | 'commissioner' | 'operator'
 
 /** The four mandatory answers. If any is empty, it is not a Decision (assertFourAnswers throws). */
-export interface FourAnswers {
+interface FourAnswers {
   what_happened: string
   why_it_matters: string
   how_confident: string

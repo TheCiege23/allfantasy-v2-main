@@ -490,7 +490,7 @@ Generate all ${rounds * numTeams} picks with realistic player selections based o
       const isAbsentManager = absentManagerSet.has(managerKey)
       pick.isBotPick = Boolean(!pick.isUser && (replaceAbsentWithAi || isAbsentManager))
       if (pick.isBotPick && !pick.notes) {
-        pick.notes = 'AI bot selected this pick based on board context and team needs.'
+        pick.notes = 'Chimmy bot selected this pick based on board context and team needs.'
       }
     }
     const proposals = draftTypeLabel === 'auction' ? [] : generateInlineTradeProposals(draftResults, league)

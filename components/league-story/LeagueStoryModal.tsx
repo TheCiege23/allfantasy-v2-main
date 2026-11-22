@@ -48,7 +48,7 @@ function mapStoryTypeToShareType(storyType: StoryType): LeagueStoryType {
   return 'league_spotlight'
 }
 
-export interface LeagueStoryModalProps {
+interface LeagueStoryModalProps {
   leagueId: string
   leagueName: string
   week?: number

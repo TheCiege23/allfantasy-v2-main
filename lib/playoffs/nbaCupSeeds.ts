@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { isOfficialTeamName } from "./playoffBracketProjection"
 
 /** The knockout field, ordered by conference seed. Group play is not part of this bracket. */
-export type NbaCupField = {
+type NbaCupField = {
   season: number
   east: string[]
   west: string[]
@@ -11,7 +11,7 @@ export type NbaCupField = {
   enteredAt: string
 }
 
-export function nbaCupFieldCacheKey(season: number): string {
+function nbaCupFieldCacheKey(season: number): string {
   return `NBA:nba_cup_field:${season}`
 }
 

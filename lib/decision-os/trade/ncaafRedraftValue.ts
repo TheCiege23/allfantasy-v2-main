@@ -39,7 +39,7 @@ export type NcaafRosteredPlayer = {
 }
 
 /** Per-game points under this league's rules, for one player. */
-export type NcaafPerGame = { perGame: number; position: string | null }
+export type NcaafPerGame = { perGame: number; position: string | null; tradeMarket?: { percent: number; trades: number } }
 
 /** The best free agent at one position: who, and his per-game points under this league's rules. */
 export type NcaafReplacement = { name: string; perGame: number }
@@ -65,12 +65,12 @@ export const NCAAF_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 /** "weeks 5–15 of the 2026 college season" — the unit every value here is in. */
-export function ncaafWindowText(w: NcaafSeasonWindow): string {
+function ncaafWindowText(w: NcaafSeasonWindow): string {
   const span = w.fromWeek === w.toWeek ? `week ${w.fromWeek}` : `weeks ${w.fromWeek}–${w.toWeek}`
   return `${span} of the ${w.season} college season`
 }
 
-export function ncaafRedraftBasis(w: NcaafSeasonWindow): string {
+function ncaafRedraftBasis(w: NcaafSeasonWindow): string {
   return `Points over the best free agent at each position for ${ncaafWindowText(w)}, scored under this league’s rules. College byes are not on file per player, so no bye is taken off anyone.`
 }
 
@@ -101,17 +101,17 @@ type Priced = { name: string; value: number }
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: NcaafRedraftContext,
-): { priced: Priced[] } | { withheld: string } {
+): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const priced: Priced[] = []
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: NCAAF_REDRAFT_PICKS_REASON }
     if (asset.kind === 'faab') return { withheld: NCAAF_FAAB_REASON }
     const found = resolveNcaafRosteredPlayer(asset, ctx.rostered)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
+    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.`, valuationGap: 'unresolved_player' }
     const { player } = found
     const line = ctx.perGameByRosterId.get(player.rosterPlayerId)
     if (!line) {
-      return { withheld: `${player.name} has no college projection scored under this league’s rules, so this deal is not graded.` }
+      return { withheld: `${player.name} has no college projection scored under this league’s rules, so this deal is not graded.`, valuationGap: 'missing_projections' }
     }
     const position = String(line.position ?? player.position ?? '').trim().toUpperCase()
     const replacement = position ? ctx.replacementByPosition.get(position) : undefined
@@ -122,7 +122,7 @@ function priceSide(
     }
     // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
     const overPerGame = Math.max(0, line.perGame - replacement.perGame)
-    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks })
+    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks * (1 + (line.tradeMarket?.percent ?? 0) / 100) })
   }
   return { priced }
 }
@@ -144,15 +144,16 @@ export function gradeNcaafRedraftDeal(args: {
     return { graded: false, reason: `The ${ctx.window.season} college regular season has no weeks left to play, so there is nothing to grade this deal on.`, basis }
   }
   const give = priceSide(args.give, ctx)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get, ctx)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position — every player in it could be replaced from the wire.',
       basis,
     }
@@ -185,11 +186,6 @@ export function gradeNcaafRedraftDeal(args: {
     lines,
     moves: [],
   })
-}
-
-/** Which sports and league types this module grades. */
-export function isNcaafRedraft(sport: string | null | undefined, leagueType: string | null | undefined): boolean {
-  return String(sport ?? '').trim().toUpperCase() === 'NCAAF' && String(leagueType ?? '').trim().toLowerCase() === 'redraft'
 }
 
 /** Why a deal in a non-redraft college league carrying a pick is not graded (Phase 9 prices them). */

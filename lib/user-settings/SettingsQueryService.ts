@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { canConnectSpotify } from "@/lib/spotify/connectAccess"
 import { resolveLanguage } from "@/lib/i18n/constants"
 import { getUserSettingsRecord } from "./UserSettingsService"
 import { resolveSharedProfileBootstrap } from "./SharedProfileBootstrapService"
@@ -171,6 +172,12 @@ async function queryBaseProfile(
     discordConnectedAt: profile?.discordConnectedAt ?? null,
     spotifyDisplayName: profile?.spotifyDisplayName ?? null,
     spotifyConnectedAt: profile?.spotifyConnectedAt ?? null,
+    // Whether Settings shows a live Spotify Connect button (tester allowlist). The list
+    // itself never leaves the server — see lib/spotify/connectAccess.
+    spotifyConnectAllowed: canConnectSpotify({
+      email: user.email ?? null,
+      alreadyConnected: Boolean(profile?.spotifyConnectedAt),
+    }),
     bio: profile?.bio ?? null,
     preferredSports: Array.isArray(profile?.preferredSports)
       ? (profile.preferredSports as string[])
@@ -260,6 +267,12 @@ async function queryBaseProfileMinimal(
     discordConnectedAt: null,
     spotifyDisplayName: profile?.spotifyDisplayName ?? null,
     spotifyConnectedAt: profile?.spotifyConnectedAt ?? null,
+    // Whether Settings shows a live Spotify Connect button (tester allowlist). The list
+    // itself never leaves the server — see lib/spotify/connectAccess.
+    spotifyConnectAllowed: canConnectSpotify({
+      email: user.email ?? null,
+      alreadyConnected: Boolean(profile?.spotifyConnectedAt),
+    }),
     bio: profile?.bio ?? null,
     preferredSports: null,
     notificationPreferences: null,

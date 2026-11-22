@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import {
   commissionerPickEdit,
   COMMISSIONER_PICK_EDIT_ACTIONS,
@@ -57,6 +58,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!gate.ok) {
     return NextResponse.json({ error: gate.err.error, code: gate.err.code }, { status: gate.err.status })
   }
+
+  // Sleeper rewrites a mirrored draft on every sync; an edit made here would be silently undone.
+  const mirrored = await refuseIfSleeperMirrored(leagueId)
+  if (mirrored) return NextResponse.json(mirrored.body, { status: mirrored.status })
 
   if (!(await isLeagueRosterDraftReady(leagueId))) {
     return NextResponse.json(rosterConfigurationIncompleteBody(), { status: 400 })
@@ -124,6 +129,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
   }
 
+  await recordCommissionerDraftAction(leagueId, userId, 'pick_edit', {
+    overall: Math.floor(overallPickNumber),
+    source: `pick-edit:${action}`,
+  })
   const sessionOut = await withViewerSession(leagueId, userId, result.snapshot)
   return NextResponse.json({ ok: true, session: sessionOut })
 }

@@ -8,7 +8,7 @@
  * questions (reuse rate, provider calls avoided, coalesced duplicates, per-tool cost, token
  * reserve/finalize/release balance, stuck recoveries) without any admin dashboard.
  */
-export type IntelligenceEventType =
+type IntelligenceEventType =
   | 'cache_hit'
   | 'cache_miss'
   | 'stale_hit'
@@ -49,7 +49,7 @@ export interface IntelligenceObserver {
 /** Discards everything (tests that don't assert telemetry). */
 export const noopObserver: IntelligenceObserver = { emit() {} }
 
-export type IntelligenceCounters = {
+type IntelligenceCounters = {
   byType: Record<string, number>
   /** provider calls avoided = cache_hit + stale_hit + coalesced_waiter (no orchestration ran). */
   providerCallsAvoided: number

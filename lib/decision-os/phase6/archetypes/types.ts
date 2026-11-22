@@ -8,18 +8,18 @@
 
 // ── Input types (structurally mirrors Phase 5.3) ─────────────────────────────
 
-export type LeagueEngagementTierInput = 'elite' | 'active' | 'moderate' | 'passive' | 'dormant'
-export type ActivityTierInput         = 'high'  | 'moderate' | 'low' | 'none'
-export type RetentionRiskInput        = 'low'   | 'medium'   | 'high' | 'critical'
-export type CommissionerWorkloadInput = 'light' | 'moderate' | 'heavy' | 'critical'
+type LeagueEngagementTierInput = 'elite' | 'active' | 'moderate' | 'passive' | 'dormant'
+type ActivityTierInput         = 'high'  | 'moderate' | 'low' | 'none'
+type RetentionRiskInput        = 'low'   | 'medium'   | 'high' | 'critical'
+type CommissionerWorkloadInput = 'light' | 'moderate' | 'heavy' | 'critical'
 
-export interface LeagueActivitySignalInput {
+interface LeagueActivitySignalInput {
   tier:           ActivityTierInput
   /** Events per manager in the lookback window. */
   perManagerRate: number
 }
 
-export interface LeagueParticipationInput {
+interface LeagueParticipationInput {
   totalManagers:    number
   activeManagers:   number
   inactiveManagers: number

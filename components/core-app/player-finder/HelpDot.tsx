@@ -36,4 +36,3 @@ export function HelpDot({ title, body }: { title: string; body: string }) {
   )
 }
 
-export default HelpDot

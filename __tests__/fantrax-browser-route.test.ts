@@ -2,7 +2,7 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest'
 import {NextRequest, NextResponse} from 'next/server'
 const mocks=vi.hoisted(()=>({auth:vi.fn(),context:vi.fn(),importScores:vi.fn()}))
-vi.mock('@/lib/auth-guard',()=>({requireVerifiedUser:mocks.auth}))
+vi.mock('@/lib/auth-guard',()=>({requireVerifiedUser: mocks.auth, requireAgeConfirmedUser: mocks.auth}))
 vi.mock('@/lib/http/served-origin',()=>({getServedOrigin:()=> 'https://www.allfantasy.ai'}))
 vi.mock('@/lib/import-os/collector/fantraxBrowserContext',()=>({fantraxBrowserContext:mocks.context}))
 vi.mock('@/lib/import-os/collector/fantraxBrowserActuals',()=>({importFantraxBrowserActuals:mocks.importScores}))

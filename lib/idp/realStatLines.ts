@@ -15,11 +15,11 @@ import type { IdpWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
 
 export const IDP_PBP_SOURCE = 'rolling_insights_pbp'
 
-export type RealIdpWeek = { week: number; stats: IdpWeeklyStatLine }
+type RealIdpWeek = { week: number; stats: IdpWeeklyStatLine }
 
-export type RealIdpMissReason = 'no_identity_mapping' | 'no_stat_line'
+type RealIdpMissReason = 'no_identity_mapping' | 'no_stat_line'
 
-export type RealIdpLineLookup = {
+type RealIdpLineLookup = {
   /** roster player id → ingested weekly lines, ascending week. */
   linesByPlayer: Map<string, RealIdpWeek[]>
   /** roster player id → why nothing could be served. */

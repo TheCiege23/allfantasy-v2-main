@@ -186,16 +186,26 @@ describe('the page view', () => {
 })
 
 describe('the trade-evaluator route', () => {
-  const route = fs.readFileSync(path.join(process.cwd(), 'app/api/trade-evaluator/route.ts'), 'utf8')
+  const route = fs.readFileSync(path.join(process.cwd(), 'app/api/trade-evaluator/route.ts'), 'utf8').replace(/\r\n/g, '\n')
+  const leagueGrade = route.slice(route.indexOf('async function evaluateLeagueOffer('), route.indexOf('async function renderLeagueOffer('))
+  const leagueResponse = route.slice(route.indexOf('async function renderLeagueOffer('), route.indexOf('export const POST'))
+  const legacyGrade = route.slice(route.indexOf('const evaluationReceiptPromise:'), route.indexOf('const oneGradePayload'))
 
   it('returns keeper cost beside the grade, from the league the grade uses', () => {
+    expect(route).toMatch(/evaluateLeagueOffer\(data, evaluationLeagueId, userId\)/)
+    expect(route).toMatch(/return leagueResponse\(evaluationLeagueId, scopedOffer\)/)
+    expect(leagueGrade).toMatch(/evaluateTrade\(\{[\s\S]*?\bleagueId,/)
+    expect(leagueResponse).toMatch(/loadTradeKeeperCosts\(\{\s*leagueId,/)
+    expect(leagueResponse).toMatch(/\bkeeperCosts,/)
+    expect(legacyGrade).toMatch(/leagueId: evaluationLeagueId/)
+    expect(route).toMatch(/const leagueId = evaluationLeagueId\s*\n\s*if \(!leagueId\) return \{ applies: false \}/)
     expect(route).toMatch(/keeperCosts: await keeperCostsPromise/)
-    expect(route).toMatch(/loadTradeKeeperCosts\(\{\s*leagueId,/)
-    expect(route).toMatch(/await evaluationLeagueIdPromise\.catch\(\(\) => null\) : null\s*\n\s*if \(!leagueId\) return \{ applies: false \}/)
   })
 
   /** Each player's value is the one grade's (its receipt), never the route's dynasty-chart first pass. */
   it('values each player at the one grade’s number', () => {
+    expect(leagueResponse).toMatch(/const players = receipt\.assets\.filter/)
+    expect(leagueResponse).toMatch(/value: asset\.marketValue,/)
     expect(route).toMatch(/const receipt = await evaluationReceiptPromise\.catch\(\(\) => null\)/)
     expect(route).toMatch(/value: gradeValueByName\.get\(p\.name\.toLowerCase\(\)\.trim\(\)\) \?\? null,/)
     expect(route).not.toMatch(/loadTradeKeeperCosts\([\s\S]{0,400}value: p\.value/)
@@ -203,8 +213,31 @@ describe('the trade-evaluator route', () => {
 
   /** 🛑 Beside, not in: nothing keeper-related may reach the one grade's inputs. */
   it('keeps keeper cost out of the letter', () => {
-    const gradeCall = route.slice(route.indexOf('evaluateTrade('), route.indexOf('const oneGradePayload'))
-    expect(gradeCall.length).toBeGreaterThan(0)
-    expect(gradeCall).not.toMatch(/keeper/i)
+    for (const gradePath of [leagueGrade, legacyGrade]) {
+      expect(gradePath).toMatch(/evaluateTrade\(/)
+      expect(gradePath).not.toMatch(/keeper/i)
+    }
+  })
+})
+
+/*
+ * The bar is two thirds (owner's decision, 2026-11-20; it was 0.7). A production league sat at 24 of
+ * 35 keepers at their drafted round, 69%, with the rest bumped later by same-round clashes.
+ */
+describe('the same-round bar is two thirds', () => {
+  const league = (agreeing: number, total: number) => {
+    const picks: Array<{ playerId: string; season: number; round: number; isKeeper: boolean }> = []
+    for (let i = 0; i < total; i++) {
+      picks.push({ playerId: `p${i}`, season: 2025, round: 5, isKeeper: false })
+      picks.push({ playerId: `p${i}`, season: 2026, round: i < agreeing ? 5 : 8, isKeeper: true })
+    }
+    return picks
+  }
+  it('24 of 35 is measured as same-round; 23 of 35 is not', () => {
+    expect(measureKeeperCostRule(league(24, 35))).toEqual({ rule: 'same_round', season: 2026, measured: 35, agreeing: 24 })
+    expect(measureKeeperCostRule(league(23, 35))).toMatchObject({ rule: null, measured: 35, agreeing: 23 })
+  })
+  it('exactly two thirds counts', () => {
+    expect(measureKeeperCostRule(league(4, 6))).toMatchObject({ rule: 'same_round' })
   })
 })

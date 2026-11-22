@@ -1,4 +1,4 @@
-export interface SleeperUserIdentity {
+interface SleeperUserIdentity {
   username: string
   userId?: string
 }

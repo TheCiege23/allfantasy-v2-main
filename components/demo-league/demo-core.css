@@ -1,0 +1,54 @@
+/*
+ * The real app screens inside the demo frame (DemoCoreShell). Only what a visitor must not see or
+ * cannot use is changed here; everything else is the app's own styling.
+ */
+
+/* League Home's footer: "Imported from …", Customize page, Contact support, Back to home — member
+   controls with no meaning (or no listener) in the demo. */
+.af-core[data-demo-league] .af-lh-foot { display: none; }
+
+/* "More about this league" folds only the member sections the demo hides (DEMO_HIDDEN_HOME_SECTIONS),
+   so it would open onto nothing. */
+.af-core[data-demo-league] .af-lho-more { display: none; }
+
+/* Standings: "Share standings" renders an image from a members-only API (a visitor gets nothing), and
+   "we cannot tell which team is yours" is true of every visitor, so it is noise here. */
+.af-core[data-demo-league] .af-st-share,
+.af-core[data-demo-league] .af-st-noteam { display: none; }
+
+/* League-type screens (FormatRealScreen). Controls that open member-only views do nothing for a
+   visitor, so they are hidden rather than left inert:
+   - Salary Cap's "Back" (the first button of both the dashboard and the contracts table);
+   - the Devy hero's "DM @chimmy" and "League settings";
+   - Survivor Guilly's "Your tribe" (a visitor has none) and the commissioner's "Tribe setup". */
+.af-core[data-demo-league] [data-testid='format-real-screen-salary-cap'] .space-y-6 > button:first-child,
+.af-core[data-demo-league] [data-testid='format-real-screen-devy'] button,
+.af-core[data-demo-league] [data-testid='format-real-screen-survivor-guilly'] [data-testid='sg-tribedraw'],
+.af-core[data-demo-league] [data-testid='format-real-screen-survivor-guilly'] [data-testid='sg-tribesetup'] { display: none; }
+
+/* The live demo league has no image; its rail tile shows the AF crest letters on the app's tile. */
+.af-core[data-demo-league] .af-rail-tile-art { overflow: hidden; }
+
+/*
+ * Phone top bar. The app's own rules (af-core-shell.css, ≤720px) make `.af-topbar-right` a sideways
+ * scroller sized for a row of status chips. The demo has ONE thing there — "Sign up free" — and the
+ * league name beside it took the room: measured at 390px, the right side got 56px for a 106px button,
+ * so the button was cut off at the screen edge. Here the name gives way instead (one line, ellipsis)
+ * and the button keeps its width.
+ */
+/* ⚠ `.af-core.af-shell[...]`, not `.af-core[...]`: the shell's own phone rule
+   `.af-core.af-shell:not([data-league-first="true"]) .af-topbar-right { flex: 1 1 0 }` is (0,4,0), and a
+   (0,3,0) selector here lost to it silently — measured, the button stayed cut off. Equal specificity
+   and a later sheet is what wins. */
+@media (max-width: 720px) {
+  .af-core.af-shell[data-demo-league] .af-topbar { flex-wrap: nowrap; }
+  .af-core.af-shell[data-demo-league] .af-scope { flex: 1 1 auto; min-width: 0; }
+  .af-core.af-shell[data-demo-league] .af-scope-btn {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core.af-shell[data-demo-league] .af-topbar-right { flex: 0 0 auto; overflow: visible; max-width: none; }
+}

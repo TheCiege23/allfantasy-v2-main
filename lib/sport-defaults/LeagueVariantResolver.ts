@@ -7,7 +7,7 @@ import { toSportType } from './sport-type-utils'
 import { getFormatTypeForVariant, isIdpVariant } from './LeagueVariantRegistry'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 
-export interface LeagueVariantResolution {
+interface LeagueVariantResolution {
   sportType: SportType
   variant: string | null
   formatType: string

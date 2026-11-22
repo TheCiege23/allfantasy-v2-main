@@ -36,14 +36,14 @@
 
 import { isPlaceholderBirthday } from '@/lib/player-identity/birthdayRules'
 
-export type IdentityRow = {
+type IdentityRow = {
   /** `Player.id`. Rows with none are ignored by the caller. */
   playerId: string | null
   /** For `provider: 'sleeper'` this IS the Sleeper player id. */
   providerPlayerId: string
 }
 
-export type DobRow = {
+type DobRow = {
   sleeperId: string | null
   dob: string | null
   /** The row's `SportsPlayer.source`. Sleeper's own row outranks a provider row stamped with its id. */

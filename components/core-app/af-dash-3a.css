@@ -267,6 +267,10 @@
 
 .af3a-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
 .af3a-body[data-no-side] { grid-template-columns: minmax(0, 1fr); }
+/* Nothing in the main column (Dashboard3A `mainShown`): the side cards share the full width instead. */
+.af3a-body[data-no-main] { grid-template-columns: minmax(0, 1fr); }
+.af3a-body[data-no-main] > .af3a-col-main { display: none; }
+.af3a-body[data-no-main] > .af3a-col-side { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .af3a-col-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 .af3a-col-side { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
@@ -737,6 +741,10 @@
 .af-connect-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .af-connect-note { margin: 8px 0 0; max-width: 36ch; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .af-connect-note[data-tone='bad'] { color: var(--warn, #f59e0b); }
+/* An unverified account's confirm-your-email nudge (2026-11-15): under the league, never instead of it,
+   so its button is the quiet one. A full-width row of its own, outside any media query. */
+.af-connect-confirm { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.af-connect-confirm .af-connect-go { min-height: 36px; background: transparent; color: var(--text); border: 1px solid var(--line); }
 @media (max-width: 560px) {
   .af-connect-actions, .af-connect-go { width: 100%; }
 }

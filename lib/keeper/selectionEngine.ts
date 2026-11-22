@@ -6,6 +6,7 @@ import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
 import { placeTeamKeepers, placedKeeperLabel, resolveKeeperRules } from './keeperRules'
 import { KEEPER_SUBMITTED_NONE, applyMissedDeadlineRule } from './missedDeadlineService'
+import { resolveKeeperSourceRoster } from './keeperSourceRoster'
 
 export async function openKeeperSelectionPhase(
   leagueId: string,
@@ -92,9 +93,21 @@ async function submitKeeperSelectionsLocked(
     await db.leagueAuditLog.create({ data: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId, metadata: { rosterId } } })
   }
 
-  const elig = await db.keeperEligibility.findMany({
-    where: { seasonId, rosterId, playerId: { in: playerIds } },
-  })
+  // The window's roster is next season's empty shell; the keepable players and their eligibility rows
+  // are on this owner's roster in the season just played (lib/keeper/keeperSourceRoster.ts). Records
+  // are still written under the window's season and roster: lock, carryover and the next draft read those.
+  const source = await resolveKeeperSourceRoster({ leagueId, seasonId, rosterId }, db)
+  const sourcePlayers = source.mapped
+    ? source.rosterId
+      ? await db.redraftRosterPlayer.findMany({ where: { rosterId: source.rosterId } })
+      : []
+    : roster.players
+
+  const elig = source.rosterId
+    ? await db.keeperEligibility.findMany({
+        where: { seasonId: source.seasonId, rosterId: source.rosterId, playerId: { in: playerIds } },
+      })
+    : []
   const eligMap = new Map(elig.map((e) => [e.playerId, e]))
 
   const valid: SubmitKeeperResult['valid'] = []
@@ -107,13 +120,22 @@ async function submitKeeperSelectionsLocked(
     e: (typeof elig)[0]
   }[] = []
 
+  // A keeper the commissioner rejected stays rejected: saving him again does not put him back.
+  const rejected = new Set(
+    (await db.keeperRecord.findMany({ where: { leagueId, seasonId, rosterId, status: 'rejected', playerId: { in: playerIds } }, select: { playerId: true } })).map((r) => r.playerId),
+  )
+
   for (const pid of playerIds) {
+    if (rejected.has(pid)) {
+      conflicted.push({ playerIds: [pid], reason: 'rejected_by_commissioner' })
+      continue
+    }
     const e = eligMap.get(pid)
     if (!e?.isEligible) {
       conflicted.push({ playerIds: [pid], reason: e?.ineligibleReason ?? 'ineligible' })
       continue
     }
-    const onRoster = roster.players.some((p) => p.playerId === pid && !p.droppedAt)
+    const onRoster = sourcePlayers.some((p) => p.playerId === pid && !p.droppedAt)
     if (!onRoster) {
       conflicted.push({ playerIds: [pid], reason: 'not_on_roster' })
       continue
@@ -169,7 +191,14 @@ async function submitKeeperSelectionsLocked(
     const costLabel = spot ? placedKeeperLabel(spot) : e.projectedCost
     if (spot && spot.round !== spot.costRound) warnings.push(`${pid}: ${costLabel}`)
 
-    const player = roster.players.find((p) => p.playerId === pid)!
+    const player = sourcePlayers.find((p) => p.playerId === pid && !p.droppedAt)!
+    /*
+     * This keep's season as a keeper: the seasons he was already a LOCKED keeper (the eligibility
+     * row's history count, the same one the max-years rule uses) plus this one. It was the constant
+     * 1, so every record said "first year". Selection is refused once the session locks (above), so
+     * the history here never already includes this season.
+     */
+    const yearsKept = Math.max(0, e.yearsKept ?? 0) + 1
     const rec = await db.keeperRecord.upsert({
       where: {
         seasonId_rosterId_playerId: {
@@ -188,7 +217,7 @@ async function submitKeeperSelectionsLocked(
         team: player.team,
         sport: player.sport,
         originalDraftYear: new Date().getFullYear(),
-        yearsKept: 1,
+        yearsKept,
         costRound,
         costAuctionValue: e.projectedCostAuction,
         costLabel,
@@ -199,6 +228,7 @@ async function submitKeeperSelectionsLocked(
         costRound,
         costAuctionValue: e.projectedCostAuction,
         costLabel,
+        yearsKept,
         status: 'pending',
         submittedAt: new Date(),
       },
@@ -211,9 +241,34 @@ async function submitKeeperSelectionsLocked(
     })
   }
 
+  /*
+   * 🛑 THE LIST A MANAGER SAVES IS THEIR SELECTION. The Keepers tab posts every ticked player, but a
+   * save only ever added: untick a player and save, and his record stayed on file, was locked with
+   * the rest, cost a pick and could put the team over the keeper limit (the limit is checked against
+   * the list sent, not what is stored). Saving nobody left every earlier keeper in place too. A
+   * pending or commissioner-confirmed keeper the list no longer names is removed. Locked and rejected
+   * records are never touched.
+   */
+  await db.keeperRecord.deleteMany({ where: { leagueId, seasonId, rosterId, status: { in: ['pending', 'confirmed'] }, playerId: { notIn: playerIds } } })
+
+  /*
+   * How many TEAMS have submitted, counted, not incremented. It went up by one on every save, so one
+   * manager saving twice read "2 of 4 teams submitted" to the commissioner (walked locally
+   * 2026-11-20), and a refused pick counted too. A team has submitted when it holds a keeper on
+   * file or has deliberately kept nobody.
+   */
+  const [withKeepers, keptNobody] = await Promise.all([
+    db.keeperRecord.findMany({ where: { leagueId, seasonId, status: { not: 'rejected' } }, select: { rosterId: true }, distinct: ['rosterId'] }),
+    db.leagueAuditLog.findMany({ where: { leagueId, actionType: KEEPER_SUBMITTED_NONE, entityType: 'keeper_session', entityId: seasonId }, select: { metadata: true } }),
+  ])
+  const submitted = new Set(withKeepers.map((r) => r.rosterId))
+  for (const row of keptNobody) {
+    const id = (row.metadata as { rosterId?: unknown } | null)?.rosterId
+    if (typeof id === 'string' && id) submitted.add(id)
+  }
   await db.keeperSelectionSession.updateMany({
     where: { seasonId, leagueId },
-    data: { teamsSubmitted: { increment: 1 } },
+    data: { teamsSubmitted: submitted.size },
   })
 
   return { valid, conflicted, cost, warnings }
@@ -279,8 +334,14 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
       console.error('[keeper] missed-deadline rule failed; defaults rolled back', { leagueId, sessionId, error: error instanceof Error ? error.message : error })
     }
 
+    /*
+     * 🛑 A KEEPER THE COMMISSIONER CONFIRMED WAS DROPPED AT THE LOCK. The dashboard's Confirm button
+     * sets `confirmed`; the lock promoted only `pending`, and the carryover, the pick forfeits and the
+     * next draft all read `locked`. So approving a keeper was the one way to lose him: he stayed in
+     * the pool and the team kept its pick. Both statuses lock; `rejected` never does.
+     */
     await db.keeperRecord.updateMany({
-      where: { leagueId, seasonId: current.seasonId, status: 'pending' },
+      where: { leagueId, seasonId: current.seasonId, status: { in: ['pending', 'confirmed'] } },
       data: { status: 'locked', lockedAt: new Date() },
     })
     await db.keeperSelectionSession.update({ where: { id: sessionId }, data: { status: 'locked', lockedAt: new Date() } })

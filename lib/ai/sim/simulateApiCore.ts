@@ -104,7 +104,7 @@ export const simulateBodySchema = z.discriminatedUnion('kind', [
   }),
 ])
 
-export type ParsedSimulateBody = z.infer<typeof simulateBodySchema>
+type ParsedSimulateBody = z.infer<typeof simulateBodySchema>
 
 export function executeSimulateBody(b: ParsedSimulateBody): unknown {
   const it = 'iterations' in b && b.iterations != null ? b.iterations : undefined

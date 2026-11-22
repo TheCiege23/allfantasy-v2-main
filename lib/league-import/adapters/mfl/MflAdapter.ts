@@ -286,6 +286,19 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
           original_roster_id: pick.originalFranchiseId,
           current_owner_roster_id: pick.currentOwnerFranchiseId,
         })),
+      /*
+       * The other half of that same list: picks MFL reports as held by their own
+       * franchise. Passing them on is what clears a stored row for a pick that was
+       * traded away and has since come back — the filter above drops such a pick,
+       * and nothing else ever removed its row.
+       */
+      returned_picks: (raw.futureDraftPicks ?? [])
+        .filter((pick) => pick.originalFranchiseId === pick.currentOwnerFranchiseId)
+        .map((pick) => ({
+          season: pick.season,
+          round: pick.round,
+          original_roster_id: pick.originalFranchiseId,
+        })),
       draft_picks: draftPicks,
       transactions,
       standings,

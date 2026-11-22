@@ -21,7 +21,7 @@ import {
 import type { CommissionerPickEditAction } from '@/lib/live-draft-engine/commissioner/commissionerPickEditService'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 
-export interface CommissionerAuditLogListProps {
+interface CommissionerAuditLogListProps {
   leagueId: string
   /** Used to resolve rosterId → displayName in the list rows. Safe if empty. */
   slotOrder?: SlotOrderEntry[]
@@ -253,4 +253,3 @@ export function CommissionerAuditLogList(props: CommissionerAuditLogListProps) {
   )
 }
 
-export default CommissionerAuditLogList

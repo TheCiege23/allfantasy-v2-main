@@ -78,6 +78,18 @@ export function isLeagueEntryFeeDisabledError(e: unknown): e is LeagueEntryFeeDi
  * pass anything into it that should not appear in a client response, because the
  * route surfaces `.message`.
  */
+/**
+ * 🛑 ONE SWITCH FOR ALL LEAGUE MONEY (owner's decision, 2026-11-07: AllFantasy does not hold league
+ * money). It used to guard only Stripe checkout and the webhook, so payout requests, payout approvals,
+ * manual "paid" marks that raise the in-app treasury, waivers and the paid-league settings all ran with
+ * it off. Every one of those routes now refuses with this body while it is off. Nothing is deleted:
+ * the rows stay, and setting the variable to 'true' restores the flows exactly.
+ */
+export function leagueMoneyRefusal(detail?: string): { error: string; code: 'league_entry_fee_disabled'; status: 403 } | null {
+  if (isLeagueEntryFeeProcessingEnabled()) return null
+  return { error: new LeagueEntryFeeDisabledError(detail).message, code: 'league_entry_fee_disabled', status: 403 }
+}
+
 export function assertLeagueEntryFeeProcessingEnabled(detail?: string): void {
   if (isLeagueEntryFeeProcessingEnabled()) return
   throw new LeagueEntryFeeDisabledError(detail)

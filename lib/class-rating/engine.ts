@@ -36,9 +36,9 @@ export const GLICKO = {
   minLeagueTeams: 4,
 } as const
 
-export const CLASS_COUNT = 25
+const CLASS_COUNT = 25
 export const DIVISION_COUNT = 5
-export const CLASSES_PER_DIVISION = CLASS_COUNT / DIVISION_COUNT
+const CLASSES_PER_DIVISION = CLASS_COUNT / DIVISION_COUNT
 
 /* ──────────────────────────────── types ──────────────────────────────── */
 
@@ -102,7 +102,7 @@ export type ClassifiedRating = {
 const g = (phi: number) => 1 / Math.sqrt(1 + (3 * phi * phi) / (Math.PI * Math.PI))
 const expected = (mu: number, muj: number, phij: number) => 1 / (1 + Math.exp(-g(phij) * (mu - muj)))
 
-export type Observation = { muj: number; phij: number; s: number }
+type Observation = { muj: number; phij: number; s: number }
 
 export function newRating(): RatingState {
   return { mu: 0, phi: GLICKO.startRd / GLICKO.scale, sigma: GLICKO.startSigma, games: 0, lastPeriod: null }

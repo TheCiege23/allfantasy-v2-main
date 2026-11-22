@@ -1,4 +1,5 @@
 import { defineMessages } from '@/lib/i18n/messages'
+import type { SkipReason } from '@/lib/core-app/gameDayTriage'
 
 /**
  * Game Plan (components/core-app/screens/GamePlan.tsx). Every string is the one the screen printed
@@ -32,7 +33,22 @@ export const gamePlanMessages = defineMessages({
     embedAll: 'Flagged starters in active manual lineups · soonest deadline first',
     embedWeek: (week: number) => ` · week ${week}`,
     startersCheckedAcross: 'starters checked across',
+    ofTotal: (total: number) => `of ${total}`,
     leagues: (n: number): string => (n === 1 ? 'league' : 'leagues'),
+    skipsSummary: (n: number) => `${n} ${n === 1 ? 'league' : 'leagues'} not checked — which, and why`,
+    skipsLabel: 'Leagues not checked',
+    skipReason: (reason: SkipReason, n: number): string =>
+      ({
+        no_team: `No team of yours claimed (${n}) — we can’t tell which lineup is yours`,
+        no_roster: `No synced roster yet (${n}) — your team is claimed, but we hold no lineup for it. Sync the league.`,
+        unsupported: `On a platform we can’t read yet (${n})`,
+        not_read: `Past the limit this list checks at once (${n})`,
+        best_ball: `Best ball (${n}) — the platform sets those lineups`,
+        pre_season: `Draft not finished (${n}) — no lineup to set yet`,
+        season_over: `Season over (${n})`,
+        eliminated: `Your team is eliminated (${n})`,
+      })[reason],
+    unnamedLeague: 'Unnamed league',
     alreadyLocked: (_n: number) => 'already locked and shown at the end',
     emptyListLabel: 'Lineups with an empty starting slot',
     emptyStarting: (n: number) => `${n} empty starting ${n === 1 ? 'slot' : 'slots'}`,
@@ -73,7 +89,22 @@ export const gamePlanMessages = defineMessages({
     embedAll: 'Titulares señalados en alineaciones manuales activas · primero el que se bloquea antes',
     embedWeek: (week) => ` · semana ${week}`,
     startersCheckedAcross: 'titulares revisados en',
+    ofTotal: (total) => `de ${total}`,
     leagues: (n) => (n === 1 ? 'liga' : 'ligas'),
+    skipsSummary: (n) => `${n} ${n === 1 ? 'liga sin revisar' : 'ligas sin revisar'}: cuáles y por qué`,
+    skipsLabel: 'Ligas sin revisar',
+    skipReason: (reason, n) =>
+      ({
+        no_team: `Ningún equipo tuyo reclamado (${n}): no sabemos cuál alineación es la tuya`,
+        no_roster: `Sin plantel sincronizado (${n}): tu equipo está reclamado, pero no tenemos su alineación. Sincroniza la liga.`,
+        unsupported: `En una plataforma que todavía no podemos leer (${n})`,
+        not_read: `Más de las que esta lista revisa a la vez (${n})`,
+        best_ball: `Best ball (${n}): la plataforma arma esas alineaciones`,
+        pre_season: `Draft sin terminar (${n}): todavía no hay alineación que armar`,
+        season_over: `Temporada terminada (${n})`,
+        eliminated: `Tu equipo está eliminado (${n})`,
+      })[reason as SkipReason],
+    unnamedLeague: 'Liga sin nombre',
     alreadyLocked: (n) => (n === 1 ? 'ya bloqueado y al final' : 'ya bloqueados y al final'),
     emptyListLabel: 'Alineaciones con un puesto titular vacío',
     emptyStarting: (n) => `${n} ${n === 1 ? 'puesto titular vacío' : 'puestos titulares vacíos'}`,

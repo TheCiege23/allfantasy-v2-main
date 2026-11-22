@@ -1,6 +1,6 @@
 import type { UseAFProjectionParams } from '@/components/weather/useAFProjection'
 
-export type AFCrestSize = 'xs' | 'sm' | 'md'
+type AFCrestSize = 'xs' | 'sm' | 'md'
 
 export type AFCrestButtonProps = UseAFProjectionParams & {
   size?: AFCrestSize

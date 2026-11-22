@@ -37,9 +37,9 @@ export function LeagueFeedCommissionerSection({
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
       <div>
-        <SettingsSectionLabel>League feed & AI flavor</SettingsSectionLabel>
+        <SettingsSectionLabel>League feed & Chimmy flavor</SettingsSectionLabel>
         <p className="mt-1 text-[11px] leading-relaxed text-white/45">
-          Central activity stream for the league. AI personality lines are optional and never change outcomes.
+          Central activity stream for the league. Chimmy personality lines are optional and never change outcomes.
         </p>
       </div>
 
@@ -51,13 +51,13 @@ export function LeagueFeedCommissionerSection({
           onChange={(v) => push({ enabled: v })}
         />
         <SettingsToggleRow
-          label="AI personality flavor (quotes)"
+          label="Chimmy personality flavor (quotes)"
           checked={feed.aiFlavorEnabled !== false}
           disabled={disabled || feed.enabled === false}
           onChange={(v) => push({ aiFlavorEnabled: v })}
         />
         <SettingsToggleRow
-          label="Show AI archetypes to the league"
+          label="Show Chimmy archetypes to the league"
           checked={feed.showArchetypesPublic !== false}
           disabled={disabled}
           onChange={(v) => push({ showArchetypesPublic: v })}
@@ -84,7 +84,7 @@ export function LeagueFeedCommissionerSection({
           ))}
         </div>
         <p className="mt-1 text-[11px] text-white/35">
-          Low throttles optional AI quotes on busy stretches; high keeps more flavor on marquee moments.
+          Low throttles optional Chimmy quotes on busy stretches; high keeps more flavor on marquee moments.
         </p>
       </div>
 

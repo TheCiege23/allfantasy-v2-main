@@ -1,7 +1,7 @@
 import { buildSeasonLeagueLayout } from './seasonLeagueLayout'
 import { buildSeasonBlueprint } from './seasonBlueprint'
 
-export type OpeningEntrant = { id: string; userId: string; displayName: string; avatarUrl: string | null }
+type OpeningEntrant = { id: string; userId: string; displayName: string; avatarUrl: string | null }
 /** Fisher–Yates with an exclusive-upper-bound cryptographic draw supplied by the server. */
 export function buildOpeningField(input: unknown, entrants: OpeningEntrant[], draw: (upper: number) => number) {
   const { config } = buildSeasonBlueprint(input)

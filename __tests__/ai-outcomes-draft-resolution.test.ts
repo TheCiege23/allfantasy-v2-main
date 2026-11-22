@@ -276,17 +276,17 @@ describe('the scheduled caller', () => {
   })
 
   /*
-   * 🛑 ABOVE `maintenanceEnabled()`, AND THIS IS THE ASSERTION THAT PROTECTS IT. That gate belongs
-   * to Decision OS maintenance, which has nothing to do with outcome resolution. Moving this call
-   * below it would mean a switch somebody turns off for an unrelated subsystem silently stops the
-   * only thing that ever resolves an outcome — a writer that exists, looks wired, and never runs.
+   * 🛑 NO FEATURE GATE MAY STAND IN FRONT OF THIS CALL, AND THIS IS THE ASSERTION THAT PROTECTS IT.
+   * It used to be pinned ABOVE `maintenanceEnabled()`: that switch belonged to Decision OS maintenance,
+   * which has nothing to do with outcome resolution, and a switch turned off for an unrelated subsystem
+   * would silently have stopped the only thing that ever resolves an outcome. The gate was retired with
+   * the three-brain drains on 2026-11-19 (re-score build item 9), so the property is now stronger: there
+   * is no such gate at all, and one may not come back above or below this call.
    */
-  it('runs BEFORE the maintenance feature gate', () => {
-    const call = CRON.indexOf('resolveDraftRecommendationOutcomes({')
-    const gate = CRON.indexOf('if (!maintenanceEnabled())')
-    expect(call).toBeGreaterThan(-1)
-    expect(gate).toBeGreaterThan(-1)
-    expect(call).toBeLessThan(gate)
+  it('runs with no maintenance feature gate in the cron', () => {
+    const code = CRON.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    expect(code.indexOf('resolveDraftRecommendationOutcomes({')).toBeGreaterThan(-1)
+    expect(code).not.toMatch(/maintenanceEnabled\(/)
   })
 
   /* Outcome telemetry must never be the reason a scheduled job goes red. */
@@ -296,8 +296,9 @@ describe('the scheduled caller', () => {
   })
 
   /*
-   * Reported in the response, so a run that resolves nothing is visible as a number rather than
-   * as silence. The disabled-maintenance branch returns early, so it needs it too.
+   * Reported in the response, so a run that resolves nothing is visible as a number rather than as
+   * silence. Since the maintenance gate was retired (2026-11-19) there are two branches: unauthorized,
+   * and the run itself.
    */
   it('reports what it did on every response branch', () => {
     /*
@@ -312,7 +313,8 @@ describe('the scheduled caller', () => {
       calls.push(CRON.slice(at, at + 260))
       at = CRON.indexOf('NextResponse.json', at + 1)
     }
-    expect(calls.length).toBeGreaterThanOrEqual(3)
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    expect(calls.filter((c) => !c.includes('unauthorized')).length).toBeGreaterThanOrEqual(1)
     for (const c of calls) {
       if (c.includes('unauthorized')) continue
       expect(c).toContain('draftOutcomes')

@@ -33,6 +33,9 @@ import type { ProcessedClaimResult } from "@/lib/waiver-wire/types"
 const WAIVER_SKIP_MESSAGES: Record<WaiverRunSkipReason, string> = {
   league_moves_locked:
     "League skipped: the commissioner has locked all roster moves. Pending claims stay pending until the lock is lifted.",
+  run_in_progress: "League skipped: another waiver run for this league was still in progress. Pending claims stay pending for the next run.",
+  guillotine_chop_pending:
+    "League skipped: this week's Guilly chop has not landed yet. Pending claims stay pending and settle on the first run after the chop.",
 }
 
 function mapRunType(trigger: ProcessLeagueWaiversInput["trigger"]): string {

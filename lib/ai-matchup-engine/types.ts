@@ -3,7 +3,7 @@
  * Providers synthesize from deterministic context only; no invented stats.
  */
 
-export type AiProviderStatus = 'ok' | 'error' | 'skipped'
+type AiProviderStatus = 'ok' | 'error' | 'skipped'
 
 export type LeagueMatchupAiResult = {
   summary: string

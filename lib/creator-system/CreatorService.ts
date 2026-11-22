@@ -81,7 +81,7 @@ function coerceSocialHandles(value: unknown): CreatorSocialHandles | null {
   return Object.values(socialHandles).some(Boolean) ? socialHandles : null
 }
 
-export function coerceCreatorBranding(value: unknown): CreatorBranding | null {
+function coerceCreatorBranding(value: unknown): CreatorBranding | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const input = value as Record<string, unknown>
   const branding: CreatorBranding = {
@@ -110,7 +110,7 @@ export function normalizeCreatorHandle(raw: string | null | undefined): string {
   return normalized || 'creator'
 }
 
-export function normalizeCreatorSlug(raw: string | null | undefined): string {
+function normalizeCreatorSlug(raw: string | null | undefined): string {
   return normalizeCreatorHandle(raw)
 }
 
@@ -233,22 +233,6 @@ function canViewCreator(
 ) {
   if (creator.visibility !== 'private') return true
   return canManageCreator(creator, viewerUserId, viewerEmail)
-}
-
-function canViewLeague(
-  league: {
-    inviteCode: string
-    isPublic: boolean
-    creator: { userId: string; visibility: string }
-  },
-  viewerUserId?: string | null,
-  viewerEmail?: string | null,
-  inviteCode?: string | null
-) {
-  if (!canViewCreator(league.creator, viewerUserId, viewerEmail)) return false
-  if (league.isPublic) return true
-  if (canManageCreator(league.creator, viewerUserId, viewerEmail)) return true
-  return !!inviteCode && inviteCode.trim().toUpperCase() === league.inviteCode
 }
 
 async function ensureUniqueCreatorHandleAndSlug(
@@ -1191,119 +1175,6 @@ export async function createCreatorLeague(
   return toLeagueDto(league, baseUrl)
 }
 
-export async function updateCreatorLeague(
-  creatorLeagueId: string,
-  userId: string,
-  input: Partial<UpsertCreatorLeagueInput>,
-  baseUrl = '',
-  viewerEmail?: string | null
-) {
-  const existing = await prisma.creatorLeague.findUnique({
-    where: { id: creatorLeagueId },
-    include: {
-      creator: {
-        select: {
-          id: true,
-          userId: true,
-          visibility: true,
-        },
-      },
-    },
-  })
-  if (!existing || !canManageCreator(existing.creator, userId, viewerEmail)) return null
-
-  const nextInviteCode = input.regenerateInvite
-    ? await ensureUniqueInviteCode(existing.id)
-    : existing.inviteCode
-  const nextSlug = input.slug
-    ? await ensureUniqueLeagueSlug(existing.creatorId, input.slug, existing.id)
-    : existing.slug
-
-  const updated = await prisma.creatorLeague.update({
-    where: { id: creatorLeagueId },
-    data: {
-      type: input.type ? normalizeLeagueType(input.type) : existing.type,
-      leagueId: input.leagueId !== undefined ? trimToNull(input.leagueId, 64) : undefined,
-      bracketLeagueId:
-        input.bracketLeagueId !== undefined ? trimToNull(input.bracketLeagueId, 64) : undefined,
-      name: input.name !== undefined ? trimToNull(input.name, 256) ?? existing.name : undefined,
-      slug: nextSlug,
-      description:
-        input.description !== undefined ? trimToNull(input.description, 1200) : undefined,
-      sport: input.sport !== undefined ? normalizeSport(input.sport) : undefined,
-      inviteCode: nextInviteCode,
-      isPublic: input.isPublic,
-      maxMembers: input.maxMembers !== undefined ? clampMembers(input.maxMembers) : undefined,
-      joinDeadline:
-        input.joinDeadline !== undefined
-          ? input.joinDeadline
-            ? new Date(input.joinDeadline)
-            : null
-          : undefined,
-      coverImageUrl:
-        input.coverImageUrl !== undefined ? trimToNull(input.coverImageUrl) : undefined,
-      communitySummary:
-        input.communitySummary !== undefined
-          ? trimToNull(input.communitySummary, 1200)
-          : undefined,
-      latestRecapTitle:
-        input.latestRecapTitle !== undefined ? trimToNull(input.latestRecapTitle, 160) : undefined,
-      latestRecapSummary:
-        input.latestRecapSummary !== undefined
-          ? trimToNull(input.latestRecapSummary, 1200)
-          : undefined,
-      latestCommentary:
-        input.latestCommentary !== undefined
-          ? trimToNull(input.latestCommentary, 2000)
-          : undefined,
-    },
-    include: {
-      creator: {
-        include: {
-          user: {
-            select: {
-              avatarUrl: true,
-              displayName: true,
-            },
-          },
-          _count: { select: { leagues: true } },
-        },
-      },
-    },
-  })
-
-  if (input.regenerateInvite) {
-    await syncCreatorLeagueInvite(updated)
-  }
-
-  return toLeagueDto(updated, baseUrl)
-}
-
-export async function createInvite(
-  creatorId: string,
-  userId: string,
-  creatorLeagueId?: string | null,
-  viewerEmail?: string | null
-) {
-  const profile = await prisma.creatorProfile.findUnique({
-    where: { id: creatorId },
-    select: { id: true, userId: true },
-  })
-  if (!profile || !canManageCreator(profile, userId, viewerEmail)) return null
-
-  const code = await ensureUniqueInviteCode()
-  return prisma.creatorInvite.create({
-    data: {
-      creatorId,
-      creatorLeagueId: creatorLeagueId || null,
-      code,
-      metadata: {
-        source: creatorLeagueId ? 'manual_league' : 'manual_creator',
-      },
-    },
-  })
-}
-
 async function joinCreatorLeagueByResolvedInvite(input: {
   creatorId: string
   inviteId: string | null
@@ -1499,52 +1370,6 @@ export async function unfollowCreator(creatorProfileId: string, followerUserId: 
   return { success: true }
 }
 
-export async function getCreatorLeagueByInviteCode(code: string, baseUrl = '') {
-  const normalizedCode = code.trim().toUpperCase()
-  if (!normalizedCode) return null
-
-  const invite = await prisma.creatorInvite.findUnique({
-    where: { code: normalizedCode },
-    include: {
-      league: {
-        include: {
-          creator: {
-            include: {
-              user: {
-                select: {
-                  avatarUrl: true,
-                  displayName: true,
-                },
-              },
-              _count: { select: { leagues: true } },
-            },
-          },
-        },
-      },
-    },
-  })
-
-  if (invite?.league) return toLeagueDto(invite.league, baseUrl)
-
-  const league = await prisma.creatorLeague.findUnique({
-    where: { inviteCode: normalizedCode },
-    include: {
-      creator: {
-        include: {
-          user: {
-            select: {
-              avatarUrl: true,
-              displayName: true,
-            },
-          },
-          _count: { select: { leagues: true } },
-        },
-      },
-    },
-  })
-  return league ? toLeagueDto(league, baseUrl) : null
-}
-
 export function buildShareUrl(creatorSlug: string, baseUrl: string): string {
   return `${resolveBaseUrl(baseUrl)}/creators/${encodeURIComponent(creatorSlug)}`
 }
@@ -1659,79 +1484,3 @@ export async function getCreatorAnalyticsSummary(
   })
 }
 
-export async function getCreatorLeagueById(
-  creatorLeagueId: string,
-  viewerUserId?: string | null,
-  baseUrl = '',
-  viewerEmail?: string | null,
-  inviteCode?: string | null,
-  viewerTier?: number | null
-) {
-  const league = await prisma.creatorLeague.findUnique({
-    where: { id: creatorLeagueId },
-    include: {
-      creator: {
-        include: {
-          user: {
-            select: {
-              avatarUrl: true,
-              displayName: true,
-            },
-          },
-          _count: { select: { leagues: true } },
-        },
-      },
-    },
-  })
-  if (!league) return null
-  if (!canViewLeague(league, viewerUserId, viewerEmail, inviteCode)) return null
-  const manageAccess = canManageCreator(league.creator, viewerUserId, viewerEmail)
-  const tierMap = await loadCreatorLeagueTierMap([
-    {
-      id: league.id,
-      type: league.type,
-      leagueId: league.leagueId,
-      bracketLeagueId: league.bracketLeagueId,
-    },
-  ])
-  const tierWindow = resolveCreatorLeagueTierWindow(
-    clampCareerTier(viewerTier, 1),
-    tierMap.get(league.id) ?? 1,
-    {
-      inviteOverride:
-        !!inviteCode && inviteCode.trim().toUpperCase() === league.inviteCode.trim().toUpperCase(),
-      visibilityBypass: !!manageAccess,
-    }
-  )
-
-  const membership = viewerUserId
-    ? await prisma.creatorLeagueMember.findUnique({
-        where: {
-          creatorLeagueId_userId: {
-            creatorLeagueId: league.id,
-            userId: viewerUserId,
-          },
-        },
-        select: { id: true },
-      })
-    : null
-
-  return toLeagueDto(
-    { ...league, isMember: !!membership },
-    baseUrl,
-    {
-      viewerTier: tierWindow.viewerTier,
-      leagueTier: tierWindow.leagueTier,
-      canJoinByRanking: tierWindow.canJoinByRanking || !!membership,
-      inviteOnlyByTier: tierWindow.inviteOnlyByTier && !membership,
-    }
-  )
-}
-
-export async function ensureCreatorProfile(
-  userId: string,
-  handle: string,
-  viewerEmail?: string | null
-) {
-  return upsertCreatorProfile(userId, viewerEmail, { handle, displayName: handle })
-}

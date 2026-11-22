@@ -32,7 +32,13 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
   })
 
   const releasedPlayerIds: string[] = []
+  /*
+   * What each roster held before it was emptied, so an undone chop (./chopUndo.ts) can put it back exactly.
+   * Chops released before this was recorded have no snapshot; undo rebuilds their player list instead.
+   */
+  const previousPlayerData: Record<string, unknown> = {}
   for (const roster of rosters) {
+    previousPlayerData[roster.id] = roster.playerData ?? null
     const ids = getRosterPlayerIds(roster.playerData)
     releasedPlayerIds.push(...ids)
     const emptyData = Array.isArray(roster.playerData) ? [] : clearReleasedRosterData(roster.playerData)
@@ -46,6 +52,7 @@ export async function releaseChoppedRosters(input: ReleaseChoppedRostersInput): 
     rosterIds,
     releasedPlayerIds,
     releaseTiming: input.releaseTiming,
+    previousPlayerData,
   })
 }
 

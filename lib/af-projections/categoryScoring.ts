@@ -30,25 +30,12 @@ import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import type { SeasonAggregate } from './types'
 
 /** Sports this module can score. Anything else must keep refusing rather than be defaulted. */
-export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
+type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB' | 'SOCCER'
 
 export function isCategoryScoredSport(sport: string | null | undefined): sport is CategorySport {
   const s = String(sport ?? '').trim().toUpperCase()
   return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB' || s === 'SOCCER'
 }
-
-/**
- * ⚠ MLB KEYS COLLIDE ACROSS GROUPS AND MEAN OPPOSITE THINGS.
- *
- * `H`, `R`, `HR`, `BB`, `SB`, `CS`, `HBP`, `IBB`, `1B`, `2B`, `3B` all appear under BOTH
- * `regular_season.batting` and `regular_season.pitching`. A hit RECORDED and a hit ALLOWED are the
- * same key. Flattening the two groups into one namespace would add a pitcher's hits-allowed to a
- * batter's hits and score the result as offence — silently, with no error anywhere.
- *
- * So grouped components are addressed `"<group>.<KEY>"` and never merged. NBA and NHL are already
- * flat under `regular_season` and need no prefix.
- */
-export const MLB_GROUPED_KEY_PREFIXES = ['batting', 'pitching'] as const
 
 /**
  * DraftKings MLB, as published.
@@ -161,7 +148,7 @@ export function getCategoryScoringRules(sport: string | null | undefined): Recor
   return RULES_BY_SPORT[String(sport).trim().toUpperCase() as CategorySport]
 }
 
-export interface CategoryScoringResult {
+interface CategoryScoringResult {
   /** Season total under the rules. Per-game division is the caller's job. */
   points: number
   /** Per-component contribution, so a number on screen can always be taken apart. */

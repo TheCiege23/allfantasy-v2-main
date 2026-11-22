@@ -40,7 +40,7 @@ export type RankColumn = {
   hideOnPhone?: boolean
 }
 
-export type RankCell = {
+type RankCell = {
   text: string
   href?: string
   title?: string
@@ -388,4 +388,3 @@ function PhoneMore({ row, columns }: { row: RankRow; columns: RankColumn[] }) {
   )
 }
 
-export default RankTable

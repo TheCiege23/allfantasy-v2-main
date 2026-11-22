@@ -12,9 +12,9 @@
 
 import type { IntelligenceEvidence, LegacyDataConfidence } from '@/lib/legacy/dataStatus'
 
-export type ValueProvenance = 'observed' | 'derived' | 'fallback' | 'unavailable'
+type ValueProvenance = 'observed' | 'derived' | 'fallback' | 'unavailable'
 
-export interface TradePlayerValuation {
+interface TradePlayerValuation {
   name: string
   side: 'A' | 'B'
   value: number
@@ -113,7 +113,7 @@ export function buildTradeValuationEvidence(input: {
 
 // ── Derived-field tracking for normalized AI responses ───────────────────────
 
-export interface DerivedFieldTracker {
+interface DerivedFieldTracker {
   /** Bounded numeric field: model value wins; an absent/invalid model value takes the
    * synthesized fallback AND records the field as derived. */
   bounded(field: string, value: unknown, min: number, max: number, fallback: number): number

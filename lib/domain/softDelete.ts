@@ -37,7 +37,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { ActorContext } from './actorContext'
 import type { DomainError } from './errors'
-import { forbidden } from './errors'
 import { type Result, err, ok } from './result'
 import { validateReason } from './reason'
 import { type Authorize, denyAll } from './ports'
@@ -59,8 +58,6 @@ export const SOFT_DELETE_FILTERED_OPERATIONS = [
   'groupBy',
   'updateMany',
 ] as const
-
-export type SoftDeleteFilteredOperation = (typeof SOFT_DELETE_FILTERED_OPERATIONS)[number]
 
 const FILTERED = new Set<string>(SOFT_DELETE_FILTERED_OPERATIONS)
 
@@ -106,7 +103,7 @@ export async function withDeleted<T>(
 
 // ─── The pure core ───────────────────────────────────────────────────────────
 
-export type SoftDeleteArgsParams = {
+type SoftDeleteArgsParams = {
   readonly model: string
   readonly operation: string
   readonly args: Record<string, unknown> | undefined
@@ -169,7 +166,7 @@ export function softDeletableModelsFromDmmf(dmmf: {
   )
 }
 
-export type SoftDeleteExtensionOptions = {
+type SoftDeleteExtensionOptions = {
   /** Models to filter. Usually `softDeletableModelsFromDmmf(Prisma.dmmf)`. */
   readonly softDeletableModels: ReadonlySet<string>
   /**

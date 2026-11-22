@@ -8,7 +8,7 @@ import type { LeagueSport } from '@prisma/client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type DynastyEligibleSport = 'NFL' | 'NCAAF'
+type DynastyEligibleSport = 'NFL' | 'NCAAF'
 
 export const DYNASTY_DRAFT_TYPE_IDS = [
   'snake',
@@ -24,11 +24,11 @@ export const DYNASTY_DRAFT_TYPE_IDS = [
   'dispersal_draft',
 ] as const
 
-export type DynastyDraftType = (typeof DYNASTY_DRAFT_TYPE_IDS)[number]
+type DynastyDraftType = (typeof DYNASTY_DRAFT_TYPE_IDS)[number]
 
 type EngineDraftType = 'snake' | 'linear' | 'auction'
 
-export interface DynastyRosterTemplate {
+interface DynastyRosterTemplate {
   rosterMode: 'dynasty'
   starterSlots: Record<string, number>
   flexDefinitions: Array<{ slotName: string; allowedPositions: string[] }>
@@ -42,7 +42,7 @@ export interface DynastyRosterTemplate {
   defensePosition: 'DST' | 'DEF'
 }
 
-export interface DynastyDraftSettings {
+interface DynastyDraftSettings {
   draftType: EngineDraftType
   requestedDraftType: DynastyDraftType
   rounds: number
@@ -70,7 +70,7 @@ export interface DynastyDraftSettings {
   keeperDynastyCarryoverSupported: true
 }
 
-export interface DynastyDefaultContract {
+interface DynastyDefaultContract {
   sport: DynastyEligibleSport
   league_type: 'dynasty'
   leagueType: 'dynasty'

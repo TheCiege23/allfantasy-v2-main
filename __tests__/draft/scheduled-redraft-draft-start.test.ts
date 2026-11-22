@@ -66,8 +66,22 @@ describe('scheduled redraft draft start', () => {
     const where = m.due.mock.calls[0][0].where
     expect(where).not.toHaveProperty('autostart')
     expect(where.draftDateUtc).toEqual({ lte: NOW, gte: expect.any(Date) })
-    expect(where.league.is).toMatchObject({ leagueType: 'redraft', isDynasty: false })
+    expect(where.league.is).toMatchObject({ isDynasty: false })
+    // Classic Best Ball is a seasonal draft like redraft (lib/draft/redraftScheduledStart.ts).
+    expect([...where.league.is.leagueType.in].sort()).toEqual(['best_ball', 'redraft'])
     expect([...where.league.is.sport.in].sort()).toEqual(['MLB', 'NBA', 'NFL', 'NHL'])
+  })
+
+  it.each(['NFL', 'NBA', 'NHL', 'MLB'])('starts a due Classic Best Ball %s draft without anyone pressing Start', async (sport) => {
+    m.due.mockResolvedValue([row({}, { sport, leagueType: 'best_ball' })])
+    expect(await startScheduledRedraftDrafts(NOW)).toMatchObject({ scanned: 1, started: 1, errors: [] })
+    expect(m.start).toHaveBeenCalledWith('league-1')
+  })
+
+  it('leaves Guilly + Best Ball to the Survivor/Guillotine starter, which honours Autostart', async () => {
+    m.due.mockResolvedValue([row({}, { leagueType: 'guillotine', guillotineMode: true })])
+    expect(await startScheduledRedraftDrafts(NOW)).toMatchObject({ scanned: 0, started: 0 })
+    expect(m.start).not.toHaveBeenCalled()
   })
 
   it.each(['NBA', 'NHL', 'MLB'])('starts a %s redraft draft', async (sport) => {

@@ -20,7 +20,6 @@ export function ZombieUpdatesPanel({ leagueId, canEdit }: { leagueId: string; ca
   const [preview, setPreview] = useState('')
   const [week, setWeek] = useState('1')
   const [status, setStatus] = useState('')
-  const [pendingCount, setPendingCount] = useState(0)
   const [tab, setTab] = useState<'settings' | 'preview' | 'history'>('settings')
 
   useEffect(() => {
@@ -276,7 +275,7 @@ export function ZombieUpdatesPanel({ leagueId, canEdit }: { leagueId: string; ca
                 type="button"
                 disabled={d || !preview || preview === 'Loading...'}
                 onClick={() => void approveAndPost()}
-                className="rounded-lg bg-[var(--zombie-green)]/20 px-4 py-2 text-[12px] font-semibold text-[var(--zombie-green)] transition hover:bg-[var(--zombie-green)]/30 disabled:opacity-40"
+                className="rounded-lg bg-zombie-green/20 px-4 py-2 text-[12px] font-semibold text-[var(--zombie-green)] transition hover:bg-zombie-green/30 disabled:opacity-40"
               >
                 Approve & post to chat
               </button>

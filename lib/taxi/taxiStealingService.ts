@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import 'server-only'
 
 import { randomUUID } from 'node:crypto'
@@ -282,8 +283,8 @@ export async function protectTaxiPlayer(leagueId: string, userId: string, input:
   const found = await findOpenClaim(leagueId, input.claimId)
   if (!found) return { ok: false, status: 409, error: 'That claim is no longer open.' }
   const { league, claim } = found
-  const roster = await prisma.roster.findUnique({ where: { id: claim.fromRosterId }, select: { platformUserId: true, playerData: true } })
-  if (!roster || roster.platformUserId !== userId) return { ok: false, status: 403, error: 'Only the player’s owner can protect them.' }
+  const roster = await prisma.roster.findUnique({ where: { id: claim.fromRosterId }, select: { platformUserId: true, managerUserId: true, playerData: true } })
+  if (!roster || !isRosterManagedBy(roster, userId)) return { ok: false, status: 403, error: 'Only the player’s owner can protect them.' }
   if (!taxiPlayerIds(roster.playerData).includes(claim.playerId)) {
     // Already off the taxi squad: the claim cannot succeed, so it ends as protected.
     const closed = await prisma.$transaction((tx) => closeClaim(tx, leagueId, claim.id, { status: 'protected', resolvedAt: now.toISOString() }))
@@ -314,8 +315,8 @@ export async function protectTaxiPlayer(leagueId: string, userId: string, input:
 export async function releaseTaxiPlayer(leagueId: string, userId: string, input: { claimId?: unknown }, now = new Date()): Promise<StealResult> {
   const found = await findOpenClaim(leagueId, input.claimId)
   if (!found) return { ok: false, status: 409, error: 'That claim is no longer open.' }
-  const roster = await prisma.roster.findUnique({ where: { id: found.claim.fromRosterId }, select: { platformUserId: true } })
-  if (!roster || roster.platformUserId !== userId) return { ok: false, status: 403, error: 'Only the player’s owner can let them go.' }
+  const roster = await prisma.roster.findUnique({ where: { id: found.claim.fromRosterId }, select: { platformUserId: true, managerUserId: true } })
+  if (!roster || !isRosterManagedBy(roster, userId)) return { ok: false, status: 403, error: 'Only the player’s owner can let them go.' }
   return executeSteal(found.league, found.claim, now)
 }
 

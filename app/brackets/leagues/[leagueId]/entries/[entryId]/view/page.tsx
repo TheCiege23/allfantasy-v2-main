@@ -26,12 +26,12 @@ export default async function SharedPlayoffEntryPage(props: {
     select: {
       id: true, name: true, challengeId: true,
       challenge: {
-        select: { id: true, name: true, sport: true, seasonYear: true, ownerUserId: true, config: true },
+        select: { id: true, name: true, sport: true, seasonYear: true, ownerUserId: true, config: true, isTestMode: true },
       },
     },
   }) as {
     id: string; name: string; challengeId: string
-    challenge: { id: string; name: string; sport: string; seasonYear: number; ownerUserId: string; config: unknown }
+    challenge: { id: string; name: string; sport: string; seasonYear: number; ownerUserId: string; config: unknown; isTestMode: boolean }
   } | null
 
   if (!entry || entry.challengeId !== leagueId || !["ncaaf", "nba_cup", "nfl"].includes(entry.challenge.sport)) {
@@ -78,9 +78,12 @@ export default async function SharedPlayoffEntryPage(props: {
     nextGameAt: row.nextGameAt instanceof Date ? row.nextGameAt.toISOString() : null,
     lastSyncedAt: row.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : null,
   })) as PlayoffSeriesView[]
-  const visiblePicks = visiblePlayoffPicks(series, rawPicks as PlayoffPickView[])
+  const shareablePicks = entry.challenge.sport === "nba_cup" && !entry.challenge.isTestMode
+    ? rawPicks.filter((pick: { confirmedAt: Date | null }) => pick.confirmedAt)
+    : rawPicks
+  const visiblePicks = visiblePlayoffPicks(series, shareablePicks as PlayoffPickView[])
   const projected = buildProjectedPlayoffSeries(series, visiblePicks)
-  const hidden = rawPicks.length - visiblePicks.length
+  const hidden = shareablePicks.length - visiblePicks.length
 
   return <>
     <BracketQuickNav leagueId={leagueId} />

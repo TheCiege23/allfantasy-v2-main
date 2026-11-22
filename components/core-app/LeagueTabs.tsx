@@ -37,7 +37,7 @@ import '@/components/core-app/af-league-tabs.css'
  * fixtures and saved rule dates; Moves groups the available trade/waiver flows.
  */
 
-export type LeagueTabsProps = {
+type LeagueTabsProps = {
   leagueId: string
   leagueName: string
   /** The active /core segment, e.g. 'standings'. */
@@ -90,13 +90,13 @@ const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
   { key: 'my-team', label: navLabel('my-team') },
   { key: 'matchup', label: navLabel('matchup') },
   { key: 'players', label: navLabel('players', 'short') },
-  { key: 'moves', label: navLabel('moves') },
+  /* Trades, not Moves (2026-11-14): Moves folded into Trades. Hidden where the league cannot trade. */
+  { key: 'trades', label: navLabel('trades') },
 ]
 
 /* Which of these a league can show is decided by lib/core-app/leagueDestinations.ts — the gates the rail applies too. */
 const TABS: Array<{ key: string; label: string }> = [
   { key: '', label: navLabel('overview') },
-  { key: 'moves', label: navLabel('moves') },
   { key: 'schedule', label: navLabel('schedule') },
   { key: 'my-team', label: navLabel('my-team') },
   { key: 'matchup', label: navLabel('matchup') },

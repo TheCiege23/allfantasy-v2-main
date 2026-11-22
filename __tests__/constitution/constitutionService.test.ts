@@ -55,6 +55,9 @@ vi.mock('@/lib/prisma', () => {
 
 import {
   applyAmendmentsAtSeasonRollover,
+  approveAmendment,
+  declineAmendment,
+  withdrawAmendment,
   proposeAmendment,
   publishVersion,
   readConstitutionView,
@@ -157,5 +160,55 @@ describe('season rollover', () => {
   it('does nothing without the plan', async () => {
     state.entitled = false
     expect(await applyAmendmentsAtSeasonRollover('L1')).toEqual({ applied: 0, failed: 0, skipped: 'no_plan' })
+  })
+})
+
+describe('member proposals — the commissioner approves', () => {
+  it('a member proposal waits for the commissioner: no poll, nothing to vote on yet', async () => {
+    const r = await proposeAmendment('L1', 'member1', { title: 'Later deadline', change: { key: 'tradeDeadlineWeek', value: 13 } }, NOW, { asCommissioner: false })
+    expect(r.ok).toBe(true)
+    expect(state.chatPosts).toHaveLength(0)
+    expect(amendments()[0]).toMatchObject({ status: 'pending_approval', proposedByRole: 'member', effectiveSeason: 2027 })
+  })
+
+  it('one member cannot queue more than two waiting proposals', async () => {
+    for (let i = 0; i < 2; i++) await proposeAmendment('L1', 'member1', { title: `Idea ${i}` }, NOW, { asCommissioner: false })
+    const third = await proposeAmendment('L1', 'member1', { title: 'Idea 3' }, NOW, { asCommissioner: false })
+    expect(third).toEqual({ ok: false, error: 'too_many_pending' })
+    expect((await proposeAmendment('L1', 'member2', { title: 'Other' }, NOW, { asCommissioner: false })).ok).toBe(true)
+  })
+
+  it('approving opens the league vote from that moment', async () => {
+    const r = await proposeAmendment('L1', 'member1', { title: 'Later deadline' }, NOW, { asCommissioner: false })
+    if (!r.ok) throw new Error('refused')
+    const later = new Date(NOW.getTime() + 2 * 86_400_000)
+    const ok = await approveAmendment('L1', 'owner', r.amendment.id, later)
+    expect(ok.ok).toBe(true)
+    expect(state.chatPosts).toHaveLength(1)
+    expect(amendments()[0]).toMatchObject({ status: 'voting', closesAt: new Date(later.getTime() + 3 * 86_400_000).toISOString() })
+    expect((await approveAmendment('L1', 'owner', r.amendment.id, later)).ok).toBe(false)
+  })
+
+  it('declining records the reason and opens nothing', async () => {
+    const r = await proposeAmendment('L1', 'member1', { title: 'Ban QBs' }, NOW, { asCommissioner: false })
+    if (!r.ok) throw new Error('refused')
+    expect(await declineAmendment('L1', 'owner', r.amendment.id, 'Not a real rule')).toEqual({ ok: true })
+    expect(state.chatPosts).toHaveLength(0)
+    expect(amendments()[0]).toMatchObject({ status: 'declined', declineReason: 'Not a real rule' })
+  })
+
+  it('a member withdraws only their own waiting proposal', async () => {
+    const r = await proposeAmendment('L1', 'member1', { title: 'Mine' }, NOW, { asCommissioner: false })
+    if (!r.ok) throw new Error('refused')
+    expect(await withdrawAmendment('L1', 'member2', r.amendment.id, { isCommissioner: false })).toBe(false)
+    expect(await withdrawAmendment('L1', 'member1', r.amendment.id, { isCommissioner: false })).toBe(true)
+    expect(amendments()[0].status).toBe('withdrawn')
+  })
+
+  it('a commissioner proposal still opens the vote at once, and names the season it takes effect', async () => {
+    const r = await proposeAmendment('L1', 'owner', { title: 'Median game', change: { key: 'medianGame', value: true }, effective: 'next_season' }, NOW)
+    expect(r.ok).toBe(true)
+    expect(amendments()[0]).toMatchObject({ status: 'voting', proposedByRole: 'commissioner', effectiveSeason: 2027 })
+    expect(state.chatPosts[0].text).toContain('takes effect in the 2027 season')
   })
 })

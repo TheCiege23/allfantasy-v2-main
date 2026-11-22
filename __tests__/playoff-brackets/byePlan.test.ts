@@ -40,7 +40,8 @@ describe('bye plans', () => {
   it('rejects plans that leave a round with an odd number of teams, or reward a worse seed', () => {
     expect(checkByePlan(7, [2, 0, 0, 0, 0, 0, 0])).toMatchObject({ ok: false, error: expect.stringMatching(/Round 2 would have 3 teams/) })
     expect(checkByePlan(6, [0, 1, 0, 0, 0, 0])).toMatchObject({ ok: false, error: expect.stringMatching(/cannot wait longer/) })
-    expect(checkByePlan(17, naturalByePlan(17)).ok).toBe(false)
+    expect(checkByePlan(32, naturalByePlan(32)).ok).toBe(true)
+    expect(checkByePlan(33, naturalByePlan(33)).ok).toBe(false)
   })
 
   it('lists valid plans, natural first', () => {

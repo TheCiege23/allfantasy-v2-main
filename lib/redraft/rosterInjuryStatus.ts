@@ -12,7 +12,7 @@ type InjuryKeyed = { playerId?: string | null; playerName?: string | null; sport
  * With the name in the key a row applies only when id AND name agree, which drops the impostors and
  * nothing else: a same-person row whose provider shares the roster's id space still matches.
  */
-export function playerInjuryKey(player: InjuryKeyed): string {
+function playerInjuryKey(player: InjuryKeyed): string {
   const sport = String(player.sport ?? '').toUpperCase()
   const playerId = String(player.playerId ?? '').trim()
   const name = normalizePlayerName(player.playerName)

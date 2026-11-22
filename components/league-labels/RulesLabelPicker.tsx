@@ -4,7 +4,7 @@ import { Lock } from 'lucide-react'
 import { RosterLabel } from './RosterLabel'
 import { ScoringLabel } from './ScoringLabel'
 
-export type RulesPickerOption = { id: string; disabled?: boolean }
+type RulesPickerOption = { id: string; disabled?: boolean }
 
 /**
  * A grid of selectable label cards (scoring or roster) — the picker for league creation, league

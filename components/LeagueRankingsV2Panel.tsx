@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
+import { buildDynastyRoadmapRequest } from '@/lib/rankings-engine/dynastyRoadmapRequest'
 import DemandHeatmap from './DemandHeatmap'
 import { WhatChangedPanel, TierLabel, WinWindowPanel } from './RankingsMicroPanels'
 import ManagerPsychology from './ManagerPsychology'
@@ -472,13 +474,6 @@ function RankMovement({ delta }: { delta: number | null }) {
   return <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-0.5"><span className="text-[11px]">&#x25B2;</span>{Math.abs(delta)}</span>
 }
 
-function PhaseLabel({ phase, week }: { phase: string; week: number }) {
-  if (phase === 'offseason') return <>Offseason</>
-  if (phase === 'post_draft') return <>Post-Draft</>
-  if (phase === 'post_season') return <>Postseason</>
-  return <>Week {week}</>
-}
-
 function HeroCard({ title, subtitle, detail, accent, icon, cta, onCta }: {
   title: string
   subtitle: string
@@ -531,7 +526,6 @@ function RankHistoryChart({ teams, weeklyPtsMap, selectedTeam, onSelectTeam }: {
   }
 
   const maxPts = Math.max(...teamPts, 1)
-  const barWidth = Math.max(8, Math.min(24, Math.floor(280 / teamPts.length) - 2))
 
   return (
     <div>
@@ -636,54 +630,22 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
     setYearPlanLoading(true)
     setYearPlanError('')
     try {
-      const positionValues = team.positionValues || {}
-      const exposure = team.rosterExposure || {}
-      const posStrengths: Record<string, number> = {}
-      const weakPositions: string[] = []
-      const allPos = Object.keys(positionValues)
-      const maxTotal = Math.max(...allPos.map(p => positionValues[p]?.total ?? 0), 1)
-      for (const pos of allPos) {
-        const score = Math.round(((positionValues[pos]?.total ?? 0) / maxTotal) * 100)
-        posStrengths[pos] = score
-        if (score < 40) weakPositions.push(pos)
-      }
-      const topAssets = allPos
-        .sort((a, b) => (positionValues[b]?.total ?? 0) - (positionValues[a]?.total ?? 0))
-        .slice(0, 3)
-        .map(p => `${p} group (${(exposure[p] ?? 0).toFixed(0)}% exposure)`)
-
-      const rosterSignals = allPos.map(pos => ({
-        position: pos,
-        playerName: `${pos} group`,
-        age: null,
-        marketValue: positionValues[pos]?.total ?? 0,
-        impactScore: posStrengths[pos] ?? 50,
-        trend30Day: 0,
-      }))
-
-      const portfolio = team.portfolioProjection || { year1: 50, year3: 45, year5: 40 }
-      const avgAge = portfolio.year5 >= portfolio.year1 ? 23 : portfolio.year5 < 30 ? 28 : 30
-      const phase = team.phase || data?.phase || 'in_season'
-      const isContending = team.composite >= 60
-
       const res = await fetch('/api/rankings/dynasty-roadmap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sport: data?.sport,
-          leagueType: data?.isDynasty ? 'Dynasty' : 'Redraft',
-          isSF: data?.isSuperFlex ?? false,
-          goal: isContending ? 'compete' : 'rebuild',
-          rosterSignals,
-          avgAge,
-          totalValue: team.totalRosterValue ?? 0,
-          positionStrengths: posStrengths,
-          weakPositions,
-          topAssets,
-          leagueName: data?.leagueName,
-        }),
+        body: JSON.stringify(
+          buildDynastyRoadmapRequest(team, {
+            sport: data?.sport,
+            isDynasty: data?.isDynasty,
+            isSuperFlex: data?.isSuperFlex,
+            leagueName: data?.leagueName,
+          }),
+        ),
       })
-      if (!res.ok) throw new Error('Failed to generate plan')
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(readPlanRefusal(res.status, body)?.message ?? 'Failed to generate plan')
+      }
       const result = await res.json()
       setYearPlan(result.roadmap)
     } catch (err: any) {
@@ -1038,8 +1000,6 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
             const weeklyPts = weeklyPtsMap.get(team.rosterId) || []
             const recentPts = weeklyPts.slice(-6)
             const explanation = team.explanation
-            const upDrivers = explanation?.drivers?.filter(d => d.polarity === 'UP').slice(0, 2) ?? []
-            const downDrivers = explanation?.drivers?.filter(d => d.polarity === 'DOWN').slice(0, 1) ?? []
 
             return (
               <div key={team.rosterId} className={cx(

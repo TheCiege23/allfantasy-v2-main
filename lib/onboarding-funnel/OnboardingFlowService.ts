@@ -27,7 +27,7 @@ export async function getOnboardingState(userId: string): Promise<OnboardingFunn
 /**
  * Returns the next step in the funnel, or "completed" if already at last step.
  */
-export function getNextStep(current: OnboardingStepId): OnboardingStepId {
+function getNextStep(current: OnboardingStepId): OnboardingStepId {
   const idx = ONBOARDING_STEPS.indexOf(current)
   if (idx < 0 || idx >= ONBOARDING_STEPS.length - 1) return "completed"
   return ONBOARDING_STEPS[idx + 1]!

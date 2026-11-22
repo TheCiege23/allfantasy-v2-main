@@ -21,16 +21,37 @@ export function WeekLineupLine({
   leagueId,
   season,
   week,
+  plain = false,
 }: {
   lineups: WeekLineups | null | undefined
   leagueId: string
   season: number
   week: number
+  /**
+   * 2026-11-14, Your week (one league): "Projected: 184.7–233.3" — one source, AF's when it has one. Two
+   * projections side by side ("AF 184.7–233.3 · Sleeper 186.8–231.8") read as a puzzle; the second is in
+   * the tooltip. The other screens keep both.
+   */
+  plain?: boolean
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const v = lineupProjectionFor(lineups, leagueId, season, week)
   if (!v) return null
+  const parts = messagesFor(corePartsMessages, language)
+  if (plain) {
+    const shown = v.af ?? v.api
+    if (!shown) return null
+    const both = [v.af ? `AF ${lineupPairText(v.af, v.unpaired)}` : null, v.api ? `${PROJECTION_PROVIDER_LABEL} ${lineupPairText(v.api, v.unpaired)}` : null]
+      .filter(Boolean)
+      .join(' · ')
+    return (
+      <span className="af-wk-lineup af-num" data-testid="week-lineup-plain" title={`${parts.lineupProjectionTitle(PROJECTION_PROVIDER_LABEL, v.partial)} ${both}`}>
+        <span className="af-wk-lineup-k">{parts.lineupPlainLabel}:</span> {lineupPairText(shown, v.unpaired)}
+        {v.partial ? <span className="af-wk-lineup-partial"> · {copy('partial')}</span> : null}
+      </span>
+    )
+  }
   return (
     <span
       className="af-wk-lineup af-num"

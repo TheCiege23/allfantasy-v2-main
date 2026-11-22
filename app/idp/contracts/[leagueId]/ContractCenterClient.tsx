@@ -106,7 +106,7 @@ export function ContractCenterClient({ leagueId }: { leagueId: string }) {
         <section>
           <h2 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/45">Contract timeline</h2>
           <p className="mb-3 text-[11px] text-white/40">
-            Gantt-style view (horizontal scroll on mobile). Bars span contract years.
+            Each bar is the length of the contract. Green: under contract · amber: expiring this season · violet: franchise tag.
           </p>
           <div className="overflow-x-auto rounded-xl border border-white/[0.07] bg-[#0c101a] p-3">
             <div className="min-w-[600px] space-y-2">
@@ -117,9 +117,9 @@ export function ContractCenterClient({ leagueId }: { leagueId: string }) {
                   const span = Math.max(1, c.contractYears)
                   const tagged = c.isFranchiseTagged || c.status === 'franchise_tagged'
                   const exp = c.yearsRemaining <= 1
-                  const bg = tagged ? 'bg-amber-500/35' : exp ? 'bg-[color:var(--cap-amber)]/25' : 'bg-[color:var(--cap-green)]/25'
+                  const bg = tagged ? 'bg-violet-500/45' : exp ? 'bg-cap-amber/40' : 'bg-cap-green/40'
                   return (
-                    <div key={c.id} className="flex h-20 items-center gap-2">
+                    <div key={c.id} className="flex h-10 items-center gap-2">
                       <div className="w-36 shrink-0 truncate text-[11px] text-white/80">{c.playerName}</div>
                       <div className="relative h-8 flex-1 rounded bg-white/[0.06]">
                         <div

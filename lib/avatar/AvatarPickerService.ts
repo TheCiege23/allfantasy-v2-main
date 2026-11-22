@@ -3,7 +3,7 @@ import { AVATAR_PRESET_EMOJI } from "./AvatarCatalogResolver"
 import { AVATAR_PRESET_LABELS } from "@/lib/signup/avatar-presets"
 import type { AvatarPresetId } from "@/lib/signup/avatar-presets"
 
-export interface AvatarCatalogEntry {
+interface AvatarCatalogEntry {
   id: AvatarPresetId
   label: string
   emoji: string

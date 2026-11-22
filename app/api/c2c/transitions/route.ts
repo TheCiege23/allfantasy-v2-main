@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'leagueId, transitionId, action approve|reject required' }, { status: 400 })
   }
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const existing = await prisma.c2CTransitionRecord.findFirst({

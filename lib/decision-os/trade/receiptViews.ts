@@ -6,7 +6,7 @@
  * grade becomes `null`, never a "Fair" and never a balance built from placeholder values. That is
  * the whole difference from `calculateTradeBalance`, which priced an unknown player at a flat 200.
  */
-import type { TradeGradeLine, TradeGradeView } from './tradeGrade'
+import type { TradeDivisionImpact, TradeGradeLine, TradeGradeView, TradeValuationGap } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 
 type ReceiptLike = {
@@ -15,7 +15,7 @@ type ReceiptLike = {
   assets: Array<{ side: 'give' | 'get'; name: string; kind: 'player' | 'pick' | 'faab'; leagueValue: number | null }>
 }
 
-export type LegacyVerdict = 'Fair' | 'Slightly favors A' | 'Slightly favors B' | 'Strongly favors A' | 'Strongly favors B'
+type LegacyVerdict = 'Fair' | 'Slightly favors A' | 'Slightly favors B' | 'Strongly favors A' | 'Strongly favors B'
 
 /** The one grade's label, in the legacy analyzer's words. Side A is the side that sends `give`. */
 export function legacyVerdictFromGrade(grade: TradeGradeView): LegacyVerdict | null {
@@ -79,6 +79,8 @@ export function receiptGradeFields(receipt: ReceiptLike): {
   partnerGrade: string | null
   gradeLabel: string | null
   gradeWithheld: string | null
+  valuationGap?: TradeValuationGap
+  divisionImpacts?: readonly TradeDivisionImpact[]
   percentDiff: number | null
   /** League value the graded side sends / receives — the totals the letter was taken on. */
   giveValue: number | null
@@ -93,6 +95,8 @@ export function receiptGradeFields(receipt: ReceiptLike): {
     partnerGrade: g.graded ? g.partnerLetter : null,
     gradeLabel: g.graded ? g.label : null,
     gradeWithheld: g.graded ? null : g.reason,
+    ...(!g.graded && g.valuationGap ? { valuationGap: g.valuationGap } : {}),
+    ...(!g.graded && g.divisionImpacts ? { divisionImpacts: g.divisionImpacts } : {}),
     percentDiff: g.graded ? g.percentDiff : null,
     giveValue: g.graded ? g.giveValue : null,
     getValue: g.graded ? g.getValue : null,
@@ -221,7 +225,7 @@ export function gradeInputsFromLegacyAssets(
  * `betterAlternatives` is always empty: it was model-invented partners with model-invented fit
  * scores. `riskFlags` are the explanation's risks, which were checked against the packet.
  */
-export type ExplanationLike = {
+type ExplanationLike = {
   verdict: {
     headline: string
     reasons: Array<{ text: string }>

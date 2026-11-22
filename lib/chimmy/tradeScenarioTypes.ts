@@ -11,6 +11,7 @@
  */
 
 // Client-safe: this module imports types and one string constant, nothing else.
+import type { TradeDivisionImpact } from '@/lib/decision-os/trade/tradeGrade'
 import { LEAGUE_WEEK_UNIT } from '@/lib/decision-os/trade/rosterImpactSummary'
 
 export type ScenarioPlayer = { playerId: string; name: string; position: string | null }
@@ -99,6 +100,7 @@ export type ReadyTradeScenario = {
     basis?: string | null
     /** Why there is no grade, when there is none. */
     withheld?: string | null
+    divisionImpacts?: readonly TradeDivisionImpact[]
     /** The other team's letter for the same deal, on league value — the mirror of the market letter. */
     partnerGrade?: string | null
     /**
@@ -106,6 +108,12 @@ export type ReadyTradeScenario = {
      * 2026-10-10): the same deal's league-value letter, which the other manager and trade history see.
      */
     marketGrade?: string | null
+    /**
+     * Why values moved, as MEASURED from completed trades on AllFantasy (`marketEvidenceOf`): one line per asset and
+     * fact, verbatim from the grade — e.g. "Puka Nacua: AllFantasy trade market +6%: what managers actually paid…".
+     * Empty when nothing in the grade came from the trade market. Absent on scenarios sent before 2026-11-22.
+     */
+    marketEvidence?: string[]
   }
   /**
    * The saved evaluation receipt (`evaluateTrade`), so a reply can point at the one record every

@@ -26,7 +26,7 @@ const STYLES: Record<BigBrotherUserStatus, string> = {
   JURY: 'border-purple-500/50 bg-purple-950/40 text-purple-200',
 }
 
-export interface BigBrotherStatusBadgeProps {
+interface BigBrotherStatusBadgeProps {
   status: BigBrotherUserStatus
   className?: string
 }

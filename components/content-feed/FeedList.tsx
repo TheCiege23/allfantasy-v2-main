@@ -6,7 +6,7 @@ import { RefreshCw } from "lucide-react"
 import type { ContentFeedItem, FeedMode, FeedItemType } from "@/lib/content-feed"
 import { FeedCardRenderer } from "./FeedCardRenderer"
 
-export interface FeedListProps {
+interface FeedListProps {
   tab: FeedMode
   sport: string | null
   contentType: FeedItemType | null

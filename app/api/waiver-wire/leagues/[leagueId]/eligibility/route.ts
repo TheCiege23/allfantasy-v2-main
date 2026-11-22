@@ -1,4 +1,5 @@
-import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { actingTeamRefusal, requestedRosterIdFrom, resolveActingRoster } from '@/lib/league/viewerTeams'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -23,11 +24,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const leagueId = params.leagueId
-  const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  const roster = await prisma.roster.findFirst({
-    where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
+  // Eligibility is for one team: the manager's own, a named one of several, or a co-owned team.
+  const acting = await resolveActingRoster(leagueId, userId, requestedRosterIdFrom(req))
+  if (!acting.ok && acting.code !== 'NO_TEAM') return actingTeamRefusal(acting)
+  const roster = acting.ok ? { id: acting.rosterId } : null
   if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
 
   const body = await req.json().catch(() => ({}))
@@ -45,8 +45,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
       typeof body.commissionerOverrides === "object" &&
       !Array.isArray(body.commissionerOverrides)
     ) {
-      const role = await getLeagueRole(leagueId, userId)
-      if (role === "commissioner" || role === "co_commissioner") {
+      if ((await canCommissionerAct(leagueId, userId, 'league'))) {
         const co = body.commissionerOverrides as Record<string, unknown>
         const patch: Parameters<typeof mergeCommissionerOverrides>[1] = { setByUserId: userId }
         if (typeof co.bypassInsufficientFaab === "boolean") patch.bypassInsufficientFaab = co.bypassInsufficientFaab

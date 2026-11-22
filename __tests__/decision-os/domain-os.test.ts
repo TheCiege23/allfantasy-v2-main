@@ -9,7 +9,7 @@ import { createOsFeed, type OsFactSource } from '@/lib/decision-os/domain-os/fee
 import { createOsStore } from '@/lib/decision-os/domain-os/store'
 import { OS_SCOPE_LEVELS, HOURS, MINUTES } from '@/lib/decision-os/domain-os/types'
 import { waiverSettingsSource, waiverResourceSource } from '@/lib/decision-os/waiver-os'
-import { tradeSettingsSource, tradeRosterSource } from '@/lib/decision-os/trade-os'
+import { tradeRosterSource } from '@/lib/decision-os/trade-os'
 
 const FACTS = { ok: true } as never
 
@@ -123,7 +123,6 @@ describe('waiver + trade declare the right levels and speeds', () => {
   it('puts league RULES at league level and this manager RESOURCES at user level', () => {
     expect(waiverSettingsSource.level).toBe('league')
     expect(waiverResourceSource.level).toBe('user')
-    expect(tradeSettingsSource.level).toBe('league')
     expect(tradeRosterSource.level).toBe('user')
   })
 
@@ -131,11 +130,9 @@ describe('waiver + trade declare the right levels and speeds', () => {
     // A stale FAAB balance would tell someone they can afford a bid they cannot — a wrong answer
     // that looks authoritative.
     expect(waiverResourceSource.ttlMs).toBeLessThan(waiverSettingsSource.ttlMs)
-    expect(tradeRosterSource.ttlMs).toBeLessThan(tradeSettingsSource.ttlMs)
   })
 
   it('keeps trade the shortest-lived of the two, because it is the highest-stakes domain', () => {
-    expect(tradeSettingsSource.ttlMs).toBeLessThan(waiverSettingsSource.ttlMs)
     expect(tradeRosterSource.ttlMs).toBeLessThan(waiverResourceSource.ttlMs)
     expect(waiverSettingsSource.ttlMs).toBe(6 * HOURS)
     expect(waiverResourceSource.ttlMs).toBe(5 * MINUTES)

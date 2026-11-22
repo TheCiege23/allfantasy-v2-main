@@ -5,7 +5,7 @@ import {
 } from "@/lib/openai-client"
 import { grokEnrich } from "@/lib/ai-external/grok"
 
-export type BracketMatchupContext = {
+type BracketMatchupContext = {
   tournamentId: string
   nodeId: string
   teamA: string
@@ -22,7 +22,7 @@ export type BracketMatchupContext = {
   generatedAtIso?: string
 }
 
-export type BracketAiStructuredOutput = {
+type BracketAiStructuredOutput = {
   analysis: string
   keyFactors: string[]
   suggestedLean: string

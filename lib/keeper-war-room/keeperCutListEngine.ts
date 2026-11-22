@@ -6,10 +6,10 @@
  * recommendation engine (what to keep) with the inverse (what to let go).
  */
 
-import { classifyKeeper, playerSeasonValue, rankKeepers } from './keeperValueEngine'
+import { playerSeasonValue, rankKeepers } from './keeperValueEngine'
 import type { KeeperPlayerFact, KeeperWarRoomContext } from './types'
 
-export interface KeeperCutCandidate {
+interface KeeperCutCandidate {
   playerId: string
   playerName: string
   position: string

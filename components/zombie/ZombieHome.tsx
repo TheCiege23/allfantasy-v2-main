@@ -29,7 +29,7 @@ import { ZombieSeasonOperations } from './ZombieSeasonOperations'
  * universe map, and Infection night as the signature moment.
  */
 
-export interface ZombieHomeProps {
+interface ZombieHomeProps {
   leagueId: string
 }
 
@@ -78,6 +78,8 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
   const [summary, setSummary] = useState<ZombieSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** A league played as Zombie on another platform: no outbreak records here (lib/zombie/importedZombieNote.ts). */
+  const [importedNote, setImportedNote] = useState<string | null>(null)
   /** Null until the first load: the server picks the league's current week. */
   const [week, setWeek] = useState<number | null>(null)
   const [view, setView] = useState<'home' | 'infection'>('home')
@@ -94,7 +96,12 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
         setSummary(null)
         return
       }
-      const data = (await res.json()) as ZombieSummary
+      const data = (await res.json()) as ZombieSummary & { importedNote?: string }
+      if (typeof data.importedNote === 'string' && data.importedNote) {
+        setImportedNote(data.importedNote)
+        setSummary(null)
+        return
+      }
       setSummary(data)
     } catch {
       setError('Failed to load Zombie summary')
@@ -112,6 +119,15 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
     return (
       <div className="zombie-glass flex min-h-[200px] items-center justify-center rounded-2xl border border-white/[0.09] p-8">
         <p className="text-sm text-white/65">Loading outbreak data…</p>
+      </div>
+    )
+  }
+
+  if (importedNote && !summary) {
+    return (
+      <div role="note" data-testid="zombie-imported-note" className="zombie-glass rounded-2xl border border-white/[0.09] p-5">
+        <p className="text-sm font-semibold text-white">No outbreak board for this league</p>
+        <p className="mt-2 text-sm text-white/70">{importedNote}</p>
       </div>
     )
   }

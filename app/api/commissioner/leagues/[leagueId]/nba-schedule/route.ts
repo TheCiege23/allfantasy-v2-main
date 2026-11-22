@@ -4,16 +4,12 @@
  * PUT: Updates NBA schedule config.
  */
 
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import {
-  getNbaScheduleConfig,
-  updateNbaScheduleConfig,
-  resolveNbaFantasyWeek,
-  getWeekVolumeProfile,
-} from '@/lib/nba-schedule'
+import { getNbaScheduleConfig, updateNbaScheduleConfig, resolveNbaFantasyWeek } from '@/lib/nba-schedule'
 import type { NbaScheduleConfig } from '@/lib/nba-schedule'
 import type { LeagueFormatId } from '@/lib/league/format-engine'
 
@@ -32,7 +28,8 @@ export async function GET(
     select: { userId: true, sport: true, leagueVariant: true, leagueType: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'view')
+  if (refused) return refused
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
 
   const config = await getNbaScheduleConfig(leagueId)
@@ -67,7 +64,8 @@ export async function PUT(
     select: { userId: true, sport: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
   if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
 
   const body = await req.json().catch(() => ({}))

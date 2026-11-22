@@ -16,16 +16,16 @@
 
 export const SCHEDULED_ANNOUNCEMENTS_KEY = 'scheduled_announcements'
 export const MAX_PENDING_PER_LEAGUE = 10
-export const ANNOUNCEMENT_MAX_LENGTH = 500
+const ANNOUNCEMENT_MAX_LENGTH = 500
 /** Earliest a post may be scheduled: one sweep out, so "schedule" is never just a slow "send now". */
-export const MIN_LEAD_MS = 15 * 60 * 1000
-export const MAX_LEAD_MS = 90 * 24 * 60 * 60 * 1000
+const MIN_LEAD_MS = 15 * 60 * 1000
+const MAX_LEAD_MS = 90 * 24 * 60 * 60 * 1000
 /** A claim this old was interrupted mid-send; it is marked failed, never re-sent. */
-export const STALE_CLAIM_MS = 30 * 60 * 1000
+const STALE_CLAIM_MS = 30 * 60 * 1000
 /** Finished posts kept for the commissioner to see. */
 export const HISTORY_KEEP = 20
 
-export type ScheduledAnnouncementStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled'
+type ScheduledAnnouncementStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled'
 
 export type ScheduledAnnouncement = {
   id: string

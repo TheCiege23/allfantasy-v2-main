@@ -32,7 +32,7 @@ import {
  * `onRequestCollapse`) when the user drags across the peek line. The room's own tab state remains
  * the source of truth, so a tab tap and a drag can never disagree about what is showing.
  */
-export type DraftMobileTrayProps = {
+type DraftMobileTrayProps = {
   /** True when the room has a panel selected; false collapses to peek (whole board visible). */
   open: boolean
   onRequestCollapse: () => void
@@ -45,6 +45,11 @@ export type DraftMobileTrayProps = {
   chrome: ReactNode
   /** Floats above the tray's top-right edge (e.g. a quick-action button). */
   accessory?: ReactNode
+  /**
+   * Full-width bar pinned just above the tray (the auction bid dock). The accessory moves up
+   * over it rather than covering it.
+   */
+  dock?: ReactNode
   /**
    * Height the tray opens to from peek. 'half' shares the screen with the board; 'full' suits a
    * long list that needs its own header (the player pool), where half leaves room for ~2 rows.
@@ -69,6 +74,7 @@ export function DraftMobileTray({
   children,
   chrome,
   accessory,
+  dock,
   openSnap,
   fullOnInputFocus = false,
   preferredOpenSnap,
@@ -175,8 +181,13 @@ export function DraftMobileTray({
       data-snap={snap}
       aria-label={ariaLabel}
     >
+      {dock ? (
+        <div className="absolute inset-x-2 bottom-full z-20 mb-2" data-testid={`${testIdPrefix}-bid-dock`}>
+          {dock}
+        </div>
+      ) : null}
       {accessory ? (
-        <div className="absolute bottom-full right-4 z-20 mb-3" data-testid={`${testIdPrefix}-dock-accessory`}>
+        <div className={`absolute bottom-full right-4 z-20 ${dock ? 'mb-[84px]' : 'mb-3'}`} data-testid={`${testIdPrefix}-dock-accessory`}>
           {accessory}
         </div>
       ) : null}

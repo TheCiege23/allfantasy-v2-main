@@ -20,7 +20,7 @@
  */
 
 /** The shape both callers and tests destructure. */
-export interface ProjectionCoverage {
+interface ProjectionCoverage {
   /** A vendor weekly projection feed lands rows in `fantasy_projections` for this sport. */
   weeklyFeedAvailable: boolean
   /** Computed season-long rows exist in `AFProjectionSnapshot` for this sport. */
@@ -40,11 +40,10 @@ const WEEKLY_FEED_SPORTS = new Set(['NFL'])
 /**
  * Sports whose season-long projections are computed locally by `lib/af-projections`.
  *
- * Everything with a `fantasy_stat_lines` base ends up here, which as of 2026-08-30 is every
- * supported sport except SOCCER (no player season stats from Rolling Insights — see
- * `support_consequences` in contracts/rolling-insights/ENDPOINTS.yaml).
+ * Soccer builds its baselines from committed match stats. The other sports
+ * use their committed season stat lines.
  */
-const SEASON_LONG_SPORTS = new Set(['NFL', 'NCAAF', 'NCAAB', 'NBA', 'NHL', 'MLB'])
+const SEASON_LONG_SPORTS = new Set(['NFL', 'NCAAF', 'NCAAB', 'NBA', 'NHL', 'MLB', 'SOCCER'])
 
 const NO_WEEKLY_FEED_REASON: Record<string, string> = {
   NCAAF:

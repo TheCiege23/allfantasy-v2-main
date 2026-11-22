@@ -17,7 +17,7 @@ export type WorldCupNotificationType =
   | "chimmyReply"
   | "globalBroadcast"
 
-export type WorldCupNotificationPreferences = {
+type WorldCupNotificationPreferences = {
   poolMuted: boolean
   inAppEnabled: boolean
   smsEnabled: boolean
@@ -33,7 +33,7 @@ export type WorldCupNotificationPreferences = {
   globalBroadcastEnabled: boolean
 }
 
-export type WorldCupNotificationPreferenceResolution = {
+type WorldCupNotificationPreferenceResolution = {
   userId: string
   preferences: WorldCupNotificationPreferences
   phone: string | null

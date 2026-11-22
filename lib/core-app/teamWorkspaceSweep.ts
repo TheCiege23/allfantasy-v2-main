@@ -19,7 +19,7 @@ export async function runTeamWorkspaceSweep(userIds:string[],deadline:number){
   }
   for(const userId of rotateSweepTargets(userIds,Date.now())){
     if(Date.now()>=deadline){outcome.budgetStopped=true;break}
-    const where={status:{in:['active','in_season']},OR:[{userId},{teams:{some:{claimedByUserId:userId}}},{rosters:{some:{platformUserId:userId}}},{redraftMembers:{some:{userId}}}]}
+    const where={status:{in:['active','in_season']},OR:[{userId},{teams:{some:{claimedByUserId:userId}}},{rosters:{some:{OR:[{platformUserId:userId},{managerUserId:userId}]}}},{redraftMembers:{some:{userId}}}]}
     const total=await prisma.league.count({where})
     if(!total)continue
     const skip=teamSweepBatchOffset(total,2,Date.now())

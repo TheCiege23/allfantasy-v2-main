@@ -35,7 +35,7 @@ export interface BehavioralSnapshotStore {
 /** The persistence-layer key. `managerId` uses a stable sentinel for league-scope rows (see
  * `prismaBehavioralSnapshotStore.ts` for why: a nullable column can't enforce a unique
  * constraint against NULL in Postgres, since NULL is never equal to itself). */
-export function snapshotStoreKey(leagueId: string, managerId: string | null, periodKey: string): string {
+function snapshotStoreKey(leagueId: string, managerId: string | null, periodKey: string): string {
   return `${leagueId}::${managerId ?? '__league__'}::${periodKey}`
 }
 

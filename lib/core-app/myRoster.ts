@@ -1,3 +1,5 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
+import { rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
 import type { PrismaClient } from '@prisma/client'
 
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
@@ -59,10 +61,26 @@ export async function findMyRoster(
   prisma: Pick<PrismaClient, 'leagueTeam' | 'roster'>,
   leagueId: string,
   userId: string,
+  /**
+   * The team to read, for a manager who runs several in one league (`Roster.id`). It must be theirs.
+   * With none named, a manager with several teams gets their first in a stable order: this is a read.
+   */
+  rosterId?: string | null,
 ): Promise<MyRosterLookup> {
+  // The team named, else the team this manager last switched to (lib/league/viewerTeams.ts). Either
+  // must be one they run: their first team, or a further team that names them as manager.
+  const wanted = rosterId ? [rosterId] : await rememberedActiveTeamIds()
+  if (wanted.length > 0) {
+    const named = await prisma.roster
+      .findFirst({ where: { ...managedRosterWhere(leagueId, userId), id: { in: wanted } }, select: { id: true, playerData: true } })
+      .catch(() => null)
+    if (named) return { found: true, playerData: named.playerData, rosterId: named.id }
+  }
+
   const team = await prisma.leagueTeam
     .findFirst({
       where: { leagueId, claimedByUserId: userId },
+      orderBy: { id: 'asc' },
       select: { platformUserId: true, externalId: true },
     })
     .catch(() => null)
@@ -75,6 +93,8 @@ export async function findMyRoster(
     ? await prisma.roster
         .findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
+          // Only the roster is returned, so with several teams this is one whole team: the first by id.
+          orderBy: { id: 'asc' },
           select: { id: true, playerData: true },
         })
         .catch(() => null)

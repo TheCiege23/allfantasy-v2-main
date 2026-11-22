@@ -28,7 +28,7 @@ import { type Result, err, ok } from './result'
 
 export const DEFAULT_WINDOW_MS = 60_000
 
-export type RateLimitWindow = {
+type RateLimitWindow = {
   /** Window start, in whole windows since the epoch. */
   readonly window: number
   readonly count: number
@@ -49,7 +49,7 @@ export type RateLimitWindow = {
  * atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING` on a counters table is
  * the cheapest correct option and needs no new infrastructure.
  */
-export type RateLimitStore = {
+type RateLimitStore = {
   /**
    * Atomically increment and return the resulting state.
    *
@@ -60,7 +60,7 @@ export type RateLimitStore = {
   increment(key: string, window: number, windowMs: number): Promise<RateLimitWindow>
 }
 
-export type RateLimitDecision = {
+type RateLimitDecision = {
   readonly allowed: boolean
   readonly limit: number
   readonly remaining: number
@@ -114,7 +114,7 @@ export function rateLimitKey(tenantId: string, bucket = 'api'): string {
   return `ratelimit:${bucket}:${tenantId}`
 }
 
-export type RateLimiterDeps = {
+type RateLimiterDeps = {
   readonly store: RateLimitStore
   readonly now?: () => number
   readonly windowMs?: number

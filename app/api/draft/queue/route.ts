@@ -1,9 +1,10 @@
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeague } from '@/lib/draft/access'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,12 +33,13 @@ export async function GET(req: NextRequest) {
   }
   // A queue is a manager's private draft plan. League access alone let any member
   // read a rival's with ?userId=; only the commissioner may look at someone else's.
-  if (uid !== userId && !(await isCommissioner(ds.leagueId, userId))) {
+  if (uid !== userId && !(await canCommissionerAct(ds.leagueId, userId, 'view'))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // A manager's own queue is the queue of the team they are on; a commissioner reading another manager's uses that id.
   const rows = await prisma.draftQueueEntry.findMany({
-    where: { draftSessionId: draftId, userId: uid },
+    where: { draftSessionId: draftId, userId: uid === userId ? await draftQueueKeyForUser(ds.leagueId, userId) : uid },
     orderBy: { priority: 'asc' },
   })
 
@@ -73,16 +75,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const queueKey = await draftQueueKeyForUser(ds.leagueId, userId)
   if (action === 'remove') {
     await prisma.draftQueueEntry.deleteMany({
-      where: { draftSessionId: draftId, userId, playerId },
+      where: { draftSessionId: draftId, userId: queueKey, playerId },
     })
     return NextResponse.json({ ok: true })
   }
 
   if (action === 'reorder') {
     await prisma.draftQueueEntry.updateMany({
-      where: { draftSessionId: draftId, userId, playerId },
+      where: { draftSessionId: draftId, userId: queueKey, playerId },
       data: { priority },
     })
     return NextResponse.json({ ok: true })
@@ -91,7 +94,7 @@ export async function POST(req: Request) {
   await prisma.draftQueueEntry.create({
     data: {
       draftSessionId: draftId,
-      userId,
+      userId: queueKey,
       playerId,
       playerName: playerName ?? undefined,
       priority,

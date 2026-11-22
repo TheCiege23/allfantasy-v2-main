@@ -10,6 +10,8 @@ import { seasonContractHash } from './seasonCalendarVerification'
 import { assessSeasonScoringSourceReadiness } from './seasonScoringSourceReadiness'
 import { BlueprintOperationError } from './seasonBlueprintStore'
 import { hasSeasonDraftRelease } from './seasonDraftReleaseGate'
+import { resolveSeasonDraftWindow } from './seasonRules'
+import { currentSeasonOpeningField, seasonRecoveryHeld } from './seasonRecoveryState'
 class RetrySetup extends Error {}
 
 /** One native league is an atomic unit; no network/provider calls occur while holding the lock. */
@@ -29,7 +31,8 @@ export async function provisionNextSeasonLeague(userId: string, tournamentId: st
         const timestamp = new Date(Math.max(Date.now(), shell.updatedAt.getTime() + 1))
         const lock = await db.tournamentShell.updateMany({ where: { id: tournamentId, status: shell.status, updatedAt: shell.updatedAt }, data: { updatedAt: timestamp } })
         if (lock.count !== 1) throw new RetrySetup()
-        const event = await db.tournamentAuditLog.findFirst({ where: { id: freezeId, tournamentId, action: 'season_opening_field_frozen' } })
+        const event = await currentSeasonOpeningField(db, tournamentId)
+        if (event?.id !== freezeId || await seasonRecoveryHeld(db, tournamentId)) throw new BlueprintOperationError('Reload the current frozen opening field before setup.', 409)
         if (!event) throw new BlueprintOperationError('Freeze the full opening field before setup.', 409)
         const raw = event.data as Record<string, unknown>, { manifestHash, ...payload } = raw
         if (seasonContractHash(payload) !== manifestHash) throw new BlueprintOperationError('The frozen assignment checksum does not match. Setup is blocked for review.', 409)
@@ -74,7 +77,7 @@ export async function provisionNextSeasonLeague(userId: string, tournamentId: st
           const expectedBalances = Object.fromEntries(rosters.map(roster => [roster.id, r.waivers.mode === 'faab' ? r.waivers.budget : 0]))
           const released = league && await hasSeasonDraftRelease(ids.leagueId, league.settings, db)
           const draftStateConsistent = released
-            ? tournamentLeague?.status === 'season_draft_ready' && ['pre_draft', 'drafting'].includes(league.lifecycleState) && ['pre_draft', 'in_progress', 'paused', 'completed'].includes(draft?.status ?? '')
+            ? ['season_draft_ready', 'drafting', 'draft_ready'].includes(tournamentLeague?.status ?? '') && ['pre_draft', 'drafting'].includes(league.lifecycleState) && ['pre_draft', 'in_progress', 'paused', 'completed'].includes(draft?.status ?? '')
             : tournamentLeague?.status === 'season_setup_blocked' && league?.lifecycleState === 'setup' && draft?.status === 'tournament_setup_blocked'
           const consistent = seasonContractHash(waiver?.currentPriorityOrder) === seasonContractHash(expectedPriority) && seasonContractHash(waiver?.faabState) === seasonContractHash(expectedBalances) && members.length === item.slots + (item.members.some(m => m.userId === userId) ? 0 : 1) && item.members.every(m => members.some(member => member.userId === m.userId && member.teamNumber === m.draftSlot && member.role === (m.userId === userId ? 'COMMISSIONER' : 'MEMBER'))) && draftSettings?.draftOrderLocked === true && draftSettings.autostart === false && draftSettings.rounds === manifest.config.rosterSize && draftSettings.draftType === manifest.config.draftType && draftSettings.pickTimerCustomValue === r.draftPolicy!.pickClockSeconds && seasonContractHash(draftSettings.draftOrderSlots) === seasonContractHash(draft?.slotOrder) && seasonContractHash(scoringRows) === seasonContractHash(expectedScoring) && seasonContractHash(Object.fromEntries(Object.keys(expectedWaivers).map(key => [key, Reflect.get(waiverSettings ?? {}, key)]))) === seasonContractHash(expectedWaivers) && tournamentLeague?.leagueId === ids.leagueId && draftStateConsistent && tournamentLeague.draftSessionId === ids.draftId && draft?.auctionBudgetPerTeam === (manifest.config.draftType === 'auction' ? r.draftPolicy!.auctionBudget : null) && league?.locked === true && ids.manifestHash === manifest.manifestHash && league?.userId === userId && seasonContractHash(league.settings) === seasonContractHash(expectedSettings) && draft?.leagueId === league.id && draft.rounds === manifest.config.rosterSize && draft.teamCount === item.slots && draft.draftType === manifest.config.draftType && draft.timerSeconds === manifest.config.rules!.draftPolicy!.pickClockSeconds && rosters.length === item.slots && seats.length === item.slots && teams.length === item.slots && bindings.length === item.slots && waiver?.processingLocked === true && members.some(m => m.userId === userId && m.role === 'COMMISSIONER') && order?.length === item.slots && item.members.every((m, i) => {
             const roster = rosters[i]
@@ -84,7 +87,7 @@ export async function provisionNextSeasonLeague(userId: string, tournamentId: st
         }
         if (!pool || done.has(pool.key)) return { complete: done.size === manifest.leagues.length, created: false, completed: done.size, total: manifest.leagues.length, launchReady: false }
         attemptedKey = pool.key
-        const draftAt = manifest.config.rules!.calendar.drafts.find(d => d.stage === 1)!.startsAt
+        const draftAt = resolveSeasonDraftWindow(manifest.config.rules!.calendar, 1, pool)!.startsAt
         if (Date.parse(draftAt) <= Date.now()) throw new BlueprintOperationError('The opening draft window has started. New league setup is blocked for schedule review.', 409)
         const entrants = await db.tournamentParticipant.findMany({ where: { tournamentId, id: { in: pool.members.map(m => m.id) } } })
         if (entrants.length !== pool.slots || pool.members.some(m => !entrants.some(e => e.id === m.id && e.userId === m.userId && e.status === 'registered'))) throw new BlueprintOperationError('A frozen entrant has changed. Setup is blocked for review.', 409)
@@ -110,7 +113,7 @@ export async function provisionNextSeasonLeague(userId: string, tournamentId: st
 export async function loadSeasonNativeSetup(userId: string, tournamentId: string) {
   const shell = await prisma.tournamentShell.findUnique({ where: { id: tournamentId } })
   if (!shell || shell.commissionerId !== userId) throw new BlueprintOperationError('Only the tournament owner can view opening setup.', 403)
-  const frozen = await prisma.tournamentAuditLog.findFirst({ where: { tournamentId, action: 'season_opening_field_frozen' } })
+  const frozen = await currentSeasonOpeningField(prisma, tournamentId)
   if (!frozen) return null
   const manifest = readOpeningManifest(frozen.data)
   const checkpoints = await prisma.tournamentAuditLog.findMany({ where: { tournamentId, action: { in: ['season_opening_league_provisioned', 'season_opening_league_failed', 'season_opening_draft_released'] } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })

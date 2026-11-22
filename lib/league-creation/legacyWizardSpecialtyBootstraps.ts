@@ -5,7 +5,7 @@
  * - POST /api/league/create legacy Prisma league.create path (deprecated shell — kept for non-manual platforms)
  */
 
-export type LegacyWizardSpecialtyBootstrapArgs = {
+type LegacyWizardSpecialtyBootstrapArgs = {
   league: { id: string; name: string | null; sport: string; leagueSize: number | null }
   userId: string
   name: string | null | undefined
@@ -287,6 +287,9 @@ export async function runLegacyWizardSpecialtyBootstrapsAfterLeagueCreate(
     try {
       const { upsertBigBrotherConfig } = await import('@/lib/big-brother/BigBrotherLeagueConfig')
       await upsertBigBrotherConfig(league.id, {})
+      // The commissioner's setup choices (tie-break, finale, jury, HOH challenge) become the game's rules.
+      const { applyBigBrotherSetupRules } = await import('@/lib/big-brother/bigBrotherSetupRulesApply')
+      await applyBigBrotherSetupRules(league.id)
       try {
         const { runBigBrotherLeagueBootstrap } = await import('@/lib/big-brother/bigBrotherLeagueBootstrap')
         const bbBoot = await runBigBrotherLeagueBootstrap(league.id)

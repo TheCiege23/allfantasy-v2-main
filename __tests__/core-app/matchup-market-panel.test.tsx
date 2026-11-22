@@ -21,6 +21,17 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 
 const h = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
 
+/* Background refreshes go through the deploy guard (lib/core-app/deployGuard). A synchronous
+   pass-through keeps fake-timer assertions in the same tick and keeps its marker read out of
+   fetch counts; guard.ok=false is "a deploy landed". */
+const guard = vi.hoisted(() => ({ ok: true }))
+vi.mock('@/lib/core-app/deployGuard', () => ({
+  primeDeployBaseline: () => Promise.resolve(),
+  canRefreshInBackground: () => ({ then: (cb: (ok: boolean) => void) => cb(guard.ok) }),
+  refreshInBackground: (fn: () => void) => { if (guard.ok) fn(); return Promise.resolve() },
+  isNewVersionReady: () => false,
+  subscribeNewVersionReady: () => () => {},
+}))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({
   useOptionalLanguage: () => ({ language: h.language, setLanguage: () => {}, t: (k: string) => k }),
 }))
@@ -159,7 +170,7 @@ describe('Spanish — no English left', () => {
         1,
       ),
     )
-    expect(t).toContain('Entorno de anotación')
+    expect(t).toContain('Panorama de los partidos de tus jugadores (líneas de apuestas)')
     expect(t).toContain('27.5 pts esperados')
     expect(t).toContain('favorito por 3.5')
     expect(t).toContain('no favorito por 2.5')
@@ -280,7 +291,7 @@ describe('the Matchup screen carries the panel', () => {
   it('mounts it, asks for your starters’ clubs once each, and renders present + partial', async () => {
     const fetchFn = stubFetch(MARKET)
     const { container } = render(<Matchup data={data()} />)
-    await screen.findByText('Scoring environment')
+    await screen.findByText('Game outlook for your players (betting lines)')
 
     expect(fetchFn).toHaveBeenCalledTimes(1)
     const url = String(fetchFn.mock.calls[0][0])
@@ -315,7 +326,7 @@ describe('the Matchup screen carries the panel', () => {
     h.language = 'es'
     stubFetch(MARKET)
     const { container } = render(<Matchup data={data()} />)
-    await screen.findByText('Entorno de anotación')
+    await screen.findByText('Panorama de los partidos de tus jugadores (líneas de apuestas)')
     expect(container.querySelector('.af-mu-market')!.textContent).toContain('favorito por 3.5')
   })
 

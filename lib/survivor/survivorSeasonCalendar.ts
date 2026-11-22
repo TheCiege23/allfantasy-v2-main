@@ -7,7 +7,7 @@ import type { LeagueSport } from '@prisma/client'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 /** Last fantasy regular-season week index (1-based), playoffs excluded — approximate industry defaults. */
-export const REGULAR_SEASON_END_WEEK_BY_SPORT: Record<LeagueSport, number> = {
+const REGULAR_SEASON_END_WEEK_BY_SPORT: Record<LeagueSport, number> = {
   NFL: 14,
   NBA: 25,
   NHL: 28,
@@ -17,7 +17,7 @@ export const REGULAR_SEASON_END_WEEK_BY_SPORT: Record<LeagueSport, number> = {
   SOCCER: 34,
 }
 
-export function getRegularSeasonEndWeek(
+function getRegularSeasonEndWeek(
   sport: string | null | undefined,
   override: number | null | undefined,
 ): number {

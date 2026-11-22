@@ -18,16 +18,16 @@ export interface AssignmentParticipant {
   displayName: string
 }
 
-export interface AssignmentTribe {
+interface AssignmentTribe {
   slotIndex: number
   memberUserIds: string[]
 }
 
-export type TribeAssignmentResult =
+type TribeAssignmentResult =
   | { ok: true; mode: TribeAssignmentMode; tribes: AssignmentTribe[]; seed: number | null }
   | { ok: false; code: 'no_participants' | 'invalid_tribe_count' | 'manual_invalid' | 'limited_data'; error: string }
 
-export interface ComputeTribeAssignmentInput {
+interface ComputeTribeAssignmentInput {
   participants: AssignmentParticipant[]
   tribeCount: number
   mode: TribeAssignmentMode

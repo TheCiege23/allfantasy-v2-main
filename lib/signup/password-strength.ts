@@ -1,9 +1,9 @@
 /**
  * Password strength for signup UI: level 0–4 and label.
  */
-export type PasswordStrengthLevel = 0 | 1 | 2 | 3 | 4
+type PasswordStrengthLevel = 0 | 1 | 2 | 3 | 4
 
-export interface PasswordStrength {
+interface PasswordStrength {
   level: PasswordStrengthLevel
   label: string
   valid: boolean

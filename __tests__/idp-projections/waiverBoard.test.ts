@@ -38,6 +38,9 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
     )
   }),
 }))
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async () => (await import('@/lib/core-app/playerProjections')).lookupProjections(['6038', 'fa1', ...Object.keys(extraFeed)]),
+}))
 vi.mock('@/lib/projections/leagueScoring', () => ({
   computeLeagueProjectedPoints: (line: Record<string, number>) => ({ points: Number(line.rec) }),
 }))
@@ -188,20 +191,9 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     expect(board.candidates[0]?.displaces?.name).toBe('Wrong Player')
   })
 
-  it('puts the AllFantasy engine beside the free agent and the starter he displaces, without moving the gain', async () => {
-    const { lookupAfEngineProjections } = await import('@/lib/core-app/playerProjections')
-    vi.mocked(lookupAfEngineProjections).mockResolvedValueOnce(new Map([
-      ['fa1', { playerId: 'fa1', projectedPoints: 24, basis: null, confidence: null }],
-      ['6038', { playerId: '6038', projectedPoints: 10, basis: null, confidence: null }],
-    ]))
-    const before = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+  it('uses the AF forecast on both sides of the swap', async () => {
     const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
-    // Provider line scores the same under this league as generic (rec x1), so AF carries over 1:1.
-    expect(before.candidates[0]?.afProjectedPoints).toBe(24)
-    expect(before.candidates[0]?.displaces?.afProjectedPoints).toBe(10)
-    // Without AF rows the figures are absent, and the gain is identical either way.
-    expect(board.candidates[0] && 'afProjectedPoints' in board.candidates[0]).toBe(false)
-    expect(before.candidates[0]?.gain).toBe(board.candidates[0]?.gain)
+    expect(board.candidates[0]).toMatchObject({ projectedPoints: 12, gain: 7, displaces: { projectedPoints: 5 } })
   })
 
   /*

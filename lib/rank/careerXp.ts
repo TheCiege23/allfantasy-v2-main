@@ -18,7 +18,7 @@ import {
  * Pure: no prisma, so it is tested directly.
  */
 
-export type XpLedgerRow = {
+type XpLedgerRow = {
   season: number
   wins: number
   losses: number

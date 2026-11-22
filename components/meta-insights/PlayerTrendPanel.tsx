@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { DEFAULT_SPORT } from "@/lib/sport-scope"
 
-export interface TrendingPlayer {
+interface TrendingPlayer {
   playerId: string
   sport: string
   trendScore: number
@@ -143,7 +143,7 @@ export default function PlayerTrendPanel(props: {
         </Link>
         {" · "}
         <Link href="/waiver-ai" className="text-violet-600 hover:underline dark:text-violet-400">
-          Waiver AI
+          Waiver Chimmy
         </Link>
       </p>
       {detailPlayer && (
@@ -181,7 +181,7 @@ export default function PlayerTrendPanel(props: {
             href={`/waiver-ai?highlight=${encodeURIComponent(detailPlayer.playerId)}`}
             className="mt-2 inline-block text-xs text-violet-600 hover:underline dark:text-violet-400"
           >
-            See in Waiver AI →
+            See in Waiver Chimmy →
           </Link>
         </div>
       )}

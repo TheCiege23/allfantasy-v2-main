@@ -21,7 +21,7 @@ import { pitchLine, type PitchLine, type PitchPackage } from './tradePitch'
  * ingested yet" lead and sorts last, it is not given a window.
  */
 
-export type TradeWindowRow = {
+type TradeWindowRow = {
   leagueId: string
   leagueName: string
   platform: string

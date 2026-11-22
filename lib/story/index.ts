@@ -8,4 +8,4 @@
 export * from './types'
 export { buildStoryContext, type StoryDataSource } from './storyContextBuilder'
 export { generateStoryDraft, buildStoryPrompt, STORY_SAFETY_NOTE } from './storyGenerator'
-export { StoryEngine, type StoryEngineRequest } from './StoryEngine'
+export { StoryEngine } from './StoryEngine'

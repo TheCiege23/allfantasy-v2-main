@@ -6,13 +6,7 @@
  * They produce structured outputs that can be shown directly to users OR
  * passed as context to an LLM for a richer generative summary.
  */
-import type {
-  WorldCupAiStrategy,
-  WorldCupBracketHealth,
-  WorldCupMatchView,
-  WorldCupPickView,
-  WorldCupRound,
-} from "./types"
+import type { WorldCupAiStrategy, WorldCupBracketHealth, WorldCupMatchView, WorldCupPickView } from "./types"
 import { hasWorldCupPickSelection } from "./worldCupProjectedBracket"
 
 // ── FIFA seed / rank lookup ───────────────────────────────────────────────────
@@ -46,18 +40,6 @@ function getSlotStrength(slotKey: string): number {
 }
 
 // ── Team strength ─────────────────────────────────────────────────────────────
-
-/**
- * Returns a rough strength rating (0–100) for a team/side.
- * Uses slot key as proxy for FIFA rank / seeding when real data unavailable.
- */
-export function getWorldCupTeamStrength(
-  slotKey: string,
-  teamName?: string | null
-): number {
-  if (teamName && teamName.toLowerCase() === "tbd") return DEFAULT_STRENGTH
-  return getSlotStrength(slotKey)
-}
 
 // ── Win probability ───────────────────────────────────────────────────────────
 
@@ -293,13 +275,13 @@ export function calculateWorldCupBracketHealth(
 
 // ── Group Stage AI insights (deterministic, per-group) ───────────────────────
 
-export type WorldCupGroupStageInsightTeam = {
+type WorldCupGroupStageInsightTeam = {
   teamId: string
   name: string
   seedOrder: number
 }
 
-export type WorldCupGroupStageGroupInsightInput = {
+type WorldCupGroupStageGroupInsightInput = {
   /** Display name shown in copy (e.g. "Group A"). */
   groupName: string
   /** Group key used for slot-strength lookup (e.g. "A"). */
@@ -417,7 +399,7 @@ export function buildWorldCupGroupStageGroupInsights(
 
 // ── Third-place advancer insights (deterministic, pool-wide) ─────────────────
 
-export type WorldCupGroupStageThirdPlaceInsightInput = {
+type WorldCupGroupStageThirdPlaceInsightInput = {
   groups: Array<{
     id: string
     groupKey: string
@@ -490,11 +472,3 @@ export function buildWorldCupGroupStageThirdPlaceInsights(
 
 // ── Round scoring weights (for builder ordering) ──────────────────────────────
 
-export const WORLD_CUP_ROUND_PICK_ORDER: WorldCupRound[] = [
-  "round_of_32",
-  "round_of_16",
-  "quarterfinal",
-  "semifinal",
-  "third_place",
-  "final",
-]

@@ -10,11 +10,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
+import { recordImportStarted } from '@/lib/analytics/importFunnel'
 import { orchestrateImportPreview } from '@/lib/league-import/importOrchestrator'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
-import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { importComingSoonMessage, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
+import { isYahooSnapshotSourceId } from '@/lib/league-import/yahoo/snapshot/yahooSnapshotModel'
+import { isYahooSnapshotImportOpenFor } from '@/lib/yahoo/yahooAvailability'
 import { getSleeperImportPreview } from '@/lib/league-import/sleeper/SleeperImportPreviewService'
+import { buildServerImportReview } from '@/lib/league-import/review/attachImportReview'
 import {
   assertImportCommissioner,
   attestationFromRequestBody,
@@ -33,7 +37,7 @@ function mapImportPreviewErrorStatus(code: string): number {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) {
     return auth.response
   }
@@ -62,12 +66,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unsupported import provider' }, { status: 400 })
   }
 
-  if (!isImportProviderAvailable(provider)) {
+  /*
+   * A PASTED Yahoo league (yahoo-snapshot:<id>) needs no Yahoo API access, so it is not held to
+   * Yahoo's coming-soon state — only to the snapshot rollout (lib/yahoo/yahooAvailability.ts).
+   * The API path for Yahoo stays refused here exactly as before.
+   */
+  const yahooSnapshotAllowed =
+    provider === 'yahoo' && isYahooSnapshotSourceId(sourceId) && isYahooSnapshotImportOpenFor(auth.userId)
+  if (!isImportProviderAvailable(provider) && !yahooSnapshotAllowed) {
     return NextResponse.json(
-      { error: `Import from ${provider} is not yet available.` },
+      { error: importComingSoonMessage(provider), code: 'coming_soon' },
       { status: 400 }
     )
   }
+
+  // The funnel's "import started" — a pasted league id skips discovery, so preview counts too.
+  void recordImportStarted(auth.userId, provider, 'preview')
 
   // Gate at preview too — no reason to surface data to someone who can't commit.
   const gate = await assertImportCommissioner({
@@ -118,9 +132,18 @@ export async function POST(req: NextRequest) {
         { status: mapImportPreviewErrorStatus(sleeperPreview.code) }
       )
     }
+    const sleeperReview = await buildServerImportReview({
+      provider,
+      userId: auth.userId,
+      sourceLeagueId: sourceId,
+      preview: sleeperPreview.preview,
+      canonical: sleeperPreview.canonical,
+    })
     return NextResponse.json({
       ...sleeperPreview.preview,
       canonical: sleeperPreview.canonical,
+      // Omitted, not null, when there is no review: older clients see the response unchanged.
+      ...(sleeperReview ? { review: sleeperReview } : {}),
     })
   }
 
@@ -136,9 +159,17 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  const review = await buildServerImportReview({
+    provider,
+    userId: auth.userId,
+    sourceLeagueId: sourceId,
+    preview: result.preview,
+    canonical: result.canonicalPreview,
+  })
   return NextResponse.json({
     ...result.preview,
     canonical: result.canonicalPreview,
+    ...(review ? { review } : {}),
     /* A Secret-ID Fantrax member: the screen offers "I'm the commissioner" so the commit can say so. */
     ...(gateAllowsCommissionerConfirm(gate, provider) ? { commissionerConfirmable: true } : {}),
     ...(previewOnly

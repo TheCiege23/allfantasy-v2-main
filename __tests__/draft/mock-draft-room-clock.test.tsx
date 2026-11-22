@@ -27,6 +27,7 @@ function seed(state: Record<string, unknown>) {
       ...state,
     },
   }))
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ leagues: [] }), { status: 200 })))
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -54,7 +55,8 @@ describe('mock room clock bar', () => {
     expect(screen.getByTestId('mock-draft-current-pick')).toHaveTextContent('Pick #1')
     expect(screen.getByTestId('mock-draft-clock-status')).toHaveTextContent('Paused')
     expect(screen.queryByTestId('mock-draft-clock')).toBeNull()
-    expect(screen.getByTestId('draft-room-mock-banner')).toBeInTheDocument()
+    // The shell renders its banner slot in both the desktop and the phone layout.
+    expect(screen.getAllByTestId('draft-room-mock-banner').length).toBeGreaterThan(0)
   })
 
   it('on your turn it says so and shows the time left with its bar', async () => {

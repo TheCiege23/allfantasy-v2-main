@@ -8,13 +8,13 @@ const LOCKED_VARIANT_BY_LEAGUE_TYPE: Record<string, string> = {
   c2c: 'merged_devy_c2c',
 }
 
-export interface ResolveLeagueVariantInput {
+interface ResolveLeagueVariantInput {
   sport: string | null | undefined
   leagueType: string | null | undefined
   requestedVariant?: string | null
 }
 
-export interface EffectiveLeagueVariantResult {
+interface EffectiveLeagueVariantResult {
   variant: string | null
   variantLockedByLeagueType: boolean
 }

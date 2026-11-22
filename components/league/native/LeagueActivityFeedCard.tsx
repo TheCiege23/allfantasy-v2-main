@@ -50,7 +50,8 @@ const KIND_LABEL: Record<FeedItem['kind'], string> = { trade: 'Trade', waiver: '
  * what actually happened in the league, newest first, with one-tap reactions on the moves that
  * live in league chat.
  */
-export function LeagueActivityFeedCard({ leagueId, onOpenChat }: { leagueId: string; onOpenChat: () => void }) {
+/** `onOpenChat` absent: no "Open league chat" link (an imported league without a chat tab). */
+export function LeagueActivityFeedCard({ leagueId, onOpenChat }: { leagueId: string; onOpenChat?: () => void }) {
   const [items, setItems] = useState<FeedItem[] | null | undefined>(undefined)
   const [picker, setPicker] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -161,9 +162,11 @@ export function LeagueActivityFeedCard({ leagueId, onOpenChat }: { leagueId: str
         </ol>
       )}
       {error ? <p className="nl-activity-error" role="alert">{error}</p> : null}
-      <button type="button" className="nl-text-link" onClick={onOpenChat} data-testid="league-activity-chat">
-        Open league chat <ArrowRight size={15} aria-hidden />
-      </button>
+      {onOpenChat ? (
+        <button type="button" className="nl-text-link" onClick={onOpenChat} data-testid="league-activity-chat">
+          Open league chat <ArrowRight size={15} aria-hidden />
+        </button>
+      ) : null}
     </section>
   )
 }

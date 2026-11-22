@@ -99,7 +99,7 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')
 }
 
-export async function theSportsDbHeadshot(name: string): Promise<TsdbHeadshot | null> {
+async function theSportsDbHeadshot(name: string): Promise<TsdbHeadshot | null> {
   const norm = normalizeName(name)
   if (!norm) return null
   const row = await cachedJson<TsdbCacheRow>(
@@ -150,7 +150,7 @@ export async function theSportsDbHeadshots(
 
 // ── Rolling Insights injuries ────────────────────────────────────────────────
 export type InjuryFlag = { status: string; note: string | null }
-export type InjuriesPayload =
+type InjuriesPayload =
   | { configured: false }
   | { configured: true; available: false }
   | { configured: true; available: true; byName: Record<string, InjuryFlag> }

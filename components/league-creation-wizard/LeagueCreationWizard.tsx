@@ -32,7 +32,6 @@ import type {
 import { getConceptIntroVideoUrl } from '@/lib/league-creation/concept-intro-videos'
 import { PlatformStyleSelector } from './PlatformStyleSelector'
 import { clampTeamCountForSport } from '@/lib/league-creation-wizard/sport-team-limits'
-import { COLLEGE_PAIR_WIZARD_PRIMARY_SPORTS } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import { readFetchJson } from '@/lib/http/readFetchJson'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
@@ -124,7 +123,7 @@ const STEP_LABELS: Record<ActiveWizardStepId, string> = {
   sport: 'Sport & setup',
   team_setup: 'League details',
   scoring: 'Scoring & rosters',
-  draft_privacy: 'AI & privacy',
+  draft_privacy: 'Chimmy & privacy',
   review: 'Review & create',
 }
 
@@ -790,7 +789,7 @@ export function LeagueCreationWizard({
     setError(null)
     try {
       if (state.leagueType === 'guillotine' && !state.formatOptions.guillotineRulesAcknowledged) {
-        setError('Confirm Guilly elimination rules on the AI & privacy step.')
+        setError('Confirm Guilly elimination rules on Chimmy & privacy step.')
         setCreating(false)
         return
       }

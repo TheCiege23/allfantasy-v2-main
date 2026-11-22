@@ -1,6 +1,5 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -63,41 +62,21 @@ function SortRow({
 }
 
 type Props = {
-  sessionId: string
   queue: DraftPlayerRow[]
   onQueueChange: (next: DraftPlayerRow[]) => void
+  /**
+   * The room saves the queue (`DraftShell`), whichever tab is open; this panel only shows it. It used to
+   * save from here, so nothing queued while another tab was open was ever saved (2026-11-16).
+   */
+  saving?: boolean
 }
 
-export function QueuePanel({ sessionId, queue, onQueueChange }: Props) {
+export function QueuePanel({ queue, onQueueChange, saving = false }: Props) {
   const { t } = useLanguage()
-  const [saving, setSaving] = useState(false)
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-
-  const persist = useCallback(
-    async (ids: string[]) => {
-      setSaving(true)
-      try {
-        await fetch('/api/draft/queue/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, playerIds: ids }),
-        })
-      } finally {
-        setSaving(false)
-      }
-    },
-    [sessionId],
-  )
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void persist(queue.map((q) => q.id))
-    }, 500)
-    return () => window.clearTimeout(timeoutId)
-  }, [queue, persist])
 
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e

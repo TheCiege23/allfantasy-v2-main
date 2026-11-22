@@ -50,7 +50,7 @@ export interface CrossSizeRow {
   sampleSize: number
 }
 
-export interface CrossSizeEntry {
+interface CrossSizeEntry {
   playerKey: string
   playerName: string
   /** Overall pick projected into the caller's league size. */
@@ -102,7 +102,7 @@ export function weightedMedian(pairs: ReadonlyArray<{ value: number; weight: num
   return usable[usable.length - 1]!.value
 }
 
-export interface BuildCrossSizeOptions {
+interface BuildCrossSizeOptions {
   /** The league size to project into. */
   targetTeamCount: number
   /**
@@ -114,7 +114,7 @@ export interface BuildCrossSizeOptions {
   minBoardSampleSize?: number
 }
 
-export const DEFAULT_MIN_BOARD_SAMPLE = 1
+const DEFAULT_MIN_BOARD_SAMPLE = 1
 
 /**
  * Pool snapshot rows from every league size into one board projected to `targetTeamCount`.

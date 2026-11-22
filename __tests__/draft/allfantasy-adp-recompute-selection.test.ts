@@ -194,6 +194,57 @@ describe('imported drafts are folded into the same recompute', () => {
     expect(report.uniqueContexts).toBe(2)
   })
 
+  it('aggregates a production-sized imported corpus without dropping the batch', async () => {
+    const draftCount = 2_000
+    const draftLength = 80
+    const leagues = Array.from({ length: draftCount }, (_, index) => ({
+      ...importedLeague,
+      id: `imported-${index}`,
+    }))
+    const identities = Array.from({ length: draftLength }, (_, index) => ({
+      sleeperId: `player-${index}`,
+      canonicalName: `Imported Player ${index}`,
+      position: 'WR',
+    }))
+    mockLeagueFindMany.mockResolvedValue(leagues)
+    mockIdentityFindMany.mockResolvedValue(identities)
+    const facts = leagues.flatMap((league, draftIndex) =>
+      identities.map((player, index) => ({
+        draftId: String(draftIndex * draftLength + index).padStart(6, '0'),
+        leagueId: league.id,
+        season: 2026,
+        round: Math.floor(index / 10) + 1,
+        pickNumber: index + 1,
+        playerId: player.sleeperId,
+      })),
+    )
+    mockDraftFactFindMany.mockImplementation(async ({ where, take }) => {
+      const start = where.draftId ? Number(where.draftId.gt) + 1 : 0
+      return facts.slice(start, start + take)
+    })
+
+    const report = await recomputeAllFantasyAdp({ sport: 'NFL', apply: false })
+    expect(report.errors).toEqual([])
+    expect(report.importedDraftsCovered).toBe(draftCount)
+    expect(mockDraftFactFindMany.mock.calls.length).toBeGreaterThan(1)
+    expect(report.picksKept).toBe(draftCount * draftLength)
+    expect(report.uniquePlayers).toBe(draftLength)
+  })
+
+  it('rebuilds just the imported board when the backfill selects that draft type', async () => {
+    armImports()
+    const report = await recomputeAllFantasyAdp({
+      sport: 'NFL',
+      season: '2024',
+      draftType: 'imported',
+      apply: false,
+    })
+    expect(mockDraftPickFindMany).not.toHaveBeenCalled()
+    expect(report.errors).toEqual([])
+    expect(report.picksKept).toBe(importedFacts.length)
+    expect(report.uniqueContexts).toBe(1)
+  })
+
   it('can be switched off without touching the live pass', async () => {
     mockDraftPickFindMany.mockResolvedValue([mirroredPick()])
     armImports()
@@ -221,5 +272,32 @@ describe('imported drafts are folded into the same recompute', () => {
     armImports()
     await recomputeAllFantasyAdp({ sport: null, apply: false })
     expect(mockDraftFactFindMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('recompute row selection — what counts as evidence (2026-11-22)', () => {
+  it('an autopick is our own board talking back: left out, and counted', async () => {
+    mockDraftPickFindMany.mockResolvedValue([mirroredPick(), mirroredPick({ source: 'auto', playerName: 'Bot Pick', overall: 3 })])
+    const report = await recomputeAllFantasyAdp({ sport: 'NFL', apply: false })
+    expect(report.picksKept).toBe(1)
+    expect(report.filteredOutByAutopick).toBe(1)
+  })
+
+  it('a pick with no pickedAt is dated by when its row was written, so it can weigh as recent', async () => {
+    const now = new Date('2026-11-22T12:00:00Z')
+    mockDraftPickFindMany.mockResolvedValue([
+      // Ten days ago at 10, today at 40: recency pulls the board toward 40, past the plain mean of 25.
+      mirroredPick({ overall: 10, createdAt: new Date(now.getTime() - 10 * 86_400_000) }),
+      mirroredPick({ overall: 40, createdAt: now }),
+    ])
+    const report = await recomputeAllFantasyAdp({ sport: 'NFL', apply: true, now })
+    expect(report.picksKept).toBe(2)
+    const written = mockAdpUpsert.mock.calls.map((c) => c[0]?.create ?? c[0]?.update).find(Boolean) as { averageOverallPick?: number } | undefined
+    expect(written?.averageOverallPick ?? 0).toBeGreaterThan(25)
+  })
+
+  it('selects the row time it dates picks by', async () => {
+    await recomputeAllFantasyAdp({ sport: 'NFL', apply: false })
+    expect(mockDraftPickFindMany.mock.calls[0]?.[0]?.select).toMatchObject({ createdAt: true })
   })
 })

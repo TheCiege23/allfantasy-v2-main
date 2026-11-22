@@ -2,8 +2,8 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 
 export type SingleGameSport = "ncaaf" | "nba_cup"
-export type ScheduledGame = { seriesNumber: number; startsAt: string; label?: string; venue?: string; location?: string }
-export type SingleGameSchedule = {
+type ScheduledGame = { seriesNumber: number; startsAt: string; label?: string; venue?: string; location?: string }
+type SingleGameSchedule = {
   sport: SingleGameSport
   season: number
   games: ScheduledGame[]

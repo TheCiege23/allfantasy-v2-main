@@ -8,6 +8,7 @@ import {
   parseWaiverEngineConfig,
   type WaiverEngineConfigJson,
 } from "./waiver-engine-config"
+import { faabBudgetRebaseApplies, rebaseFaabBalancesForBudgetChange } from "./faabBudgetRebase"
 import { defaultProcessingDaysList, resolveFreeAgentUnlockBehavior } from "./free-agent-unlock"
 import {
   readFaabRolloverRule,
@@ -252,7 +253,7 @@ export async function upsertLeagueWaiverSettings(
   const [league, existing] = await Promise.all([
     (prisma as any).league.findUnique({
       where: { id: leagueId },
-      select: { sport: true, leagueVariant: true },
+      select: { sport: true, leagueVariant: true, platform: true, platformLeagueId: true },
     }),
     (prisma as any).leagueWaiverSettings.findUnique({
       where: { leagueId },
@@ -329,6 +330,13 @@ export async function upsertLeagueWaiverSettings(
     create: { leagueId, ...data },
     update: data,
   })
+  // Every door that changes the budget (settings window, League settings, the waiver API) saves through here, so the
+  // teams' balances move with it exactly once (lib/waiver-wire/faabBudgetRebase.ts). Best-effort, like the seed.
+  if (input.faabBudget !== undefined && league && faabBudgetRebaseApplies(league) && normalizeWaiverTypeForEngine(data.waiverType) === "faab") {
+    await rebaseFaabBalancesForBudgetChange(leagueId, fallbackFaabBudget ?? null, data.faabBudget ?? null).catch((err) => {
+      console.warn("[waiver-settings] FAAB balance rebase failed", { leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+  }
   // Best-effort: the settings row is saved; a failed seed must not fail the save.
   await seedNullFaabBalances(leagueId).catch((err) => {
     console.warn("[waiver-settings] FAAB balance seed failed", { leagueId, error: err instanceof Error ? err.message : String(err) })

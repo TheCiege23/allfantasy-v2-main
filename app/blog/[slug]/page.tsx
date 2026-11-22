@@ -7,8 +7,10 @@ import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { renderBlogBodyHtml } from "@/lib/automated-blog/renderBlogBody"
 import { isBlogAdmin } from "@/lib/automated-blog/blogAdminGate"
-
-const BASE = "https://allfantasy.ai"
+import { isArticleLive } from "@/lib/automated-blog/liveArticles"
+import { buildBlogPostingJsonLd } from "@/lib/automated-blog/blogPostingSchema"
+import { serializeJsonLd } from "@/lib/seo/StructuredDataResolver"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> }
 
@@ -17,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await prisma.blogArticle.findUnique({
     where: { slug },
   })
-  if (!article || article.publishStatus !== "published") return { title: "Blog | AllFantasy" }
+  if (!article || !isArticleLive(article)) return { title: "Blog | AllFantasy" }
   const seo = buildBlogSEO({
     title: article.title,
     excerpt: article.excerpt,
@@ -25,6 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     sport: article.sport,
     category: article.category,
     slug: article.slug,
+    seoTitle: article.seoTitle,
+    seoDescription: article.seoDescription,
   })
   return {
     title: seo.title,
@@ -58,12 +62,38 @@ export default async function BlogArticlePage({ params, searchParams }: Props) {
   if (!article) notFound()
   // `?preview=1` shows an unpublished article, so it is an admin view — for
   // anyone else a draft does not exist.
-  if (article.publishStatus !== "published" && !(isPreview && (await isBlogAdmin()))) notFound()
+  const live = isArticleLive(article)
+  if (!live && !(isPreview && (await isBlogAdmin()))) notFound()
 
   const bodyHtml = renderBlogBodyHtml(article.body)
+  // An admin's preview of a draft is not a page anyone should index, so it gets no article data.
+  const jsonLd = live
+    ? buildBlogPostingJsonLd({
+        origin: getPublicSiteOrigin(),
+        slug: article.slug,
+        title: article.title,
+        description: buildBlogSEO({
+          title: article.title,
+          excerpt: article.excerpt,
+          body: article.body,
+          sport: article.sport,
+          category: article.category,
+          slug: article.slug,
+          seoTitle: article.seoTitle,
+          seoDescription: article.seoDescription,
+        }).description,
+        category: article.category,
+        tags: article.tags,
+        publishedAt: article.publishedAt,
+        updatedAt: article.updatedAt,
+      })
+    : []
 
   return (
     <main className="min-h-screen bg-gray-950 text-white">
+      {jsonLd.map((item, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(item) }} />
+      ))}
       <article className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-12">
         <Link href="/blog" className="text-sm text-gray-400 hover:text-white" data-testid="blog-article-back-button">
           ← Back to Blog

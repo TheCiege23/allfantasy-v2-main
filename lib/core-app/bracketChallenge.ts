@@ -38,7 +38,7 @@ export type BracketTeam = {
   logo: string | null
 }
 
-export type BracketSlot = {
+type BracketSlot = {
   seed: number
   /** Null until a seeding source exists — rendered as an open "?" slot. */
   team: BracketTeam | null
@@ -53,7 +53,7 @@ export type BracketSide = {
   pairs: Array<[number, number]>
 }
 
-export type SportOption = {
+type SportOption = {
   key: SportKey
   label: string
   available: boolean

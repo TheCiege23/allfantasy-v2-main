@@ -4,6 +4,9 @@ import { isSafeInternalPath, safeInternalPathOr } from "@/lib/auth/auth-intent-r
 import { relativeRedirect, relativeUrl } from "@/lib/http/relative-redirect"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
+import { cookies } from "next/headers"
+import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
+import { ACQUISITION } from "@/lib/analytics/eventNames"
 
 export const runtime = "nodejs"
 
@@ -92,14 +95,17 @@ export async function GET(req: Request) {
   const now = new Date()
 
   let verifiedEmail: string | null = null
+  /** The account had never confirmed an address before this link — the funnel's "email verified". */
+  let firstConfirmation = false
 
   try {
     await (prisma as any).$transaction(async (tx: any) => {
       const updated = await tx.appUser.findUnique({
         where: { id: row.userId },
-        select: { email: true },
+        select: { email: true, emailVerified: true },
       })
       verifiedEmail = updated?.email ?? null
+      firstConfirmation = updated != null && updated.emailVerified == null
 
       await tx.appUser.updateMany({
         where: { id: row.userId },
@@ -130,6 +136,25 @@ export async function GET(req: Request) {
       })
     } catch (mirrorErr) {
       console.warn("[verify/email] EarlyAccessSignup confirm mirror failed (non-blocking):", mirrorErr)
+    }
+  }
+
+  /*
+   * The funnel's `acquisition.email_verified` (2026-11-15). Once per account: an address CHANGE on an
+   * already-confirmed account also lands here, and counting it would inflate the stage. Best-effort —
+   * recordFunnelEvent never throws, and is awaited only so the write is not cut off by the redirect.
+   */
+  if (firstConfirmation) {
+    try {
+      const jar = await cookies()
+      await recordFunnelEvent({
+        event: ACQUISITION.EMAIL_VERIFIED,
+        userId: row.userId,
+        getCookie: (name) => jar.get(name)?.value,
+        meta: { method: "email" },
+      })
+    } catch {
+      // Analytics never costs the confirmation that just committed.
     }
   }
 

@@ -1,7 +1,7 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { resolveDuplicateManagerFlag, type DuplicateManagerFlagAction } from '@/lib/identity/DuplicateManagerFlagService'
 
 type SessionWithUser = { user?: { id?: string } } | null
@@ -18,10 +18,8 @@ export async function POST(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId, flagId } = await params
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const refused = await commissionerAccessResponse(leagueId, userId, 'league')
+  if (refused) return refused
 
   const body = await req.json().catch(() => ({}))
   const action = typeof body.action === 'string' ? body.action : null

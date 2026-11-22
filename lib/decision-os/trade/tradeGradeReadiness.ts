@@ -4,7 +4,7 @@ import type {
   TradeGradingPolicy,
 } from '@/lib/trade-intel/tradeGradingPolicy'
 
-export type TradeGradeReadiness = {
+type TradeGradeReadiness = {
   contextualGradeAllowed: boolean
   marketComparisonAllowed: boolean
   missingRequired: TradeEvidenceKey[]

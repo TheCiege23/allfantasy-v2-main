@@ -81,6 +81,9 @@ export const DRAFT_TYPES_BY_LEAGUE_FORMAT: Record<DraftMatrixLeagueFormatId, rea
   zombie: ['snake'],
   salary_cap: ['auction'],
   big_brother: DRAFT_TYPES_BIG_BROTHER,
+  // A redraft shell (lib/survivor-guillotine/createFit.ts), so redraft's matrix — the format engine
+  // resolves it the same way. The create catalog narrows what the wizard offers.
+  survivor_guillotine: DRAFT_TYPES_REDRAFT,
 }
 
 /** Sports that support each league format concept (mirrors format-engine). */
@@ -98,6 +101,8 @@ export const SUPPORTED_SPORTS_BY_LEAGUE_FORMAT: Record<DraftMatrixLeagueFormatId
   zombie: ZOMBIE_ELIGIBLE_LEAGUE_SPORTS,
   salary_cap: ALL_SPORTS,
   big_brother: ALL_SPORTS,
+  // The Survivor Guilly engine schedules NFL weeks and NBA scoring periods only.
+  survivor_guillotine: ['NFL', 'NBA'],
 }
 
 /**
@@ -416,6 +421,23 @@ export function listCreateLeagueWireDraftTypeIds(): string[] {
 
 export function isExecutionModeDraftType(id: string): boolean {
   return (EXECUTION_MODE_DRAFT_IDS as readonly string[]).includes(String(id).trim().toLowerCase())
+}
+
+/**
+ * `LeagueSettings.draftType` ('snake' | 'linear' | 'auction' | '3rd_reversal') for a draft hub type and its 3rd-round
+ * reversal flag (2026-11-15). The inverse of `sessionDraftTypeFromLeagueSettings`
+ * (lib/live-draft-engine/DraftSessionService.ts).
+ *
+ * 🛑 DRAFT TYPE LIVED IN TWO STORES THAT COULD DISAGREE. The Draft tab (PATCH /draft/settings) wrote the hub's
+ * `config.draft_type`; the settings window wrote `LeagueSettings.draftType`. Each screen showed its own value, the
+ * last save won on the live session, and a session rebuilt from scratch read only `LeagueSettings`. The Draft tab
+ * now writes both.
+ */
+export function leagueSettingsDraftTypeFor(draftType: string, thirdRoundReversal: boolean): 'snake' | 'linear' | 'auction' | '3rd_reversal' {
+  const core = mapCanonicalDraftTypeToEngineCore(draftType)
+  if (core === 'auction') return 'auction'
+  if (core === 'linear') return 'linear'
+  return thirdRoundReversal ? '3rd_reversal' : 'snake'
 }
 
 /**

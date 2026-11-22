@@ -113,6 +113,8 @@ describe('the trade-evaluator route', () => {
     expect(route).toMatch(/const senderPlayerPrices = senderDevyPass\?\.prices \?\? rawSenderPlayerPrices/)
     // One membership-checked resolution, shared by the devy pass and the grade.
     expect(route.match(/resolveEvaluationLeagueId\(/g)).toHaveLength(1)
-    expect(route).toMatch(/const evaluationLeagueId = await evaluationLeagueIdPromise/)
+    expect(route).toMatch(/const evaluationLeagueId = await resolveEvaluationLeagueId\(/)
+    expect(route).toMatch(/const devyLeagueId\s*=[\s\S]*?\? evaluationLeagueId\s*:\s*null/)
+    expect(route).toMatch(/evaluateLeagueOffer\(data, evaluationLeagueId, userId\)/)
   })
 })

@@ -59,7 +59,7 @@ function normalizeTypedState(state: string | null | undefined): string | null {
   return byName?.code ?? null
 }
 
-export interface BillingAddressLike {
+interface BillingAddressLike {
   country?: string | null
   postal_code?: string | null
   state?: string | null

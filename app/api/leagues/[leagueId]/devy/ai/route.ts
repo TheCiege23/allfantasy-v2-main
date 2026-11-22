@@ -98,7 +98,7 @@ export async function POST(
 
   if (!res.ok) {
     return NextResponse.json(
-      { error: (res as any).details ?? 'AI request failed' },
+      { error: (res as any).details ?? 'Chimmy request failed' },
       { status: 500 }
     )
   }

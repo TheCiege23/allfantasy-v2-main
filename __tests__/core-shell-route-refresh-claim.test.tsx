@@ -24,6 +24,14 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
+/* Background refreshes go through the deploy guard (lib/core-app/deployGuard). A synchronous
+   pass-through keeps fake-timer assertions in the same tick; guard.ok=false is "a deploy landed". */
+const guard = vi.hoisted(() => ({ ok: true }))
+vi.mock('@/lib/core-app/deployGuard', () => ({
+  primeDeployBaseline: () => Promise.resolve(),
+  canRefreshInBackground: () => ({ then: (cb: (ok: boolean) => void) => cb(guard.ok) }),
+  refreshInBackground: (fn: () => void) => { if (guard.ok) fn(); return Promise.resolve() },
+}))
 
 vi.mock('@/components/core-app/comms/CommsDock', () => ({ default: () => null }))
 vi.mock('@/components/core-app/SyncNowButton', () => ({ default: () => null }))
@@ -51,15 +59,23 @@ function Shell({ children }: { children?: React.ReactNode }) {
   )
 }
 
+/* The shell rebuilds only when /api/core/league-version moves (core-shell-change-only-refresh.test.tsx).
+   These tests are about WHO refreshes, so the data changes on every check. */
+let versionN = 0
+const fetchMock = vi.fn(async () => new Response(JSON.stringify({ version: `v${++versionN}` }), { status: 200 }))
+const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
 beforeEach(() => {
   vi.useFakeTimers()
   nav.router.refresh.mockClear()
+  vi.stubGlobal('fetch', fetchMock)
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
 })
 
 afterEach(() => {
   // Unmount even when an assertion threw, so a held claim cannot leak into the next test.
   cleanup()
+  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
@@ -78,11 +94,29 @@ describe('routeRefreshClaim', () => {
 })
 
 describe('the shell poll and the matchup board', () => {
-  it('the shell refreshes on the game-day cadence when nothing claims the route', () => {
+  it('the shell refreshes on the game-day cadence when nothing claims the route', async () => {
     const { unmount } = render(<Shell />)
-    act(() => void vi.advanceTimersByTime(20_000))
+    await tick(20_000)
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()
+  })
+
+  /*
+   * 🛑 After a deploy, `router.refresh()` is a FULL PAGE RELOAD (Next hard-navigates on a build-id
+   * mismatch) — the "page reloads under my click when I come back" report. The timer and the
+   * return-to-tab listener must both stand down once the guard says the deployment moved.
+   */
+  it('🛑 after a deploy the shell neither ticks nor refreshes on return to the tab', () => {
+    guard.ok = false
+    try {
+      const { unmount } = render(<Shell />)
+      act(() => void vi.advanceTimersByTime(60_000))
+      act(() => void document.dispatchEvent(new Event('visibilitychange')))
+      expect(nav.router.refresh).not.toHaveBeenCalled()
+      unmount()
+    } finally {
+      guard.ok = true
+    }
   })
 
   it('with the board mounted, only the board refreshes — one render per period, not two', () => {
@@ -145,7 +179,7 @@ describe('the shell poll and the matchup board', () => {
     unmount()
   })
 
-  it('the shell resumes when the board unmounts', () => {
+  it('the shell resumes when the board unmounts', async () => {
     const { rerender, unmount } = render(
       <Shell>
         <MatchupPulseRefresh inPlay />
@@ -161,7 +195,7 @@ describe('the shell poll and the matchup board', () => {
     expect(routeRefreshClaimed()).toBe(true)
     rerender(<Shell />)
     expect(routeRefreshClaimed()).toBe(false)
-    act(() => void vi.advanceTimersByTime(20_000))
+    await tick(20_000)
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()
   })
@@ -169,14 +203,14 @@ describe('the shell poll and the matchup board', () => {
 
 
 describe('resume and reconnect route recovery',()=>{
- it('refreshes once on resume, preserves the route owner and ignores hidden tabs',()=>{
-  render(<Shell />);act(()=>void vi.advanceTimersByTime(1000))
+ it('refreshes once on resume, preserves the route owner and ignores hidden tabs',async()=>{
+  render(<Shell />);await tick(1000)
   Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'})
-  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).not.toHaveBeenCalled()
+  await act(async()=>{window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)});expect(nav.router.refresh).not.toHaveBeenCalled()
   Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'})
-  act(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'))})
+  await act(async()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)})
   expect(nav.router.refresh).toHaveBeenCalledTimes(1)
-  const release=claimRouteRefresh();act(()=>void vi.advanceTimersByTime(1000))
-  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).toHaveBeenCalledTimes(1);release()
+  const release=claimRouteRefresh();await tick(1000)
+  await act(async()=>{window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)});expect(nav.router.refresh).toHaveBeenCalledTimes(1);release()
  })
 })

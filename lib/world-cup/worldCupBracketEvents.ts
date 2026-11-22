@@ -31,9 +31,6 @@ export const WORLD_CUP_BRACKET_EVENT_TYPES = {
   KNOCKOUT_OVERRIDE: "world_cup.knockout_override",
 } as const
 
-export type WorldCupBracketEventType =
-  (typeof WORLD_CUP_BRACKET_EVENT_TYPES)[keyof typeof WORLD_CUP_BRACKET_EVENT_TYPES]
-
 /** Subset of PoolChat system `type` keys (see `PoolChat.tsx` typeColors). */
 export type WorldCupPoolChatSystemKind =
   | "TOURNAMENT_READY"

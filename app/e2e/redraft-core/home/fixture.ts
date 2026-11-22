@@ -24,7 +24,7 @@ type SportFixture = {
 
 const FOOTBALL = ['Fourth & Long', 'Waiver Wire Wizards', 'Gridiron Ghosts', 'Bench Mob', 'Late Round QBs', 'Sunday Scaries', 'Taco Tuesday', 'The Replacements', 'Red Zone Rejects', 'Hail Mary Heroes', 'Two-Point Tries', 'Monday Night Misery']
 
-export const SPORT_FIXTURES: Record<string, SportFixture> = {
+const SPORT_FIXTURES: Record<string, SportFixture> = {
   nfl: { sport: 'NFL', week: 9, regular: 14, deadline: 11, spots: 6, scale: 110, teams: FOOTBALL },
   ncaaf: { sport: 'NCAAF', week: 7, regular: 12, deadline: 9, spots: 4, scale: 105, teams: FOOTBALL.slice(0, 10) },
   nba: { sport: 'NBA', week: 3, regular: 19, deadline: 14, spots: 6, scale: 610, teams: ['Hardwood Heroes', 'Pick & Rollers', 'Triple Doubles', 'Full Court Press', 'Bench Mob', 'Fast Breakers', 'Glass Cleaners', 'Corner Threes', 'Sixth Men', 'The Tankers'] },

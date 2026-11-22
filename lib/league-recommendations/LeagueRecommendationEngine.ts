@@ -330,11 +330,11 @@ function scoreLeague(card: DiscoveryCard, profile: UserLeagueProfile): {
 
   if (profile.aiUsageScore >= 0.55 && card.aiFeatures.length > 0) {
     score += 8
-    reasons.push("Includes AI tools you frequently use.")
+    reasons.push("Includes Chimmy tools you frequently use.")
     matchedSignals.push("ai_usage")
   } else if (profile.aiUsageScore <= 0.2 && card.aiFeatures.length === 0) {
     score += 4
-    reasons.push("Leans deterministic, matching your lower AI usage pattern.")
+    reasons.push("Leans deterministic, matching your lower Chimmy usage pattern.")
     matchedSignals.push("ai_usage")
   } else if (card.aiFeatures.length > 0) {
     score += 2

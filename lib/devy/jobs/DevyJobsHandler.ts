@@ -35,7 +35,7 @@ export type DevyJobResult = {
 }
 
 /** NCAA player sync backed by CFBD + provider chain ingestion. */
-export async function runNcaaPlayerSync(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runNcaaPlayerSync(payload: DevyJobPayload): Promise<DevyJobResult> {
   const sport = payload.sport ?? 'NFL'
   const processedAt = new Date().toISOString()
   try {
@@ -57,7 +57,7 @@ export async function runNcaaPlayerSync(payload: DevyJobPayload): Promise<DevyJo
 }
 
 /** Declare / draft / return-to-school status refresh: placeholder for status pipeline. */
-export async function runDeclareStatusRefresh(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runDeclareStatusRefresh(payload: DevyJobPayload): Promise<DevyJobResult> {
   const processedAt = new Date().toISOString()
   try {
     const leagueId = payload.leagueId
@@ -79,7 +79,7 @@ export async function runDeclareStatusRefresh(payload: DevyJobPayload): Promise<
 }
 
 /** Auto-graduation after NFL/NBA draft: mark devy players as graduated when draft data exists. */
-export async function runAutoGraduationAfterDraft(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runAutoGraduationAfterDraft(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const seasonYear = payload.seasonYear ?? new Date().getFullYear()
   const processedAt = new Date().toISOString()
@@ -114,7 +114,7 @@ export async function runAutoGraduationAfterDraft(payload: DevyJobPayload): Prom
 }
 
 /** Rookie pool generation: ensure exclusion list is available; no-op that validates pool separation. */
-export async function runRookiePoolGeneration(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runRookiePoolGeneration(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const processedAt = new Date().toISOString()
   try {
@@ -137,7 +137,7 @@ export async function runRookiePoolGeneration(payload: DevyJobPayload): Promise<
 }
 
 /** Devy pool generation: placeholder for building devy-eligible pool for a league. */
-export async function runDevyPoolGeneration(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runDevyPoolGeneration(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const processedAt = new Date().toISOString()
   try {
@@ -158,7 +158,7 @@ export async function runDevyPoolGeneration(payload: DevyJobPayload): Promise<De
 }
 
 /** Promotion window sync: config-driven; job can emit notifications when window opens/closes. */
-export async function runPromotionWindowSync(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runPromotionWindowSync(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const processedAt = new Date().toISOString()
   try {
@@ -184,7 +184,7 @@ export async function runPromotionWindowSync(payload: DevyJobPayload): Promise<D
 }
 
 /** Rookie draft exclusion list: materialize and optionally cache exclusion sets for draft UI. */
-export async function runRookieDraftExclusionList(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runRookieDraftExclusionList(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const processedAt = new Date().toISOString()
   try {
@@ -208,7 +208,7 @@ export async function runRookieDraftExclusionList(payload: DevyJobPayload): Prom
 }
 
 /** Best ball lineup snapshot: compute optimal lineup and persist to DevyBestBallLineupSnapshot. */
-export async function runBestBallLineupSnapshot(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runBestBallLineupSnapshot(payload: DevyJobPayload): Promise<DevyJobResult> {
   const { leagueId, rosterId, periodKey } = payload
   const processedAt = new Date().toISOString()
   try {
@@ -251,7 +251,7 @@ export async function runBestBallLineupSnapshot(payload: DevyJobPayload): Promis
 }
 
 /** Class strength snapshot: aggregate devy players by year/position for AI storytelling. */
-export async function runClassStrengthSnapshot(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runClassStrengthSnapshot(payload: DevyJobPayload): Promise<DevyJobResult> {
   const sport = payload.sport ?? 'NFL'
   const seasonYear = payload.seasonYear ?? new Date().getFullYear()
   const processedAt = new Date().toISOString()
@@ -289,7 +289,7 @@ export async function runClassStrengthSnapshot(payload: DevyJobPayload): Promise
 }
 
 /** Rankings refresh after promotions/drafts: recompute outlook for affected rosters. */
-export async function runRankingsRefreshAfterPromotions(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runRankingsRefreshAfterPromotions(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const rosterId = payload.rosterId
   const processedAt = new Date().toISOString()
@@ -366,7 +366,7 @@ export async function processDevyJob(payload: DevyJobPayload): Promise<DevyJobRe
 }
 
 /** C2C hybrid standings: recompute hybrid standings (read-only; warms any cache). */
-export async function runHybridStandingsRecompute(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runHybridStandingsRecompute(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const processedAt = new Date().toISOString()
   try {
@@ -391,7 +391,7 @@ export async function runHybridStandingsRecompute(payload: DevyJobPayload): Prom
 }
 
 /** C2C pipeline: recompute college-to-pro outlook for all rosters in a C2C league. */
-export async function runC2CPipelineRecalculation(payload: DevyJobPayload): Promise<DevyJobResult> {
+async function runC2CPipelineRecalculation(payload: DevyJobPayload): Promise<DevyJobResult> {
   const leagueId = payload.leagueId
   const rosterId = payload.rosterId
   const processedAt = new Date().toISOString()

@@ -1,11 +1,42 @@
 'use client'
 
+import Link from 'next/link'
 import {
+  CHIMMY_PRO_TOOL_UPGRADE_HREF,
   VERDICT_LABEL,
   VERDICT_SOURCE_LABEL,
+  proUpsellLine,
   type ChimmyFaabCard,
+  type ChimmyProOnlyTool,
   type ChimmyVerdict,
 } from '@/lib/chimmy/answerPolish'
+
+/**
+ * "From your past chats" — this answer quoted the user's own earlier Chimmy conversations
+ * (`recall_past_chats`, AF Pro). Shown so a "last week you asked…" reads as remembered, not invented.
+ */
+export function ChimmyPastChatsChip() {
+  return (
+    <span className="af-cm-pastchats" data-testid="chimmy-past-chats" title="Chimmy searched your earlier conversations for this answer">
+      From your past chats
+    </span>
+  )
+}
+
+/**
+ * Under a free user's answer whose question needed an AF Pro tool the executor refused
+ * (`meta.proUpsell`). One line and one button; never shown on an AF Pro answer.
+ */
+export function ChimmyProUpsell({ tools }: { tools: readonly ChimmyProOnlyTool[] }) {
+  return (
+    <div className="af-cm-proupsell" data-testid="chimmy-pro-upsell">
+      <span className="af-cm-proupsell-line">{proUpsellLine(tools)}</span>
+      <Link href={CHIMMY_PRO_TOOL_UPGRADE_HREF} className="af-cm-outofanswers-btn" data-primary="true">
+        Get AF Pro
+      </Link>
+    </div>
+  )
+}
 
 /**
  * The three pieces of "answer polish" on a Chimmy answer (`lib/chimmy/answerPolish.ts`):

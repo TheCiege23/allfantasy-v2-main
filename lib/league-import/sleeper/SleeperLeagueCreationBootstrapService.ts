@@ -10,8 +10,10 @@ import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRos
 import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
+import { writeCurrentSeasonMatchupFacts } from './currentSeasonMatchupFacts'
+import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
-export interface SleeperLeagueBootstrapResult {
+interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
   rostersCreated: number
   /**
@@ -339,6 +341,10 @@ export async function bootstrapLeagueFromNormalizedImport(
       players: r.player_ids,
       player_metadata: snapshotImportedPlayerMetadata(r.player_ids, normalized.player_map),
       starters: r.starter_ids,
+      // ESPN only: the provider's own slot per starter, so My Team need not guess FLEX from a position.
+      ...(r.starter_slot_by_id && Object.keys(r.starter_slot_by_id).length > 0
+        ? { starter_slot_by_id: r.starter_slot_by_id }
+        : {}),
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],
       lineup_sections: {
@@ -503,6 +509,43 @@ export async function bootstrapLeagueFromNormalizedImport(
   const performances = await writeTeamPerformances({ season, rows: performanceRows })
   teamPerformancesCreated = performances.processed
 
+  /*
+   * The same schedule, as head-to-head rows in `dw_matchup_facts`. This is what keeps the season
+   * being played current there on every sync; see `currentSeasonMatchupFacts.ts` for why the
+   * four-hourly history refresh could not. Sleeper only: the other providers' history services key
+   * their rows differently. A failure here never fails the sync.
+   */
+  if (normalized.source.source_provider === 'sleeper') {
+    try {
+      await writeCurrentSeasonMatchupFacts({
+        leagueId,
+        sport: normalized.league.sport,
+        season: normalized.league.season,
+        schedule: normalized.schedule,
+      })
+    } catch (err) {
+      console.error('[bootstrapLeagueFromNormalizedImport] could not refresh current-season matchup facts', {
+        leagueId,
+        error: err instanceof Error ? err.name : 'unknown',
+      })
+    }
+  }
+
+  /*
+   * 🛑 A TEAM SOMEONE PICKED WITHOUT PROOF NEVER CARRIES THE COMMISSIONER FLAG. The upserts above copy
+   * `is_commissioner` from the provider on every sync, and ~20 places grant commissioner rights from
+   * that column. Claiming a flagged team without proof is refused up front; this covers the flag
+   * MOVING onto such a team later. See `espnPublicMemberImport.ts`.
+   */
+  try {
+    await stripCommissionerFlagsFromUnprovenClaims(leagueId)
+  } catch (err) {
+    console.error(
+      '[bootstrapLeagueFromNormalizedImport] could not clear commissioner flags from unproven claims',
+      { leagueId, error: err instanceof Error ? err.name : 'unknown' },
+    )
+  }
+
   return {
     leagueTeamsCreated,
     rostersCreated,
@@ -514,12 +557,3 @@ export async function bootstrapLeagueFromNormalizedImport(
   }
 }
 
-/**
- * Backward-compatible alias for older Sleeper-specific call sites.
- */
-export async function bootstrapLeagueFromSleeperImport(
-  leagueId: string,
-  normalized: NormalizedImportResult
-): Promise<SleeperLeagueBootstrapResult> {
-  return bootstrapLeagueFromNormalizedImport(leagueId, normalized)
-}

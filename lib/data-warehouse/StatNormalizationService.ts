@@ -6,7 +6,7 @@
 import type { WarehouseSport } from './types'
 import { normalizeSportForWarehouse } from './types'
 
-export interface NormalizedStatMap {
+interface NormalizedStatMap {
   [key: string]: number
 }
 
@@ -41,17 +41,3 @@ export function normalizeStatPayload(
   return out
 }
 
-/**
- * Compute fantasy points from normalized stats (sport-agnostic placeholder; scoring engine can override).
- */
-export function fantasyPointsFromNormalized(
-  _sport: string,
-  normalized: NormalizedStatMap,
-  _scoringRules?: Record<string, number>
-): number {
-  let pts = 0
-  for (const [, v] of Object.entries(normalized)) {
-    pts += typeof v === 'number' ? v : 0
-  }
-  return pts
-}

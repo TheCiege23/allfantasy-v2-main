@@ -14,7 +14,7 @@
  * supplies one.
  */
 
-export type ScheduleRefusal =
+type ScheduleRefusal =
   | 'playoff_start_period_missing'
   | 'playoff_start_period_out_of_range'
   | 'playoff_teams_missing'
@@ -49,7 +49,7 @@ export interface ScheduleInput {
   providerPlayoffLimit?: number | null
 }
 
-export interface Schedule {
+interface Schedule {
   kind: 'schedule'
   /** Consecutive, ascending, starting at 1. */
   periods: readonly number[]
@@ -59,7 +59,7 @@ export interface Schedule {
   lastPeriod: number
 }
 
-export type ScheduleResolution = Schedule | { kind: 'refused'; reason: ScheduleRefusal }
+type ScheduleResolution = Schedule | { kind: 'refused'; reason: ScheduleRefusal }
 
 function isPositiveInt(n: unknown): n is number {
   return typeof n === 'number' && Number.isInteger(n) && n >= 0
@@ -144,7 +144,7 @@ export function resolveScheduledPeriods(input: ScheduleInput): ScheduleResolutio
   }
 }
 
-export type PeriodAdvance =
+type PeriodAdvance =
   | { kind: 'period'; periodOrdinal: number }
   | { kind: 'no_period' }
 
@@ -175,7 +175,7 @@ export function isConsecutiveSchedule(periods: readonly number[]): boolean {
   return true
 }
 
-export type LookbackResolution =
+type LookbackResolution =
   | { kind: 'lookback'; periods: readonly number[] }
   | { kind: 'refused'; reason: 'period_not_in_schedule' | 'lookback_invalid' | 'schedule_empty' }
 

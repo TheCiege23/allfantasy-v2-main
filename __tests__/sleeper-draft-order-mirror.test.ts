@@ -20,7 +20,7 @@ const h = vi.hoisted(() => ({
          is a genuinely empty array rather than null. */
       findUnique: vi.fn(async () => ({ slotOrder: [] as unknown[] })),
     },
-    draftPick: { deleteMany: vi.fn(async () => ({ count: 0 })), createMany: vi.fn(async () => ({ count: 0 })) },
+    draftPick: { findMany: vi.fn(async () => []), deleteMany: vi.fn(async () => ({ count: 0 })), createMany: vi.fn(async () => ({ count: 0 })) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(h.prisma)),
   },
 }))

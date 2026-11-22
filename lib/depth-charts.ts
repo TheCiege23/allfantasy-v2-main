@@ -3,7 +3,7 @@ import 'server-only'
 import { depthChartPlayerNames, selectCurrentDepthRows } from '@/lib/depthChartRows'
 import { prisma } from '@/lib/prisma'
 
-export type DepthChartEntry = {
+type DepthChartEntry = {
   team: string
   position: string
   /** Player names in depth order, starter first. */
@@ -12,7 +12,7 @@ export type DepthChartEntry = {
 }
 
 /** Cache-only depth chart lookup: checks DepthChart table and never calls providers. */
-export async function getDepthCharts(sport: string, options?: { team?: string }): Promise<DepthChartEntry[]> {
+async function getDepthCharts(sport: string, options?: { team?: string }): Promise<DepthChartEntry[]> {
   // 1. Check DepthChart table
   try {
     const where: Record<string, unknown> = { sport: sport.toUpperCase() }
@@ -41,9 +41,3 @@ export async function getTeamDepthChart(team: string, sport: string): Promise<De
   return getDepthCharts(sport, { team })
 }
 
-/** Get the starter for a position on a team. */
-export async function getStarter(team: string, position: string, sport: string): Promise<string | null> {
-  const entries = await getTeamDepthChart(team, sport)
-  const entry = entries.find((e) => e.position.toUpperCase() === position.toUpperCase())
-  return entry?.players[0] ?? null
-}

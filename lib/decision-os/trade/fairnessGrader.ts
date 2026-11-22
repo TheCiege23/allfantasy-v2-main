@@ -69,7 +69,7 @@ function clamp(n: number, lo: number, hi: number): number {
  * answers "could we price it", not "how good was the input"; `valuationBasis` is preserved per
  * asset for anyone who needs the second question.
  */
-export function computeConfidence(sides: SideTotals[]): number {
+function computeConfidence(sides: SideTotals[]): number {
   let players = 0
   let priced = 0
   for (const side of sides) {
@@ -140,13 +140,12 @@ export function canonicalFairnessGrade(
 
   const bullets: string[] = []
   const gap = Math.abs(valueDifference)
+  const gainer = valueDifference > 0 ? 'Team B' : 'Team A'
   if (fairnessScore >= 88) {
     bullets.push('Trade is within normal market range')
   } else if (fairnessScore >= 65) {
-    const gainer = valueDifference > 0 ? 'Team A' : 'Team B'
     bullets.push(`${gainer} gains modestly more total value (${gap} pts)`)
   } else {
-    const gainer = valueDifference > 0 ? 'Team A' : 'Team B'
     bullets.push(`Trade is significantly uneven toward ${gainer} (${gap} pts)`)
   }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import Link from 'next/link';
 import { Loader2, GraduationCap } from 'lucide-react';
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui';
@@ -135,7 +136,7 @@ export type LineupOptimizationRequester = (input: {
   rosterSlots?: string[];
 }) => Promise<LineupOptimizationResponse>;
 
-export interface CoachAdvicePanelProps {
+interface CoachAdvicePanelProps {
   leagueId?: string;
   leagueName?: string;
   week?: number;
@@ -185,7 +186,7 @@ async function requestCoachAdvice(input: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to get coach advice');
+    throw new Error(readPlanRefusal(res.status, data)?.message ?? (typeof data?.error === 'string' ? data.error : 'Failed to get coach advice'));
   }
   return data as CoachAdviceResult;
 }
@@ -211,7 +212,7 @@ async function requestLineupOptimizationDefault(input: {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup');
+    throw new Error(readPlanRefusal(res.status, data)?.message ?? (typeof data?.error === 'string' ? data.error : 'Failed to optimize lineup'));
   }
   return data as LineupOptimizationResponse;
 }
@@ -531,7 +532,7 @@ export function CoachAdvicePanel({
             }`}
             data-testid="coach-lineup-optimize-ai-toggle"
           >
-            {optimizerUseAI ? 'AI explain on' : 'AI explain off'}
+            {optimizerUseAI ? 'Chimmy explain on' : 'Chimmy explain off'}
           </button>
           <Button
             variant="outline"
@@ -550,7 +551,7 @@ export function CoachAdvicePanel({
               } else if (typeof window !== 'undefined') {
                 const q = new URLSearchParams({ sport: compareSport });
                 if (leagueId) q.set('leagueId', leagueId);
-                window.location.href = `/player-compare?${q.toString()}`;
+                window.location.href = `/player-comparison-lab?${q.toString()}`;
               }
             }}
             className="gap-2 border-white/15 text-white/85"
@@ -560,7 +561,7 @@ export function CoachAdvicePanel({
             Player compare
           </Button>
           <Link
-            href={`/player-compare?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
+            href={`/player-comparison-lab?sport=${encodeURIComponent(compareSport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`}
             className="text-xs text-cyan-300/85 underline hover:text-cyan-100"
             data-testid="coach-player-compare-full-page"
           >
@@ -598,7 +599,7 @@ export function CoachAdvicePanel({
             </div>
             {advice.explanation?.source && (
               <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-white/45">
-                Explanation source: {advice.explanation.source === 'ai' ? 'AI' : 'Deterministic fallback'}
+                Explanation source: {advice.explanation.source === 'ai' ? 'Chimmy' : 'Deterministic fallback'}
               </p>
             )}
           </section>
@@ -647,7 +648,7 @@ export function CoachAdvicePanel({
               ))}
             </ul>
             <p className="mt-3 text-xs text-white/60">
-              Explanation source: {optimizerResult.explanation.source === 'ai' ? 'AI' : 'Deterministic'}
+              Explanation source: {optimizerResult.explanation.source === 'ai' ? 'Chimmy' : 'Deterministic'}
             </p>
             <ul className="mt-1 list-inside list-disc space-y-1 text-xs text-white/70">
               {optimizerResult.explanation.bullets.slice(0, 4).map((bullet, index) => (
@@ -660,7 +661,7 @@ export function CoachAdvicePanel({
             'lineupMode' in optimizerResult.decisionEngine ? (
               <div className="mt-4 rounded-lg border border-cyan-400/20 bg-[#0a1228]/90 px-3 py-2">
                 <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-cyan-200/90">
-                  AI lineup decision engine
+                  Chimmy lineup decision engine
                 </p>
                 <p className="mt-1 text-xs text-white/80">
                   Mode:{' '}

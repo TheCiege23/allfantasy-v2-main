@@ -7,6 +7,7 @@ import { hasSeasonDraftRelease } from '@/lib/tournament/seasonDraftReleaseGate'
 
 import type { League, LeagueLifecycleState, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import { logAction } from '@/server/services/auditService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/carryDynastyRosters'
@@ -396,6 +397,7 @@ export async function transitionLeagueState(
     where: { id: leagueId },
     data: {
       lifecycleState: nextState,
+      ...nativeLeagueStatusPatch(league.platform, nextState),
       lifecycleMetadata: {
         ...(typeof league.lifecycleMetadata === 'object' && league.lifecycleMetadata !== null
           ? (league.lifecycleMetadata as Record<string, unknown>)
@@ -695,7 +697,7 @@ export async function transitionLeagueStateInTransaction(
 ): Promise<TransactionalLifecycleTransitionResult> {
   const league = await tx.league.findUnique({
     where: { id: input.leagueId },
-    select: { lifecycleState: true, lifecycleMetadata: true },
+    select: { lifecycleState: true, lifecycleMetadata: true, platform: true },
   })
   if (!league) throw new Error('League not found')
 
@@ -710,6 +712,7 @@ export async function transitionLeagueStateInTransaction(
     where: { id: input.leagueId },
     data: {
       lifecycleState: input.nextState,
+      ...nativeLeagueStatusPatch(league.platform, input.nextState),
       lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
         lastTransitionAt: new Date().toISOString(),
         lastTransitionFrom: current,
@@ -733,7 +736,7 @@ export async function applyPostDraftLifecycleInTransaction(
 ): Promise<ApplyPostDraftLifecycleResult> {
   const league = await tx.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true },
+    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true, platform: true },
   })
   if (!league) {
     return { applied: false }
@@ -750,6 +753,7 @@ export async function applyPostDraftLifecycleInTransaction(
     where: { id: leagueId },
     data: {
       lifecycleState: target,
+      ...nativeLeagueStatusPatch(league.platform, target),
       lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
         lastTransitionAt: new Date().toISOString(),
         lastTransitionFrom: current,
@@ -779,7 +783,7 @@ export async function applyDraftingLifecycleOnDraftResetInTransaction(
 ): Promise<ApplyPostDraftLifecycleResult> {
   const league = await tx.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true },
+    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true, platform: true },
   })
   if (!league) {
     return { applied: false }
@@ -795,6 +799,7 @@ export async function applyDraftingLifecycleOnDraftResetInTransaction(
     where: { id: leagueId },
     data: {
       lifecycleState: next,
+      ...nativeLeagueStatusPatch(league.platform, next),
       lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
         lastTransitionAt: new Date().toISOString(),
         lastTransitionFrom: current,

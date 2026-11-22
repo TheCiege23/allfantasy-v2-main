@@ -4,7 +4,7 @@ import { parseSettingsSnapshot } from '@/lib/league-contract/types'
  * Concept-aware roster/lineup flags from `League.settings.conceptRules` + extensions.
  * Single resolver — specialty concepts add keys under `extensions` without separate engines.
  */
-export type ConceptRosterLineupRules = {
+type ConceptRosterLineupRules = {
   allowLineupEdits: boolean
   allowIrMoves: boolean
   allowTaxiPromotion: boolean

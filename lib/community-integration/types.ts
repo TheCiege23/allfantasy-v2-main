@@ -2,7 +2,7 @@
  * Discord and Reddit Integration (PROMPT 298) — types for community share and webhooks.
  */
 
-export type CommunityContentKind =
+type CommunityContentKind =
   | 'draft_results'
   | 'weekly_recap'
   | 'trade_reaction'

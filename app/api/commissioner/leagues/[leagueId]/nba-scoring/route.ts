@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 /**
  * [NEW] app/api/commissioner/leagues/[leagueId]/nba-scoring/route.ts
@@ -11,14 +12,10 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
   getLeagueNbaScoringConfig,
-  saveLeagueNbaScoringConfig,
   getNbaScoringPresets,
-  buildFullScoringConfig,
-  type NbaScoringPresetKey,
 } from '@/lib/nba-scoring'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
-import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
-import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
+import { applySportScoringToLeague } from '@/lib/league/applySportScoring'
 
 const featureGate = new FeatureGateService()
 
@@ -41,7 +38,7 @@ export async function GET(
 
   const config = await getLeagueNbaScoringConfig(leagueId)
   const presets = getNbaScoringPresets()
-  const isCommissioner = league.userId === session.user.id
+  const isCommissioner = await canCommissionerAct(leagueId, session.user.id, 'scoring')
 
   let isPremium = false
   try {
@@ -52,54 +49,22 @@ export async function GET(
   return NextResponse.json({ config, presets, isCommissioner, isPremium, categoryScoring: nativeCategoryScoringContext(league.settings, 'NBA') })
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ leagueId: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const { leagueId } = await params
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { userId: true, sport: true, settings: true },
-  })
-  if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
-  const locked = await settingsLockedResponse(leagueId, 'scoring')
-  if (locked) return locked
-  if (league.sport !== 'NBA') return NextResponse.json({ error: 'NBA leagues only' }, { status: 400 })
-
-  if (nativeCategoryScoringContext(league.settings, 'NBA')) return NextResponse.json({ error: 'This league uses categories; point weights do not apply.' }, { status: 409 })
-
-  const body = await req.json().catch(() => ({}))
-  const lifecycle = await decideSettingsEdit(leagueId, session.user.id, 'scoring', body)
-  if (!lifecycle.ok) return NextResponse.json(lifecycle.body, { status: lifecycle.status })
-  const presetKey = (body.presetKey ?? 'af_default') as NbaScoringPresetKey
-  const customRules = body.rules as Record<string, number> | undefined
-
-  // If custom editing, check premium access
-  if (presetKey === 'custom' || customRules) {
-    let isPremium = false
-    try {
-      const access = await featureGate.evaluateUserFeatureAccess(session.user.id, 'advanced_scoring')
-      isPremium = access.allowed
-    } catch { isPremium = false }
-    if (!isPremium) {
-      return NextResponse.json({ error: 'premiumRequired', message: 'Custom scoring editing requires AF Commissioner Subscription.' }, { status: 403 })
-    }
-  }
-
-  const rules = customRules ?? buildFullScoringConfig(presetKey)
-
-  await saveLeagueNbaScoringConfig(leagueId, {
-    presetKey,
-    rules,
+  const body = (await req.json().catch(() => ({}))) as { presetKey?: string; rules?: Record<string, number> }
+  // The commissioner check, settings lock, format guard, season-phase gate, premium gate, save and league log all
+  // live in applySportScoringToLeague, which shared scoring uses too, so the two can never disagree.
+  const result = await applySportScoringToLeague({
+    leagueId,
     userId: session.user.id,
-    premiumFeaturesUsed: presetKey === 'custom',
+    sport: 'NBA',
+    presetKey: body.presetKey,
+    rules: body.rules,
+    confirmationBody: body,
+    source: 'nba-scoring',
   })
-
-  const updated = await getLeagueNbaScoringConfig(leagueId)
-  await recordMidSeasonSettingsChange(lifecycle, { leagueId: leagueId, userId: session.user.id, section: 'scoring', source: 'nba-scoring', detail: { presetKey } })
-  return NextResponse.json({ ok: true, config: updated })
+  if (!result.ok) return NextResponse.json(result.body, { status: result.status })
+  return NextResponse.json({ ok: true, config: await getLeagueNbaScoringConfig(leagueId) })
 }

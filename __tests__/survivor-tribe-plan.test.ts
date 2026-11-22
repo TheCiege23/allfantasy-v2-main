@@ -100,6 +100,8 @@ vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTra
 vi.mock('@/lib/league-chat/LeagueChatMessageService', () => ({ createLeagueChatMessage: mock.post }))
 vi.mock('@/lib/adp/resolveAdp', () => ({ loadAdpBySleeperId: mock.adp }))
 vi.mock('@/lib/survivor/survivorTribeProvisioning', () => ({ assignSurvivorTribes: mock.assign }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const ctx = { params: Promise.resolve({ leagueId: 'league' }) }
 const users = Array.from({ length: 16 }, (_, i) => ({ id: `u${String(i).padStart(2, '0')}`, displayName: `Manager ${i}`, username: null }))

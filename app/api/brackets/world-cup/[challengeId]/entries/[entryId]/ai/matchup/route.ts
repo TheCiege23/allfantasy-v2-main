@@ -105,7 +105,7 @@ async function paidToolPost(
         sourceType: "world_cup_matchup_ai",
         sourceId: `${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
         idempotencyKey: `wc-matchup-ai:${userResult.user.id}:${challengeId}:${entryId}:${matchId}:${intent}:${strategy}`,
-        description: "World Cup matchup AI analysis",
+        description: "World Cup matchup Chimmy analysis",
         metadata: { challengeId, entryId, matchId, intent, strategy },
         upgradePath: "/pricing?from=wc-matchup-ai",
       })
@@ -233,7 +233,7 @@ async function paidToolPost(
     } catch {
       return NextResponse.json(
         {
-          error: "Token spend failed after AI generation. No tokens were deducted.",
+          error: "Token spend failed after Chimmy generation. No tokens were deducted.",
           code: "token_spend_failed_no_deduction",
           upgrade: true,
           upgradePath: "/tokens?ruleCode=world_cup_ai_matchup_analysis",

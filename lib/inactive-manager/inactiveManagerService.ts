@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
+import { isSiteAdminLeagueOwner } from './siteAdminLeague'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
@@ -25,6 +26,7 @@ import {
   autopilotRosterIds,
   CHIMMY_FREE_TEAMS,
   CHIMMY_MANAGER_LIMIT,
+  CHIMMY_SITE_ADMIN_LIMIT,
   freeChimmyRosterIds,
   chimmyManagerLimitReached,
   DEFAULT_AUTOPILOT_STYLE,
@@ -36,8 +38,9 @@ import {
   type ManagedLineup,
   type ManagedLineups,
 } from './inactiveManagerMode'
-import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
+import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 
 /**
  * Inactive manager mode (./inactiveManagerMode.ts): the commissioner's view and switch, the owner's
@@ -51,14 +54,26 @@ export const AUTOPILOT_ON_ACTION = 'chimmy_autopilot.on'
 export const AUTOPILOT_OFF_ACTION = 'chimmy_autopilot.off'
 export const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot' as const
 
-/** Chimmy autopilot is on the AF Commissioner plan — the LEAGUE OWNER's, as with the other commissioner tools. */
+/** Chimmy autopilot is on AF Pro and AF Supreme (owner decision 2026-11-22) — the LEAGUE OWNER's plan, as before. */
 export async function autopilotEntitled(leagueOwnerUserId: string | null | undefined): Promise<boolean> {
   if (!leagueOwnerUserId) return false
+  // A site admin's own league is a test league: every Chimmy team in it plays, plan or no plan. Without
+  // this, such a league took twelve Chimmy teams and then drafted instantly for one of them.
+  if (await isSiteAdminLeagueOwner(leagueOwnerUserId)) return true
   try {
     return Boolean((await new EntitlementResolver().resolveForUser(leagueOwnerUserId, AUTOPILOT_FEATURE)).hasAccess)
   } catch {
     return false
   }
+}
+
+/**
+ * How many teams Chimmy may run in a league with this owner. A site admin's league has no practical
+ * limit, so the owner can fill a whole test league with Chimmy; everyone else gets the product limit.
+ * Any failure to read the account falls back to the product limit.
+ */
+export async function chimmyTeamLimitFor(leagueOwnerUserId: string | null | undefined): Promise<number> {
+  return (await isSiteAdminLeagueOwner(leagueOwnerUserId)) ? CHIMMY_SITE_ADMIN_LIMIT : CHIMMY_MANAGER_LIMIT
 }
 
 const settingsObject = (s: unknown) => (s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>) : {})
@@ -100,14 +115,14 @@ export async function readInactiveManagerView(
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
-  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isOrphanPlatformUserId(r.platformUserId) || isAiManagerPlatformUserId(r.platformUserId)).map((r) => r.id))
+  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isSeatPlaceholderUserId(r.platformUserId)).map((r) => r.id))
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
     autopilotEntitled: await autopilotEntitled(league.userId),
     draftAsMe: settingsObject(league.settings)[DRAFT_AS_ME_SETTING] !== false,
     autoHandover: readAutoHandover(league.settings),
-    chimmyLimit: CHIMMY_MANAGER_LIMIT,
+    chimmyLimit: await chimmyTeamLimitFor(league.userId),
     chimmyFreeTeams: CHIMMY_FREE_TEAMS,
     chimmyReports: await readChimmyReports(leagueId),
     teams: health.rows.map((r) => ({
@@ -152,7 +167,7 @@ export type SwitchResult = { ok: true; managed: boolean } | { ok: false; status:
 export async function setInactiveManagerMode(leagueId: string, userId: string, rosterId: unknown, on: unknown): Promise<SwitchResult> {
   if (!(await isElevatedCommissioner(leagueId, userId))) return { ok: false, status: 403, error: 'Forbidden' }
   if (typeof rosterId !== 'string' || !rosterId || typeof on !== 'boolean') return { ok: false, status: 400, error: 'Name a team and whether to turn it on.' }
-  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, name: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only set lineups in leagues it runs.' }
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
@@ -169,6 +184,27 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
   })
   if (changed) {
     await logAction({ leagueId, userId, actionType: on ? ON_ACTION : OFF_ACTION, entityType: 'roster', entityId: rosterId, metadata: { rosterId } })
+  }
+  /*
+   * The manager is told when the commissioner hands their lineup to Chimmy (owner decision 2026-11-18:
+   * notify, and the manager can take it back). Saving a lineup of their own ends it — the existing way
+   * back (`endInactiveManagerModeOnOwnerSave`) — so the notice says exactly that.
+   */
+  const owner = roster.platformUserId
+  if (changed && on && owner && owner !== userId && !isSeatPlaceholderUserId(owner)) {
+    await dispatchNotification({
+      userIds: [owner],
+      category: 'autocoach',
+      type: 'chimmy_lineup_on',
+      title: `Chimmy is setting your lineup · ${league.name ?? 'your league'}`,
+      body: 'Your commissioner turned on Chimmy lineup for your team: Chimmy sets your best starters before each lock. Save a lineup yourself at any time and it turns off.',
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}?tab=team`,
+      actionLabel: 'View team',
+      dedupePrefix: `chimmy-lineup-on:${rosterId}:${new Date().toISOString().slice(0, 10)}`,
+      meta: { leagueId, rosterId },
+    }).catch(() => {})
   }
   return { ok: true, managed: on }
 }
@@ -198,6 +234,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'Chimmy can only run teams in leagues AllFantasy runs.' }
   // Without the plan Chimmy still runs one team for free (CHIMMY_FREE_TEAMS); the plan raises it to the
   // league limit. Which one is free is decided under the league lock below, with the limit.
+  const teamLimit = await chimmyTeamLimitFor(league.userId)
   const entitled = nextStyle === null ? true : await autopilotEntitled(league.userId)
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
@@ -208,7 +245,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
   const now = new Date().toISOString()
   await updateManaged(leagueId, (current) => {
     const entry = current[rosterId]
-    if (nextStyle !== null && chimmyManagerLimitReached(current, rosterId, entitled ? CHIMMY_MANAGER_LIMIT : CHIMMY_FREE_TEAMS)) {
+    if (nextStyle !== null && chimmyManagerLimitReached(current, rosterId, entitled ? teamLimit : CHIMMY_FREE_TEAMS)) {
       if (entitled) overLimit = true
       else overFree = true
       return null
@@ -225,10 +262,10 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
     return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
   })
   if (overFree) {
-    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. The AF Commissioner plan lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
+    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. AF Pro or AF Supreme lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
   }
   if (overLimit) {
-    return { ok: false, status: 409, error: `Chimmy can run up to ${CHIMMY_MANAGER_LIMIT} teams in a league. Take Chimmy off a team first.` }
+    return { ok: false, status: 409, error: `Chimmy can run up to ${teamLimit} teams in a league. Take Chimmy off a team first.` }
   }
   if (changed) {
     await logAction({
@@ -259,7 +296,7 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only run teams in leagues it runs.' }
   if (parsed.value?.to === 'autopilot' && !(await autopilotEntitled(league.userId))) {
-    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of the AF Commissioner plan. Lineup management is free.' }
+    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of AF Pro and AF Supreme. Lineup management is free.' }
   }
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
@@ -293,24 +330,24 @@ export async function runAutoHandovers(opts?: { now?: Date; limit?: number; dead
       const rule = readAutoHandover(league?.settings)
       if (!league || !rule || resolveWriteAuthority(league.platform) !== 'NATIVE') continue
       result.leagues += 1
-      const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
-      const [saves, claims] = await Promise.all([
-        prisma.afRosterMoveHistory.groupBy({ by: ['rosterId', 'actorUserId'], where: { leagueId, source: 'user_save' }, _max: { createdAt: true } }),
-        prisma.waiverClaim.groupBy({ by: ['rosterId'], where: { leagueId }, _max: { createdAt: true } }),
-      ])
+      const rosters = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true, managerUserId: true, redraftRosterId: true } })
+      /*
+       * The manager's own last action — the SAME clock the commissioner's "inactive" reads
+       * (lib/commissioner-hub/ownerLastAction.ts, 2026-11-20): their lineup saves, the claims they filed
+       * EXCEPT autopilot's (filed under the owner's id, so counting them reset a returned owner's idle clock
+       * to whenever Chimmy last claimed for them), redraft claims and the trades they proposed. A
+       * commissioner's or a former owner's save does not count.
+       */
+      const own = await loadOwnerLastActions(
+        rosters.map((r) => ({ id: r.id, leagueId, platformUserId: r.platformUserId ?? null, managerUserId: r.managerUserId ?? null, redraftRosterId: r.redraftRosterId ?? null })),
+      )
+      // Who is told, and who the managed entry names: the roster's owner key, as before.
       const owner = new Map(rosters.map((r) => [r.id, r.platformUserId ?? null]))
-      const last = new Map<string, number>()
-      const bump = (rosterId: string, at: Date | null | undefined) => {
-        if (at) last.set(rosterId, Math.max(last.get(rosterId) ?? 0, at.getTime()))
-      }
-      // Only the owner's own saves count; a commissioner's or a former owner's do not.
-      for (const s of saves) if (s.actorUserId && s.actorUserId === owner.get(s.rosterId)) bump(s.rosterId, s._max.createdAt)
-      for (const c of claims) bump(c.rosterId, c._max.createdAt)
       const toHand = teamsToHandOver({
         rule,
         managed: readManagedLineups(league.settings),
         now,
-        candidates: rosters.map((r) => ({ rosterId: r.id, lastOwnActionAt: last.has(r.id) ? new Date(last.get(r.id)!) : null })),
+        candidates: rosters.map((r) => ({ rosterId: r.id, lastOwnActionAt: own.get(r.id) ?? null })),
       })
       if (toHand.length === 0) continue
       const autopilot = rule.to === 'autopilot' && (await autopilotEntitled(league.userId))

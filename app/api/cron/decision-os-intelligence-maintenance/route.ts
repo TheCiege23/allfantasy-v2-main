@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server'
 import { resolveDraftRecommendationOutcomes } from '@/lib/ai/outcomes/resolveDraftRecommendationOutcomes'
 import { recomputeAdviceLearning } from '@/lib/chimmy-outcomes/adviceLearning'
 
-import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
-import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
 import { awaitPendingParityWrites } from '@/lib/decision-os/core/parity/durableParityStore'
 import { recordSyncJobRun, type SyncJobOutcome } from '@/lib/production-health/syncJobRunTelemetry'
 
@@ -18,7 +16,13 @@ import { recordSyncJobRun, type SyncJobOutcome } from '@/lib/production-health/s
  * decision paths that have no schedule.
  *
  * So each authorized tick records this heartbeat and the probe reads it. A caught failure in the
- * outcome resolver or the advice rebuild records PARTIAL; a maintenance throw records FAILED.
+ * outcome resolver or the advice rebuild records PARTIAL.
+ *
+ * ⚠ THE THREE-BRAIN MAINTENANCE STEP WAS RETIRED 2026-11-19 (re-score build item 9). It drained intelligence
+ * refreshes and token reservations behind `DECISION_OS_MAINTENANCE_ENABLED`, but nothing ever produced a
+ * three-brain run (`runManagedIntelligence` had no caller), so there was nothing to refresh or reconcile, and
+ * every reader of a saved analysis was removed in the same change. The library under
+ * `lib/decision-os/three-brain/` stays, unused. `DECISION_OS_MAINTENANCE_ENABLED` no longer does anything here.
  */
 const HEARTBEAT_JOB = 'cron-decision-os-intelligence-maintenance'
 
@@ -34,6 +38,9 @@ function tickWarnings(draftOutcomes: unknown, adviceLearning: unknown): string[]
   if (adviceLearning && typeof adviceLearning === 'object' && (adviceLearning as { status?: unknown }).status === 'error') {
     warnings.push(`adviceLearning: ${String((adviceLearning as { error?: unknown }).error ?? 'error')}`)
   }
+  if (adviceLearning && typeof adviceLearning === 'object' && (adviceLearning as { ledger?: unknown }).ledger === 'error') {
+    warnings.push('adviceLearning: AllFantasy call ledger failed to grade')
+  }
   return warnings
 }
 
@@ -44,10 +51,9 @@ export const maxDuration = 60
 /**
  * GET /api/cron/decision-os-intelligence-maintenance
  *
- * The scheduled trigger for the Decision OS Phase 2 durable maintenance runner: it drains pending
- * intelligence-refresh jobs and reconciles expired/abandoned token reservations. This is a BACKGROUND cron —
- * NOT one of the four live Decision OS user routes and NOT wired to Chimmy. Reconciliation runs here with no
- * user request; refresh execution is inert until a live evidence rehydrator is injected (Phase 3), by design.
+ * A BACKGROUND cron, every ten minutes: recovers expired Chimmy requests, resolves draft recommendation
+ * outcomes, rebuilds the advice-learning snapshot and flushes parity writes. The name is historical — it was the
+ * trigger for the three-brain maintenance runner, retired 2026-11-19 (see the note above).
  */
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET
@@ -60,18 +66,6 @@ function authorizeCron(request: Request): boolean {
     if (q && q === secret) return true
   }
   return false
-}
-
-/**
- * Off-by-default activation gate. Maintenance runs ONLY when `DECISION_OS_MAINTENANCE_ENABLED` is EXACTLY "true";
- * missing/empty/"false"/"1"/"yes"/any other value stays disabled. Placed AFTER authentication (an unauthorized
- * request still 401s) and BEFORE any deps/runner/DB call, so an authenticated-but-disabled invocation is fully
- * inert — no Phase 2 table query, no job drain, no reservation reconcile, no provider call, no token/freshness
- * mutation, no DB write. Keeps the deployed cron safe before migrations exist, with provider creds configured,
- * and even after Phase 3 begins enqueueing jobs — until an operator intentionally flips this flag.
- */
-function maintenanceEnabled(): boolean {
-  return process.env.DECISION_OS_MAINTENANCE_ENABLED === 'true'
 }
 
 /*
@@ -97,8 +91,8 @@ export async function GET(request: Request) {
   /*
    * Fill in `followed` for draft recommendations whose manager has since picked.
    *
-   * 🛑 DELIBERATELY ABOVE THE `maintenanceEnabled()` GATE. This has nothing to do with Decision OS maintenance, and hanging it off that flag
-   * would mean a switch somebody turned off for an unrelated subsystem silently stops the only
+   * 🛑 THIS SAT DELIBERATELY ABOVE THE (since retired) `maintenanceEnabled()` GATE. It has nothing to do with Decision OS
+   * maintenance, and hanging it off that flag would have meant a switch somebody turned off for an unrelated subsystem silently stops the only
    * thing that ever resolves an outcome — the exact shape of a scheduled writer that exists,
    * looks wired, and never runs.
    *
@@ -113,14 +107,21 @@ export async function GET(request: Request) {
     error: error instanceof Error ? error.message.slice(0, 120) : 'resolve failed',
   }))
   /*
-   * What Chimmy learns from how its advice turned out (brief item 10). Above the maintenance gate
-   * for the same reason as the resolver above. Rebuilds at most every six hours — most ticks are
+   * What Chimmy learns from how its advice turned out (brief item 10). Unconditional, for the same reason as the
+   * resolver above. Rebuilds at most every six hours — most ticks are
    * one indexed read — inside its own time budget, and never turns this cron red.
    */
   const adviceLearning = await recomputeAdviceLearning().catch((error) => ({
     status: 'error' as const,
     error: error instanceof Error ? error.message.slice(0, 120) : 'learning failed',
   }))
+  /*
+   * AF projection factors (`lib/af-projections/factors`): one sport per tick, the stalest, at most once a day each —
+   * no cron slot of its own. Caught here, like everything above: learning must never turn this cron red.
+   */
+  const projectionFactors = await Promise.all([import('@/lib/af-projections/factors/factorLearning'), import('@/lib/prisma')])
+    .then(([{ runFactorLearningTick }, { prisma }]) => runFactorLearningTick(prisma as never))
+    .catch((error) => ({ status: 'error' as const, error: error instanceof Error ? error.message.slice(0, 120) : 'factor learning failed' }))
   // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
   // paths -- so writes can still be in flight when this handler reaches here, and on Vercel this instance can
   // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
@@ -129,32 +130,6 @@ export async function GET(request: Request) {
   const parityWrites = await awaitPendingParityWrites()
   const warnings = tickWarnings(draftOutcomes, adviceLearning)
 
-  if (!maintenanceEnabled()) {
-    // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
-    // providers, tokens, or freshness. The heartbeat is telemetry for the tick itself, which did
-    // run the outcome resolver and advice rebuild above, so it is still recorded.
-    await recordTick({ warnings, metadata: { maintenance: 'disabled' } }, startedAt)
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
-  }
-  try {
-    // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
-    // the runner, so ANY concurrent invocation — same tick or not — that loses the lease returns status:'skipped'.
-    const tickId = new Date().toISOString().slice(0, 16)
-    const result = await runIntelligenceMaintenance({
-      tickId,
-      deps: createManagedIntelligenceDeps(),
-      config: { refreshBatch: 20, reconcileBatch: 200 },
-    })
-    await recordTick({ warnings, metadata: { maintenance: 'enabled', tickId } }, startedAt)
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
-  } catch (error) {
-    await recordTick(
-      { warnings, errors: [error instanceof Error ? error.message : 'maintenance failed'] },
-      startedAt,
-    )
-    return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', draftOutcomes, adviceLearning },
-      { status: 500 },
-    )
-  }
+  await recordTick({ warnings, metadata: { maintenance: 'retired' } }, startedAt)
+  return NextResponse.json({ ok: true, parityWrites, draftOutcomes, adviceLearning, projectionFactors, chimmyRecovered })
 }

@@ -39,7 +39,7 @@ export function useAIAssistantAvailability(defaultEnabled = true) {
       setEnabled(nextEnabled)
     } catch (err) {
       setEnabled(defaultEnabled)
-      setError(err instanceof Error ? err.message : "Failed to resolve AI availability")
+      setError(err instanceof Error ? err.message : "Failed to resolve Chimmy availability")
     } finally {
       setLoading(false)
     }

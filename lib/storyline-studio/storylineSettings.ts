@@ -12,9 +12,9 @@
  *                   double post is the chat row's deterministic id, not this map.
  */
 
-export const STORYLINE_SETTINGS_KEY = 'storyline_studio'
+const STORYLINE_SETTINGS_KEY = 'storyline_studio'
 
-export type PostedRecord = { at: string; messageId: string; hookId: string; auto: boolean }
+type PostedRecord = { at: string; messageId: string; hookId: string; auto: boolean }
 
 export type StorylineSettings = {
   autoPost: boolean
@@ -28,7 +28,7 @@ export type StorylineSettings = {
   posted: Record<string, PostedRecord>
 }
 
-export const DEFAULT_STORYLINE_SETTINGS: StorylineSettings = {
+const DEFAULT_STORYLINE_SETTINGS: StorylineSettings = {
   autoPost: false,
   includePoll: false,
   weekday: 3,
@@ -45,7 +45,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === 'object' && !Array.isArray(v)
 }
 
-export function isValidTimeZone(tz: unknown): tz is string {
+function isValidTimeZone(tz: unknown): tz is string {
   if (typeof tz !== 'string' || !tz || tz.length > 64) return false
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: tz })
@@ -98,7 +98,7 @@ export function autoPostMessageId(leagueId: string, season: number, week: number
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 /** The weekday (0-6) and hour (0-23) of `now` in `timeZone`. */
-export function localWeekdayHour(now: Date, timeZone: string): { weekday: number; hour: number } {
+function localWeekdayHour(now: Date, timeZone: string): { weekday: number; hour: number } {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(now)
   const wd = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun'
   const hr = Number(parts.find((p) => p.type === 'hour')?.value ?? 0)

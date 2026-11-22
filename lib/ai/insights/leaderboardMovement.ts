@@ -7,7 +7,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type RankChange = {
+type RankChange = {
   entryId: string
   displayName: string
   currentRank: number
@@ -18,14 +18,14 @@ export type RankChange = {
   isCurrentUser: boolean
 }
 
-export type LeaderboardScenario = {
+type LeaderboardScenario = {
   ifTeamWins: string
   rankChanges: RankChange[]
   entriesAffected: number
   entriesGaining: number
 }
 
-export type LeaderboardShift = {
+type LeaderboardShift = {
   matchId: string
   matchDescription: string
   round: string

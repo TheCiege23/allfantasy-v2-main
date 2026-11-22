@@ -16,8 +16,10 @@
  * ANY state in their time zone — a Washington user can appear as Oregon or
  * California. Nothing in the feed says which setting produced an address. So:
  *
- *   - Pacific-time states (CA, OR, NV, WA — and ID, see below) stay BLOCKED as
- *     before: anyone placed there could be in Washington, which is full-block.
+ *   - Pacific-time states (CA, OR, NV, WA — and ID, see below) get the free
+ *     product but NOT paid features: anyone placed there could be in Washington,
+ *     Nevada or Idaho, all paid-block. (Until November 2026 they were BLOCKED
+ *     outright, because Washington was full-block.)
  *   - Mountain-time states get the free product but NOT paid features: anyone
  *     placed there could be in Idaho or Montana, which are paid-block.
  *   - Everywhere else, the relay user is placed in Apple's state and the normal
@@ -45,7 +47,7 @@
  * and Node code through ./privateRelayStore; the writer is ./privateRelayIngest.
  */
 
-export const PRIVATE_RELAY_RANGE_SET_VERSION = 1
+const PRIVATE_RELAY_RANGE_SET_VERSION = 1
 
 /** A compact, JSON-serialisable set of US egress ranges. */
 export interface RelayRangeSet {
@@ -60,7 +62,7 @@ export interface RelayRangeSet {
   v6: Array<[string, string, number]>
 }
 
-export type RelayZone = "pacific" | "mountain" | "other"
+type RelayZone = "pacific" | "mountain" | "other"
 
 /**
  * Pacific-time states, plus Idaho (see the file header). A relay user placed in
@@ -86,15 +88,16 @@ export function relayZoneForState(state: string): RelayZone {
  *              paid features off (Mountain time).
  *   blocked  — the old behaviour: the "turn off Private Relay" page.
  */
-export type RelayDecision =
+type RelayDecision =
   | { kind: "placed"; state: string; paidBlocked: boolean }
   | { kind: "blocked"; state: string | null }
 
 export function decideRelay(state: string | null): RelayDecision {
   if (!state) return { kind: "blocked", state: null }
   const zone = relayZoneForState(state)
-  if (zone === "pacific") return { kind: "blocked", state }
-  return { kind: "placed", state, paidBlocked: zone === "mountain" }
+  // Nov 2026: Washington is paid-block, so a Pacific placement can hide only paid-block
+  // states (WA, NV, ID) — the same uncertainty as Mountain time, with the same answer.
+  return { kind: "placed", state, paidBlocked: zone === "pacific" || zone === "mountain" }
 }
 
 // ─── Parsing Apple's feed ────────────────────────────────────────────────────
@@ -219,7 +222,7 @@ function compact<T extends number | bigint>(ranges: RawRange<T>[], succ: (x: T) 
   return out.filter((r) => r.state !== "")
 }
 
-export interface ParseResult {
+interface ParseResult {
   set: RelayRangeSet
   /** Lines read, US lines kept, lines that could not be parsed. */
   stats: { lines: number; usLines: number; invalid: number }

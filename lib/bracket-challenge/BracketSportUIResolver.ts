@@ -1,6 +1,6 @@
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-export type BracketSportUI = {
+type BracketSportUI = {
   sport: SupportedSport
   label: string
   shortLabel: string
