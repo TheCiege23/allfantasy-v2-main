@@ -1,5 +1,7 @@
 'use client'
 
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+
 import Link from 'next/link'
 import {
   CHIMMY_PRO_TOOL_UPGRADE_HREF,
@@ -28,11 +30,13 @@ export function ChimmyPastChatsChip() {
  * (`meta.proUpsell`). One line and one button; never shown on an AF Pro answer.
  */
 export function ChimmyProUpsell({ tools }: { tools: readonly ChimmyProOnlyTool[] }) {
+  const { language } = useOptionalLanguage()
+  const es = String(language ?? '').toLowerCase().startsWith('es')
   return (
     <div className="af-cm-proupsell" data-testid="chimmy-pro-upsell">
-      <span className="af-cm-proupsell-line">{proUpsellLine(tools)}</span>
+      <span className="af-cm-proupsell-line">{proUpsellLine(tools, language)}</span>
       <Link href={CHIMMY_PRO_TOOL_UPGRADE_HREF} className="af-cm-outofanswers-btn" data-primary="true">
-        Get AF Pro
+        {es ? 'Obtener AF Pro' : 'Get AF Pro'}
       </Link>
     </div>
   )

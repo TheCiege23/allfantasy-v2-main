@@ -245,6 +245,7 @@ import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPr
 import { resolveCorePaywall, resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
@@ -5118,7 +5119,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             */}
             {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : null}
             <MyTeam data={afGate(myTeam)} />
-            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_my_team" benefit={language === 'es' ? undefined : "AllFantasy's own projection for every player — the provider line adjusted for form, minutes, rest, opponent and the rest, each one measured on games already played."} /> : null}
+            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_my_team" benefit={coreDepthLockCopy(language).afProjectionsBenefit} /> : null}
           </>
         ) : myTeamLoadFailed ? (
           /* The read failed for a league the user HAS selected — say so, and keep
@@ -5145,7 +5146,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             {survivorBanner('compact')}
             {chimmyMovesCard}
             <Matchup data={afGate(matchup)} />
-            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_matchup" benefit={language === 'es' ? undefined : "AllFantasy's own projection for every player — the provider line adjusted for form, minutes, rest, opponent and the rest, each one measured on games already played."} /> : null}
+            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_matchup" benefit={coreDepthLockCopy(language).afProjectionsBenefit} /> : null}
           </>
         ) : matchupLoadFailed ? (
           <ScreenLoadError screen={navLabel('matchup')} retryHref={retryHref} language={language} />

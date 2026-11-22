@@ -39,6 +39,12 @@ export type CoreDepthLockCopy = {
   bodyAlt: string
   cta: (planName: string) => string
   tradeBreakdownBenefit: string
+  /** My Team and Matchup's AF Intelligence lock. */
+  afProjectionsBenefit: string
+  /** /projections' AF Intelligence lock (the board keeps its free baseline). */
+  afProjectionsBoardBenefit: string
+  /** The draft rooms' AF ADP lock, as a tooltip. */
+  afAdpLockedTitle: string
   tradeReviewWithTokens: string
   fullTradeReview: string
   tradeDraftStorageError: string
