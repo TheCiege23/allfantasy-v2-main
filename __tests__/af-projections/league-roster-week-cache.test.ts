@@ -69,3 +69,41 @@ describe('the rail week board cache', () => {
     expect(metrics).toHaveBeenCalledTimes(4)
   })
 })
+
+describe('the rail week boards: a pool of four, not lockstep batches (2026-11-22)', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ leagueId: `L${i}`, season: 2026, week: 11, ids: ['s1', 's2'] }))
+  function gate() { let open!: () => void; const p = new Promise<void>((r) => { open = r }); return { p, open } }
+
+  it('starts the fifth board as soon as one of the first four finishes, never more than four at once', async () => {
+    setSharedReadCacheForTests(false)
+    const first = gate(); const rest = gate(); let running = 0; let peak = 0
+    metrics.mockImplementation(async ({ leagueId }: { leagueId: string }) => {
+      running++; peak = Math.max(peak, running)
+      try { await (leagueId === 'L0' ? first.p : rest.p); return board(leagueId) } finally { running-- }
+    })
+    const done = loadLeagueRosterWeeks(many(6))
+    try {
+      await vi.waitFor(() => expect(metrics).toHaveBeenCalledTimes(4))
+      first.open()
+      // L1–L3 are still building: lockstep batches would not have started L4 yet.
+      await vi.waitFor(() => expect(metrics).toHaveBeenCalledTimes(5))
+    } finally { first.open(); rest.open() }
+    const result = await done
+    expect(peak).toBe(4)
+    expect([...result.keys()].sort()).toEqual(['L0', 'L1', 'L2', 'L3', 'L4', 'L5'])
+  })
+
+  it('says how many boards were rebuilt when building them is slow, and nothing when it is fast', async () => {
+    const { logBoardTiming } = await import('@/lib/af-projections/leagueRosterWeek')
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      logBoardTiming(900, [800, 1, 2])
+      expect(info).not.toHaveBeenCalled()
+      logBoardTiming(12_500, [1, 2, 300, 900, 4000])
+      expect(info).toHaveBeenCalledTimes(1)
+      const [tag, payload] = info.mock.calls[0] as [string, string]
+      expect(tag).toBe('[rail-boards-timing]')
+      expect(JSON.parse(payload)).toEqual({ boards: 5, rebuilt: 3, bound: 4, totalMs: 12_500, slowestMs: 4000, medianRebuildMs: 900 })
+    } finally { info.mockRestore() }
+  })
+})
