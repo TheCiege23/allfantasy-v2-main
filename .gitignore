@@ -186,3 +186,6 @@ ios-pwabuilder/src/AllFantasy/GoogleService-Info.plist
 
 # Local licensed sports-provider captures for tournament contract analysis.
 artifacts/tournament-provider-samples/
+
+# Legal-notice send records (account ids) written by scripts/send-terms-update-notice.ts. Public repo.
+.terms-notice-*.progress.jsonl

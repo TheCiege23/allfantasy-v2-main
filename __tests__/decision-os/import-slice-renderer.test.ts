@@ -149,3 +149,48 @@ describe('the import slice in the prompt', () => {
     expect(isImportAssertions([assertions()])).toBe(false)
   })
 })
+
+describe('a league hosted on AllFantasy is never told its import failed (2026-11-20)', () => {
+  // Exactly what `loadImportAssertions` returns for a native league: no sync state at all.
+  const native = assertions({
+    provider: 'allfantasy',
+    native: true,
+    lastAttemptedSyncAt: null,
+    lastSuccessfulSyncAt: null,
+    staleMs: null,
+    syncStatus: null,
+    consecutiveFailures: 0,
+    scopes: [
+      { scope: 'league_state', completedLastRun: false, incomplete: false, hasCheckpoint: false },
+      { scope: 'teams_rosters', completedLastRun: false, incomplete: false, hasCheckpoint: false },
+      { scope: 'traded_picks', completedLastRun: false, incomplete: false, hasCheckpoint: false },
+    ],
+    activeLane: null,
+    parity: 'unchecked',
+    parityNote: 'No sync state for this league. Native AF leagues are never imported, so this is normal rather than a failure.',
+    rostersHeld: 12,
+    rostersExpected: 12,
+    rosterCoverage: 1,
+  })
+
+  it('says it is hosted here, gives the rosters, and nothing about a failed or stale sync', () => {
+    const text = serializeDecisionOsGroundingForPrompt(packet(present(native)), NOW)
+    expect(text).toContain('hosted on AllFantasy: nothing is imported')
+    expect(text).toContain('rosters held: 12 of 12 (100%)')
+    expect(text).toContain('Do not describe this league as unsynced, stale or partly imported.')
+    expect(text).not.toContain('scopes NOT complete')
+    expect(text).not.toContain('last complete sync: never')
+    expect(text).not.toContain('say when the sync is stale or incomplete')
+  })
+
+  it('control: the same state WITHOUT the native flag still reports the unsynced scopes', () => {
+    const rows = renderImportAssertions({ ...native, native: false }).join('\n')
+    expect(rows).toContain('scopes NOT complete on the last run: league_state, teams_rosters, traded_picks')
+  })
+
+  it('a native league that does carry a sync record renders in full', () => {
+    const rows = renderImportAssertions({ ...native, syncStatus: 'complete', lastAttemptedSyncAt: '2026-09-02T11:50:00.000Z' }).join('\n')
+    expect(rows).toContain('last complete sync:')
+    expect(rows).not.toContain('hosted on AllFantasy')
+  })
+})

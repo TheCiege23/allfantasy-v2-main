@@ -3,12 +3,13 @@
  * Deterministic: tiebreakers (W-L, PF), advancement slots per pool size, optional bubble.
  */
 
+import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { getUniversalStandingsRaw, applyConferenceRankingAndCutLine } from './TournamentStandingsService'
 import { getBubbleSlotsPerConference, getEliminationLeagueCountPerConference, ELIMINATION_LEAGUE_SIZE } from './advancement-rules'
 import { getQualificationCutSlotsPerConference, getRoundWindow } from './tournament-sport-cutoffs'
-import { LATER_ROUND_NAMES, TOURNAMENT_LEAGUE_VARIANT } from './constants'
+import { LATER_ROUND_NAMES, TOURNAMENT_LEAGUE_DRAFT_READY, TOURNAMENT_LEAGUE_VARIANT } from './constants'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 interface QualificationAdvancementResult {
@@ -177,6 +178,7 @@ export async function runQualificationAdvancement(tournamentId: string): Promise
             bracketLabel: leagueName,
           },
           syncStatus: 'manual',
+          ...TOURNAMENT_LEAGUE_DRAFT_READY,
         },
       })
       newLeagueIds.push(league.id)
@@ -185,6 +187,9 @@ export async function runQualificationAdvancement(tournamentId: string): Promise
       } catch (e) {
         console.warn('[tournament] Bootstrap non-fatal', e)
       }
+      await ensureLeagueSettingsRow(league.id).catch((error) =>
+        console.warn('[tournament] Draft settings row non-fatal', league.id, error),
+      )
 
       const tl = await prisma.legacyTournamentLeague.create({
         data: {

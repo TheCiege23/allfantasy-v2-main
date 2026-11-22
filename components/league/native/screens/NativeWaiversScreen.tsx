@@ -32,7 +32,7 @@ import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
-import { Card, InjuryFlag, PosPill, ScreenHead, Segmented } from './NativeScreenParts'
+import { Card, InjuryFlag, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
 import { claimStatusLabel, faabMeter, waiverClaimTypeLabel } from '@/lib/league-media/redraftScreens'
 import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftScreenParts'
 
@@ -67,6 +67,14 @@ const SPORT_POSITIONS: Record<string, string[]> = {
   MLB: ['C', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP'],
   NHL: ['C', 'LW', 'RW', 'D', 'G'],
   SOCCER: ['GKP', 'DEF', 'MID', 'FWD'],
+}
+
+/**
+ * A player the feed marks inactive or retired (the "INA" flag) is not someone to add. He is left
+ * out of the browsing lists and still found by a name search, on the watchlist and in "My claims".
+ */
+export function isInactiveWirePlayer(p: { injuryStatus?: string | null }): boolean {
+  return /^(ina|inactive|retired|ret|non[- ]?football injury list|suspended)$/i.test(String(p.injuryStatus ?? '').trim())
 }
 
 function rosteredPct(p: UnifiedPlayerWireDto): number | null {
@@ -184,6 +192,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     return Array.from(new Set(players.map((p) => String(p.position ?? '').toUpperCase()).filter(Boolean))).slice(0, 8)
   }, [settings?.sport, league.sport, players])
   const { language, t: tr, tInterpolate } = useOptionalLanguage()
+  const openCard = useNativePlayerCard(settings?.sport ?? league.sport)
   // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
   const prospectSearchRows = useNhlProspectSearch<UnifiedPlayerWireDto>(league.id, prospectMeta, q)
   const allPlayers = useMemo(() => mergeProspectSearchRows(players, prospectSearchRows), [players, prospectSearchRows])
@@ -201,6 +210,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     if (tab === 'claims') rows = rows.filter((p) => claimedIds.has(p.id))
     if (pos !== 'ALL') rows = rows.filter((p) => waiverPositionMatches(p.position, pos))
     const needle = q.trim().toLowerCase()
+    if (!needle && (tab === 'available' || tab === 'trending')) rows = rows.filter((p) => !isInactiveWirePlayer(p))
     if (needle) rows = rows.filter((p) => p.name.toLowerCase().includes(needle) || String(p.team ?? '').toLowerCase().includes(needle))
     if (tab === 'trending') rows = [...rows].sort((a, b) => (trend.get(b.id) ?? 0) - (trend.get(a.id) ?? 0))
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
@@ -383,7 +393,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
           {loading && !players.length ? (
             <p className="nls-empty" role="status">Loading players…</p>
           ) : list.length ? (
-            <table className="nls-table">
+            <table className="nls-table nls-table-players">
               <thead>
                 <tr>
                   <th scope="col">Player</th>
@@ -408,9 +418,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                           <PlayerHeadshot playerId={p.id} playerName={p.name} headshotUrl={a.displayHeadshotUrl} position={p.position} team={p.team} sport={p.sport || league.sport} size={36} />
                           <PosPill label={p.position} />
                           <div className="nls-player">
-                            <strong>{p.name}<InjuryFlag status={p.injuryStatus} /></strong>
+                            <strong>
+                              <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.id, name: p.name, position: p.position, team: p.team, imageUrl: a.displayHeadshotUrl })}>{p.name}</PlayerNameButton>
+                              <InjuryFlag status={p.injuryStatus} />
+                            </strong>
                             <small>
                               {a.displayTeamLogoUrl ? <FallbackImg src={a.displayTeamLogoUrl} alt="" width={14} height={14} className="nls-team-logo" fallback={null} data-testid="waiver-team-logo" /> : null}
+                              {/* Phone only: the position badge is dropped there to leave room for the name. */}
+                              <span className="nls-pcell-pos">{p.position} · </span>
                               {p.team ?? (isNhlProspectWireRow(p) ? tr('draftRoom.pool.prospectUnsigned') : 'FA')}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                               {isNhlProspectWireRow(p) ? (
                                 <span className="nls-chip" data-tone="accent" title={tr('draftRoom.pool.prospectTooltip')} data-testid={`native-waivers-prospect-badge-${p.id}`}>

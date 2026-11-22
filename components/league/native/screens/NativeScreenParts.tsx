@@ -5,7 +5,40 @@ import { ordinal, positionTone, slotPillLabel } from '@/lib/league/native/native
 import { matchupTone, type OpponentRank, type RosterGameWeather } from '@/lib/redraft/nflRosterOutlookModel'
 import { redraftPositionTone } from '@/lib/league-media/redraftScreens'
 import { useRedraftScreenContext } from './RedraftScreenParts'
+import { usePlayerCard } from '@/components/core-app/player-card/PlayerCardProvider'
 import './native-screens.css'
+
+/**
+ * Opens the shared player card (components/core-app/player-card) for a row on a league screen.
+ * The league workspace mounts the provider; outside it the opener is a no-op, so a screen rendered
+ * alone (a unit test) still works. NFL ids on these screens are Sleeper ids; other sports carry
+ * the feed's own id.
+ */
+export function useNativePlayerCard(sport: string | null | undefined) {
+  const card = usePlayerCard()
+  return (p: { id?: string | null; name?: string | null; position?: string | null; team?: string | null; imageUrl?: string | null } | null | undefined) => {
+    const id = String(p?.id ?? '').trim()
+    if (!id || !p?.name) return
+    const s = String(sport ?? 'NFL').toUpperCase()
+    card.open({
+      sport: s,
+      ...(s === 'NFL' ? { sleeperId: id } : { externalId: id }),
+      name: p.name,
+      position: p.position ?? null,
+      team: p.team ?? null,
+      imageUrl: p.imageUrl ?? null,
+    })
+  }
+}
+
+/** A player's name as the button that opens his card. Looks like the text it replaces. */
+export function PlayerNameButton({ name, onOpen, children }: { name: string; onOpen: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="nls-namebtn" onClick={onOpen} aria-label={`Open ${name} player card`} data-testid="player-card-open">
+      {children}
+    </button>
+  )
+}
 
 export function ScreenHead({ eyebrow, title, sub, children }: { eyebrow?: string; title: string; sub?: ReactNode; children?: ReactNode }) {
   return (

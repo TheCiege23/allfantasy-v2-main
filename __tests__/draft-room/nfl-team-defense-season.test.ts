@@ -4,7 +4,8 @@
  * vendor's games-played echo dropped, the two copies of the count never added).
  */
 import { describe, expect, it } from 'vitest'
-import { attachTeamDefenseStats, summarizeTeamDefense } from '@/lib/draft-room/nflTeamDefenseSeason'
+import { attachTeamDefenseStats, scoreTeamDefenseGames, summarizeTeamDefense } from '@/lib/draft-room/nflTeamDefenseSeason'
+import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { getDraftStatColumnsForSport, getStatValueForDraftPlayer, formatDraftStatDisplay } from '@/lib/draft-room/draftSportStatColumns'
 import { mockPoolPhoneStatLine, mockPoolStatCells } from '@/components/mock-draft/MockDraftSleeperRoomClient'
 
@@ -31,8 +32,9 @@ const games = [
 describe('summarizeTeamDefense', () => {
   it('sums defenders by team and takes points allowed per game from the scores', () => {
     const out = summarizeTeamDefense(defenders, games)
-    expect(out.get('LAR')).toEqual({ dst_sacks: 32.5, dst_interceptions: 5, dst_td: 2, dst_fumble_recoveries: 3, dst_points_allowed_per_game: 23.5, games: 2 })
-    expect(out.get('BUF')).toEqual({ dst_sacks: 4, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0, dst_points_allowed_per_game: 17, games: 2 })
+    const noPoints = { dst_fantasy_points: null, dst_fantasy_points_per_game: null }
+    expect(out.get('LAR')).toEqual({ dst_sacks: 32.5, dst_interceptions: 5, dst_td: 2, dst_fumble_recoveries: 3, ...noPoints, dst_points_allowed_per_game: 23.5, games: 2 })
+    expect(out.get('BUF')).toEqual({ dst_sacks: 4, dst_interceptions: 0, dst_td: 0, dst_fumble_recoveries: 0, ...noPoints, dst_points_allowed_per_game: 17, games: 2 })
     expect(out.has('MIA')).toBe(false)
   })
 })
@@ -62,8 +64,52 @@ describe('the mock pool row for a defense', () => {
     summarizeTeamDefense(defenders, games),
   )[0]!
 
-  it('leads with SACK and INT, not empty fantasy points', () => {
-    expect(mockPoolStatCells(row as never, 'NFL').map((c) => `${c.label} ${c.value}`)).toEqual(['SACK 32.5', 'INT 5', 'TD 2', 'PA/G 23.5'])
+  it('leads with points per game, then SACK, INT and PA/G; a missing AVG is skipped on a phone', () => {
+    expect(mockPoolStatCells(row as never, 'NFL').map((c) => `${c.label} ${c.value}`)).toEqual(['AVG —', 'SACK 32.5', 'INT 5', 'PA/G 23.5'])
     expect(mockPoolPhoneStatLine(row as never, 'NFL')).toBe('SACK 32.5 · INT 5')
+  })
+})
+
+describe('DEF fantasy points, scored game by game', () => {
+  // Real Sleeper weekly team lines (player_game_stats, BAL 2025), trimmed to the scored keys.
+  const bal1 = { dst_sack: 1, ff: 1, pts_allow: 41, yds_allow: 497, pts_std: -2 }
+  const bal2 = { dst_sack: 2, dst_interception: 1, fum_rec: 1, blk_kick: 1, idp_defensive_touchdown: 1, pts_allow: 17, yds_allow: 322, pts_std: 15 }
+  const standard = buildLeagueStatScorer({ sport: 'NFL', settings: { sportConfig: { scoringPreset: 'STANDARD' } } })!
+  const rows = [
+    { playerId: 'BAL', weekOrRound: 1, normalizedStatMap: bal1, statPayload: {} },
+    { playerId: 'BAL', weekOrRound: 2, normalizedStatMap: {}, statPayload: bal2 }, // falls back to the raw payload
+    { playerId: 'BAL', weekOrRound: 2, normalizedStatMap: bal2, statPayload: {} }, // same week again: once
+    { playerId: 'BAL', weekOrRound: 3, normalizedStatMap: { dst_sack: 3 }, statPayload: {} }, // no points allowed: unplayed
+  ]
+
+  it("scores each game on its own points-allowed tier with the league's rules", () => {
+    const out = scoreTeamDefenseGames(rows, standard).get('BAL')!
+    // Week 2 matches Sleeper exactly (15). Week 1 is -3 here and -2 on Sleeper: Sleeper scores a
+    // forced fumble, AllFantasy's default does not — the league's own rules are the point.
+    expect(out).toEqual({ points: -3 + 15, games: 2 })
+  })
+
+  it('fills PTS and AVG on the defense row', () => {
+    const byTeam = summarizeTeamDefense([], [], scoreTeamDefenseGames(rows, standard))
+    const [def] = attachTeamDefenseStats([{ position: 'DEF', team: 'BAL', display: { stats: {} } }], byTeam)
+    const cols = getDraftStatColumnsForSport('NFL', { position: 'DEF' })
+    const shown = Object.fromEntries(cols.map((c) => [c.label, formatDraftStatDisplay(getStatValueForDraftPlayer(def as never, c), c)]))
+    expect(shown.PTS).toBe('12')
+    expect(shown.AVG).toBe('6.0')
+  })
+
+  it('a shutout has no points-allowed key on Sleeper lines, and still scores the 0 tier', () => {
+    // SEA 2025 week 13 as stored: no pts_allow, played (gp 1). Sleeper total 32 = ours 30 + 2 forced fumbles.
+    const sea = { gp: 1, dst_sack: 4, dst_interception: 4, fum_rec: 1, idp_defensive_touchdown: 1, ff: 2, pts_std: 32 }
+    expect(scoreTeamDefenseGames([{ playerId: 'SEA', weekOrRound: 13, normalizedStatMap: sea, statPayload: {} }], standard).get('SEA'))
+      .toEqual({ points: 30, games: 1 })
+    // Not marked played and no points allowed: not a game, not scored.
+    expect(scoreTeamDefenseGames([{ playerId: 'SEA', weekOrRound: 14, normalizedStatMap: { dst_sack: 2 }, statPayload: {} }], standard).size).toBe(0)
+  })
+
+  it('without a scorer, no points are invented', () => {
+    expect(summarizeTeamDefense([], [], null).size).toBe(0)
+    const [def] = attachTeamDefenseStats([{ position: 'DEF', team: 'BAL', display: { stats: {} } }], summarizeTeamDefense([], []))
+    expect((def as { display: { stats: Record<string, unknown> } }).display.stats.pts).toBeUndefined()
   })
 })

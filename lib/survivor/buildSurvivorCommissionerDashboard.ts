@@ -79,6 +79,8 @@ export type SurvivorCommissionerDashboardResult =
         emoji: ReturnType<typeof extractLeadingTribeIcon>
         /** Members carry the manager behind the roster so the host can move them by name. */
         members: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number]['members'][number] & { userId: string | null; displayName: string | null }>
+        /** Members still in the game. `members` keeps the voted-out too: their tribe row is history. */
+        inGameCount: number
       }>
       tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       /** The weekly to-do list: usually "nothing needed". */
@@ -213,6 +215,7 @@ export async function buildSurvivorCommissionerDashboard(
       userId: castByRoster.get(member.rosterId)?.userId ?? null,
       displayName: castByRoster.get(member.rosterId)?.displayName ?? null,
     })),
+    inGameCount: tribe.members.filter(member => !eliminatedIds.has(member.rosterId)).length,
   }))
 
   const afPlan = resolveAfPlanFromEntitlement(entitlementSnapshot.plans, entitlementSnapshot.status)

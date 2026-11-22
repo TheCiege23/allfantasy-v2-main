@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
+import { isSiteAdminLeagueOwner } from './siteAdminLeague'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
@@ -25,6 +26,7 @@ import {
   autopilotRosterIds,
   CHIMMY_FREE_TEAMS,
   CHIMMY_MANAGER_LIMIT,
+  CHIMMY_SITE_ADMIN_LIMIT,
   freeChimmyRosterIds,
   chimmyManagerLimitReached,
   DEFAULT_AUTOPILOT_STYLE,
@@ -36,7 +38,7 @@ import {
   type ManagedLineup,
   type ManagedLineups,
 } from './inactiveManagerMode'
-import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 
@@ -52,14 +54,26 @@ export const AUTOPILOT_ON_ACTION = 'chimmy_autopilot.on'
 export const AUTOPILOT_OFF_ACTION = 'chimmy_autopilot.off'
 export const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot' as const
 
-/** Chimmy autopilot is on the AF Commissioner plan — the LEAGUE OWNER's, as with the other commissioner tools. */
+/** Chimmy autopilot is on AF Pro and AF Supreme (owner decision 2026-11-22) — the LEAGUE OWNER's plan, as before. */
 export async function autopilotEntitled(leagueOwnerUserId: string | null | undefined): Promise<boolean> {
   if (!leagueOwnerUserId) return false
+  // A site admin's own league is a test league: every Chimmy team in it plays, plan or no plan. Without
+  // this, such a league took twelve Chimmy teams and then drafted instantly for one of them.
+  if (await isSiteAdminLeagueOwner(leagueOwnerUserId)) return true
   try {
     return Boolean((await new EntitlementResolver().resolveForUser(leagueOwnerUserId, AUTOPILOT_FEATURE)).hasAccess)
   } catch {
     return false
   }
+}
+
+/**
+ * How many teams Chimmy may run in a league with this owner. A site admin's league has no practical
+ * limit, so the owner can fill a whole test league with Chimmy; everyone else gets the product limit.
+ * Any failure to read the account falls back to the product limit.
+ */
+export async function chimmyTeamLimitFor(leagueOwnerUserId: string | null | undefined): Promise<number> {
+  return (await isSiteAdminLeagueOwner(leagueOwnerUserId)) ? CHIMMY_SITE_ADMIN_LIMIT : CHIMMY_MANAGER_LIMIT
 }
 
 const settingsObject = (s: unknown) => (s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>) : {})
@@ -101,14 +115,14 @@ export async function readInactiveManagerView(
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
-  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isOrphanPlatformUserId(r.platformUserId) || isAiManagerPlatformUserId(r.platformUserId)).map((r) => r.id))
+  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isSeatPlaceholderUserId(r.platformUserId)).map((r) => r.id))
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
     autopilotEntitled: await autopilotEntitled(league.userId),
     draftAsMe: settingsObject(league.settings)[DRAFT_AS_ME_SETTING] !== false,
     autoHandover: readAutoHandover(league.settings),
-    chimmyLimit: CHIMMY_MANAGER_LIMIT,
+    chimmyLimit: await chimmyTeamLimitFor(league.userId),
     chimmyFreeTeams: CHIMMY_FREE_TEAMS,
     chimmyReports: await readChimmyReports(leagueId),
     teams: health.rows.map((r) => ({
@@ -177,7 +191,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
    * back (`endInactiveManagerModeOnOwnerSave`) — so the notice says exactly that.
    */
   const owner = roster.platformUserId
-  if (changed && on && owner && owner !== userId && !isOrphanPlatformUserId(owner) && !isAiManagerPlatformUserId(owner)) {
+  if (changed && on && owner && owner !== userId && !isSeatPlaceholderUserId(owner)) {
     await dispatchNotification({
       userIds: [owner],
       category: 'autocoach',
@@ -220,6 +234,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'Chimmy can only run teams in leagues AllFantasy runs.' }
   // Without the plan Chimmy still runs one team for free (CHIMMY_FREE_TEAMS); the plan raises it to the
   // league limit. Which one is free is decided under the league lock below, with the limit.
+  const teamLimit = await chimmyTeamLimitFor(league.userId)
   const entitled = nextStyle === null ? true : await autopilotEntitled(league.userId)
   const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId }, select: { id: true, platformUserId: true } })
   if (!roster) return { ok: false, status: 404, error: 'That team is not in this league.' }
@@ -230,7 +245,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
   const now = new Date().toISOString()
   await updateManaged(leagueId, (current) => {
     const entry = current[rosterId]
-    if (nextStyle !== null && chimmyManagerLimitReached(current, rosterId, entitled ? CHIMMY_MANAGER_LIMIT : CHIMMY_FREE_TEAMS)) {
+    if (nextStyle !== null && chimmyManagerLimitReached(current, rosterId, entitled ? teamLimit : CHIMMY_FREE_TEAMS)) {
       if (entitled) overLimit = true
       else overFree = true
       return null
@@ -247,10 +262,10 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
     return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
   })
   if (overFree) {
-    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. The AF Commissioner plan lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
+    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. AF Pro or AF Supreme lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
   }
   if (overLimit) {
-    return { ok: false, status: 409, error: `Chimmy can run up to ${CHIMMY_MANAGER_LIMIT} teams in a league. Take Chimmy off a team first.` }
+    return { ok: false, status: 409, error: `Chimmy can run up to ${teamLimit} teams in a league. Take Chimmy off a team first.` }
   }
   if (changed) {
     await logAction({
@@ -281,7 +296,7 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only run teams in leagues it runs.' }
   if (parsed.value?.to === 'autopilot' && !(await autopilotEntitled(league.userId))) {
-    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of the AF Commissioner plan. Lineup management is free.' }
+    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of AF Pro and AF Supreme. Lineup management is free.' }
   }
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`

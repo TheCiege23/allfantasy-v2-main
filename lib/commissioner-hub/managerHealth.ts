@@ -42,6 +42,7 @@ import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidati
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 import { recordInactiveFlags } from '@/lib/commissioner-hub/inactiveFlagLedger'
+import { readEliminatedTeams } from '@/lib/guillotine/eliminatedTeams'
 
 export type ManagerHealthStatus = 'active' | 'at_risk' | 'inactive' | 'unknown'
 
@@ -152,16 +153,27 @@ export async function getLeagueManagerHealth(leagueId: string): Promise<LeagueMa
   const empty: LeagueManagerHealth = { leagueId, rows: [], totalManagers: 0, inactiveCount: 0, atRiskCount: 0 }
   if (!leagueId) return empty
 
-  const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { starters: true, platform: true } })
-    .catch(() => null)
+  const [league, allRosters, eliminated] = await Promise.all([
+    prisma.league
+      .findUnique({ where: { id: leagueId }, select: { starters: true, platform: true } })
+      .catch(() => null),
+    prisma.roster
+      .findMany({
+        where: { leagueId },
+        select: { id: true, platformUserId: true, managerUserId: true, playerData: true, updatedAt: true, redraftRosterId: true, faabRemaining: true },
+      })
+      .catch(() => [] as Array<{ id: string; platformUserId: string; managerUserId: string | null; playerData: unknown; updatedAt: Date; redraftRosterId: string | null; faabRemaining: number | null }>),
+    readEliminatedTeams(leagueId),
+  ])
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: { leagueId },
-      select: { id: true, platformUserId: true, managerUserId: true, playerData: true, updatedAt: true, redraftRosterId: true, faabRemaining: true },
-    })
-    .catch(() => [] as Array<{ id: string; platformUserId: string; managerUserId: string | null; playerData: unknown; updatedAt: Date; redraftRosterId: string | null; faabRemaining: number | null }>)
+  /*
+   * 🛑 A CHOPPED TEAM IS OUT OF THE LEAGUE, NOT INACTIVE (2026-11-20). Its roster was released and its
+   * manager can no longer act, so its roster clock stops and every eliminated team aged into
+   * `inactive` here — and through this function into the Hub table, the quiet-managers list, the
+   * weekly recap, the commissioner recipes and the inactive-manager suggestions. A commissioner
+   * reported it from their own chopped leagues. The table is the managers still playing.
+   */
+  const rosters = allRosters.filter((r) => !eliminated.rosterIds.has(r.id))
 
   if (rosters.length === 0) return empty
 

@@ -215,6 +215,12 @@ const TEMPLATE_RESOLVERS: Record<string, (leagueType: string) => { slots: Record
   SOCCER: resolveSoccerRosterTemplate,
 }
 
+/** The roster template league bootstrap installs for this sport and league type: slot name to count. Null for a sport with none. */
+export function newLeagueRosterSlots(sport: string, leagueType: string): Record<string, number> | null {
+  const resolve = TEMPLATE_RESOLVERS[String(sport ?? '').trim().toUpperCase()]
+  return resolve ? { ...resolve(leagueType).slots } : null
+}
+
 /** Settings carrying only a roster slot map, in the shape the roster engine writes. */
 export function settingsWithRosterSlots(slots: Record<string, number>): Record<string, unknown> {
   return { roster: { config: { sections: [{ key: 'primary', label: 'Primary', slots }] } } }

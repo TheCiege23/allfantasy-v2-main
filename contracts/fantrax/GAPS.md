@@ -357,3 +357,35 @@ players who agree on the school, as the NCAAF matcher already did (124 CFB codes
 **CFB positions are Fantrax's labels, not the registry's.** CB/S vs DB, OLB vs LB, DE vs EDGE, DL vs DE all
 occur for one player at one school; `ncaafFantraxIdentityPlan.ts` compares position GROUPS. Offensive
 labels stay exact.
+
+## F-19 — Transaction History is a logged-in page with a CSV download — **CAPTURED 2026-11-21**
+
+F-13 still holds for the public `fxea` API: it has no transactions endpoint. Completed claims, drops and
+trades are on the logged-in website, at `/fantasy/league/<leagueId>/transactions/history`, with three
+tabs (Claim/Drop, Trade, Lineup). Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-transaction-history-download.json`.
+
+- The page loads through `POST /fxpa/req` with `msgs[].method = getTransactionDetailsHistory` and
+  `data.view` of `CLAIM_DROP` or `TRADE`. Its response body was not captured.
+- "Download all as CSV" opens `GET /fxpa/downloadTransactionHistory` with `view`, `team=ALL`,
+  `positionOrGroup=ALL`, `pageNumber=1`, `adminMode=false`, `includeDeleted=false`, `executedOnly=true`.
+  Same family as `/fxpa/downloadTeamRosterStats`, which the browser connector already uses
+  (`tools/fantrax-browser-connector`).
+- The Claim/Drop CSV is `Player, Team, Position, Type, Team, Bid, Date (EST), Week`. Two columns are
+  named `Team` (NFL club, then fantasy team). `Type` is `Claim` or `Drop`. **There is no player id**, so
+  a row has to be matched by name, club and position, as the Trade CSV already is.
+- One download returned every row the page listed across its four pages (78 rows), not only page 1.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the download answers without a login. The score download answers `WARNING_NOT_LOGGED_IN`.
+- The download with `view=TRADE` and `view=LINEUP`. The Trade CSV's columns are known from a user
+  upload (`fantraxTradeHistoryCsv.ts`); its request parameters are assumed to match and were not seen.
+- **Why the export started in week 10 of an 11-week season** (earliest row Nov 12). A retention window,
+  a default date filter, or this league's own history would each explain it. Until that is known, an
+  import of this file must not be described as the league's whole history.
+- Whether `getTransactionDetailsHistory` returns player ids. If it does, it is the better source.
+
+Fantrax also sends each member alerts (push and email) for "Any trade has been executed" and "A player
+is successfully claimed", listed under My Team Settings → Notifications, with a history page at
+`/notification/all`. No trade or claim alert was seen, so their wording is unknown.

@@ -61,7 +61,8 @@ import '@/components/core-app/af-core-redraft-matchup.css'
 import '@/components/core-app/af-core-redraft-live.css'
 import { liveGameBug } from '@/lib/core-app/redraftCoreScoreBug'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { messagesFor } from '@/lib/i18n/messages'
+import { defineMessages, messagesFor } from '@/lib/i18n/messages'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import {
   countSuffix,
   finalCount,
@@ -191,8 +192,15 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
+/* 2026-11-20: what the page's "More detail" fold holds, named in a few words (MoreDetail `note`). */
+const liveMoreDetailMessages = defineMessages({
+  en: { note: 'Contributions by league · where scores come from' },
+  es: { note: 'Aportes por liga · de dónde vienen los marcadores' },
+})
+
 export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null, leagueWeek = null, leagueGames = null, sportNextKickoff = null }: LiveScoresProps) {
   const guide = useMessages(liveGuideMessages)
+  const moreDetailCopy = useMessages(liveMoreDetailMessages)
   const [playsOpen, setPlaysOpen] = useState(false)
   const { language } = useOptionalLanguage()
   const [data, setData] = useState<LivePageData>(initial)
@@ -927,12 +935,6 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               />
             </>
           )}
-          {/* Across leagues only: with one league held there is only one league’s scoring to compare. */}
-          {visibleGames.length > 0 && !leagueFilterId ? (
-            <p className="af-lg-teach">
-              <b>{guide.why}</b> {guide.slateTeach}
-            </p>
-          ) : null}
         </section>
 
         <aside className="af-live-side" data-roster={data.hasRosterData} aria-label={lsc('Your live impact', language)}>
@@ -974,17 +976,6 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               ) : null}
             </div>
           ) : null}
-
-          <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
-            <summary>{lsc('Contributions by league', language)}</summary>
-            <p>{lsc('Actual points from games on this slate. Remaining is a player count, not a projection. Different league scoring totals are not comparable.', language)}</p>
-            {workspace.leagues.map(league => <div key={league.id} className="af-live-league-contribution">
-              <Link href={`/core/matchup?league=${encodeURIComponent(league.id)}`}>{league.name}</Link>
-              <dl><div><dt>{lsc('Live', language)}</dt><dd>{league.live.toFixed(1)}</dd></div><div><dt>{lsc('Completed', language)}</dt><dd>{league.completed.toFixed(1)}</dd></div><div><dt>{lsc('Remaining', language)}</dt><dd>{league.remaining}</dd></div></dl>
-              {league.missing > 0 && <small>{missingScores(league.missing, language)}</small>}
-            </div>)}
-            {!workspace.leagues.length && <p>{lsc('No roster contributions available for this view.', language)}</p>}
-          </details>
 
           {impact.biggestMover ? (
             <div className="af-live-card">
@@ -1093,15 +1084,41 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             </div>
           ) : null}
 
-          <p className="af-live-note">
-            {lsc('Scores come from the official feed. AllFantasy only reads your leagues — nothing here changes anything on your platform.', language)}
-          </p>
-          {lowData.lowData ? null : (
-            <p className="af-lg-lowdata">
-              <span>{guide.lowDataHint}</span>
-              <LowDataToggle decision={lowData} onChange={setLowData} className="af-live-lowdata-toggle" />
+          {/*
+            2026-11-20 — the page's one "More detail" fold (MoreDetail.tsx). The games on now and your
+            own panel (up next, latest, plays) stay on screen; the per-league contribution breakdown
+            (this was its own fold, same class and open rule), the "why" note under the slate, the
+            data-source note and the low-data switch moved in here, unchanged.
+          */}
+          <MoreDetail
+            className="af-live-card af-live-contributions"
+            open={!!leagueFilterId}
+            note={moreDetailCopy.note}
+            testId="live-more"
+          >
+            <p>{lsc('Actual points from games on this slate. Remaining is a player count, not a projection. Different league scoring totals are not comparable.', language)}</p>
+            {workspace.leagues.map(league => <div key={league.id} className="af-live-league-contribution">
+              <Link href={`/core/matchup?league=${encodeURIComponent(league.id)}`}>{league.name}</Link>
+              <dl><div><dt>{lsc('Live', language)}</dt><dd>{league.live.toFixed(1)}</dd></div><div><dt>{lsc('Completed', language)}</dt><dd>{league.completed.toFixed(1)}</dd></div><div><dt>{lsc('Remaining', language)}</dt><dd>{league.remaining}</dd></div></dl>
+              {league.missing > 0 && <small>{missingScores(league.missing, language)}</small>}
+            </div>)}
+            {!workspace.leagues.length && <p>{lsc('No roster contributions available for this view.', language)}</p>}
+            {/* Across leagues only: with one league held there is only one league’s scoring to compare. */}
+            {visibleGames.length > 0 && !leagueFilterId ? (
+              <p className="af-lg-teach">
+                <b>{guide.why}</b> {guide.slateTeach}
+              </p>
+            ) : null}
+            <p className="af-live-note">
+              {lsc('Scores come from the official feed. AllFantasy only reads your leagues — nothing here changes anything on your platform.', language)}
             </p>
-          )}
+            {lowData.lowData ? null : (
+              <p className="af-lg-lowdata">
+                <span>{guide.lowDataHint}</span>
+                <LowDataToggle decision={lowData} onChange={setLowData} className="af-live-lowdata-toggle" />
+              </p>
+            )}
+          </MoreDetail>
         </aside>
       </div>
     </div>

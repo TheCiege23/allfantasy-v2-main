@@ -5,6 +5,7 @@ import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 import { prisma } from '@/lib/prisma'
 import { createCfbdGameLogCollector, planCfbdGameLogs, type CfbdGameLogReport } from '@/lib/stats/cfbdGameLogs'
 import { appearancesOfWeek, decideWeekFetch, verifiedSeasonAppearances, readWeekAppearances, weekAppearancesKey, type WeekAppearances } from '@/lib/stats/cfbdWeekFetchPlan'
+import { cfbdFetch } from '@/lib/cfbd-quota'
 
 /**
  * cfbdPlayerStats — NCAAF season stat lines from CollegeFootballData, and (since 2026-09-23) the
@@ -93,7 +94,7 @@ async function fetchGamesPlayed(
       continue
     }
     try {
-      const res = await fetch(
+      const res = await cfbdFetch(
         `${CFBD_BASE}/games/players?year=${season}&week=${week}&seasonType=regular`,
         { cache: 'no-store', headers: { Authorization: `Bearer ${key}` } },
       )
@@ -149,7 +150,7 @@ async function fetchGamesPlayed(
  * earned them. Understating is the safe direction — it never invents production
  * a player did not have.
  */
-function dkFantasyPoints(stats: Record<string, number | string>): number | null {
+export function dkFantasyPoints(stats: Record<string, number | string>): number | null {
   const n = (key: string): number => {
     const v = stats[key]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
@@ -222,7 +223,7 @@ const FANTASY_POSITIONS = new Set([...OFFENSIVE_POSITIONS, ...DEFENSIVE_POSITION
  *   - Sacks are also tackles for loss. Most IDP formats pay both, and this
  *     follows that convention rather than trying to de-duplicate them.
  */
-function idpFantasyPoints(stats: Record<string, number | string>): number | null {
+export function idpFantasyPoints(stats: Record<string, number | string>): number | null {
   const n = (key: string): number => {
     const v = stats[key]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
@@ -335,7 +336,7 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
 
   let rows: CfbdStatRow[]
   try {
-    const res = await fetch(`${CFBD_BASE}/stats/player/season?year=${season}`, {
+    const res = await cfbdFetch(`${CFBD_BASE}/stats/player/season?year=${season}`, {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${key}` },
     })

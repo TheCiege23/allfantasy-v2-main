@@ -1,4 +1,5 @@
 import { readHiddenLeagueSections, type LeagueSectionId } from '@/lib/league/leagueSections'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { loadTradeDeadlineCountdown } from '@/lib/trade-deadline/tradeDeadlineWindow'
 import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
@@ -520,7 +521,7 @@ async function leagueNameForTitle(leagueId: string, userId: string): Promise<str
     .findFirst({
       where: {
         id: leagueId,
-        OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+        OR: leagueMemberWhere(userId),
       },
       select: { name: true },
     })
@@ -733,7 +734,15 @@ export default async function AfCorePage({
   const shellStartedAt = Date.now()
   // And `af.loop.busy_shell_pct`: how busy the thread was over that same window (lib/observability/loopBusy.ts).
   const shellLoopMark = markLoop()
+  /*
+   * Per-read timing for the shell phase (2026-11-21). `[core-shell-timing]` below said the shell
+   * took a median 10.6s on slow renders but not WHICH read took it; this names each one. Same
+   * 2.5s threshold as that line, so fast shells log nothing. Read the line as: `reads` is each
+   * read's own duration (they overlap inside a wave), `laps` is wall-clock per serial stage.
+   */
+  const shellTimer = createRenderTimer('core-shell', 2500)
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
+  shellTimer.lap('session')
   const userId = session?.user?.id
   if (!userId) {
     /*
@@ -778,10 +787,13 @@ export default async function AfCorePage({
    * after the whole shell wave — a third serial stage on every /core render for a value the wave
    * never needed. Same inputs, same fallback, same place it is read.
    */
-  const chimmyPlanRead = readChimmyAnswerAllowance({
-    userId,
-    email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
-  }).catch(() => null)
+  const chimmyPlanRead = shellTimer.time(
+    'chimmyPlan',
+    readChimmyAnswerAllowance({
+      userId,
+      email: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+    }).catch(() => null),
+  )
 
   /*
    * `rosterDetail: 'count'` — this page reads no roster off the list; every screen that needs a lineup
@@ -796,11 +808,15 @@ export default async function AfCorePage({
    * follows available. Read in the same wave; it never throws (a failed read answers false).
    */
   const [leagueListPayload, pausedSyncKeys, leaguePrefs, teamFollowPromptEligible] = await Promise.all([
-    getDashboardLeagueListForUser(userId, { rosterDetail: 'count', requireCoreLeagues: true }).catch(() => null),
-    getPausedSyncKeys(userId).catch(() => null),
-    getLeaguePreferences(userId),
-    shouldShowTeamFollowPrompt(userId),
+    shellTimer.time(
+      'leagueList',
+      getDashboardLeagueListForUser(userId, { rosterDetail: 'count', requireCoreLeagues: true }).catch(() => null),
+    ),
+    shellTimer.time('pausedSync', getPausedSyncKeys(userId).catch(() => null)),
+    shellTimer.time('leaguePrefs', getLeaguePreferences(userId)),
+    shellTimer.time('followPrompt', shouldShowTeamFollowPrompt(userId)),
   ])
+  shellTimer.lap('listWave')
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
   /*
@@ -998,10 +1014,10 @@ export default async function AfCorePage({
    * The no-op `.catch` only marks the promise handled, so a redirect that throws before the await
    * cannot leave an unhandled rejection; the await below still rethrows exactly as before.
    */
-  const railHubsRead = attachLeagueHubs(userId, rail)
+  const railHubsRead = shellTimer.time('railHubs', attachLeagueHubs(userId, rail))
   railHubsRead.catch(() => {})
   // Each Exile Island under its Survivor league (lib/core-app/survivorExileRail.ts). Same start-early shape.
-  const railExileRead = attachSurvivorExileLinks(rail, userId)
+  const railExileRead = shellTimer.time('railExile', attachSurvivorExileLinks(rail, userId))
   railExileRead.catch(() => {})
 
   const tradeLeagueRow = selectedLeagueRow
@@ -1139,12 +1155,13 @@ export default async function AfCorePage({
    *
    * Each read keeps the fallback it had; one failure never blocks the others.
    */
+  const timeShell = shellTimer.time
   const shellReads = Promise.all([
-    getCoreActivitySnapshot(
+    timeShell('activity', getCoreActivitySnapshot(
       playedLeagues.map((league) => league.id),
       playedLeagues.map((league) => String(league.sport ?? 'NFL')),
       now,
-    ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false, liveDraftLeagueIds: [] as string[] })),
+    ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false, liveDraftLeagueIds: [] as string[] }))),
     /*
      * Whether the selected league has any scored week, for the nav gate.
      *
@@ -1159,14 +1176,14 @@ export default async function AfCorePage({
      * emptiness.
      */
     selectedLeagueId
-      ? getLeagueDataSignals({
+      ? timeShell('scoredWeek', getLeagueDataSignals({
           leagueId: selectedLeagueId,
           platformLeagueId:
             (playedLeagues.find((l) => l.id === selectedLeagueId) as { platformLeagueId?: string | null } | undefined)
               ?.platformLeagueId ?? null,
         })
           .then((signals) => signals.hasScoredWeek)
-          .catch(() => null)
+          .catch(() => null))
       : Promise.resolve(null),
     /*
      * Does this league score IDP? Gates the Defense Hub rail entry.
@@ -1225,7 +1242,7 @@ export default async function AfCorePage({
      * of the same unread number on the screen itself, but they are recomputed per
      * request and are not worth a second pass here just to bump a badge.
      */
-    Promise.all([
+    timeShell('notifyAndUser', Promise.all([
       prisma.platformNotification.count({ where: { userId, readAt: null } }).catch(() => 0),
       /*
        * The rail's profile chip. Read fresh from app_users rather than
@@ -1248,14 +1265,14 @@ export default async function AfCorePage({
           },
         })
         .catch(() => null),
-    ]),
+    ])),
     /*
      * The launcher badge, on EVERY /core screen rather than only home — the dock
      * is mounted in the shell, so a count that only existed on the dashboard would
      * blink out the moment somebody navigated. Degrades to zeroes on failure
      * rather than failing the page. DMs, league chat and Chimmy's weekly checks (chatBadge.ts).
      */
-    getChatBadge(userId),
+    timeShell('chatBadge', getChatBadge(userId)),
     /*
      * This week's head-to-head per league, for the expanded league rail.
      *
@@ -1266,7 +1283,7 @@ export default async function AfCorePage({
      * rail that only carries scores on some pages is worse than one that never
      * does. A failure is null and the rail simply renders names and crests.
      */
-    getRailMatchups(
+    timeShell('railMatchups', getRailMatchups(
       userId,
       playedLeagues.map((l) => ({
         id: l.id,
@@ -1282,7 +1299,7 @@ export default async function AfCorePage({
             isDynasty: l.isDynasty,
           }) === 'guillotine',
       })),
-    ).catch(() => null),
+    ).catch(() => null)),
     /*
      * The plan chip and token meter. The handoff is explicit that the meter must be
      * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
@@ -1290,12 +1307,12 @@ export default async function AfCorePage({
      * chat. `null` on a read failure omits the chip rather than showing a made-up
      * tier or a zero balance the user does not actually have.
      */
-    aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now }).catch(() => null),
+    timeShell('aiAccess', aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now }).catch(() => null)),
     /*
      * Your record and place per league, for the league list's "6-3 · 2nd" line (railRecords.ts). Two
      * set-based reads, budgeted like the matchups above; a failure is an empty map and no line.
      */
-    getRailRecords(userId, playedLeagues.map((l) => l.id)).catch(() => ({})),
+    timeShell('railRecords', getRailRecords(userId, playedLeagues.map((l) => l.id)).catch(() => ({}))),
   ])
   // Awaited below the admin gate. Every read above degrades rather than throws, but should one
   // ever reject while the gate is still being read, this keeps it from surfacing as unhandled;
@@ -1328,9 +1345,12 @@ export default async function AfCorePage({
    * model-admin-authorization-policy.test.ts follows. It costs no time: the reads above
    * have already started, so this waits beside them rather than in front of them.
    */
-  const isAdmin = await getAdminAccessState()
-    .then((state) => state.status === 'admin')
-    .catch(() => false)
+  const isAdmin = await timeShell(
+    'admin',
+    getAdminAccessState()
+      .then((state) => state.status === 'admin')
+      .catch(() => false),
+  )
   const modelAdminAllowed = segment === 'model-admin' && isAdmin
 
   const [
@@ -1347,6 +1367,7 @@ export default async function AfCorePage({
   ] = await shellReads
   await railHubsRead
   await railExileRead
+  shellTimer.lap('shellWave')
 
   /*
    * The league-first landing. A redirect, so it must stay in AfCorePage ahead of the shell render
@@ -1363,7 +1384,11 @@ export default async function AfCorePage({
           .map((m) => m.leagueId),
       ),
     })
-    if (landing) redirect(landing)
+    if (landing) {
+      // A landing pays the whole shell and then renders it again on the target URL — log it.
+      shellTimer.done({ screen: activeKey, redirect: true, leagues: playedLeagues.length })
+      redirect(landing)
+    }
   }
   const devySlotCount = devyNav.devySlotCount
   /*
@@ -1390,7 +1415,7 @@ export default async function AfCorePage({
   // The Updates menu's "Fix lineup in <platform> ↗" for an imported league (lib/core-app/shellLineupHandoff.ts).
   const lineupHandoff =
     selectedLeagueRecord && isImportedPlatform(selectedLeagueRecord.platform?.trim())
-      ? await shellLineupHandoff(userId, selectedLeagueRecord).catch(() => null)
+      ? await timeShell('lineupHandoff', shellLineupHandoff(userId, selectedLeagueRecord).catch(() => null))
       : null
 
   const shellProfile = {
@@ -1598,6 +1623,18 @@ export default async function AfCorePage({
   recordRootDuration('af.shell_ms', shellStartedAt)
   recordRootNumber('af.loop.busy_shell_pct', loopBusyPctSince(shellLoopMark))
   try{const durationMs=Math.max(0,Date.now()-shellStartedAt);if(durationMs>=2500)console.info('[core-shell-timing]',JSON.stringify({durationMs}))}catch{/* Diagnostics cannot fail the shell. */}
+  shellTimer.lap('tail')
+  /*
+   * The breakdown behind that line, as `[render-timing] {"scope":"core-shell",…}`. `leagues` and
+   * `loopBusyPct` are what tell a big-account read apart from a busy server: the same read taking
+   * 8s at 95% loop busy is queueing behind other work, not a slow query.
+   */
+  shellTimer.done({
+    screen: activeKey,
+    league: Boolean(selectedLeagueId),
+    leagues: playedLeagues.length,
+    loopBusyPct: loopBusyPctSince(shellLoopMark),
+  })
 
   /*
    * The same duration, against the budget it was measured against (`lib/sports-os/budgets.ts`).

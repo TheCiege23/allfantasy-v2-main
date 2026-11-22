@@ -120,9 +120,12 @@ describe('the commissioner trade review shows the letter’s record', () => {
     explanation: { noteToLeague: null, headline: 'h', source: 'template' },
     actOn: null,
   }
-  const RECORD = ledgerRecordFor(snapshot(tally(22, -1.4)), null)
+  let RECORD: unknown = ledgerRecordFor(snapshot(tally(22, -1.4)), null)
 
-  beforeEach(() => __resetAdviceRecordForTests())
+  beforeEach(() => {
+    __resetAdviceRecordForTests()
+    RECORD = ledgerRecordFor(snapshot(tally(22, -1.4)), null)
+  })
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
@@ -148,6 +151,18 @@ describe('the commissioner trade review shows the letter’s record', () => {
     expect(line).toMatch(/^Trades commissioners reviewed at A: across 22 graded redraft deals/)
     expect(line).toMatch(/1\.4 PPR a week less than it gave up\. The letter has not held up so far/)
     // The recommendation itself is untouched by the record.
+    expect(screen.getByTestId('trade-review-recommendation').textContent).toBe('No flags — fine to approve')
+    // No letter confidence on this record, so no confidence line.
+    expect(screen.queryByTestId('trade-review-letter-confidence')).toBeNull()
+  })
+
+  it('Trade OS 2026-11-21: how sure the letter is, from the commissioners’ own graded deals, beside the record', async () => {
+    RECORD = { ...(RECORD as object), commissionerTradeConfidence: { A: { heldRate: 0.74, decided: 22 } }, tradeConfidence: { A: { heldRate: 0.5, decided: 40 } } }
+    await open({ sport: 'NFL', leagueType: 'redraft' })
+    const line = screen.getByTestId('trade-review-letter-confidence')
+    expect(line.textContent).toBe(
+      'How sure this A is: High. About 74% of our A grades on redraft trades have held up (22 decided, recent ones weighted more).',
+    )
     expect(screen.getByTestId('trade-review-recommendation').textContent).toBe('No flags — fine to approve')
   })
 

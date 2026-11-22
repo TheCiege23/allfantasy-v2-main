@@ -6,19 +6,14 @@ import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-h
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
 import { runWaiverClaimDecision } from '../waiver'
 import type { WaiverClaimRecommendation } from '../waiver/decision'
-import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
+import { worldInputFromFacts } from '../waiver/loader'
+import { createWaiverOsLoaders } from '../waiver-os'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
 import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
 import { createCommissionerOsLoaders } from '../commissioner-os'
-import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
-import { inactiveFlagView, type InactiveFlagView } from '@/lib/commissioner-hub/inactiveFlagView'
-
-/** The inactive flag's graded record from the outcome snapshot (memoised by its store). Null on any failure. */
-async function loadInactiveFlagRecord(): Promise<InactiveFlagView | null> {
-  const snapshot = await readAdviceLearningSnapshot().catch(() => null)
-  return inactiveFlagView(snapshot?.inactiveFlags)
-}
+// The inactive flag's graded record — the one loader the hub's flag also reads, so the two never disagree.
+import { loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice } from './packet'
@@ -266,6 +261,16 @@ export interface WaiverDecisionBridgeArgs extends DecisionBridgeArgs {
   onClaims?: (claims: readonly WaiverClaimRecommendation[], confidencePct: number | null) => void
 }
 
+/*
+ * 🛑 THE WAIVER FACTS GO THROUGH WAIVER OS NOW (2026-11-20 re-score, Kernel ⚠ → ✅). This bridge — every Chimmy waiver
+ * question and the weekly engine run (`weeklyEngineCalls.ts`) — called `loadWaiverWorldFacts` directly, so the
+ * domain's registered feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`. It reads the
+ * user-level resource entry: FAAB, priority and settings for this manager, held five minutes (`waiverResourceSource`
+ * — short because FAAB moves on every processed claim), derived by the same `loadWaiverWorldFacts` on a miss, and a
+ * store problem falls through to that derivation. A null result is still "no roster resolved", never cached.
+ */
+const waiverOs = createWaiverOsLoaders()
+
 export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
   const userId = args.userId ?? null
   const leagueId = args.leagueId ?? null
@@ -286,7 +291,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
   }
 
   try {
-    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    const facts = await waiverOs.loadWorldFacts(userId, leagueId)
     if (!facts) {
       /*
        * ⚠ THE HONEST DEGRADE, AND IT IS THE LIKELY PATH FOR SOME PROVIDERS.

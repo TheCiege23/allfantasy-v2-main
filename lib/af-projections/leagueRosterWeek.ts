@@ -43,7 +43,7 @@ export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[]) {
         if (!row.rosterPlayerId) continue
         const player = { points: row.weekly, team: row.team ?? null, unavailable: false }
         players.set(row.rosterPlayerId, player)
-        if (row.availabilityId) {
+        if (row.availabilityId && row.weeklyUnavailableReason !== 'no_nba_roster') {
           const matches = cohort.players.get(row.availabilityId) ?? []
           matches.push(player)
           cohort.players.set(row.availabilityId, matches)

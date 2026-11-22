@@ -89,7 +89,8 @@ export async function GET(req: NextRequest) {
     const pendingReminders = await withSyncJobRun(
       { jobName: 'cron-pending-trade-reminders', trigger: 'cron' },
       () => remindPendingTrades(),
-      (r) => ({ rowsRead: r.checked, rowsWritten: r.sent }),
+      // Each reminder re-grades its offer for the receiver (Trade OS's scheduled grade beyond Sleeper).
+      (r) => ({ rowsRead: r.checked, rowsWritten: r.sent, metadata: { regraded: r.regraded, moved: r.moved } }),
     ).catch((e) => {
       console.error('[cron/trade-grade-notify] pending reminder sweep failed', e)
       return { checked: 0, sent: 0, error: e instanceof Error ? e.message : String(e) }

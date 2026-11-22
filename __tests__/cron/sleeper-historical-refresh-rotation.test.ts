@@ -5,7 +5,7 @@
  *
  * Production 2026-11-20: 93 `dynasty_backfill_status` rows belonged to deleted leagues. They were
  * the oldest rows, so they filled the 15 reserved slots on every fire and were then dropped by the
- * league lookup. Each fire refreshed 10 leagues instead of 25, always the most recently viewed.
+ * league lookup. Each fire refreshed 10 leagues instead of its cap (then 25), always the most recently viewed.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -54,11 +54,11 @@ beforeEach(() => {
 
 describe('sleeper-historical-refresh rotation', () => {
   it('status rows of deleted leagues take no slots: a full fire of real leagues is refreshed', async () => {
-    const live = ids('L', 40)
+    const live = ids('L', 100)
     const gone = ids('GONE', 30)
     seed({
       live,
-      viewed: live.slice(30),
+      viewed: live.slice(76),
       statuses: [
         // The deleted leagues are the OLDEST rows, exactly as in production.
         ...gone.map((leagueId, i) => ({ leagueId, updatedAt: new Date(Date.UTC(2026, 5, 1 + i)) })),
@@ -68,13 +68,13 @@ describe('sleeper-historical-refresh rotation', () => {
 
     const body = await fire()
 
-    expect(body.leaguesConsidered).toBe(25)
-    expect(refreshed()).toHaveLength(25)
+    expect(body.leaguesConsidered).toBe(60)
+    expect(refreshed()).toHaveLength(60)
     expect(refreshed().some((id) => id.startsWith('GONE'))).toBe(false)
     // The reserved floor went to starved leagues, oldest first; the rest to the viewed ones.
-    expect(refreshed().slice(0, 15)).toEqual(ids('L', 15))
-    expect(refreshed().slice(15)).toEqual(live.slice(30))
-    expect(body.metadata).toMatchObject({ leaguesSelected: 25, statusRowsWithoutLeague: 30 })
+    expect(refreshed().slice(0, 36)).toEqual(ids('L', 36))
+    expect(refreshed().slice(36)).toEqual(live.slice(76))
+    expect(body.metadata).toMatchObject({ leaguesSelected: 60, statusRowsWithoutLeague: 30 })
   })
 
   it('a league with no status row has never been refreshed and goes first', async () => {

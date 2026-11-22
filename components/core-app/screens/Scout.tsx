@@ -22,6 +22,7 @@ import type { RailStanding } from '@/lib/core-app/railMatchups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { scoutScreenMessages } from '@/lib/core-app/messages/scoutScreen'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { buildRoomGrid, type RoomGrid as RoomGridModel, type RoomGridCell } from '@/lib/core-app/scoutRoomGrid'
 
 /**
@@ -699,12 +700,13 @@ export function Scout({
 
       {tradeIdeas}
 
+      {/*
+        2026-11-20: the shared "More detail" fold (MoreDetail.tsx) — the same word and look on every /core
+        page. "More about this league" was this page's own name for it; its contents line ("the table, the
+        road ahead, the race…") is now the `note`. Closed by default, as before. Contents unchanged.
+      */}
       {hasMore ? (
-        <details className="af-frame af-sc-more" data-testid="war-room-more">
-          <summary>
-            <span className="af-sc-more-title">{m.moreTitle}</span>
-            <span className="af-sc-more-hint">{m.moreHint}</span>
-          </summary>
+        <MoreDetail className="af-sc-more" testId="war-room-more" note={m.moreHint}>
           <div className="af-sc-more-body">
             {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
             {road}
@@ -713,7 +715,7 @@ export function Scout({
             {chest}
             {brief}
           </div>
-        </details>
+        </MoreDetail>
       ) : null}
 
       {data.managers.available ? (

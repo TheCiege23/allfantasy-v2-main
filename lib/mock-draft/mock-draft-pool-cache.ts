@@ -9,6 +9,7 @@ import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { attachAfAdpToMockPool } from '@/lib/mock-draft/mockPoolAfAdp'
 import { attachSeasonStatsToMockPool } from '@/lib/mock-draft/mockPoolSeasonStats'
+import { attachCollegeByeWeeks, loadCollegeByeIndex } from '@/lib/draft-room/collegeByeWeeks'
 import { loadNflAgesBySleeperId, plausibleAge } from '@/lib/mock-draft/mockPoolAges'
 import { fillPoolFromConsensus, type ConsensusRow, type MockPoolEntry } from '@/lib/mock-draft/nflPoolConsensusFill'
 import { getLiveAdpByName, getSeasonDefenseAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
@@ -429,10 +430,20 @@ export async function getCachedMockDraftPool(params: MockDraftPoolRequest): Prom
   const built = await buildMockPoolPayload(params)
   // AF ADP beside market ADP, and the live room's season stat columns (mockPoolSeasonStats.ts),
   // computed once per cached pool.
-  const withStats = await attachSeasonStatsToMockPool(built.entries, {
-    sport: normalizeToSupportedSport(params.sport || DEFAULT_SPORT),
+  const poolSport = normalizeToSupportedSport(params.sport || DEFAULT_SPORT)
+  const withStatsOnly = await attachSeasonStatsToMockPool(built.entries, {
+    sport: poolSport,
     scoring: params.scoring,
   })
+  // College byes (collegeByeWeeks.ts): every row of an NCAAF mock, the college rows of an NFL one.
+  const withStats =
+    poolSport === 'NCAAF' || poolSport === 'NFL'
+      ? attachCollegeByeWeeks(
+          withStatsOnly,
+          await loadCollegeByeIndex(new Date().getUTCFullYear()).catch(() => ({ byExact: new Map(), byLoose: new Map(), weekEnds: new Map() })),
+          (row) => poolSport === 'NCAAF' || row.poolType === 'college',
+        )
+      : withStatsOnly
   const payload: MockDraftPoolPayload = {
     ...built,
     entries: await attachAfAdpToMockPool(withStats, {

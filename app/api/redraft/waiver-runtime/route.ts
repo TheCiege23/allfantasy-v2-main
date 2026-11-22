@@ -1,6 +1,8 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -143,12 +145,15 @@ export async function GET(req: NextRequest) {
   const wantsLeagueScope = scope === 'league'
   if (wantsLeagueScope && !commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `WaiverRuntimeRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftWaiverRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
     includeFreeAgents,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })

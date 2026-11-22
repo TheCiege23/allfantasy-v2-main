@@ -8,6 +8,7 @@ import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
 import { OfflineLineupSync } from "@/components/pwa/OfflineLineupSync"
 import { NewVersionReload } from "@/components/shell/NewVersionReload"
 import { RouterCacheFreshness } from "@/components/shell/RouterCacheFreshness"
+import { CareerWidgetSync } from "@/components/platform/CareerWidgetSync"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
 import { initPWA } from "@/lib/pwa"
 import { isInIosAppClient } from "@/lib/platform/iosApp"
@@ -241,6 +242,8 @@ export function SafeGlobalChrome({
       <ServiceWorkerLifecycle />
       {isAuthPath(pathname) ? null : <OfflineLineupSync />}
       {isAuthPath(pathname) ? null : <NewVersionReload />}
+      {/* iOS app only: keeps the home-screen career widget current on open and resume. */}
+      {isAuthPath(pathname) ? null : <CareerWidgetSync />}
       {/* Suspense: it reads useSearchParams, which must not bail a static page out of prerendering. */}
       {isAuthPath(pathname) ? null : (
         <Suspense fallback={null}>

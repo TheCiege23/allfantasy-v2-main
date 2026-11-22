@@ -466,6 +466,30 @@
     overflow: hidden;
     box-shadow: var(--shadow);
   }
+
+  /*
+   * The four Career links (CareerRankingLinks) as a 2x2 grid on a phone. They sat in the
+   * base one-row flex with nothing phone-specific — the phone rules in af-career-devices.css
+   * are scoped to the DESKTOP tree (.af-c13), which is display:none here. Measured 2026-11-20
+   * at 375 and 393px: content 381px wide in a 349px row, each button wrapped to 71px tall, and
+   * "Share a card" ran to x=394, cut off by this card's overflow:hidden with no way to scroll
+   * to it. Two columns fit every label on one line at 375px with 44px targets.
+   */
+  .af-crm > .af-cr-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px 12px 4px;
+  }
+  .af-crm > .af-cr-actions .af-cr-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    line-height: 1.2;
+  }
 }
 
 .af-crm-head {

@@ -88,12 +88,19 @@ type LetterSummary = { n: number; netPerWeek: number; positive: number; negative
  * `pointsPerWeek(ids, from, through)` returns the players' combined points per week over the window, or
  * null when none of them could be placed in the feed (the row is then unscored, not zero).
  */
-export function gradeTradeRows(
-  rows: readonly TradeLedgerRow[],
+export function gradeTradeRows<R extends TradeLedgerRow>(
+  rows: readonly R[],
   through: number,
   pointsPerWeek: (ids: readonly string[], from: number, through: number) => number | null,
-): { byLetter: Map<string, LetterSummary>; pending: number; unscored: number } {
+): {
+  byLetter: Map<string, LetterSummary>
+  pending: number
+  unscored: number
+  /** Each scored row with its net per week — what the letter's confidence is folded from (`letterCalibration.ts`). */
+  scored: Array<{ row: R; netPerWeek: number }>
+} {
   const byLetter = new Map<string, LetterSummary>()
+  const scored: Array<{ row: R; netPerWeek: number }> = []
   let pending = 0
   let unscored = 0
   for (const row of rows) {
@@ -108,6 +115,7 @@ export function gradeTradeRows(
       continue
     }
     const net = get - give
+    scored.push({ row, netPerWeek: net })
     const s = byLetter.get(row.letter) ?? { n: 0, netPerWeek: 0, positive: 0, negative: 0 }
     s.n++
     s.netPerWeek += net
@@ -116,5 +124,5 @@ export function gradeTradeRows(
     byLetter.set(row.letter, s)
   }
   for (const s of byLetter.values()) s.netPerWeek = s.n ? Math.round((s.netPerWeek / s.n) * 10) / 10 : 0
-  return { byLetter, pending, unscored }
+  return { byLetter, pending, unscored, scored }
 }

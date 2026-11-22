@@ -1,6 +1,7 @@
 import type { UserLeague } from '@/app/dashboard/types'
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { readEliminatedTeamsByLeague } from '@/lib/guillotine/eliminatedTeams'
 import { monitorLeagueHealth, type OverallStatus } from '@/lib/league-health/league-health-engine'
 import { disputeHealthSignals, readDisputes } from '@/lib/disputes/disputeStore'
 import { shouldRunCommissionerHealthShadow, shouldRunCommissionerHealthLive, runCommissionerHealthShadow } from '@/lib/decision-os/commissioner-health/shadow'
@@ -234,6 +235,11 @@ export type CommissionerHealthBuildInput = {
   now?: Date
   source?: CommissionerHealthDataSource
   nflDataCoverage?: CanonicalNflDataCoverage | null
+  /**
+   * `Roster.id` of the teams a chopped league has eliminated (lib/guillotine/eliminatedTeams.ts).
+   * They are out of the league, so they count as neither inactive nor a missed lineup.
+   */
+  eliminatedRosterIds?: ReadonlySet<string>
   counts?: Partial<{
     tradeActivity: number
     pendingTrades: number
@@ -384,7 +390,7 @@ function isRosterInactive(roster: RosterHealthRow, now: Date): boolean {
   const settings = asRecord(roster.settings)
   if (settings.isOrphan === true || settings.orphan === true || settings.inactive === true) return true
   // An orphan has no manager to be active: imported orphans carry an 'orphan-' key, not ''.
-  if (!roster.platformUserId || isOrphanPlatformUserId(roster.platformUserId)) return true
+  if (!roster.platformUserId || isSeatPlaceholderUserId(roster.platformUserId)) return true
   if (!roster.updatedAt) return false
   const updatedAt = new Date(roster.updatedAt).getTime()
   if (!Number.isFinite(updatedAt)) return false
@@ -604,13 +610,21 @@ export function buildCommissionerHealthSnapshot(
   const league = input.league
   const rosters = Array.isArray(league.rosters) ? league.rosters : []
   const teamCount = resolveTeamCount(league, rosters)
+  /*
+   * 🛑 A CHOPPED TEAM IS OUT OF THE LEAGUE, NOT INACTIVE (2026-11-20). Its roster is released and its
+   * manager can do nothing, so it read as an inactive team AND a missed lineup, and a chopped league
+   * halfway through its season scored as half-abandoned. The league's live teams are the ones judged.
+   */
+  const eliminated = input.eliminatedRosterIds
+  const liveRosters = eliminated?.size ? rosters.filter((roster) => !(roster.id && eliminated.has(roster.id))) : rosters
+  const liveTeamCount = Math.max(0, teamCount - (rosters.length - liveRosters.length))
   const requiredStarters = readRequiredStarterCount(league)
-  const missedLineups = countMissedLineups(rosters, requiredStarters)
-  const inactiveTeams = rosters.filter((roster) => isRosterInactive(roster, now)).length
+  const missedLineups = countMissedLineups(liveRosters, requiredStarters)
+  const inactiveTeams = liveRosters.filter((roster) => isRosterInactive(roster, now)).length
   const injuredStarters = countInjuredStarters(rosters)
   const projectionSignals = countProjectionSignals(rosters)
-  const activeManagers = Math.max(0, teamCount - inactiveTeams)
-  const lineupSubmissionRate = clampPct(teamCount > 0 ? (teamCount - missedLineups) / teamCount : 1)
+  const activeManagers = Math.max(0, liveTeamCount - inactiveTeams)
+  const lineupSubmissionRate = clampPct(liveTeamCount > 0 ? (liveTeamCount - missedLineups) / liveTeamCount : 1)
   const projectionCoveragePct = projectionSignals.starters > 0
     ? Math.round((projectionSignals.withProjection / projectionSignals.starters) * 100)
     : 0
@@ -631,7 +645,7 @@ export function buildCommissionerHealthSnapshot(
     sport: String(league.sport ?? 'NFL'),
     leagueType,
     leagueId: league.id,
-    numTeams: teamCount,
+    numTeams: liveTeamCount,
     currentWeek,
     totalWeeks: 17,
     activeManagers,
@@ -1173,11 +1187,13 @@ export async function getCommissionerHubHealthForUser(
     // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
     // this costs nothing and every snapshot keeps `participation: null`.
     // Independent reads, so neither waits on the other. Both degrade to empty rather than throw.
-    const [participationByLeague, dynastyByLeague] = await Promise.all([
+    const [participationByLeague, dynastyByLeague, eliminatedByLeague] = await Promise.all([
       loadParticipationByLeague(leagueIds),
       options.dynastySignals
         ? loadDynastySignalsByLeague(leagueIds, userId).catch(() => new Map<string, DynastyHealthSignals>())
         : Promise.resolve(new Map<string, DynastyHealthSignals>()),
+      // Chopped leagues' eliminated teams; never throws, and a league with none is absent.
+      readEliminatedTeamsByLeague(leagueIds),
     ])
 
     const snapshots = leagueIds.map((leagueId) => {
@@ -1189,6 +1205,7 @@ export async function getCommissionerHubHealthForUser(
         now,
         source: 'database',
         nflDataCoverage: nflCoverageByLeague.get(leagueId) ?? null,
+        eliminatedRosterIds: eliminatedByLeague.get(leagueId)?.rosterIds,
         counts: countsByLeague.get(leagueId) ?? EMPTY_HEALTH_COUNTS,
       })
     }).map((snap) => {

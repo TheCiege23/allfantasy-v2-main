@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
  * Import OS → the four assertions Decision OS needs to call a league CONCLUSIVE (3.2, D7).
@@ -65,6 +66,11 @@ export interface ImportAssertions {
   provider: string
   externalLeagueId: string
   season: number
+  /**
+   * The league is hosted on AllFantasy (`isNativePlatform`), so nothing is imported and there is no sync to report.
+   * Optional only so older fixtures still type; the loader always sets it.
+   */
+  native?: boolean
 
   // ── 1. Freshness ──────────────────────────────────────────────────────────────────────────
   /**
@@ -262,6 +268,7 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
     provider,
     externalLeagueId,
     season,
+    native: isNativePlatform(league.platform),
     lastAttemptedSyncAt: state?.lastAttemptedSyncAt?.toISOString() ?? null,
     lastSuccessfulSyncAt: lastSuccess?.toISOString() ?? null,
     staleMs: lastSuccess ? Date.now() - lastSuccess.getTime() : null,

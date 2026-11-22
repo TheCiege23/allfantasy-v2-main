@@ -48,6 +48,8 @@ type PlayInstallStats = {
   /** Which CSV column the install counts were read from. */
   installColumn: string
   reportMonths: number
+  /** One row per report day, oldest first — for windows other than 7 and 28 days (admin Apps page). */
+  daily: { date: string; installs: number }[]
 }
 
 export type PlayInstallStatsResult =
@@ -287,6 +289,7 @@ export function summarizeReports(reports: { column: string; rows: ParsedReportRo
     latestDate: latest?.date ?? null,
     installColumn: reports[reports.length - 1].column,
     reportMonths: reports.length,
+    daily: days.map((d) => ({ date: d.date, installs: d.installs })),
   }
 }
 

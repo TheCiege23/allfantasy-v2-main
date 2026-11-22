@@ -207,6 +207,17 @@ describe('survivor commissioner dashboard payload', () => {
     expect('eliminatedCount' in result && result.eliminatedCount).toBe(1)
   })
 
+  it('a tribe counts the members still in the game; the voted-out stay on its list', async () => {
+    getCurrentlyEliminatedRosterIds.mockResolvedValue(new Set(['roster-out', 'season-roster-out']))
+    getTribesWithMembers.mockResolvedValue([
+      { id: 'tribe-1', name: '🔥 Fire Tribe', members: [{ rosterId: 'r1' }, { rosterId: 'r2' }, { rosterId: 'roster-out' }] },
+      { id: 'tribe-2', name: 'Water Tribe', members: [{ rosterId: 'r3' }] },
+    ])
+    const result = await buildSurvivorCommissionerDashboard('league-1', 'user-1', 'u@example.com')
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.tribes.map((t) => [t.id, t.inGameCount, t.members.length])).toEqual([['tribe-1', 2, 3], ['tribe-2', 1, 1]])
+  })
+
   it('carries the weekly to-do list, built from the same facts as the readiness list', async () => {
     const result = await buildSurvivorCommissionerDashboard('league-1', 'user-1', 'u@example.com')
     expect(result.ok).toBe(true)

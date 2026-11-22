@@ -58,7 +58,6 @@ import {
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { leagueVariantFor } from '@/lib/core-app/valueBook'
 import { tradeFormatCoverage } from '@/lib/trade-value-console/formatCoverage'
-import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
@@ -1554,17 +1553,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
    */
   const verifiedTeamId = await resolveCallerTeamId({ leagueId: leagueSnapshot?.id, userId, teamId })
 
-  // How the managers in this league have actually behaved. Entitlement is checked
-  // inside, so an unentitled user grounds exactly as before; and the block names
-  // the managers it has NOT observed, because a model handed a partial roster of
-  // personalities will invent the rest in the same confident voice.
-  const psychologyGroundingLines =
-    leagueSnapshot && userId
-      ? await buildPsychologyGroundingLines({
-          leagueId: leagueSnapshot.id,
-          userId,
-        }).catch(() => [] as string[])
-      : []
+  /*
+   * (The psychology-profile grounding call that stood here was removed 2026-11-20: `buildPsychologyGroundingLines`
+   * has returned [] since the Competitive Edge privacy pass, and its comment still claimed it grounded manager
+   * behaviour. Manager facts reach Chimmy through the `managerRecords` slice and the `get_manager_record` tool.)
+   */
 
   let normalizedLeagueContext: NormalizedLeagueContext | null = null
   if (leagueId && userId) {
@@ -2670,9 +2663,6 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         season: effectiveSeasonResult,
       }),
       connectedFranchiseGrounding,
-      ...(psychologyGroundingLines.length > 0
-        ? [psychologyGroundingLines.join(NEWLINE)]
-        : []),
     ]
       .filter(Boolean)
       .join(NEWLINE) || undefined,
@@ -3341,6 +3331,57 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       depth: chimmyDepth,
     }
     let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
+    /*
+     * A SECOND MODEL READS A DECISION ANSWER BEFORE THE USER DOES (hub multi-model, 2026-11-21, owner's choice). On a
+     * trade, waiver, start/sit or draft turn, a small fast model compares the answer with the facts Chimmy read — what
+     * the tools returned plus the packet — and a contradiction sends it back to Chimmy once. Before the letter check
+     * below on purpose: that deterministic check then holds the FINAL answer, revised or not. Fails open; never on chat.
+     * See `lib/chimmy/decisionAnswerCheck.ts`.
+     */
+    if (loop?.text) {
+      try {
+        const { checkDecisionAnswer, DECISION_CHECK_ENV } = await import('@/lib/chimmy/decisionAnswerCheck')
+        const { callDecisionCheckModel } = await import('@/lib/chimmy/decisionAnswerCheckModel')
+        const revision: { result: Awaited<ReturnType<typeof runChimmyToolLoop>> } = { result: null }
+        const checked = await checkDecisionAnswer(
+          {
+            intent: chimmyOrchestrationClassification.intent,
+            question: message,
+            answer: loop.text,
+            facts: [loop.evidence, loopArgs.groundingLine].filter(Boolean).join('\n\n'),
+            env: process.env[DECISION_CHECK_ENV],
+          },
+          {
+            check: callDecisionCheckModel,
+            revise: async (correction) => {
+              revision.result = await runChimmyToolLoop({ ...loopArgs, question: `${message}\n\n${correction}` }).catch(() => null)
+              return revision.result?.text ?? null
+            },
+            now: () => Date.now(),
+          },
+        )
+        if (checked.outcome === 'revised' && revision.result) {
+          loop = { ...revision.result, text: checked.text, toolsUsed: [...loop.toolsUsed, ...revision.result.toolsUsed],
+            evidence: [loop.evidence, revision.result.evidence].filter(Boolean).join('\n\n') }
+        }
+        if (checked.outcome !== 'off' && checked.outcome !== 'skipped') {
+          persistChimmyAIAnalyticsEvent({
+            event_name: 'decision_check',
+            user_id: userId ?? 'anonymous',
+            league_id: toolContext.leagueId ?? null,
+            surface: 'chimmy_chat',
+            mode: selectedAssistantMode,
+            // Checked only on a decision turn, so the intent is one of the four decision topics.
+            topic: chimmyOrchestrationClassification.intent as 'trade' | 'waiver' | 'start_sit' | 'draft',
+            action: checked.outcome,
+            timestamp: new Date().toISOString(),
+            metadata: { ms: checked.ms, contradictions: checked.contradictions.length },
+          }).catch(() => {})
+        }
+      } catch (err) {
+        console.warn('[chimmy] decision answer check failed', err instanceof Error ? err.message : err)
+      }
+    }
     /*
      * 🛑 A TRADE LETTER IN THE ANSWER MUST BE ONE THE ENGINE GAVE (design step 7, 2026-09-27). Nothing
      * checked the tool loop's answer, and it answers most messages. The trade tools record every letter

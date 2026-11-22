@@ -472,43 +472,8 @@
   }
 }
 
-/* 2026-11-14: "More about this league" — everything that is information rather than a move this week. */
-.af-core .af-sc-more {
-  padding: 0 16px;
-  border-radius: var(--af-radius-card);
-}
-.af-core .af-sc-more > summary {
-  cursor: pointer;
-  min-height: 48px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  padding: 12px 0;
-}
-.af-core .af-sc-more-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--text);
-}
-.af-core .af-sc-more-hint {
-  font-size: 12px;
-  color: var(--muted);
-}
-.af-core .af-sc-more > summary { list-style: none; position: relative; padding-right: 28px; }
-.af-core .af-sc-more > summary::-webkit-details-marker { display: none; }
-/* A visible arrow: a summary drawn as flex loses the browser's own marker, and nothing else says it opens. */
-.af-core .af-sc-more > summary::after {
-  content: '▾';
-  position: absolute;
-  right: 0;
-  top: 14px;
-  font-size: 16px;
-  color: var(--muted);
-  transition: transform 0.15s ease;
-}
-.af-core .af-sc-more[open] > summary::after { transform: rotate(180deg); }
-.af-core .af-sc-more[open] { padding-bottom: 16px; }
+/* 2026-11-14: everything that is information rather than a move this week. Since 2026-11-20 it is the
+   shared "More detail" fold — its look comes from more-detail.css; only the body's spacing stays here. */
 .af-core .af-sc-more-body {
   display: grid;
   gap: 18px;

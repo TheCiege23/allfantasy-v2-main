@@ -29,9 +29,12 @@ import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
+import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
+import { benchCallRecord, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds } from './lineupCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap, withNewestKickoffs } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
@@ -237,6 +240,12 @@ export type BenchCheck = {
   benchProjected: number
   starterName: string
   starterProjected: number
+  /**
+   * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper leagues only, and only once its edge
+   * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
+   */
+  record?: BenchCallRecord | null
 }
 
 export type LineupSlot = {
@@ -581,7 +590,15 @@ async function resolvePlayers(
    * name-only bridge, then to the descriptive-id parse, then to an honest
    * "could not identify" — none of which this removes.
    */
-  const playerCrosswalk = await crosswalkToSleeperIds(platform, sport, ids).catch(
+  /*
+   * 🛑 FANTRAX NFL GOES THROUGH THE SAME BRIDGE AS THE MATCHUP BOARD. Production 2026-11-21: every
+   * starter of a Fantrax NFL team read "no game found for this week" and the lock read "no week 11
+   * game found for any of your starters yet", while /core/matchup showed the same players' kickoffs.
+   * The shared crosswalk has no Fantrax entry, so nothing here reached the Sleeper-keyed joins below
+   * (fixture, injury, weather). `lineupCrosswalkToSleeperIds` reads the registry's `fantraxId` for
+   * NFL and is the shared crosswalk for everything else.
+   */
+  const playerCrosswalk = await lineupCrosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
   /*
@@ -904,8 +921,18 @@ async function resolvePlayers(
     const players = await fantraxPlayersRead
     for (const player of players) {
       if (player.name === `Player ${player.id}`) continue
-      const existing = out.get(player.id)
-      out.set(player.id, existing ? { ...existing, imageUrl: player.imageUrl ?? existing.imageUrl, logoUrl: player.logoUrl } : {
+      /*
+       * A translated player keeps ONE entry, edited in place. The bye and scoring passes below find
+       * him by his Sleeper id and the lineup finds him by his Fantrax id; a copy here would leave
+       * the bye flag on an entry the lineup never reads. Only an id the bridge translated counts.
+       */
+      const existing = sleeperIdByRosterId.has(player.id) ? out.get(player.id) : undefined
+      if (existing) {
+        existing.imageUrl = player.imageUrl ?? existing.imageUrl
+        existing.logoUrl = player.logoUrl
+        continue
+      }
+      out.set(player.id, {
         sleeperId: player.id, name: player.name, position: player.position, team: player.team,
         sport, imageUrl: player.imageUrl, logoUrl: player.logoUrl, gameContext: null, kickoff: null,
         preseason: false, venue: null, injuryStatus: null, ruledOut: false, projectedPoints: null,
@@ -1487,11 +1514,12 @@ async function loadMyTeamData(
       const p = players.get(id)
       if (!p) continue
       const row = metricById.get(id)
+      const noNbaRoster = row?.weeklyUnavailableReason === 'no_nba_roster'
       const total = lineupPeriod?.kind === 'day'
         ? (p.periodGames != null && row ? Math.round(p.periodGames * row.perGame * 100) / 100 : null)
         : row?.weekly ?? null
-      const points = board?.unit === 'fantasy points' ? total : null
-      p.afProjectedPoints = p.ruledOut ? 0 : points
+      const points = board?.unit === 'fantasy points' && !noNbaRoster ? total : null
+      p.afProjectedPoints = p.ruledOut && !noNbaRoster ? 0 : points
       p.afEngineProjectedPoints = p.afProjectedPoints
       p.projectionSource = points == null ? null : 'allfantasy'
     }
@@ -1660,15 +1688,22 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
+  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper leagues.
+  const benchCalibration = base.league.bestBall
+    ? null
+    : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)
   for (const c of benchCandidates) {
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
+    const swap = c.gap >= BENCH_SWAP_POINTS
+    const record = swap ? benchCallRecord(c.gap, benchCalibration) : null
     checkBySlot.set(c.slotIndex, {
-      verdict: c.gap >= BENCH_SWAP_POINTS ? 'swap' : 'close',
+      verdict: swap ? 'swap' : 'close',
       benchName: c.bench.name,
       benchProjected: c.benchProj,
       starterName: c.starter.name,
       starterProjected: c.starterProj,
+      ...(record ? { record } : {}),
     })
     if (c.gap >= BENCH_SWAP_POINTS) {
       ledgerCalls.push({

@@ -61,8 +61,12 @@
 .af-core.af-ml .af-mlg-foot {
   margin: 0 0 16px;
 }
-.af-core.af-ml .af-mlg-filters > summary,
-.af-core.af-ml .af-mlg-foot > summary {
+/* 2026-11-20: the foot fold is the shared "More detail" (MoreDetail.tsx), which draws its own summary;
+   the summary rules below are the filters fold's alone now. Its body sits inside the fold's padding. */
+.af-core.af-ml .af-mlg-foot .af-mlg-foot-body {
+  padding-top: 0;
+}
+.af-core.af-ml .af-mlg-filters > summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -77,18 +81,15 @@
   cursor: pointer;
   list-style: none;
 }
-.af-core.af-ml .af-mlg-filters > summary::-webkit-details-marker,
-.af-core.af-ml .af-mlg-foot > summary::-webkit-details-marker {
+.af-core.af-ml .af-mlg-filters > summary::-webkit-details-marker {
   display: none;
 }
-.af-core.af-ml .af-mlg-filters > summary::after,
-.af-core.af-ml .af-mlg-foot > summary::after {
+.af-core.af-ml .af-mlg-filters > summary::after {
   content: '▾';
   margin-left: auto;
   color: var(--muted);
 }
-.af-core.af-ml .af-mlg-filters[open] > summary::after,
-.af-core.af-ml .af-mlg-foot[open] > summary::after {
+.af-core.af-ml .af-mlg-filters[open] > summary::after {
   content: '▴';
 }
 .af-core.af-ml .af-mlg-on {

@@ -7,6 +7,8 @@
  *     with the mock's PPR / Half PPR / Standard setting. One season for the whole pool, as in the room.
  *   - NBA / NHL / MLB: `loadStoredDraftSeasonStats`, joined on the row's Rolling Insights id (the
  *     mock's non-NFL rows already carry it as `playerId`).
+ *   - NCAAF: the college season lines on `DevyPlayer` (written daily by the CFBD stat phase), read
+ *     through `getDevyStatsByNameFromDb`, joined on name and position (see `collegeStatFields`).
  * Everything reads Postgres; no provider is called. A row with no match keeps its dashes, and a
  * failed read leaves the whole pool as it was rather than failing the mock.
  */
@@ -20,6 +22,8 @@ import { loadStoredDraftSeasonStats } from '@/lib/draft-room/storedDraftSeasonSt
 import { attachTeamDefenseStats, loadNflTeamDefenseSeason } from '@/lib/draft-room/nflTeamDefenseSeason'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { CFBPlayerStats } from '@/lib/cfb-player-data'
+import { collegeNameKey } from '@/lib/mock-draft/collegeMockPoolOrder'
 
 type Row = Record<string, unknown>
 
@@ -122,6 +126,44 @@ async function storedFields(sport: 'NBA' | 'NHL' | 'MLB', entries: Row[]): Promi
   })
 }
 
+const COLLEGE_SKILL_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE'])
+
+/**
+ * Pure: each college row's season line, keyed the way the college stat columns read it.
+ *
+ * The join is the name plus the position. The name map already drops names two players share, and
+ * the position check stops a same-named player at another position (the pool lists A.J. Abbott as a
+ * QB and as a WR) from taking the other one's numbers. Only QB / RB / WR / TE rows get a line.
+ */
+export function collegeStatFields(
+  entries: readonly Row[],
+  byName: ReadonlyMap<string, CFBPlayerStats>,
+): Array<MockSeasonStatFields | null> {
+  return entries.map((e) => {
+    const name = str(e.name)
+    const position = (str(e.position) ?? '').toUpperCase()
+    if (!name || !COLLEGE_SKILL_POSITIONS.has(position)) return null
+    const line = byName.get(collegeNameKey(name))
+    if (!line || String(line.position ?? '').trim().toUpperCase() !== position) return null
+    return {
+      stats: {
+        pass_yds: line.passingYards,
+        pass_td: line.passingTDs,
+        rush_yds: line.rushingYards,
+        rush_td: line.rushingTDs,
+        rec: line.receptions,
+        rec_yds: line.receivingYards,
+        rec_td: line.receivingTDs,
+      },
+    }
+  })
+}
+
+async function collegeFields(entries: Row[]): Promise<Array<MockSeasonStatFields | null>> {
+  const { getDevyStatsByNameFromDb } = await import('@/lib/devy/devyPlayerReads')
+  return collegeStatFields(entries, await getDevyStatsByNameFromDb())
+}
+
 export async function attachSeasonStatsToMockPool<T>(
   entries: T[],
   options: { sport: string; scoring?: string | null },
@@ -134,10 +176,17 @@ export async function attachSeasonStatsToMockPool<T>(
       const { fields, season } = await nflFields(rows, options.scoring)
       const withPlayers = entries.map((entry, i) => mergeSeasonStatsIntoEntry(entry, fields[i]))
       // Team defenses (DEF rows): the live pool's SACK / INT / TD / PA/G, same season.
-      const defense = await loadNflTeamDefenseSeason(season).catch(() => new Map())
+      const { buildLeagueStatScorer } = await import('@/lib/redraft/scoringEngine')
+      const scorer = buildLeagueStatScorer({ sport: 'NFL', settings: { sportConfig: { scoringPreset: mockScoringPreset(options.scoring) } } })
+      const defense = await loadNflTeamDefenseSeason(season, scorer).catch(() => new Map())
       return attachTeamDefenseStats(withPlayers, defense)
     }
-    const fields = sport === 'NBA' || sport === 'NHL' || sport === 'MLB' ? await storedFields(sport, rows) : null
+    const fields =
+      sport === 'NBA' || sport === 'NHL' || sport === 'MLB'
+        ? await storedFields(sport, rows)
+        : sport === 'NCAAF'
+          ? await collegeFields(rows)
+          : null
     if (!fields) return entries
     return entries.map((entry, i) => mergeSeasonStatsIntoEntry(entry, fields[i]))
   } catch (error) {

@@ -53,6 +53,22 @@ describe('official NBA recovery of real incomplete primary boxes', () => {
    player.name='Different Smith'
    expect(()=>prepareSGOfficialNbaBox(target(box),match(box),box,mapped,now)).toThrow('UNRESOLVED_PLAYER_1631095')
  })
+ it.each([
+   ['1629651','Nic Claxton','Nicolas Claxton','999'],
+   ['1642267','Bub Carrington','Carlton Carrington','1661'],
+   ['1631119','Jaylin Williams','Jaylin Williams','1449'],
+ ])('matches reviewed official player %s by both names and primary ID', (officialId,officialName,primaryName,primaryId)=>{
+   const box=structuredClone(cle), player=box.game.homeTeam.players.find(p=>p.played==='1')!
+   const original=prepareSGOfficialNbaBox(target(cle),match(cle),cle,identities,now).rows.find(r=>r.providerPlayerId===String(player.personId))!
+   const mapped=identities.map(i=>i.id===original.playerId?{...i,canonicalName:primaryName,rollingInsightsId:primaryId}:i)
+   if (officialId==='1631119') mapped.push({id:'other-jaylin',canonicalName:'Jaylin Williams',rollingInsightsId:'1705'})
+   player.personId=Number(officialId);player.name=officialName
+   expect(prepareSGOfficialNbaBox(target(box),match(box),box,mapped,now).rows.find(r=>r.providerPlayerId===officialId)?.playerId).toBe(original.playerId)
+   const wrong=mapped.map(i=>i.id===original.playerId?{...i,rollingInsightsId:'wrong'}:i)
+   expect(()=>prepareSGOfficialNbaBox(target(box),match(box),box,wrong,now)).toThrow('UNRESOLVED_PLAYER_'+officialId)
+   player.name='Different Person'
+   expect(()=>prepareSGOfficialNbaBox(target(box),match(box),box,mapped,now)).toThrow('UNRESOLVED_PLAYER_'+officialId)
+ })
  it('accepts official provenance only for NBA and preserves the genuine correction window',()=>{
    expect(acceptedDailyBoxSource('NBA','nba_official_live')).toBe(true)
    expect(acceptedDailyBoxSource('NFL','nba_official_live')).toBe(false)

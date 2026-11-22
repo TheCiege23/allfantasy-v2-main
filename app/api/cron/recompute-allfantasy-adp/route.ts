@@ -12,6 +12,9 @@ import { syncMarketReferences, captureCachedReferences, captureProviderAdp } fro
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { prisma } from '@/lib/prisma'
 import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/lib/trade-market/scheduledMarketRecalc'
+import { describePickMarket } from '@/lib/trade-market/pickMarketLearner'
+import { describePostureMarket } from '@/lib/trade-market/postureMarketLearner'
+import { describeNeedMarket } from '@/lib/trade-market/needMarketLearner'
 
 /*
  * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
@@ -52,6 +55,52 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
           ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
           ...(r.tradesStamped ? [`trades given a league format: ${r.tradesStamped}`] : []),
+          // Every season's unlabelled trades: how many histories were drawn, resolved, left unresolved, and rows labelled.
+          ...(r.formatBackfill
+            ? [`league type, all seasons: ${r.formatBackfill.resolved} of ${r.formatBackfill.histories} trade histories resolved (${r.formatBackfill.unresolved} unresolved), ${r.formatBackfill.rowsStamped} trade rows labelled`]
+            : ['league type, all seasons: the pass failed this run']),
+          // FAAB filled onto older Sleeper trades from the transaction warehouse, before the markets read them.
+          ...(r.faabBackfill == null
+            ? ['FAAB backfill: the pass failed this run']
+            : r.faabBackfill.off
+              ? ['FAAB backfill: off (TRADE_FAAB_BACKFILL=off)']
+              : [`FAAB backfill: ${r.faabBackfill.rowsFilled} trade rows given their FAAB`]),
+          // Where the pick, posture and need markets read from, and what the historical series priced.
+          ...(r.structural
+            ? [
+                r.structural.ok
+                  ? `structural pass (picks, posture, need): every season from ${r.structural.sinceSeason}`
+                  : `structural pass failed: picks, posture and need read the market's widest window instead`,
+                ...r.structural.history.map(
+                  (h) => `history chart ${h.book}: ${h.tradesPriced} older trades priced on their own day; ${h.scale?.note ?? 'not measured'}`,
+                ),
+              ]
+            : []),
+          // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
+          ...(r.datedShadow ?? []).map(
+            (d) =>
+              `dated market ${d.concept} (${d.learner === 'dated' ? 'LIVE' : 'shadow'}, since ${d.sinceSeason}): ${d.published} published from ${d.tradesUsed} trades; ` +
+              `${d.bothPublished} also in the current market, median gap ${d.medianGapPercent ?? '—'} pts; ${d.onlyCurrent} only current, ${d.onlyDated} only dated; ` +
+              `not measured: ${Object.entries(d.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`,
+          ),
+          // Pick values learned from the trades (shadow) — read from sync_job_runs before anything uses them.
+          ...(r.pickMarkets ?? []).map(
+            (m) =>
+              `${describePickMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.pickMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What contenders and rebuilders pay over middle teams (shadow).
+          ...(r.postureMarkets ?? []).map(
+            (m) =>
+              `${describePostureMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.postureMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What teams short of (or deep at) a position pay for it over normal-depth teams (shadow).
+          ...(r.needMarkets ?? []).map(
+            (m) =>
+              `${describeNeedMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.needMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
         ],
       }),
     )

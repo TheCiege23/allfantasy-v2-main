@@ -22,6 +22,7 @@ const SAMPLES: Record<LeagueSkin, { name: string; leagueType: string; leagueVari
   guillotine: { name: 'Off With Their Heads', leagueType: 'guillotine', sport: 'NFL', teams: 16, week: 11 },
   survivor: { name: 'Island League', leagueType: 'redraft', leagueVariant: 'survivor', sport: 'NFL', teams: 12, week: 11 },
   devy: { name: 'The Last IDP Dynasty!!', leagueType: 'devy', isDynasty: true, sport: 'NFL', teams: 14, week: 11 },
+  c2c: { name: 'Peach Bowl (C2C)', leagueType: 'c2c', isDynasty: true, sport: 'NFL', teams: 12, week: 11 },
   zombie: { name: 'Undead Sundays', leagueType: 'zombie', sport: 'NFL', teams: 12, week: 11 },
   salary_cap: { name: 'Cap Space Kings', leagueType: 'salary_cap', sport: 'NFL', teams: 12, week: 11 },
   pirate: { name: 'Pirate League!', leagueType: 'pirate', isDynasty: true, sport: 'NFL', teams: 14, week: 11 },

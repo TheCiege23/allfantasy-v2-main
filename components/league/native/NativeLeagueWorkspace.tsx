@@ -11,6 +11,7 @@ import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { Award, Axe, BarChart3, Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Home, LayoutDashboard, List, Menu, MessageSquare, Plus, Search, Settings, Shield, Star, Swords, Trophy, Users, X, Zap, ArrowLeftRight, Landmark, CarTaxiFront, Ticket, CalendarDays, Skull, Radio, BookOpen, Eye, Crown, ShieldCheck, Vote, Scale, Shuffle, History, Wallet, Gauge, FileText, Hammer, Gavel, ScrollText, GraduationCap } from 'lucide-react'
 import AppShell, { type AppShellProps } from '@/app/components/AppShell'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
+import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import type { UserLeague } from '@/app/dashboard/types'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import { dynastySeasonClock, type DynastySeasonClock } from '@/lib/league-media/dynastySeasonClock'
@@ -415,7 +416,8 @@ export function NativeLeagueWorkspace({ native, league, leagues, tabs, activeTab
             <strong>{zombieScenes[activeTab]?.label ?? tabs.find(tab => tab.id === activeTab)?.label ?? 'Outbreak headquarters'}</strong>
             <span className="nl-zombie-scene-detail">{zombieScenes[activeTab]?.detail ?? 'Your league’s outbreak continues here.'}</span>
           </div>}
-          {children}
+          {/* One player card for every league screen: any player name opens it. */}
+          <PlayerCardProvider leagueId={league?.id ?? null}>{children}</PlayerCardProvider>
         </div>
       </div>
     </div>

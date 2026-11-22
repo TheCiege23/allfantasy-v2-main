@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
+import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
+import { foldDraftTips, gradeDraftTip, type DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
+import { backtestKey, buildIdSpaces, chooseIdSpace, gameRowsToWeekly, weeklyByKey, windowPoints } from '@/lib/shared-services/draft/backtest/backtestInputs'
 import {
   addWindowEnd,
   completedThrough,
@@ -101,9 +104,14 @@ function leagueScope(column: Prisma.Sql, leagueIds: readonly string[] | undefine
   return leagueIds ? Prisma.sql`AND ${column} = ANY(${[...leagueIds]}::text[])` : Prisma.empty
 }
 
-async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
-  const rows = await db.$queryRaw<Array<{ user_id: string; week: number; withdrawn: boolean; rec_pts: number | null; alt_pts: number | null }>>`
-    SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+type BenchRowSql = {
+  user_id: string; week: number; withdrawn: boolean; rec_pts: number | null; alt_pts: number | null
+  sport?: string | null; rec_projected?: number | null; alt_projected?: number | null; given_at?: Date | null
+}
+
+/** Exported for its fallback test (`__tests__/decision-os/bench-calibration.test.ts`). */
+export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
+  const from = Prisma.sql`
     FROM chimmy_advice a
     JOIN leagues l ON l.id = a.league_id
     LEFT JOIN league_player_weekly_scores r
@@ -112,12 +120,34 @@ async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string
       ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
     WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
       ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`
+  /*
+   * What each call knew (2026-11-21), for the bench check's own calibration: the sport, both projections when it was
+   * made, and when. ⚠ `rec_projected` / `alt_projected` arrive with `20261115000000_chimmy_advice_ledger_inputs`, and
+   * the writer already tolerates a database without them — so does this read: if the wider SELECT fails, the original
+   * one runs and the tally is exactly what it was, with no edge bands. A missing column is "no calibration", never a
+   * lost bench record.
+   */
+  let rows: BenchRowSql[]
+  try {
+    rows = await db.$queryRaw<BenchRowSql[]>`
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts,
+             a.sport, a.rec_projected, a.alt_projected, a.given_at
+      ${from}`
+  } catch {
+    rows = await db.$queryRaw<BenchRowSql[]>`
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+      ${from}`
+  }
   return rows.map((r) => ({
     userId: r.user_id,
     week: Number(r.week),
     withdrawn: Boolean(r.withdrawn),
     recPts: r.rec_pts == null ? null : Number(r.rec_pts),
     altPts: r.alt_pts == null ? null : Number(r.alt_pts),
+    sport: r.sport ?? null,
+    recProjected: r.rec_projected == null ? null : Number(r.rec_projected),
+    altProjected: r.alt_projected == null ? null : Number(r.alt_projected),
+    givenAt: r.given_at ?? null,
   }))
 }
 
@@ -217,7 +247,7 @@ export function gradeEngineClaims(rows: readonly EngineClaimRow[], cal: WeekCale
 }
 
 export type TradeLedgerInputs = {
-  rows: Array<TradeLedgerRow & { completed: boolean }>
+  rows: Array<TradeLedgerRow & { completed: boolean; capturedAtMs: number }>
   skips: Record<string, number>
   read: number
   /** Standard PPR per week over [from, through] for a set of receipt player ids; null when one cannot be placed. */
@@ -274,7 +304,7 @@ export async function loadTradeLedgerInputs(
   for (const s of snaps) {
     const r = tradeLedgerRow({ receipt: s.receipt, surface: s.surface, isTrade: s.is_trade, fromWeek: firstWeekNotKickedOff(cal, new Date(s.captured_at)) })
     if ('skip' in r) skips[r.skip] = (skips[r.skip] ?? 0) + 1
-    else rows.push({ ...r, completed: Boolean(s.completed) })
+    else rows.push({ ...r, completed: Boolean(s.completed), capturedAtMs: new Date(s.captured_at).getTime() })
   }
 
   const ids = [...new Set(rows.flatMap((r) => [...r.getPlayerIds, ...r.givePlayerIds]))]
@@ -299,7 +329,9 @@ export async function loadTradeLedgerInputs(
   return { rows, skips, read: snaps.length, pointsPerWeek, idsTotal: ids.length, idsPlaced: ids.filter((id) => placed(id) != null).length }
 }
 
-async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<LedgerSnapshot['trades']> {
+type GradedTrades = { tally: LedgerSnapshot['trades']; letters: TradeLetterLedger }
+
+async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db, surface?: string): Promise<GradedTrades> {
   const inputs = await loadTradeLedgerInputs(season, cal, { db, surface })
   const redraft = inputs.rows.filter((r) => r.format === 'redraft')
   const g = gradeTradeRows(redraft, completedThrough(cal, now), inputs.pointsPerWeek)
@@ -308,7 +340,109 @@ async function gradeTrades(season: number, cal: WeekCalendar, now: Date, db: Db,
     const s = g.byLetter.get(letter)
     if (s) byLetter[letter as TradeLetter] = { n: s.n, netPerWeek: s.netPerWeek, ahead: s.positive, behind: s.negative }
   }
-  return { byLetter, pending: g.pending, unscored: g.unscored, read: inputs.read, gradable: redraft.length }
+  // Each letter's held-up record, decayed by the grade's age — the trade grade's own confidence (`letterCalibration.ts`).
+  const letters = foldTradeLetterCalls(
+    g.scored.map(({ row, netPerWeek }) => ({
+      letter: row.letter,
+      netPerWeek,
+      ageDays: Number.isFinite(row.capturedAtMs) ? (now.getTime() - row.capturedAtMs) / 86_400_000 : 0,
+    })),
+  )
+  return { tally: { byLetter, pending: g.pending, unscored: g.unscored, read: inputs.read, gradable: redraft.length }, letters }
+}
+
+/** A recorder key (`name|position`, as `recommendationRecorder.ts` writes it) → the outcome table's key. */
+function recorderKeyToOutcomeKey(key: string): string {
+  const i = key.lastIndexOf('|')
+  return i < 0 ? backtestKey(key, '') : backtestKey(key.slice(0, i), key.slice(i + 1))
+}
+
+/**
+ * Draft OS's served pick tips this NFL season (`draft_recommendation_records`), each graded against the best-projected
+ * alternatives the pool held at that moment (`decision-os/draft/tipCalibration.ts`), standard PPR from the first week not kicked
+ * off through the last one played. Nothing is read beyond the records when there are none.
+ */
+async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<DraftTipLedger> {
+  const records = await db.draftRecommendationRecord.findMany({
+    // Advice only: an auto-pick is graded on its own (`gradeAutopicks`), never into the card's confidence.
+    where: { sport: 'NFL', surface: { not: 'autopick' }, createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
+    take: 20_000,
+  })
+  return gradeRecordedPicks(records, season, cal, now, db, () => 'all').then((byGroup) => byGroup.all ?? {})
+}
+
+/**
+ * The picks the clock made this NFL season, graded the same way as the card's tips, one ledger per strategy
+ * (`draft-as-me`, `queue`, `bpa`…) — how Chimmy's own auto-picks held up (2026-11-22).
+ */
+async function gradeAutopicks(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<Record<string, DraftTipLedger>> {
+  const records = await db.draftRecommendationRecord.findMany({
+    where: { sport: 'NFL', surface: 'autopick', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
+    take: 20_000,
+  })
+  return gradeRecordedPicks(records, season, cal, now, db, (r) => {
+    const s = (r.detail as { autopick?: { strategy?: unknown } } | null)?.autopick?.strategy
+    return typeof s === 'string' && s.trim() ? s.trim() : 'other'
+  })
+}
+
+type RecordedPick = {
+  createdAt: Date
+  round: number
+  servedMode: string
+  observeName: string | null
+  observePosition: string | null
+  activeName: string | null
+  activePosition: string | null
+  detail: unknown
+}
+
+async function gradeRecordedPicks(
+  records: readonly RecordedPick[],
+  season: number,
+  cal: WeekCalendar,
+  now: Date,
+  db: Db,
+  groupOf: (r: RecordedPick) => string,
+): Promise<Record<string, DraftTipLedger>> {
+  if (records.length === 0) return {}
+  const through = completedThrough(cal, now)
+  const [players, gameRaw] = await Promise.all([
+    db.sportsPlayer.findMany({ where: { sport: 'NFL' }, select: { id: true, externalId: true, sleeperId: true, source: true, name: true, position: true } }),
+    db.playerGameStat.findMany({
+      where: { sportType: { in: ['NFL', 'nfl'] }, season },
+      select: { playerId: true, weekOrRound: true, fantasyPoints: true, normalizedStatMap: true },
+    }),
+  ])
+  const game = gameRowsToWeekly(gameRaw)
+  const space = chooseIdSpace(buildIdSpaces(players), game.rows.map((r) => r.playerId)).space
+  const { byKey } = weeklyByKey(game.rows, space)
+  const windows = new Map<number, Map<string, number>>()
+  const calls = new Map<string, Array<{ round: number; grade: 'held' | 'missed' | null }>>()
+  for (const r of records) {
+    const from = firstWeekNotKickedOff(cal, new Date(r.createdAt))
+    if (from == null || from > through) continue
+    let pts = windows.get(from)
+    if (!pts) windows.set(from, (pts = windowPoints(byKey, from, through)))
+    const servedName = r.servedMode === 'active' ? r.activeName : r.observeName
+    const servedPos = r.servedMode === 'active' ? r.activePosition : r.observePosition
+    const detail = (r.detail ?? {}) as { projections?: Record<string, number> }
+    const window = pts
+    const group = groupOf(r)
+    let list = calls.get(group)
+    if (!list) calls.set(group, (list = []))
+    list.push({
+      round: r.round,
+      grade: gradeDraftTip({
+        servedKey: servedName ? `${servedName}|${servedPos ?? ''}` : null,
+        projections: detail.projections && typeof detail.projections === 'object' ? detail.projections : {},
+        points: (key) => window.get(recorderKeyToOutcomeKey(key)) ?? null,
+      }),
+    })
+  }
+  return Object.fromEntries([...calls].map(([group, list]) => [group, foldDraftTips(list)]))
 }
 
 /** Swallow only "this part's table/column is not there"; anything else is the caller's to see. */
@@ -334,8 +468,8 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
   if (cal.size === 0) return null
-  const noTrades = { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }
-  const [bench, adds, trades, commissionerTrades, engineClaims] = await Promise.all([
+  const noTrades: GradedTrades = { tally: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, letters: {} }
+  const [bench, adds, graded, commissionerGraded, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
     part(() => loadAddRows(season, db), [] as AddRow[]),
     part(() => gradeTrades(season, cal, now, db), noTrades),
@@ -344,8 +478,35 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     // The waiver engine's #1 claims, by the score it gave them — its own calibration.
     part(() => loadEngineClaimRows(season, db), [] as EngineClaimRow[]),
   ])
+  /*
+   * Draft OS's served pick tips, graded against the board they were given on — its own calibration. ⚠ Contained on its
+   * own, not through `part()`: it is the newest part and only feeds a confidence line, so any failure in it costs only
+   * that line, never the bench, pickup, trade and waiver records beside it.
+   */
+  const draftTips = await gradeDraftTips(season, cal, now, db).catch((err: unknown) => {
+    console.warn('[ledgerGrading] draft tip grading failed', err instanceof Error ? err.message : err)
+    return {} as DraftTipLedger
+  })
+  // Chimmy's own auto-picks, per strategy — contained the same way, for the same reason.
+  const autopicks = await gradeAutopicks(season, cal, now, db).catch((err: unknown) => {
+    console.warn('[ledgerGrading] autopick grading failed', err instanceof Error ? err.message : err)
+    return {} as Record<string, DraftTipLedger>
+  })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
-  return foldLedger({ season, cal, now, bench, adds, trades, commissionerTrades, waiverEngine })
+  return foldLedger({
+    season,
+    cal,
+    now,
+    bench,
+    adds,
+    trades: graded.tally,
+    commissionerTrades: commissionerGraded.tally,
+    waiverEngine,
+    tradeLetters: graded.letters,
+    commissionerTradeLetters: commissionerGraded.letters,
+    draftTips,
+    autopicks,
+  })
 }
 
 /**

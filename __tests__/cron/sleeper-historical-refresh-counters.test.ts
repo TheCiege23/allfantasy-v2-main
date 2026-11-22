@@ -87,7 +87,7 @@ describe('sleeper-historical-refresh counters', () => {
     expect(body).toMatchObject({ ok: false, status: 'partial', leaguesRefreshed: 2, leaguesFailed: 1 })
     expect(body.metadata.matchupSeasons).toEqual(expected)
     // The existing metadata is still there.
-    expect(body.metadata).toMatchObject({ leagueCap: 25, budgetMs: 240_000 })
+    expect(body.metadata).toMatchObject({ leagueCap: 60, budgetMs: 240_000 })
 
     expect(telemetry.outcomes).toHaveLength(1)
     expect((telemetry.outcomes[0] as { metadata: Record<string, unknown> }).metadata.matchupSeasons).toEqual(expected)

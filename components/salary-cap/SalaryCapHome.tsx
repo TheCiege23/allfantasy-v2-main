@@ -18,6 +18,7 @@ import { SalaryCapRulesView } from './SalaryCapRulesView'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
 import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
+import { ImportedContractsUpload } from './ImportedContractsUpload'
 
 interface SalaryCapHomeProps {
   leagueId: string
@@ -120,6 +121,7 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
           {summary.contractsNote}
         </p>
       ) : null}
+      {summary?.canImportContracts ? <ImportedContractsUpload leagueId={leagueId} onSaved={() => void load()} /> : null}
       {view === 'home' && summary && (
         <SalaryCapSpecialtyHome
           summary={summary}

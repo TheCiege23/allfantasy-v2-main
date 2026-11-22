@@ -13,6 +13,8 @@ import {
   type AfMarketRow,
 } from '@/lib/trade-market/afTradeMarketReads'
 import type { TradeConsolePlayerLine, TradeConsoleTradeMarket } from './types'
+import { bookKey } from '@/lib/trade-market/formatMarkets'
+import { learnedPickAdjustment, learnedPicksOn, loadLearnedTables, type LearnedTables } from '@/lib/trade-market/learnedInGrades'
 
 /**
  * The AllFantasy trade market and this league's lineup, applied to one console grade.
@@ -52,11 +54,17 @@ export function buildTradeMarketOverlay(args: {
   book: MarketBook
   lineup?: LineupProfile | null
   lineupFactors?: LineupFactorTable | null
-}): { tradeMarket: Adjustments; lineup: Adjustments; lineupNote: string | null; summary: TradeConsoleTradeMarket } | null {
+  /** The learned tables, when `TRADE_LEARNED_PICKS=on` (`learnedInGrades.ts`); absent leaves picks as priced. */
+  learned?: LearnedTables | null
+  teams?: number | null
+  now?: Date
+}): { tradeMarket: Adjustments; lineup: Adjustments; learnedPicks: Adjustments; lineupNote: string | null; summary: TradeConsoleTradeMarket } | null {
   const lines: TradeConsoleTradeMarket['lines'] = []
   let latest: Date | null = null
   const market: Adjustments = { give: [], get: [] }
   const lineup: Adjustments = { give: [], get: [] }
+  const learnedPicks: Adjustments = { give: [], get: [] }
+  let picksMoved = 0
 
   for (const side of ['give', 'get'] as const) {
     const ls = side === 'give' ? args.giveLines : args.getLines
@@ -100,16 +108,22 @@ export function buildTradeMarketOverlay(args: {
       }
       market[side].push(m)
       lineup[side].push(u)
+      const pickMove = args.learned && l.pricedSource === 'pick'
+        ? learnedPickAdjustment(args.learned, bookKey(args.book), l.name, args.teams ?? null, args.now ?? new Date())
+        : null
+      if (pickMove) picksMoved++
+      learnedPicks[side].push(pickMove)
     })
   }
 
   const positions = [...args.giveLines, ...args.getLines].filter((l) => l.pricedSource === 'fantasycalc').map((l) => l.position)
   const note = lineupNote(args.lineupFactors ?? null, args.lineup ?? null, positions)
-  if (lines.length === 0 && !note) return null
+  if (lines.length === 0 && !note && picksMoved === 0) return null
   const generated = latest as Date | null
   return {
     tradeMarket: market,
     lineup,
+    learnedPicks,
     lineupNote: note,
     summary: {
       generatedAt: generated ? generated.toISOString() : args.lineupFactors?.generatedAt ?? null,
@@ -133,14 +147,17 @@ export async function loadTradeMarketOverlay(
     getLines: readonly TradeConsolePlayerLine[]
     givePriced: readonly PricedAsset[]
     getPriced: readonly PricedAsset[]
+    teams?: number | null
   },
 ): Promise<ReturnType<typeof buildTradeMarketOverlay>> {
   if (!tradeMarketAppliesTo(args)) return null
   const book = bookForChart(args)
   const ids = [...args.giveLines, ...args.getLines].map(sleeperIdOfLine).filter((x): x is string => Boolean(x))
-  const [rows, lineupFactors] = await Promise.all([
+  const hasPick = [...args.giveLines, ...args.getLines].some((l) => l.pricedSource === 'pick')
+  const [rows, lineupFactors, learned] = await Promise.all([
     ids.length ? loadAfTradeMarketRows(prisma, ids, book) : Promise.resolve(new Map<string, AfMarketRow>()),
     args.lineup ? loadLineupFactors(prisma) : Promise.resolve(null),
+    hasPick && learnedPicksOn() ? loadLearnedTables(prisma).catch(() => null) : Promise.resolve(null),
   ])
-  return buildTradeMarketOverlay({ ...args, rows, book, lineupFactors })
+  return buildTradeMarketOverlay({ ...args, rows, book, lineupFactors, learned })
 }

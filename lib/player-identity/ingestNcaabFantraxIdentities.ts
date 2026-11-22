@@ -4,12 +4,12 @@ import { getFantraxPlayerIds } from '@/lib/league-import/fantrax/fantraxApi'
 import { planNcaabFantraxIdentityLinks } from './ncaabFantraxIdentityPlan'
 
 /** Weekly, additive bridge for Fantrax college basketball rosters. Dry runs never write. */
-export async function ingestNcaabFantraxIdentities(dryRun = false, forceRefresh = false) {
+export async function ingestNcaabFantraxIdentities(dryRun = false, forceRefresh = false, watchedRosterIds?: ReadonlySet<string>) {
   const markerKey = 'fantrax:ncaab-identities:last-run'
   const marker = await prisma.sportsDataCache.findUnique({ where: { cacheKey: markerKey } })
   const last = marker?.data && typeof marker.data === 'object' && !Array.isArray(marker.data)
     ? (marker.data as Record<string, unknown>).at : null
-  if (!dryRun && !forceRefresh && typeof last === 'string' && Date.now() - Date.parse(last) < 7 * 86400000) {
+  if (!watchedRosterIds && !dryRun && !forceRefresh && typeof last === 'string' && Date.now() - Date.parse(last) < 7 * 86400000) {
     return { skipped: 'weekly cadence', proposed: 0, updated: 0 }
   }
 
@@ -33,18 +33,26 @@ export async function ingestNcaabFantraxIdentities(dryRun = false, forceRefresh 
     prisma.playerGameStat.groupBy({ by: ['playerId', 'team'], _min: { gameId: true }, where: {
       sportType: 'NCAAB', season: currentScheduleSeason(), source: 'rolling_insights_live',
       gameDate: { lte: new Date() }, team: { not: null },
-      normalizedStatMap: { path: ['stats', 'minutes'], gt: 0 },
+      AND: [
+        { normalizedStatMap: { path: ['stats', 'minutes'], gt: 0 } },
+        ...(watchedRosterIds ? [
+          { normalizedStatMap: { path: ['gameFinal'], equals: true } },
+          { normalizedStatMap: { path: ['seasonType'], equals: 'regular' } },
+        ] : []),
+      ],
     } }),
   ])
   const appearances = currentAppearances.map(row => ({ playerId: row.playerId, team: row.team, gameId: row._min.gameId }))
   const plan = planNcaabFantraxIdentityLinks({ refs: Object.values(map.data), identities,
     sourcePlayers, teams, currentAppearances: appearances, rosterIds: new Set(rosterRows.map(row => row.player_id)) })
   const byId = new Map(identities.map(row => [row.id, row]))
-  const guardedLinks = plan.links.map(link => {
+  const appeared = new Set(appearances.map(row => row.playerId))
+  const selected = watchedRosterIds ? plan.links.filter(link => watchedRosterIds.has(link.fantraxId) && appeared.has(link.id)) : plan.links
+  const guardedLinks = selected.map(link => {
     const prior = byId.get(link.id)!
     return { ...link, normalizedName: prior.normalizedName, currentTeam: prior.currentTeam, position: prior.position }
   })
-  const updated = dryRun || !plan.links.length ? 0 : await prisma.$transaction(async tx => {
+  const updated = dryRun || !guardedLinks.length ? 0 : await prisma.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fantrax:ncaab-identity-links'))`
     return tx.$executeRaw`
       WITH links AS (SELECT * FROM jsonb_to_recordset(${JSON.stringify(guardedLinks)}::jsonb)
@@ -57,8 +65,8 @@ export async function ingestNcaabFantraxIdentities(dryRun = false, forceRefresh 
           AND other."fantraxId"=l."fantraxId")`
   }, { timeout: 60000, isolationLevel: 'Serializable' })
   const result = { provided: Object.keys(map.data).length, rostered: rosterRows.length,
-    proposed: plan.links.length, updated, ambiguous: plan.ambiguous, conflicts: plan.conflicts, dryRun }
-  if (!dryRun) {
+    proposed: guardedLinks.length, updated, ambiguous: plan.ambiguous, conflicts: plan.conflicts, dryRun }
+  if (!dryRun && !watchedRosterIds) {
     const data = { at: new Date().toISOString(), ...result }
     const expiresAt = new Date(Date.now() + 30 * 86400000)
     await prisma.sportsDataCache.upsert({ where: { cacheKey: markerKey },

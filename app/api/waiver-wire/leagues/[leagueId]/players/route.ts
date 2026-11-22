@@ -1,4 +1,5 @@
 import { leagueRosterForecasts } from '@/lib/af-projections/leagueRosterForecasts'
+import { isFantraxNbaCampusLeague } from '@/lib/decision-os/trade/sportPointsValue'
 import { leagueIdColumn, resolveRosterIdsToKeys, type LeagueIdColumn } from '@/lib/waivers/seasonRatePool'
 import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const [league, rosterAsMember] = await Promise.all([
     (prisma as any).league.findFirst({
       where: { id: leagueId },
-      select: { id: true, sport: true, userId: true, isDynasty: true, leagueType: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
+      select: { id: true, sport: true, platform: true, userId: true, isDynasty: true, leagueType: true, leagueVariant: true, waiverHours: true, season: true, settings: true },
     }),
     (prisma as any).roster.findFirst({
       where: coOwnerRosterId ? { leagueId, id: coOwnerRosterId } : managedRosterWhere(leagueId, userId),
@@ -223,7 +224,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       }
     }
 
-    return NextResponse.json({ players: priced, rosteredCount: rosteredIds.size })
+    const rows = isFantraxNbaCampusLeague(String(league.sport), league)
+      ? priced.map((row, i) => ({ ...row, afProjectionPlayerId: canonical[i] }))
+      : priced
+    return NextResponse.json({ players: rows, rosteredCount: rosteredIds.size })
   } catch (error) {
     console.error("Failed to fetch waiver wire players:", error)
     return NextResponse.json({ error: "Failed to fetch players" }, { status: 500 })

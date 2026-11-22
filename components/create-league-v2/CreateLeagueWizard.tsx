@@ -8,7 +8,7 @@ import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { BestBallRulesSummary, BestBallSetupPanel } from './BestBallSetupPanel'
 import { fitBestBallToTeamCount } from '@/lib/create-league-v2/bestBallWizard'
-import { bestBallPoolCheckForWizard } from '@/lib/create-league-v2/form-completion'
+import { bestBallPoolCheckForWizard, playerSupplyCheckForWizard } from '@/lib/create-league-v2/form-completion'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { SG_CREATE_TRIBE_COUNTS } from '@/lib/survivor-guillotine/createFit'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -181,7 +181,8 @@ function help(t: (key: string) => string, which: keyof typeof HELP): string {
 /** When the draft is, as the summary and preview show it. */
 function draftWhenLabel(t: (key: string) => string, state: CreateLeagueV2State): string {
   if (state.draftScheduleLater === true) return tx(t, 'createLeague.g30.draftWhen.later', 'Schedule later')
-  if (state.draftDate && state.draftTime) return `${state.draftDate} ${state.draftTime}`
+  // The zone is part of the time: "8:00 PM" alone cannot be checked on the review step.
+  if (state.draftDate && state.draftTime) return `${state.draftDate} ${state.draftTime} · ${timezoneLabel(state.timezone)}`
   return state.draftDate || t('createLeague.g30.empty')
 }
 
@@ -270,7 +271,14 @@ function bestBallSetupForTeamCount(sport: CreateLeagueV2State['sport'], draftTyp
 
 export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTypeId): Partial<CreateLeagueV2State> {
   const draftTypeOptions = getDraftTypeOptions(leagueType, state.sport)
-  const draftType = draftTypeOptions.some((option) => option.id === state.draftType)
+  /*
+   * Keep the manager's draft type when the new format offers it, unless the format they are leaving
+   * gave them no choice. Salary Cap is auction-only, so tapping it and then Redraft left Auction
+   * selected: a draft type nobody picked, carried into every format and sport visited afterwards.
+   */
+  const leaving = getEffectiveLeagueType(state)
+  const leftForcedDraftType = leaving != null && leaving !== leagueType && getDraftTypeOptions(leaving, state.sport).length === 1
+  const draftType = !leftForcedDraftType && draftTypeOptions.some((option) => option.id === state.draftType)
     ? state.draftType
     : (draftTypeOptions[0]?.id ?? 'snake') as WizardDraftType
   const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
@@ -378,6 +386,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
   best_ball_pool: 'basics',
+  player_supply: 'basics',
 }
 
 export function stepForIssue(code: string): WizardStep {
@@ -899,7 +908,8 @@ export function SportStep({ state, onChange, importCarryover }: Pick<WizardProps
               title={t(`createLeague.sport.${sport.toLowerCase()}`)}
               hint={
                 seasonCapable
-                  ? t('createLeague.g30.sport.cardHint')
+                  // Each sport says what it is; seven cards reading "Full season with weekly scoring" said nothing.
+                  ? tx(t, `createLeague.g30.sport.cardHint.${sport.toLowerCase()}`, t('createLeague.g30.sport.cardHint'))
                   : tx(t, 'createLeague.g30.sport.noScoringHint', 'Draft and league tools only — no weekly scoring yet')
               }
               selected={selected}
@@ -1135,7 +1145,10 @@ export function LeagueBasicsStep({
             </button>
           </div>
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
-            {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+            {/* One allowed size (NFL Survivor is 12) reads as that size, not as a range "12 to 12". */}
+            {teamCountOptions.length === 1
+              ? tx(t, 'createLeague.g30.teamCount.fixed', `${teamCountOptions[0]} teams. This format plays at one size.`)
+              : teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
           <FieldError message={fieldErrors?.teamCount} />
           {lockedTeamCounts.length > 0 ? (
@@ -1170,8 +1183,8 @@ export function LeagueBasicsStep({
             <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">A playing commissioner takes one cast seat. Chimmy runs private votes and idols without revealing them to that commissioner.</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {([
-                { value: 'non_participating_host', label: 'Host only', hint: 'All cast seats are available for invited managers.' },
                 { value: 'participating_player', label: 'Play as a manager', hint: 'Your team takes one of the cast seats.' },
+                { value: 'non_participating_host', label: 'Host only', hint: 'All cast seats are available for invited managers.' },
               ] as const).map((option) => (
                 <button key={option.value} type="button"
                   aria-pressed={state.survivorCommissionerParticipationMode === option.value}
@@ -1348,7 +1361,20 @@ export function LeagueBasicsStep({
       ) : null}
 
       <BestBallPoolNote state={state} t={t} />
+      <PlayerSupplyNote state={state} t={t} importCarryover={importCarryover} />
     </section>
+  )
+}
+
+/** Why a pro-sport league this size cannot be created, with the largest size that can (playerSupply.ts). */
+function PlayerSupplyNote({ state, t, importCarryover }: { state: CreateLeagueV2State; t: (key: string) => string; importCarryover?: boolean }) {
+  const check = playerSupplyCheckForWizard(state, importCarryover === true)
+  if (!check || check.ok || !check.message) return null
+  return (
+    <div role="alert" className="space-y-1 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200" data-testid="g30-player-supply-refused">
+      <p className="font-bold">{tx(t, 'createLeague.g30.playerSupply.refusedTitle', 'Too many teams for this sport')}</p>
+      <p>{check.message}</p>
+    </div>
   )
 }
 
