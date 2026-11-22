@@ -2,14 +2,20 @@ import 'server-only'
 
 import { COMPONENT_RULE_KEYS, type IdpComponent } from './idpScoring'
 import { prisma } from '@/lib/prisma'
+import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
 import { loadNflSpecialistRates } from './nflSpecialistRates'
-import type { SpecialistRate } from './nflSpecialistRatesModel'
+import { teamDefenseWeekLine, type SpecialistRate } from './nflSpecialistRatesModel'
 
 /** AF's seasonal component rates, scaled to the opportunities in the requested NFL week.
  * Keep both identity spaces so league projections, roster tools and the wire share one line. */
-export type NflWeekLine = PlayerProjection & { key: string; weekGames: number }
+export type NflWeekLine = PlayerProjection & {
+  key: string
+  weekGames: number
+  /** The learned factors that moved this line, when any applied (`lib/af-projections/factors`). */
+  afFactors?: { multiplier: number; reasons: string[] }
+}
 export function nflComponentRates(factors: Record<string, unknown>, games = 1): Record<string, number> {
   const rates = factors.perGameRates
 
@@ -66,7 +72,31 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
     result.set(linked.sleeperId, { key: row.playerId, playerId: linked.sleeperId, name: row.playerName, position: row.position, team: team ?? null,
       weekGames: games, componentStats: components, projectedPoints: row.afProjection * games, source: 'allfantasy' })
   }
+  await applyNflFactors(result).catch(() => undefined)
   return result
+}
+
+/**
+ * The learned factors (`lib/af-projections/factors`) on each NFL line: form, snaps trend, a new team — the ones about the
+ * player himself, which his recent game lines carry. Rest and opponent are left out here (this schedule carries no
+ * kickoff time or opponent). Component stats scale with the points, so league scoring prices the same move.
+ */
+async function applyNflFactors(result: Map<string, NflWeekLine>): Promise<void> {
+  const table = await loadFactorTable(prisma, 'NFL')
+  if (!table) return
+  const lines = [...result.values()].filter((l) => l.weekGames > 0)
+  const adjustments = await liveFactorAdjustments(prisma, {
+    sport: 'NFL',
+    table,
+    players: lines.map((l) => ({ key: l.playerId, gameLogId: l.playerId, next: { atMs: Date.now(), drop: ['rest', 'opponent', 'returning'] as const } })),
+  })
+  for (const [key, adj] of adjustments) {
+    const line = result.get(key)
+    if (!line) continue
+    const scaled: Record<string, number> = {}
+    for (const [stat, v] of Object.entries(line.componentStats ?? {})) scaled[stat] = typeof v === "number" ? v * adj.multiplier : (v as number)
+    result.set(key, { ...line, componentStats: scaled, projectedPoints: (line.projectedPoints ?? 0) * adj.multiplier, afFactors: { multiplier: adj.multiplier, reasons: adj.reasons } })
+  }
 }
 
 const cache = new Map<string, { at: number; rows: Promise<Map<string, NflWeekLine>> }>()
@@ -82,4 +112,36 @@ export function loadAfNflWeek(at: { season: string; week: number }) {
   })
   cache.set(key, { at: now, rows })
   return rows
+}
+
+/**
+ * Team-defense lines for one NFL week, keyed by club code — how rosters key a defense.
+ *
+ * 🛑 THE WEEK POOL ABOVE HAS NO TEAM DEFENSE IN IT, AND NEVER DID: it is built from the AF engine's
+ * season snapshot, which carries none. So every starting D/ST in Chimmy's lineup check read as
+ * unpriced, and the check told managers "San Francisco 49ers (DEF) is starting with no week 11
+ * projection — a bye, ruled out, or released" about defenses playing that day (owner report,
+ * 2026-11-22: two leagues, every defense flagged). The redraft outlook already priced defenses from
+ * these same season rates; the week pricing did not.
+ *
+ * Only ids asked for, and only clubs that play this week: a bye stays unpriced, which is true.
+ */
+export async function loadAfNflDefenseLines(at: { season: string; week: number }, ids: readonly string[]): Promise<Map<string, NflWeekLine>> {
+  const out = new Map<string, NflWeekLine>()
+  const season = Number(at.season)
+  if (!Number.isFinite(season)) return out
+  const specialists = await loadNflSpecialistRates(season)
+  const wanted = [...new Set(ids)].filter((id) => specialists.get(id)?.kind === 'DEF')
+  if (wanted.length === 0) return out
+  const schedule = await loadProjectionSchedule({ sport: 'NFL', season, week: at.week, now: new Date() })
+  for (const id of wanted) {
+    const team = projectionTeamKey('NFL', id)
+    const games = team ? schedule.get(team)?.weekGames : null
+    const line = teamDefenseWeekLine(specialists.get(id), games)
+    if (!line) continue
+    out.set(id, { key: id, playerId: id, name: null, position: 'DEF', team, weekGames: games!, componentStats: line,
+      // No generic number exists for a defense; consumers of this line re-score `componentStats`.
+      projectedPoints: 0, source: 'allfantasy' })
+  }
+  return out
 }

@@ -116,7 +116,7 @@ export function SalaryCapAIPanel({
               onClick={() => setType(t)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
                 type === t
-                  ? 'bg-cyan-500/80 text-white'
+                  ? 'bg-cyan-700 text-white'
                   : 'border border-white/20 bg-white/5 text-white/80 hover:bg-white/10'
               }`}
             >
@@ -130,7 +130,7 @@ export function SalaryCapAIPanel({
             type="button"
             onClick={runAI}
             disabled={loading}
-            className="rounded-lg bg-cyan-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <>

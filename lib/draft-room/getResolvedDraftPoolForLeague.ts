@@ -24,6 +24,7 @@ import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type R
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { poolTypeForStartupDraftLabel } from '@/lib/draft-defaults/startupCollegeDraft'
 import { isDevyLeague } from '@/lib/devy'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
@@ -991,7 +992,8 @@ function resolveConflictingExternalIds(
   return rows
 }
 
-const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal'])
+// `college`: a Devy / C2C league's second startup draft (lib/draft-defaults/startupCollegeDraft.ts).
+const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal', 'college'])
 
 export function isFollowUpDraftMode(draftModeLabel: string | null | undefined): boolean {
   return FOLLOW_UP_DRAFT_MODES.has(String(draftModeLabel ?? '').toLowerCase())
@@ -1202,6 +1204,9 @@ async function buildResolvedDraftPoolForLeague(
   const devyEnabled = Boolean(rawDevyConfig?.enabled)
   const c2cEnabled = Boolean(rawC2cConfig?.enabled) || isC2C
   const liveDraftUsesDevyPools = devyEnabled || c2cEnabled
+  // A two-draft startup (lib/draft-defaults/startupCollegeDraft.ts): the pro draft offers pros only, the
+  // college draft college players only, so the board and auto-pick match what each round accepts.
+  if (poolType == null) poolType = poolTypeForStartupDraftLabel(draftSession?.draftModeLabel, { isC2C, isDevy: isDevyDynasty })
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
@@ -2091,7 +2096,7 @@ async function buildResolvedDraftPoolForLeague(
           settings: league?.settings ?? null,
         },
         session: draftSession
-          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
+          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null, playerPool: draftSession.playerPool ?? null }
           : null,
       })
       const perfAiAdp = perfStart('10. loadAdpBoard')

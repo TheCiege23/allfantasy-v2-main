@@ -80,6 +80,8 @@ export async function buildPlayerProjectionContext(args: {
         row.weeklyUnavailableReason === 'no_nba_roster'
           ? 'Weekly estimate unavailable because this player has no current NBA roster assignment'
           : row.weekly == null ? 'Weekly estimate unavailable' : `Week ${metrics.week}: ${row.weekly.toFixed(2)} ${metrics.unit} over ${row.weekGames} scheduled team games`,
+        // The learned factors that moved the weekly number, each measured on past games (`lib/af-projections/factors`).
+        row.afFactors?.reasons.length ? `Weekly number adjusted ${row.afFactors.multiplier >= 1 ? 'up' : 'down'} by AF's measured factors: ${row.afFactors.reasons.join('; ')}` : null,
         row.fullSeason == null ? 'Full-season estimate unavailable' : `${row.fullSeason.toFixed(2)} ${metrics.unit} over the full season using ${row.fullSeasonBasis === 'standard_season' ? 'the standard season length' : 'stored fixtures'}`,
         row.restOfSeason == null ? 'Rest-of-season estimate unavailable' : `Rest-of-season estimate: ${row.restOfSeason.toFixed(2)} ${metrics.unit}`,
         row.tradeValue == null ? null : `AF trade value of ${row.tradeValue.toFixed(2)} ${row.tradeValueUnit}`,

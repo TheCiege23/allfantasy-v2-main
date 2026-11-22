@@ -51,7 +51,12 @@ import { rotatingBatch } from '@/lib/redraft/scoreSyncBatch'
  * Every step checks `shouldStop` (the invocation's shared run budget) before starting the next
  * unit of work, so a slow night cannot run the tick past its cron interval.
  *
- * NBA, NHL and MLB run by default; an explicit off value issues no query at all.
+ * Every sport in `DAILY_LIVE_SPORTS` runs by default (NBA, NHL, MLB, and the write-only college
+ * sports NCAAF and NCAAB); an explicit off value issues no query at all.
+ *
+ * ⚠ THE WORKER'S OWN `DAILY_SPORT_LIVE_SCORING` DECIDES THIS, NOT THE WEB SERVICE'S. On 2026-11-22
+ * the worker held an explicit three-sport list while the web service said `all`, and college points
+ * stayed blank until the worker's copy was set to `all`. Read the cron metadata `dailyLiveEnabled`.
  */
 
 /*
@@ -90,7 +95,7 @@ export const DAILY_LIVE_MAX_SEASONS_PER_SPORT = 25
 
 /**
  * The flag. Unset / empty → all supported sports. Explicit `0` / `false` / `off` → nothing enabled.
- * `1` / `true` / `on` / `all` → NBA, NHL and MLB. Otherwise a comma list of those three.
+ * `1` / `true` / `on` / `all` → every sport in `DAILY_LIVE_SPORTS`. Otherwise a comma list of them.
  */
 export function resolveDailyLiveSports(env: Record<string, string | undefined> = process.env): DailyLiveSport[] {
   const raw = env.DAILY_SPORT_LIVE_SCORING?.trim().toLowerCase() ?? ''

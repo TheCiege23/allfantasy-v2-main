@@ -95,6 +95,48 @@ export function letterRecordApplies(input: { sport: string | null | undefined; l
   return String(input.sport ?? '').trim().toUpperCase() === 'NFL' && String(input.leagueType ?? '').toLowerCase().includes('redraft')
 }
 
+/**
+ * The record for a grade the NFL redraft ledger does NOT cover — another sport, or a dynasty / keeper / devy / C2C /
+ * salary-cap / best-ball / guillotine / survivor / zombie league (`tradeOutcomesAll.ts`, 2026-11-22). Its bucket is the
+ * sport plus how that league's trades are graded: `value` (NFL dynasty market) or `points` (league scoring). Null when
+ * `letterRecordApplies` (the NFL redraft record is the one to show) or when the letter has too few graded deals.
+ */
+export type TradeOutcomeRecord = {
+  letter: TradeLetter
+  sport: string
+  kind: 'points' | 'value'
+  n: number
+  /** Points: league-scored points a week, graded side minus what it gave. Value: share of the deal's value, in points. */
+  net: number
+  aheadPct: number | null
+  verdict: LetterVerdict
+  confidence: TradeLetterConfidence | null
+}
+
+export function tradeOutcomeRecordFor(
+  view: LedgerRecordView | null | undefined,
+  input: { sport: string | null | undefined; leagueType: string | null | undefined; letter: string | null | undefined },
+): TradeOutcomeRecord | null {
+  const sport = String(input.sport ?? '').trim().toUpperCase()
+  if (!sport || letterRecordApplies(input)) return null
+  const type = String(input.leagueType ?? '').toLowerCase()
+  const kind: 'points' | 'value' = sport === 'NFL' && /dynasty|keeper|devy|c2c|campus|salary_cap|salary-cap|contract/.test(type) ? 'value' : 'points'
+  const bucket = view?.tradeOutcomes?.[`${sport}:${kind}`]
+  const l = typeof input.letter === 'string' ? input.letter.trim().charAt(0).toUpperCase() : ''
+  const row = bucket?.letters.find((t) => t.letter === l)
+  if (!bucket || !row) return null
+  return {
+    letter: row.letter,
+    sport,
+    kind,
+    n: row.n,
+    net: row.net,
+    aheadPct: row.aheadPct,
+    verdict: letterVerdict(row.letter, row.net),
+    confidence: tradeLetterConfidence(row.letter, bucket.confidence),
+  }
+}
+
 /** The waiver panel's #1-pickup record across everyone, only once it carries a rate. */
 export function pickupRecord(view: LedgerRecordView | null | undefined): { ratePct: number; graded: number } | null {
   const e = view?.pickups?.everyone
@@ -160,9 +202,24 @@ export function renderEngineRecordPromptLine(view: LedgerRecordView | null): str
     lines.push('- Trade grades: no letter has enough graded deals yet.')
   }
 
+  // Every other sport and league type (2026-11-22): its own measure, named so the model never mixes them up.
+  const outcomeParts = Object.values(view?.tradeOutcomes ?? {}).flatMap((b) =>
+    b.letters.map((t) => {
+      const v = letterVerdict(t.letter, t.net)
+      const c = tradeLetterConfidence(t.letter, b.confidence)
+      const measure = b.kind === 'value' ? `${signed(t.net)} points of the deal's dynasty value a month or more later` : `${signed(t.net)} league-scored points a week`
+      return `${b.kind === 'value' ? 'dynasty-style leagues' : `${b.sport} leagues`} ${t.letter}: ${measure} (${t.n} deals${t.aheadPct != null ? `, ahead in ${t.aheadPct}%` : ''})` +
+        (v === 'held_up' ? ' — has held up' : v === 'not_held_up' ? ' — has NOT held up' : '') +
+        (c ? `; how sure: ${c.level} (about ${c.heldPct}% held up, ${c.decided} decided)` : '')
+    }),
+  )
+  if (outcomeParts.length) {
+    lines.push(`- Trade grades in other sports and league types (dynasty, keeper, devy and C2C on the dynasty market; everything else on each league's own scoring): ${outcomeParts.join('; ')}.`)
+  }
+
   lines.push(
     'When you give a trade grade, a waiver pickup or a bench call, you may say how that kind of call has held up — quote these numbers exactly, and say plainly when a letter has not held up. Never state or imply any other record, hit rate or win percentage for AllFantasy.',
-    'Where a letter above carries "how sure", that is how sure a redraft NFL grade of that letter is: say it beside the grade (a low one means the deal is closer than the letter suggests). It never changes the letter — the grade is the trade engine\'s.',
+    'Where a letter above carries "how sure", that is how sure a grade of that letter is in that kind of league: say it beside the grade (a low one means the deal is closer than the letter suggests). Use the line for the league in question — NFL redraft, or that sport and league type — never another one. It never changes the letter — the grade is the trade engine\'s.',
   )
   return lines.join('\n')
 }

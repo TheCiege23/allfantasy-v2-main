@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { SportPointsBaseResult, SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
-import { isFantraxNbaCampusLeague, MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
+import { isFantraxCampusProjectionLeague, MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
 import { isDynastyGradedSport, missingAgeAssumption, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 import { loadCachedLeagueBoardBase, type CachedBoardResult } from '@/lib/decision-os/value-os/leagueBoard'
@@ -66,7 +66,7 @@ export async function loadLeagueValueBoard(
   const league = await d.league(leagueId).catch(() => null)
   if (!league || !isBoardValueSport(league.sport)) return { kind: 'not_board_sport' }
   const sport = league.sport.trim().toUpperCase() as PointsGradedSport
-  const projection = options?.projectionOnly && isFantraxNbaCampusLeague(sport, league) ? options : undefined
+  const projection = options?.projectionOnly && isFantraxCampusProjectionLeague(sport, league) ? options : undefined
   const base = await (projection ? d.base(sport, league, projection) : d.base(sport, league)).catch(() => null)
   if (!base) return { kind: 'unavailable', sport, reason: 'The league’s value board could not be read just now.' }
   if (!base.ok) return { kind: 'unavailable', sport, reason: base.reason }
@@ -159,7 +159,7 @@ export function boardPlayerValue(
 ): { available: true; data: BoardPlayerValue } | { available: false; reason: string } {
   if (board.kind === 'not_board_sport') return { available: false, reason: 'This sport is not valued on a league board yet.' }
   if (board.kind === 'unavailable') return { available: false, reason: board.reason }
-  if (board.projectionOnly) return { available: false, reason: 'This board contains NBA projections for the current season. Campus-to-Canton trade values require both divisions.' }
+  if (board.projectionOnly) return { available: false, reason: `This board contains ${board.sport} projections for the current season. Campus-to-Canton trade values require both divisions.` }
   const { ctx, sport } = board
   if (ctx.window.gamesRemaining <= 0) {
     return { available: false, reason: `The ${ctx.window.seasonLabel} regular season has no games left, so there is no rest-of-season value.` }

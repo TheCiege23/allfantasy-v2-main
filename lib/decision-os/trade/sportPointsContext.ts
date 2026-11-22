@@ -44,7 +44,7 @@ import {
   indexBoard,
   meetsSampleBar,
   multiSeasonFormatReason,
-  isFantraxNbaCampusLeague,
+  isFantraxCampusProjectionLeague,
   MIN_SAMPLE_GAMES,
   replacementFromLineups,
   replacementFromRosters,
@@ -276,13 +276,13 @@ export async function loadSportPointsBase(args: {
   format?: SportScoringFormat | null
   now?: Date
   campusOnly?: boolean
-  /** A current-season points board for Fantrax NBA Campus-to-Canton lineups. */
+  /** A current-season points board for Fantrax Campus-to-Canton lineups. */
   projectionOnly?: boolean
 }): Promise<SportPointsBaseResult> {
   const { sport, league } = args
   const now = args.now ?? new Date()
 
-  const projectionOnly = Boolean(args.projectionOnly && league?.season && isFantraxNbaCampusLeague(sport, league))
+  const projectionOnly = Boolean(args.projectionOnly && league?.season && isFantraxCampusProjectionLeague(sport, league))
   const formatRestriction = league && multiSeasonFormatReason(league.leagueType, sport)
   if (formatRestriction && !projectionOnly) return { ok: false, reason: formatRestriction }
   const valuation = valuationFor(sport, league, args.format)
@@ -922,7 +922,7 @@ async function finishBoard(args: {
     }
   }
 
-  const notReady = args.projectionOnly ? (board.length ? null : 'No league-scored NBA projection rates are on file.')
+  const notReady = args.projectionOnly ? (board.length ? null : `No league-scored ${sport} projection rates are on file.`)
     : boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport),
       verifiedWire, rosterDepth: teams * (lineup.benchPerTeam + lineup.slots.reduce((n, s) => n + s.count, 0)) })
   if (notReady) return { ok: false, reason: notReady, valuationGap: 'projection_coverage' }

@@ -152,6 +152,8 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     conceptSetup.commissionerAi = d.commissionerAi
     conceptSetup.userAi = d.userAi
     if (d.introVideoUrl) conceptSetup.introVideoUrl = d.introVideoUrl
+    // Devy / C2C: two startup drafts unless one merged draft was chosen (lib/draft-defaults/startupCollegeDraft.ts).
+    if ((lt === 'devy' || lt === 'c2c') && d.mergedCollegeDraft === true) conceptSetup.mergedCollegeDraft = true
     if (lt === 'dynasty' && state.sport === 'NFL' && d.devyRoundsEnabled === true) {
       conceptSetup.devyRoundsEnabled = true
       conceptSetup.devyRoundCount = d.devyRoundCount ?? 2

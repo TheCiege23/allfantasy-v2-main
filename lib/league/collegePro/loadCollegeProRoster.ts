@@ -84,6 +84,26 @@ function leagueSettingsOf(leagueId: string | null | undefined): Promise<unknown>
     .catch(() => null)
 }
 
+/**
+ * AF weekly projections for one half, keyed by that half's roster ids and scored under that half's
+ * own league (`loadLeaguePlayerMetrics` reads the league's sport, season and scoring). Undefined —
+ * not an empty map — when there is nothing to show, so the PROJ column keeps its "—" rather than a
+ * row of zeros. `week: null` lets the metrics infer the week from the league's own sport calendar.
+ */
+async function weeklyProjectionsFor(
+  leagueId: string,
+  week: number | null,
+  rosterIds: string[],
+  now: Date,
+): Promise<Record<string, number> | undefined> {
+  const ids = [...new Set(rosterIds.filter(Boolean))]
+  if (!ids.length) return undefined
+  const metrics = await loadLeaguePlayerMetrics({ leagueId, week, rosterIds: ids, limit: ids.length, includeTradeValues: false, now }).catch(() => null)
+  if (!metrics || metrics.unit !== 'fantasy points') return undefined
+  const out = Object.fromEntries(metrics.rows.flatMap((p) => (p.rosterPlayerId && p.weekly != null ? [[p.rosterPlayerId, p.weekly]] : [])))
+  return Object.keys(out).length ? out : undefined
+}
+
 /** ["wins", "ejections", "buzzer-beaters"] → "wins, ejections and buzzer-beaters". */
 function listInWords(items: string[]): string {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
@@ -207,6 +227,13 @@ export async function loadCollegeProRoster(
       : Promise.resolve(null),
   ])
 
+  // The PROJ column: each half's AF weekly projection, scored by that half's own league.
+  const [proProjections, collegeProjections] = await Promise.all([
+    weeklyProjectionsFor(league.id, week, Object.keys(pro.players ?? {}), now),
+    collegeHalf?.leagueId ? weeklyProjectionsFor(collegeHalf.leagueId, null, collegePlayers.map((p) => p.id), now) : Promise.resolve(undefined),
+  ])
+  if (proProjections) pro.weeklyProjections = proProjections
+
   const college: CollegeProSide = collegeHalf
     ? (() => {
         const players = collegeHalf.players ?? []
@@ -236,6 +263,7 @@ export async function loadCollegeProRoster(
           ...shown,
           players: toPlayerMap(players),
           points,
+          weeklyProjections: collegeProjections,
           score: { week, total: sumStarterPoints(shown.starters, points), opponent: null, note },
           unavailable:
             collegeHalf.unavailableReason ??
@@ -400,14 +428,23 @@ async function loadDrafts(sleeperLeagueId: string, fantraxSnapshotId: string | n
  * The newest NFL draft on file (this year's, else last year's) against the league's college rosters.
  * Null when no draft results are stored yet, which is the case until CFBD answers again.
  */
+/**
+ * The draft pipeline for one college half. Football keys picks by CFBD athlete id
+ * (`cfbd:draft-picks:v1:`, lib/devy/cfbdDraftPicksStore.ts); basketball by ESPN athlete id
+ * (`cbbd:draft-picks:v1:`, lib/devy/cbbdDraftPicksStore.ts). Each league player is reached through
+ * `PlayerIdentityMap` by Fantrax id — never by name — and a Fantrax id that resolves to two
+ * different athletes is left out rather than guessed.
+ */
 async function loadPipeline(
   fantraxSnapshotId: string,
   myPlayers: ReadonlyArray<{ id: string; cfbdId?: string | null; name: string }>,
   now: Date,
+  sport: 'NCAAF' | 'NCAAB' = 'NCAAF',
 ): Promise<CollegeProPipeline | null> {
+  const prefix = sport === 'NCAAB' ? 'cbbd:draft-picks:v1:' : 'cfbd:draft-picks:v1:'
   const thisYear = now.getUTCFullYear()
   const rows = await prisma.sportsDataCache.findMany({
-    where: { cacheKey: { in: [`cfbd:draft-picks:v1:${thisYear}`, `cfbd:draft-picks:v1:${thisYear - 1}`] } },
+    where: { cacheKey: { in: [`${prefix}${thisYear}`, `${prefix}${thisYear - 1}`] } },
     select: { data: true },
   })
   const stored = rows
@@ -421,17 +458,37 @@ async function loadPipeline(
   const fantraxIds = (Array.isArray(snapshot?.roster) ? (snapshot!.roster as unknown[]) : [])
     .map((r) => String((r as { fantraxId?: unknown; id?: unknown })?.fantraxId ?? (r as { id?: unknown })?.id ?? '').trim())
     .filter(Boolean)
-  const identities = fantraxIds.length
-    ? await prisma.playerIdentityMap.findMany({
-        where: { sport: 'NCAAF', fantraxId: { in: fantraxIds }, cfbdId: { not: null } },
-        select: { cfbdId: true },
-      })
-    : []
+  // Your own players are always looked up, even if an older snapshot's league list misses them.
+  for (const p of myPlayers) if (p.id && !fantraxIds.includes(p.id)) fantraxIds.push(p.id)
+  const athleteIdOf = new Map<string, string | null>()
+  if (fantraxIds.length) {
+    const identities = sport === 'NCAAB'
+      ? (await prisma.playerIdentityMap.findMany({
+          where: { sport, fantraxId: { in: fantraxIds }, espnId: { not: null } },
+          select: { fantraxId: true, espnId: true },
+        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.espnId }))
+      : (await prisma.playerIdentityMap.findMany({
+          where: { sport, fantraxId: { in: fantraxIds }, cfbdId: { not: null } },
+          select: { fantraxId: true, cfbdId: true },
+        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.cfbdId }))
+    for (const { fantraxId, athleteId } of identities) {
+      if (!fantraxId || !athleteId) continue
+      const seen = athleteIdOf.get(fantraxId)
+      athleteIdOf.set(fantraxId, seen === undefined || seen === athleteId ? athleteId : null)
+    }
+  }
+  const leagueAthleteIds = new Set([...athleteIdOf.values()].filter((v): v is string => !!v))
   return buildPipeline({
     year: stored.year,
     picks: stored.picks,
-    myPlayers: myPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, name: p.name })),
-    leagueCfbdIds: new Set(identities.map((i) => i.cfbdId!).filter(Boolean)),
+    // Football keeps the id the roster already resolved; basketball's roster carries no ESPN id, so it comes from here.
+    myPlayers: myPlayers.map((p) => ({
+      id: p.id,
+      cfbdId: sport === 'NCAAB' ? athleteIdOf.get(p.id) ?? null : p.cfbdId ?? null,
+      name: p.name,
+    })),
+    leagueCfbdIds: leagueAthleteIds,
+    unlinked: stored.unlinked,
   })
 }
 
@@ -496,7 +553,7 @@ async function loadFantraxProPair(args: {
   const rosterIds = [...new Set(proPlayers.map((p) => p.id).filter(Boolean))]
   // Each half is scored under its OWN Fantrax league's rules: the NBA league's here, the college league's below.
   const collegeSettings = await leagueSettingsOf(collegeHalf.leagueId)
-  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics] = await Promise.all([
+  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics, collegeProjections] = await Promise.all([
     period
       ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers), settings: league.settings }).catch(() => null)
       : Promise.resolve(null),
@@ -511,6 +568,8 @@ async function loadFantraxProPair(args: {
     format === 'c2c' && period && rosterIds.length
       ? loadLeaguePlayerMetrics({ leagueId: league.id, week: period.number, rosterIds, limit: rosterIds.length, includeTradeValues: false, now }).catch(() => null)
       : Promise.resolve(null),
+    // The college half's projections, scored by the college league (its week inferred from its own sport).
+    collegeHalf.leagueId ? weeklyProjectionsFor(collegeHalf.leagueId, null, collegePlayers.map((p) => p.id), now) : Promise.resolve(undefined),
   ])
 
   const listsOf = (ps: typeof proPlayers, minorsAsTaxi: boolean) =>
@@ -579,6 +638,7 @@ async function loadFantraxProPair(args: {
     players: toPlayerMap(collegePlayers),
     unavailable: collegeHalf.unavailableReason ?? (collegePlayers.length ? null : 'Your college roster could not be read from Fantrax.'),
     points: collegePointsDaily?.points ?? {},
+    weeklyProjections: collegeProjections,
     score: {
       week: period?.number ?? null,
       total: collegePointsDaily ? sumStarterPoints(collegeLists.starters, collegePointsDaily.points) : null,
@@ -629,6 +689,12 @@ async function loadFantraxProPair(args: {
     fantraxDraftCard(collegeSnap ? readStoredFantraxDraft(collegeSnap.transactions) : null, collegeSnap?.season ?? null, 'college'),
   ].filter((d): d is CollegeProDraft => d != null)
 
+  // The NBA draft's "Moving up": your college players drafted last June, linked by ESPN id.
+  const pipeline =
+    collegeSport === 'NCAAB'
+      ? await loadPipeline(collegeHalf.memberLeagueId, collegePlayers.map((p) => ({ id: p.id, name: p.name })), now, 'NCAAB').catch(() => null)
+      : null
+
   return {
     applies: true,
     format,
@@ -639,7 +705,7 @@ async function loadFantraxProPair(args: {
     combinedTotal: myCombined,
     canEditScoring,
     drafts,
-    pipeline: null,
+    pipeline,
     proLeagueId: league.id,
     headToHead: h2h?.headToHead ?? (scoring === 'combined' ? { me: myCombined, opponent: null, missing: "This week's matchup could not be read." } : null),
     teamMap: h2h?.editor ?? null,
