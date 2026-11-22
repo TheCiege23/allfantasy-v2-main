@@ -1,0 +1,347 @@
+{
+  "_probe": {
+    "path": "/teams/roster?season=2025&team=Duke",
+    "capturedAt": "2026-11-22"
+  },
+  "response": [
+    {
+      "teamId": 72,
+      "teamSourceId": "150",
+      "team": "Duke",
+      "conference": "ACC",
+      "season": 2025,
+      "players": [
+        {
+          "id": 204,
+          "sourceId": "5203685",
+          "name": "Khaman Maluach",
+          "firstName": "Khaman",
+          "lastName": "Maluach",
+          "jersey": "9",
+          "position": "Center",
+          "height": 86,
+          "weight": 250,
+          "hometown": {
+            "city": "Rumbek",
+            "state": "South Sudan",
+            "country": null,
+            "latitude": null,
+            "longitude": null,
+            "countyFips": null
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2025
+        },
+        {
+          "id": 205,
+          "sourceId": "5041939",
+          "name": "Cooper Flagg",
+          "firstName": "Cooper",
+          "lastName": "Flagg",
+          "jersey": "2",
+          "position": "Guard",
+          "height": 81,
+          "weight": 205,
+          "hometown": {
+            "city": "Newport",
+            "state": "ME",
+            "country": null,
+            "latitude": 44.8353424,
+            "longitude": -69.2739365,
+            "countyFips": "23019"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2025
+        },
+        {
+          "id": 206,
+          "sourceId": "5061575",
+          "name": "Kon Knueppel",
+          "firstName": "Kon",
+          "lastName": "Knueppel",
+          "jersey": "7",
+          "position": "Guard",
+          "height": 79,
+          "weight": 217,
+          "hometown": {
+            "city": "Milwaukee",
+            "state": "WI",
+            "country": null,
+            "latitude": 43.0386475,
+            "longitude": -87.9090751,
+            "countyFips": "55079"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2025
+        },
+        {
+          "id": 207,
+          "sourceId": "5023693",
+          "name": "Tyrese Proctor",
+          "firstName": "Tyrese",
+          "lastName": "Proctor",
+          "jersey": "5",
+          "position": "Guard",
+          "height": 78,
+          "weight": 183,
+          "hometown": {
+            "city": "Sydney",
+            "state": "NSW",
+            "country": null,
+            "latitude": null,
+            "longitude": null,
+            "countyFips": null
+          },
+          "dateOfBirth": null,
+          "startSeason": 2023,
+          "endSeason": 2025
+        },
+        {
+          "id": 210,
+          "sourceId": "4431753",
+          "name": "Mason Gillis",
+          "firstName": "Mason",
+          "lastName": "Gillis",
+          "jersey": "18",
+          "position": "Forward",
+          "height": 78,
+          "weight": 225,
+          "hometown": {
+            "city": "New Castle",
+            "state": "IN",
+            "country": null,
+            "latitude": 39.9289351,
+            "longitude": -85.3702477,
+            "countyFips": "18065"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2025
+        },
+        {
+          "id": 213,
+          "sourceId": "4602025",
+          "name": "Sion James",
+          "firstName": "Sion",
+          "lastName": "James",
+          "jersey": "14",
+          "position": "Guard",
+          "height": 78,
+          "weight": 220,
+          "hometown": {
+            "city": "Sugar Hill",
+            "state": "GA",
+            "country": null,
+            "latitude": 34.1064895,
+            "longitude": -84.0335197,
+            "countyFips": "13135"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2025
+        },
+        {
+          "id": 214,
+          "sourceId": "4431890",
+          "name": "Neal Begovich",
+          "firstName": "Neal",
+          "lastName": "Begovich",
+          "jersey": "20",
+          "position": "Forward",
+          "height": 81,
+          "weight": 230,
+          "hometown": {
+            "city": "San Francisco",
+            "state": "CA",
+            "country": null,
+            "latitude": 37.7792588,
+            "longitude": -122.4193286,
+            "countyFips": "06075"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2024,
+          "endSeason": 2025
+        },
+        {
+          "id": 215,
+          "sourceId": "4897107",
+          "name": "Stanley Borden",
+          "firstName": "Stanley",
+          "lastName": "Borden",
+          "jersey": "17",
+          "position": "Center",
+          "height": 84,
+          "weight": 241,
+          "hometown": {
+            "city": "Istanbul",
+            "state": "TUR",
+            "country": null,
+            "latitude": null,
+            "longitude": null,
+            "countyFips": null
+          },
+          "dateOfBirth": null,
+          "startSeason": 2022,
+          "endSeason": 2025
+        },
+        {
+          "id": 217,
+          "sourceId": "4897108",
+          "name": "Spencer Hubbard",
+          "firstName": "Spencer",
+          "lastName": "Hubbard",
+          "jersey": "55",
+          "position": "Guard",
+          "height": 68,
+          "weight": 157,
+          "hometown": {
+            "city": "Los Angeles",
+            "state": "CA",
+            "country": null,
+            "latitude": 34.0536909,
+            "longitude": -118.242766,
+            "countyFips": "06037"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2022,
+          "endSeason": 2025
+        },
+        {
+          "id": 209,
+          "sourceId": "5105337",
+          "name": "Maliq Brown",
+          "firstName": "Maliq",
+          "lastName": "Brown",
+          "jersey": "6",
+          "position": "Forward",
+          "height": 81,
+          "weight": 225,
+          "hometown": {
+            "city": "Culpeper",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.4733823,
+            "longitude": -77.9961275,
+            "countyFips": "51047"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 208,
+          "sourceId": "4711256",
+          "name": "Caleb Foster",
+          "firstName": "Caleb",
+          "lastName": "Foster",
+          "jersey": "1",
+          "position": "Guard",
+          "height": 77,
+          "weight": 200,
+          "hometown": {
+            "city": "Harrisburg",
+            "state": "NC",
+            "country": null,
+            "latitude": 35.3258295,
+            "longitude": -80.6454979,
+            "countyFips": "37025"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2024,
+          "endSeason": 2027
+        },
+        {
+          "id": 211,
+          "sourceId": "5061585",
+          "name": "Isaiah Evans",
+          "firstName": "Isaiah",
+          "lastName": "Evans",
+          "jersey": "3",
+          "position": "Guard",
+          "height": 78,
+          "weight": 180,
+          "hometown": {
+            "city": "Fayetteville",
+            "state": "NC",
+            "country": null,
+            "latitude": 35.0525759,
+            "longitude": -78.878292,
+            "countyFips": "37051"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 212,
+          "sourceId": "4873107",
+          "name": "Darren Harris",
+          "firstName": "Darren",
+          "lastName": "Harris",
+          "jersey": "1",
+          "position": "Guard",
+          "height": 77,
+          "weight": 205,
+          "hometown": {
+            "city": "Herndon",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.9695316,
+            "longitude": -77.3859479,
+            "countyFips": "51059"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 218,
+          "sourceId": "4432321",
+          "name": "Cameron Sheffield",
+          "firstName": "Cameron",
+          "lastName": "Sheffield",
+          "jersey": "13",
+          "position": "Guard",
+          "height": 78,
+          "weight": 205,
+          "hometown": {
+            "city": "Alpharetta",
+            "state": "GA",
+            "country": null,
+            "latitude": 34.0709576,
+            "longitude": -84.2747329,
+            "countyFips": "13121"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2026
+        },
+        {
+          "id": 216,
+          "sourceId": "4873209",
+          "name": "Patrick Ngongba II",
+          "firstName": "Patrick",
+          "lastName": "Ngongba II",
+          "jersey": "21",
+          "position": "Center",
+          "height": 83,
+          "weight": 250,
+          "hometown": {
+            "city": "Manassas",
+            "state": "VA",
+            "country": null,
+            "latitude": 38.7509488,
+            "longitude": -77.4752667,
+            "countyFips": "51683"
+          },
+          "dateOfBirth": null,
+          "startSeason": 2025,
+          "endSeason": 2027
+        }
+      ]
+    }
+  ]
+}
