@@ -17,6 +17,8 @@ import {
   type StampAllResult,
 } from './formatMarkets'
 import { backfillTradeFaab } from './tradeFaabBackfill'
+import { runBoardSportLearning } from './boardSportLearning'
+import type { BoardSportMarket } from './boardSportLearner'
 
 /**
  * The SCHEDULED writer for the AllFantasy trade market (rides `/api/cron/recompute-allfantasy-adp`).
@@ -65,6 +67,8 @@ export type ScheduledMarketRecalcResult = {
   needMarketsWritten: boolean
   /** FAAB filled onto older Sleeper trades this run, before the markets read them (`tradeFaabBackfill.ts`). Null: the pass failed. */
   faabBackfill: { off?: true; rowsFilled: number } | null
+  /** NBA / MLB / NHL / NCAAB / soccer trade learning (shadow) — null when the read failed. */
+  boardSports: { off?: true; markets: BoardSportMarket[]; written: boolean } | null
   /**
    * Where the pick, posture and need markets came from: the STRUCTURAL pass (every season from 2020, older dynasty
    * trades priced on the historical series), or — when that pass failed — the market's widest window.
@@ -95,6 +99,7 @@ export async function runScheduledMarketRecalc(
     writePosture?: typeof writePostureMarketTable
     writeNeed?: typeof writeNeedMarketTable
     faabBackfill?: typeof backfillTradeFaab
+    boardSports?: typeof runBoardSportLearning
   } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
@@ -199,6 +204,10 @@ export async function runScheduledMarketRecalc(
     ? await (opts.writeNeed ?? writeNeedMarketTable)(prisma, needMarkets, now).then(() => true, () => false)
     : false
 
+  // The other sports' trade learning, from the board values saved with each trade. Best-effort and separate: it reads
+  // different rows and must never cost the NFL markets this run already wrote.
+  const boardSports = await (opts.boardSports ?? runBoardSportLearning)(prisma as never, { now }).catch(() => null)
+
   // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
   const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
 
@@ -220,5 +229,6 @@ export async function runScheduledMarketRecalc(
     needMarketsWritten,
     faabBackfill,
     structural,
+    boardSports,
   }
 }

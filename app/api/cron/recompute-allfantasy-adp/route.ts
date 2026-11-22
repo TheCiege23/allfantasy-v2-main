@@ -15,6 +15,7 @@ import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/li
 import { describePickMarket } from '@/lib/trade-market/pickMarketLearner'
 import { describePostureMarket } from '@/lib/trade-market/postureMarketLearner'
 import { describeNeedMarket } from '@/lib/trade-market/needMarketLearner'
+import { describeBoardSportMarket } from '@/lib/trade-market/boardSportLearner'
 
 /*
  * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
@@ -100,6 +101,11 @@ async function rebuildTradeMarket(startedAt: number): Promise<
             (m) =>
               `${describeNeedMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
               `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.needMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // NBA / MLB / NHL / NCAAB / soccer: posture and need from the board values saved with each trade (shadow).
+          ...(r.boardSports?.markets ?? []).map(
+            (m) =>
+              `${describeBoardSportMarket(m)} not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.boardSports?.written ? '' : '; ⚠ not stored this run'}`,
           ),
         ],
       }),

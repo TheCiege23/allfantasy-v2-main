@@ -53,6 +53,36 @@ export default async function TradeMarketPage() {
               {data.publishedRows} of {data.totalRows} measured numbers are published.
             </p>
             {data.sections.map((s) => <SectionView key={s.key} section={s} />)}
+            <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-section="other-sports">
+              <h2 className="text-base font-bold">Other sports — NBA, MLB, NHL, NCAAB, soccer</h2>
+              <p className="mt-0.5 text-xs text-white/55">
+                Measured only, not used by any grade yet. These sports have no dated market, so learning starts from trades
+                captured since their board values began being saved with each trade (2026-11-22).
+              </p>
+              <p className="mt-1 text-xs text-white/55" data-testid="status-other-sports">
+                {data.otherSports.status.missing
+                  ? "Not written yet — the daily market run has not stored this table."
+                  : `Written ${data.otherSports.status.generatedAt?.slice(0, 16).replace("T", " ")} UTC (${data.otherSports.status.ageDays} days ago).`}
+              </p>
+              {data.otherSports.sports.map((sp) => (
+                <div key={sp.sport} className="mt-4" data-sport={sp.sport}>
+                  <h3 className="text-sm font-semibold">
+                    {sp.sport}
+                    <span className="ml-2 font-normal text-white/50">{sp.tradesRead.toLocaleString("en-US")} trades with board values</span>
+                  </h3>
+                  <ul className="mt-1 text-sm">
+                    {sp.rows.map((r) => (
+                      <li key={r.label} className="border-t border-white/5 py-1.5">
+                        {r.label}: <span className="tabular-nums">{r.pct == null ? "—" : `${r.pct > 0 ? "+" : ""}${r.pct}%`}</span>
+                        <span className="ml-2 text-xs text-white/55">
+                          {r.trades} trades · {r.published ? "enough to state" : "not enough yet"} · {r.note}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
           </>
         )}
       </div>

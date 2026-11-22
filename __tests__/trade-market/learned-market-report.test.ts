@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { loadLearnedMarketReport, summarizeLearnedMarket } from '@/lib/trade-market/learnedMarketReport'
 import { NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY } from '@/lib/trade-market/formatMarkets'
+import { BOARD_SPORT_MARKET_CACHE_KEY } from '@/lib/trade-market/boardSportLearning'
 
 /**
  * /admin/trade-market (owner's call, 2026-11-22): what each learner measured, the evidence behind it, whether it is
@@ -72,7 +73,7 @@ describe('the learned market report', () => {
     expect(r.sections[0]!.books[0]!.warnings).toHaveLength(1)
   })
 
-  it('reads the three stored tables fresh on every load', async () => {
+  it('reads the four stored tables fresh on every load', async () => {
     const asked: string[] = []
     const prisma = {
       sportsDataCache: {
@@ -84,7 +85,16 @@ describe('the learned market report', () => {
     }
     const a = await loadLearnedMarketReport(prisma, {}, NOW)
     await loadLearnedMarketReport(prisma, {}, NOW)
-    expect(asked.sort()).toEqual([NEED_MARKET_CACHE_KEY, NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY].sort())
+    const keys = [NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY, BOARD_SPORT_MARKET_CACHE_KEY]
+    expect(asked.sort()).toEqual([...keys, ...keys].sort())
     expect(a.totalRows).toBe(2)
+  })
+
+  it('other sports: shown as measured only, with how many trades it rests on', () => {
+    const boardSports = { generatedAt: '2026-11-22T06:00:00Z', sports: [{ sport: 'NBA', tradesRead: 44, observations: 80, premiums: [{ kind: 'posture', group: 'contend', premiumPct: 9, effectiveSample: 22, baselineEffectiveSample: 30, trades: 24, published: true, note: 'measured' }] }] }
+    const r = summarizeLearnedMarket({ picks: null, posture: null, need: null, boardSports }, {}, NOW)
+    expect(r.otherSports.status.missing).toBe(false)
+    expect(r.otherSports.sports[0]).toMatchObject({ sport: 'NBA', tradesRead: 44, rows: [{ label: 'Contenders (.600+) vs middle teams', pct: 9, published: true }] })
+    expect(summarizeLearnedMarket({ picks: null, posture: null, need: null }, {}, NOW).otherSports).toMatchObject({ status: { missing: true }, sports: [] })
   })
 })

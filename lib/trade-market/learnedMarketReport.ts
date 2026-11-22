@@ -15,6 +15,8 @@ import { NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY 
 import { nextDraftYear, type PickClassValue } from './pickMarketLearner'
 import type { PosturePremium } from './postureMarketLearner'
 import type { NeedPremium } from './needMarketLearner'
+import type { BoardSportMarket } from './boardSportLearner'
+import { BOARD_SPORT_MARKET_CACHE_KEY } from './boardSportLearning'
 
 /**
  * THE LEARNED MARKET, ON ONE SCREEN (owner's call, 2026-11-22: /admin/trade-market).
@@ -63,10 +65,19 @@ export type ReportRow = {
 }
 export type ReportBook = { book: string; label: string; rows: ReportRow[]; warnings: string[]; tradesUsed: number | null }
 export type ReportSection = { key: 'picks' | 'posture' | 'need'; title: string; switch: SwitchState; status: TableStatus; books: ReportBook[] }
-export type LearnedMarketReport = { generatedAt: string; sections: ReportSection[]; publishedRows: number; totalRows: number }
+export type OtherSportRow = { label: string; pct: number | null; trades: number; effectiveSample: number; published: boolean; note: string }
+export type OtherSportReport = { sport: string; tradesRead: number; observations: number; rows: OtherSportRow[] }
+export type LearnedMarketReport = {
+  generatedAt: string
+  sections: ReportSection[]
+  publishedRows: number
+  totalRows: number
+  /** NBA / MLB / NHL / NCAAB / soccer (shadow — no grade reads these yet). Empty until trades with board values exist. */
+  otherSports: { status: TableStatus; sports: OtherSportReport[] }
+}
 
 type StoredDoc = { generatedAt?: unknown; books?: unknown } | null
-type RawDocs = { picks: unknown; posture: unknown; need: unknown }
+type RawDocs = { picks: unknown; posture: unknown; need: unknown; boardSports?: unknown }
 
 function statusOf(name: string, raw: unknown, now: Date): TableStatus {
   const d = raw && typeof raw === 'object' ? (raw as StoredDoc) : null
@@ -182,7 +193,24 @@ export function summarizeLearnedMarket(raw: RawDocs, env: NodeJS.ProcessEnv, now
     },
   ]
   const all = sections.flatMap((s) => s.books.flatMap((b) => b.rows))
-  return { generatedAt: now.toISOString(), sections, publishedRows: all.filter((r) => r.published).length, totalRows: all.length }
+  const board = raw.boardSports && typeof raw.boardSports === 'object' ? (raw.boardSports as { sports?: unknown }) : null
+  const sports: OtherSportReport[] = (Array.isArray(board?.sports) ? (board!.sports as BoardSportMarket[]) : []).map((m) => ({
+    sport: m.sport,
+    tradesRead: m.tradesRead,
+    observations: m.observations,
+    rows: (m.premiums ?? []).map((p) => ({
+      label: p.kind === 'posture' ? `${p.group === 'contend' ? 'Contenders (.600+)' : 'Rebuilders (.400−)'} vs middle teams` : `${p.group} · no spare at the position bought`,
+      pct: p.premiumPct,
+      trades: p.trades,
+      effectiveSample: p.effectiveSample,
+      published: p.published,
+      note: p.note,
+    })),
+  }))
+  return {
+    generatedAt: now.toISOString(), sections, publishedRows: all.filter((r) => r.published).length, totalRows: all.length,
+    otherSports: { status: statusOf('other sports', raw.boardSports, now), sports },
+  }
 }
 
 type CacheReader = { sportsDataCache: { findUnique: (args: { where: { cacheKey: string } }) => PromiseLike<unknown> } }
@@ -193,6 +221,6 @@ export async function loadLearnedMarketReport(prisma: CacheReader, env: NodeJS.P
     const row = (await prisma.sportsDataCache.findUnique({ where: { cacheKey: key } })) as { data?: unknown } | null
     return row?.data ?? null
   }
-  const [picks, posture, need] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY)])
-  return summarizeLearnedMarket({ picks, posture, need }, env, now)
+  const [picks, posture, need, boardSports] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY), read(BOARD_SPORT_MARKET_CACHE_KEY)])
+  return summarizeLearnedMarket({ picks, posture, need, boardSports }, env, now)
 }
