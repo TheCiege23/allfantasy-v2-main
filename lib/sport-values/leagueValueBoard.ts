@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { SportPointsBaseResult, SportPointsLeague } from '@/lib/decision-os/trade/sportPointsContext'
-import { MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
+import { isFantraxNbaCampusLeague, MIN_SAMPLE_GAMES, meetsSampleBar, priceBoardPlayer, type BoardPlayer, type PointsGradedSport, type SportPointsContext } from '@/lib/decision-os/trade/sportPointsValue'
 import { MIN_AT_BATS, MIN_INNINGS } from '@/lib/decision-os/trade/mlbTeamGame'
 import { isDynastyGradedSport, missingAgeAssumption, playerDynastyValue } from '@/lib/decision-os/trade/sportDynastyValue'
 import { loadCachedLeagueBoardBase, type CachedBoardResult } from '@/lib/decision-os/value-os/leagueBoard'
@@ -36,7 +36,7 @@ export type LeagueBoardRow = SportPointsLeague & { sport: string }
 
 export type LeagueValueBoardDeps = {
   league: (leagueId: string) => Promise<LeagueBoardRow | null>
-  base: (sport: PointsGradedSport, league: SportPointsLeague) => Promise<SportPointsBaseResult | CachedBoardResult>
+  base: (sport: PointsGradedSport, league: SportPointsLeague, options?: { projectionOnly: true }) => Promise<SportPointsBaseResult | CachedBoardResult>
 }
 
 export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
@@ -46,7 +46,7 @@ export const defaultLeagueValueBoardDeps: LeagueValueBoardDeps = {
       select: { id: true, sport: true, platform: true, platformLeagueId: true, settings: true, leagueType: true, leagueSize: true, season: true, status: true },
     }) as Promise<LeagueBoardRow | null>,
   // Through Value OS's three-minute league board, the one the in-league trade grade reads too (2026-11-21).
-  base: (sport, league) => loadCachedLeagueBoardBase({ sport, league }),
+  base: (sport, league, options) => loadCachedLeagueBoardBase({ sport, league, ...options }),
 }
 
 export type LeagueValueBoard =
@@ -54,22 +54,24 @@ export type LeagueValueBoard =
   | { kind: 'not_board_sport' }
   /** A board sport whose board could not be built here — the reason is the board's own words. */
   | { kind: 'unavailable'; sport: PointsGradedSport; reason: string }
-  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer>; servedFrom?: 'store' | 'live' }
+  | { kind: 'ok'; sport: PointsGradedSport; ctx: SportPointsContext; byId: ReadonlyMap<string, BoardPlayer>; servedFrom?: 'store' | 'live'; projectionOnly?: true }
 
 /** The board for one league, or why not. Never throws. */
 export async function loadLeagueValueBoard(
   leagueId: string,
   deps: Partial<LeagueValueBoardDeps> = {},
+  options?: { projectionOnly: true },
 ): Promise<LeagueValueBoard> {
   const d = { ...defaultLeagueValueBoardDeps, ...deps }
   const league = await d.league(leagueId).catch(() => null)
   if (!league || !isBoardValueSport(league.sport)) return { kind: 'not_board_sport' }
   const sport = league.sport.trim().toUpperCase() as PointsGradedSport
-  const base = await d.base(sport, league).catch(() => null)
+  const projection = options?.projectionOnly && isFantraxNbaCampusLeague(sport, league) ? options : undefined
+  const base = await (projection ? d.base(sport, league, projection) : d.base(sport, league)).catch(() => null)
   if (!base) return { kind: 'unavailable', sport, reason: 'The league’s value board could not be read just now.' }
   if (!base.ok) return { kind: 'unavailable', sport, reason: base.reason }
   const servedFrom = 'servedFrom' in base ? base.servedFrom : undefined
-  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])), ...(servedFrom ? { servedFrom } : {}) }
+  return { kind: 'ok', sport, ctx: base.ctx, byId: new Map(base.ctx.board.map((p) => [p.id, p])), ...(servedFrom ? { servedFrom } : {}), ...projection }
 }
 
 /** What a board value measures, as a phrase: "fantasy points" or "category score". */
@@ -157,6 +159,7 @@ export function boardPlayerValue(
 ): { available: true; data: BoardPlayerValue } | { available: false; reason: string } {
   if (board.kind === 'not_board_sport') return { available: false, reason: 'This sport is not valued on a league board yet.' }
   if (board.kind === 'unavailable') return { available: false, reason: board.reason }
+  if (board.projectionOnly) return { available: false, reason: 'This board contains NBA projections for the current season. Campus-to-Canton trade values require both divisions.' }
   const { ctx, sport } = board
   if (ctx.window.gamesRemaining <= 0) {
     return { available: false, reason: `The ${ctx.window.seasonLabel} regular season has no games left, so there is no rest-of-season value.` }

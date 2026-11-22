@@ -3,7 +3,7 @@ import 'server-only'
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-import { categoryLeagueReason, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
+import { categoryLeagueReason, isFantraxNbaCampusLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
 import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 import { leagueIdColumn } from '@/lib/waivers/seasonRatePool'
@@ -18,7 +18,7 @@ import { loadProjectionEvidence } from './projectionCoverageEvidence'
 import { assessProjectionCoverage, parseChimmyProjection, type CoveragePlayer, type ChimmyProjection } from './projectionCoverageCore'
 
 const LEAGUE_SELECT = {
-  id: true, season: true, sport: true, platform: true, settings: true,
+  id: true, season: true, sport: true, platform: true, leagueType: true, settings: true,
   rosters: { select: { playerData: true } },
   redraftSeasons: { select: { season: true, rosters: { select: {
     players: { where: { droppedAt: null }, select: { playerId: true, playerName: true } },
@@ -79,7 +79,10 @@ async function auditSport(sport: LeagueSport, now: Date, requestedLeagueId?: str
   }
   const allIds = [...rosterIds.keys()].sort()
   const ids = allIds.slice(0, MAX_PLAYERS)
-  const valueBoard = isPointsGradedSport(sport) ? loadLeagueValueBoard(league.id) : undefined
+  const projectionOnly = isFantraxNbaCampusLeague(sport, league)
+  const valueBoard = isPointsGradedSport(sport)
+    ? loadLeagueValueBoard(league.id, {}, projectionOnly ? { projectionOnly: true } : undefined)
+    : undefined
   const [os, lineupBoards, matchup, board] = await Promise.all([
     loadLeaguePlayerMetrics({ leagueId: league.id, week, now, rosterIds: ids, limit: ids.length, includeTradeValues: false, valueBoard }),
     week != null ? loadLeagueRosterWeeks([{ leagueId: league.id, season, week, ids }]) : null,
