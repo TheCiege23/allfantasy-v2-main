@@ -403,6 +403,8 @@ export async function resolveBestAvailableAutopickCandidate(
   } = ctx
 
   let selected: BestAvailableAutopickResolved | null = null
+  /** Set when draft as me was on but had too little history: said in front of the fallback's reason. */
+  let draftAsMeNote: string | null = null
 
   /*
    * One starter guard for every branch below (lib/live-draft-engine/autopickStarterGuard.ts). It bites
@@ -428,6 +430,9 @@ export async function resolveBestAvailableAutopickCandidate(
       eligible: draftEligiblePositions,
       aiAdpByKey,
       sport,
+      onNotEnoughHistory: (reason) => {
+        draftAsMeNote = reason
+      },
     }).catch(() => null)
     if (mine && guard.allows(mine.position)) {
       return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
@@ -507,7 +512,7 @@ export async function resolveBestAvailableAutopickCandidate(
     }
   }
 
-  return selected
+  return selected && draftAsMeNote ? { ...selected, reason: draftAsMeNote } : selected
 }
 
 /**
@@ -547,6 +552,8 @@ export async function submitBestAvailableAutopickForExpiredTimer(
     rosterId: onClockRosterId,
     source: 'auto',
     expectedOverall,
+    // Why it was picked, shown on the board's player card (autoPickReason in the session snapshot).
+    pickMetadata: { autopick: { strategy: selected.strategy, reason: selected.reason } },
   })
 
   if (!result.success) return { ok: false, error: 'submit_failed' }

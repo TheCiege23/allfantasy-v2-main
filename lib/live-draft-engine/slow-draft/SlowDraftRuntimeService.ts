@@ -174,6 +174,7 @@ export async function tryQueueAutoPick(
       rosterId,
       source: 'auto',
       expectedOverall,
+      pickMetadata: { autopick: { strategy: 'queue', reason: 'The next available player in your queue.' } },
     })
     if (attempt.success) {
       return { success: true, playerName: String(entry.playerName ?? '').trim(), queuePlayerUnavailable }
