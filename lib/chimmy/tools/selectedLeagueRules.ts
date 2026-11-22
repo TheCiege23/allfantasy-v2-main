@@ -6,10 +6,20 @@ import { parseSections } from '@/lib/constitution/constitutionBuilder'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { sanitizeUntrusted, sanitizeUntrustedExcerpt } from '@/lib/chimmy/sanitizeUntrusted'
 
+const LEAGUE_RULES_UNAVAILABLE = 'The selected league settings could not be verified. Do not describe its rules.'
+
+export function isSelectedLeagueRulesQuestion(message: string): boolean {
+  return /\b(?:rules?|constitution|bylaws?|scoring|tiebreakers?|playoff settings|roster slots?|(?:league|weekly) median|median (?:game|scoring|win|loss)|player pools?|player ownership|(?:conference|division) pools?)\b/i.test(message)
+}
+
 /** Membership is checked before reading any published text. */
 export async function buildSelectedLeagueRules(leagueId: string, userId: string): Promise<string> {
+  return await readSelectedLeagueRules(leagueId, userId) ?? LEAGUE_RULES_UNAVAILABLE
+}
+
+export async function readSelectedLeagueRules(leagueId: string, userId: string): Promise<string | null> {
   const rules = await resolveNormalizedLeagueContext({ leagueId, userId })
-  if (!rules.ok) return 'The selected league settings could not be verified. Do not describe its rules.'
+  if (!rules.ok) return null
 
   const { leagueName, season, sport, platform, scoring, roster, waiver, trade, playoff, matchupPeriod, lineupBehavior, flags, importHealth } = rules.context
   const competition = rules.context.nativeCompetitionRules

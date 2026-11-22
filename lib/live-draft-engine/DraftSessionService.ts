@@ -739,7 +739,7 @@ export async function buildSessionSnapshot(
 
 export type StartDraftSessionResult =
   | { ok: true }
-  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE' | 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE'; error?: string }
+  | { ok: false; reason: 'session_not_ready' | 'ROSTER_CONFIGURATION_INCOMPLETE' | 'SURVIVOR_CAST_INCOMPLETE' | 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE' | 'NFL_DRAFT_POOL_INCOMPLETE'; error?: string }
 
 export async function startDraftSession(leagueId: string): Promise<StartDraftSessionResult> {
   const started = await startDraftSessionCore(leagueId)
@@ -763,7 +763,11 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
 }
 
 async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessionResult> {
-  const seasonSettings = (await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }))?.settings
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { sport: true, leagueType: true, platform: true, settings: true },
+  })
+  const seasonSettings = league?.settings
   if (seasonSetupBlocked(seasonSettings)) {
     if (!(await hasSeasonDraftRelease(leagueId, seasonSettings))) return { ok: false, reason: 'session_not_ready' }
     const { loadSeasonDraftContext, readSeasonDraftSnapshot } = await import('@/lib/tournament/seasonDraftRuntime')
@@ -779,6 +783,12 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
 
   const session = await prisma.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
   if (!session || session.status !== 'pre_draft') return { ok: false, reason: 'session_not_ready' }
+
+  if (league?.sport === 'NFL' && ['redraft', 'dynasty'].includes(league.leagueType ?? '')) {
+    const { getNflDraftPoolCapacity } = await import('@/lib/draft-room/nflDraftPoolCapacity')
+    const capacity = await getNflDraftPoolCapacity(leagueId, { league, session })
+    if (capacity?.error) return { ok: false, reason: 'NFL_DRAFT_POOL_INCOMPLETE', error: capacity.error }
+  }
 
   const renewalSeats=await zombieRenewalDraftReadiness(prisma,leagueId,session.teamCount,seasonSettings)
   if(!renewalSeats.ready) return {ok:false,reason:'ZOMBIE_RENEWAL_SEATS_INCOMPLETE',error:renewalSeats.error}

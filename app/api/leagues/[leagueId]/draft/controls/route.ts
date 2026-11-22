@@ -280,7 +280,8 @@ async function handleDraftControl(
         if (started.reason === 'ROSTER_CONFIGURATION_INCOMPLETE') {
           return NextResponse.json(rosterConfigurationIncompleteBody({ leagueId }), { status: 409 })
         }
-        if ((started.reason === 'SURVIVOR_CAST_INCOMPLETE' || started.reason === 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE')) {
+        if (started.reason === 'SURVIVOR_CAST_INCOMPLETE' ||
+            started.reason === 'ZOMBIE_RENEWAL_SEATS_INCOMPLETE' || started.reason === 'NFL_DRAFT_POOL_INCOMPLETE') {
           return NextResponse.json({ code: started.reason, error: started.error }, { status: 409 })
         }
         return NextResponse.json({ error: 'Cannot start draft' }, { status: 400 })

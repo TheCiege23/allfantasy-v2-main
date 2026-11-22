@@ -120,6 +120,7 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
    * what that gating was written to do.
    */
   const sleeperRowsOnly = url.searchParams.get("sleeperRows") === "1"
+  const currentRosterOnly = sleeperRowsOnly && url.searchParams.get("currentRoster") === "1"
   const intelOnly = url.searchParams.get("intel") === "1"
 
   const sports = sportParam
@@ -166,7 +167,12 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
         return NextResponse.json({ ok: false, error: 'sleeperRows requires a single sport (NFL or NBA) and cannot combine with intel.' }, { status: 400 })
       }
       const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
-      const result = await refreshSleeperPlayerRows({ sport, limit: sport === 'NBA' ? 600 : 1500, isExhausted: () => budget.exhausted() })
+      const result = await refreshSleeperPlayerRows({
+        sport,
+        currentRosterOnly,
+        limit: currentRosterOnly ? 3500 : sport === 'NBA' ? 600 : 1500,
+        isExhausted: () => budget.exhausted(),
+      })
       const nbaIdentities = sport === 'NBA' && !result.feedUnavailable && !budget.exhausted()
         ? await import('@/lib/player-identity/reconcileSleeperNbaIdentities')
           .then(({ reconcileSleeperNbaIdentities }) => reconcileSleeperNbaIdentities({ isExhausted: () => budget.exhausted() }))

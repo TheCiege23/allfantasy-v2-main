@@ -80,6 +80,7 @@ export function useLiveDraftSync({
   const [pollInterval, setPollInterval] = useState(POLL_MS)
   const refetchOnceRef = useRef<(() => void) | null>(null)
   const pollTickRef = useRef(0)
+  const pollOffset = useRef<number | null>(null)
   const pollInFlightRef = useRef(false)
   const secondaryInFlightRef = useRef(false)
 
@@ -252,9 +253,15 @@ export function useLiveDraftSync({
 
   useEffect(() => {
     if (!leagueId) return
-    const id = setInterval(() => {
+    pollOffset.current ??= Math.random()
+    let interval: ReturnType<typeof setInterval> | undefined
+    const first = setTimeout(() => {
       refetchOnceRef.current?.()
-    }, pollInterval)
-    return () => clearInterval(id)
+      interval = setInterval(() => refetchOnceRef.current?.(), pollInterval)
+    }, Math.round(pollInterval * pollOffset.current))
+    return () => {
+      clearTimeout(first)
+      if (interval) clearInterval(interval)
+    }
   }, [leagueId, pollInterval])
 }

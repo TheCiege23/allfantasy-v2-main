@@ -13,6 +13,8 @@ import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 import { readConfirmedLeagueConcept, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { leagueVariantFor } from '@/lib/core-app/valueBook'
+import { loadPlayerPools } from '@/lib/league/player-pools/load'
+import { countTeamsByPlayerPool, poolOf, readPlayerPoolScope } from '@/lib/league/player-pools/policy'
 
 type RawAsset = {
   fromRosterId: string
@@ -122,6 +124,7 @@ export async function computeRedraftTradeValueSnapshot(
    * when the count cannot describe a league, and the snapshot records that assumption.
    */
   let scoring = null as ReturnType<typeof scoringContextFromWorld>
+  let playerPoolNote: string | null = null
   /*
    * The league's REAL format, so the format registry can resolve a model for it.
    *
@@ -157,8 +160,25 @@ export async function computeRedraftTradeValueSnapshot(
       const starterSlots = Array.isArray(league.starters)
         ? (league.starters as unknown[]).filter((x): x is string => typeof x === 'string')
         : null
+      let playerMarketTeams = seasonRosterCount
+      if (readPlayerPoolScope(league.settings) !== 'league') {
+        const [pools, seasonRosters] = await Promise.all([
+          loadPlayerPools(input.leagueId, { settings: league.settings, seasonId: input.seasonId }),
+          prisma.redraftRoster.findMany({ where: { seasonId: input.seasonId }, select: { id: true } }),
+        ])
+        const poolSizes = countTeamsByPlayerPool(seasonRosters.map(roster => roster.id), pools)
+        const sending = poolSizes.get(poolOf(pools, input.proposerRosterId))
+        const receiving = poolSizes.get(poolOf(pools, input.receiverRosterId))
+        if (sending != null && sending >= 2 && sending === receiving) {
+          playerMarketTeams = sending
+          playerPoolNote = 'Player values use the ' + sending + '-team player pools for these franchises.'
+        } else if (sending != null && receiving != null) {
+          playerPoolNote = 'These franchises draw from pools of ' + sending + ' and ' + receiving
+            + ' teams. This grade uses a common league market and does not estimate the difference in replacement value.'
+        }
+      }
       scoring = scoringContextFromWorld({
-        teams: seasonRosterCount,
+        teams: playerMarketTeams,
         starterSlots,
         rosterSize: league.rosterSize,
         irSlots: league.irSlots,
@@ -337,6 +357,7 @@ export async function computeRedraftTradeValueSnapshot(
     scoring,
   })
 
+  if (playerPoolNote) snapshot.grade.bullets.push(playerPoolNote)
   if (seasonRosterCount < 2) {
     snapshot.grade.bullets.push(`This season has no verified team count. Team profiles use ${leagueSize} teams.`)
   }

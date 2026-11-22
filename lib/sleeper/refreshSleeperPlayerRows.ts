@@ -122,6 +122,8 @@ export async function refreshSleeperPlayerRows(args: {
   sport?: 'NFL' | 'NBA'
   /** How many players to touch this run. Keeps one unit small. */
   limit?: number
+  /** Prioritize draft eligibility and roster changes ahead of historical profile updates. */
+  currentRosterOnly?: boolean
   /** Checked BETWEEN batches, never inside one. */
   isExhausted?: () => boolean
 }): Promise<SleeperRowRefreshResult> {
@@ -158,6 +160,10 @@ export async function refreshSleeperPlayerRows(args: {
   }
   if (byId.size === 0) return { ...empty, feedUnavailable: true }
 
+  const rosteredIds = args.currentRosterOnly
+    ? [...byId].filter(([, player]) => Boolean(player.team?.trim())).map(([id]) => id)
+    : null
+  if (rosteredIds?.length === 0) return { ...empty, feedUnavailable: true }
   const now = new Date()
   const expiresAt = new Date(now.getTime() + TTL_MS)
 
@@ -168,7 +174,11 @@ export async function refreshSleeperPlayerRows(args: {
    */
   const existing = await prisma.sportsPlayer
     .findMany({
-      where: { sport, source: SOURCE, sleeperId: { not: null }, fetchedAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+      where: {
+        sport, source: SOURCE, sleeperId: { not: null },
+        fetchedAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        ...(rosteredIds ? { OR: [{ team: { not: null } }, { sleeperId: { in: rosteredIds } }] } : {}),
+      },
       orderBy: { fetchedAt: 'asc' },
       select: { id: true, sleeperId: true },
       take: limit,
@@ -230,15 +240,16 @@ export async function refreshSleeperPlayerRows(args: {
    */
   const createBudget = Math.max(0, limit - scanned)
   if (createBudget > 0 && !isExhausted()) {
+    const candidateIds = rosteredIds ?? [...byId.keys()]
     const known = await prisma.sportsPlayer
       .findMany({
-        where: { sport, source: SOURCE, sleeperId: { in: [...byId.keys()] } },
+        where: { sport, source: SOURCE, sleeperId: { in: candidateIds } },
         select: { sleeperId: true },
       })
       .catch(() => [])
     const haveIds = new Set(known.map((k) => k.sleeperId).filter(Boolean) as string[])
 
-    const missing = [...byId.entries()].filter(([id]) => !haveIds.has(id))
+    const missing = candidateIds.filter((id) => !haveIds.has(id)).map((id) => [id, byId.get(id)!] as const)
       .sort(([, a], [, b]) => Number(Boolean(b.team)) - Number(Boolean(a.team)))
       .slice(0, createBudget)
     for (const [id, p] of missing) {

@@ -9,6 +9,8 @@ import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRoste
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
+import { dedupeInFlight } from '@/lib/api-performance'
 import {
   repairDraftCompletionIfBoardFull,
   syncPostDraftArtifactsIfCompletedThrottled,
@@ -38,16 +40,16 @@ export async function buildDraftLiveSyncPayload(
     chatLimit?: number
   },
 ): Promise<DraftLiveSyncWire> {
-  /** Heal stuck "full board but not completed" even when client `since` matches `updatedAt`. */
-  await repairDraftCompletionIfBoardFull(leagueId).catch((e) => {
-    console.error('[buildDraftLiveSyncPayload] repairDraftCompletionIfBoardFull', leagueId, e)
-  })
-  await syncPostDraftArtifactsIfCompletedThrottled(leagueId)
-
-  const draftSessionRow = await prisma.draftSession.findFirst({
-    where: { leagueId },
-    orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { updatedAt: true },
+  const draftSessionRow = await dedupeInFlight('draft:live-sync-version:' + leagueId, async () => {
+    await repairDraftCompletionIfBoardFull(leagueId).catch(error => {
+      console.error('[buildDraftLiveSyncPayload] repairDraftCompletionIfBoardFull', leagueId, error)
+    })
+    await syncPostDraftArtifactsIfCompletedThrottled(leagueId)
+    return prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { updatedAt: true },
+    })
   })
 
   if (!draftSessionRow) {
@@ -63,18 +65,25 @@ export async function buildDraftLiveSyncPayload(
   let sessionPayload: Record<string, unknown> | null = null
 
   if (sessionNeedsRefresh) {
-    const [snapshot, uiSettings, orphanRosterIds] = await Promise.all([
-      buildSessionSnapshot(leagueId, new Date(), userId),
-      getDraftUISettingsForLeague(leagueId),
-      getOrphanRosterIdsForLeague(leagueId),
-    ])
+    const [snapshot, uiSettings, orphanRosterIds] = await dedupeInFlight(
+      'draft:live-sync-board:' + leagueId + ':' + updatedAt,
+      () => Promise.all([
+        buildSessionSnapshot(leagueId, new Date()),
+        getDraftUISettingsForLeague(leagueId),
+        getOrphanRosterIdsForLeague(leagueId),
+      ]),
+    )
     const providerStatus = getProviderStatus()
-    const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
+    const [currentUserRosterId, viewerAutopick] = snapshot ? await Promise.all([
+      getCurrentUserRosterIdForLeague(leagueId, userId, undefined, snapshot),
+      getViewerAutopickPreference(snapshot.id, userId),
+    ]) : [null, null]
 
     sessionPayload =
       snapshot != null
         ? ({
             ...snapshot,
+            viewerAutopick,
             currentUserRosterId: currentUserRosterId ?? undefined,
             orphanRosterIds,
             aiManagerEnabled: uiSettings.orphanTeamAiManagerEnabled,

@@ -16,6 +16,15 @@ export function poolOf(pools: PlayerPools, rosterId: string): string {
   return pool
 }
 
+export function countTeamsByPlayerPool(rosterIds: readonly string[], pools: PlayerPools): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const id of new Set(rosterIds)) {
+    const pool = poolOf(pools, id)
+    counts.set(pool, (counts.get(pool) ?? 0) + 1)
+  }
+  return counts
+}
+
 export function picksInPool<T extends { rosterId: string }>(picks: readonly T[], pools: PlayerPools, rosterId: string): readonly T[] {
   if (!pools) return picks
   const pool = poolOf(pools, rosterId)

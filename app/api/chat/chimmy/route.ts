@@ -2541,11 +2541,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     )
   }
 
-  const selectedLeagueRules = leagueSnapshot && userId && /\b(?:rules?|constitution|bylaws?|scoring|tiebreakers?|playoff settings|roster slots?)\b/i.test(message)
-    ? await import('@/lib/chimmy/tools/selectedLeagueRules')
-        .then(({ buildSelectedLeagueRules }) => buildSelectedLeagueRules(leagueSnapshot.id, userId))
-        .catch(() => 'The selected league settings and constitution could not be verified.')
+  const rulesModule = leagueSnapshot && userId ? await import('@/lib/chimmy/tools/selectedLeagueRules') : null
+  const needsSelectedLeagueRules = rulesModule?.isSelectedLeagueRulesQuestion(message) === true
+  const verifiedSelectedLeagueRules = leagueSnapshot && userId && rulesModule && needsSelectedLeagueRules
+    ? await rulesModule.readSelectedLeagueRules(leagueSnapshot.id, userId).catch(() => null)
     : null
+  const selectedLeagueRules = verifiedSelectedLeagueRules ??
+    (needsSelectedLeagueRules ? 'The selected league settings and constitution could not be verified.' : null)
   const combinedMemorySection = [
     selectedLeagueRules,
     mockDraftBoardBlock ? `## MOCK DRAFT BOARD\n${mockDraftBoardBlock}` : undefined,
@@ -3501,7 +3503,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            * reports `league_not_read`, which the panel shows as no line at all — it never claimed one.
            */
           leagueGrounding: boundLeague
-            ? answerReadLeague(loop.toolsUsed)
+            ? (verifiedSelectedLeagueRules && boundLeague.id === leagueSnapshot?.id) || answerReadLeague(loop.toolsUsed)
               ? {
                   grounded: true as const,
                   leagueId: boundLeague.id,
@@ -3515,7 +3517,13 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           /* Which lookups the model chose, so the answer's sourcing is visible. */
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,
-          dataSources: [...loop.toolsUsed, ...(decisionOsGrounding ? ['decision_os_grounding_packet'] : [])],
+          dataSources: [
+            ...new Set([
+              ...loop.toolsUsed,
+              ...(verifiedSelectedLeagueRules && boundLeague?.id === leagueSnapshot?.id ? ['get_selected_league_rules'] : []),
+              ...(decisionOsGrounding ? ['decision_os_grounding_packet'] : []),
+            ]),
+          ],
           ...(singleBracketRead ? { bracketEvidence: singleBracketRead } : {}),
           /*
            * The next questions worth asking — each one answerable by a tool, none of them sent until
