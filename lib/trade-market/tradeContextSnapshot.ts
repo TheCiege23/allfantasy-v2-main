@@ -48,7 +48,8 @@ export type TradeContextPlayer = {
   team: string | null
   /** The lineup slot the player held before the trade, when the provider says (e.g. "SUPER_FLEX"); null on the bench. */
   slot: string | null
-  starter: boolean
+  /** Null when unknown — a player the offseason rebuild put back on a roster had no lineup that week. */
+  starter: boolean | null
   /** Null when the source cannot say — a roster rebuilt from weekly score rows carries no reserve or taxi flag. */
   reserve: boolean | null
   taxi: boolean | null
@@ -70,9 +71,10 @@ export type TradeContextSnapshot = {
    * `live_sync`: captured from the sync that saw the trade — rosters exact.
    * `backfill_rebuilt`: rebuilt later from stored weekly rows (`tradeContextBackfill.ts`) — rosters as of the week
    * before, so moves made between that week and the trade are not in them. `rosterBasis` says which week.
+   * `week1_unwound`: an offseason trade — week-1 rows with the trade undone, so moves between it and week 1 are in them.
    */
   source: 'live_sync' | 'backfill_rebuilt'
-  rosterBasis?: { kind: 'weekly_rows'; week: number }
+  rosterBasis?: { kind: 'weekly_rows' | 'week1_unwound'; week: number }
   provider: string
   capturedAt: string
   tradeAt: string | null
