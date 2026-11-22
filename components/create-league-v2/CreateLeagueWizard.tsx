@@ -270,7 +270,14 @@ function bestBallSetupForTeamCount(sport: CreateLeagueV2State['sport'], draftTyp
 
 export function nextStateForLeagueType(state: CreateLeagueV2State, leagueType: LeagueTypeId): Partial<CreateLeagueV2State> {
   const draftTypeOptions = getDraftTypeOptions(leagueType, state.sport)
-  const draftType = draftTypeOptions.some((option) => option.id === state.draftType)
+  /*
+   * Keep the manager's draft type when the new format offers it, unless the format they are leaving
+   * gave them no choice. Salary Cap is auction-only, so tapping it and then Redraft left Auction
+   * selected: a draft type nobody picked, carried into every format and sport visited afterwards.
+   */
+  const leaving = getEffectiveLeagueType(state)
+  const leftForcedDraftType = leaving != null && leaving !== leagueType && getDraftTypeOptions(leaving, state.sport).length === 1
+  const draftType = !leftForcedDraftType && draftTypeOptions.some((option) => option.id === state.draftType)
     ? state.draftType
     : (draftTypeOptions[0]?.id ?? 'snake') as WizardDraftType
   const scoringPresetId = resolveValidScoringPresetIdForSelection('', {
@@ -1135,7 +1142,10 @@ export function LeagueBasicsStep({
             </button>
           </div>
           <span id="g30-team-count-options" className="block text-xs text-[color:var(--text-secondary)]">
-            {teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
+            {/* One allowed size (NFL Survivor is 12) reads as that size, not as a range "12 to 12". */}
+            {teamCountOptions.length === 1
+              ? tx(t, 'createLeague.g30.teamCount.fixed', `${teamCountOptions[0]} teams. This format plays at one size.`)
+              : teamCountStep === 1 ? `${teamCountOptions[0]} to ${teamCountOptions.at(-1)}` : teamCountOptions.join(', ')}
           </span>
           <FieldError message={fieldErrors?.teamCount} />
           {lockedTeamCounts.length > 0 ? (
