@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({
   attach: vi.fn(async (a: { role: string }) => ({ ok: true as const, linkId: 'link-1', role: a.role })),
   paired: new Map<string, unknown>(),
   metrics: vi.fn(),
+  cache: [] as Array<{ data: unknown }>,
+  identities: [] as Array<{ fantraxId: string; espnId: string | null }>,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -19,7 +21,11 @@ vi.mock('@/lib/prisma', () => ({
     franchiseLeagueMember: { findMany: vi.fn(async () => []) },
     userProfile: { findUnique: vi.fn(async () => null) },
     sportsGame: { findMany: vi.fn(async () => []) },
-    sportsDataCache: { findMany: vi.fn(async () => []) },
+    sportsDataCache: { findMany: vi.fn(async () => h.cache) },
+    playerIdentityMap: {
+      findMany: vi.fn(async (q: { where: { fantraxId?: { in: string[] } } }) =>
+        h.identities.filter((i) => q.where.fantraxId?.in.includes(i.fantraxId))),
+    },
     fantraxLeague: {
       findUnique: vi.fn(async (q: { where: { id: string } }) =>
         q.where.id === 'snap-nba'
@@ -75,6 +81,8 @@ const PERIODS = [
 beforeEach(() => {
   h.attach.mockClear()
   h.paired.clear()
+  h.cache = []
+  h.identities = []
   h.metrics.mockReset().mockResolvedValue({
     unit: 'fantasy points',
     rows: [
@@ -168,6 +176,38 @@ describe('the combined page for an NBA league on Fantrax', () => {
     const calls = vi.mocked(loadDailyPoints).mock.calls.map((c) => c[0])
     expect(calls.filter((c) => c.sport === 'NBA').every((c) => c.settings === nbaRules)).toBe(true)
     expect(calls.filter((c) => c.sport === 'NCAAB').map((c) => c.settings)).toEqual([cbbRules])
+  })
+
+  it('moves a drafted college player up the NBA way: linked by ESPN id, never by name', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.identities = [{ fantraxId: 'c1', espnId: '111' }, { fantraxId: 'dk1', espnId: '222' }]
+    h.cache = [{ data: {
+      year: 2026,
+      fetchedAt: '2026-07-20T00:00:00.000Z',
+      picks: [
+        { collegeAthleteId: '111', name: 'Freshman', position: 'G', collegeTeam: 'Butler', nflTeam: 'Utah Jazz', round: 1, pick: 14, overall: 14 },
+        { collegeAthleteId: '222', name: 'Duke Guard', position: 'G', collegeTeam: 'Duke', nflTeam: 'Boston Celtics', round: 2, pick: 3, overall: 33 },
+        { collegeAthleteId: '333', name: 'Nobody Held', position: 'F', collegeTeam: 'Kansas', nflTeam: 'Miami Heat', round: 2, pick: 9, overall: 39 },
+      ],
+      unlinked: [{ name: 'No Id', school: 'BYU', overall: 8, reason: 'no athlete id' }],
+    } }]
+    const r = await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
+    expect(r.applies && r.pipeline).toEqual({
+      year: 2026,
+      movingUp: [{ playerId: 'c1', name: 'Freshman', position: 'G', nflTeam: 'Utah Jazz', round: 1, pick: 14 }],
+      rookiePool: { drafted: 3, heldInCollege: 2, unheld: 1 },
+      unlinked: 1,
+    })
+  })
+
+  it('a college player whose Fantrax id maps to two different athletes is not moved up', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    h.identities = [{ fantraxId: 'c1', espnId: '111' }, { fantraxId: 'c1', espnId: '999' }]
+    h.cache = [{ data: { year: 2026, fetchedAt: '2026-07-20T00:00:00.000Z', picks: [
+      { collegeAthleteId: '111', name: 'Freshman', position: 'G', collegeTeam: 'Butler', nflTeam: 'Utah Jazz', round: 1, pick: 14, overall: 14 },
+    ], unlinked: [] } }]
+    const r = await loadCollegeProRoster('nba', 'u1', new Date('2026-11-21T18:00:00Z'))
+    expect(r.applies && r.pipeline?.movingUp).toEqual([])
   })
 
   it('publishes the AF weekly totals by Fantrax roster ID, preserving zero and missing', async () => {

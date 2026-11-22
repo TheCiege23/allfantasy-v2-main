@@ -105,6 +105,9 @@ export const scoutScreenMessages = defineMessages({
     standingsThroughWeek: 'Standings through week',
     seasonFinal: ' — final',
     noStandingsYet: 'No standings yet',
+    /** Under the manager cards, which show their first SCOUT_CARDS_PREVIEW (Scout). */
+    showAllManagers: (n: number) => `Show all ${n} managers`,
+    showFewerManagers: 'Show fewer managers',
     edgeLockWhat: 'Every manager’s trade and waiver record',
     eyebrow: 'War Room',
     /** 2026-11-14: the league moves to the eyebrow, and the h1 says something. */
@@ -237,6 +240,8 @@ export const scoutScreenMessages = defineMessages({
     standingsThroughWeek: 'Clasificación hasta la semana',
     seasonFinal: ' (final)',
     noStandingsYet: 'Todavía no hay clasificación',
+    showAllManagers: (n) => `Ver los ${n} mánagers`,
+    showFewerManagers: 'Ver menos mánagers',
     edgeLockWhat: 'El historial de intercambios y reclamos de cada mánager',
     eyebrow: 'Sala de estrategia',
     eyebrowLeague: (league) => `Sala de estrategia · ${league}`,

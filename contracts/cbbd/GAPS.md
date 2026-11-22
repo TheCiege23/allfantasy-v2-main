@@ -1,46 +1,51 @@
 # CollegeBasketballData (CBBD) — open questions
 
 CBBD is CollegeFootballData's sister API. One key and one monthly call quota cover both
-(<https://collegefootballdata.com/api-tiers>). Commercial use is permitted
-(<https://collegefootballdata.com/terms>).
+(<https://collegefootballdata.com/api-tiers>; the CBBD tier page says "one Patreon membership unlocks
+both sites"). Commercial use is permitted (<https://collegefootballdata.com/terms>).
 
-**Nothing in this repo calls CBBD yet.** No `ENDPOINTS.yaml` and no fixtures exist. Every field
-name below comes from the Python client's model docs (<https://github.com/CFBD/cbbd-python>), which
-give snake_case names with no descriptions and no JSON wire names. Do not code against them until a
-response has been captured with this contract's own probe and committed as a fixture (CLAUDE.md:
-probing is allowed only to add a new endpoint, and the fixture lands in the same change).
+Captured endpoints and their shapes are in `ENDPOINTS.yaml`, from the fixtures in `fixtures/`
+(`scripts/probe.sh`). **Nothing in the app calls CBBD yet.** The Python client's snake_case model
+names (<https://github.com/CFBD/cbbd-python>) are NOT the wire names: the API is camelCase.
 
-## B-01 — Can an NBA draft pick be linked to our college basketball player without names? (recorded 2026-11-21, no probe)
+## B-01 — Can an NBA draft pick be linked to our college basketball player without names? — **ANSWERED 2026-11-22: yes, by id**
 
 **Why it matters.** The C2C / Devy pipeline for basketball needs to know which college players were
 drafted to the NBA: they move up to the manager's NBA roster, and the rookies nobody held make up
 the shortened rookie draft. The football version links a CFBD draft pick to our player by
-`collegeAthleteId` == `PlayerIdentityMap.cfbdId` (lib/devy/cfbdDraftPicksStore.ts). Basketball has
-no such link today:
+`collegeAthleteId` == `PlayerIdentityMap.cfbdId` (lib/devy/cfbdDraftPicksStore.ts).
 
-- `PlayerIdentityMap` (sport `NCAAB`) holds 3,288 rows with an `espnId`, and no CBBD id at all.
-- NBA identity rows hold no `espnId` (0, measured 2026-11-21), so ESPN's shared athlete id cannot
-  link college to pro from our side.
-- Matching by name is ruled out (lib/core-app/connectedRoster.ts: "Never match a college player by name").
+**The chain, every link measured on committed fixtures (3 calls, 2026-11-22):**
 
-**What the docs suggest (unverified):**
+```
+/draft/picks?year=Y      athleteId
+        ==  /teams/roster?season=Y&team=<sourceTeamLocation>   players[].id
+/teams/roster            players[].sourceId   (ESPN athlete id, a string)
+        ==  PlayerIdentityMap.espnId   (sport NCAAB)
+```
 
-| model | id fields (Python names) |
-|---|---|
-| `DraftPick` (`/draft/picks`) | `athlete_id` (int) only. `source_team_*` fields describe the college team, not the player. |
-| `TeamRosterPlayer` (`/teams/roster`) | `id` (int, CBBD) and `source_id` (str, system not stated) |
-| `GameBoxScorePlayersPlayersInner` (`/games/players`) | `athlete_id` (int) and `athlete_source_id` (str, system not stated) |
+1. **Wire names are camelCase:** `athleteId`, `sourceTeamLocation`, `sourceId`, `teamSourceId`.
+2. **A pick's `athleteId` is the roster player's CBBD `id`.** The 2025 draft's three Duke picks
+   (`draft-picks-2025.json`) are 205 Cooper Flagg, 206 Kon Knueppel and 204 Khaman Maluach; Duke's
+   2024-25 roster (`roster-2025-duke.json`) has the same three ids on the same three players.
+   The roster to read is the season ending in the draft year (2025 draft → `season=2025`).
+3. **`sourceId` is the ESPN athlete id.** Duke's current roster (`roster-2026-duke.json`) has 13
+   players. 5 of their `sourceId`s are stored as `espnId` in our NCAAB identity rows, and all 5 are the
+   same person (Caleb Foster, Cayden Boozer, Dame Sarr, Sebastian Wilkins, Patrick Ngongba II). None of
+   the 13 is held by a different player. The other 8 are in our data with `espnId` NULL, so they
+   cannot be compared yet — not a disagreement. `teamSourceId` is 150, Duke's ESPN team id.
 
-**Hypothesis:** `athlete_source_id` / `source_id` is the ESPN athlete id. If it is, the chain is
-`DraftPick.athlete_id` → `TeamRosterPlayer.id` → `source_id` (ESPN) → `PlayerIdentityMap.espnId`
-(NCAAB), with no names anywhere.
+**Limits, so nobody overreads it:**
 
-**To settle it, once the CFBD/CBBD key has quota again:** capture one `/draft/picks?year=<last
-draft>` and one `/teams/roster` for a school with a recent first-rounder, then commit both as
-fixtures here. Confirm that:
-1. the JSON wire names (camelCase or not);
-2. the roster `sourceId` of a known player equals his ESPN athlete id;
-3. the pick's athlete id equals that roster player's CBBD id.
+- **Coverage is our `espnId` coverage.** A pick links only if the player's NCAAB identity row has an
+  `espnId`. 5 of 13 Duke players did. The ESPN NCAAB roster ingest (`lib/espn/ncaabEspnIngest.ts`)
+  is what fills it; check its coverage on rostered players before relying on the pipeline.
+- **Non-college picks carry no `athleteId`** (13 of 59 in 2025: France, China, Serbia...). Correct to
+  skip — they were never on a college roster.
+- **A college pick can lack `athleteId` too:** Egor Demin (BYU, 8th overall, 2025), 1 of 46. That pick
+  cannot be linked by id and must not be linked by name; report it as unlinked.
+- One school roster per draftee school is one call each (about 20–30 a draft). Fine once a year.
 
-Until then the basketball pipeline is not built. The page shows the drafts card without a
-"Moving up" section, as football does before its draft results arrive.
+**Next:** build the basketball pipeline on this chain — store the picks once after each June draft,
+resolve each to `PlayerIdentityMap.espnId` through the draft-year roster, and feed the drafts card's
+"Moving up" section the way football does.

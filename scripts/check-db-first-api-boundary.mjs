@@ -113,6 +113,10 @@ const DATA_API_HOST_PATTERNS = [
   // and scores/gameScoreProviders.ts by existing allowlist entries, the two scripts/ by the
   // import|refresh pattern, and lib/stats/cfbdPlayerStats.ts by the entry added below.
   /(^|\.)api\.collegefootballdata\.com$/i,
+  // CollegeBasketballData — CFBD's sister API, same key and same monthly quota. Added with its
+  // first caller (2026-11-22), so it is watched from day one: lib/cbbd/cbbdFetch.ts is the adapter
+  // (allowlisted below) and lib/devy/cbbdDraftPicksStore.ts the ingestion that alone imports it.
+  /(^|\.)api\.collegebasketballdata\.com$/i,
   // api-sports.io. NOT the same vendor as `api.sportsdata.io` above, despite the
   // names — that near-collision is how this one stayed off the list while its
   // lookalike was monitored. Seen as `v3.football.api-sports.io` and
@@ -320,6 +324,8 @@ const DATA_API_IDENTIFIERS = [
   // the check for every one of them — the exact failure this list exists to
   // prevent, described in the block comment above.
   'CFBD_BASE_URL',
+  // The CBBD host, hoisted into lib/cbbd/cbbdFetch.ts for the same reason as CFBD_BASE_URL.
+  'CBBD_BASE_URL',
   // ESPN's FANTASY league host (`lm-api-reads.fantasy.espn.com`), hoisted into
   // `lib/providers/espnUrls.ts` for the ESPN import adapter. Same reason as both
   // ESPN entries above: four files held that literal, and without these names the
@@ -553,6 +559,13 @@ const ALLOWED_PATH_PATTERNS = [
    * does when the answer is "we could not ask", rather than defaulting to `[]`.
    */
   /^lib\/cfbd-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/cbbd/cbbdFetch.ts` — the CollegeBasketballData adapter, defining `CBBD_BASE_URL` and
+   * calling through `cfbdGet` above. Census 2026-11-22 (static, relative, dynamic and require
+   * forms): its only runtime importer is `lib/devy/cbbdDraftPicksStore.ts`, ingestion run from the
+   * `?intel=1` cron tick. If a request path ever imports it, this entry is no longer earned.
+   */
+  /^lib\/cbbd\/cbbdFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The API-Football adapter. Earned the same way CFBD did, and checked the same
    * way — by its callers.

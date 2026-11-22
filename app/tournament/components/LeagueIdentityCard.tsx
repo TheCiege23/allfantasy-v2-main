@@ -46,7 +46,14 @@ export function LeagueIdentityCard({
         className="relative flex h-[100px] items-end justify-start bg-cover p-3 md:h-[120px]"
         style={{ background: bg }}
       >
-        <p className="text-[15px] font-bold text-white drop-shadow-md">{name}</p>
+        {/* A scrim under the name: white on a light conference colour was unreadable (1.79:1 on the gold
+            conference, tournament gaps audit item 4, 2026-11-09). The banner keeps its colour above it. */}
+        <span
+          aria-hidden
+          data-testid="league-identity-scrim"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/55 to-transparent"
+        />
+        <p className="relative text-[15px] font-bold text-white drop-shadow-md">{name}</p>
       </div>
       <div className="space-y-2 p-3">
         <div className="flex flex-wrap items-center gap-2">

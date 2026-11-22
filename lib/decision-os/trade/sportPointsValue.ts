@@ -290,8 +290,15 @@ export function isFantraxNbaCampusLeague(
   sport: string,
   league: { platform?: string | null; leagueType?: string | null },
 ): boolean {
-  return sport === 'NBA' && league.platform?.trim().toLowerCase() === 'fantrax' &&
-    league.leagueType?.trim().toLowerCase() === 'c2c'
+  return sport === 'NBA' && isFantraxCampusProjectionLeague(sport, league)
+}
+
+export function isFantraxCampusProjectionLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return (sport === 'NBA' || sport === 'NCAAB') &&
+    league.platform?.trim().toLowerCase() === 'fantrax' && league.leagueType?.trim().toLowerCase() === 'c2c'
 }
 
 /**

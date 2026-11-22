@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
+import { parseRiScheduleSeason } from '@/lib/sports-data/riSeasonSchedule'
 import { isFinalRiStatus, normalizedStatMapFor, normalizeRiGameBox } from '@/lib/sports-data/rollingInsightsGameLogs'
 import { buildNcaabSchoolIndex, schoolForAppearance, schoolKey } from '@/lib/player-identity/ncaabSchoolCodes'
 import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
@@ -75,12 +76,26 @@ async function watchIdentities(sport: CollegeSport, players: WatchedPlayer[]) {
   return ready
 }
 
+async function seasonScheduleForEmptyDates(sport: CollegeSport, season: number) {
+  const response = await riFetchRows('schedule_season', { sport, season, timeoutMs: 12_000 })
+  if (response.error || !response.rows.length) return null
+  const games = parseRiScheduleSeason(response.rows)
+  if (games.length !== response.rows.length) return null
+  const regularDays = games.filter(game => game.seasonType === 'regular').map(game => game.day).sort()
+  const first = regularDays[0], last = regularDays.at(-1)
+  const bounds = sport === 'NCAAF'
+    ? [`${season}-08-01`, `${season}-09-30`, `${season}-11-20`, `${season}-12-31`]
+    : [`${season}-10-01`, `${season}-11-30`, `${season + 1}-03-01`, `${season + 1}-04-30`]
+  if (!first || !last || first < bounds[0]! || first > bounds[1]! || last < bounds[2]! || last > bounds[3]!) return null
+  return { first, last, scheduledDays: new Set(games.map(game => game.day)) }
+}
+
 /** Game finality and the roster-to-player and player-to-school joins must all agree. */
 export async function ingestCollegeFinalBoxes(
   sport: CollegeSport, season: number, players: WatchedPlayer[], now = new Date(),
 ) {
   const ready = await watchIdentities(sport, players)
-  const result = { written: 0, warnings: [] as string[], players: [...ready.values()] }
+  const result = { written: 0, warnings: [] as string[], noGameDates: [] as string[], players: [...ready.values()] }
   if (!ready.size) return result
 
   const historical = await prisma.playerGameStat.findMany({
@@ -90,14 +105,25 @@ export async function ingestCollegeFinalBoxes(
   })
   const knownDates = historical.flatMap(row => row.gameDate ? [row.gameDate.toISOString().slice(0, 10)] : [])
   const dates = collegeBoxDates(players, now, knownDates)
+  const appearanceDates = new Set([...knownDates, ...players.flatMap(player => player.dates)])
+  let seasonSchedule: ReturnType<typeof seasonScheduleForEmptyDates> | undefined
   const verified = new Map<string, Prisma.PlayerGameStatCreateManyInput>()
   const ambiguous = new Set<string>()
   for (let offset = 0; offset < dates.length; offset += 3) {
     const batch = await Promise.all(dates.slice(offset, offset + 3).map(async date => ({
       date, ...await riFetchRows('live', { sport, date, timeoutMs: 12_000 }),
     })))
-    for (const { date, rows, error } of batch) {
+    for (const { date, rows, error, notModified } of batch) {
       if (error) {
+        // A 304 or 404 alone says nothing about whether a game was played.
+        if ((notModified || /^HTTP 404 live\//.test(error)) && !appearanceDates.has(date)) {
+          seasonSchedule ??= seasonScheduleForEmptyDates(sport, season)
+          const schedule = await seasonSchedule
+          if (schedule && date >= schedule.first && date <= schedule.last && !schedule.scheduledDays.has(date)) {
+            result.noGameDates.push(date)
+            continue
+          }
+        }
         result.warnings.push(sport + ' final box feed unavailable for ' + date)
         continue
       }

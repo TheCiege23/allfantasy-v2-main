@@ -269,6 +269,28 @@ describe('loadSportPointsBase', () => {
       .toMatchObject({ ok: false, reason: expect.stringContaining('c2c league') })
   })
 
+  it('reads Fantrax college Campus-to-Canton projections from completed games without enabling trade grades', async () => {
+    const now = new Date('2026-11-22T19:45:00Z')
+    db.identities = [{ id: 'college-player', canonicalName: 'Campus Player', fantraxId: 'ft-campus',
+      rollingInsightsId: 'ri-college', sleeperId: null, position: 'G' }]
+    db.rosters = [{ playerData: { players: ['ft-campus'] } }]
+    db.matchRows = Array.from({ length: 10 }, (_, i) => ({
+      playerId: 'college-player', season: 2026, team: 'DUKE', gameId: 'college-' + i,
+      gameDate: new Date(Date.UTC(2026, 10, i + 1)),
+      normalizedStatMap: { seasonType: 'regular', gameFinal: true, stats: { points: 24, minutes: 1800 } },
+    }))
+    db.games = [{ homeTeam: 'DUKE', awayTeam: 'UNC', seasonType: 'regular', season: 2026, startTime: new Date('2026-12-01T00:00:00Z') }]
+    const league = { id: 'campus', platform: 'fantrax', season: 2026, leagueType: 'c2c', leagueSize: 12,
+      settings: { sportConfig: { categoryPoints: { pts: 2 } } } }
+    const result = await loadSportPointsBase({ sport: 'NCAAB', league, now, projectionOnly: true })
+    if (!result.ok) throw new Error(result.reason)
+    expect(result.ctx.rosterIndex?.get('ft-campus')).toMatchObject({ id: 'college-player', perGame: 48, sampleGames: 10 })
+    expect(result.ctx.replacementByPosition.size).toBe(0)
+    expect(await loadSportPointsBase({ sport: 'NCAAB', league, now })).toMatchObject({
+      ok: false, reason: expect.stringContaining('c2c league'),
+    })
+  })
+
   it('loads an NBA dynasty league with each player’s age and the next rookie draft', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 40 })
     nbaPlayer('b', 'Beta', 'C', { points: 30 })
