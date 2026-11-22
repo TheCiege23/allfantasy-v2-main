@@ -16,7 +16,7 @@
  * Refuses to start unless --confirm-host names the host Prisma will connect to. Counts and points only —
  * no user, league or player identifiers. Prints the host, never the URL.
  */
-import { gradeTradeRows } from '@/lib/decision-os/trade/tradeLedger'
+import { gradeTradeRows, outcomesByEvidence, yourTeamVsMarket } from '@/lib/decision-os/trade/tradeLedger'
 import { completedThrough } from '@/lib/chimmy-outcomes/ledgerRecord'
 
 function arg(name: string): string | null {
@@ -74,6 +74,21 @@ async function main() {
   table('Redraft, trades actually completed', rows.filter((r) => r.format === 'redraft' && r.completed))
   table('Dynasty/keeper, every evaluation (priced for years — a weak weekly signal)', rows.filter((r) => r.format === 'dynasty'))
   table('Other/unknown format', rows.filter((r) => r.format === 'other'))
+
+  /*
+   * The outcome check for trade learning (2026-11-22): did grades that rested on measured market evidence hold up as
+   * often as grades on the chart alone? And, the fairer test of the roster adjustments: where the your-team letter and
+   * the market letter disagreed on one deal, which held up? Redraft only — the measure is weeks of points.
+   */
+  const redraft = gradeTradeRows(rows.filter((r) => r.format === 'redraft'), through, pointsPerWeek)
+  console.log('\nRedraft, by the market evidence each grade rested on (a grade with two kinds counts in both):')
+  const byEvidence = outcomesByEvidence(redraft.scored)
+  if (byEvidence.length === 0) console.log('  (none graded yet)')
+  for (const o of byEvidence) {
+    console.log(`  ${o.group.padEnd(13)} ${String(o.scored).padStart(4)} graded · ${o.decided} decided · held up ${o.held}${o.heldPct == null ? '' : ` (${o.heldPct}%)`} · net ${o.netPerWeek != null && o.netPerWeek >= 0 ? '+' : ''}${o.netPerWeek} PPR/week`)
+  }
+  const vs = yourTeamVsMarket(redraft.scored)
+  console.log(`\nWhere the your-team letter differed from the market letter: ${vs.deals} deals, ${vs.bothDecided} decided both ways — your-team letter held up ${vs.yourTeamHeld}, market letter ${vs.marketHeld}.`)
   console.log('\nPaste everything above back. It contains counts and points only.')
   await prisma.$disconnect()
 }
