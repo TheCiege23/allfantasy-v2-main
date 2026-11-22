@@ -378,7 +378,8 @@ export function validateCreatePayload(
    * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
    * College leagues are not checked. A league carried over from an import keeps the size it has.
    */
-  if ((formatId === 'redraft' || formatId === 'dynasty') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+  // C2C as well: a college C2C league's pro side must fit the pro sport (owner's decision, 2026-11-22).
+  if ((formatId === 'redraft' || formatId === 'dynasty' || formatId === 'c2c') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
     const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
     if (!supply.ok && supply.message) {
       return {

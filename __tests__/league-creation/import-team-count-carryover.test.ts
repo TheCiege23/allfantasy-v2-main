@@ -139,11 +139,11 @@ describe('validateCreatePayload and the imported team count', () => {
     // College: the whole native range. The owner's own college leagues run 140 and 180 teams.
     const college = { sport: 'NCAAF', scoringPreset: 'ncaaf_half_ppr' }
     for (const teams of [4, 9, 34, 36, 160, 250]) expect(validateCreatePayload(body(teams, 'dynasty', college)).ok, `NCAAF ${teams}`).toBe(true)
-    // NFL: up to what the NFL's players can fill (lib/league-creation/playerSupply.ts), with the reason past it.
-    for (const teams of [4, 9, 34, 36, 88]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(true)
-    const tooBig = validateCreatePayload(body(160))
-    expect(tooBig.ok).toBe(false)
-    if (!tooBig.ok) expect(tooBig.errors?.[0]).toMatchObject({ path: 'teamCount', code: 'PLAYER_SUPPLY_EXHAUSTED' })
+    // NFL: never more teams than the NFL has (owner's rule, 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS).
+    for (const teams of [4, 9, 31, 32]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(true)
+    for (const teams of [33, 34, 36, 88, 160]) expect(validateCreatePayload(body(teams)).ok, `NFL ${teams}`).toBe(false)
+    // An imported 34- or 36-team pro league (the owner's commissioner runs both on Fantrax) keeps its size.
+    for (const teams of [34, 36]) expect(validateCreatePayload(body(teams), { importedTeamCount: teams }).ok, `NFL import ${teams}`).toBe(true)
     // An imported league keeps the size it has.
     expect(validateCreatePayload(body(160), { importedTeamCount: 160 }).ok).toBe(true)
     expect(validateCreatePayload(body(3)).ok).toBe(false)
