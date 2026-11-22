@@ -30,6 +30,7 @@ import {
 } from '@/lib/waiver-wire/immediate-add-policy'
 import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { positionIsRosterable, rosterablePositions } from '@/lib/waiver-wire/rosterablePositions'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
@@ -77,6 +78,23 @@ export function isInactiveWirePlayer(p: { injuryStatus?: string | null }): boole
   return /^(ina|inactive|retired|ret|non[- ]?football injury list|suspended)$/i.test(String(p.injuryStatus ?? '').trim())
 }
 
+/** "RUSH YDS 766" as a labelled figure. A line with no space is shown as a figure with no label. */
+export function splitStatLine(line: string): { label: string; value: string } {
+  const text = line.trim()
+  const cut = text.lastIndexOf(' ')
+  return cut > 0 ? { label: text.slice(0, cut), value: text.slice(cut + 1) } : { label: '', value: text }
+}
+
+/** "@ DAL · Thu 4:30 PM", "Bye week", or null when the week's game is not on file. */
+export function wireGameLine(opponent: string | null, homeAway: string | null | undefined, kickoffIso: string | null): string | null {
+  if (!opponent) return null
+  if (opponent.toUpperCase() === 'BYE') return 'Bye week'
+  const versus = `${String(homeAway ?? '').toLowerCase() === 'away' ? '@' : 'vs'} ${opponent}`
+  const kickoff = kickoffIso ? new Date(kickoffIso) : null
+  if (!kickoff || !Number.isFinite(kickoff.getTime())) return versus
+  return `${versus} · ${kickoff.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+}
+
 function rosteredPct(p: UnifiedPlayerWireDto): number | null {
   const r = p as unknown as Record<string, unknown>
   const unified = (p.product?.unified ?? {}) as unknown as Record<string, unknown>
@@ -95,7 +113,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [prospectMeta, setProspectMeta] = useState<NhlProspectListMeta | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<Tx[]>([])
-  const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null })
+  const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null; starterPositions: string[] | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null, starterPositions: null })
   const [watch, setWatch] = useState<string[]>([])
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -130,6 +148,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       faab: typeof r.faabRemaining === 'number' ? r.faabRemaining : null,
       priority: typeof r.waiverPriority === 'number' ? r.waiverPriority : null,
       capacity: cap > 0 ? cap : null,
+      starterPositions: Array.isArray(r.starterAllowedPositions) ? (r.starterAllowedPositions as unknown[]).filter((x): x is string => typeof x === 'string') : null,
     })
   }, [])
 
@@ -186,11 +205,17 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const movesClosed = !settings || Boolean(settings.phasePolicy?.code && !settings.phasePolicy.claimsAllowed && !settings.phasePolicy.immediateAddsAllowed)
   const trend = useMemo(() => waiverTrendByPlayer(history, claims), [history, claims])
   const claimedIds = useMemo(() => new Set(claims.map((c) => c.addPlayerId)), [claims])
+  const rosterable = useMemo(() => rosterablePositions(roster.starterPositions), [roster.starterPositions])
   const positions = useMemo(() => {
     const known = SPORT_POSITIONS[String(settings?.sport ?? league.sport ?? 'NFL').toUpperCase()]
-    if (known) return known
+    // Only the positions this league has a slot for: no K or DEF filter in a league that starts neither.
+    if (known) {
+      const startable = rosterable ? known.filter((position) => positionIsRosterable(position, rosterable)) : known
+      // None matching means the league spells its positions some way this list does not know: offer them all.
+      return startable.length > 0 ? startable : known
+    }
     return Array.from(new Set(players.map((p) => String(p.position ?? '').toUpperCase()).filter(Boolean))).slice(0, 8)
-  }, [settings?.sport, league.sport, players])
+  }, [settings?.sport, league.sport, players, rosterable])
   const { language, t: tr, tInterpolate } = useOptionalLanguage()
   const openCard = useNativePlayerCard(settings?.sport ?? league.sport)
   // NHL dynasty: a name search also asks the server for prospects beyond the ones the list carries.
@@ -211,12 +236,18 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     if (pos !== 'ALL') rows = rows.filter((p) => waiverPositionMatches(p.position, pos))
     const needle = q.trim().toLowerCase()
     if (!needle && (tab === 'available' || tab === 'trending')) rows = rows.filter((p) => !isInactiveWirePlayer(p))
+    // A player at a position the league has no slot for cannot be rostered, so he is not offered.
+    if (tab === 'available' || tab === 'trending') {
+      const startable = rows.filter((p) => positionIsRosterable(p.position, rosterable))
+      // Hiding every player would mean the league's positions are spelled some way this list does not know.
+      if (startable.length > 0 || rows.length === 0) rows = startable
+    }
     if (needle) rows = rows.filter((p) => p.name.toLowerCase().includes(needle) || String(p.team ?? '').toLowerCase().includes(needle))
     if (tab === 'trending') rows = [...rows].sort((a, b) => (trend.get(b.id) ?? 0) - (trend.get(a.id) ?? 0))
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
     // Prospects have no projection: after every real player (lib/waiver-wire/prospectFreeAgentDisplay.ts).
     return (tab === 'trending' ? rows : placeProspectsAfterPlayers(rows, 'projection')).slice(0, 120)
-  }, [allPlayers, tab, watch, claimedIds, pos, q, trend])
+  }, [allPlayers, tab, watch, claimedIds, pos, q, trend, rosterable])
   const listHasProspects = list.some((p) => isNhlProspectWireRow(p))
   // The waiver wire's own display adapter: canonical photo / crest, and the season stat line.
   const shown = useMemo(() => list.map((p) => ({ p, a: adaptWaiverWirePlayer(p) })), [list])
@@ -398,7 +429,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                 <tr>
                   <th scope="col">Player</th>
                   <th scope="col" data-hide="phone">Rost%</th>
-                  <th scope="col">{league.currentWeek ? `Wk ${league.currentWeek} proj` : 'Proj'}</th>
+                  <th scope="col">
+                    {/* A phone has no room for the week in the header; it widened this column and squeezed the names. */}
+                    <span className="nls-long">{league.currentWeek ? `Wk ${league.currentWeek} proj` : 'Proj'}</span>
+                    <span className="nls-short">Proj</span>
+                  </th>
                   <th scope="col" data-hide="phone">AF trend</th>
                   <th scope="col" data-align="left" data-hide="phone">Status</th>
                   <th scope="col"><span className="nls-sr">Action</span></th>
@@ -411,9 +446,20 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   const claimed = claimedIds.has(p.id)
                   const holdUntil = playerWaiverHoldUntil(p, settings)
                   const rowImmediate = immediate && !holdUntil
+                  // Football carries the week's game; basketball, hockey and baseball carry the period's opponent.
+                  const period = p as { periodOpponent?: string | null; periodHomeAway?: string | null }
+                  const gameLine = wireGameLine(
+                    a.displayOpponent ?? period.periodOpponent ?? null,
+                    p.nflRedraftGameContext?.homeAway ?? period.periodHomeAway,
+                    a.displayKickoffTime,
+                  )
+                  const strip = a.seasonStatsSummary.map(splitStatLine)
                   return (
                     <tr key={p.id}>
                       <td data-align="left">
+                        {/* One line on a wide screen. On a phone its two children are separate grid items, so the
+                            star sits beside the stat strip and the name keeps the row's width. */}
+                        <div className="nls-prow">
                         <div className="nls-pcell">
                           <PlayerHeadshot playerId={p.id} playerName={p.name} headshotUrl={a.displayHeadshotUrl} position={p.position} team={p.team} sport={p.sport || league.sport} size={36} />
                           <PosPill label={p.position} />
@@ -424,8 +470,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                             </strong>
                             <small>
                               {a.displayTeamLogoUrl ? <FallbackImg src={a.displayTeamLogoUrl} alt="" width={14} height={14} className="nls-team-logo" fallback={null} data-testid="waiver-team-logo" /> : null}
-                              {/* Phone only: the position badge is dropped there to leave room for the name. */}
-                              <span className="nls-pcell-pos">{p.position} · </span>
+                              {/* Phone only: the position, in its colour, sits here; the wide badge beside the photo is dropped. */}
+                              <span className="nls-pcell-pos"><PosPill label={p.position} /></span>
                               {p.team ?? (isNhlProspectWireRow(p) ? tr('draftRoom.pool.prospectUnsigned') : 'FA')}{a.displayByeWeek ? ` · Bye ${a.displayByeWeek}` : ''}
                               {isNhlProspectWireRow(p) ? (
                                 <span className="nls-chip" data-tone="accent" title={tr('draftRoom.pool.prospectTooltip')} data-testid={`native-waivers-prospect-badge-${p.id}`}>
@@ -433,21 +479,40 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                                 </span>
                               ) : null}
                             </small>
-                            {a.seasonStatsSummary.length ? <small data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
+                            {gameLine ? <small data-game data-testid={`native-waivers-game-${p.id}`}>{gameLine}</small> : null}
                             {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
+                        </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />
                           </button>
                         </div>
+                        {/* The season's figures, each under its own label. On a phone the strip takes the row's full
+                            width under the player; the rostered share joins it there, where its column is hidden. */}
+                        {strip.length || pct != null ? (
+                          <span className="nls-pstats-wide" data-stats data-testid={`native-waivers-stats-${p.id}`}>
+                            {strip.map((stat, i) => (
+                              <span key={`${stat.label}-${i}`} className="nls-pstat">
+                                {stat.label ? <em>{stat.label}</em> : null}
+                                <b>{stat.value}</b>
+                              </span>
+                            ))}
+                            {pct != null ? (
+                              <span className="nls-pstat" data-phone-only>
+                                <em>Rost %</em>
+                                <b>{Math.round(pct)}</b>
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </td>
                       <td data-hide="phone">{pct != null ? `${Math.round(pct)}%` : '—'}</td>
-                      <td>{fmt1(p.projectedPoints)}</td>
+                      <td data-proj>{fmt1(p.projectedPoints)}</td>
                       <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
                         {rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
-                      <td>
+                      <td data-action>
                         {claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
@@ -545,6 +610,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
         hasOpenRosterSpot={drawer?.immediate ? false : roster.capacity == null || roster.ids.length < roster.capacity}
         rosterPlayerIds={roster.ids}
         rosterPlayers={roster.names}
+        immediate={Boolean(drawer?.immediate)}
         onSubmit={async (opts) => {
           if (!drawer) return
           if (drawer.immediate) await addDrop(drawer.player, opts.dropPlayerId)

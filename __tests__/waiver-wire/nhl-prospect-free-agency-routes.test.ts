@@ -68,7 +68,7 @@ describe('GET /api/waiver-wire/leagues/[id]/players', () => {
     const { status, body } = await getPlayers()
     expect(status).toBe(200)
     const ids = body.players.map((p) => p.id)
-    expect(ids.slice(0, 2)).toEqual(['sp-mcdavid', 'sp-linked'])
+    expect(ids.slice(0, 2)).toEqual(['7001', '5001'])
     expect(ids.slice(2).sort()).toEqual(['fantrax:04qyf', 'fantrax:04qyh'])
     expect(ids).not.toContain('fantrax:04abc')
     expect(ids).not.toContain('fantrax:04lnk')
@@ -82,8 +82,11 @@ describe('GET /api/waiver-wire/leagues/[id]/players', () => {
   it('NHL dynasty: a rostered prospect since linked to an NHL identity hides that identity\'s pro row', async () => {
     h.rosters.mockResolvedValue([{ playerData: { players: ['fantrax:04lnk'] } }])
     const { body } = await getPlayers()
-    expect(body.players.map((p) => p.id)).not.toContain('sp-linked')
-    expect(body.players.map((p) => p.id)).toContain('sp-mcdavid')
+    // A pool player is listed under the id a drafted roster holds for him: his external source id
+    // (lib/waiver-wire/nflRosterIdForPoolRow.ts), not the pool row id `sp-…`.
+    expect(body.players.map((p) => p.id)).not.toContain('5001')
+    expect(body.players.map((p) => p.id)).toContain('7001')
+    expect(body.players.map((p) => p.id).filter((id) => id.startsWith('sp-'))).toEqual([])
   })
 
   it('NHL dynasty: the position filter applies to prospects', async () => {
@@ -95,11 +98,12 @@ describe('GET /api/waiver-wire/leagues/[id]/players', () => {
     ['NHL redraft', { ...NHL_DYNASTY, isDynasty: false, leagueType: 'redraft' }],
     ['NHL keeper', { ...NHL_DYNASTY, isDynasty: false, leagueType: 'keeper' }],
     ['MLB dynasty', { ...NHL_DYNASTY, sport: 'MLB' }],
+    // NFL rosters hold Sleeper ids; these rows carry none, so the list keeps the pool id for them.
     ['NFL dynasty', { ...NHL_DYNASTY, sport: 'NFL' }],
-  ])('%s: unchanged — the pool only, and no prospect read', async (_label, league) => {
+  ])('%s: unchanged — the pool only, and no prospect read', async (label, league) => {
     h.league.mockResolvedValue(league)
     const { body } = await getPlayers()
-    expect(body.players.map((p) => p.id)).toEqual(['sp-mcdavid', 'sp-linked'])
+    expect(body.players.map((p) => p.id)).toEqual(label === 'NFL dynasty' ? ['sp-mcdavid', 'sp-linked'] : ['7001', '5001'])
     expect(body.nhlProspects).toBeUndefined()
     expect(h.db!.sportsDataCache.findUnique).not.toHaveBeenCalled()
     expect(h.db!.playerIdentityMap.findMany).not.toHaveBeenCalled()
@@ -109,14 +113,14 @@ describe('GET /api/waiver-wire/leagues/[id]/players', () => {
     h.db = prospectDb({ universe: 'throw' })
     const { status, body } = await getPlayers()
     expect(status).toBe(200)
-    expect(body.players.map((p) => p.id)).toEqual(['sp-mcdavid', 'sp-linked'])
+    expect(body.players.map((p) => p.id)).toEqual(['7001', '5001'])
     expect(body.nhlProspects).toBeUndefined()
   })
 
   it('NHL dynasty: a never-stored universe lists no prospects', async () => {
     h.db = prospectDb({ universe: null })
     const { body } = await getPlayers()
-    expect(body.players.map((p) => p.id)).toEqual(['sp-mcdavid', 'sp-linked'])
+    expect(body.players.map((p) => p.id)).toEqual(['7001', '5001'])
     expect(body.nhlProspects).toEqual({ total: 0, listed: 0 })
   })
 

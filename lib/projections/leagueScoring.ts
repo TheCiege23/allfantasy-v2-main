@@ -624,6 +624,67 @@ const HOSTED_NFL_PANEL_TO_RULE: Readonly<Record<string, string>> = {
   receiving_2pt: 'rec_2pt',
   fumble: 'fum',
   fumble_lost: 'fum_lost',
+  // Kicking. Priced from a kicker's own makes by distance (lib/af-projections/nflSpecialistRates.ts).
+  fg_0_19: 'fgm_0_19',
+  fg_20_29: 'fgm_20_29',
+  fg_30_39: 'fgm_30_39',
+  fg_40_49: 'fgm_40_49',
+  fg_50_plus: 'fgm_50p',
+  pat_made: 'xpm',
+  pat_missed: 'xpmiss',
+}
+
+/**
+ * The scoring panel's team-defense keys, in the vocabulary a team defense's rate is carried in.
+ *
+ * 🛑 KEPT OUT OF THE MAP ABOVE ON PURPOSE. `sack`, `int` and `fum_rec` are also what an individual
+ * defender's stats alias to (`STAT_ALIASES`), so putting a team-defense weight under them in the
+ * league's general rules would pay a linebacker the team defense's points on top of his own. These
+ * rules are applied to a team-defense line only (`scoreTeamDefenseRate`).
+ */
+const HOSTED_NFL_PANEL_TO_DEFENSE_RULE: Readonly<Record<string, string>> = {
+  dst_sack: 'sack',
+  dst_interception: 'int',
+  dst_fumble_recovery: 'fum_rec',
+  dst_safety: 'safe',
+  dst_blocked_kick: 'blk_kick',
+  dst_kick_return_td: 'def_st_td',
+  dst_pa_0: 'pts_allow_0',
+  dst_pa_1_6: 'pts_allow_1_6',
+  dst_pa_7_13: 'pts_allow_7_13',
+  dst_pa_14_20: 'pts_allow_14_20',
+  dst_pa_21_27: 'pts_allow_21_27',
+  dst_pa_28_34: 'pts_allow_28_34',
+  dst_pa_35_plus: 'pts_allow_35p',
+}
+
+/**
+ * A team defense's projected points from its per-game rate, in this league's scoring, or null when
+ * the league's rules cannot price it.
+ *
+ * A league AllFantasy hosts is scored from the scoring panel's store, so that store decides when it
+ * holds team-defense rules; otherwise the league's stored rulebook is used as it is (an imported
+ * league's is already in this vocabulary).
+ */
+export function scoreTeamDefenseRate(perGame: Record<string, number>, leagueSettings: unknown): number | null {
+  if (!leagueSettings || typeof leagueSettings !== 'object') return null
+  const s = leagueSettings as Record<string, unknown>
+  const config = s.nfl_scoring_config
+  const panel = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).rules : null
+  let rules: Record<string, unknown> | null = null
+  if (panel && typeof panel === 'object' && !Array.isArray(panel)) {
+    const out: Record<string, number> = {}
+    for (const [key, rule] of Object.entries(HOSTED_NFL_PANEL_TO_DEFENSE_RULE)) {
+      const weight = readNumber((panel as Record<string, unknown>)[key])
+      if (weight != null) out[rule] = weight
+    }
+    if (hasScoringRules(out)) rules = out
+  }
+  rules ??= storedScoringSettings(s)
+  // The raw points allowed is not a scoring stat here: the buckets carry it, as how often each happens.
+  const { pts_allow: _raw, ...line } = perGame
+  const scored = computeLeagueProjectedPoints(line, rules)
+  return scored && Number.isFinite(scored.points) ? scored.points : null
 }
 
 /**
