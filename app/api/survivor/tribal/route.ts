@@ -75,8 +75,19 @@ export async function POST(req: NextRequest) {
     const week = typeof body.week === 'number' ? body.week : 1
     const tribeId = typeof body.tribeId === 'string' ? body.tribeId : null
     const deadline = typeof body.deadline === 'string' ? new Date(body.deadline) : new Date(Date.now() + 3600000)
-    const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
-    return NextResponse.json(council)
+    // A refusal (one council a week, an unknown tribe) is the host's answer, not a server fault: it
+    // used to surface as a bare 500 with no text, so the host saw a failure and no reason.
+    try {
+      const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
+      return NextResponse.json(council)
+    } catch (error) {
+      // Only the service's own one-line refusals are shown. Anything else (a database error) is a fault.
+      const message = error instanceof Error ? error.message : ''
+      const refusal = message && !message.includes('\n') && message.length <= 120 && !/prisma/i.test(message)
+      if (refusal) return NextResponse.json({ error: message }, { status: 409 })
+      console.error('[survivor/tribal] open council failed', error)
+      return NextResponse.json({ error: 'Could not open council' }, { status: 500 })
+    }
   }
 
   if (action === 'vote') {
