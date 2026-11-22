@@ -154,6 +154,51 @@ export async function stampTradeFormats(
   return updated
 }
 
+/** Trade histories resolved per run by `stampAllTradeFormats`, drawn at random from those still unlabelled. */
+export const STAMP_ALL_HISTORY_LIMIT = 5000
+
+export type StampAllResult = { histories: number; resolved: number; unresolved: number; rowsStamped: number }
+
+/**
+ * EVERY TRADE'S LEAGUE TYPE, IN EVERY SEASON (owner's call, 2026-11-22 — the census "league-type gap").
+ *
+ * `stampTradeFormats` labels only the trades the market's own window reads (this season and the two before), so every
+ * older trade kept a null `leagueFormat`: 11,761 of 29,808 NFL trades in the 2026-11-22 census, at least 10,898 of them
+ * from 2018–2023. That is not a lookup failure — those leagues resolve like any other — and it is not harmless:
+ * `comprehensive-trade-learning` reads null as REDRAFT and 1QB, and the history the next learner step reads is exactly
+ * those seasons.
+ *
+ * So: trade histories still unlabelled, in any season, through the same three-step lookup the market uses
+ * (`resolveTradeLeagues`: the current league, that season's own stored settings, then today's settings), labelled by
+ * history. Only EMPTY rows are written, as before. A random draw of histories per run, so one that cannot be resolved
+ * never holds a place ahead of the rest; the ones that resolve drop out of the draw, and the rest are said out loud.
+ */
+export async function stampAllTradeFormats(prisma: PrismaClient, limit = STAMP_ALL_HISTORY_LIMIT): Promise<StampAllResult> {
+  const rows = await prisma.$queryRaw<Array<{ historyId: string }>>(Prisma.sql`
+    SELECT "historyId" FROM (SELECT DISTINCT "historyId" FROM "LeagueTrade" WHERE "leagueFormat" IS NULL) h
+    ORDER BY random() LIMIT ${limit}`)
+  const ids = rows.map((r) => r.historyId).filter(Boolean)
+  if (ids.length === 0) return { histories: 0, resolved: 0, unresolved: 0, rowsStamped: 0 }
+  const leagues = await resolveTradeLeagues(prisma, ids)
+  const groups = new Map<string, string[]>()
+  for (const [historyId, league] of leagues) {
+    const key = `${league.tradeFormat}|${league.book.qbFormat === 'SUPERFLEX'}`
+    groups.set(key, [...(groups.get(key) ?? []), historyId])
+  }
+  let rowsStamped = 0
+  for (const [key, historyIds] of groups) {
+    const [leagueFormat, sf] = key.split('|')
+    for (const part of chunk(historyIds)) {
+      const r = await prisma.leagueTrade.updateMany({
+        where: { historyId: { in: part }, leagueFormat: null },
+        data: { leagueFormat, isSuperFlex: sf === 'true' },
+      })
+      rowsStamped += r.count
+    }
+  }
+  return { histories: ids.length, resolved: leagues.size, unresolved: ids.length - leagues.size, rowsStamped }
+}
+
 /** Sleeper `settings.type`: 0 redraft, 1 keeper, 2 dynasty. */
 const SLEEPER_LEAGUE_TYPE: Record<string, string> = { '0': 'redraft', '1': 'keeper', '2': 'dynasty' }
 

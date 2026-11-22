@@ -52,6 +52,10 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
           ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
           ...(r.tradesStamped ? [`trades given a league format: ${r.tradesStamped}`] : []),
+          // Every season's unlabelled trades: how many histories were drawn, resolved, left unresolved, and rows labelled.
+          ...(r.formatBackfill
+            ? [`league type, all seasons: ${r.formatBackfill.resolved} of ${r.formatBackfill.histories} trade histories resolved (${r.formatBackfill.unresolved} unresolved), ${r.formatBackfill.rowsStamped} trade rows labelled`]
+            : ['league type, all seasons: the pass failed this run']),
           // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
           ...(r.datedShadow ?? []).map(
             (d) =>
