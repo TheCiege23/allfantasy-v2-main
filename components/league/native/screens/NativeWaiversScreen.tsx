@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -33,7 +32,7 @@ import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { positionIsRosterable, rosterablePositions } from '@/lib/waiver-wire/rosterablePositions'
 import { PLAYERS_TABS, leagueScopeRows, rosteredByLabel, tabUsesLeagueScope, type PlayersTab } from '@/lib/waiver-wire/playersListTabs'
-import { leagueSectionHref } from '@/lib/league/nativeLeagueNavigation'
+import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModal'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
@@ -62,7 +61,7 @@ type Claim = { id: string; addPlayerId: string; dropPlayerId: string | null; faa
 type Tx = { id: string; addPlayerId: string; dropPlayerId: string | null; faabSpent: number | null; processedAt: string; roster?: { id: string } | null }
 type Tab = PlayersTab
 /** What the players route adds to a row: last week's points, and (league scope) who holds him. */
-type WireRow = UnifiedPlayerWireDto & { lastWeekPoints?: number | null; rosteredBy?: { mine: boolean; team: string | null } | null }
+type WireRow = UnifiedPlayerWireDto & { lastWeekPoints?: number | null; rosteredBy?: { mine: boolean; team: string | null; rosterId?: string | null } | null }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SPORT_POSITIONS: Record<string, string[]> = {
@@ -122,6 +121,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   // The last completed week the server scored (NFL), or null when the list carries no such figure.
   const [lastWeek, setLastWeek] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
+  // The trade builder, opened on the rostered player whose Trade button was tapped.
+  const [tradeFor, setTradeFor] = useState<{ playerId: string; rosterId: string | null } | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<Tx[]>([])
   const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null; starterPositions: string[] | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null, starterPositions: null })
@@ -568,7 +569,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                         {row.rosteredBy?.mine ? (
                           <span className="nls-chip">Yours</span>
                         ) : row.rosteredBy ? (
-                          <Link className="nls-btn" data-size="sm" href={leagueSectionHref(league, 'trades')} data-testid={`native-waivers-trade-${p.id}`}>Trade</Link>
+                          <button type="button" className="nls-btn" data-size="sm" aria-label={`Trade for ${p.name}`} onClick={() => setTradeFor({ playerId: p.id, rosterId: row.rosteredBy?.rosterId ?? null })} data-testid={`native-waivers-trade-${p.id}`}>Trade</button>
                         ) : claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
@@ -586,6 +587,24 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
             <p className="nls-empty">{tab === 'watchlist' ? 'Star a player to keep him on your watchlist.' : tab === 'claims' ? 'You have no pending claims.' : tab === 'search' ? (q.trim() ? 'No player in this league matches that name.' : 'Type a name to search every player in this league.') : tab === 'trade' ? 'No players on other teams match these filters.' : 'No available players match these filters.'}</p>
           )}
         </section>
+
+        {/* Mounted only while open: the builder reads the session and loads every roster. */}
+        {tradeFor ? (
+        <ProposeTradeModal
+          open
+          onClose={() => setTradeFor(null)}
+          leagueId={league.id}
+          teams={[]}
+          platform={league.platform}
+          sport={league.sport}
+          initialPartnerRosterId={tradeFor?.rosterId ?? null}
+          initialGetPlayerId={tradeFor?.playerId ?? null}
+          onSubmitted={() => {
+            setTradeFor(null)
+            toast.success('Trade offer sent')
+          }}
+        />
+        ) : null}
 
         <aside className="nls-aside" aria-label="Your claims">
           <Card label="Your claims" right={faabMode && totalBid > 0 ? <span className="nls-mono">${totalBid} bid</span> : undefined}>

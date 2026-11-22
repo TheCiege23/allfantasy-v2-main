@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   pool: vi.fn(),
   db: null as null | ReturnType<typeof import('./nhl-prospect-fixture').prospectDb>,
 }))
+// Last week's points have their own reads (identity bridge, season start); these tests count the prospect reads only.
+vi.mock('@/lib/waiver-wire/lastWeekPoints', async (orig) => ({ ...(await orig<typeof import('@/lib/waiver-wire/lastWeekPoints')>()), loadLastWeekPoints: async () => null }))
 vi.mock('server-only', () => ({}))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))

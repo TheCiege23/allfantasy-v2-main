@@ -226,11 +226,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
 
     // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
-    // NFL only today; null elsewhere, and the screen then shows no such figure.
+    // NFL, NBA, NHL and MLB points leagues; null elsewhere, and the screen then shows no such figure.
     const lastWeek = await loadLastWeekPoints(
       prisma as never,
       { sport: String(league.sport), season: league.season ?? null, settings: league.settings },
-      priced.map((row: any) => String(row.id)),
+      priced.map((row: any) => ({ id: String(row.id), position: row.position ?? null, name: row.name ?? null })),
     )
     if (lastWeek) priced = priced.map((row: any) => ({ ...row, lastWeekPoints: lastWeek.points.get(String(row.id)) ?? null }))
     const lastWeekNumber = lastWeek?.week ?? null

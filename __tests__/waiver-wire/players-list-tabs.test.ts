@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { PLAYERS_TABS, leagueScopeRows, rosteredByLabel, tabUsesLeagueScope } from '@/lib/waiver-wire/playersListTabs'
-import { lastCompletedWeek, rosterOwnership } from '@/lib/waiver-wire/lastWeekPoints'
+import { lastCompletedWeek, rosterOwnership, scoreWeekLines } from '@/lib/waiver-wire/lastWeekPoints'
 
 const rows = [
   { id: 'a', name: 'Free Agent', team: 'DAL', projectedPoints: 9, lastWeekPoints: 4, rosteredBy: null },
@@ -73,9 +73,27 @@ describe('rosterOwnership', () => {
       [{ externalId: 'u1', teamName: 'Mine' }, { externalId: 'u2', teamName: ' ', ownerName: 'Sam' }],
       'r1',
     )
-    expect(map.get('96')).toEqual({ mine: true, team: 'Mine' })
-    expect(map.get('4034')).toEqual({ mine: false, team: 'Sam' })
-    expect(map.get('77')).toEqual({ mine: false, team: null })
+    expect(map.get('96')).toEqual({ mine: true, team: 'Mine', rosterId: 'r1' })
+    expect(map.get('4034')).toEqual({ mine: false, team: 'Sam', rosterId: 'r2' })
+    expect(map.get('77')).toEqual({ mine: false, team: null, rosterId: 'r3' })
     expect(map.get('nobody')).toBeUndefined()
+  })
+})
+
+describe('scoreWeekLines', () => {
+  it("prices each player's week with the league's scorer, by his position", () => {
+    const scorer = (line: Record<string, number>, position?: string | null) => (line.points ?? 0) + (position === 'C' ? (line.rebounds ?? 0) * 1.2 : 0)
+    const out = scoreWeekLines(
+      new Map([['201939', { points: 81, rebounds: 10 }], ['203999', { points: 60, rebounds: 30 }]]),
+      new Map([['201939', 'PG'], ['203999', 'C']]),
+      scorer,
+    )
+    expect(out.get('201939')).toBe(81)
+    expect(out.get('203999')).toBe(96)
+  })
+
+  it('leaves out a player with no line, and a line the scorer cannot price', () => {
+    const out = scoreWeekLines(new Map([['a', { points: 1 }]]), new Map(), () => Number.NaN)
+    expect(out.size).toBe(0)
   })
 })
