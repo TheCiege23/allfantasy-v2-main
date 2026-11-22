@@ -38,8 +38,9 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
   const ids = records.map((r) => String(r.fantraxId ?? r.id ?? ''))
   const field = (v: unknown) => typeof v === 'string' && v.trim() ? v.trim() : null
   const normalizedSport = normalizeIdentitySport(sport)
-  const college = normalizedSport === 'NCAAF'
-  const directory = college ? await loadCollegeTeamIndex().catch(() => null) : null
+  const college = normalizedSport === 'NCAAF' || normalizedSport === 'NCAAB'
+  /* The CFBD directory is football's; basketball schools reach their crest through the RI team below. */
+  const directory = normalizedSport === 'NCAAF' ? await loadCollegeTeamIndex().catch(() => null) : null
   const identities = await resolveRosterPlayerIdentities(platform, normalizedSport, ids)
 
   if (platform !== 'fantrax') {
@@ -65,9 +66,26 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
       { source: 'rolling_insights', externalId: { in: providerIds } },
       ...(sleeperIds.length ? [{ sleeperId: { in: sleeperIds }, imageUrl: { not: null } }] : []),
     ] },
-    select: { externalId: true, source: true, imageUrl: true, sleeperId: true },
+    select: { externalId: true, source: true, imageUrl: true, sleeperId: true, team: true },
     orderBy: { fetchedAt: 'desc' },
   }).catch(() => []) : []
+  /*
+   * College crests by ID, not by Fantrax's abbreviation. Fantrax writes schools as "HiPt", "GMas",
+   * "Stetsn" — a vocabulary no directory holds. The player's Rolling Insights row names the school in
+   * full ("High Point University"), and the RI team row of that exact name carries the crest. Measured
+   * 2026-11-22: 364 of 371 RI basketball schools and 223 of 255 football schools resolve this way.
+   * Basketball still falls back to the team registry, which is where its crests came from before.
+   */
+  const riTeamByPlayer = new Map<string, string>()
+  for (const img of images) {
+    if (img.source === 'rolling_insights' && img.externalId && img.team && !riTeamByPlayer.has(img.externalId)) {
+      riTeamByPlayer.set(img.externalId, img.team)
+    }
+  }
+  const riLogos = college && riTeamByPlayer.size ? new Map((await prisma.sportsTeam.findMany({
+    where: { sport: normalizedSport, source: 'rolling_insights', name: { in: [...new Set(riTeamByPlayer.values())] }, logo: { not: null } },
+    select: { name: true, logo: true },
+  }).catch(() => [])).map((t) => [t.name, t.logo as string])) : new Map<string, string>()
   return records.map((r, i) => {
     const p = identities.get(ids[i]) ?? null
     const team = field(r.school) ?? field(r.nflTeam) ?? field(r.team) ?? p?.team ?? null
@@ -80,7 +98,11 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
         ?? asHeadshotUrl(images.find((img) => img.source === 'cfbd' && img.externalId === p?.cfbdId)?.imageUrl)
         ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl)
         ?? (p?.sleeperId ? asHeadshotUrl(images.find((img) => img.sleeperId === p.sleeperId && img.imageUrl)?.imageUrl) : null),
-      logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team),
+      logoUrl: college
+        ? school?.logo
+          ?? (p?.rollingInsightsId ? riLogos.get(riTeamByPlayer.get(p.rollingInsightsId) ?? '') ?? null : null)
+          ?? (normalizedSport === 'NCAAB' ? teamLogoUrl(normalizedSport, team) : null)
+        : teamLogoUrl(normalizedSport, team),
       rosterSlot: rosterPosition, rosterStatus: field(r.status), cfbdId: p?.cfbdId ?? null, rollingInsightsId: p?.rollingInsightsId ?? null }
   })
 }
