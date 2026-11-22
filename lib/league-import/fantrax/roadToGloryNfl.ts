@@ -2,7 +2,7 @@ import 'server-only'
 
 import { fetchFantraxScheduleWithScores, getFantraxLeagueInfo, getFantraxStandings } from './fantraxApi'
 
-export const ROAD_TO_GLORY_NFL_ID = 'tau9a8fomvmq84sx'
+const ROAD_TO_GLORY_NFL_ID = 'tau9a8fomvmq84sx'
 
 export async function fetchRoadToGloryNflSnapshot(now = new Date()) {
   const [league, records] = await Promise.all([

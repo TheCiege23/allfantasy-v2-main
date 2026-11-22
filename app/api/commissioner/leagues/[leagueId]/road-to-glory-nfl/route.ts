@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isRoadToGloryStagingLeague } from '@/lib/core-app/commissionerQa'
 import { readAwardSheetToken } from '@/lib/league-chat/awardSheetToken'
-import { fetchRoadToGloryNflSnapshot, ROAD_TO_GLORY_NFL_ID } from '@/lib/league-import/fantrax/roadToGloryNfl'
+import { fetchRoadToGloryNflSnapshot } from '@/lib/league-import/fantrax/roadToGloryNfl'
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
-import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const userId = authorization.startsWith('Bearer ')
     ? readAwardSheetToken(authorization.slice(7), leagueId)
     : (await resolvePlatformUser()).appUserId
-  const league = userId && await prisma.league.findFirst({
-    where: { id: leagueId, userId, platform: 'fantrax', platformLeagueId: ROAD_TO_GLORY_NFL_ID, season: 2026, sport: 'NFL' },
-    select: { id: true },
-  })
-  if (!league) return NextResponse.json({ error: 'Road To Glory NFL staging access denied' }, { status: 403 })
+  if (!userId || !await canCommissionerAct(leagueId, userId, 'league')) {
+    return NextResponse.json({ error: 'Road To Glory NFL staging access denied' }, { status: 403 })
+  }
   try {
     const snapshot = await fetchRoadToGloryNflSnapshot()
     return NextResponse.json(snapshot, { headers: { 'Cache-Control': 'private, no-store' } })

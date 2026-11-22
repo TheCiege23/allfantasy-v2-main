@@ -319,7 +319,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
           sourceUrl="https://sleeper.com/beta/leagues/1419790450268635136/matchup"
         />
       ) : null}
-      {data.role === 'commissioner' && isRoadToGloryStagingLeague(league.id) ? (
+      {(data.role === 'commissioner' || data.role === 'co_commissioner') && isRoadToGloryStagingLeague(league.id) ? (
         <CommissionerLeagueResults
           endpoint={`/api/commissioner/leagues/${encodeURIComponent(league.id)}/road-to-glory-nfl`}
           title="Road To Glory NFL" provider="Fantrax"
