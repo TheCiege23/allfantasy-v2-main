@@ -261,8 +261,10 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
 
   return (
     <>
-    {!importSourceLeagueId ? (
-      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={fromDemo === true} />
+    {/* From the demo league the manager came for this switch, so it leads. Otherwise it follows the
+        form: above it, it filled a phone's first screen and pushed every sport card below the fold. */}
+    {!importSourceLeagueId && fromDemo === true ? (
+      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo />
     ) : null}
     <CreateLeagueWizard
       state={state}
@@ -286,6 +288,9 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       restoredAt={restoredAt}
       onStartOver={importTemplate ? undefined : handleStartOver}
     />
+    {!importSourceLeagueId && fromDemo !== true ? (
+      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={false} />
+    ) : null}
     </>
   )
 }

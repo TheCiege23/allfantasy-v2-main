@@ -181,7 +181,8 @@ function help(t: (key: string) => string, which: keyof typeof HELP): string {
 /** When the draft is, as the summary and preview show it. */
 function draftWhenLabel(t: (key: string) => string, state: CreateLeagueV2State): string {
   if (state.draftScheduleLater === true) return tx(t, 'createLeague.g30.draftWhen.later', 'Schedule later')
-  if (state.draftDate && state.draftTime) return `${state.draftDate} ${state.draftTime}`
+  // The zone is part of the time: "8:00 PM" alone cannot be checked on the review step.
+  if (state.draftDate && state.draftTime) return `${state.draftDate} ${state.draftTime} · ${timezoneLabel(state.timezone)}`
   return state.draftDate || t('createLeague.g30.empty')
 }
 
@@ -906,7 +907,8 @@ export function SportStep({ state, onChange, importCarryover }: Pick<WizardProps
               title={t(`createLeague.sport.${sport.toLowerCase()}`)}
               hint={
                 seasonCapable
-                  ? t('createLeague.g30.sport.cardHint')
+                  // Each sport says what it is; seven cards reading "Full season with weekly scoring" said nothing.
+                  ? tx(t, `createLeague.g30.sport.cardHint.${sport.toLowerCase()}`, t('createLeague.g30.sport.cardHint'))
                   : tx(t, 'createLeague.g30.sport.noScoringHint', 'Draft and league tools only — no weekly scoring yet')
               }
               selected={selected}
