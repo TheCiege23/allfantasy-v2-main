@@ -46,6 +46,7 @@ vi.mock('@/lib/rolling-insights', () => ({ syncNFLScheduleToDb: vi.fn() }))
 vi.mock('@/lib/api-sports', () => ({
   syncAPISportsGamesToDb: vi.fn(),
   syncAPISportsGameOddsToDb: vi.fn(),
+  apiSportsOddsSportsFor: vi.fn(() => ['NFL']),
   clearAPISportsDiagnostics: vi.fn(),
   getAPISportsDiagnostics: vi.fn(() => ({})),
 }))

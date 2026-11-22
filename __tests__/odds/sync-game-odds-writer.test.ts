@@ -40,7 +40,7 @@ vi.mock('@/lib/workers/rate-limit-manager', () => ({
   },
 }))
 
-const { syncAPISportsGameOddsToDb } = await import('@/lib/api-sports')
+const { syncAPISportsGameOddsToDb, apiSportsOddsSportsFor, API_SPORTS_ODDS_WINDOW } = await import('@/lib/api-sports')
 
 /** A bookmaker payload carrying the three primaries plus a prop board. */
 function bookmakerPayload() {
@@ -142,6 +142,59 @@ describe('game selection', () => {
     expect(gameOddsUpsert).not.toHaveBeenCalled()
     expect(summary.gamesConsidered).toBe(0)
     expect(summary.rowsUpserted).toBe(0)
+  })
+})
+
+describe('college (NCAAF)', () => {
+  it('queries NCAAF rows, not NFL, when asked for college', async () => {
+    sportsGameFindMany.mockResolvedValue([])
+    await syncAPISportsGameOddsToDb({ season: '2026', sport: 'NCAAF' })
+    expect(sportsGameFindMany.mock.calls[0][0].where.sport).toBe('NCAAF')
+    expect(sportsGameFindMany.mock.calls[0][0].where.source).toBe('api_sports')
+  })
+
+  it('uses a 48-hour window by default, not the NFL 7 days', async () => {
+    sportsGameFindMany.mockResolvedValue([])
+    await syncAPISportsGameOddsToDb({ season: '2026', sport: 'NCAAF' })
+    const { lte } = sportsGameFindMany.mock.calls[0][0].where.startTime
+    const forwardDays = (lte.getTime() - Date.now()) / 86_400_000
+    expect(forwardDays).toBeGreaterThan(1.9)
+    expect(forwardDays).toBeLessThanOrEqual(2.1)
+  })
+
+  it('caps a full Saturday slate, well above the NFL 24-game cap', async () => {
+    sportsGameFindMany.mockResolvedValue([])
+    await syncAPISportsGameOddsToDb({ season: '2026', sport: 'NCAAF' })
+    expect(sportsGameFindMany.mock.calls[0][0].take).toBe(API_SPORTS_ODDS_WINDOW.NCAAF.maxGames)
+    expect(API_SPORTS_ODDS_WINDOW.NCAAF.maxGames).toBeGreaterThan(API_SPORTS_ODDS_WINDOW.NFL.maxGames)
+  })
+
+  it('CONTROL: NFL defaults are unchanged (7 days, 24 games)', async () => {
+    sportsGameFindMany.mockResolvedValue([])
+    await syncAPISportsGameOddsToDb({ season: '2026', sport: 'NFL' })
+    expect(sportsGameFindMany.mock.calls[0][0].take).toBe(24)
+    const { lte } = sportsGameFindMany.mock.calls[0][0].where.startTime
+    expect((lte.getTime() - Date.now()) / 86_400_000).toBeGreaterThan(6.5)
+  })
+
+  it('writes college odds rows under sport NCAAF', async () => {
+    sportsGameFindMany.mockResolvedValue([game({ externalId: '9001', homeTeam: 'Ohio State', awayTeam: 'Michigan' })])
+    const summary = await syncAPISportsGameOddsToDb({ season: '2026', sport: 'NCAAF' })
+    expect(summary.sport).toBe('NCAAF')
+    expect(summary.rowsUpserted).toBe(1)
+    expect(gameOddsUpsert.mock.calls[0][0].create.sport).toBe('NCAAF')
+  })
+})
+
+describe('which sports the hourly odds cron syncs', () => {
+  it('no sport param means NFL then college', () => {
+    expect(apiSportsOddsSportsFor(null)).toEqual(['NFL', 'NCAAF'])
+    expect(apiSportsOddsSportsFor('')).toEqual(['NFL', 'NCAAF'])
+  })
+  it('an explicit sport still narrows it', () => {
+    expect(apiSportsOddsSportsFor('NFL')).toEqual(['NFL'])
+    expect(apiSportsOddsSportsFor('ncaaf')).toEqual(['NCAAF'])
+    expect(apiSportsOddsSportsFor('all')).toEqual(['NFL', 'NCAAF'])
   })
 })
 
