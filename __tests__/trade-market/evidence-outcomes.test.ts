@@ -16,6 +16,8 @@ describe('evidenceKindsOf', () => {
     expect(evidenceKindsOf({ moves: [{ reasons: [LINEUP, PICK, 'Half-PPR scoring'] }], rosterFit: { moves: [{ reasons: [NEED, POSTURE, MARKET] }] } }))
       .toEqual(['trade_market', 'pick_market', 'posture', 'need', 'lineup'])
     expect(evidenceKindsOf({ moves: [{ reasons: ['you cannot fill 1 TE slot and there is no TE available on waivers'] }] })).toEqual([])
+    // The "this week" premium is need evidence too.
+    expect(evidenceKindsOf({ moves: [{ reasons: ['teams short at TE this week (a starter ruled out) paid +14% over normal-depth teams across 60 completed trades'] }] })).toEqual(['need'])
     expect(evidenceKindsOf(null)).toEqual([])
   })
 })

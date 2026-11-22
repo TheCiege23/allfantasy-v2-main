@@ -12,7 +12,7 @@ const PATTERNS: Array<[EvidenceKind, RegExp]> = [
   ['trade_market', /AllFantasy trade market [+-−]?\d/],
   ['pick_market', /AllFantasy pick market [+-−]?\d/],
   ['posture', /over middle-of-the-table teams across \d[\d,]* completed trades/],
-  ['need', /teams short at [A-Z]+ paid .* across \d[\d,]* completed trades/],
+  ['need', /teams short at [A-Z]+(?: this week \([^)]*\))? paid .* across \d[\d,]* completed trades/],
   ['lineup', /\bLineup [+-−]?\d.*measured across \d[\d,]* trades/],
 ]
 

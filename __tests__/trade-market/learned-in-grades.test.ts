@@ -39,6 +39,7 @@ const tables = (over: Partial<LearnedTables> = {}): LearnedTables => ({
   need: new Map([[BOOK, [
     { position: 'TE', need: 'short', published: true, premiumPct: 11, trades: 140 },
     { position: 'WR', need: 'short', published: false, premiumPct: 20, trades: 12 },
+    { position: 'TE', need: 'short_this_week', published: true, premiumPct: 14, trades: 60 },
   ] as never]]),
   posture: new Map([[BOOK, [
     { buyer: 'contend', bought: 'veteran', published: true, premiumPct: 8, trades: 210 },
@@ -167,6 +168,18 @@ describe('need and posture, on your team', () => {
     expect(learned.reason).toMatch(/teams short at TE paid \+11% over normal-depth teams across 140 completed trades/)
     // The same tables with the switch off change nothing.
     expect(run([line('A TE', 'TE', 4000)], { book: BOOK, tables: tables(), need: false, posture: null }).get[0]).toEqual(hand)
+  })
+
+  it('the hole is a ruled-out starter (depth is fine): the "short this week" premium, said so', () => {
+    const learned = { book: BOOK, tables: tables(), need: true, posture: null }
+    // Now: no TE available. Depth (everyone counted as available): a TE on the roster.
+    const out = allocateNeedFactors({ give: [], get: [line('A TE', 'TE', 4000)], needAfterOutgoing: noTe, needAfterTrade: full, scarcity: wire, learned, depthAfterOutgoing: full }).get[0]!
+    expect(out.factor).toBeCloseTo(1.14, 6)
+    expect(out.reason).toMatch(/teams short at TE this week \(a starter ruled out\) paid \+14%.*60 completed trades/)
+    // Missing depth as well: the plain "short" premium.
+    const deep = allocateNeedFactors({ give: [], get: [line('A TE', 'TE', 4000)], needAfterOutgoing: noTe, needAfterTrade: full, scarcity: wire, learned, depthAfterOutgoing: noTe }).get[0]!
+    expect(deep.factor).toBeCloseTo(1.11, 6)
+    expect(deep.reason).not.toMatch(/this week/)
   })
 
   it('an unpublished need premium, or a position with none, keeps the hand-set factor', () => {
