@@ -121,6 +121,13 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             subtitle="Every recommendation is logged when it is shown, when a manager acts on it, and when its outcome is known."
           >
             <DecisionBars rows={DEMO_DECISIONS} />
+            <p className="mt-4 text-xs text-white/60">
+              These bars are sample data. AllFantasy&apos;s own graded record, misses included, is public:{' '}
+              <Link href="/track-record" className="font-semibold text-cyan-300 hover:underline">
+                see the track record
+              </Link>
+              .
+            </p>
           </Card>
 
           {/* Shown only once the daily hold-out check says the learned numbers hold (lib/partner-portal/tradeMarketRelease.ts). */}
