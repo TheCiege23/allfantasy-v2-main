@@ -75,8 +75,14 @@ export async function POST(req: NextRequest) {
     const week = typeof body.week === 'number' ? body.week : 1
     const tribeId = typeof body.tribeId === 'string' ? body.tribeId : null
     const deadline = typeof body.deadline === 'string' ? new Date(body.deadline) : new Date(Date.now() + 3600000)
-    const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
-    return NextResponse.json(council)
+    // A refusal (one council a week, an unknown tribe) is the host's answer, not a server fault: it
+    // used to surface as a bare 500 with no text, so the host saw a failure and no reason.
+    try {
+      const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
+      return NextResponse.json(council)
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not open council' }, { status: 409 })
+    }
   }
 
   if (action === 'vote') {

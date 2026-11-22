@@ -221,6 +221,32 @@ describe('Survivor tribal eliminate route behavior', () => {
   })
 })
 
+describe('host opens Tribal Council', () => {
+  const open = async () => {
+    const { POST } = await import('@/app/api/survivor/tribal/route')
+    return POST(new Request('http://localhost/api/survivor/tribal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId: 'league-1', action: 'open', week: 6, tribeId: 't-1' }) }))
+  }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
+    assertLeagueCommissionerMock.mockResolvedValue({ ok: true })
+  })
+
+  it('returns the new council', async () => {
+    openTribalCouncilMock.mockResolvedValueOnce({ id: 'c-9' })
+    const response = await open()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ id: 'c-9' })
+  })
+
+  it('a second council in the same week is refused with the reason, not a bare 500', async () => {
+    openTribalCouncilMock.mockRejectedValueOnce(new Error('Council already exists for this week'))
+    const response = await open()
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: 'Council already exists for this week' })
+  })
+})
+
 describe('playing commissioner manual action restrictions', () => {
   it('blocks council elimination before executing a manual control', async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'playing-owner' } })
