@@ -225,7 +225,7 @@ export async function runNbaFantraxProjectionRecheck(now = new Date()) {
       }
       const person = verified[0]
       const refs = logs.get(person.id) ?? []
-      let stats: Prisma.InputJsonObject
+      let stats: Prisma.InputJsonObject & { verifiedBoxVersion: string }
       let team: string | null = person.team
       if (!team) {
         // Reviewed inactive lines already carry their actual departure date.
@@ -280,7 +280,7 @@ export async function runNbaFantraxProjectionRecheck(now = new Date()) {
         result.writer[0].seasonLinesWritten++
       }
       const snapshot = snapshotsByPlayer.get(owner.id)
-      if (snapshot?.verifiedBoxVersion !== version || snapshot.sourceSeason !== season) rebuild.push(owner.id)
+      if (!snapshot || snapshot.verifiedBoxVersion !== version || snapshot.sourceSeason !== season) rebuild.push(owner.id)
     } catch (error) {
       result.warnings.push(redactAndCap(owner.canonicalName + ': ' + (error instanceof Error ? error.message : 'NBA final verification failed'), 250))
     }
