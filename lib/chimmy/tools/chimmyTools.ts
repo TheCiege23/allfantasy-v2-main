@@ -1383,7 +1383,10 @@ export async function executeChimmyTool(
         const week = typeof args.week === 'number' && Number.isFinite(args.week)
           ? Math.floor(args.week)
           : null
-        return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId })
+        // AF Intelligence (AF Pro, AF Commissioner, AF Supreme): without it, the baseline only — and the button.
+        const afIntelligence = ctx.depth === 'pro'
+        if (!afIntelligence && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId, afIntelligence })
       }
 
       /*
@@ -1564,13 +1567,19 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({
+        const scenarioText = await runTradeScenarioTool({
           give: args.give,
           get: args.get,
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
         })
+        // AF Intelligence: a free plan gets the letter and the league values — the basic answer — and the button.
+        if (ctx.depth === 'pro') return scenarioText
+        const { basicTradeScenarioText } = await import('@/lib/chimmy/basicTradeAnswer')
+        const basic = basicTradeScenarioText(scenarioText)
+        if (basic !== scenarioText && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return basic
       }
 
       case 'suggest_counter_offer': {

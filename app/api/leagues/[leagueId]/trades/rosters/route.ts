@@ -57,6 +57,7 @@ import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrate
 import { signProposalEvidenceToken, type VerifiedProposalAssetEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -1073,7 +1074,7 @@ export async function GET(
     }
   }
 
-  return NextResponse.json({
+  return await afJson(userId, {
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,

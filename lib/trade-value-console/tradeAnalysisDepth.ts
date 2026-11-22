@@ -6,7 +6,8 @@
  * rows, what we could not see, and the league's own rules (`formatNotes`, which can block the
  * deal) and bye collisions, which are schedule facts.
  *
- * AF PRO — the breakdown: who wins now and long term and why, the value layers, contender and
+ * AF PRO, AF COMMISSIONER, AF SUPREME (`af_intelligence`, 2026-11-22) — the breakdown: the market's per-asset
+ * moves, the OS's second opinion, the lineup picture, who wins now and long term and why, the value layers, contender and
  * rebuilder reads, warnings, rebalance ideas and counter targets, the negotiation toolkit, the
  * written evaluation and its drivers, and the posture / leverage / need / scale / pick notes.
  *
@@ -41,6 +42,18 @@ export const TRADE_DEPTH_FIELDS = [
   'needNotes',
   'scaleNotes',
   'pickNotes',
+  /*
+   * 2026-11-22 (owner: "the extended trade value and trade eval — users get a basic answer but not the
+   * full answer, with an upgrade button"). Moved from the free verdict:
+   *   tradeMarket   the AllFantasy market's per-asset moves (the "extended trade value")
+   *   decisionOs    the OS's own second opinion on the deal
+   *   visualImpact  the lineup and depth-chart picture after the deal
+   * The letter, the fairness score, both totals and the rules the grade was priced under (`valueBasis`)
+   * stay free, so a free grade still names WHAT moved it — the lock says where the detail went.
+   */
+  'tradeMarket',
+  'decisionOs',
+  'visualImpact',
 ] as const
 
 /** Everything else the route returns — free, and read by the Trade Center, the league trades tab and the value modal. */
@@ -65,16 +78,9 @@ export const TRADE_VERDICT_FIELDS = [
    */
   'valueBasis',
   'valuationBasis',
-  /*
-   * The AllFantasy trade market's per-asset moves — free for the same reason as `valueBasis`: they are
-   * already inside the letter, so hiding them would make the free grade move for an unseen reason.
-   */
-  'tradeMarket',
   /* The letter itself, and the same free verdict on every surface — see `lib/decision-os/trade/tradeGrade.ts`. */
   'grade',
   'evaluationReceipt',
-  // Observable lineup/capacity consequences accompany the free value verdict.
-  'visualImpact',
   'salaryCap',
   'degraded',
   'dataGaps',
@@ -87,7 +93,6 @@ export const TRADE_VERDICT_FIELDS = [
   'dataQuality',
   'formatNotes',
   'byeNotes',
-  'decisionOs',
   'aiLimit',
 ] as const
 
@@ -106,5 +111,15 @@ export function applyTradeAnalysisDepth<T extends object>(
   if (access.unlocked) return { ...body, depth: access }
   const kept: Record<string, unknown> = { ...(body as Record<string, unknown>) }
   for (const field of TRADE_DEPTH_FIELDS) delete kept[field]
+  /*
+   * Inside the free letter, the extended value goes too (2026-11-22): the market's per-asset moves and
+   * the roster-fit breakdown. The letter, both totals, the priced lines and the basis stay — they ARE
+   * the basic answer, and every other surface shows the same letter.
+   */
+  const grade = kept.grade
+  if (grade && typeof grade === 'object' && !Array.isArray(grade)) {
+    const { moves: _moves, rosterFit: _rosterFit, ...basic } = grade as Record<string, unknown>
+    kept.grade = basic
+  }
   return { ...(kept as T), depth: access }
 }

@@ -47,7 +47,8 @@ export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
   weekly: number | null
   weeklyUnavailableReason?: 'no_nba_roster'
   /** The learned factors that moved `weekly` / `daily`, when any applied (`lib/af-projections/factors`). */
-  afFactors?: { multiplier: number; reasons: string[] }
+  /** `unadjusted` holds weekly/daily before the factors, restored for a viewer without AF Intelligence. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   fullSeason: number | null
   fullSeasonBasis: 'stored_schedule' | 'standard_season' | null
   restOfSeason: number | null
@@ -446,12 +447,13 @@ export async function loadLeaguePlayerMetrics(args: {
           players: rows.filter((r) => r.weekly != null || r.daily != null).map((r) => ({ key: r.playerId, gameLogId: r.playerId, next: { atMs: now.getTime(), drop: ['rest', 'opponent'] as const } })),
         }).catch(() => new Map())
       : new Map()
-    for (const r of rows as Array<(typeof rows)[number] & { afFactors?: { multiplier: number; reasons: string[] } }>) {
+    for (const r of rows as Array<(typeof rows)[number] & { afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> } }>) {
       const adj = adjustments.get(r.playerId)
       if (!adj) continue
+      const unadjusted = { weekly: r.weekly ?? null, daily: r.daily ?? null }
       if (r.weekly != null) r.weekly = Math.round(r.weekly * adj.multiplier * 100) / 100
       if (r.daily != null) r.daily = Math.round(r.daily * adj.multiplier * 100) / 100
-      r.afFactors = { multiplier: adj.multiplier, reasons: adj.reasons }
+      r.afFactors = { multiplier: adj.multiplier, reasons: adj.reasons, unadjusted }
     }
   }
   const rosterTradeQuotes = independentQuotes ? Object.fromEntries([...nflRoster].map(([rosterId, id]) =>

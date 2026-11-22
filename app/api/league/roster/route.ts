@@ -21,6 +21,7 @@ import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -388,7 +389,7 @@ export async function GET(req: NextRequest) {
           position: player.position, team: player.team ?? '' }]))
       : undefined
 
-    return NextResponse.json({
+    return await afJson(sessionUserId, {
       source: 'db' as const,
       rosterId: roster.id,
       taxiTenure,
@@ -563,7 +564,7 @@ export async function GET(req: NextRequest) {
   })
 
   if (!matched) {
-    return NextResponse.json({
+    return await afJson(sessionUserId, {
       source: 'sleeper' as const,
       roster: null,
       ownerId: sleeperOwnerId,
@@ -601,7 +602,7 @@ export async function GET(req: NextRequest) {
     },
   }
 
-  return NextResponse.json({
+  return await afJson(sessionUserId, {
     source: 'sleeper' as const,
     roster: rosterPayload,
     ownerId: String(matched.owner_id ?? sleeperOwnerId ?? ''),

@@ -41,6 +41,7 @@ import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isFantraxNbaCampusLeague } from '@/lib/decision-os/trade/sportPointsValue'
 import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -279,7 +280,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
     weekOrPeriod: body.weekOrPeriod ?? null,
   }).catch(() => {})
 
-  return NextResponse.json({
+  return await afJson(userId, {
     ...payload,
     leagueId,
     explanationGate,

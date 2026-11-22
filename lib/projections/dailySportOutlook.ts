@@ -51,7 +51,8 @@ export type DailySportOutlook = {
    * time, opponent, a new team, a return from a layoff — only those that made later games' projections closer in the
    * hold-out check. Absent when none applied; `projectedPoints` is then exactly the form rate × games.
    */
-  afFactors?: { multiplier: number; reasons: string[] }
+  /** `unadjusted` holds the fields before the factors, restored for a viewer without AF Intelligence. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
 }
 
 export type DailySportOutlookResult = {
@@ -220,7 +221,7 @@ export async function loadDailySportOutlook(
     const adj = adjustments.get(p.key)
     byKey.set(p.key, {
       projectedPoints: base != null && adj ? Math.round(base * adj.multiplier * 100) / 100 : base,
-      ...(adj && base ? { afFactors: { multiplier: adj.multiplier, reasons: adj.reasons } } : {}),
+      ...(adj && base ? { afFactors: { multiplier: adj.multiplier, reasons: adj.reasons, unadjusted: { projectedPoints: base } } } : {}),
       periodGames,
       perGame: f.perGame,
       recentGames: f.recentGames,
