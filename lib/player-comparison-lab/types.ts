@@ -103,6 +103,8 @@ export interface ResolvedPlayerStats {
   /** Draft cost from `adp_data`. See {@link MarketAdpSignal} — never collapse into `sleeperAdp`. */
   marketAdp: MarketAdpSignal | null;
   internalProjectionPoints: number | null;
+  /** Present for a comparison tied to the league's weekly AF projection. */
+  leagueWeeklyProjection?: number | null;
   injury: InjurySignal;
   scheduleDifficultyScore: number | null;
   sourceFlags: DeterministicSourceFlags;
