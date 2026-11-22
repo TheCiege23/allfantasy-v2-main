@@ -39,13 +39,17 @@ describe('capturing who was out', () => {
       { playerName: 'Sam Same', team: 'AAA', position: 'WR', status: 'Out', date: NOW, fetchedAt: NOW },
       { playerName: 'Sam Same', team: 'BBB', position: 'WR', status: 'Active', date: NOW, fetchedAt: NOW },
     ])
-    const lookup = await loadInjuryLookup(NOW)
+    const lookup = (await loadInjuryLookup(NOW))!
     expect(lookup({ id: 'x', name: 'Tom Endzone', team: 'AAA', position: 'TE' })).toBe('Out')
     expect(lookup({ id: 'y', name: 'Nobody Hurt', team: 'CCC', position: 'RB' })).toBeNull()
     expect(lookup({ id: 'z', name: 'Sam Same', team: null, position: 'WR' })).toBeUndefined()
     expect(lookup({ id: 'w', team: 'AAA', position: 'WR' })).toBeUndefined()
     // Only fresh NFL reports are read.
     expect(m.injuries.mock.calls[0]![0].where).toMatchObject({ sport: 'NFL' })
+    // No fresh report for a sport is "no feed", never "everyone healthy".
+    m.injuries.mockResolvedValue([])
+    expect(await loadInjuryLookup(NOW, 'NHL')).toBeNull()
+    expect(m.injuries.mock.calls.at(-1)![0].where).toMatchObject({ sport: 'NHL' })
   })
 
   const trade = {
@@ -71,9 +75,12 @@ describe('capturing who was out', () => {
     expect(saved.injuriesRead).toBe(true)
     expect(saved.sides.flatMap((s) => s.rosterBefore).find((p) => p.id === 'te1')!.injuryStatus).toBe('IR')
 
-    const nba = vi.fn(async () => () => null)
-    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, injuries: nba })
-    expect(nba).not.toHaveBeenCalled()
+    // Every sport is read, by its own name (2026-11-22) — and a sport with no feed leaves the snapshot unmarked.
+    const nbaDb = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    const nba = vi.fn(async () => null)
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: nbaDb as never, now: NOW, env: {}, injuries: nba, board: async () => null })
+    expect(nba).toHaveBeenCalledWith(NOW, 'NBA')
+    expect((nbaDb.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: Record<string, unknown> } }])[0].data.contextSnapshot.injuriesRead).toBeUndefined()
 
     const failingDb = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
     await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NFL'), trades: [trade as never] }, { db: failingDb as never, now: NOW, env: {}, injuries: async () => { throw new Error('down') } })
@@ -154,5 +161,39 @@ describe('short this week', () => {
     expect(p.published).toBe(true)
     expect(p.premiumPct!).toBeGreaterThan(12)
     expect(market.premiums).toHaveLength(12)
+  })
+})
+
+describe('other sports: the board value of each traded player, at capture', () => {
+  const trade = { source_transaction_id: 'tx', type: 'trade' as const, status: 'complete', created_at: hoursAgo(5), completed_at: hoursAgo(5), roster_ids: ['1', '2'], adds: { b1: '1', b2: '2' }, drops: { b1: '2', b2: '1' }, week: 6 }
+  const normalized = (sport: string) => ({
+    source: { source_provider: 'sleeper', source_league_id: 'sl-1' },
+    league: { name: 'L', sport, season: 2026, isDynasty: false },
+    rosters: [
+      { source_team_id: '1', source_manager_id: 'a', player_ids: ['b2'], starter_ids: [] },
+      { source_team_id: '2', source_manager_id: 'b', player_ids: ['b1'], starter_ids: [] },
+    ],
+    transactions: [trade],
+    player_map: { b1: { name: 'Big Center', position: 'C', team: 'AAA' }, b2: { name: 'Quick Guard', position: 'PG', team: 'BBB' } },
+  }) as never
+
+  it('an NBA trade saves each player\'s board price; one the board cannot price is null, never 0', async () => {
+    const db = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    const board = vi.fn(async () => ({ sport: 'NBA', unit: 'fantasy points', priceOf: (id: string, name: string | null) => (name === 'Big Center' ? 412.7 : null) }))
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, board })
+    const saved = (db.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: { boardValues?: unknown } } }])[0].data.contextSnapshot
+    expect(saved.boardValues).toEqual({ sport: 'NBA', unit: 'fantasy points', byPlayer: { b1: 412.7, b2: null } })
+    expect(board).toHaveBeenCalledWith('sl-1')
+  })
+
+  it('NFL never reads a board; a failed board read saves the snapshot exactly as before', async () => {
+    const nflBoard = vi.fn(async () => null)
+    const db = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NFL'), trades: [trade as never] }, { db: db as never, now: NOW, env: {}, board: nflBoard, injuries: async () => null })
+    expect(nflBoard).not.toHaveBeenCalled()
+    const failing = { leagueTrade: { updateMany: vi.fn(async () => ({ count: 2 })) } }
+    await attachTradeContextSnapshots({ platformLeagueId: 'sl-1', normalized: normalized('NBA'), trades: [trade as never] }, { db: failing as never, now: NOW, env: {}, board: async () => { throw new Error('down') } })
+    const plain = (failing.leagueTrade.updateMany.mock.calls[0] as unknown as [{ data: { contextSnapshot: Record<string, unknown> } }])[0].data.contextSnapshot
+    expect(plain.boardValues).toBeUndefined()
   })
 })

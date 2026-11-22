@@ -19,6 +19,14 @@ function cacheActive(): boolean {
   return !process.env.VITEST || enabledInTests
 }
 
+/**
+ * The same switch, for a caller that caches through another layer (leagueRosterWeek.ts's durable board cache)
+ * and must stay off under Vitest exactly when this one is.
+ */
+export function sharedReadCacheActive(): boolean {
+  return cacheActive()
+}
+
 /** Tests only: turn the cache on (or off again) and start empty. */
 export function setSharedReadCacheForTests(on: boolean): void {
   enabledInTests = on

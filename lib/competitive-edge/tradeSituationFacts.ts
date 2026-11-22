@@ -1,6 +1,7 @@
 import { ageAtTrade, postureOf, VETERAN_MIN_AGE } from '@/lib/trade-market/postureMarketLearner'
 import { needAt, NEED_POSITIONS, slotsFromRosterPositions, type NeedPosition } from '@/lib/trade-market/needMarketLearner'
 import { TRADE_FLOOR, type EdgeFact, type EdgeTrade } from './tradeEdge'
+import { PROJECTED_EVEN_BAND } from '@/lib/trade-intel/gradeScale'
 
 /**
  * THE SITUATION AROUND A MANAGER'S TRADES — facts for the paid manager record (owner's call, 2026-11-22: "manager
@@ -32,6 +33,7 @@ type SituationSide = {
   rosterId?: number | null
   playersIn: Array<{ playerId?: string; position: string | null }>
   picksIn: unknown[]
+  picksOut?: unknown[]
   faabIn?: number
   faabOut?: number
 }
@@ -49,7 +51,17 @@ export type SavedTradeContext = {
   }>
 }
 
+/**
+ * What one trade's two sides were worth on the league's values WHEN IT HAPPENED — the commissioner audit's row
+ * (`trade_value_audits`, `lib/integrity/tradeValueAudit.ts`). `gapPct` is signed from side A: + means A received more.
+ */
+export type TradePriceAtTheTime = { sideA: string; sideB: string; gapPct: number }
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+const medianOf = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2
+}
 
 export function buildTradeSituationFacts(input: {
   name: string
@@ -59,6 +71,8 @@ export function buildTradeSituationFacts(input: {
   contexts: ReadonlyMap<string, SavedTradeContext>
   /** Player age today, by Sleeper id. */
   ages: ReadonlyMap<string, number | null>
+  /** Each trade's value gap at the time, by trade id — absent when the audit could not be read. */
+  prices?: ReadonlyMap<string, TradePriceAtTheTime>
   now: Date
 }): EdgeFact[] {
   const { name } = input
@@ -87,6 +101,36 @@ export function buildTradeSituationFacts(input: {
     facts.push({
       key: 'trade.situation.faab',
       text: `${name} sent FAAB in ${faabSent.length} of their ${n} trades ($${total(faabSent, 'faabOut')} in all) and received it in ${faabGot.length} ($${total(faabGot, 'faabIn')}).`,
+      bearsOnDeal: false,
+    })
+  }
+
+  // ── against the league's values at the time (2026-11-22) ───────────────────────────────────────
+  // How each trade came out for THIS manager on the values of its own day. Counts and a median — never "wins trades".
+  const priced = theirs.flatMap(({ t, side }) => {
+    const p = input.prices?.get(t.id)
+    if (!p || side.rosterId == null || !Number.isFinite(p.gapPct)) return []
+    const me = String(side.rosterId)
+    return me === p.sideA ? [p.gapPct] : me === p.sideB ? [-p.gapPct] : []
+  })
+  if (priced.length >= TRADE_FLOOR) {
+    const more = priced.filter((g) => g >= PROJECTED_EVEN_BAND).length
+    const less = priced.filter((g) => g <= -PROJECTED_EVEN_BAND).length
+    const even = priced.length - more - less
+    const med = Math.round(medianOf(priced))
+    const cover = priced.length === n ? `all ${n} of their trades` : `${priced.length} of their ${n} trades`
+    facts.push({
+      key: 'trade.situation.price',
+      text:
+        `On the league's values at the time, priced for ${cover}: ${name} received more in ${more}, less in ${less}, and ${even} ` +
+        `${even === 1 ? 'was' : 'were'} about even (a gap under ${PROJECTED_EVEN_BAND}%). The middle trade: ` +
+        `${med === 0 ? 'even' : `${Math.abs(med)}% ${med > 0 ? 'more received than sent' : 'less received than sent'}`}.`,
+      bearsOnDeal: false,
+    })
+  } else if (priced.length > 0) {
+    facts.push({
+      key: 'trade.situation.price.coverage',
+      text: `Only ${plural(priced.length, 'trade')} of ${name}'s ${n} ${priced.length === 1 ? 'is' : 'are'} priced at the time it happened — fewer than ${TRADE_FLOOR}, so nothing is read from it yet.`,
       bearsOnDeal: false,
     })
   }
@@ -142,13 +186,14 @@ export function buildTradeSituationFacts(input: {
         return age != null && age >= VETERAN_MIN_AGE
       })
     const tookPicks = (r: Read) => r.side.picksIn.length > 0
+    const sentPicks = (r: Read) => (r.side.picksOut?.length ?? 0) > 0
     for (const [group, words] of [[up, 'at .600 or better'], [down, 'at .400 or worse']] as const) {
       if (group.length === 0) continue
       facts.push({
         key: `trade.situation.${group === up ? 'ahead' : 'behind'}`,
         text:
           `Of the ${plural(group.length, 'trade')} they made ${words}, ${group.filter(tookVeteran).length} took on a player ` +
-          `${VETERAN_MIN_AGE} or older and ${group.filter(tookPicks).length} took on draft picks.`,
+          `${VETERAN_MIN_AGE} or older, ${group.filter(tookPicks).length} took on draft picks and ${group.filter(sentPicks).length} sent draft picks away.`,
         bearsOnDeal: false,
       })
     }

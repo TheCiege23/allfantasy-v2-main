@@ -76,4 +76,12 @@ describe('loadCollegePoints', () => {
     expect(r.points).toEqual({})
     expect(r.statsOnFile).toBe(false)
   })
+  it("reports the college league's own scoring when its Fantrax rules are passed, and the defaults otherwise", async () => {
+    h.riRows = [{ playerId: 'id-qb', normalizedStatMap: { pts: 21 } }]
+    h.riAny = { id: 'x' }
+    const own = await loadCollegePoints({ season: 2026, nflWeek: 12, players, settings: { scoringSettings: { source: 'fantrax', rules: { pass_td: 6 } } } })
+    expect(own.scoredWith).toBe('league')
+    const std = await loadCollegePoints({ season: 2026, nflWeek: 12, players })
+    expect(std.scoredWith).toBe('standard')
+  })
 })

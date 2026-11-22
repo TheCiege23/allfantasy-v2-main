@@ -223,13 +223,18 @@ export function ProposeTradeModal({
 
   // Opened from the Propose grid: select the tapped manager and player once the rosters are in.
   useEffect(() => {
-    if (!open || counterTradeId || preselectApplied.current || !rosters || !initialPartnerRosterId) return
-    const partner = rosters.find((r) => r.rosterId === initialPartnerRosterId)
+    if (!open || counterTradeId || preselectApplied.current || !rosters || (!initialPartnerRosterId && !initialGetPlayerId)) return
+    // The Players screen's Trade tab knows the player and may not know his team's roster id here:
+    // the team is then whichever other roster holds him.
+    const mine = viewerTeamRosterId ?? viewerRosterId
+    const partner =
+      (initialPartnerRosterId ? rosters.find((r) => r.rosterId === initialPartnerRosterId) : undefined) ??
+      (initialGetPlayerId ? rosters.find((r) => r.rosterId !== mine && r.players.some((p) => p.id === initialGetPlayerId)) : undefined)
     if (!partner) return
     preselectApplied.current = true
     setPartnerRosterId(partner.rosterId)
     if (initialGetPlayerId && partner.players.some((p) => p.id === initialGetPlayerId)) setGetPlayerIds(new Set([initialGetPlayerId]))
-  }, [open, counterTradeId, rosters, initialPartnerRosterId, initialGetPlayerId])
+  }, [open, counterTradeId, rosters, initialPartnerRosterId, initialGetPlayerId, viewerTeamRosterId, viewerRosterId])
 
   const myRoster = useMemo(
     () => rosters?.find((r) => r.rosterId === viewerTeamRosterId) ?? rosters?.find((r) => r.rosterId === viewerRosterId) ?? rosters?.find((r) => r.platformUserId === myUserId) ?? null,

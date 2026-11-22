@@ -97,12 +97,11 @@ export async function loadTradeEdge(input: {
   if (!history.available) return history
   const h = history.data
 
-  return {
-    available: true,
-    data: buildTradeEdge({
+  const managerName = opponent.ownerName?.trim() || opponent.teamName?.trim() || 'This manager'
+  const edge = buildTradeEdge({
       trades: h.trades,
       managerOwnerId: ownerId,
-      managerName: opponent.ownerName?.trim() || opponent.teamName?.trim() || 'This manager',
+      managerName,
       teamExternalId: opponent.externalId,
       viewerOwnerId: viewer?.platformUserId?.trim() || null,
       deal: input.deal,
@@ -110,6 +109,39 @@ export async function loadTradeEdge(input: {
       historyGaps: h.historyGaps,
       asOf: h.asOf,
       stale: h.stale,
-    }),
+    })
+  return { available: true, data: await withOfferFacts(edge, { leagueId: input.leagueId, trades: h.trades, ownerId, name: managerName, now }) }
+}
+
+/** The situation lines that bear on building an offer for this manager — a subset of the manager record's. */
+export const OFFER_FACT_KEYS: ReadonlySet<string> = new Set(['trade.situation.price', 'trade.situation.ahead', 'trade.situation.behind'])
+
+/**
+ * The Trade Center's partner panel also gets what the paid manager record says about this manager's PRICES and what
+ * they traded for at each end of the standings (2026-11-22) — the lines that help build an offer they have taken
+ * before. Same facts, same rules (`tradeSituationFacts.ts`); best-effort, so a failed read leaves the panel as it was.
+ */
+async function withOfferFacts(
+  edge: TradeEdge,
+  who: { leagueId: string; trades: SleeperTradeHistory['trades']; ownerId: string; name: string; now: Date },
+): Promise<TradeEdge> {
+  if (!edge.coverage.sufficient) return edge
+  try {
+    const { managerTradeSituationOn, readTradeSituation } = await import('./managerRecordLoader')
+    if (!managerTradeSituationOn()) return edge
+    const { buildTradeSituationFacts } = await import('./tradeSituationFacts')
+    const situation = await readTradeSituation(who.trades as never, who.now, who.leagueId)
+    const lines = buildTradeSituationFacts({
+      name: who.name,
+      managerOwnerId: who.ownerId,
+      trades: who.trades as never,
+      contexts: situation.contexts,
+      ages: situation.ages,
+      prices: situation.prices,
+      now: who.now,
+    }).filter((f) => OFFER_FACT_KEYS.has(f.key))
+    return lines.length ? { ...edge, facts: [...edge.facts, ...lines] } : edge
+  } catch {
+    return edge
   }
 }

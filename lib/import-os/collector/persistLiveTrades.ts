@@ -32,7 +32,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
-import { buildTradeContextSnapshot, withInjuryStatus } from '@/lib/trade-market/tradeContextSnapshot'
+import { buildTradeContextSnapshot, withBoardValues, withInjuryStatus } from '@/lib/trade-market/tradeContextSnapshot'
 import { createInjuryRowMatcher } from '@/lib/injuries/matchInjuryRows'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
@@ -201,18 +201,46 @@ export type InjuryLookup = (player: { position: string | null; team: string | nu
 /** Injury reports newer than this are read at capture; older ones are not news. */
 const INJURY_CAPTURE_FRESH_MS = 72 * 60 * 60 * 1000
 
+/** One league's value board, as a price per traded player (`withBoardValues`). */
+export type BoardPricer = { sport: string; unit: string; priceOf: (playerId: string, name: string | null) => number | null }
+
+/**
+ * The league's value board for a non-NFL Sleeper league, or null when the sport is not board-valued or the board cannot
+ * be read (the snapshot is then saved without values, exactly as before). One read per sync.
+ */
+export async function loadBoardPricer(platformLeagueId: string): Promise<BoardPricer | null> {
+  // The same Sleeper league can be imported by several members and in several seasons; the newest season is the live one.
+  const league = await prisma.league.findFirst({ where: { platformLeagueId, platform: 'sleeper' }, orderBy: { season: 'desc' }, select: { id: true } })
+  if (!league) return null
+  const { loadLeagueValueBoard, boardUnit } = await import('@/lib/sport-values/leagueValueBoard')
+  const { priceBoardPlayer } = await import('@/lib/decision-os/trade/sportPointsValue')
+  const board = await loadLeagueValueBoard(league.id)
+  if (board.kind !== 'ok') return null
+  const ctx = board.ctx
+  return {
+    sport: board.sport,
+    unit: boardUnit(ctx),
+    priceOf: (playerId, name) => {
+      const price = priceBoardPlayer({ rosterPlayerId: playerId, name }, ctx)
+      return price.ok ? price.value : null
+    },
+  }
+}
+
 /**
  * The NFL injury designations as of now, matched to a roster player by name, VERIFIED by team and position
  * (`createInjuryRowMatcher` — a name two players share is refused, never guessed). The newest claim wins.
  */
-export async function loadInjuryLookup(now: Date): Promise<InjuryLookup> {
+export async function loadInjuryLookup(now: Date, sport = 'NFL'): Promise<InjuryLookup | null> {
   const rows = await prisma.sportsInjury.findMany({
-    where: { sport: 'NFL', expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
+    where: { sport, expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
     orderBy: { fetchedAt: 'desc' },
     take: 5000,
     select: { playerName: true, team: true, position: true, status: true, date: true, fetchedAt: true },
   })
-  const match = createInjuryRowMatcher(rows, 'NFL')
+  // No fresh report at all for this sport is "no feed", not "everyone is healthy": the snapshot is then saved unmarked.
+  if (rows.length === 0) return null
+  const match = createInjuryRowMatcher(rows, sport)
   return (p) => {
     const name = p.name
     if (!name) return undefined
@@ -229,8 +257,10 @@ export async function attachTradeContextSnapshots(
     db?: Pick<typeof prisma, 'leagueTrade'>
     now?: Date
     env?: NodeJS.ProcessEnv
-    /** Injury designations for NFL rosters; defaults to the fresh `SportsInjury` rows (`loadInjuryLookup`). */
-    injuries?: (now: Date) => Promise<InjuryLookup | null>
+    /** Injury designations for the league's sport; defaults to its fresh `SportsInjury` rows (`loadInjuryLookup`). */
+    injuries?: (now: Date, sport: string) => Promise<InjuryLookup | null>
+    /** NBA / MLB / NHL / NCAAB / soccer: the league's value board as a pricer; defaults to `loadBoardPricer`. */
+    board?: (platformLeagueId: string) => Promise<BoardPricer | null>
   } = {},
 ): Promise<number> {
   const env = deps.env ?? process.env
@@ -239,13 +269,18 @@ export async function attachTradeContextSnapshots(
   const now = deps.now ?? new Date()
   const isNfl = String(input.normalized.league?.sport ?? '').toUpperCase() === 'NFL'
   // One injury read per sync, best-effort: without it a snapshot is saved exactly as before, unmarked.
-  const injuries = isNfl && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now).catch(() => null) : null
+  // Every sport (2026-11-22): who was out at the trade cannot be rebuilt later, so it is recorded wherever a feed exists.
+  const sport = String(input.normalized.league?.sport ?? '').trim().toUpperCase()
+  const injuries = sport && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now, sport).catch(() => null) : null
+  // Other sports have no dated market chart: the board's price at capture is the only record of the trade-day value.
+  const board = !isNfl && input.trades.length > 0 ? await (deps.board ?? loadBoardPricer)(input.platformLeagueId).catch(() => null) : null
   let saved = 0
   for (const trade of input.trades) {
     const built = buildTradeContextSnapshot(input.normalized, trade, now)
     if (!built) continue
     const names = input.normalized.player_map ?? {}
-    const snapshot = injuries ? withInjuryStatus(built, (p) => injuries({ ...p, name: names[p.id]?.name ?? null })) : built
+    const withInjuries = injuries ? withInjuryStatus(built, (p) => injuries({ ...p, name: names[p.id]?.name ?? null })) : built
+    const snapshot = board ? withBoardValues(withInjuries, trade, board, (id) => board.priceOf(id, names[id]?.name ?? null)) : withInjuries
     try {
       const r = await db.leagueTrade.updateMany({
         where: {

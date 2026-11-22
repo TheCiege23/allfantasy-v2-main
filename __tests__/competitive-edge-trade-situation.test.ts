@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const m = vi.hoisted(() => ({ leagueTrade: vi.fn(), sportsPlayer: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { leagueTrade: { findMany: m.leagueTrade }, sportsPlayer: { findMany: m.sportsPlayer } } }))
+const audits = vi.hoisted(() => ({ read: vi.fn(async () => [] as unknown[]) }))
+vi.mock('@/lib/integrity/tradeValueAudit', () => ({ readTradeValueAudits: audits.read }))
 
 import { buildTradeSituationFacts, type SavedTradeContext, type SituationTrade } from '@/lib/competitive-edge/tradeSituationFacts'
 import { buildManagerRecord } from '@/lib/competitive-edge/managerRecord'
@@ -59,8 +61,8 @@ describe('the situation around a manager\'s trades', () => {
     const fs = facts()
     expect(text(fs, 'trade.situation.record')).toBe('With a record on file for 3 trades (week 4 on): 2 made at .600 or better, 1 at .400 or worse and 0 in between.')
     // Only the 29-year-old counts; the receiver of unknown age is not assumed to be old.
-    expect(text(fs, 'trade.situation.ahead')).toBe('Of the 2 trades they made at .600 or better, 1 took on a player 27 or older and 0 took on draft picks.')
-    expect(text(fs, 'trade.situation.behind')).toBe('Of the 1 trade they made at .400 or worse, 0 took on a player 27 or older and 1 took on draft picks.')
+    expect(text(fs, 'trade.situation.ahead')).toBe('Of the 2 trades they made at .600 or better, 1 took on a player 27 or older, 0 took on draft picks and 0 sent draft picks away.')
+    expect(text(fs, 'trade.situation.behind')).toBe('Of the 1 trade they made at .400 or worse, 0 took on a player 27 or older, 1 took on draft picks and 0 sent draft picks away.')
   })
 
   it('their depth at what they took on: two QBs in superflex is no spare quarterback', () => {
@@ -126,5 +128,66 @@ describe('reading the situation', () => {
     expect(r.ages.get('oldqb')).toBe(29)
     expect(managerTradeSituationOn({})).toBe(true)
     expect(managerTradeSituationOn({ MANAGER_TRADE_SITUATION: 'off' })).toBe(false)
+  })
+})
+
+/*
+ * Against the league's values at the time (owner's call, 2026-11-22): how each of a manager's trades came out on the
+ * values of its own day — counts and the middle trade, never "wins trades".
+ */
+describe('a manager\'s trades against the values at the time', () => {
+  // Mike is roster 3. Signed from side A: + means A received more.
+  const prices = new Map([
+    ['L1:a', { sideA: '3', sideB: '7', gapPct: 22 }],   // Mike received 22% more
+    ['L1:b', { sideA: '7', sideB: '3', gapPct: 15 }],   // the other side received more: Mike −15%
+    ['L1:c', { sideA: '3', sideB: '7', gapPct: 4 }],    // about even
+    ['L1:d', { sideA: '3', sideB: '7', gapPct: 12 }],   // Mike +12%
+  ])
+
+  it('counts more / less / about even, oriented to the manager, with the middle trade', () => {
+    expect(text(facts({ prices }), 'trade.situation.price')).toBe(
+      "On the league's values at the time, priced for all 4 of their trades: Mike received more in 2, less in 1, and 1 was about even (a gap under 10%). The middle trade: 8% more received than sent.",
+    )
+  })
+
+  it('too few priced trades: says so, and reads nothing from them', () => {
+    const one = new Map([['L1:a', prices.get('L1:a')!]])
+    const fs = facts({ prices: one })
+    expect(text(fs, 'trade.situation.price')).toBeUndefined()
+    expect(text(fs, 'trade.situation.price.coverage')).toMatch(/^Only 1 trade of Mike's 4 is priced/)
+    expect(text(facts(), 'trade.situation.price.coverage')).toBeUndefined()
+  })
+
+  it('a price whose sides are not this manager\'s roster is not theirs', () => {
+    const strangers = new Map([...prices].map(([k, v]) => [k, { ...v, sideA: '8', sideB: '9' }]))
+    const fs = facts({ prices: strangers })
+    expect(text(fs, 'trade.situation.price')).toBeUndefined()
+    expect(text(fs, 'trade.situation.price.coverage')).toBeUndefined()
+  })
+
+  it('at .600 or better: how often they sent draft picks away', () => {
+    const withPicksOut = trades.map((t) => (t.id === 'L1:a' ? { ...t, sides: [{ ...t.sides[0]!, picksOut: [{ season: '2027', round: 2 }] }, t.sides[1]!] } : t))
+    expect(text(facts({ trades: withPicksOut }), 'trade.situation.ahead')).toMatch(/1 sent draft picks away\.$/)
+  })
+})
+
+describe('loading the prices at the time', () => {
+  it('reads the league\'s audit rows by Sleeper trade key, keyed back to the trade id; none without a league', async () => {
+    m.leagueTrade.mockResolvedValue([])
+    m.sportsPlayer.mockResolvedValue([])
+    audits.read.mockResolvedValue([{ tradeKey: 'sleeper:a', sideATeamId: '3', sideBTeamId: '7', gapPct: 22 }])
+    const r = await readTradeSituation(trades, NOW, 'league-1')
+    expect(audits.read).toHaveBeenCalledWith('league-1', { tradeKeys: ['sleeper:a', 'sleeper:b', 'sleeper:c', 'sleeper:d'] })
+    expect([...r.prices!.entries()]).toEqual([['L1:a', { sideA: '3', sideB: '7', gapPct: 22 }]])
+    audits.read.mockClear()
+    expect((await readTradeSituation(trades, NOW)).prices!.size).toBe(0)
+    expect(audits.read).not.toHaveBeenCalled()
+  })
+
+  it('a failed audit read loses the price line only', async () => {
+    audits.read.mockRejectedValue(new Error('down'))
+    const r = await readTradeSituation(trades, NOW, 'league-1')
+    expect(r.prices!.size).toBe(0)
+    expect(r.contexts).toBeDefined()
   })
 })

@@ -19,7 +19,7 @@
  */
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { buildTradeRecord, type EdgeFact, type EdgeTrade, type TradeEdge } from './tradeEdge'
-import { buildTradeSituationFacts, type SavedTradeContext, type SituationTrade } from './tradeSituationFacts'
+import { buildTradeSituationFacts, type SavedTradeContext, type SituationTrade, type TradePriceAtTheTime } from './tradeSituationFacts'
 import { buildWaiverEdge, type EdgeWaiverClaim, type WaiverEdgeFact } from './waiverEdge'
 import { draftHistoryFacts, type EdgeDraftPick } from './draftEdge'
 
@@ -70,7 +70,7 @@ export type ManagerRecordInput = {
     asOf: string
     stale: boolean
     /** Each trade's saved context and the players' ages, when read (`./tradeSituationFacts.ts`). Absent: no such lines. */
-    situation?: { contexts: ReadonlyMap<string, SavedTradeContext>; ages: ReadonlyMap<string, number | null>; now: Date }
+    situation?: { contexts: ReadonlyMap<string, SavedTradeContext>; ages: ReadonlyMap<string, number | null>; prices?: ReadonlyMap<string, TradePriceAtTheTime>; now: Date }
   }>
   waivers: SectionState<{
     season: number
@@ -97,6 +97,7 @@ function withSituation(
     trades: data.trades as unknown as SituationTrade[],
     contexts: data.situation.contexts,
     ages: data.situation.ages,
+    prices: data.situation.prices,
     now: data.situation.now,
   })
   return lines.length ? { ...record, facts: [...record.facts, ...lines] } : record

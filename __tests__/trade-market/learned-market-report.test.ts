@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { loadLearnedMarketReport, summarizeLearnedMarket } from '@/lib/trade-market/learnedMarketReport'
 import { NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY } from '@/lib/trade-market/formatMarkets'
+import { BOARD_SPORT_MARKET_CACHE_KEY } from '@/lib/trade-market/boardSportLearning'
+import { HOLDOUT_CACHE_KEY } from '@/lib/trade-market/holdoutCheck'
 
 /**
  * /admin/trade-market (owner's call, 2026-11-22): what each learner measured, the evidence behind it, whether it is
@@ -54,8 +56,8 @@ describe('the learned market report', () => {
     expect(posture!.books[0]!.rows[0]!.gradeSays).toMatch(/teams at \.600 or better paid \+8% for players 27 or older/)
     expect(posture!.books[0]!.rows[1]!.gradeSays).toBeNull()
     expect(need!.books[0]!.rows[0]!.gradeSays).toMatch(/teams short at TE paid \+11%.*140 completed trades/)
-    // "Short this week" is measured and published but no grade applies it yet: the page must not say it does.
-    expect(need!.books[0]!.rows[1]).toMatchObject({ published: true, gradeSays: null })
+    // "Short this week" applies where the hole is a ruled-out starter (2026-11-22), and the page says so.
+    expect(need!.books[0]!.rows[1]!.gradeSays).toMatch(/teams short at TE this week \(a starter ruled out\) paid \+14%.*60 completed trades/)
   })
 
   it('a stale table is flagged, and its published rows print nothing — as the grades ignore them', () => {
@@ -72,7 +74,7 @@ describe('the learned market report', () => {
     expect(r.sections[0]!.books[0]!.warnings).toHaveLength(1)
   })
 
-  it('reads the three stored tables fresh on every load', async () => {
+  it('reads the four stored tables and the hold-out verdict fresh on every load', async () => {
     const asked: string[] = []
     const prisma = {
       sportsDataCache: {
@@ -84,7 +86,36 @@ describe('the learned market report', () => {
     }
     const a = await loadLearnedMarketReport(prisma, {}, NOW)
     await loadLearnedMarketReport(prisma, {}, NOW)
-    expect(asked.sort()).toEqual([NEED_MARKET_CACHE_KEY, NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY].sort())
+    const keys = [NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY, BOARD_SPORT_MARKET_CACHE_KEY, HOLDOUT_CACHE_KEY]
+    expect(asked.sort()).toEqual([...keys, ...keys].sort())
     expect(a.totalRows).toBe(2)
+  })
+
+  it('other sports: shown as measured only, with how many trades it rests on', () => {
+    const boardSports = { generatedAt: '2026-11-22T06:00:00Z', sports: [{ sport: 'NBA', tradesRead: 44, observations: 80, premiums: [{ kind: 'posture', group: 'contend', premiumPct: 9, effectiveSample: 22, baselineEffectiveSample: 30, trades: 24, published: true, note: 'measured' }] }] }
+    const r = summarizeLearnedMarket({ picks: null, posture: null, need: null, boardSports }, {}, NOW)
+    expect(r.otherSports.status.missing).toBe(false)
+    expect(r.otherSports.sports[0]).toMatchObject({ sport: 'NBA', tradesRead: 44, rows: [{ label: 'Contenders (.600+) vs middle teams', pct: 9, published: true }] })
+    expect(summarizeLearnedMarket({ picks: null, posture: null, need: null }, {}, NOW).otherSports).toMatchObject({ status: { missing: true }, sports: [] })
+  })
+
+  it('a learner that did not hold on later trades: the book says so, and no grade line is promised for it', () => {
+    const holdout = { generatedAt: '2026-11-22T06:00:00Z', cutoff: '2025-09-01T00:00:00.000Z', sinceSeason: 2020, rows: [
+      { learner: 'posture', book: BOOK, verdict: 'not_held', improvementPct: -18, trainTrades: 300, testTrades: 90, publishedRows: 1, flippedRows: 1 },
+      { learner: 'picks', book: BOOK, verdict: 'held', improvementPct: 22, trainTrades: 600, testTrades: 200, publishedRows: 1, flippedRows: 0 },
+    ] }
+    const r = summarizeLearnedMarket({ picks: pickDoc(), posture: postureDoc, need: needDoc, holdout }, {} as NodeJS.ProcessEnv, NOW)
+    const book = (key: string) => r.sections.find((s) => s.key === key)!.books[0]!
+    expect(book('posture').holdout).toEqual({ verdict: 'not_held', says: 'Did not hold: the learned grade was 18% further from what later trades cost (90 later trades) — grades ignore it for this book.' })
+    expect(book('posture').rows.every((x) => x.gradeSays === null)).toBe(true)
+    expect(book('picks').holdout!.verdict).toBe('held')
+    expect(book('picks').rows[0]!.gradeSays).toMatch(/AllFantasy pick market/)
+    expect(book('need').holdout).toBeNull()
+    expect(r.holdout).toMatchObject({ cutoff: '2025-09-01T00:00:00.000Z', releasedToPartners: false })
+    // With no stored check at all, nothing is gated and nothing is released.
+    const none = summarizeLearnedMarket({ picks: pickDoc(), posture: postureDoc, need: needDoc }, {} as NodeJS.ProcessEnv, NOW)
+    expect(none.sections.find((s) => s.key === 'posture')!.books[0]!.rows[0]!.gradeSays).toMatch(/teams at \.600 or better/)
+    expect(none.holdout).toMatchObject({ cutoff: null, releasedToPartners: false })
+    expect(none.holdout.status.missing).toBe(true)
   })
 })

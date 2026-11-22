@@ -74,7 +74,8 @@ describe('NativeWaiversScreen', () => {
     expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
     expect(screen.getByAltText('Tank Bigsby').getAttribute('src')).toBe(nfl.headshotUrl)
     expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nfl.teamLogoUrl)
-    expect(screen.getByText('RUSH YDS 766 · TD 7')).toBeTruthy()
+    // Each season figure under its own label (a labelled strip on a phone, one line on a wide screen).
+    expect(screen.getByTestId('native-waivers-stats-p1').textContent).toBe('RUSH YDS766TD7')
     unmount()
 
     const nba = {
@@ -89,6 +90,6 @@ describe('NativeWaiversScreen', () => {
     expect(await screen.findByText('Jalen Brunson')).toBeTruthy()
     expect(screen.getByAltText('Jalen Brunson').getAttribute('src')).toBe(nba.headshotUrl)
     expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nba.teamLogoUrl)
-    expect(screen.getByText('PTS/G 26 · REB/G 3.3 · AST/G 6.8')).toBeTruthy()
+    expect(screen.getByTestId('native-waivers-stats-n1').textContent).toBe('PTS/G26REB/G3.3AST/G6.8')
   })
 })

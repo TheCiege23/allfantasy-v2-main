@@ -35,6 +35,7 @@ import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules }
 import { lineupFixLink } from './platformLinks'
 import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
 import { AF_TIP_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { mapWithConcurrency } from '@/lib/concurrency/mapWithConcurrency'
 import type {
   Dash34Brief,
   Dash34Data,
@@ -651,27 +652,8 @@ function fellBack<T>(options: Dash34Options, read: Dash34Read, fallback: T): (er
 /** How many Sleeper leagues the live lineup check reads at once. */
 const LIVE_SLEEPER_LEAGUE_BOUND = 8
 
-/**
- * `fn` over `items`, at most `limit` running at once, starting the next item as soon as any running
- * one settles. Results come back in input order. A rejection rejects the whole run, as
- * `Promise.all` over batches did.
- */
-export async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++
-      results[index] = await fn(items[index])
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker))
-  return results
-}
+/** Moved to lib/concurrency/mapWithConcurrency.ts; re-exported so existing importers keep working. */
+export { mapWithConcurrency }
 
 export async function getDash34Data(
   userId: string,

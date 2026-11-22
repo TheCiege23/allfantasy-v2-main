@@ -49,6 +49,8 @@ export function renderDecisionScenario(s: ReadyChimmyScenario): string {
     `You give ${names(s.give)}; you receive ${names(s.get)} from ${s.partnerTeamName}.`,
     s.value.divisionImpacts ? s.value.withheld ?? '' : s.value.grade ? `Trade Center grade: ${s.value.grade}${s.value.label ? ` — ${s.value.label}` : ''}.` : `No trade grade: ${s.value.withheld ?? 'league values are incomplete'}.`,
     ...(s.value.divisionImpacts ? [] : [`League value (${s.value.basis ?? 'league chart'}): ${points(s.value.given)} given, ${points(s.value.received)} received. Coverage: ${s.value.coveragePct}%.`]),
+    // The measured evidence behind the values, verbatim from the grade (`marketEvidenceOf`).
+    ...(s.value.marketEvidence ?? []).map((e) => `Measured from completed trades — ${e}.`),
     s.lineup ? `Week ${s.lineupWeek ?? 'unknown'} projected lineup: ${points(s.lineup.before)} before, ${points(s.lineup.after)} after (${points(s.lineup.delta)} point change).` : `Lineup impact unavailable: ${s.lineupUnavailable ?? 'missing projections'}.`,
     ...(s.unpricedExcluded ? [`${s.unpricedExcluded} rostered players have no projection and were excluded from lineup totals.`] : []),
     ...(s.depthChanges ?? []).map(d => `${d.position} roster depth: ${d.before} before, ${d.after} after.`),

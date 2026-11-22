@@ -10,7 +10,7 @@ import type { SGScheduledGame } from './providerSchedule'
 export const SG_OFFICIAL_NBA_SOURCE = 'nba_official_live'
 type Obj = Record<string, any>
 const obj = (value: unknown): Obj => value && typeof value === 'object' && !Array.isArray(value) ? value as Obj : {}
-type OfficialGame = { id: string; home: string; away: string; start: string; season: number }
+type OfficialGame = { id: string; home: string; away: string; start: string; season: number; final?: boolean }
 type Identity = { id: string; canonicalName: string; rollingInsightsId: string | null }
 // Verified against official NBA boxes and the primary NBA player catalog.
 // Each alias checks BOTH provider IDs and BOTH names; suffixes are never dropped globally.
@@ -45,7 +45,7 @@ export function officialNbaSchedule(payload: unknown, season: number): OfficialG
     if (obj(g.homeTeam).teamId === 0 || obj(g.awayTeam).teamId === 0) return []
     const home = dailyTeamCode('NBA', obj(g.homeTeam).teamTricode), away = dailyTeamCode('NBA', obj(g.awayTeam).teamTricode), start = String(g.gameDateTimeUTC)
     if (!/^002\d{7}$/.test(String(g.gameId)) || !/^[A-Z]{3}$/.test(home) || !/^[A-Z]{3}$/.test(away) || home === away || !Number.isFinite(Date.parse(start))) return fail('INVALID_SCHEDULE_GAME')
-    return [{ id: String(g.gameId), home, away, start, season }]
+    return [{ id: String(g.gameId), home, away, start, season, final: g.gameStatus === 3 }]
   })
   if (!games.length || new Set(games.map(g => g.id)).size !== games.length) return fail('DUPLICATE_OR_EMPTY_SCHEDULE')
   return games
@@ -57,13 +57,15 @@ export function matchOfficialNbaGame(expected: SGScheduledGame, games: OfficialG
   return matches[0]
 }
 
-export function prepareSGOfficialNbaBox(expected: SGScheduledGame, match: OfficialGame, payload: unknown, identities: Identity[], now = new Date()) {
+type OfficialNbaPlayerBox = { id: string; name: string; team: string; opponent: string; seconds: number; minutes: string; stats: Record<string, number> }
+
+export function prepareOfficialNbaFinalBox(match: OfficialGame, payload: unknown, now = new Date()) {
   const game = obj(obj(payload).game), startTime = new Date(match.start)
   if (game.gameId !== match.id || game.gameStatus !== 3 || game.regulationPeriods !== 4 || !Number.isInteger(game.period) || game.period < 4 ||
       Date.parse(game.gameTimeUTC) !== startTime.getTime() || startTime.getTime() > now.getTime()) return fail('GAME_NOT_VERIFIED_FINAL')
-  const expectedSeconds = 14400 + (game.period - 4) * 1500, rows: RiGameWrite[] = [], seen = new Set<string>(), officialIds = new Set<number>()
-  const names = new Map<string, Identity[]>()
-  for (const i of identities) if (i.rollingInsightsId) { const key = canonicalName(i.canonicalName); names.set(key, [...(names.get(key) ?? []), i]) }
+  const expectedSeconds = 14400 + (game.period - 4) * 1500
+  const players: OfficialNbaPlayerBox[] = []
+  const officialIds = new Set<number>()
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(startTime)
   for (const side of ['home', 'away'] as const) {
     const team = obj(game[side + 'Team']), totals = obj(team.statistics), code = match[side], opponent = side === 'home' ? match.away : match.home
@@ -78,18 +80,11 @@ export function prepareSGOfficialNbaBox(expected: SGScheduledGame, match: Offici
       }
       if (!Number.isSafeInteger(p.personId) || p.personId <= 0 || officialIds.has(p.personId) || typeof p.name !== 'string') return fail('INVALID_PLAYER')
       officialIds.add(p.personId)
-      const alias = aliases[String(p.personId)]
-      const reviewed = alias && canonicalName(alias.official) === canonicalName(p.name) ? alias : null
-      const found = reviewed ? identities.filter(i => i.rollingInsightsId === reviewed.riId && canonicalName(i.canonicalName) === canonicalName(reviewed.primary)) : names.get(canonicalName(p.name)) ?? []
-      if (found.length !== 1 || seen.has(found[0].id)) return fail('UNRESOLVED_PLAYER_' + p.personId)
-      const identity = found[0], time = duration(stats.minutes), line = Object.fromEntries(Object.entries(fields).map(([key, source]) => [key, count(stats[source])]))
+      const time = duration(stats.minutes), line = Object.fromEntries(Object.entries(fields).map(([key, source]) => [key, count(stats[source])]))
       if (line.points !== line.field_goals_made * 2 + line.three_points_made + line.free_throws_made || line.total_rebounds !== line.offensive_rebounds + line.defensive_rebounds ||
           line.field_goals_made > line.field_goals_attempted || line.free_throws_made > line.free_throws_attempted || line.three_points_made > line.three_points_attempted) return fail('PLAYER_TOTAL_MISMATCH')
-      counts.push(line); seconds += time; seen.add(identity.id)
-      rows.push({ playerId: identity.id, sportType: 'NBA', gameId: expected.externalId, providerGameId: expected.externalId, providerPlayerId: String(p.personId), season: match.season, weekOrRound: 0,
-        statPayload: { ...line, player: p.name, minutes: String(stats.minutes), officialGameId: match.id, officialPlayerId: String(p.personId) },
-        normalizedStatMap: { stats: line, seasonType: 'regular', scored: false, gameStartTimeUtc: startTime.toISOString(), officialGameId: match.id },
-        source: SG_OFFICIAL_NBA_SOURCE, confidence: 1, team: code, opponent, gameDate: new Date(day + 'T00:00:00Z'), fetchedAt: now })
+      counts.push(line); seconds += time
+      players.push({ id: String(p.personId), name: p.name, team: code, opponent, seconds: time, minutes: String(stats.minutes), stats: line })
     }
     if (counts.length < 5 || Math.abs(seconds - expectedSeconds) > counts.length) return fail('TEAM_MINUTES_MISMATCH')
     for (const [key, source] of Object.entries(fields)) {
@@ -98,9 +93,28 @@ export function prepareSGOfficialNbaBox(expected: SGScheduledGame, match: Offici
       if (counts.reduce((n, line) => n + line[key], 0) !== count(totals[totalKey])) return fail('TEAM_TOTAL_MISMATCH_' + key)
     }
   }
+  return { players, startTime, day, homeScore: count(obj(game.homeTeam).score), awayScore: count(obj(game.awayTeam).score) }
+}
+
+export function prepareSGOfficialNbaBox(expected: SGScheduledGame, match: OfficialGame, payload: unknown, identities: Identity[], now = new Date()) {
+  const { players, startTime, day, homeScore, awayScore } = prepareOfficialNbaFinalBox(match, payload, now)
+  const names = new Map<string, Identity[]>()
+  for (const i of identities) if (i.rollingInsightsId) { const key = canonicalName(i.canonicalName); names.set(key, [...(names.get(key) ?? []), i]) }
+  const seen = new Set<string>()
+  const rows = players.map((p): RiGameWrite => {
+    const alias = aliases[p.id]
+    const reviewed = alias && canonicalName(alias.official) === canonicalName(p.name) ? alias : null
+    const found = reviewed ? identities.filter(i => i.rollingInsightsId === reviewed.riId && canonicalName(i.canonicalName) === canonicalName(reviewed.primary)) : names.get(canonicalName(p.name)) ?? []
+    if (found.length !== 1 || seen.has(found[0].id)) return fail('UNRESOLVED_PLAYER_' + p.id)
+    seen.add(found[0].id)
+    return { playerId: found[0].id, sportType: 'NBA', gameId: expected.externalId, providerGameId: expected.externalId, providerPlayerId: p.id, season: match.season, weekOrRound: 0,
+      statPayload: { ...p.stats, player: p.name, minutes: p.minutes, officialGameId: match.id, officialPlayerId: p.id },
+      normalizedStatMap: { stats: p.stats, seasonType: 'regular', scored: false, gameStartTimeUtc: startTime.toISOString(), officialGameId: match.id },
+      source: SG_OFFICIAL_NBA_SOURCE, confidence: 1, team: p.team, opponent: p.opponent, gameDate: new Date(day + 'T00:00:00Z'), fetchedAt: now }
+  })
   const coverage: StatCoverage = { sport: 'NBA', source: SG_OFFICIAL_NBA_SOURCE, periodId: expected.externalId, kind: 'game', identitySpace: 'canonical', season: match.season, week: null,
     startTime, endTime: startTime, teams: [match.home, match.away], participantIds: [...seen].sort(), gameKeys: [coverageGameKey({homeTeam:match.home,awayTeam:match.away,startTime}, v => v)] }
-  return { rows, coverage, officialGameId: match.id, homeScore: count(obj(game.homeTeam).score), awayScore: count(obj(game.awayTeam).score) }
+  return { rows, coverage, officialGameId: match.id, homeScore, awayScore }
 }
 
 /** Only incomplete final primary boxes use this independently validated, atomic replacement. */

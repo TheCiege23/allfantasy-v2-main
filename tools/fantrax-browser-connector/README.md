@@ -36,6 +36,47 @@ without login (`WARNING_NOT_LOGGED_IN`), even when HTTP status is 200.
 - The extension requires a commissioner action for a sync. It eliminates manual
   team-by-team exports; it is not a scheduled unattended sync or a Chrome Store release.
 
+## Trades, claims and drops (0.2.0)
+
+**Sync trades, claims and drops** downloads the league's Transaction History with the
+commissioner's Fantrax login and saves it to AllFantasy. Fantrax's public API has no
+transactions endpoint, so until now trades came from a CSV uploaded by hand and adds and
+drops were inferred by comparing rosters.
+
+- Any sport. The signed-in AllFantasy user must be the league's commissioner.
+- Two downloads, one per tab: Trade and Claim/Drop. Each is the page's own
+  "Download all as CSV" request and nothing else; any other address is refused.
+- Each file is checked for its own columns before it is sent. A login page, an error
+  body or the other tab's file is refused.
+- Trades go through the existing trade-history importer. Claims and drops are saved as
+  completed moves with the team, the player, the winning bid and Fantrax's time.
+- A row whose team or player cannot be matched is reported and not saved. The export
+  has no player ids, so players are matched by name, club and position.
+- Running it again is safe: a move already saved is left as it is.
+- It is a click, not a schedule. Nothing runs in the background.
+
+Known limits: the Claim/Drop download was captured from a real request; the Trade
+download is assumed to take the same parameters and is refused if it returns anything
+but the Trade columns. The one captured Claim/Drop export of an 11-week season started
+in week 10, for a reason not yet known, so a sync must not be read as the league's whole
+history (`contracts/fantrax/GAPS.md` F-19).
+
+## Team logos (0.3.0)
+
+**Sync team logos** reads each team's logo from Fantrax and shows it in AllFantasy.
+Fantrax's public API sends no picture, so every Fantrax team showed a letter.
+
+- One request, the one Fantrax's own pages make for the league's team list. Only each
+  team's id, name and logo address leave the extension.
+- AllFantasy accepts a logo only when it is an image on Fantrax's image server.
+- A logo is matched to a team by name. A team that cannot be matched is reported.
+- The logo is saved on the team and stays there; a scheduled refresh does not remove it.
+
+Known limits: the request was captured from Fantrax's own page and has not been sent
+from the extension. It carries the site's version number, which will change; if Fantrax
+refuses an old one, the sync fails with a message and saves nothing
+(`contracts/fantrax/GAPS.md` F-20). Managers' names are not imported.
+
 ## Transport evidence
 
 Captured 2026-10-07 in Chrome Network from a real actual-week export:
