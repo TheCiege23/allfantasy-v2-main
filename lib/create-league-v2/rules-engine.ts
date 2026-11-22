@@ -151,7 +151,8 @@ export function getTeamCountOptions(
   const sizes = capToRealLeague(sport, leagueType, listedTeamCountOptions(sport, leagueType, soccerPipeline))
   // A pro-sport Redraft or Dynasty league is offered only the sizes its players can fill
   // (lib/league-creation/playerSupply.ts), so the form never offers a size the server refuses.
-  if (leagueType !== 'redraft' && leagueType !== 'dynasty') return sizes
+  // A C2C league too: a college one drafts pros on its C2C side (owner's decision, 2026-11-22).
+  if (leagueType !== 'redraft' && leagueType !== 'dynasty' && leagueType !== 'c2c') return sizes
   const supply = checkNewLeaguePlayerSupply({ sport, leagueType, teamCount: sizes[0] ?? 2 })
   return supply.verified ? sizes.filter((n) => n <= supply.maxTeams) : sizes
 }

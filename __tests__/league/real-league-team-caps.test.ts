@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { capToRealLeague, PRO_LEAGUE_TEAMS } from '@/lib/league/teamCountLimits'
 import { getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 as CATALOG } from '@/lib/league-creation/options-catalog-seed-data'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 
 describe('capToRealLeague', () => {
   it('drops every size past the real league, for the four pro sports only', () => {
@@ -49,14 +51,45 @@ describe('the create form and the catalog agree on every list', () => {
     }
   })
 
-  it('Devy and C2C: 32 for an NFL league, the college maximum for a college one', () => {
+  it('Devy and C2C: 32 for an NFL league; a college C2C league stops where its PRO side runs out', () => {
     expect(Math.max(...getTeamCountOptions('NFL', 'devy'))).toBe(32)
     expect(Math.max(...getTeamCountOptions('NFL', 'c2c'))).toBe(32)
-    expect(Math.max(...getTeamCountOptions('NCAAF', 'c2c'))).toBe(250)
-    expect(Math.max(...getTeamCountOptions('NCAAB', 'c2c'))).toBe(250)
+    // Owner's decision, 2026-11-22: 16 NFL seats a team against about 2,200 NFL players (dynasty supply),
+    // 15 NBA seats against about 1,080 NBA players.
+    expect(Math.max(...getTeamCountOptions('NCAAF', 'c2c'))).toBe(137)
+    expect(Math.max(...getTeamCountOptions('NCAAB', 'c2c'))).toBe(72)
     // College Devy fills 10 DEVY seats a team from about 1,700 prospects, so it stops at 170.
     const collegeDevy = getTeamCountOptions('NCAAF', 'devy')
     expect(collegeDevy).toContain(140)
     expect(Math.max(...collegeDevy)).toBe(170)
+  })
+})
+
+describe('a college C2C league is sized by its pro side', () => {
+  const body = (sport: string, teamCount: number) => ({
+    concept: 'c2c', sport, teamCount, draftType: 'snake', leagueName: 'C2C size',
+    scoringPreset: sport === 'NCAAF' ? 'ncaaf_half_ppr' : 'ncaab_points',
+  })
+
+  it('counts the C2C (pro) seats only, against the pro sport, with the dynasty supply', () => {
+    expect(checkNewLeaguePlayerSupply({ sport: 'NCAAF', leagueType: 'c2c', teamCount: 137 })).toMatchObject({ verified: true, ok: true, rosterSpots: 16, pool: 2200 })
+    expect(checkNewLeaguePlayerSupply({ sport: 'NCAAB', leagueType: 'c2c', teamCount: 72 })).toMatchObject({ verified: true, ok: true, rosterSpots: 15, pool: 1080 })
+    // An NFL C2C league counts its NFL seats, not its college ones: 21 a team, far under the 32-team cap.
+    expect(checkNewLeaguePlayerSupply({ sport: 'NFL', leagueType: 'c2c', teamCount: 32 })).toMatchObject({ ok: true, rosterSpots: 21 })
+  })
+
+  it('the server refuses one team past the cap, saying why', () => {
+    expect(validateCreatePayload(body('NCAAF', 137)).ok).toBe(true)
+    const refused = validateCreatePayload(body('NCAAF', 138))
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) expect(refused.errors?.[0]).toMatchObject({ path: 'teamCount', code: 'PLAYER_SUPPLY_EXHAUSTED' })
+    expect(validateCreatePayload(body('NCAAB', 73)).ok).toBe(false)
+  })
+
+  it('an imported college C2C league keeps its size (Road To Glory runs 180 teams)', () => {
+    expect(validateCreatePayload(body('NCAAB', 180), { importedTeamCount: 180 }).ok).toBe(true)
+    expect(validateCreatePayload(body('NCAAF', 140), { importedTeamCount: 140 }).ok).toBe(true)
+    // The allowance is the import's own count only.
+    expect(validateCreatePayload(body('NCAAB', 180), { importedTeamCount: 9 }).ok).toBe(false)
   })
 })
