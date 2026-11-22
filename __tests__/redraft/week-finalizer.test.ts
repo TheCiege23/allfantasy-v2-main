@@ -588,7 +588,7 @@ describe('finalizeCompletedWeeksForSeason', () => {
 
     expect(findFirst.mock.calls[0]).toEqual([
       {
-        where: { seasonId: 'season-1', week: { lt: 2 }, status: { not: 'final' }, awayRosterId: { not: null } },
+        where: { seasonId: 'season-1', week: { lt: 2 }, status: { not: 'final' }, awayRosterId: { not: null }, type: { not: 'pre_league' } },
         orderBy: { week: 'asc' },
         select: { week: true },
       },

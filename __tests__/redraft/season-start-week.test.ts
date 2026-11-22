@@ -22,9 +22,11 @@ describe('resolveSeasonStartWeek', () => {
     expect(await start(week(4, 'played', 5))).toEqual({ startWeek: 5, reason: 'next_unplayed_week' })
   })
 
-  it('a week in progress is skipped too — its early games are gone', async () => {
-    expect(await start(week(5, 'live', 6))).toMatchObject({ startWeek: 6 })
-    expect(await start(week(5, 'between', 6))).toMatchObject({ startWeek: 6 })
+  it('a week in progress is the first week — its games still to play score live', async () => {
+    expect(await start(week(5, 'live', 6))).toEqual({ startWeek: 5, reason: 'week_in_progress' })
+    // A Saturday: Thursday is final, Sunday has not kicked off (sportWeekSignal reads that as between).
+    expect(await start(week(5, 'between', 6))).toEqual({ startWeek: 5, reason: 'week_in_progress' })
+    expect(await start(week(5, 'upcoming', 6))).toEqual({ startWeek: 5, reason: 'week_in_progress' })
   })
 
   it('with no next week on the schedule yet, the one after the current week', async () => {

@@ -26,7 +26,7 @@ import type { SportWeekResolution } from '@/lib/season-week/types'
 export type SeasonStartWeek = {
   startWeek: number
   /** Why this week — for the draft-completion log, so a late start is never a mystery. */
-  reason: 'sport_not_started' | 'next_unplayed_week' | 'clamped_to_last_regular_week' | 'week_unknown' | 'postseason'
+  reason: 'sport_not_started' | 'next_unplayed_week' | 'week_in_progress' | 'clamped_to_last_regular_week' | 'week_unknown' | 'postseason'
 }
 
 export async function resolveSeasonStartWeek(
@@ -44,10 +44,21 @@ export async function resolveSeasonStartWeek(
   // A postseason week number is not a regular-season week; nothing sensible to start on.
   if (resolution.seasonType !== 'regular') return { startWeek: 1, reason: 'postseason' }
 
-  const wanted = resolution.state === 'upcoming'
-    ? resolution.sportWeek
-    : (resolution.nextSportWeek ?? resolution.sportWeek + 1)
+  /*
+   * A week still being PLAYED is the league's first week, not the one after it (owner's call,
+   * 2026-11-22, superseding the "next unplayed week" half of the 2026-09-28 ruling). A league drafted on
+   * an NFL Saturday started at the FOLLOWING week, so Sunday's games — the ones every manager was
+   * watching — scored nothing. The weeks fully played before the draft load as pre-league weeks
+   * (lib/redraft/preLeagueWeeks.ts).
+   *
+   * ⚠ ONLY `played` MOVES THE START ON. A Saturday of an NFL week reads `between`, not `live`
+   * (sportWeekSignal.ts `stateFor`: the first kickoff has passed and Sunday's games are not final), so
+   * a rule written as "upcoming or live" still skipped the exact week this exists for.
+   */
+  const wanted = resolution.state === 'played'
+    ? (resolution.nextSportWeek ?? resolution.sportWeek + 1)
+    : resolution.sportWeek
   if (wanted <= 1) return { startWeek: 1, reason: 'sport_not_started' }
   if (wanted > regularEnd) return { startWeek: regularEnd, reason: 'clamped_to_last_regular_week' }
-  return { startWeek: wanted, reason: 'next_unplayed_week' }
+  return { startWeek: wanted, reason: resolution.state === 'played' ? 'next_unplayed_week' : 'week_in_progress' }
 }
