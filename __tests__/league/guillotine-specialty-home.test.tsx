@@ -165,7 +165,9 @@ describe('GuillotineSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You were chopped in week 1')
+    // One header: the verdict leads the hero, the week sits under it.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Chopped in week 1')
+    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
     expect(screen.queryByTestId('guillotine-hero-lineup')).toBeNull()
     expect(screen.queryByTestId('guillotine-hero-waivers')).toBeNull()
     expect(screen.getByTestId('guillotine-hero-chop')).toBeTruthy()
