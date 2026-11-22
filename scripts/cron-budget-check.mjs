@@ -49,7 +49,9 @@ const SLOW_TIER_WORKFLOW = join('.github', 'workflows', 'cron-slow-tier.yml')
  * Raise it consciously, in a commit that says why.
  */
 // One dedicated slot for the hourly college watchlist in the Railway registry.
-const CEILING = 61
+// Raised 61 -> 62 for the NFL game-day stat refresh (`import-player-game-stats?gameDay=1`): it is a
+// mode of an existing route on its own 15-minute schedule, so it cannot share the daily mode's slot.
+const CEILING = 62
 
 const reportOnly = process.argv.includes('--report')
 const root = process.cwd()
