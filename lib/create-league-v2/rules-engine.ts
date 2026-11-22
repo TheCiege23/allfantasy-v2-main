@@ -1,3 +1,4 @@
+import { capToRealLeague } from '@/lib/league/teamCountLimits'
 import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 /**
@@ -146,7 +147,8 @@ export function getTeamCountOptions(
   leagueType: LeagueTypeId,
   soccerPipeline?: 'mls' | 'euro' | null
 ): number[] {
-  const sizes = listedTeamCountOptions(sport, leagueType, soccerPipeline)
+  // Never bigger than the real league for a pro sport (lib/league/teamCountLimits.ts `capToRealLeague`).
+  const sizes = capToRealLeague(sport, leagueType, listedTeamCountOptions(sport, leagueType, soccerPipeline))
   // A pro-sport Redraft or Dynasty league is offered only the sizes its players can fill
   // (lib/league-creation/playerSupply.ts), so the form never offers a size the server refuses.
   if (leagueType !== 'redraft' && leagueType !== 'dynasty') return sizes
