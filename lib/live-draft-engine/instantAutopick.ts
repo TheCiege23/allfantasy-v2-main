@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
@@ -52,7 +53,7 @@ export async function instantAutopickReason(args: {
   if (isAutopilotIn(playable, args.rosterId, roster?.platformUserId ?? null)) return 'autopilot'
 
   const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
-  if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return null
+  if (!userId || isSeatPlaceholderUserId(userId)) return null
   const pref = await prisma.liveDraftAutopickPreference.findUnique({
     where: { draft_session_user_unique: { draftSessionId: args.draftSessionId, userId } },
     select: { enabled: true },
@@ -103,7 +104,7 @@ export async function listAutoDraftRosterIds(args: {
       continue
     }
     const userId = rosterManagerKey(roster) ?? ''
-    if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) continue
+    if (!userId || isSeatPlaceholderUserId(userId)) continue
     if (autoUsers.has(userId)) out.push(roster.id)
   }
   return out

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
@@ -32,7 +33,7 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
     select: { platformUserId: true },
   })
   for (const row of co) {
-    if (row.platformUserId && !String(row.platformUserId).startsWith('orphan-')) {
+    if (row.platformUserId && !isSeatPlaceholderUserId(String(row.platformUserId))) {
       ids.add(row.platformUserId)
     }
   }

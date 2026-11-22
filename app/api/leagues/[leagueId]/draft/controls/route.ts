@@ -2,6 +2,7 @@
  * POST: Commissioner controls — start, pause, resume, reset_timer, undo_pick, force_autopick, complete, etc.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -548,7 +549,7 @@ async function handleDraftControl(
         select: { platformUserId: true },
       })
       const queueUserId =
-        onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
+        onClockRoster?.platformUserId && !isSeatPlaceholderUserId(String(onClockRoster.platformUserId))
           ? String(onClockRoster.platformUserId)
           : null
       let useAiQueueMode = false

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { createAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
 import { resolveLeagueTradeSettings, isPastTradeDeadline } from '@/lib/league-trade-engine/tradeSettingsResolver'
@@ -58,7 +59,7 @@ async function teamNameFor(leagueId: string, platformUserId: string): Promise<st
 }
 
 async function isAppUser(id: string): Promise<boolean> {
-  if (!id || id.startsWith('orphan-')) return false
+  if (!id || isSeatPlaceholderUserId(id)) return false
   const row = await prisma.appUser.findUnique({ where: { id }, select: { id: true } }).catch(() => null)
   return Boolean(row)
 }
