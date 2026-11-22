@@ -245,6 +245,15 @@ describe('host opens Tribal Council', () => {
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: 'Council already exists for this week' })
   })
+
+  it('a database error is not shown to the host', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    openTribalCouncilMock.mockRejectedValueOnce(new Error('\nInvalid `prisma.survivorTribalCouncil.create()` invocation:\n\nForeign key constraint violated'))
+    const response = await open()
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Could not open council' })
+    quiet.mockRestore()
+  })
 })
 
 describe('playing commissioner manual action restrictions', () => {

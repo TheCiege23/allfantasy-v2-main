@@ -81,7 +81,12 @@ export async function POST(req: NextRequest) {
       const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
       return NextResponse.json(council)
     } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not open council' }, { status: 409 })
+      // Only the service's own one-line refusals are shown. Anything else (a database error) is a fault.
+      const message = error instanceof Error ? error.message : ''
+      const refusal = message && !message.includes('\n') && message.length <= 120 && !/prisma/i.test(message)
+      if (refusal) return NextResponse.json({ error: message }, { status: 409 })
+      console.error('[survivor/tribal] open council failed', error)
+      return NextResponse.json({ error: 'Could not open council' }, { status: 500 })
     }
   }
 
