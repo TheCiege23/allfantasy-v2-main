@@ -128,6 +128,15 @@ type ResendWebhookPayload = {
   data?: Record<string, unknown>
 }
 
+async function recordTaggedSeatInvite(data: Record<string, unknown>, messageId: string, eventType: string) {
+  const tags = data.tags
+  const attemptId = tags && typeof tags === 'object' && !Array.isArray(tags)
+    ? (tags as Record<string, unknown>).af_seat_invite : null
+  if (typeof attemptId !== 'string' || !/^[a-f0-9-]{36}$/i.test(attemptId)) return
+  const { recordSeatInviteProviderEvent } = await import('@/lib/league/seatInvites')
+  await recordSeatInviteProviderEvent(messageId, eventType, attemptId)
+}
+
 async function handleEvent(
   eventType: string,
   data: Record<string, unknown>,
@@ -300,6 +309,7 @@ export async function POST(req: NextRequest) {
     "email.complained",
     "email.delivery_delayed",
     "email.failed",
+    "email.suppressed",
   ])
 
   if (!KNOWN_EVENTS.has(eventType)) {
@@ -307,6 +317,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  try {
+    if (typeof data.email_id === 'string') await recordTaggedSeatInvite(data, data.email_id, eventType)
+  } catch {
+    return NextResponse.json({ error: 'Could not record seat invite delivery.' }, { status: 503 })
+  }
   await handleEvent(eventType, data, svixIdForStorage)
 
   return NextResponse.json({ ok: true })

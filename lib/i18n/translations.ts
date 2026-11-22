@@ -1539,7 +1539,7 @@ export const translations: Record<string, Record<string, string>> = {
     "lsHub.gen.autosaveHint": "Changes save automatically",
     "lsHub.gen.autosave": "Auto-save",
     "lsHub.gen.teamCount": "Number of teams",
-    "lsHub.gen.teamCountRange": "Enter a team count between 2 and 32.",
+    "lsHub.gen.teamCountRange": "Enter a team count between 2 and {{max}}.",
     "lsHub.gen.teamCountHint": "Change before drafting. Only empty, unclaimed seats can be removed.",
     "lsHub.gen.leagueName": "League name",
     "lsHub.gen.timezone": "Timezone",

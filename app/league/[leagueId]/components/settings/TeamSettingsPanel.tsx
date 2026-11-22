@@ -1,490 +1,252 @@
 'use client'
 
-/**
- * app/league/[leagueId]/components/settings/TeamSettingsPanel.tsx
- *
- * Commissioner "Team" settings: edit each team's name and logo, and (re)assign
- * the owner. Replaces the former Team Settings placeholder.
- *
- * Data flow reuses proven endpoints:
- *  - GET  /api/commissioner/leagues/[id]/managers  -> teams + rosters + managers
- *  - PATCH/DELETE the same route                    -> owner (re)assignment
- *  - PATCH /api/commissioner/leagues/[id]/teams     -> team name / logo (this feature)
- */
-
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { UserMinus, UserPlus, X, Search } from 'lucide-react'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { SeatInvitePanel } from './SeatInvitePanel'
 import { TeamCoOwnerPanel } from './TeamCoOwnerPanel'
-import { SettingsPanelHeading, SettingsSectionLabel, controlClassSm } from './settings-ui'
+import { SettingsPanelHeading, controlClassSm } from './settings-ui'
+import { DivisionSettingsCommissionerPanel } from '@/components/league-settings/DivisionSettingsCommissionerPanel'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
+import { MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
+import { buildTeamDirectoryCsv, type TeamDirectoryRow } from '@/lib/league/teamDirectoryExport'
 
-interface TeamRow {
-  teamId: string // leagueTeam.id
-  externalId: string
-  teamName: string
-  ownerName: string
-  avatarUrl: string | null
-  rosterId: string | null
-  platformUserId: string | null
-  isOrphan: boolean
-  isCommissioner: boolean
-  isCoCommissioner: boolean
-  teamRole: string
-  position: number
+type Directory = {
+  leagueName: string; capacity: number; native: boolean; canManage: boolean; isHeadCommissioner: boolean
+  multiTeamSupported: boolean; allowMultiTeamManagers: boolean; allowManagerTeamNameEdits: boolean; teams: TeamDirectoryRow[]
 }
+type Save = (url: string, method: string, body?: object) => Promise<boolean>
+const button = 'rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-40'
+const input = controlClassSm + ' w-full'
+const seatLabel = { open: 'Open', managed: 'Managed', automated: 'Automated' }
 
-interface AvailableUser {
-  id: string
-  username: string | null
-  displayName: string | null
-}
-
-interface RawTeam {
-  id: string
-  externalId: string
-  teamName: string | null
-  ownerName: string | null
-  avatarUrl: string | null
-  isCommissioner?: boolean
-  isCoCommissioner?: boolean
-  isOrphan?: boolean
-  role?: string
-  platformUserId?: string | null
-}
-
-interface RawRoster {
-  id: string
-  platformUserId: string | null
-}
-
-interface RawManager {
-  rosterId: string
-  userId: string | null
-  username: string | null
-  displayName: string | null
+async function request(url: string, method: string, body?: object) {
+  const response = await fetch(url, { method, cache: 'no-store', ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(result.error ?? 'Request failed. Try again.')
+  return result
 }
 
 export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; canEdit: boolean }) {
-  const disabled = !canEdit
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [teams, setTeams] = useState<TeamRow[]>([])
-  const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([])
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [addPickerOpen, setAddPickerOpen] = useState<string | null>(null)
+  const id = encodeURIComponent(leagueId)
+  const base = `/api/commissioner/leagues/${id}`
+  const [directory, setDirectory] = useState<Directory | null>(null)
+  const [status, setStatus] = useState<{ error: boolean; message: string } | null>(null)
+  const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
-
-  // Per-team draft edits for name/logo (keyed by teamId).
-  const [nameDraft, setNameDraft] = useState<Record<string, string>>({})
-  const [logoDraft, setLogoDraft] = useState<Record<string, string>>({})
-  const [savingField, setSavingField] = useState<string | null>(null)
-
+  const [seat, setSeat] = useState('')
+  const [division, setDivision] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [view, setView] = useState<'teams' | 'divisions' | 'invites'>('teams')
+  const editable = Boolean(directory?.canManage && canEdit)
   const load = useCallback(async () => {
-    setLoadError(null)
-    // Drop stale per-team drafts so a fresh server state isn't masked by them.
-    setNameDraft({})
-    setLogoDraft({})
-    try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/managers`, {
-        cache: 'no-store',
-      })
-      if (res.status === 403) {
-        setLoadError('You need commissioner access to manage teams.')
-        setTeams([])
-        return
-      }
-      const data = (await res.json().catch(() => ({}))) as {
-        teams?: RawTeam[]
-        rosters?: RawRoster[]
-        managers?: RawManager[]
-        error?: string
-      }
-      if (!res.ok) {
-        setLoadError(data.error ?? 'Failed to load teams')
-        return
-      }
+    const result = await request(base + '/managers', 'GET')
+    if (!result.directory) throw new Error('Team settings are unavailable.')
+    setDirectory(result.directory)
+  }, [base])
+  useEffect(() => { setDirectory(null); setEditing(null); setStatus(null); setView('teams'); setSearch(''); setSeat(''); setDivision(''); void load().catch(error => setStatus({ error: true, message: error.message })) }, [load])
+  const save: Save = async (url, method, body) => {
+    setBusy(true); setStatus(null)
+    try { await request(url, method, body); await load(); setStatus({ error: false, message: 'Changes saved.' }); return true }
+    catch (error) { setStatus({ error: true, message: error instanceof Error ? error.message : 'Could not save changes.' }); return false }
+    finally { setBusy(false) }
+  }
+  const teams = directory?.teams ?? []
+  const managers = new Map<string, number>()
+  for (const team of teams) if (team.status === 'managed' && team.manager?.id) managers.set(team.manager.id, (managers.get(team.manager.id) ?? 0) + 1)
+  const usernames = [...new Set(teams.flatMap(team => team.status === 'managed' && team.manager?.username ? [team.manager.username] : []))].sort()
+  const divisions = [...new Set(teams.flatMap(team => team.division ? [team.division] : []))].sort()
+  const filtered = teams.filter(team => (!seat || team.status === seat) && (!division || team.division === division) &&
+    [team.name, team.abbreviation, team.manager?.username, team.manager?.name].some(value => value?.toLowerCase().includes(search.trim().toLowerCase())))
 
-      const teamsRaw = data.teams ?? []
-      const rostersRaw = data.rosters ?? []
-      const managersRaw = data.managers ?? []
+  function download() {
+    const url = URL.createObjectURL(new Blob([buildTeamDirectoryCsv(teams)], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url; link.download = 'allfantasy-team-assignments.csv'; link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
-      // team.externalId maps to roster.id (mirrors MemberSettingsCommissionerPanel).
-      const rosterById = new Map<string, RawRoster>()
-      for (const r of rostersRaw) rosterById.set(r.id, r)
-
-      const rows: TeamRow[] = teamsRaw.map((t, i) => {
-        const roster = rosterById.get(t.externalId) ?? null
-        const isOrphan =
-          Boolean(t.isOrphan) ||
-          !t.ownerName ||
-          (t.ownerName ?? '').toLowerCase().includes('unassigned')
-        return {
-          teamId: t.id,
-          externalId: t.externalId,
-          teamName: t.teamName ?? `Team ${i + 1}`,
-          ownerName: isOrphan ? '' : (t.ownerName ?? ''),
-          avatarUrl: t.avatarUrl ?? null,
-          rosterId: roster?.id ?? null,
-          platformUserId: t.platformUserId ?? null,
-          isOrphan,
-          isCommissioner: Boolean(t.isCommissioner),
-          isCoCommissioner: Boolean(t.isCoCommissioner),
-          teamRole: typeof t.role === 'string' ? t.role : 'member',
-          position: i + 1,
-        }
-      })
-      setTeams(rows)
-
-      const assignedUserIds = new Set(
-        rows.filter((r) => !r.isOrphan).map((r) => r.platformUserId).filter(Boolean),
-      )
-      // De-duplicate unassigned candidates by user id.
-      const byId = new Map<string, AvailableUser>()
-      for (const m of managersRaw) {
-        if (!m.userId || assignedUserIds.has(m.userId) || byId.has(m.userId)) continue
-        byId.set(m.userId, { id: m.userId, username: m.username, displayName: m.displayName })
-      }
-      setAvailableUsers(Array.from(byId.values()))
-    } catch {
-      setLoadError('Failed to load team settings')
-    } finally {
-      setLoading(false)
-    }
-  }, [leagueId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const displayed = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return teams
-    return teams.filter(
-      (t) => t.teamName.toLowerCase().includes(q) || t.ownerName.toLowerCase().includes(q),
-    )
-  }, [teams, search])
-
-  const saveTeamField = useCallback(
-    async (teamId: string, patch: { teamName?: string; avatarUrl?: string | null }, fieldKey: string) => {
-      setSavingField(fieldKey)
-      try {
-        const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/teams`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ leagueTeamId: teamId, ...patch }),
-        })
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        if (!res.ok) {
-          toast.error(data.error ?? 'Could not save team')
-          return false
-        }
-        setTeams((prev) => prev.map((t) => (t.teamId === teamId ? { ...t, ...patch } : t)))
-        toast.success('Team updated')
-        return true
-      } catch {
-        toast.error('Request failed')
-        return false
-      } finally {
-        setSavingField(null)
-      }
-    },
-    [leagueId],
-  )
-
-  const commitName = useCallback(
-    (team: TeamRow) => {
-      const next = (nameDraft[team.teamId] ?? team.teamName).trim()
-      if (!next || next === team.teamName) return
-      void saveTeamField(team.teamId, { teamName: next }, `${team.teamId}:name`)
-    },
-    [nameDraft, saveTeamField],
-  )
-
-  const commitLogo = useCallback(
-    (team: TeamRow) => {
-      const raw = logoDraft[team.teamId]
-      if (raw === undefined) return
-      const next = raw.trim()
-      if (next === (team.avatarUrl ?? '')) return
-      void saveTeamField(team.teamId, { avatarUrl: next || null }, `${team.teamId}:logo`)
-    },
-    [logoDraft, saveTeamField],
-  )
-
-  const handleAssign = useCallback(
-    async (rosterId: string | null, userId: string) => {
-      if (!rosterId || !userId) return
-      setActionLoading(rosterId)
-      setAddPickerOpen(null)
-      try {
-        const res = await fetch(
-          `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/managers`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ rosterId, userId }),
-          },
-        )
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        if (!res.ok) {
-          toast.error(data.error ?? 'Failed to assign owner')
-          return
-        }
-        toast.success('Owner assigned')
-        await load()
-      } catch {
-        toast.error('Request failed')
-      } finally {
-        setActionLoading(null)
-      }
-    },
-    [leagueId, load],
-  )
-
-  const handleUnassign = useCallback(
-    async (rosterId: string | null) => {
-      if (!rosterId) return
-      setActionLoading(rosterId)
-      try {
-        const res = await fetch(
-          `/api/commissioner/leagues/${encodeURIComponent(leagueId)}/managers?rosterId=${encodeURIComponent(rosterId)}`,
-          { method: 'DELETE', credentials: 'include' },
-        )
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        if (!res.ok) {
-          toast.error(data.error ?? 'Failed to remove owner')
-          return
-        }
-        toast.success('Owner removed')
-        await load()
-      } catch {
-        toast.error('Request failed')
-      } finally {
-        setActionLoading(null)
-      }
-    },
-    [leagueId, load],
-  )
-
-  return (
-    <div
-      className="min-h-0 flex-1 space-y-6 px-6 py-6 text-[13px] text-white/85"
-      data-testid="settings-team-panel"
-    >
-      <SettingsPanelHeading
-        title="Team Settings"
-        subtitle="Rename teams, set logos, and assign owners."
-      />
-
-      {loadError ? (
-        <div className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-[12px] text-red-300">
-          {loadError}
+  return <div className="min-h-0 flex-1 space-y-5 p-4 text-sm text-white/85 sm:p-6" data-testid="settings-team-panel">
+    <SettingsPanelHeading title="Team Settings" subtitle={directory?.leagueName || 'Manage franchises, managers, and divisions.'} />
+    {status && <p className={status.error ? 'text-red-200' : 'text-teal-200'} role={status.error ? 'alert' : 'status'}>{status.message}</p>}
+    {!directory && (status ? <button className={button} type="button" onClick={() => { setStatus(null); void load().catch(error => setStatus({ error: true, message: error.message })) }}>Retry</button> : <p role="status">Loading team settings…</p>)}
+    {directory && <>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-white/10 p-3">
+        <span><strong>{teams.filter(team => team.status === 'managed').length} / {directory.capacity}</strong> managed teams</span>
+        <span><strong>{teams.filter(team => team.status === 'open').length}</strong> open</span><span><strong>{managers.size}</strong> primary managers</span>
+        <button className={button + ' sm:ml-auto'} type="button" onClick={download}>Export assignments with aliases</button>
+      </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Team setup sections">
+        {(['teams', 'divisions', ...(editable ? ['invites'] as const : [])] as const).map(section => <button key={section} type="button"
+          className={button + (view === section ? ' bg-teal-800' : '')} aria-pressed={view === section}
+          onClick={() => { setView(section); if (section === 'teams') void load().catch(error => setStatus({ error: true, message: error.message })) }}>
+          {section === 'teams' ? 'Teams & managers' : section === 'divisions' ? 'Divisions & pools' : 'Invite managers'}</button>)}
+      </div>
+      {!directory.native && <p>Team assignments come from the source platform.</p>}
+      {view === 'divisions' && <DivisionSettingsCommissionerPanel leagueId={leagueId} />}
+      {view === 'invites' && editable && <><LeagueInvitePanel leagueId={leagueId} leagueName={directory.leagueName} /><TeamInviteForm endpoint={base + '/invite/send'} /></>}
+      {view === 'teams' && <>
+        {editable && <details className="rounded-xl border border-white/10 p-3">
+          <summary className="cursor-pointer font-semibold">Capacity and manager rules</summary>
+          <form key={`${directory.capacity}:${directory.allowMultiTeamManagers}:${directory.allowManagerTeamNameEdits}`} className="mt-3 grid gap-3" onSubmit={event => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            const leagueSize = Number(form.get('capacity'))
+            const multiTeam = form.has('multiTeam'), rename = form.has('rename')
+            const patch = {
+              ...(leagueSize !== directory.capacity ? { leagueSize } : {}),
+              ...(directory.multiTeamSupported && multiTeam !== directory.allowMultiTeamManagers ? { allowMultiTeamManagers: multiTeam } : {}),
+              ...(rename !== directory.allowManagerTeamNameEdits ? { allowManagerTeamNameEdits: rename } : {}),
+            }
+            if (Object.keys(patch).length) void save(`/api/leagues/${id}/settings`, 'PATCH', { section: 'general', updates: patch })
+          }}>
+            <label className="grid max-w-xs gap-1">Team capacity<input className={input} type="number" required name="capacity" defaultValue={directory.capacity} min={Math.min(4, directory.capacity)} max={MAX_NATIVE_TEAMS} /></label>
+            {directory.multiTeamSupported && <label className="flex gap-2"><input type="checkbox" name="multiTeam" defaultChecked={directory.allowMultiTeamManagers} /> Allow one manager to run multiple teams</label>}
+            <label className="flex gap-2"><input type="checkbox" name="rename" defaultChecked={directory.allowManagerTeamNameEdits} /> Allow managers to edit team names and abbreviations</label>
+            <p className="text-xs text-white/70">Opening a seat keeps its franchise, players, and history. Lower capacity to remove eligible empty seats before the draft.</p>
+            <button className={button + ' justify-self-start bg-teal-800'} disabled={busy}>Save team rules</button>
+          </form>
+        </details>}
+        <div className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr]">
+          <input aria-label="Search teams or managers" type="search" placeholder="Find a team or manager" value={search} onChange={event => setSearch(event.target.value)} className={input} />
+          <select aria-label="Seat status" value={seat} onChange={event => setSeat(event.target.value)} className={input}>
+            <option value="">All seats</option><option value="open">Open seats</option><option value="managed">Managed seats</option><option value="automated">Automated seats</option>
+          </select>
+          {divisions.length > 0 && <select aria-label="Division" value={division} onChange={event => setDivision(event.target.value)} className={input}>
+            <option value="">All divisions</option>{divisions.map(name => <option key={name}>{name}</option>)}</select>}
         </div>
-      ) : null}
-
-      {loading ? (
-        <div className="space-y-3">
-          <div className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />
-          <div className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />
-          <div className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />
-        </div>
-      ) : (
-        <>
-          <div className="space-y-2">
-            <SettingsSectionLabel>Search teams</SettingsSectionLabel>
-            <div className="relative max-w-md">
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Team or owner…"
-                className="w-full rounded-lg border border-white/15 bg-[#0d1526] py-2.5 pl-4 pr-10 text-[13px] text-white placeholder:text-white/30 focus:border-teal-400/40 focus:outline-none"
-              />
-              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {displayed.map((team) => {
-              const nameVal = nameDraft[team.teamId] ?? team.teamName
-              const logoVal = logoDraft[team.teamId] ?? team.avatarUrl ?? ''
-              const previewUrl = logoVal.trim()
-              return (
-                <div
-                  key={team.teamId}
-                  className="rounded-2xl border border-white/[0.07] bg-black/20 p-4"
-                >
-                  <div className="flex items-start gap-4">
-                    {/* Avatar preview */}
-                    <div className="shrink-0">
-                      {previewUrl ? (
-                        <img
-                          src={previewUrl}
-                          alt=""
-                          className="h-12 w-12 rounded-full border border-white/10 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-base font-bold text-white/30">
-                          {(team.teamName || '?')[0]?.toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1 space-y-3">
-                      {/* Name + owner meta */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[12px] font-medium text-white/35">{team.position}.</span>
-                        {team.isCommissioner ? (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-200">
-                            Commissioner
-                          </span>
-                        ) : null}
-                        {team.isCoCommissioner ? (
-                          <span className="rounded bg-[#ff3d81]/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-[#ffb8d1]">
-                            Co-comm
-                          </span>
-                        ) : null}
-                        <span className="text-[12px] text-white/45">
-                          {team.isOrphan ? 'Unassigned' : team.ownerName || '—'}
-                        </span>
-                      </div>
-
-                      {/* Name field */}
-                      <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                          Team name
-                        </span>
-                        <input
-                          type="text"
-                          value={nameVal}
-                          disabled={disabled}
-                          maxLength={64}
-                          onChange={(e) =>
-                            setNameDraft((d) => ({ ...d, [team.teamId]: e.target.value }))
-                          }
-                          onBlur={() => commitName(team)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                          }}
-                          className={`${controlClassSm} w-full max-w-sm`}
-                        />
-                      </label>
-
-                      {/* Logo field */}
-                      <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                          Logo URL
-                        </span>
-                        <input
-                          type="url"
-                          value={logoVal}
-                          disabled={disabled}
-                          placeholder="https://…"
-                          onChange={(e) =>
-                            setLogoDraft((d) => ({ ...d, [team.teamId]: e.target.value }))
-                          }
-                          onBlur={() => commitLogo(team)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                          }}
-                          className={`${controlClassSm} w-full max-w-sm`}
-                        />
-                        <span className="mt-1 block text-[11px] text-white/35">
-                          Paste an image link. Leave blank to use the team initial.
-                        </span>
-                      </label>
-
-                      {canEdit && team.rosterId && <TeamCoOwnerPanel leagueId={leagueId} rosterId={team.rosterId} />}
-
-                      {/* Owner assignment */}
-                      {canEdit ? (
-                        <div className="pt-1">
-                          {team.isOrphan ? (
-                            <div className="relative inline-block">
-                              <button
-                                type="button"
-                                disabled={actionLoading === team.rosterId || !team.rosterId}
-                                onClick={() =>
-                                  setAddPickerOpen(addPickerOpen === team.teamId ? null : team.teamId)
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-teal-500/25 bg-teal-950/20 px-3 py-1.5 text-[11px] font-semibold text-teal-200 transition hover:bg-teal-950/40 disabled:opacity-40"
-                              >
-                                <UserPlus className="h-3.5 w-3.5" />
-                                Assign owner
-                              </button>
-                              {addPickerOpen === team.teamId ? (
-                                <div className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
-                                  <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-                                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                                      Select owner
-                                    </span>
-                                    <button type="button" onClick={() => setAddPickerOpen(null)}>
-                                      <X className="h-3.5 w-3.5 text-white/30 hover:text-white/60" />
-                                    </button>
-                                  </div>
-                                  {availableUsers.length > 0 ? (
-                                    <div className="max-h-48 overflow-y-auto">
-                                      {availableUsers.map((user) => (
-                                        <button
-                                          key={user.id}
-                                          type="button"
-                                          onClick={() => handleAssign(team.rosterId, user.id)}
-                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-white/70 transition hover:bg-white/[0.06] hover:text-white"
-                                        >
-                                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/40">
-                                            {(user.displayName ?? user.username ?? '?')[0]?.toUpperCase()}
-                                          </div>
-                                          <span>{user.displayName ?? user.username ?? user.id}</span>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="px-3 py-3 text-[11px] text-white/30">
-                                      No unassigned members available.
-                                    </p>
-                                  )}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={actionLoading === team.rosterId || !team.rosterId}
-                              onClick={() => handleUnassign(team.rosterId)}
-                              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-white/45 transition hover:text-red-400 disabled:opacity-40"
-                            >
-                              <UserMinus className="h-3.5 w-3.5" />
-                              Remove owner
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-
-            {displayed.length === 0 && !loadError ? (
-              <div className="py-8 text-center text-[13px] text-white/30">
-                {teams.length === 0 ? 'No teams in this league yet.' : 'No teams match this search.'}
+        <datalist id={`af-assign-managers-${id}`}>{usernames.map(name => <option key={name} value={name} />)}</datalist>
+        <ul className="grid gap-2">{filtered.map(team => {
+          const count = team.manager?.id ? managers.get(team.manager.id) ?? 0 : 0
+          return <li key={team.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><strong className="break-words text-white">{team.name || 'Open team'}</strong>{team.abbreviation && <span className="ml-2 text-xs">{team.abbreviation}</span>}
+                <p className="text-xs text-white/70">{[team.status === 'managed' ? team.manager?.name || 'Managed' : seatLabel[team.status], team.role, team.division, count > 1 ? `${count} teams` : null, team.coOwners.length ? `${team.coOwners.length} co-owner assignments` : null].filter(Boolean).join(' · ')}</p>
               </div>
-            ) : null}
-          </div>
-
-          {savingField ? (
-            <p className="text-[11px] text-white/40">Saving…</p>
-          ) : null}
-
-          {disabled ? (
-            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-              You have read-only access to team settings.
+              {editable && <button type="button" className={button} aria-expanded={editing === team.id} aria-label={`${editing === team.id ? 'Close' : 'Manage'} ${team.name}`}
+                onClick={() => setEditing(editing === team.id ? null : team.id)}>{editing === team.id ? 'Close' : 'Manage'}</button>}
             </div>
-          ) : null}
-        </>
-      )}
-    </div>
-  )
+            {editable && editing === team.id && <TeamEditor key={team.id} team={team} leagueId={leagueId} listId={`af-assign-managers-${id}`} base={base} busy={busy}
+              canManageSeat={!team.role || directory.isHeadCommissioner} save={save} onCoOwnersChange={() => void load().catch(error => setStatus({ error: true, message: error.message }))} />}
+          </li>
+        })}</ul>
+        {!filtered.length && <p role="status">No teams match these filters.</p>}
+      </>}
+    </>}
+  </div>
+}
+
+function TeamEditor({ team, leagueId, listId, base, busy, canManageSeat, save, onCoOwnersChange }: {
+  team: TeamDirectoryRow; leagueId: string; listId: string; base: string; busy: boolean; canManageSeat: boolean; save: Save; onCoOwnersChange: () => void
+}) {
+  const [confirmRelease, setConfirmRelease] = useState(false)
+  const [showCoOwners, setShowCoOwners] = useState(false)
+  return <div className="mt-3 space-y-4 border-t border-white/10 pt-3">
+    <form key={JSON.stringify([team.name, team.abbreviation, team.avatarUrl])} className="grid gap-2 sm:grid-cols-2" onSubmit={event => {
+      event.preventDefault()
+      const form = new FormData(event.currentTarget)
+      void save(base + '/teams', 'PATCH', { leagueTeamId: team.id, teamName: form.get('name'), avatarUrl: form.get('avatar') || null,
+        ...(team.rosterId ? { abbreviation: form.get('abbr') } : {}) })
+    }}>
+      <label>Team name<input className={input} required name="name" defaultValue={team.name} maxLength={MAX_TEAM_NAME_LENGTH} /></label>
+      {team.rosterId && <label>Abbreviation<input className={input} name="abbr" defaultValue={team.abbreviation} maxLength={6} /></label>}
+      <label>Logo URL<input className={input} name="avatar" type="url" defaultValue={team.avatarUrl ?? ''} /></label>
+      <button disabled={busy} className={button + ' self-end justify-self-start bg-teal-800'}>Save team details</button>
+    </form>
+    {canManageSeat && team.rosterId && <>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={async event => {
+        event.preventDefault(); const form = event.currentTarget
+        if (await save(base + '/managers', 'PATCH', { rosterId: team.rosterId, username: new FormData(form).get('username') })) form.reset()
+      }}>
+        <label>AllFantasy username<input className={input} required name="username" list={listId} /></label>
+        <button className={button + ' bg-teal-800'} disabled={busy}>{team.status !== 'open' ? 'Replace manager' : 'Assign manager'}</button>
+        {team.status !== 'open' && !confirmRelease && <button className={button} type="button" onClick={() => setConfirmRelease(true)}>Open seat</button>}
+      </form>
+      {confirmRelease && team.status !== 'open' && <div role="group" aria-label="Confirm opening the seat" className="flex flex-wrap items-center gap-2">
+        <span>Open this seat and keep the franchise?</span>
+        <button className={button} type="button" disabled={busy} onClick={async () => { if (await save(base + '/managers?rosterId=' + encodeURIComponent(team.rosterId!), 'DELETE')) setConfirmRelease(false) }}>Confirm open seat</button>
+        <button className={button} type="button" onClick={() => setConfirmRelease(false)}>Cancel</button>
+      </div>}
+      {team.status === 'managed' && <><button className={button} type="button" aria-expanded={showCoOwners} onClick={() => setShowCoOwners(!showCoOwners)}>Co-owners</button>
+        {showCoOwners && <TeamCoOwnerPanel leagueId={leagueId} rosterId={team.rosterId} onChange={onCoOwnersChange} />}</>}
+    </>}
+    <SeatInvitePanel base={base} teamId={team.id} open={team.status !== 'managed'} />
+  </div>
+}
+
+function TeamInviteForm({ endpoint }: { endpoint: string }) {
+  const [type, setType] = useState<'email' | 'username'>('email')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ message: string; url?: string; failures?: string[] } | null>(null)
+
+  async function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const value = String(form.get('recipient') ?? '').trim()
+    const recipients: string[] = []
+    if (type === 'email') {
+      const seen = new Set<string>()
+      for (const address of value.split(/[,;\s]+/).filter(Boolean)) {
+        const key = address.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        recipients.push(address)
+      }
+    } else if (value) {
+      recipients.push(value.replace(/^@/, ''))
+    }
+    if (!recipients.length || recipients.length > 20) {
+      setResult({ message: type === 'email' ? 'Enter 1 to 20 email addresses.' : 'Enter an AllFantasy username.' })
+      return
+    }
+    if (type === 'email' && recipients.some(address => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address))) {
+      setResult({ message: 'Check the email addresses before sending.' })
+      return
+    }
+
+    setBusy(true)
+    setResult(null)
+    const failures: string[] = []
+    let url: string | undefined
+    try {
+      for (const recipient of recipients) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, [type]: recipient, message: String(form.get('note') ?? '') }),
+          })
+          const data = await response.json()
+          url ??= data.inviteUrl
+          if (!response.ok || (type === 'email' && !data.sent)) {
+            failures.push(recipient + ' — ' + (response.status === 429 ? 'Email limit reached' : 'Invite could not be sent'))
+          }
+        } catch {
+          failures.push(recipient + ' — Connection failed')
+        }
+      }
+
+      setResult({
+        url,
+        failures,
+        message: type === 'email'
+          ? (recipients.length - failures.length) + ' of ' + recipients.length + ' email invites accepted by the delivery provider.'
+          : failures.length ? 'Could not create an invite.' : 'Invite link ready to share.',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <form className="grid gap-2 rounded-xl border border-white/10 p-3" onSubmit={send}>
+    <label>Invite by<select className={input} disabled={busy} value={type} onChange={event => { setType(event.target.value as typeof type); setResult(null) }}><option value="email">Email</option><option value="username">AllFantasy username</option></select></label>
+    {type === 'email' ? <>
+      <label>Email addresses<textarea className={input} disabled={busy} required name="recipient" rows={3} maxLength={6400} placeholder="One address per line, up to 20" /></label>
+      <label>Personal note<textarea className={input} disabled={busy} name="note" rows={3} maxLength={320} /></label>
+    </> : <label>AllFantasy username<input className={input} disabled={busy} required name="recipient" /></label>}
+    <button disabled={busy} className={button + ' justify-self-start bg-teal-800'}>{busy ? 'Working…' : type === 'email' ? 'Send invites' : 'Create invite'}</button>
+    {result && <div role="status">
+      <p>{result.message} {result.url && <a href={result.url} className="text-teal-300 underline">Open shareable invite link</a>}</p>
+      {Boolean(result.failures?.length) && <ul className="list-inside list-disc">{result.failures?.map(failure => <li key={failure}>{failure}</li>)}</ul>}
+    </div>}
+  </form>
 }

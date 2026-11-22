@@ -152,6 +152,19 @@ describe('assignLeagueSeat', () => {
     expect(db.draftSession.rows[0].slotOrder[0]).toMatchObject({ rosterId: 'r2', displayName: 'Open Team 2', open: true })
   })
 
+  it('keeps a named franchise and its logo when its next manager takes over', async () => {
+    const db = nativeLeague()
+    const franchise = db.leagueTeam.rows.find((team: Row) => team.id === 't2')!
+    Object.assign(franchise, { teamName: 'Division Rivals', avatarUrl: 'https://example.test/logo.png' })
+
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).ok).toBe(true)
+    expect((await releaseLeagueSeat(db, { leagueId: 'L', rosterId: 'r2' })).ok).toBe(true)
+    expect((await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'ben' })).ok).toBe(true)
+    expect(db.leagueTeam.rows.find((team: Row) => team.id === 't2')).toMatchObject({
+      teamName: 'Division Rivals', avatarUrl: 'https://example.test/logo.png', claimedByUserId: 'ben',
+    })
+  })
+
   it('releases one token claim while keeping the same manager’s other claim and membership', async () => {
     const db = nativeLeague()
     db.league.rows[0].settings = { allow_multi_team_managers: true }

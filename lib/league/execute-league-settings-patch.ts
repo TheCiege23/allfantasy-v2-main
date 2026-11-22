@@ -6,6 +6,7 @@
 
 import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY, multiTeamManagersSupported } from '@/lib/league/multiTeamManagers'
 import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
+import { MANAGER_TEAM_NAME_EDITS_KEY } from '@/lib/league/myTeamEdit'
 import { NextResponse } from 'next/server'
 import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { Prisma } from '@prisma/client'
@@ -638,6 +639,9 @@ export async function executeLeagueSettingsPatch(
    */
   if (body.allowMultiTeamManagers !== undefined && typeof body.allowMultiTeamManagers !== 'boolean') {
     return jsonError('allowMultiTeamManagers must be true or false', 400)
+  }
+  if (body.allowManagerTeamNameEdits !== undefined && typeof body.allowManagerTeamNameEdits !== 'boolean') {
+    return jsonError('allowManagerTeamNameEdits must be true or false', 400)
   }
   if (body.allowMultiTeamManagers === true && !multiTeamManagersSupported(league)) {
     return jsonError('Several teams for one manager is available in standard leagues only (redraft, dynasty, keeper, best ball).', 400)
@@ -1288,13 +1292,17 @@ export async function executeLeagueSettingsPatch(
     })
   }
 
-  if (typeof body.allowMultiTeamManagers === 'boolean') {
+  if (typeof body.allowMultiTeamManagers === 'boolean' || typeof body.allowManagerTeamNameEdits === 'boolean') {
     const prev = await readCurrentLeagueSettings(leagueId)
+    const rules = {
+      ...(typeof body.allowMultiTeamManagers === 'boolean' ? { [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: body.allowMultiTeamManagers } : {}),
+      ...(typeof body.allowManagerTeamNameEdits === 'boolean' ? { [MANAGER_TEAM_NAME_EDITS_KEY]: body.allowManagerTeamNameEdits } : {}),
+    }
     await prisma.league.update({
       where: { id: leagueId },
-      data: { settings: { ...prev, [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: body.allowMultiTeamManagers } as Prisma.InputJsonValue },
+      data: { settings: { ...prev, ...rules } as Prisma.InputJsonValue },
     })
-    updatedFieldNames.push(ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY)
+    updatedFieldNames.push(...Object.keys(rules))
   }
 
   if (typeof body.medianGameInPlayoffs === 'boolean') {

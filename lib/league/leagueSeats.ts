@@ -246,16 +246,17 @@ export async function assignLeagueSeat(
     await tx.leagueManagerClaim.deleteMany({ where: { leagueId, teamExternalId: rosterId, afUserId: team.claimedByUserId } })
   }
 
-  // A native open team takes its manager's name; an imported team keeps the name its league gave it.
-  const teamName = (wasOpenTeam && !foundation.carriedOverFromLeagueId) || !team?.teamName ? `${name}'s Team` : team.teamName
+  // Only an untouched placeholder takes its first manager's name. Established franchises keep their identity.
+  const isPlaceholder = wasOpenTeam && !foundation.carriedOverFromLeagueId && /^Open Team \d+$/.test(team?.teamName ?? '')
+  const teamName = isPlaceholder || !team?.teamName ? `${name}'s Team` : team.teamName
   if (team) {
     await tx.leagueTeam.update({
       where: { id: team.id },
       data: {
         ownerName: name,
         teamName,
-        // The manager's face on the team: a native open team takes it; an imported team keeps its own.
-        ...(user.avatarUrl && (wasOpenTeam || !team.avatarUrl) ? { avatarUrl: user.avatarUrl } : {}),
+        // Use the manager's avatar when the franchise has no image.
+        ...(user.avatarUrl && !team.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
         claimedByUserId: userId,
         isOrphan: false,
         // `getLeagueRole` trusts these flags on the claimed team, so a new holder must not

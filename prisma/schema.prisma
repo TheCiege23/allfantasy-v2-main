@@ -8803,6 +8803,7 @@ enum LeagueTeamManagerKind {
 
 model LeagueTeam {
   leagueSafeMembers LeagueSafeMember[]
+  invites LeagueSeatInvite[]
 
   id                   String                    @id @default(uuid())
   leagueId             String
@@ -17239,6 +17240,20 @@ model AutomationLock {
 /// Payload is sanitized — recipient addresses are removed before storage.
 /// svixId (the Svix unique message ID header) is the idempotency key; duplicate webhook
 /// deliveries from Resend are safely ignored via the unique constraint.
+model LeagueSeatInvite {
+  id                String   @id @default(uuid())
+  leagueTeamId      String
+  recipientLabel    String   @db.VarChar(255)
+  providerMessageId String?  @unique @db.VarChar(128)
+  status            String   @default("SENDING") @db.VarChar(16)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  team              LeagueTeam @relation(fields: [leagueTeamId], references: [id], onDelete: Cascade)
+
+  @@index([leagueTeamId, createdAt])
+  @@map("league_seat_invites")
+}
+
 model ResendEmailEvent {
   id        String   @id @default(uuid())
   /// Svix-id header value — unique per webhook delivery, used for idempotency

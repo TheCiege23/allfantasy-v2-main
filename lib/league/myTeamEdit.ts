@@ -7,6 +7,17 @@ import { isOffensiveDisplayName } from "@/lib/moderation/offensiveName"
 
 /** Long enough for "The Mahomes Supremacy Clause", short enough to fit a standings row. */
 export const MAX_TEAM_NAME_LENGTH = 40
+export const MANAGER_TEAM_NAME_EDITS_KEY = 'allow_manager_team_name_edits'
+
+export function managerTeamNameEditsAllowed(settings: unknown): boolean {
+  return (settings as Record<string, unknown> | null)?.[MANAGER_TEAM_NAME_EDITS_KEY] !== false
+}
+
+export function normalizeTeamAbbreviation(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toUpperCase()
+  return /^[A-Z0-9]{0,6}$/.test(normalized) ? normalized : null
+}
 
 type TeamNameCheck = { ok: true; teamName: string } | { ok: false; message: string }
 

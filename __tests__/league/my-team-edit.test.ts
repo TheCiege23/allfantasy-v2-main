@@ -19,7 +19,7 @@ import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
 
 const mocks = vi.hoisted(() => ({
   userId: 'user-1' as string | null,
-  league: { platform: 'allfantasy' } as { platform: string } | null,
+  league: { platform: 'allfantasy' } as { platform: string; settings?: Record<string, unknown> } | null,
   team: { id: 'team-1' } as { id: string } | null,
   coOwnerRosterId: null as string | null,
   season: { id: 'season-9' } as { id: string } | null,
@@ -41,7 +41,7 @@ vi.mock('@/lib/auth-guard', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: vi.fn(async () => mocks.league) },
-    roster: { findFirst: vi.fn(async () => ({ redraftRosterId: 'redraft-1' })) },
+    roster: { findFirst: vi.fn(async () => ({ id: 'roster-1', redraftRosterId: 'redraft-1', settings: { openSlot: false } })), update: vi.fn(async () => ({})) },
     leagueTeam: {
       findFirst: mocks.teamFindFirst,
       update: mocks.leagueTeamUpdate,
@@ -97,20 +97,36 @@ describe('checkTeamName', () => {
 
 describe('POST /api/leagues/[leagueId]/my-team', () => {
   it('renames the caller\'s claimed team and the current season roster, together', async () => {
-    const res = await POST(json({ teamName: 'Gridiron Gang' }), ctx)
+    const res = await POST(json({ leagueTeamId: 'team-1', teamName: 'Gridiron Gang' }), ctx)
     expect(res.status).toBe(200)
 
-    // Whose team: looked up by the CALLER's claim — never an id from the body.
     expect(mocks.teamFindFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { leagueId: 'league-1', claimedByUserId: 'user-1' } }),
+      expect.objectContaining({ where: { leagueId: 'league-1', id: 'team-1', claimedByUserId: 'user-1' } }),
     )
     expect(mocks.leagueTeamUpdate).toHaveBeenCalledWith({ where: { id: 'team-1' }, data: { teamName: 'Gridiron Gang' } })
-    // Current season only, this owner only.
+    // Always update the selected franchise's linked roster, including when the owner has several teams.
     expect(mocks.redraftRosterUpdateMany).toHaveBeenCalledWith({
-      where: { leagueId: 'league-1', seasonId: 'season-9', ownerId: 'user-1' },
+      where: { leagueId: 'league-1', seasonId: 'season-9', id: 'redraft-1' },
       data: { teamName: 'Gridiron Gang' },
     })
     expect(mocks.transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('sets an abbreviation independently of the team name and logo', async () => {
+    const res = await POST(json({ leagueTeamId: 'team-1', abbreviation: 'af22' }), ctx)
+    expect(res.status).toBe(200)
+    expect((await res.json()).abbreviation).toBe('AF22')
+    expect(mocks.leagueTeamUpdate).not.toHaveBeenCalled()
+    expect(mocks.redraftRosterUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('honors the commissioner rename setting and refuses teams outside the manager’s assignments', async () => {
+    const body = { leagueTeamId: 'second-team', teamName: 'Franchise Two' }
+    mocks.league = { platform: 'allfantasy', settings: { allow_manager_team_name_edits: false } }
+    expect((await POST(json(body), ctx)).status).toBe(403)
+    mocks.teamFindFirst.mockResolvedValueOnce(null)
+    expect((await POST(json(body), ctx)).status).toBe(404)
+    expect(mocks.leagueTeamUpdate).not.toHaveBeenCalled()
   })
 
   it('refuses an imported league with a code, and writes nothing', async () => {

@@ -9,7 +9,7 @@ export function providerDeliveryOutcome(channel:'email'|'sms',event:string):Pick
   if(['sent','queued','accepted','sending','scheduled'].includes(event))return {status:'accepted',reason:'provider_accepted',verification:'pending'}
   return {status:'accepted',reason:'provider_accepted',verification:'unavailable'}
 }
-async function checkProvider(channel:'email'|'sms',id:string,timeout:number){
+export async function checkProviderDelivery(channel:'email'|'sms',id:string,timeout:number){
   let url:string,authorization:string
   if(channel==='email'){
     if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)||!process.env.RESEND_API_KEY)return null
@@ -46,7 +46,7 @@ export async function reconcileTeamDeliveryReceipts(deadline:number){
       const claim=await prisma.automationAuditLog.updateMany({where:{id:row.id,userId:row.userId,metadata:{equals:row.metadata as Prisma.InputJsonValue}},data:{metadata:currentMetadata as never}})
       if(!claim.count)break
       checked++
-      const update=await checkProvider(channel,outcome.providerId,Math.min(1500,Math.max(1,deadline-Date.now())))
+      const update=await checkProviderDelivery(channel,outcome.providerId,Math.min(1500,Math.max(1,deadline-Date.now())))
       const json=JSON.stringify({...next,...(update??{verification:'unavailable'})})
       await prisma.$executeRaw`UPDATE automation_audit_logs SET metadata=jsonb_set(metadata,ARRAY['deliveryReceipt','channels',${channel}]::text[],${json}::jsonb) WHERE id=${row.id} AND "userId"=${row.userId}`
       // Each row's next channel is reconsidered on a later sweep with a fresh CAS snapshot.

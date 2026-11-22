@@ -1105,7 +1105,7 @@ function MembersTab({ data, cb }: { data: HubViewData; cb: HubCallbacks }) {
         </div>
       </Card>
 
-      <Card id="managers" title="Manage Members" sub="Assign or remove members from rosters and the league" action={<EditButton show={edit} label="Manage" onClick={() => cb.onOpenEditor('members')} />}>
+      <Card id="managers" title="Manage Members" sub="Assign or remove members from rosters and the league" action={<div className="flex flex-wrap gap-2"><EditButton show={edit} label="Team setup" onClick={() => cb.onOpenEditor('team-settings')} /><EditButton show={edit} label="Manage" onClick={() => cb.onOpenEditor('members')} /></div>}>
         <div className="af-lsh-card-body">
           {members === undefined ? <Loading /> : (
             <div className="af-lsh-table">

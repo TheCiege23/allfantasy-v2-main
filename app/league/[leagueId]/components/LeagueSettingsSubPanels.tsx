@@ -38,7 +38,7 @@ import { IDPRosterPanel } from '@/app/idp/components/settings/IDPRosterPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
+import { checkTeamName, managerTeamNameEditsAllowed, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
 import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
 import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -933,6 +933,31 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const leagueId = ctx.league.id
+  const teamId = ctx.userTeam?.id
+  const [abbreviation, setAbbreviation] = useState('')
+  const [savedAbbreviation, setSavedAbbreviation] = useState<string | null>(null)
+
+  useEffect(() => {
+    setTeamName(savedName)
+  }, [teamId, savedName])
+
+  useEffect(() => {
+    setSavedAbbreviation(null)
+    if (!native || !teamId) return
+    const abort = new AbortController()
+    const url = `/api/leagues/${encodeURIComponent(leagueId)}/my-team?leagueTeamId=${encodeURIComponent(teamId)}`
+    void fetch(url, { cache: 'no-store', signal: abort.signal })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (abort.signal.aborted || typeof data?.abbreviation !== 'string') return
+        setSavedAbbreviation(data.abbreviation)
+        setAbbreviation(data.abbreviation)
+      })
+      .catch(() => {})
+    return () => abort.abort()
+  }, [native, leagueId, teamId])
+
   // The staged image's object URL, released when it is replaced or the panel closes.
   useEffect(() => {
     if (!file) {
@@ -944,9 +969,11 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
     return () => URL.revokeObjectURL(url)
   }, [file])
 
+  const nameEditable = native && managerTeamNameEditsAllowed(ctx.league.settings)
   const nameCheck = checkTeamName(teamName)
-  const nameChanged = teamName.trim() !== savedName.trim()
-  const dirty = Boolean(file) || nameChanged
+  const nameChanged = nameEditable && teamName.trim() !== savedName.trim()
+  const abbreviationChanged = nameEditable && savedAbbreviation !== null && abbreviation.trim() !== savedAbbreviation
+  const dirty = Boolean(file) || nameChanged || abbreviationChanged
   const avatarSrc = preview ?? (ctx.userTeam?.avatarUrl ? sleeperAvatarUrl(ctx.userTeam.avatarUrl) : null)
 
   if (!ctx.userTeam) {
@@ -963,15 +990,21 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
     setError(null)
     try {
       const fd = new FormData()
+      if (ctx.userTeam) fd.set('leagueTeamId', ctx.userTeam.id)
       if (nameChanged && nameCheck.ok) fd.set('teamName', nameCheck.teamName)
+      if (abbreviationChanged) fd.set('abbreviation', abbreviation)
       if (file) fd.set('file', file)
       const res = await fetch(`/api/leagues/${encodeURIComponent(ctx.league.id)}/my-team`, { method: 'POST', body: fd })
-      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; abbreviation?: string }
       if (!res.ok) {
         setError(data.message ?? data.error ?? t('lsPanel.team.saveFailed'))
         return
       }
       setFile(null)
+      if (typeof data.abbreviation === 'string') {
+        setSavedAbbreviation(data.abbreviation)
+        setAbbreviation(data.abbreviation)
+      }
       toast.success(t('lsPanel.team.updated'))
       // `userTeam` is read on the server; refresh so the shell, standings and this panel all agree.
       router.refresh()
@@ -1020,7 +1053,7 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
           id="my-team-name"
           value={teamName}
           maxLength={MAX_TEAM_NAME_LENGTH}
-          readOnly={!native}
+          readOnly={!nameEditable}
           aria-describedby="my-team-name-hint"
           onChange={(e) => {
             setError(null)
@@ -1030,10 +1063,23 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
         />
         <p id="my-team-name-hint" className="mt-1 text-[11px] text-white/40">
           {native
-            ? t('lsPanel.team.nameHint').replace('{{count}}', String(teamName.trim().length)).replace('{{max}}', String(MAX_TEAM_NAME_LENGTH))
+            ? nameEditable
+              ? t('lsPanel.team.nameHint').replace('{{count}}', String(teamName.trim().length)).replace('{{max}}', String(MAX_TEAM_NAME_LENGTH))
+              : 'The commissioner manages team names and abbreviations in this league.'
             : t('lsPanel.team.importedHint').replace('{{platform}}', importedPlatformLabel(ctx.league.platform) ?? t('lsPanel.team.itsPlatform'))}
         </p>
       </div>
+
+      {savedAbbreviation !== null && <label className="block text-[11px] font-semibold text-white/45">
+        Abbreviation
+        <input
+          value={abbreviation}
+          maxLength={6}
+          readOnly={!nameEditable}
+          onChange={(event) => { setError(null); setAbbreviation(event.target.value.toUpperCase()) }}
+          className="mt-1 block w-28 rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[16px] text-white outline-none focus:border-[#ff3d81]/40 read-only:opacity-70 sm:text-[13px]"
+        />
+      </label>}
 
       {native && ctx.userTeam.claimedByUserId === ctx.userId && ctx.userTeam.externalId && <TeamCoOwnerPanel leagueId={ctx.league.id} rosterId={ctx.userTeam.externalId} />}
 

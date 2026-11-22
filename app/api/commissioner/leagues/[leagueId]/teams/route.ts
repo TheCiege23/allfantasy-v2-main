@@ -16,7 +16,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { checkTeamName } from '@/lib/league/myTeamEdit'
+import { checkTeamName, normalizeTeamAbbreviation } from '@/lib/league/myTeamEdit'
+import type { Prisma } from '@prisma/client'
 import { logAction } from '@/server/services/auditService'
 
 export const dynamic = 'force-dynamic'
@@ -64,7 +65,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ le
   const avatar = readAvatarUrl(body.avatarUrl)
   if (!avatar.ok) return NextResponse.json({ error: 'The avatar must be an https image link.' }, { status: 400 })
   if (avatar.value !== undefined) data.avatarUrl = avatar.value
-  if (Object.keys(data).length === 0) return NextResponse.json({ error: 'Nothing to save' }, { status: 400 })
+  const abbreviation = body.abbreviation === undefined ? undefined : normalizeTeamAbbreviation(body.abbreviation)
+  if (abbreviation === null) return NextResponse.json({ error: 'Use up to six letters or numbers for the abbreviation.' }, { status: 400 })
+  const editsTeam = Object.keys(data).length > 0
+  if (!editsTeam && abbreviation === undefined) return NextResponse.json({ error: 'Nothing to save' }, { status: 400 })
 
   const team = await prisma.leagueTeam.findFirst({
     where: { id: leagueTeamId, leagueId },
@@ -76,14 +80,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ le
   // A past season keeps the name it had that year.
   const [currentSeason, roster] = await Promise.all([
     prisma.redraftSeason.findFirst({ where: { leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true } }),
-    prisma.roster.findFirst({ where: { id: team.externalId, leagueId }, select: { redraftRosterId: true } }),
+    prisma.roster.findFirst({ where: { id: team.externalId, leagueId }, select: { id: true, redraftRosterId: true, settings: true } }),
   ])
+  if (abbreviation !== undefined && !roster) return NextResponse.json({ error: 'This team has no roster yet.' }, { status: 409 })
+  const rosterSettings = roster?.settings && typeof roster.settings === 'object' && !Array.isArray(roster.settings)
+    ? roster.settings : {}
 
   await prisma.$transaction([
-    prisma.leagueTeam.update({ where: { id: team.id }, data }),
-    ...(currentSeason && roster?.redraftRosterId
+    ...(editsTeam ? [prisma.leagueTeam.update({ where: { id: team.id }, data })] : []),
+    ...(editsTeam && currentSeason && roster?.redraftRosterId
       ? [prisma.redraftRoster.updateMany({ where: { id: roster.redraftRosterId, leagueId, seasonId: currentSeason.id }, data })]
       : []),
+    ...(abbreviation !== undefined && roster
+      ? [prisma.roster.update({ where: { id: roster.id }, data: {
+        settings: { ...rosterSettings, teamAbbreviation: abbreviation } as Prisma.InputJsonValue,
+      } })] : []),
   ])
 
   await logAction({
@@ -92,10 +103,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ le
     actionType: 'settings_patch',
     entityType: 'team',
     entityId: team.id,
-    beforeState: { teamName: team.teamName, avatarUrl: team.avatarUrl },
-    afterState: data,
-    metadata: { section: 'general', source: 'commissioner-teams', fields: Object.keys(data) },
+    beforeState: { teamName: team.teamName, avatarUrl: team.avatarUrl, ...(abbreviation !== undefined ? { abbreviation: rosterSettings.teamAbbreviation ?? '' } : {}) },
+    afterState: { ...data, ...(abbreviation !== undefined ? { abbreviation } : {}) },
+    metadata: { section: 'general', source: 'commissioner-teams', fields: [...Object.keys(data), ...(abbreviation !== undefined ? ['abbreviation'] : [])] },
   }).catch(() => {})
 
-  return NextResponse.json({ ok: true, teamName: data.teamName ?? null, avatarUrl: data.avatarUrl ?? null })
+  return NextResponse.json({ ok: true, teamName: data.teamName ?? null, avatarUrl: data.avatarUrl ?? null, abbreviation })
 }

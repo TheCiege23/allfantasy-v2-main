@@ -10,6 +10,8 @@ import { buildFantasyInviteLink, generateInviteToken, getDefaultFantasyInviteExp
 import { buildEmailIdempotencyKey } from "@/lib/email/idempotency"
 import { rateLimit } from "@/lib/rate-limit"
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { maskSeatInviteRecipient } from '@/lib/league/seatInvites'
 
 export const dynamic = "force-dynamic"
 
@@ -71,6 +73,15 @@ export async function POST(
   const type = body?.type === "username" || body?.type === "email" ? body.type : null
   const username = typeof body?.username === "string" ? body.username.trim() : ""
   const email = typeof body?.email === "string" ? body.email.trim() : ""
+  const seatId = typeof body?.leagueTeamId === 'string' ? body.leagueTeamId : null
+  if (body?.leagueTeamId !== undefined && (!seatId || type !== 'email')) {
+    return NextResponse.json({ error: 'Choose an open team and an email address.' }, { status: 400 })
+  }
+  if (seatId && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
+    return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
+  }
+  const note = typeof body?.message === "string" ? body.message.trim() : ""
+  if (note.length > 320) return NextResponse.json({ error: "Keep the invite note to 320 characters." }, { status: 400 })
 
   if (!type || (type === "username" && !username) || (type === "email" && !email)) {
     return NextResponse.json(
@@ -81,7 +92,7 @@ export async function POST(
 
   const league = await prisma.league.findUnique({
     where: { id: (await params).leagueId },
-    select: { id: true, name: true, settings: true },
+    select: { id: true, name: true, settings: true, platform: true },
   })
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
@@ -92,6 +103,13 @@ export async function POST(
   if (type === "username" && !privacy.allowUsernameInvite) {
     return NextResponse.json({ error: "Username invites are disabled for this league." }, { status: 403 })
   }
+
+  const seat = seatId && isNativePlatform(league.platform) ? await prisma.leagueTeam.findFirst({
+    where: { id: seatId, leagueId: league.id, role: { not: 'viewer' }, lifecycleState: { not: 'ARCHIVED' } },
+    select: { id: true, claimedByUserId: true },
+  }) : null
+  if (seatId && !seat) return NextResponse.json({ error: 'Team not found in this native league.' }, { status: 404 })
+  if (seat?.claimedByUserId) return NextResponse.json({ error: 'This team already has a manager.' }, { status: 409 })
 
   const settings = (league.settings as Record<string, unknown>) || {}
   let inviteCode = (settings.inviteCode as string) ?? null
@@ -117,6 +135,10 @@ export async function POST(
     if (!rl.success) {
       return NextResponse.json({ error: "Too many email invites. Try again later.", inviteUrl }, { status: 429 })
     }
+    const attempt = seat ? await prisma.leagueSeatInvite.create({
+      data: { leagueTeamId: seat.id, recipientLabel: maskSeatInviteRecipient(email) },
+      select: { id: true },
+    }) : null
     try {
       const { getResendClient } = await import("@/lib/resend-client")
       const { client, fromEmail } = getResendClient()
@@ -129,20 +151,28 @@ export async function POST(
           // The league name is commissioner-controlled: escape it for HTML, and keep the
           // subject to one short line. Unescaped, a name like `<a href=…>` made this a
           // phishing template sent from our own domain.
+          ...(attempt ? { tags: [{ name: 'af_seat_invite', value: attempt.id }] } : {}),
           subject: `You're invited to join ${subjectSafe(leagueName)} on AllFantasy`,
-          html: `You've been invited to join <strong>${escapeHtml(leagueName)}</strong>. Use this link to join: <a href="${escapeHtml(inviteUrl)}">${escapeHtml(inviteUrl)}</a>`,
+          html: `You've been invited to join <strong>${escapeHtml(leagueName)}</strong>.${note ? `<p>${escapeHtml(note).replace(/\r?\n/g, '<br>')}</p>` : ' '}Use this link to join: <a href="${escapeHtml(inviteUrl)}">${escapeHtml(inviteUrl)}</a>`,
         },
-        { idempotencyKey: buildEmailIdempotencyKey("league-invite", league.id, emailHash) }
+        { idempotencyKey: buildEmailIdempotencyKey("league-invite", league.id, emailHash, ...(attempt ? [attempt.id] : [])) }
       )
-      if (sent.error) {
-        return NextResponse.json({ error: sent.error.message || "Failed to send email", inviteUrl }, { status: 500 })
+      if (sent.error || (attempt && !sent.data?.id)) {
+        if (attempt) await prisma.leagueSeatInvite.updateMany({ where: { id: attempt.id, status: 'SENDING' }, data: { status: 'FAILED' } })
+        return NextResponse.json({ error: attempt ? 'The email provider did not accept this invite.' : sent.error?.message || 'Failed to send email', inviteUrl, inviteId: attempt?.id }, { status: attempt ? 502 : 500 })
       }
-      const registered = await prisma.appUser.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } })
+      if (attempt && sent.data?.id) {
+        await prisma.leagueSeatInvite.updateMany({
+          where: { id: attempt.id, status: 'SENDING' },
+          data: { status: 'ACCEPTED', providerMessageId: sent.data.id },
+        })
+      }
+      const registered = await prisma.appUser.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } }).catch(() => null)
       if (registered) await notifyRegisteredInvitee(registered.id, league.id, leagueName, inviteUrl, String(inviteCode)).catch((e) => console.error('[invite/send] registered invite notification failed', e))
-      return NextResponse.json({ ok: true, inviteUrl, sent: true, sentTo: email })
+      return NextResponse.json({ ok: true, inviteUrl, sent: true, sentTo: email, inviteId: attempt?.id })
     } catch (e) {
       return NextResponse.json(
-        { ok: true, inviteUrl, sent: false, error: (e as Error).message },
+        { ok: true, inviteUrl, sent: false, inviteId: attempt?.id, error: attempt ? 'The email provider could not confirm the send.' : (e as Error).message },
         { status: 200 }
       )
     }

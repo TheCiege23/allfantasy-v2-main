@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-league-patch'
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { COMMON_TIMEZONES } from '@/lib/timezone'
 import { PremiumGate } from '@/components/subscription/PremiumGate'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
@@ -591,7 +592,7 @@ export function LeagueSettingsPanel({
           }}
         >
           {/* Keeper runs to 20 teams (lib/league/oddTeamLeagues.ts); every other format keeps 4–18 here. */}
-          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
+          {Array.from({ length: (leagueType === 'keeper' ? Math.max(KEEPER_MAX_TEAMS, leagueSize) : Math.max(leagueType === 'redraft' || leagueType === 'dynasty' ? MAX_NATIVE_TEAMS : 18, leagueSize)) - 3 }, (_, i) => i + 4).map((n) => {
             // An odd keeper size is an AF Commissioner option; the settings PATCH refuses it without the plan.
             const locked = !hasCommissionerAccess && n !== leagueSize && oddTeamCountNeedsAfCommissioner(leagueType, n)
             return (

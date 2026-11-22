@@ -8,6 +8,7 @@ import { useSettingsSaveScope } from '@/components/league-settings/home/Settings
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { RosterValidationBanner } from '@/components/league-settings/roster/RosterValidationBanner'
 import { savedOr } from '@/lib/league-settings/savedLeagueOverrides'
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 import { SETTINGS_CARD_CLASS, SETTINGS_INPUT_CLASS, SETTINGS_LABEL_CLASS, WaiversSection } from './WaiversTab'
 
@@ -99,11 +100,14 @@ export function GeneralTab({
         <div className="space-y-4">
           <label className="block">
             <span className={SETTINGS_LABEL_CLASS}>{t('lsHub.gen.teamCount')}</span>
-            <input type="number" inputMode="numeric" min={2} max={32} value={teamCount} disabled={!canEdit}
+            <input type="number" inputMode="numeric" min={2} max={MAX_NATIVE_TEAMS} value={teamCount} disabled={!canEdit}
               onChange={event => setTeamCount(event.target.value)}
               onBlur={() => {
                 const size = Number(teamCount)
-                if (!Number.isInteger(size) || size < 2 || size > 32) { setCapacityError(t('lsHub.gen.teamCountRange')); return }
+                if (!Number.isInteger(size) || size < 2 || size > MAX_NATIVE_TEAMS) {
+                  setCapacityError(t('lsHub.gen.teamCountRange').replace('{{max}}', String(MAX_NATIVE_TEAMS)))
+                  return
+                }
                 setCapacityError(null)
                 if (size !== ctx.league.leagueSize) queuePatch({ leagueSize: size })
               }}

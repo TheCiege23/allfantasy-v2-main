@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 type Invite = { id: string; acceptedAt: string | null; user: { username: string | null; displayName: string | null } }
 
-export function TeamCoOwnerPanel({ leagueId, rosterId }: { leagueId: string; rosterId: string }) {
+export function TeamCoOwnerPanel({ leagueId, rosterId, onChange }: { leagueId: string; rosterId: string; onChange?: () => void }) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [username, setUsername] = useState('')
   const [error, setError] = useState('')
@@ -23,7 +23,7 @@ export function TeamCoOwnerPanel({ leagueId, rosterId }: { leagueId: string; ros
       const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterId, username }) })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) { setError(result.error ?? 'Could not invite co-owner'); return }
-      setUsername(''); await load()
+      setUsername(''); onChange?.(); await load()
     } catch { setError('Could not invite co-owner') } finally { setBusy(false) }
   }
   async function remove(id: string) {
@@ -32,6 +32,7 @@ export function TeamCoOwnerPanel({ leagueId, rosterId }: { leagueId: string; ros
       const response = await fetch(`${endpoint}?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) { setError(result.error ?? 'Could not remove co-owner'); return }
+      onChange?.()
       await load()
     } catch { setError('Could not remove co-owner') } finally { setBusy(false) }
   }

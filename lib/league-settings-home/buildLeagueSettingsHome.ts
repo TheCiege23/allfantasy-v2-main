@@ -432,7 +432,7 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
   const divisions = divisionCount(league.settings)
   const memberRows: SettingsHomeRow[] = [
     { id: 'managers', label: 'Managers', value: `${joined} / ${teamCount} joined`, ...edit('members') },
-    ...(canEdit ? [{ id: 'team-settings', label: 'Team settings', value: 'Names, logos and managers', target: 'team-settings' as const }] : []),
+    ...(canEdit ? [{ id: 'team-settings', label: 'Team settings', value: 'Capacity, managers, invites and divisions', target: 'team-settings' as const }] : []),
     { id: 'previous-leagues', label: 'Previous Leagues', value: 'View history', target: 'previous-leagues' },
     {
       id: 'invite',
