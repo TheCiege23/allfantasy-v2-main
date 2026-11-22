@@ -7,7 +7,7 @@ import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague, getCurrentUserRosterIdsForLeague } from '@/lib/live-draft-engine/auth'
 import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
 import {
   getOrCreateDraftSession,
@@ -147,7 +147,9 @@ export async function GET(
       return NextResponse.json({ error: 'Could not check draft pool readiness' }, { status: 503 })
     }
   }
-  const allowed = await canAccessLeagueDraft(leagueId, userId)
+  // A held roster both grants room access and supplies the viewer's teams.
+  const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
+  const allowed = rosterIds.length > 0 || await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
@@ -219,7 +221,7 @@ export async function GET(
 
       const providerStatus = getProviderStatus()
       const { viewerAutopick: _viewerAutopick, currentUserRosterId: _currentUserRosterId, ...sharedSnapshot } = snapshot
-      const response = await prepareDraftSessionResponse({
+      const response = prepareDraftSessionResponse({
         leagueId,
         session: {
           ...sharedSnapshot,
@@ -256,11 +258,11 @@ export async function GET(
     }
 
     const [currentUserRosterId, viewerAutopick] = await Promise.all([
-      getCurrentUserRosterIdForLeague(leagueId, userId, undefined, shared.snapshot),
+      getCurrentUserRosterIdForLeague(leagueId, userId, undefined, shared.snapshot, rosterIds),
       getViewerAutopickPreference(shared.snapshot.id, userId),
     ])
     recordEngineTelemetrySample(ENGINE.DRAFT_STATE_POLL, { meta: { leagueId, userId } })
-    return shared.response({ viewerAutopick, currentUserRosterId: currentUserRosterId ?? undefined }, req.headers.get('accept-encoding'))
+    return shared.response({ viewerAutopick, currentUserRosterId: currentUserRosterId ?? undefined })
   } catch (e) {
     logStructured('error', 'draft_session_get', 'unhandled_error', {
       leagueId,

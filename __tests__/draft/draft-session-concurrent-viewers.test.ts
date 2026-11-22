@@ -1,20 +1,24 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-import { gunzipSync } from 'node:zlib'
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(),
   access: vi.fn(async () => true),
   snapshot: vi.fn(),
   roster: vi.fn(async (_leagueId: string, userId: string) => 'roster-' + userId),
+  held: vi.fn(async (_leagueId: string, _userId: string): Promise<string[]> => []),
   preference: vi.fn(async (_sessionId: string, userId: string) => ({ enabled: userId === 'alice' })),
   repair: vi.fn(async () => {}),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mock.auth }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/live-draft-engine/auth', () => ({ canAccessLeagueDraft: mock.access, getCurrentUserRosterIdForLeague: mock.roster }))
+vi.mock('@/lib/live-draft-engine/auth', () => ({
+  canAccessLeagueDraft: mock.access,
+  getCurrentUserRosterIdForLeague: mock.roster,
+  getCurrentUserRosterIdsForLeague: mock.held,
+}))
 vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ buildSessionSnapshot: mock.snapshot }))
 vi.mock('@/lib/live-draft-engine/LiveDraftAutopickPreferenceService', () => ({ getViewerAutopickPreference: mock.preference }))
 vi.mock('@/lib/live-draft-engine/auction', () => ({ runAuctionAutomationTick: async () => {} }))
@@ -53,8 +57,8 @@ describe('draft session polling', () => {
     await vi.waitFor(() => expect(mock.access).toHaveBeenCalledTimes(2))
     finish()
     const [a, b] = await Promise.all([alice, bob].map(async req => (await req).json()))
-    expect(mock.roster).toHaveBeenCalledWith('league', 'alice', undefined, board)
-    expect(mock.roster).toHaveBeenCalledWith('league', 'bob', undefined, board)
+    expect(mock.roster).toHaveBeenCalledWith('league', 'alice', undefined, board, [])
+    expect(mock.roster).toHaveBeenCalledWith('league', 'bob', undefined, board, [])
     expect(mock.snapshot).toHaveBeenCalledTimes(1)
     expect(mock.snapshot).toHaveBeenCalledWith('league', expect.any(Date))
     expect(a.session).toMatchObject({currentUserRosterId:'roster-alice', viewerAutopick:{enabled:true}})
@@ -70,6 +74,7 @@ describe('draft session polling', () => {
     const board = { id: 'large-session', status: 'in_progress', picks }
     mock.snapshot.mockResolvedValue(board)
     mock.auth.mockResolvedValueOnce({ user: { id: 'alice' } }).mockResolvedValueOnce({ user: { id: 'bob' } })
+    mock.held.mockImplementationOnce(async () => ['roster-alice']).mockImplementationOnce(async () => ['roster-bob'])
     const poll = (encoding: string) => GET(
       new NextRequest('https://example.invalid/api/leagues/large-league/draft/session', {
         headers: { 'Accept-Encoding': encoding },
@@ -78,9 +83,9 @@ describe('draft session polling', () => {
     )
     try {
       const [alice, bob] = await Promise.all([poll('gzip'), poll('gzip;q=0, identity')])
-      expect(alice.headers.get('Content-Encoding')).toBe('gzip')
-      expect(bob.headers.get('Content-Encoding')).toBeNull()
-      const a = JSON.parse(gunzipSync(Buffer.from(await alice.arrayBuffer())).toString())
+      expect(alice.headers.get('Content-Type')).toMatch(/application\/json/)
+      expect(alice.headers.get('Cache-Control')).toBe('private, no-store')
+      const a = await alice.json()
       const b = await bob.json()
       expect(a.session).toMatchObject({ picks, currentUserRosterId: 'roster-alice', viewerAutopick: { enabled: true } })
       expect(b.session).toMatchObject({ picks, currentUserRosterId: 'roster-bob', viewerAutopick: { enabled: false } })

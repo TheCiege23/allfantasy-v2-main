@@ -124,8 +124,9 @@ export async function getCurrentUserRosterIdForLeague(
   userId: string | undefined,
   requestedRosterId?: string | null,
   board?: { status: string; draftType?: string; currentPick?: { rosterId: string } | null },
+  knownRosterIds?: readonly string[],
 ): Promise<string | null> {
-  const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
+  const rosterIds = knownRosterIds ?? await getCurrentUserRosterIdsForLeague(leagueId, userId)
   if (rosterIds.length <= 1) return rosterIds[0] ?? null
   // Several teams: the one named, else the one on the clock (so the room is always about the team that
   // is up), else the team they last switched to, else the first.
