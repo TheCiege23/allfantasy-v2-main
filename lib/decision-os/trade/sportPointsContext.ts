@@ -1,5 +1,6 @@
 import { fantraxSoccerExportKey, hasFantraxSoccerPool, validateFantraxSoccerExport } from '@/lib/league-import/fantrax/soccerPlayerExport'
 import 'server-only'
+import { readVerifiedNbaInactiveSince } from '@/lib/af-projections/nbaVerifiedSeasonLines'
 
 import { providerIdentityColumn } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { reduceCrosswalk } from '@/lib/core-app/crosswalkRules'
@@ -709,9 +710,11 @@ async function loadSnapshotLines(
     if (!rates) continue
     const stats = scoringStats(rates)
     if (Object.keys(stats).length === 0) continue
+    const verifiedNbaInactiveSince = sport === 'NBA' ? readVerifiedNbaInactiveSince(r.adjustmentFactors) : undefined
     lines.push({
       id: r.playerId,
       name: r.playerName,
+      ...(verifiedNbaInactiveSince ? { verifiedNbaInactiveSince } : {}),
       position: String(r.position ?? '').trim().toUpperCase(),
       sampleGames: sampleGamesFromReasons(reasonsOf(r.adjustmentFactors)),
       aliases: aliasesById.get(r.playerId) ?? [],
