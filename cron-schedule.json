@@ -61,6 +61,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/import-player-game-stats?gameDay=1",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/import-nfl-team-defense",
       "schedule": "50 6 * * *"
     },
