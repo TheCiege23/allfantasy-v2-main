@@ -39,11 +39,18 @@ describe('league header source link', () => {
   })
 
   it('the shell builds the header link from that id, not from the raw snapshot uuid', () => {
+    /*
+     * Since 2026-11-22 an imported league opens in the same workspace as a native one, and the
+     * "Open in Fantrax" link moved from the old sync strip into the workspace header. The shell
+     * hands the workspace the linkable id; the workspace builds the link from it.
+     */
     const shell = code('app/league/[leagueId]/LeagueShell.tsx')
-    const nav = shell.match(/<LeagueWorkspaceNavigation[\s\S]*?\/>/)?.[0] ?? ''
-    expect(nav).toContain('sourceLeagueId=')
-    expect(nav).not.toMatch(/sourceLeagueId=\{league\.platformLeagueId\}/)
-    expect(nav).toMatch(/sourceLinkLeagueId/)
+    const prop = shell.match(/<NativeLeagueWorkspace[\s\S]*?sourceLeagueId=\{[^\n]*\}/)?.[0] ?? ''
+    expect(prop).toContain('sourceLeagueId=')
+    expect(prop).not.toMatch(/sourceLeagueId=\{league\.platformLeagueId\}/)
+    expect(prop).toMatch(/sourceLinkLeagueId/)
+    const workspace = code('components/league/native/NativeLeagueWorkspace.tsx')
+    expect(workspace).toMatch(/resolveSourceLink\(\{[^}]*sourceLeagueId[^}]*\}\)/)
   })
 
   it('maps a Fantrax snapshot to its real league id; other platforms and CSV rows behave as before', async () => {

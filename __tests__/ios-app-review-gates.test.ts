@@ -11,7 +11,7 @@
  *     that calls that "hosting" would trip the VPN gate and the reviewer would
  *     see /vpn-blocked. Apple's network is not treated as an anonymizer…
  *  3. …but it gets NOTHING else: a Relay address Apple itself lists still
- *     follows the Relay rule, and Washington is still Washington.
+ *     follows the Relay rule, and Washington is still Washington (paid-block since Nov 2026).
  *
  * Every "passes" assertion has a positive control beside it — the same request
  * that DOES trip the gate — so a gate that stopped firing altogether cannot read
@@ -141,10 +141,10 @@ describe("iOS app detection and path lists", () => {
   })
 
   it("matches purchase pages on a segment boundary", () => {
-    for (const p of ["/upgrade", "/upgrade/x", "/pricing", "/commissioner-upgrade", "/tokens", "/donate", "/donate/success", "/support", "/survivor/abc/exile/tokens"]) {
+    for (const p of ["/upgrade", "/upgrade/x", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access", "/donate", "/donate/success", "/support", "/survivor/abc/exile/tokens"]) {
       expect(isIosAppPurchasePage(p), p).toBe(true)
     }
-    for (const p of ["/core", "/contact", "/supporters", "/upgraded-feature", "/survivor/abc", IOS_APP_PLANS_PATH]) {
+    for (const p of ["/core", "/contact", "/supporters", "/upgraded-feature", "/profile", "/projections", "/pros", "/survivor/abc", IOS_APP_PLANS_PATH]) {
       expect(isIosAppPurchasePage(p), p).toBe(false)
     }
   })
@@ -211,14 +211,14 @@ describe("guideline 3.1.1 — an IAP build sells plans and tokens through Apple 
   })
 
   it("opens the plan and token pages to an IAP build", async () => {
-    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access"]) {
       const res = await middleware(request(p, { ua: IOS_IAP_UA }))
       expect(location(res)?.pathname ?? null, p).not.toBe(IOS_APP_PLANS_PATH)
     }
   })
 
   it("control: the same pages still redirect a 1.0 build with no StoreKit bridge", async () => {
-    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens"]) {
+    for (const p of ["/upgrade?plan=pro", "/pricing", "/commissioner-upgrade", "/tokens", "/pro", "/all-access"]) {
       const res = await middleware(request(p, { ua: IOS_UA }))
       expect(res.status, p).toBe(307)
       expect(location(res)?.pathname, p).toBe(IOS_APP_PLANS_PATH)
@@ -298,16 +298,19 @@ describe("App Review's network is not treated as a VPN", () => {
     expect(res.status).not.toBe(403)
   })
 
-  it("an Apple address that Apple lists as Relay still follows the Relay rule (California is refused)", async () => {
-    const res = await middleware(request("/login", { ip: APPLE_LISTED_RELAY_CA }))
-    expect(location(res)?.pathname).toBe("/vpn-blocked")
+  // Nov 2026: Pacific relay users are placed with paid features off (Washington is paid-block now).
+  it("an Apple address that Apple lists as Relay still follows the Relay rule (California: no paid features)", async () => {
+    expect(location(await middleware(request("/login", { ip: APPLE_LISTED_RELAY_CA })))).toBeNull()
+    const paid = await middleware(request("/api/user/autocoach", { ip: APPLE_LISTED_RELAY_CA, method: "POST" }))
+    expect(paid.status).toBe(451)
+    expect(await paid.json()).toMatchObject({ reason: "private_relay" })
   })
 
-  it("Washington is still Washington", async () => {
-    const control = await middleware(request("/core", { ip: RESIDENTIAL, region: "WA" }))
-    const apple = await middleware(request("/core", { ip: APPLE_REVIEW_IP, region: "WA" }))
-    expect(location(control)?.pathname).toBeTruthy()
-    expect(location(apple)?.pathname).toBe(location(control)?.pathname)
+  it("Washington is still Washington (paid-block: paid routes refused, exactly as for a home connection)", async () => {
+    const control = await middleware(request("/api/leagues/import", { ip: RESIDENTIAL, region: "WA" }))
+    const apple = await middleware(request("/api/leagues/import", { ip: APPLE_REVIEW_IP, region: "WA" }))
+    expect(control.status).toBe(451)
+    expect(apple.status).toBe(control.status)
   })
 
   it("detectUserState (signup, checkout) agrees with the middleware", async () => {

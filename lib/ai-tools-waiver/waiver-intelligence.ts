@@ -1,3 +1,4 @@
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { injuryStatusLookup } from '@/lib/injuries/matchInjuryRows'
 import { toImageUrl } from '@/lib/media/imageUrl'
 import 'server-only'
@@ -616,7 +617,6 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
   teamNeeds: string[]
   leagueNormCtx: NormalizedLeagueContext | null
 }> {
-  const input = args
   const dataGaps = args.dataGaps
   const sportStr = args.sportStr
 
@@ -708,12 +708,12 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
   if (selectedLeague) {
     const rosters = await prisma.roster.findMany({
       where: { leagueId: selectedLeague.id },
-      select: { playerData: true, platformUserId: true, faabRemaining: true },
+      select: { playerData: true, platformUserId: true, managerUserId: true, faabRemaining: true },
     })
     for (const r of rosters) {
       getRosterPlayerIds(r.playerData).forEach((id) => rostered.add(id))
     }
-    const mine = rosters.find((r) => r.platformUserId === args.userId)
+    const mine = rosters.find((r) => isRosterManagedBy(r, args.userId))
     if (mine) {
       userRosterIds = getRosterPlayerIds(mine.playerData)
       if (typeof mine.faabRemaining === 'number') faabRemaining = mine.faabRemaining
@@ -1658,7 +1658,6 @@ export async function runWaiverIntelligenceAnalysis(input: {
       teamNeeds: part.teamNeeds,
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
     if (e instanceof LeagueToolAccessDeniedError) {
       const code = e.code
       const m = leagueToolAccessUserMessage(code)

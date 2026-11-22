@@ -1,25 +1,9 @@
 import { pickRoundTable } from '@/lib/pick-curve';
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
-export type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
+type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
-export const TIER_TO_SEMANTIC: Record<AssetTier, SemanticTier> = {
-  0: 'elite',
-  1: 'high',
-  2: 'starter',
-  3: 'replaceable',
-  4: 'depth',
-};
-
-export const SEMANTIC_TO_TIER: Record<SemanticTier, AssetTier> = {
-  'elite': 0,
-  'high': 1,
-  'starter': 2,
-  'replaceable': 3,
-  'depth': 4,
-};
-
-export interface TieredPlayer {
+interface TieredPlayer {
   name: string;
   tier: AssetTier;
   semanticTier: SemanticTier;
@@ -28,7 +12,7 @@ export interface TieredPlayer {
   notes?: string;
 }
 
-export const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
+const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
   { name: "Puka Nacua", tier: 0, semanticTier: 'elite', position: "WR", age: 23 },
   { name: "Justin Jefferson", tier: 0, semanticTier: 'elite', position: "WR", age: 25 },
   { name: "Ja'Marr Chase", tier: 0, semanticTier: 'elite', position: "WR", age: 24 },
@@ -42,7 +26,7 @@ export const TIER_0_UNTOUCHABLES: TieredPlayer[] = [
   { name: "Jalen Hurts", tier: 0, semanticTier: 'elite', position: "QB", age: 26, notes: "SF only" },
 ];
 
-export const TIER_1_CORNERSTONES: TieredPlayer[] = [
+const TIER_1_CORNERSTONES: TieredPlayer[] = [
   { name: "Amon-Ra St. Brown", tier: 1, semanticTier: 'high', position: "WR", age: 25 },
   { name: "A.J. Brown", tier: 1, semanticTier: 'high', position: "WR", age: 27 },
   { name: "Tyreek Hill", tier: 1, semanticTier: 'high', position: "WR", age: 30 },
@@ -57,7 +41,7 @@ export const TIER_1_CORNERSTONES: TieredPlayer[] = [
   { name: "Anthony Richardson", tier: 1, semanticTier: 'high', position: "QB", age: 22 },
 ];
 
-export const TIER_2_HIGH_END: TieredPlayer[] = [
+const TIER_2_HIGH_END: TieredPlayer[] = [
   { name: "DK Metcalf", tier: 2, semanticTier: 'starter', position: "WR", age: 27 },
   { name: "Jaxon Smith-Njigba", tier: 2, semanticTier: 'starter', position: "WR", age: 22 },
   { name: "JSN", tier: 2, semanticTier: 'starter', position: "WR", age: 22 },
@@ -74,7 +58,7 @@ export const TIER_2_HIGH_END: TieredPlayer[] = [
   { name: "Jonathan Taylor", tier: 2, semanticTier: 'starter', position: "RB", age: 25 },
 ];
 
-export const TIER_3_STARTERS: TieredPlayer[] = [
+const TIER_3_STARTERS: TieredPlayer[] = [
   { name: "De'Von Achane", tier: 3, semanticTier: 'replaceable', position: "RB", age: 23 },
   { name: "Kyren Williams", tier: 3, semanticTier: 'replaceable', position: "RB", age: 24 },
   { name: "Kenneth Walker III", tier: 3, semanticTier: 'replaceable', position: "RB", age: 24 },
@@ -94,7 +78,7 @@ export const TIER_3_STARTERS: TieredPlayer[] = [
   { name: "Mark Andrews", tier: 3, semanticTier: 'replaceable', position: "TE", age: 29 },
 ];
 
-export const TIER_4_REPLACEABLE: TieredPlayer[] = [
+const TIER_4_REPLACEABLE: TieredPlayer[] = [
   { name: "Alvin Kamara", tier: 4, semanticTier: 'depth', position: "RB", age: 29, notes: "aging" },
   { name: "Derrick Henry", tier: 4, semanticTier: 'depth', position: "RB", age: 31, notes: "aging" },
   { name: "Deebo Samuel", tier: 4, semanticTier: 'depth', position: "WR", age: 29, notes: "aging" },
@@ -136,20 +120,20 @@ export const TIER_BASE_VALUES: Record<AssetTier, number> = {
  */
 export const PICK_BASE_VALUES: Record<number, number> = pickRoundTable(650, 4);
 
-export const PICK_SLOT_MODIFIERS: Record<string, number> = {
+const PICK_SLOT_MODIFIERS: Record<string, number> = {
   'early': 1.35,
   'mid': 1.00,
   'late': 0.70,
 };
 
-export const PICK_TIME_DISCOUNT: Record<number, number> = {
+const PICK_TIME_DISCOUNT: Record<number, number> = {
   0: 1.00,
   1: 0.85,
   2: 0.70,
   3: 0.55,
 };
 
-export const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
+const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
   '1.01': 950,
   '1.02': 900,
   '1.03': 850,
@@ -182,7 +166,7 @@ export const PICK_SPECIFIC_SLOT_VALUES: Record<string, number> = {
   '3.06': 55,
 };
 
-export function getAgeCurveModifier(position: string, age: number | undefined): number {
+function getAgeCurveModifier(position: string, age: number | undefined): number {
   if (!age) return 0;
   
   const pos = position.toUpperCase();
@@ -262,7 +246,7 @@ export function getWindowMultiplier(window: number): number {
 }
 
 // NEW: Position Multiplier (SF-aware)
-export function getPositionMultiplier(position: string, isSF: boolean, isTEP: boolean): number {
+function getPositionMultiplier(position: string, isSF: boolean, isTEP: boolean): number {
   const pos = position.toUpperCase();
   
   if (pos === 'QB') {
@@ -285,7 +269,7 @@ export function getPositionMultiplier(position: string, isSF: boolean, isTEP: bo
 }
 
 // NEW: Liquidity Bonus (how easy to flip in 6 months)
-export function getLiquidityModifier(position: string, age: number | undefined, tier: AssetTier | null): number {
+function getLiquidityModifier(position: string, age: number | undefined, tier: AssetTier | null): number {
   if (!age) return 0;
   const pos = position.toUpperCase();
   
@@ -387,7 +371,7 @@ export function calculateDynastyScore(
   };
 }
 
-export function getFormatModifier(
+function getFormatModifier(
   position: string,
   tier: AssetTier,
   isSF: boolean,
@@ -416,7 +400,7 @@ export function getFormatModifier(
   return modifier;
 }
 
-export function getIDPMultiplier(idpStarterCount: number): number {
+function getIDPMultiplier(idpStarterCount: number): number {
   if (idpStarterCount === 0) return 0.05;
   if (idpStarterCount <= 3) return 0.20;
   if (idpStarterCount <= 6) return 0.30;
@@ -424,7 +408,7 @@ export function getIDPMultiplier(idpStarterCount: number): number {
   return 0.55;
 }
 
-export function isIDPPosition(position: string): boolean {
+function isIDPPosition(position: string): boolean {
   const idpPositions = ['LB', 'DB', 'DL', 'DE', 'DT', 'S', 'CB', 'IDP', 'ED', 'EDGE'];
   return idpPositions.includes(position.toUpperCase());
 }
@@ -461,7 +445,7 @@ export function findPlayerTier(playerName: string, position?: string | null): Ti
   ) || null;
 }
 
-export interface TradeAsset {
+interface TradeAsset {
   name: string;
   position?: string;
   age?: number;
@@ -473,7 +457,7 @@ export interface TradeAsset {
   pickType?: string;
 }
 
-export interface EvaluatedAsset extends TradeAsset {
+interface EvaluatedAsset extends TradeAsset {
   tier: AssetTier | null;
   baseValue: number;
   ageCurveModifier: number;
@@ -483,58 +467,13 @@ export interface EvaluatedAsset extends TradeAsset {
   isAging: boolean;
 }
 
-export interface LeagueSettings {
+interface LeagueSettings {
   isSF: boolean;
   isTEP: boolean;
   idpStarterCount: number;
 }
 
-export interface TradeEvaluation {
-  senderAssets: EvaluatedAsset[];
-  receiverAssets: EvaluatedAsset[];
-  senderTotalValue: number;
-  receiverTotalValue: number;
-  deltaPct: number;
-  valueRatio: number;
-  tierViolation: boolean;
-  tierViolationReason: string | null;
-  tierParityCheck: {
-    passed: boolean;
-    senderBestTier: SemanticTier | null;
-    receiverBestTier: SemanticTier | null;
-    violation: string | null;
-  };
-  timelineCheck: {
-    senderTimeline: 'contender' | 'rebuild' | 'middle';
-    receiverTimeline: 'contender' | 'rebuild' | 'middle';
-    aligned: boolean;
-    mismatchReason: string | null;
-  };
-  sanityCheck: {
-    wouldMostReject: boolean;
-    rejectReason: string | null;
-    rejectionRate: number;
-    windowMismatch: boolean;
-    windowMismatchYears: number;
-    qbRbVeto: boolean;
-    asymmetricValue: boolean;
-  };
-  windowAnalysis: {
-    senderAvgWindow: number;
-    receiverAvgWindow: number;
-    windowDelta: number;
-    dynastyVerdict: 'LONG_TERM_WIN' | 'SHORT_TERM_WIN' | 'BALANCED' | 'ASYMMETRIC';
-    dynastyLabel: string;
-  };
-  plausibility: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNREALISTIC';
-  maxGrade: string;
-  verdict: 'FAIR' | 'SLIGHT_EDGE' | 'LOPSIDED' | 'VERY_LOPSIDED' | 'UNREALISTIC';
-  warnings: string[];
-  suggestedFix: string | null;
-  consolidationPenaltyApplied: boolean;
-}
-
-export function evaluatePickValue(
+function evaluatePickValue(
   pickYear: number,
   pickRound: number,
   pickSlot: 'early' | 'mid' | 'late' = 'mid',
@@ -628,228 +567,8 @@ export function evaluateAsset(
  * scripts/check-decision-engine-boundary.mjs exists to stop. Same move as pick-valuation's analyzeTrade.
  */
 
-export function formatEvaluationForAI(evaluation: TradeEvaluation): string {
-  const tierParityStatus = evaluation.tierParityCheck.passed 
-    ? 'PASSED' 
-    : `FAILED - ${evaluation.tierParityCheck.violation}`;
-  
-  const timelineStatus = evaluation.timelineCheck.aligned 
-    ? 'ALIGNED' 
-    : `MISALIGNED - ${evaluation.timelineCheck.mismatchReason}`;
-  
-  const sanityStatus = evaluation.sanityCheck.wouldMostReject 
-    ? `FAILED (${evaluation.sanityCheck.rejectionRate}% would reject) - ${evaluation.sanityCheck.rejectReason}` 
-    : `PASSED (${evaluation.sanityCheck.rejectionRate}% rejection estimate)`;
-  
-  const windowStatus = evaluation.sanityCheck.windowMismatch
-    ? `FLAGGED - ${evaluation.windowAnalysis.windowDelta.toFixed(1)} year gap`
-    : `OK - ${evaluation.windowAnalysis.windowDelta.toFixed(1)} year gap`;
-
-  return `
-DETERMINISTIC TRADE EVALUATION RESULTS (AI MUST FOLLOW):
-=========================================================
-Trade Verdict: ${evaluation.verdict}
-Dynasty Verdict: ${evaluation.windowAnalysis.dynastyLabel}
-Maximum Allowed Grade: ${evaluation.maxGrade}
-Market Plausibility: ${evaluation.plausibility}
-
-VETO LAYER CHECKS:
-------------------
-1. Tier Parity: ${tierParityStatus}
-   - Sender best tier: ${evaluation.tierParityCheck.senderBestTier || 'N/A (picks only)'}
-   - Receiver best tier: ${evaluation.tierParityCheck.receiverBestTier || 'N/A (picks only)'}
-
-2. Timeline Alignment: ${timelineStatus}
-   - Sender timeline: ${evaluation.timelineCheck.senderTimeline}
-   - Receiver timeline: ${evaluation.timelineCheck.receiverTimeline}
-
-3. Sanity Check (Would 70%+ reject?): ${sanityStatus}
-   - QB-RB Veto (SF): ${evaluation.sanityCheck.qbRbVeto ? 'TRIGGERED - Premium asset required' : 'OK'}
-   - Asymmetric Value: ${evaluation.sanityCheck.asymmetricValue ? 'TRIGGERED - Single aging RB for cornerstone' : 'OK'}
-
-4. Window Mismatch: ${windowStatus}
-   - Sender avg window: ${evaluation.windowAnalysis.senderAvgWindow.toFixed(1)} years
-   - Receiver avg window: ${evaluation.windowAnalysis.receiverAvgWindow.toFixed(1)} years
-
-VALUE ANALYSIS:
----------------
-- Sender gives total adjusted value: ${evaluation.senderTotalValue} DVP
-- Receiver gives total adjusted value: ${evaluation.receiverTotalValue} DVP
-- Delta percentage: ${evaluation.deltaPct}%
-- Value ratio: ${evaluation.valueRatio.toFixed(2)}
-- Consolidation penalty applied: ${evaluation.consolidationPenaltyApplied ? 'YES (-12%)' : 'NO'}
-
-ASSET BREAKDOWN:
-----------------
-Sender Assets (what sender gives up):
-${evaluation.senderAssets.map(a => {
-  const tierLabel = a.tier !== null ? `Tier ${a.tier} (${TIER_TO_SEMANTIC[a.tier as AssetTier]})` : 'PICK';
-  const window = a.position && a.age ? `~${getExpectedWindow(a.position, a.age).toFixed(1)}yr window` : '';
-  return `  - ${a.name}: ${tierLabel}, ${a.adjustedValue} DVP${window ? ` [${window}]` : ''}${a.isIDP ? ' [IDP]' : ''}${a.isAging ? ' [AGING]' : ''}`;
-}).join('\n')}
-
-Receiver Assets (what receiver gives up):
-${evaluation.receiverAssets.map(a => {
-  const tierLabel = a.tier !== null ? `Tier ${a.tier} (${TIER_TO_SEMANTIC[a.tier as AssetTier]})` : 'PICK';
-  const window = a.position && a.age ? `~${getExpectedWindow(a.position, a.age).toFixed(1)}yr window` : '';
-  return `  - ${a.name}: ${tierLabel}, ${a.adjustedValue} DVP${window ? ` [${window}]` : ''}${a.isIDP ? ' [IDP]' : ''}${a.isAging ? ' [AGING]' : ''}`;
-}).join('\n')}
-
-${evaluation.warnings.length > 0 ? `REQUIRED WARNINGS (MUST MENTION ALL):\n${evaluation.warnings.map(w => `  ⚠️ ${w}`).join('\n')}` : ''}
-
-${evaluation.suggestedFix ? `WHAT IT WOULD TAKE: ${evaluation.suggestedFix}` : ''}
-
-AI INSTRUCTIONS (MANDATORY):
-============================
-1. You may NOT assign a grade higher than ${evaluation.maxGrade}
-2. You MUST explain why the trade is ${evaluation.verdict.toLowerCase().replace(/_/g, ' ')}
-3. You MUST use the dynasty verdict label: "${evaluation.windowAnalysis.dynastyLabel}"
-4. You MUST reference all failed veto checks (tier parity, timeline, sanity, window)
-5. You MUST mention all required warnings above
-6. You may NOT justify an unrealistic trade using "team needs" or "win-now mode" alone
-7. If verdict is UNREALISTIC, firmly state: "This trade would be rejected by most dynasty managers"
-8. If sanity check failed, explain why ${evaluation.sanityCheck.rejectionRate}% would reject
-9. If window mismatch >= 5 years, clearly label as "Long-Term Win" or "Short-Term Win"
-10. Always suggest what would make this trade viable
-11. Elite-tier assets (Tier 0-1) require elite-tier returns - no exceptions
-12. Garbage bundles (3+ low-tier assets for 1 elite) are never acceptable
-13. QB-for-aging-RB in SF leagues requires premium asset added (WR1, early 1st, or QB)
-`.trim();
-}
-
-export function detectIDPFromRosterPositions(rosterPositions: string[]): number {
-  const idpPositions = ['LB', 'DB', 'DL', 'DE', 'DT', 'S', 'CB', 'IDP', 'ED', 'EDGE'];
-  let count = 0;
-  
-  for (const pos of rosterPositions) {
-    const upper = pos.toUpperCase();
-    if (idpPositions.includes(upper)) {
-      count++;
-    }
-  }
-  
-  return count;
-}
-
 export function detectSFFromRosterPositions(rosterPositions: string[]): boolean {
   const sfPositions = ['SUPER_FLEX', 'SUPERFLEX', 'SF'];
   return rosterPositions.some(pos => sfPositions.includes(pos.toUpperCase()));
 }
 
-export type GradeType = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D' | 'F';
-
-export const GRADE_PRIORITY: GradeType[] = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-
-export function shouldShowAsSuggestion(evaluation: TradeEvaluation): boolean {
-  if (evaluation.tierViolation) return false;
-  if (evaluation.valueRatio >= 1.60) return false;
-  if (evaluation.plausibility === 'UNREALISTIC') return false;
-  if (evaluation.verdict === 'UNREALISTIC' || evaluation.verdict === 'VERY_LOPSIDED') return false;
-  
-  const idpOnlyTrade = evaluation.senderAssets.every(a => a.isIDP || a.isPick);
-  const targetingElite = evaluation.receiverAssets.some(a => a.tier !== null && a.tier <= 1);
-  if (idpOnlyTrade && targetingElite) return false;
-  
-  return true;
-}
-
-export function enforceGradeDistribution(
-  grades: GradeType[],
-  maxDistribution: Record<string, number> = {
-    'A+': 0.01,
-    'A': 0.10,
-    'A-': 0.15,
-    'B+': 0.20,
-    'B': 0.25,
-    'B-': 0.15,
-    'C+': 0.10,
-    'C': 0.15,
-    'C-': 0.10,
-    'D': 0.10,
-    'F': 0.10,
-  }
-): GradeType[] {
-  const total = grades.length;
-  if (total === 0) return grades;
-  
-  const currentCounts: Record<string, number> = {};
-  const adjustedGrades: GradeType[] = [...grades];
-  
-  for (const grade of GRADE_PRIORITY) {
-    currentCounts[grade] = grades.filter(g => g === grade).length;
-  }
-  
-  for (let i = 0; i < adjustedGrades.length; i++) {
-    const grade = adjustedGrades[i];
-    const maxCount = Math.max(1, Math.floor(total * (maxDistribution[grade] || 0.10)));
-    
-    if (currentCounts[grade] > maxCount) {
-      const gradeIndex = GRADE_PRIORITY.indexOf(grade);
-      if (gradeIndex < GRADE_PRIORITY.length - 1) {
-        const newGrade = GRADE_PRIORITY[gradeIndex + 1];
-        adjustedGrades[i] = newGrade;
-        currentCounts[grade]--;
-        currentCounts[newGrade] = (currentCounts[newGrade] || 0) + 1;
-      }
-    }
-  }
-  
-  return adjustedGrades;
-}
-
-export function isIDPKillSwitchTriggered(
-  evaluation: TradeEvaluation,
-  idpStarterCount: number
-): boolean {
-  if (idpStarterCount > 3) return false;
-  
-  const idpAssets = evaluation.senderAssets.filter(a => a.isIDP);
-  const offensiveStars = evaluation.receiverAssets.filter(a => a.tier !== null && a.tier <= 2);
-  
-  if (idpAssets.length === 0 || offensiveStars.length === 0) return false;
-  
-  const idpValue = idpAssets.reduce((sum, a) => sum + a.adjustedValue, 0);
-  const offensiveValue = offensiveStars.reduce((sum, a) => sum + a.adjustedValue, 0);
-  
-  return idpValue > (offensiveValue * 0.30);
-}
-
-export function categorizeTradeSuggestion(evaluation: TradeEvaluation): 'VIABLE' | 'AGGRESSIVE' | 'UNREALISTIC' {
-  if (!shouldShowAsSuggestion(evaluation)) {
-    return 'UNREALISTIC';
-  }
-  
-  if (evaluation.plausibility === 'MEDIUM' || evaluation.verdict === 'LOPSIDED') {
-    return 'AGGRESSIVE';
-  }
-  
-  return 'VIABLE';
-}
-
-export function filterAndCategorizeSuggestions(evaluations: TradeEvaluation[]): {
-  viable: TradeEvaluation[];
-  aggressive: TradeEvaluation[];
-  unrealistic: TradeEvaluation[];
-} {
-  const viable: TradeEvaluation[] = [];
-  const aggressive: TradeEvaluation[] = [];
-  const unrealistic: TradeEvaluation[] = [];
-  
-  for (const evaluation of evaluations) {
-    const category = categorizeTradeSuggestion(evaluation);
-    
-    switch (category) {
-      case 'VIABLE':
-        viable.push(evaluation);
-        break;
-      case 'AGGRESSIVE':
-        aggressive.push(evaluation);
-        break;
-      case 'UNREALISTIC':
-        unrealistic.push(evaluation);
-        break;
-    }
-  }
-  
-  return { viable, aggressive, unrealistic };
-}

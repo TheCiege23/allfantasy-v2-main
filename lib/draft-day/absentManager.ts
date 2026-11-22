@@ -24,7 +24,7 @@ export type AbsentManagerRule = {
 
 export const ABSENT_MANAGER_RULE_KEY = 'draft_absent_manager_rule'
 
-export const ABSENT_MANAGER_RULE_DEFAULT: AbsentManagerRule = { enabled: false, missedPicks: 2, seconds: 15 }
+const ABSENT_MANAGER_RULE_DEFAULT: AbsentManagerRule = { enabled: false, missedPicks: 2, seconds: 15 }
 
 export const ABSENT_LIMITS = { missedPicks: { min: 1, max: 5 }, seconds: { min: 10, max: 120 } } as const
 
@@ -45,7 +45,7 @@ export function readAbsentManagerRule(settings: unknown): AbsentManagerRule {
   return normalizeAbsentManagerRule(s[ABSENT_MANAGER_RULE_KEY])
 }
 
-export type BoardPick = { overall: number; rosterId: string; source?: string | null; playerName?: string | null }
+type BoardPick = { overall: number; rosterId: string; source?: string | null; playerName?: string | null }
 
 /**
  * Auto-picks in a row at the end of this team's picks. Keeper picks are skipped: the board places a

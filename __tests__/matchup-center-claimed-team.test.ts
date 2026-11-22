@@ -68,3 +68,34 @@ describe('⚠ three 404s are three different problems', () => {
     expect(HANDLER).toContain("'League not found.'")
   })
 })
+
+/*
+ * 🛑 "NO WEEK GIVEN" WAS WEEK 1 (2026-11-19). An imported Fantrax league states no current week in its settings, so the
+ * league page's Matchups tab opened on week 1 in week 11 while My Team showed week 11. Anchored to code lines, never
+ * to the comments that describe the bug.
+ */
+describe('🛑 the current week is the league’s, not a guessed 1', () => {
+  const CONTAINER = read('components/matchup-center/MatchupTabContainer.tsx')
+
+  it('the service asks the league’s schedule before falling back to 1', () => {
+    expect(SERVICE).toMatch(/^\s*\(league\.platformLeagueId \? \(await resolveCurrentWeekForLeague\(league\.platformLeagueId\)/m)
+    const chain = SERVICE.slice(SERVICE.indexOf('  const week =\n'), SERVICE.indexOf('  const week =\n') + 400)
+    expect(chain.indexOf('weekFromSettings(league.settings)')).toBeLessThan(chain.indexOf('resolveCurrentWeekForLeague'))
+    expect(chain.indexOf('resolveCurrentWeekForLeague')).toBeLessThan(chain.lastIndexOf('    1\n'))
+  })
+
+  it('a settings blob with no week reads as no week, not as week 1', () => {
+    expect(SERVICE).toMatch(/^function weekFromSettings\(settings: unknown\): number \| null \{$/m)
+    expect(SERVICE).not.toMatch(/^\s*return 1\s*$/m)
+  })
+
+  it('the tab requests the current week when it does not know one, instead of sending week 1', () => {
+    expect(CONTAINER).not.toMatch(/^\s*const \[week, setWeek\] = useState\(\(\) => Math\.max\(1, league\.currentWeek \?\? 1\)\)/m)
+    expect(CONTAINER).toMatch(/\$\{week != null \? `&week=\$\{week\}` : ''\}/)
+  })
+
+  it('an imported league with no rows here is pointed at the Matchup screen that reads its schedule', () => {
+    expect(CONTAINER).toMatch(/^\s*\{isImportedPlatform\(league\.platform\) \? \(/m)
+    expect(CONTAINER).toContain('href={`/core/matchup?league=${encodeURIComponent(league.id)}&week=${payload.week}`}')
+  })
+})

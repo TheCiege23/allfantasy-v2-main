@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const row = await prisma.devyImportSession.findFirst({ where: { id: sessionId } })
   if (!row) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
 
-  const gate = await assertLeagueCommissioner(row.leagueId, userId)
+  const gate = await assertLeagueCommissioner(row.leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   // A second merge of the same session would write its history seasons again. Re-importing

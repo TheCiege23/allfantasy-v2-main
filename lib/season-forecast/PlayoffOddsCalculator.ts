@@ -7,14 +7,14 @@
 
 import type { SimulatedStanding } from './types'
 
-export interface PlayoffOddsInput {
+interface PlayoffOddsInput {
   simulationResults: SimulatedStanding[][]
   playoffSpots: number
   byeSpots: number
   teamIds: string[]
 }
 
-export interface TeamPlayoffOdds {
+interface TeamPlayoffOdds {
   teamId: string
   playoffProbability: number
   firstPlaceProbability: number

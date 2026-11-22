@@ -38,7 +38,7 @@ export type RolloverInput = {
   pendingClaims: number
 }
 
-export type RolloverStep = { key: RolloverStepKey; state: RolloverStepState }
+type RolloverStep = { key: RolloverStepKey; state: RolloverStepState }
 
 export type RolloverPlan = {
   steps: RolloverStep[]

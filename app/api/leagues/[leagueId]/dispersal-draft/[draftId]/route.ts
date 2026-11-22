@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft, canSubmitDispersalPickForUser } from '@/lib/live-draft-engine/auth'
-import { getLeagueRole } from '@/lib/league/permissions'
 import {
   getRosterIdForLeagueUser,
   requireDispersalDraftForLeague,
@@ -67,8 +67,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can start the draft.' }, { status: 403 })
       }
       try {
@@ -181,8 +180,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can start the draft.' }, { status: 403 })
       }
       const state = await DispersalDraftEngine.startDraft(draftId, uid)
@@ -223,8 +221,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
       const ent = await requireEntitlement('commissioner_dispersal_draft')
       if (ent instanceof NextResponse) return ent
       const uid = ent
-      const role = await getLeagueRole(leagueId, uid)
-      if (role !== 'commissioner' && role !== 'co_commissioner') {
+      if (!(await canCommissionerAct(leagueId, uid, 'league'))) {
         return NextResponse.json({ error: 'Only the commissioner or co-commissioner can force complete.' }, { status: 403 })
       }
       await dispersalDraftClient.update({

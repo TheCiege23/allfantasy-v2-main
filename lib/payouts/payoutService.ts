@@ -13,6 +13,7 @@ import { extractEntryFeeUsdFromSettings } from '@/lib/league-finance/extractEntr
 import { CONTEST_KINDS, readSideContests } from '@/lib/side-contests/sideContests'
 import { readSideContestsView } from '@/lib/side-contests/sideContestsService'
 import { calculatePayouts, readPayoutPlan, suggestedPlacePercents, type PayoutPlan, type PayoutResult, type PlaceRow } from './payoutCalculator'
+import { survivorFinishingOrder, type SurvivorOrderInput } from './survivorOrder'
 
 export type PayoutsView = {
   /** False outside leagues AllFantasy runs itself: there are no standings or prizes to read. */
@@ -51,6 +52,23 @@ export function readFinalOrder(input: {
     .filter((r) => typeof r.rosterId === 'string' && typeof r.rank === 'number')
     .map((r) => ({ rosterId: r.rosterId as string, place: r.rank as number }))
   return rows.length ? rows : null
+}
+
+/**
+ * A Survivor league's players, finale and (once the winner is revealed, never before) jury votes; null for any
+ * other league. Only revealed votes are read, so the payouts card can never leak a result.
+ */
+async function readSurvivorOrderInputs(leagueId: string): Promise<Omit<SurvivorOrderInput, 'rosters'> | null> {
+  const players = await prisma.survivorPlayer.findMany({
+    where: { leagueId },
+    select: { userId: true, redraftRosterId: true, eliminatedWeek: true, isFinalist: true },
+  })
+  if (!players.length) return null
+  const jury = await prisma.jurySession.findUnique({ where: { leagueId }, select: { id: true, status: true, winnerId: true, finalistUserIds: true } })
+  const votes = jury?.status === 'winner_revealed'
+    ? await prisma.juryVote.findMany({ where: { sessionId: jury.id }, select: { finalistUserId: true } })
+    : []
+  return { players, jury: jury ? { status: jury.status, winnerId: jury.winnerId, finalistUserIds: jury.finalistUserIds } : null, votes }
 }
 
 /** The current standings order (`RedraftRoster.playoffSeed`, which the standings engine keeps). */
@@ -93,19 +111,22 @@ export async function readPayoutsView(leagueId: string, userId: string | null | 
   })
   if (!season) return { ok: true, ...empty, native: true }
 
-  const [rosters, bracket, sides, dues] = await Promise.all([
-    prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, teamName: true, ownerName: true, playoffSeed: true } }),
+  const [rosters, bracket, sides, dues, survivor] = await Promise.all([
+    prisma.redraftRoster.findMany({ where: { seasonId: season.id }, select: { id: true, ownerId: true, teamName: true, ownerName: true, playoffSeed: true } }),
     prisma.redraftPlayoffBracket.findUnique({ where: { seasonId: season.id }, select: { status: true, structure: true } }),
     readSideContestsView(leagueId, userId),
     canEdit
       ? prisma.leagueDues.findMany({ where: { leagueId, season: season.season }, select: { amountPaidCents: true, status: true } })
       : Promise.resolve(null),
+    readSurvivorOrderInputs(leagueId),
   ])
 
   const config = readSideContests(league.settings)
   const weeklyPrizeCentsPerWeek = CONTEST_KINDS.reduce((sum, k) => sum + (config[k].enabled ? config[k].prizeCents : 0), 0)
   const regularSeasonWeeks = season.playoffStartWeek > 1 ? season.playoffStartWeek - 1 : season.totalWeeks
-  const finalOrder = readFinalOrder({ bracket, settings: league.settings, season: season.season })
+  // Survivor has no bracket: its winner is the jury's (./survivorOrder.ts). Every other league reads as before.
+  const survivorOrder = survivor ? survivorFinishingOrder({ ...survivor, rosters }) : null
+  const finalOrder = survivorOrder ? (survivorOrder.final ? survivorOrder.order : null) : readFinalOrder({ bracket, settings: league.settings, season: season.season })
   const result = calculatePayouts({
     plan,
     entryFeeCents,
@@ -113,7 +134,7 @@ export async function readPayoutsView(leagueId: string, userId: string | null | 
     weeklyPrizeCentsPerWeek,
     regularSeasonWeeks,
     weeklyPrizesWon: sides.ok ? sides.totals : [],
-    order: finalOrder ?? currentOrder(rosters),
+    order: finalOrder ?? survivorOrder?.order ?? currentOrder(rosters),
     final: finalOrder !== null,
   })
   const names = Object.fromEntries(rosters.map((r) => [r.id, r.teamName?.trim() || r.ownerName || 'Team']))

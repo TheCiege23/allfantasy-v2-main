@@ -4,7 +4,14 @@ const m = vi.hoisted(() => ({
   update: vi.fn(), seasonUpdate: vi.fn(), advance: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => {
-  const tx = { bestBallEntry: { findMany: m.entries, update: m.update } }
+  // league / redraftRoster / bestBallEntry.count: the renewal check a completed contest now passes
+  // through (nativeTournament.ts currentSeasonContestId). No entries recorded = the contest is kept.
+  const tx = {
+    bestBallEntry: { findMany: m.entries, update: m.update, count: async () => 0 },
+    league: { findUniqueOrThrow: async () => ({ bbContestId: 'c' }) },
+    redraftRoster: { findMany: async () => [] },
+    bestBallContest: { findUniqueOrThrow: (...a: unknown[]) => m.contest(...a) },
+  }
   return { prisma: {
     redraftSeason: { findUniqueOrThrow: m.season, update: m.seasonUpdate },
     bestBallContest: { findUniqueOrThrow: m.contest },

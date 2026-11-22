@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import { calculateScoreFromSportConfig } from './scoringEngine'
+import { recordWeekPositions } from '@/lib/bestball/weekPositions'
+import { calculateScoreFromSportConfig, leagueIsBestBall } from './scoringEngine'
+import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
 import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
 import {
   canonicalTeamDefenseId,
@@ -47,6 +49,7 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readExileRoster } from '@/lib/survivor/exileRosterRules'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
+import { isDailyBestBallLeague } from '@/lib/bestball/scoringPeriod'
 import { addDatedGameRow, buildPlayerDailyStatLines, type DatedGameRows } from '@/lib/redraft/playerDailyStatLines'
 import { gamesCountActive } from '@/lib/redraft/gamesCount'
 import {
@@ -64,6 +67,11 @@ export type WeeklyScoreSyncSummary = {
   season: number
   week: number
   rosteredPlayers: number
+  /**
+   * Best ball only: players no longer on any roster who still count for THIS week (dropped after their
+   * game, or on a team chopped after it — lib/redraft/bestBallWeekRoster.ts), refreshed with the rest.
+   */
+  weekHeldDroppedPlayers?: number
   cacheRowsRead: number
   /** Daily-sport game rows in the window that were PRESEASON games, and so not scored. */
   preseasonRowsSkipped?: number
@@ -92,6 +100,8 @@ export type WeeklyScoreSyncSummary = {
   scoresUpserted: number
   /** Daily-lineup leagues only: per-day rows written to `player_daily_scores` (see lib/redraft/dailyLineups.ts). */
   dailyScoresUpserted?: number
+  /** Week positions written to `player_week_positions` (lib/bestball/weekPositions.ts); 0 until migrated. */
+  weekPositionsRecorded?: number
   /** Games-count leagues only: `player_week_game_scores` rows written (lib/redraft/gamesCount.ts). */
   weekGameScoresUpserted?: number
   missingCachePlayerIds: string[]
@@ -241,7 +251,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // `RedraftSeason.sport` stores `NCAAFB`, so this must not be a string compare against 'NCAAF'.
   const isNcaaf = isNcaafSport(sport)
   if (sport !== 'NFL' && !isDailySport && !isNcaaf) {
-    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL and NCAAB; ${sport} is not available yet.`)
+    throw new Error(`Weekly stat sync is wired for NFL, NCAAF, NBA, NHL, NCAAB, MLB and SOCCER; ${sport} is not available yet.`)
   }
 
   const rosters = await prisma.redraftRoster.findMany({
@@ -260,10 +270,43 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   // has released the team for the following week.
   const survivorLeague = await prisma.league.findUnique({
     where: { id: season.leagueId },
-    select: { platform: true, survivorMode: true, settings: true },
+    select: { platform: true, survivorMode: true, settings: true, bestBallMode: true, leagueVariant: true, leagueType: true, guillotineMode: true },
   })
-  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats.
-  const dailyLineupScoring = isDailySport && isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport)
+  /*
+   * 🛑 BEST BALL SCORES THE WEEK AS HELD, SO THE REFRESH MUST TOO. `scoreRosterBestBall` and the week
+   * finalizer count every player held at his first game lock of the week (`loadBestBallWeekRosterRows`),
+   * including one dropped after his game and the whole roster of a team chopped after the week. The
+   * current-roster read above skips exactly those players, so a stat correction or a late stat line for
+   * them was never synced, and the week kept counting the stale score. The same loader adds them here —
+   * bounded by it: only rows dropped at or after this week's first kickoff, only for a native league with
+   * a readable schedule (otherwise it returns the current roster and nothing is added).
+   */
+  let weekHeldDropped: Array<{ playerId: string; playerName: string | null; sport: string; position: string | null; team: string | null }> = []
+  if (rosterIds.length && leagueIsBestBall(survivorLeague)) {
+    try {
+      const held = await loadBestBallWeekRosterRows(prisma, {
+        rosterIds,
+        sport,
+        season: seasonYear,
+        week,
+        platform: survivorLeague?.platform ?? null,
+      })
+      const current = new Set(ordinaryRosterPlayers.map((p) => p.playerId))
+      const added = new Set<string>()
+      weekHeldDropped = held
+        .filter((p) => p.droppedAt != null && !current.has(p.playerId) && !added.has(p.playerId) && added.add(p.playerId))
+        .map((p) => ({ playerId: p.playerId, playerName: p.playerName ?? null, sport: p.sport, position: p.position ?? null, team: p.team ?? null }))
+    } catch (err) {
+      // Never fail the sync over this: the current roster is still refreshed, exactly as before.
+      console.warn('[playerWeeklyScoreService] week-held roster unreadable; refreshing the current roster only', err instanceof Error ? err.message : err)
+    }
+  }
+  // A daily-lineup league is scored per day, so its sync also keeps each player's per-day stats — and so
+  // is a DAILY best ball league (lib/bestball/scoringPeriod.ts), whose week is each day's best lineup.
+  const dailyLineupScoring =
+    isDailySport &&
+    (isDailyLineupScoringEnabled(survivorLeague?.settings ?? null, sport) ||
+      isDailyBestBallLeague(survivorLeague ? { sport, settings: survivorLeague.settings, bestBallMode: survivorLeague.bestBallMode } : null))
   // A league that counts only some games (best-N / lock-in, lib/redraft/gamesCount.ts) is scored per
   // GAME, so its sync also keeps each player's per-game stats. Off for every other league.
   let gamesCountScoring = isDailySport && gamesCountActive(survivorLeague?.settings ?? null, sport)
@@ -283,7 +326,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       playerId: player.id, sport, position: player.position, team: player.team,
     })),
   )
-  const storedRosterPlayers = [...ordinaryRosterPlayers, ...exileRosterPlayers]
+  const storedRosterPlayers = [...ordinaryRosterPlayers, ...weekHeldDropped, ...exileRosterPlayers]
   const storedIds = Array.from(new Set(storedRosterPlayers.map((p: { playerId: string }) => p.playerId).filter(Boolean)))
 
   /*
@@ -337,6 +380,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     season: seasonYear,
     week,
     rosteredPlayers: storedIds.length,
+    ...(weekHeldDropped.length ? { weekHeldDroppedPlayers: weekHeldDropped.length } : {}),
     ...(foreignIdsTranslated !== undefined ? { foreignIdsTranslated } : {}),
     ...(untranslatedForeignPlayerIds ? { untranslatedForeignPlayerIds } : {}),
     cacheRowsRead: 0,
@@ -1023,6 +1067,25 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     summary.warnings.push(
       `Unrecognized ${sport} provider stat keys (alias table may be wrong): ${[...unmappedStatKeys].sort().join(', ')}`,
     )
+  }
+
+  /*
+   * The position each player's week was computed with, recorded per week (lib/bestball/weekPositions.ts):
+   * the position history the schema never had. Best ball seats a player at it when it rescores this week
+   * later. A row follows the roster while the week is open and is frozen once the week finalizes. A no-op
+   * until the player_week_positions migration is applied.
+   */
+  const positionsBySport = new Map<string, Map<string, string | null>>()
+  for (const playerId of playerIds) {
+    const playerSport = sportByPlayer.get(playerId) ?? sport
+    const forSport = positionsBySport.get(playerSport) ?? new Map<string, string | null>()
+    forSport.set(playerId, positionByPlayer.get(playerId) ?? null)
+    positionsBySport.set(playerSport, forSport)
+  }
+  for (const [playerSport, positions] of positionsBySport) {
+    summary.weekPositionsRecorded =
+      (summary.weekPositionsRecorded ?? 0) +
+      (await recordWeekPositions(prisma as never, { sport: playerSport, season: seasonYear, week }, positions))
   }
 
   await recordScoreSyncAudit(summary, params.actorId ?? 'system')

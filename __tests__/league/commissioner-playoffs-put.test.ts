@@ -38,6 +38,7 @@ vi.mock('@/lib/league-events/publisher', () => ({ publishLeagueFanoutEvent: vi.f
 vi.mock('@/lib/league/structuralSettingsLock', () => ({ structuralPatchRefusal: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/waiver-wire/settings-service', () => ({ upsertLeagueWaiverSettings: vi.fn() }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ refreshLeagueWaiverNextRunAt: vi.fn() }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessAllowAll())
 
 import { PUT } from '@/app/api/commissioner/leagues/[leagueId]/playoffs/route'
 import { assertSettingsEditAllowed } from '@/server/services/commissionerService'

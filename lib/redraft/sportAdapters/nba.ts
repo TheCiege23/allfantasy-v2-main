@@ -26,13 +26,3 @@ export const nbaAdapter: SportAdapter = {
   },
 }
 
-export function getLoadManagementRisk(_playerId: string): 'high' | 'medium' | 'low' {
-  void _playerId
-  return 'low'
-}
-
-export function getBackToBackSchedule(_teamId: string, _week: number): boolean {
-  void _teamId
-  void _week
-  return false
-}

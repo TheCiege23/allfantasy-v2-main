@@ -45,6 +45,8 @@ vi.mock('@/lib/zombie/whispererRedaction', () => ({
   redactZombieEvent: vi.fn(),
   redactZombieTeam: vi.fn(),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromRealRole())
 
 function post(body: Record<string, unknown> = { leagueId: LEAGUE, sport: 'NFL', teamCount: 12 }) {
   return new Request('http://localhost/api/zombie/league', {

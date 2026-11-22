@@ -3,7 +3,7 @@
  * Counts active recommendations, insights, and alerts across all sections.
  */
 
-export interface DraftHelperBadgeCountInput {
+interface DraftHelperBadgeCountInput {
   recommendation: { player?: { name?: string } } | null | undefined
   warRoom: { snapshot?: unknown } | null | undefined
   aiFeatureStatus?: {

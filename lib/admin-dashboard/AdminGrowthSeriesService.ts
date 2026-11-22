@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { EXCLUDE_STORE_TEST_SUBSCRIPTIONS } from "@/lib/monetization/storeTestSubscriptions"
 
 /**
  * Growth over time for the Command Center: signups, entries, pools, active
@@ -31,9 +32,9 @@ import { prisma } from "@/lib/prisma"
 
 export type GrowthGranularity = "day" | "week" | "month"
 
-export type GrowthMetricKey = "signups" | "entries" | "pools" | "activeUsers" | "paidConversions"
+type GrowthMetricKey = "signups" | "entries" | "pools" | "activeUsers" | "paidConversions"
 
-export type GrowthBucket = {
+type GrowthBucket = {
   /** Stable key for the bucket, e.g. "2026-09-01" or "2026-09". */
   key: string
   /** Human label for an axis, already in the reporting timezone. */
@@ -68,7 +69,7 @@ export type GrowthMetric = {
   buckets: GrowthBucket[]
 }
 
-export type GrowthSeriesForGranularity = {
+type GrowthSeriesForGranularity = {
   granularity: GrowthGranularity
   windowLabel: string
   metrics: GrowthMetric[]
@@ -287,7 +288,7 @@ export async function getAdminGrowthSeries(now: Date = new Date()): Promise<Admi
     prisma.appUser.findMany({ where: { createdAt: { gte: since } }, select: ts }),
     prisma.worldCupBracketEntry.findMany({ where: { createdAt: { gte: since } }, select: ts }),
     prisma.worldCupBracketChallenge.findMany({ where: { createdAt: { gte: since } }, select: ts }),
-    prisma.userSubscription.findMany({ where: { createdAt: { gte: since } }, select: ts }),
+    prisma.userSubscription.findMany({ where: { createdAt: { gte: since }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS }, select: ts }),
     prisma.bracketPayment.findMany({
       where: { createdAt: { gte: since }, status: { in: COMPLETED_PAYMENT_STATUSES } },
       select: ts,

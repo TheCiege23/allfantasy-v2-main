@@ -4,7 +4,7 @@ import { resolveNflRedraftPlayoffRuntime, type PlayoffRuntimeDeps } from './reso
 import { playoffRoundWeeks } from './playoffRoundWeeks'
 import { seriesLengthForRound, seriesWinsNeeded } from './playoffSeries'
 
-export type NativePlayoffSeedPreviewRow = {
+type NativePlayoffSeedPreviewRow = {
   /** The generic `Roster.id` the standings rows are keyed on, or the season roster id when no link exists. */
   rosterId: string
   redraftRosterId: string
@@ -13,7 +13,7 @@ export type NativePlayoffSeedPreviewRow = {
   qualifiedBy: 'division' | 'wildcard' | 'standings' | null
 }
 
-export type NativePlayoffSeedPreview = {
+type NativePlayoffSeedPreview = {
   /** True once a bracket is generated: these are the seeds it was built with. Else "if the season ended today". */
   locked: boolean
   seeds: NativePlayoffSeedPreviewRow[]
@@ -25,7 +25,7 @@ export type NativePlayoffSeedPreview = {
   series: NativePlayoffSeriesRound[] | null
 }
 
-export type NativePlayoffSeriesRound = { roundNumber: number; bestOf: number; winsNeeded: number; weeks: number[] }
+type NativePlayoffSeriesRound = { roundNumber: number; bestOf: number; winsNeeded: number; weeks: number[] }
 
 /** The series schedule a bracket of `roundCount` rounds plays, or null when series mode is off. */
 export function playoffSeriesSchedule(input: {

@@ -17,12 +17,17 @@
  * the league shape only, and says so rather than pretending to handle both.
  */
 
-export type ViewerPollOption = {
+type ViewerPollOption = {
   id: string
   text: string
   count: number
   /** Whether this is the option the viewer chose. */
   mine: boolean
+  /**
+   * A moment this option stands for (ISO), e.g. a draft start time offered in the draft scheduler. The
+   * poll shows it in the VIEWER's own time zone; `text` is the league-zone fallback.
+   */
+  startsAt?: string
 }
 
 export type ViewerPoll = {
@@ -55,7 +60,7 @@ export type ViewerPoll = {
   prediction: ViewerPrediction | null
 }
 
-export type ViewerPrediction = {
+type ViewerPrediction = {
   week: number
   resolved: boolean
   /** null while unresolved, and on a tie. */
@@ -106,6 +111,7 @@ export function readViewerPoll(
       text,
       count: votes.length,
       mine: Boolean(viewerUserId) && votes.includes(viewerUserId as string),
+      ...(typeof entry.startsAt === 'string' && Number.isFinite(Date.parse(entry.startsAt)) ? { startsAt: entry.startsAt } : {}),
     })
   })
 
@@ -202,7 +208,7 @@ export function votePollLocally(poll: ViewerPoll, optionId: string): ViewerPoll 
  *
  * `now` is the server's clock: the deadline is the server's to judge, as in the vote route.
  */
-export function redactHiddenPollResults(
+function redactHiddenPollResults(
   metadata: unknown,
   viewerUserId: string | null | undefined,
   now: number = Date.now(),

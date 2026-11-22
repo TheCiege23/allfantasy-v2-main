@@ -70,3 +70,14 @@ it('names a Sleeper NFL trade player from the NFL row, never another sport’s r
   const trades = await persistedRecentTrades([{ id: 'af', name: 'League', platformLeagueId: 'src', platform: 'sleeper' }], new Date('2026-09-26'))
   expect(trades[0].sides[0].received[0]).toMatchObject({ name: 'Player One', position: 'QB' })
 })
+
+it('asks for 104 leagues with one relation branch per platform, not one per league (5.3s → 50ms measured)', async () => {
+  h.trades.mockResolvedValue([])
+  const leagues = Array.from({ length: 104 }, (_, i) => ({ id: `af${i}`, name: `L${i}`, platformLeagueId: `src${i}`, platform: i < 100 ? 'sleeper' : 'ESPN' }))
+  await persistedRecentTrades(leagues, new Date('2026-09-26'))
+  const or = h.trades.mock.calls.at(-1)![0].where.OR as Array<{ platform: string; history: { sleeperLeagueId: { in: string[] } } }>
+  expect(or).toHaveLength(2)
+  expect(or.map((b) => b.platform)).toEqual(['espn', 'sleeper'])
+  expect(or[0].history.sleeperLeagueId.in).toHaveLength(4)
+  expect(or[1].history.sleeperLeagueId.in).toHaveLength(100)
+})

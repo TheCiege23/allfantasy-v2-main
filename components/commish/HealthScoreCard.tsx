@@ -22,7 +22,7 @@
  * learns to close the page.
  */
 
-export type HealthTone = 'good' | 'warn' | 'bad' | 'none'
+type HealthTone = 'good' | 'warn' | 'bad' | 'none'
 
 export type HealthScoreCardProps = {
   score: number | null
@@ -86,7 +86,7 @@ function SubScore({ name, value }: { name: string; value: number | null }) {
   )
 }
 
-export function HealthScoreCard(props: HealthScoreCardProps) {
+function HealthScoreCard(props: HealthScoreCardProps) {
   const {
     score,
     status,

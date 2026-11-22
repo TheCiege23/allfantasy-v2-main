@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const h = vi.hoisted(() => ({ run: vi.fn(), confirm: vi.fn(), record: vi.fn() }))
+const h = vi.hoisted(() => ({ run: vi.fn(), confirm: vi.fn(), record: vi.fn(), blog: vi.fn() }))
+const BLOG_OFF = { ran: false, reason: 'off', created: [], wouldCreate: [], skipped: [] }
+// Daily blog drafts ride this route too; the runner has its own suite (daily-blog-drafts).
+vi.mock('@/lib/automated-blog/daily/runDailyBlogDrafts', () => ({
+  parseDailyDraftMode: (raw: string) => (raw === 'off' || raw === 'dry' ? raw : 'run'),
+  runDailyBlogDrafts: h.blog,
+}))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 // Find a League saved-search alerts ride this route too (their own suite: find-league-step3); nothing is due here.
@@ -37,6 +43,7 @@ beforeEach(() => {
   h.run.mockReset().mockResolvedValue(RUN)
   h.confirm.mockReset().mockResolvedValue(CONFIRM)
   h.record.mockReset()
+  h.blog.mockReset().mockResolvedValue(BLOG_OFF)
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -93,5 +100,47 @@ describe('morning-briefing — the activation reminder', () => {
     expect(res.status).toBe(401)
     expect(h.run).not.toHaveBeenCalled()
     expect(h.confirm).not.toHaveBeenCalled()
+    expect(h.blog).not.toHaveBeenCalled()
+  })
+})
+
+describe('morning-briefing — the daily blog drafts', () => {
+  const REPORT = {
+    ran: true,
+    date: '2026-11-14',
+    created: [{ sport: 'NBA', slug: 'nba-fantasy-standouts-2026-11-14', articleId: 'a1' }],
+    wouldCreate: [],
+    skipped: [{ sport: 'NHL', reason: 'fact_check_failed', detail: 'numbers: 41' }],
+  }
+
+  it('passes the ?blogDrafts mode through, and a run that did something is reported with its own heartbeat', async () => {
+    h.blog.mockResolvedValue(REPORT)
+    const body = await call()
+    expect(h.blog).toHaveBeenCalledWith({ mode: 'run' })
+    expect(body.blogDrafts).toEqual(REPORT)
+    expect(h.record).toHaveBeenCalledTimes(1)
+    expect(h.record.mock.calls[0]![0]).toMatchObject({ jobName: 'cron-blog-daily-drafts' })
+    // A discarded draft is the check working, not a failure of the job.
+    expect(h.record.mock.calls[0]![1]).toMatchObject({ rowsWritten: 1, rowsSkipped: 1, status: 'success', errors: [] })
+
+    await call('?blogDrafts=dry')
+    expect(h.blog).toHaveBeenLastCalledWith({ mode: 'dry' })
+  })
+
+  it('a model or save failure marks the heartbeat partial', async () => {
+    h.blog.mockResolvedValue({ ...REPORT, created: [], skipped: [{ sport: 'NBA', reason: 'generation_failed', detail: 'status 500' }] })
+    await call()
+    expect(h.record.mock.calls[0]![1]).toMatchObject({ status: 'partial', errors: ['NBA: generation_failed (status 500)'] })
+  })
+
+  it('switched off it leaves the body as it was, and a crash never fails the briefing', async () => {
+    const off = await call('?blogDrafts=off')
+    expect(off).toEqual({ mode: 'cron', enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
+    expect(h.record).not.toHaveBeenCalled()
+
+    h.blog.mockRejectedValue(new Error('db down'))
+    const body = await call()
+    expect(body.mode).toBe('cron')
+    expect(body.blogDrafts).toEqual({ ran: false, reason: 'error', error: 'db down' })
   })
 })

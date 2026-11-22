@@ -21,7 +21,7 @@ const STATUS_EVENT: Record<CanonicalGameSchedule['status'], string> = {
   live: 'game_started', final: 'game_final', cancelled: 'game_cancelled', unknown: 'game_corrected',
 }
 
-export type GameEvent = { eventId: string; eventType: string; entityId: string; contentHash: string; record: CanonicalGameSchedule }
+type GameEvent = { eventId: string; eventType: string; entityId: string; contentHash: string; record: CanonicalGameSchedule }
 
 /** Pure diff: new game → game_created; changed status/start → the status-mapped event; unchanged → suppressed. */
 export function diffGames(games: CanonicalGameSchedule[], previous: Map<string, string>, snapshotVersion: string): { events: GameEvent[]; created: number; changed: number; suppressed: number } {
@@ -40,7 +40,7 @@ export function diffGames(games: CanonicalGameSchedule[], previous: Map<string, 
   return { events, created, changed, suppressed }
 }
 
-export type ScheduleSyncResult = { certified: boolean; season: string; week: string | null; snapshotId: string | null; gameCount: number; rejected: number; createdEvents: number; changedEvents: number; eventsInserted: number; attempts: number; logical: number; reason?: string }
+type ScheduleSyncResult = { certified: boolean; season: string; week: string | null; snapshotId: string | null; gameCount: number; rejected: number; createdEvents: number; changedEvents: number; eventsInserted: number; attempts: number; logical: number; reason?: string }
 
 export async function runEspnScheduleSync(input: { week?: number; store?: SportsRuntimeStore }): Promise<ScheduleSyncResult> {
   const store = input.store ?? new SportsRuntimeStore()

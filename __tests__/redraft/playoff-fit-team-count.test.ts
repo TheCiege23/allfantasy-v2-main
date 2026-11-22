@@ -304,10 +304,15 @@ describe('the settings PATCH refuses a bracket that outlasts the season', () => 
     expect(wrotePlayoffTeams()).toBe(true)
   })
 
-  it('more than 16 is refused outright, even where the league is bigger', async () => {
-    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffTeams: 18, playoffStartWeek: 10 })
+  it('more than 32 is refused outright, even where the league is bigger', async () => {
+    m.prisma.league.findFirst.mockImplementation(async () => ({
+      id: 'L', platform: 'manual', sport: 'NFL', leagueSize: 160, timezone: 'UTC', teams: [], leagueSettings: null,
+      waiverSchedule: null, waiverProcessTime: '02:00', playoffTeams: 6, playoffStartWeek: 15, playoffWeeksPerRound: 1,
+      settings: {},
+    }))
+    const res = await executeLeagueSettingsPatch('u', { leagueId: 'L', playoffTeams: 34, playoffStartWeek: 10 })
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/at most 16/)
+    expect((await res.json()).error).toMatch(/at most 32/)
   })
 })
 

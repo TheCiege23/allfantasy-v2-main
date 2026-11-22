@@ -127,13 +127,13 @@ export function readSurvivorHouseRules(settings: unknown): string {
   return typeof raw === 'string' ? raw.replace(/\r\n/g, '\n').trim().slice(0, SURVIVOR_HOUSE_RULES_MAX) : ''
 }
 
-export interface WeeklyPrizeMember {
+interface WeeklyPrizeMember {
   rosterId: string
   userId: string
   finalScore: number
 }
 
-export interface PlannedWeeklyPrize {
+interface PlannedWeeklyPrize {
   idempotencyKey: string
   spec: SurvivorRewardSpec
 }

@@ -7,7 +7,7 @@
  */
 import type { SlotDef } from './types'
 
-export type RosterGroupKind =
+type RosterGroupKind =
   | 'offense' | 'flex' | 'kicker' | 'dst' | 'idp' | 'bench' | 'injured' | 'reserve' | 'college' | 'other'
 
 export interface RosterGroup {
@@ -17,7 +17,7 @@ export interface RosterGroup {
   defs: SlotDef[]
 }
 
-export const FOOTBALL_SPORTS = new Set(['NFL', 'NCAAF'])
+const FOOTBALL_SPORTS = new Set(['NFL', 'NCAAF'])
 
 export function isFootballSport(sport: unknown): boolean {
   return FOOTBALL_SPORTS.has(String(sport ?? '').trim().toUpperCase())

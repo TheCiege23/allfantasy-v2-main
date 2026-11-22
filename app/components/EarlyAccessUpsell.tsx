@@ -15,15 +15,15 @@ interface EarlyAccessUpsellProps {
 
 const CONTENT = {
   default: {
-    title: "Help shape the AI before launch",
-    body: "AF Legacy is a live preview of the AI powering the AllFantasy app launching in 2026. Early access members help guide how the AI learns by using the tools, sharing feedback, and stress-testing real league scenarios.",
+    title: "Help shape Chimmy before launch",
+    body: "AF Legacy is a live preview of Chimmy powering the AllFantasy app launching in 2026. Early access members help guide how Chimmy learns by using the tools, sharing feedback, and stress-testing real league scenarios.",
   },
   after_feedback: {
-    title: "Thanks — this helps the AI learn",
-    body: "Feedback like yours directly influences how the AllFantasy AI improves before launch. Want to be part of that process as new features roll out?",
+    title: "Thanks — this helps Chimmy learn",
+    body: "Feedback like yours directly influences how the AllFantasy Chimmy improves before launch. Want to be part of that process as new features roll out?",
   },
   power_user: {
-    title: "You're already using the AI like an early tester",
+    title: "You're already using Chimmy like an early tester",
     body: "Early access members get visibility into what's coming next and help shape the tools before the full app launch.",
   },
 };
@@ -83,7 +83,7 @@ export default function EarlyAccessUpsell({
         <div className="text-3xl mb-3">🎉</div>
         <h3 className="text-lg font-semibold text-white mb-2">You're in!</h3>
         <p className="text-sm text-white/60">
-          You'll be among the first to shape the AllFantasy AI. We'll be in touch soon.
+          You'll be among the first to shape the AllFantasy Chimmy. We'll be in touch soon.
         </p>
         {onClose && (
           <button

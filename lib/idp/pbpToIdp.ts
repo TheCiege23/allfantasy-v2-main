@@ -22,7 +22,7 @@ import type { IdpWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
  */
 
 /** A defender's line for one game, keyed by the canonical `idp_*` names. */
-export type IdpGameLine = {
+type IdpGameLine = {
   playerId: string
   playerName: string
   teamAbbr: string | null
@@ -33,20 +33,6 @@ export type IdpGameLine = {
 const add = (line: IdpWeeklyStatLine, key: string, n = 1) => {
   line[key] = (line[key] ?? 0) + n
 }
-
-/**
- * ⚠ NOT MAPPED, ON PURPOSE:
- *
- *   role 'fumbler'  — GAPS N-06 records this as ambiguous: it may name the
- *                     player who FUMBLED rather than the one who forced it.
- *                     Crediting a forced fumble to whoever fumbled would hand
- *                     defensive points to the offense that lost the ball.
- *
- *   action 'pressure' — a hurry is not a QB hit, and `idp_qb_hit` is the only
- *                     near-miss key available. Counting hurries as hits would
- *                     inflate every edge rusher in the league.
- */
-const UNMAPPED_BY_DESIGN = ['fumbler', 'pressure'] as const
 
 function isDefensivePlayer(p: PbpPlayer): boolean {
   return p.role === 'defender' || p.role === 'interceptor' || p.role === 'recoverer'
@@ -85,7 +71,7 @@ function creditTackles(play: PbpPlay, lineFor: (p: PbpPlayer) => IdpWeeklyStatLi
  * fumble: a defender named for a tackle on the touchdown can carry a second, try-only entry. A try the
  * details declare but the prose does not mark cannot be separated and is read whole, as before.
  */
-export function scrimmagePartOf(play: PbpPlay): PbpPlay | null {
+function scrimmagePartOf(play: PbpPlay): PbpPlay | null {
   const attempt = twoPointTryOf(play)
   if (!attempt || !attempt.tryText) return play
   if (!attempt.touchdownText) return null
@@ -176,5 +162,3 @@ export function idpLinesFromGame(game: PbpGame): IdpGameLine[] {
   return [...byPlayer.values()].filter((l) => Object.keys(l.stats).length > 0)
 }
 
-/** Exported so a test can assert the exclusions stay deliberate. */
-export const __unmappedByDesign = UNMAPPED_BY_DESIGN

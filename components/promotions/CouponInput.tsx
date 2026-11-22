@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import { CheckCircle2, Loader2, Tag, X } from "lucide-react"
 
-export type CouponState =
+type CouponState =
   | { status: "idle" }
   | { status: "validating" }
   | {

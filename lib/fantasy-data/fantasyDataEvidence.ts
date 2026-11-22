@@ -387,22 +387,6 @@ function resolveAvailability(players: { count: number }, adp: { count: number })
   return "unavailable"
 }
 
-function checkMissingEnv(sport: string): string[] {
-  const missing: string[] = []
-  if (!process.env.ROLLING_INSIGHTS_API_KEY && !process.env.ROLLING_INSIGHTS_API_SECRET) {
-    missing.push("ROLLING_INSIGHTS_API_KEY")
-  }
-  if (!process.env.API_SPORTS_KEY && !process.env.X_RAPIDAPI_KEY) {
-    missing.push("API_SPORTS_KEY or X_RAPIDAPI_KEY")
-  }
-  if (sport === "NCAAF") {
-    if (!process.env.CFBD_API_KEY && !process.env.COLLEGE_FOOTBALL_DATA_API_KEY) {
-      missing.push("CFBD_API_KEY (CollegeFootballData) — NCAAF data limited without it")
-    }
-  }
-  return missing
-}
-
 function checkMissingProviderEnv(sport: string): string[] {
   const missing: string[] = []
   const hasRollingInsights =

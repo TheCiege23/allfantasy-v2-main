@@ -1,3 +1,4 @@
+import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { League, LeagueSport, Prisma } from '@prisma/client'
 import { readChampionshipLength } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
@@ -70,6 +71,8 @@ export type CommissionerSettingsFormData = {
    * lib/redraft/medianGame.ts); false unless stored true. Not a column — PATCHed as `medianGameInPlayoffs`.
    */
   medianGameInPlayoffs?: boolean
+  /** `settings.allow_multi_team_managers` (lib/league/multiTeamManagers.ts). PATCHed as `allowMultiTeamManagers`. */
+  allowMultiTeamManagers?: boolean
   allowPreDraftMoves?: boolean | null
   preventBenchDrops?: boolean | null
   lockAllMoves?: boolean | null
@@ -224,6 +227,7 @@ export function commissionerLeagueFieldsFromRow(
     leagueType: league.leagueType,
     medianGame: league.medianGame,
     medianGameInPlayoffs: readMedianGameInPlayoffs(league.settings),
+    allowMultiTeamManagers: readAllowMultiTeamManagers(league.settings),
     allowPreDraftMoves: league.allowPreDraftMoves,
     preventBenchDrops: league.preventBenchDrops,
     lockAllMoves: league.lockAllMoves,

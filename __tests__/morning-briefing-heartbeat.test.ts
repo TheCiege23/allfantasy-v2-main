@@ -38,6 +38,11 @@ vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: 
 vi.mock('@/lib/public-discovery/runSavedSearchAlerts', () => ({
   runSavedSearchAlerts: vi.fn(async () => ({ due: 0, checked: 0, alerted: 0, errors: [], budgetExhausted: false })),
 }))
+// Daily blog drafts ride this route too (their own suite: daily-blog-drafts); switched off here.
+vi.mock('@/lib/automated-blog/daily/runDailyBlogDrafts', () => ({
+  parseDailyDraftMode: () => 'off',
+  runDailyBlogDrafts: vi.fn(async () => ({ ran: false, reason: 'off', created: [], wouldCreate: [], skipped: [] })),
+}))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 // The non-cron branch calls getServerSession, which needs a Next request scope vitest does not

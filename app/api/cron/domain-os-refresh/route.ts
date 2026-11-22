@@ -1,12 +1,11 @@
+import { currentNflSeason } from '@/lib/follows/followFreeAgentCheck'
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
-import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
+import { createRunBudget } from '@/lib/cron/runBudget'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
-import { createOsStore, safeRead, type OsDomain, type OsFactSource, type OsFeed } from '@/lib/decision-os/domain-os'
-import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
-import { createWaiverOs, waiverSettingsSource } from '@/lib/decision-os/waiver-os'
+import { createOsStore, type OsDomain } from '@/lib/decision-os/domain-os'
 import { createValueOs, marketValueSource, devyValueSource } from '@/lib/decision-os/value-os'
 import { createProjectionOs, canonicalProjectionSource } from '@/lib/decision-os/projection-os'
 import {
@@ -57,108 +56,27 @@ import {
  * `get` derives on a miss. But every league-level fact was re-derived per USER instead of once per
  * league, so the entire saving the level split exists to produce was never collected.
  *
- * ── 🛑 WHICH SOURCES THIS WALKS, AND WHY THE REST ARE NOT ELIGIBLE ──────────────────────────
+ * ── 🛑 THE PER-LEAGUE WALK IS RETIRED (owner's call, 2026-11-17) ────────────────────────────
  *
- * The plan said "call `feed.refresh(source, args)` for every registered source". That was wrong
- * and shipping it would have planted a bug. A source is eligible only if ALL THREE hold: its
- * `derive` is satisfiable from a league id alone, its `scopeKey` is the league id alone, and its
- * TTL is long enough that a 30-minute fire can keep it warm.
+ * This route used to walk up to 200 NFL leagues every 30 minutes and warm two league-keyed entries
+ * in `domain_os_facts`: Draft OS's `draftRulesSource` and Waiver OS's `waiverSettingsSource`. Both
+ * were WRITES WITH NO READ. The draft entry's only consumer, `resolveNflRedraftDraftRuntime`, was
+ * deleted on 2026-09-06 (see `lib/decision-os/draft-os/index.ts`); the waiver loader reads through
+ * `waiverResourceSource`, never the settings entry (`lib/decision-os/waiver-os/index.ts`). So each
+ * fire spent a league query plus up to 400 derives filling a cache nothing served.
  *
- *   ✅ draftRulesSource      derive = resolveCanonicalLeagueRules(leagueId). League in, league out.
- *   ✅ waiverSettingsSource  eligible SINCE 1.1b, and it is why 1.1b existed — see below.
+ * Removing it also removed the walk's early `return` when no NFL league qualified — which used to
+ * skip every sweep below it (rankings, forecast, odds, portfolio, outlook) on such a fire. The
+ * history of why those two sources were the only eligible ones (league-id derive, league-id scope,
+ * a TTL a 30-minute fire can keep warm) is in git; it is the test to apply before adding a
+ * league-keyed warm here again, and the first question is whether anything reads it.
  *
- * ⚠ AND THIS FILE'S FIRST VERSION OVERCLAIMED WHAT THAT SAVES. It said "seven queries on every
- * draft-runtime resolve, which during a live draft is every poll and every pick", quoting
- * `draft-os/index.ts`. The figure is real; the traffic is not. `resolveNflRedraftDraftRuntime` —
- * the only consumer of `draftRulesSource` — had **zero callers**, and was DELETED on 2026-09-06.
- * Live drafts run on `lib/live-draft-engine/DraftSessionService` and never reached it.
- *
- * 🛑 SO THIS CRON NOW WARMS A FACT WITH NO READER AT ALL — not "a reader nobody calls", which is
- * what this comment used to describe. The warm is still correct and still cheap, and removing it
- * is a live-behaviour decision that belongs to whoever owns this route rather than to a cleanup
- * pass; see the retirement record in `lib/decision-os/draft-os/index.ts`. Stated here so the next
- * person reading this file does not have to go and re-derive it.
- *
- * So today this cron warms a fact that is true, cheap, and read by nothing. That is the inverse of
- * the `ingestCFBDStats` failure this repo records — not a surface reading a table nobody writes,
- * but a writer filling a cache nobody reads. Harmless, and worth stating plainly rather than
- * leaving a number in place that a later decision might be justified with.
- *
- * 🛑 THE SAVING IS REAL AND IT IS SOMEWHERE ELSE. `resolveCanonicalLeagueRules` IS on live request
- * paths — just not that one:
- *
- *     playoff-runtime   4 routes        roster-runtime   1 route
- *     schedule-runtime  1 route         draft-runtime    0   <- the odd one out of four
- *
- * The fact this source maintains is LEAGUE RULES, not draft rules. It is misplaced in `draft-os`
- * rather than wrong, and pointed at those three resolvers it would deliver to real traffic exactly
- * what the original sentence claimed. Tracked as 1.2a in docs/decision-os/HUB_BUILD_PLAN.md;
- * whether the canonical draft resolver should get a route at all is 1.2b, and a product decision.
- *
- * ⚠ Found by opening the ticket to wire Draft OS and discovering it would connect a dead feed to a
- * dead resolver — i.e. by trying to USE the thing, which is the only reason it surfaced at all.
- *
- * ── WAIVER: WHY IT WAS INELIGIBLE, AND WHAT 1.1b CHANGED ────────────────────────────────────
- *
- * `waiverSettingsSource` was always declared `level: 'league'` with `scopeKey: leagueId`, and was
- * still underivable at the league level: it shared `deriveWorldFacts({ userId, leagueId })` with
- * the user source, which returns the whole `WaiverWorldFacts` INCLUDING that manager's FAAB
- * balance and priority. Warming it from here would have meant inventing a userId and storing ONE
- * MANAGER'S PRIVATE RESOURCES UNDER A LEAGUE-SCOPED KEY — the write-side form of the exact failure
- * `waiver-os/index.ts` warns about: it would "let the system tell someone they can afford a bid
- * they cannot".
- *
- * 1.1b split it. `loadWaiverLeagueFacts(leagueId)` derives the league half from three deps and no
- * user, so the source is now genuinely what it always claimed to be. It also stopped being
- * underivable for a non-member — the old path returned null when the caller had no roster.
- *
- * ── STILL NOT ELIGIBLE, WITH THE SPECIFIC REASON EACH ───────────────────────────────────────
- *
- *   ❌ tradeSettingsSource   ITS DERIVE IS SPLIT TOO (1.1b), so this one is not about the derive:
- *                            it is keyed `${leagueId}:${seasonId}` and this walk has no season.
- *                            Bridging that means deciding which season is "current" for a league
- *                            and what to do when several qualify — and a wrong answer warms the
- *                            WRONG SEASON'S entry, which is worse than warming nothing.
- *   ❌ leagueRulesSource     60s TTL. Expired long before the next 30-minute fire, so scheduling
- *                            it would spend the derive, warm nothing, and report healthy work.
- *                            Short-TTL facts are read-through by nature.
- *   ❌ lineup sources        user- and week-parameterised (playerIds, week, a specific roster).
- *                            Not league facts, and never will be.
- *
- * ── Bounds, copied from decision-os-activity-ingest's hard-won shape ─────────────────────────
- *
- * That route's header documents three compounding defects that hung it for weeks: untimed
- * fetches, a budget checked only BETWEEN units, and a platform kill leaving `running` rows behind.
- * Two of the three cannot occur here — `resolveCanonicalLeagueRules` is Postgres-only, so there is
- * no provider socket to hang on — and the third is handled by `withSyncJobRun`, whose
- * `reapAbandonedRuns` closes any row a previous kill orphaned.
- *
- * `rotateForFairness` is not decoration. A fixed-order walk that stops when the budget runs out
- * refreshes the first N leagues forever and never reaches the tail — which `runBudget.ts` records
- * happening in production, where NBA/NHL/MLB/SOCCER sat frozen at one date while NFL kept
- * updating. Rotation gives every league the lead position within one cycle.
- *
- * ⚠ NFL ONLY, AND THAT IS THE SOURCE'S CONSTRAINT RATHER THAN A CHOICE HERE.
- * `draftRulesSource.sport` is hardcoded `() => 'NFL'`, so a fact derived for any other sport would
- * be filed under the wrong partition. Widening it is a D17 follow-up on the SOURCE; scoping this
- * walk to NFL is what keeps the two consistent in the meantime.
+ * What remains is the app-level walk (market values, devy values, projections — keyed by
+ * sport/format, each serving every league) and the dedicated writers below it.
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-
-/**
- * Leagues considered per fire. Well under what the budget allows — each unit is a handful of
- * indexed Postgres reads, not a provider round trip — so the cap is about bounding DB load on a
- * shared instance, not about time.
- */
-const LEAGUE_CAP = 200
-
-/** Runs every 30 min, so the fairness period matches the fire interval. */
-const ROTATION_PERIOD_MS = 30 * 60 * 1000
-
-/** League statuses that mean "no longer playing"; refreshing their rules helps nobody. */
-const DEAD_STATUSES = ['ARCHIVED', 'COMPLETE', 'COMPLETED', 'CLOSED']
 
 /**
  * Upper bound on app-level combinations warmed per fire (R3.2).
@@ -408,34 +326,10 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Bind one league-keyed source to its feed, erasing the fact type at the boundary.
- *
- * ⚠ THE HELPER IS NOT DECORATION. `OsFactSource<TArgs, TFacts>` is INVARIANT in `TFacts` — its
- * optional `measure(facts: TFacts)` puts the type in an input position — so an array typed
- * `OsFactSource<…, unknown>[]` will not accept a concrete source, however obviously compatible it
- * looks. Capturing each source inside a closure while it still has its real type is what lets two
- * domains share one walk.
- */
-function target<TFacts>(
-  domain: OsDomain,
-  feed: OsFeed,
-  source: OsFactSource<{ leagueId: string }, TFacts>,
-) {
-  return {
-    domain,
-    kind: source.kind,
-    level: source.level,
-    ttlMs: source.ttlMs,
-    scopeKey: source.scopeKey,
-    refresh: (args: { leagueId: string }) => feed.refresh(source, args),
-  }
-}
-
-/**
  * R3.2 — the SECOND walk: app-level sources, keyed sport+format rather than by league.
  *
- * ── 🛑 WHY THE LEAGUE WALK COULD NEVER REACH THESE ──────────────────────────────────────────
- * `bindLeagueSource` is typed `OsFactSource<{ leagueId: string }, …>`. `marketValueSource` takes
+ * ── 🛑 WHY THE (NOW RETIRED) LEAGUE WALK COULD NEVER REACH THESE ───────────────────────────
+ * That walk took sources keyed by league id alone. `marketValueSource` takes
  * `{ sport, format, qbFormat }`, `devyValueSource` takes `{ sport, currentSeason }` and
  * `canonicalProjectionSource` takes `{ sport, season, week? }` — none is satisfiable from a league
  * id, so none could ever be a member of that list. They were not omitted by oversight; they are a
@@ -453,11 +347,9 @@ function target<TFacts>(
  * use it. So the set comes from the SNAPSHOT table: exactly the combinations that can produce an
  * answer, and it stays correct as the data changes rather than drifting from a hardcoded list.
  *
- * ── ⚠ IT RUNS BEFORE THE LEAGUE WALK, AND THAT IS A PRIORITY DECISION ───────────────────────
- * One app-level fact serves every league — 249 of them today. One league fact serves one. If the
- * run budget exhausts mid-fire, the four market combinations are worth more than four leagues'
- * draft rules. It also sidesteps the league walk's `leagues.length === 0` early return, which
- * would otherwise skip app sources entirely on a fire where the league query came back empty.
+ * ── ⚠ IT RUNS FIRST, AND THAT IS A PRIORITY DECISION ────────────────────────────────────────
+ * One app-level fact serves every league — 249 of them when this was written. If the run budget
+ * exhausts mid-fire, the market combinations are worth more than anything that serves one league.
  */
 async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeof createRunBudget>): Promise<void> {
   const store = createOsStore()
@@ -471,7 +363,12 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
       return [] as { format: string; qbFormat: string }[]
     })
 
-  const season = new Date().getUTCFullYear()
+  /*
+   * The football season, not the calendar year (2026-11-20 re-score). In January and February a league still plays —
+   * and asks for — LAST year's season (the playoffs, the Super Bowl window, the NCAAF bowls), so a calendar-year key
+   * warmed 2027 entries that no league read while the 2026 ones went cold. Same rule the follow-alert check uses.
+   */
+  const season = currentNflSeason(new Date())
 
   type Unit = { domain: OsDomain; label: string; run: () => Promise<'written' | 'unavailable' | 'write_failed'> }
   const units: Unit[] = [
@@ -498,8 +395,8 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
   ]
 
   for (const u of units) {
-    // `exhausted()` is the budget's actual surface — there is no `hasTimeFor`. Same call the
-    // league walk below makes, so both halves stop on the same signal.
+    // `exhausted()` is the budget's actual surface — there is no `hasTimeFor`. The sweeps below make
+    // the same call, so every part of the fire stops on the same signal.
     if (budget.exhausted()) { counts.skippedForTime += 1; continue }
     counts.considered += 1
     counts.due += 1
@@ -534,10 +431,11 @@ async function run(): Promise<RefreshCounts> {
   await refreshAppSources(counts, budget)
 
   /*
-   * ── THE DAILY RANKINGS SNAPSHOT, BEFORE THE LEAGUE WALK ─────────────────────────────────────
+   * ── THE DAILY RANKINGS SNAPSHOT ─────────────────────────────────────────────────────────────
    *
-   * ⚠ BEFORE, NOT AFTER, because the walk below returns early when no NFL league qualifies, and a
-   * snapshot has nothing to do with NFL leagues. It is one existence read per fire and, on the
+   * ⚠ IT USED TO HAVE TO RUN BEFORE THE PER-LEAGUE WALK, whose early return (no NFL league) skipped
+   * everything after it. That walk is retired (see the header), so no writer here can be skipped by
+   * another's empty result. It is one existence read per fire and, on the
    * first fire of each Eastern day, one ledger read and one upsert — so it does not need the budget
    * the sweeps below compete for. It never throws; a failure is counted and the run continues.
    */
@@ -549,9 +447,9 @@ async function run(): Promise<RefreshCounts> {
   })
 
   /*
-   * ── THE CLASS RATING (ADR F2.10a), ALSO BEFORE THE LEAGUE WALK ─────────────────────────────
+   * ── THE CLASS RATING (ADR F2.10a) ───────────────────────────────────────────────────────────
    *
-   * Same reason as the snapshot: the walk's early return has nothing to do with it. Every fire
+   * Every fire
    * but the first of the Eastern day is one state read; the first reads the matchup facts and
    * rebuilds only when they changed (about weekly). It takes the budget it needs from the fire
    * and stands down for the next one when too little is left. It never throws.
@@ -565,97 +463,7 @@ async function run(): Promise<RefreshCounts> {
     },
   )
 
-  const leagues = await prisma.league
-    .findMany({
-      where: { sport: 'NFL', NOT: { status: { in: DEAD_STATUSES } } },
-      select: { id: true },
-      take: LEAGUE_CAP,
-      orderBy: { updatedAt: 'desc' },
-    })
-    .catch((e: unknown) => {
-      counts.errors.push(`league_query: ${e instanceof Error ? e.message : String(e)}`)
-      return [] as { id: string }[]
-    })
-
-  counts.considered = leagues.length
-  if (leagues.length === 0) return counts
-
-  const store = createOsStore()
-
-  /**
-   * Every league-keyed source this cron warms.
-   *
-   * ⚠ THE LIST IS NOT "EVERY SOURCE", AND IT CANNOT BE. Membership requires all three: a
-   * `derive` satisfiable from a league id alone, a `scopeKey` of the league id alone, and a TTL
-   * long enough that a 30-minute fire can actually keep it warm.
-   *
-   *   draft   rules     ✅ but read by nothing — its only consumer was deleted 2026-09-06
-   *   waiver  settings  ✅ and the reason 1.1b existed: its derive used to need a userId
-   *   trade   settings  ❌ keyed `${leagueId}:${seasonId}`; this walk has no season
-   *   league  rules     ❌ 60s TTL — expired long before the next fire; read-through by nature
-   *   lineup  both      ❌ user- and week-parameterised; not league facts
-   */
-  const targets = [
-    target('draft', createDraftOs({ store }), draftRulesSource),
-    target('waiver', createWaiverOs({ store }), waiverSettingsSource),
-  ]
-
-  const ordered = rotateForFairness(leagues, ROTATION_PERIOD_MS)
-
-  for (const league of ordered) {
-    // Checked BETWEEN units, per RunBudget's contract. Every remaining league is reported as
-    // skipped rather than silently dropped — a truncated walk that looks complete is the failure
-    // this repo keeps finding.
-    if (budget.exhausted()) {
-      counts.skippedForTime = ordered.length - (counts.due + counts.unavailable + counts.failed)
-      break
-    }
-
-    const args = { leagueId: league.id }
-
-    for (const t of targets) {
-    /**
-     * DUE-NESS IS A READ, NOT A GUESS. `refresh()` re-derives unconditionally, so calling it on
-     * every league every fire would do the expensive work even when the stored fact is still
-     * warm. Reading first with the source's own `ttlMs` asks exactly the question `get` asks —
-     * a hit means a live consumer would have been served from the store, so there is nothing to
-     * do. Producer and consumer therefore share one definition of stale instead of drifting.
-     */
-    const hit = await safeRead(store, {
-      domain: t.domain,
-      kind: t.kind,
-      level: t.level,
-      scopeKey: t.scopeKey(args),
-      ttlMs: t.ttlMs,
-    })
-    if (hit) continue
-
-    counts.due += 1
-
-    /*
-     * Per-league isolation: one league that cannot resolve must not end the walk. `refresh`
-     * swallows a derive rejection into 'unavailable' and a store rejection into 'write_failed',
-     * so this catch is for anything neither of those covers.
-     *
-     * 🛑 THIS COMMENT USED TO CLAIM THE CATCH COVERED A FAILING STORE WRITE. It never could —
-     * `safeWrite` swallowed the throw two layers below, so nothing reached here and `refresh`
-     * returned the literal 'written'. Between that and a `domain_os_facts` table which did not
-     * exist in production (confirmed 2026-09-01), this walk reported `written: N` every 30
-     * minutes for rows it never wrote. The fix is the outcome, not the catch.
-     */
-    try {
-      const outcome = await t.refresh(args)
-      if (outcome === 'written') counts.written += 1
-      else if (outcome === 'write_failed') counts.writeFailed += 1
-      else counts.unavailable += 1
-    } catch (e) {
-      counts.failed += 1
-      if (counts.errors.length < 10) {
-        counts.errors.push(`${t.domain}/${league.id}: ${e instanceof Error ? e.message : String(e)}`)
-      }
-    }
-    }
-  }
+  // The per-league draft/waiver warm that stood here is retired — see the header. Nothing read it.
 
   /*
    * ── THE RANKINGS SWEEP, LAST AND ON THE LEFTOVER BUDGET ────────────────────────────────────

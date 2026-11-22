@@ -41,3 +41,19 @@
 .af-recent-clips-compact .af-x-embed>button:hover{border-color:var(--accent,#22d3ee)}
 @media(max-width:720px){.af-recent-clips-compact .af-x-grid{grid-template-columns:1fr}.af-recent-clips-compact{padding:14px}}
 
+/*
+ * Tap targets on a phone (2026-11-07). The league chips were 28px and "Watch on X" 15px.
+ *  - Chips go to 36px and an invisible box adds 4px above and below, so the hit area is 44px; the row
+ *    gap goes to 8px so two wrapped rows never share a tap.
+ *  - "Watch on X" sits 11px under "Load X post", so an invisible box would overlap that button; the link
+ *    itself becomes 44px tall instead.
+ *  - "X privacy" stays as it is: a link inside a sentence, which the 44px rule (WCAG 2.5.8) exempts.
+ * Top-level, appended.
+ */
+@media (max-width: 720px) {
+  .af-recent-clips-compact .af-x-badges { row-gap: 8px; }
+  .af-recent-clips-compact .af-x-badges a { position: relative; min-height: 36px; }
+  .af-recent-clips-compact .af-x-badges a::after { content: ''; position: absolute; inset: -4px 0; }
+  .af-recent-clips-compact .af-x-embed > a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+

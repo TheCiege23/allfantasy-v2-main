@@ -11,7 +11,8 @@ const tableSrc = readFileSync(resolve(__dirname, '..', '..', 'components/app/dra
 describe('AF ADP column', () => {
   it('sits beside market ADP as the second of exactly two ADP columns', () => {
     const keys = buildSleeperPoolTableLayout('NBA').columns.map((c) => c.key)
-    expect(keys.slice(2, 4)).toEqual(['adp', 'afAdp'])
+    // Room v2: the actions column leads, then RK and PLAYER.
+    expect(keys.slice(0, 5)).toEqual(['actions', 'rk', 'player', 'adp', 'afAdp'])
     expect(keys.filter((k) => /adp/i.test(k))).toEqual(['adp', 'afAdp'])
   })
 

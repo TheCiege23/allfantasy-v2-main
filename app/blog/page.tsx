@@ -1,27 +1,44 @@
 import type { Metadata } from "next"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { BLOG_CATEGORY_LABELS, BLOG_CATEGORIES } from "@/lib/automated-blog/types"
+import { liveArticleWhere } from "@/lib/automated-blog/liveArticles"
 
-const BASE = "https://allfantasy.ai"
+const BASE = getPublicSiteOrigin()
 
 export const dynamic = "force-dynamic"
 
-export const metadata: Metadata = {
-  title: "Fantasy Sports Blog – Strategy, Waiver Wire & Rankings | AllFantasy",
-  description:
-    "Fantasy sports blog: weekly strategy, waiver wire, trade value, draft prep, matchup previews, and ranking updates for NFL, NBA, MLB, NHL, NCAA, and Soccer.",
-  alternates: { canonical: `${BASE}/blog` },
-  openGraph: {
-    title: "Fantasy Sports Blog | AllFantasy",
-    description: "Strategy, waiver wire, draft prep, and rankings for fantasy football, basketball, baseball, hockey, and more.",
-    url: `${BASE}/blog`,
-    type: "website",
-  },
-  robots: { index: true, follow: true },
+/*
+ * ⚠ NOINDEX WHILE EMPTY. Production had zero articles (measured 2026-11-15), so this page was an
+ * empty shell that the sitemap listed at priority 0.8 — a thin page Google was invited to index.
+ * It now asks to be indexed only once at least one article is live, and app/sitemap.xml lists it
+ * under the same condition. `follow` stays true so its links are still crawled. If the count
+ * itself fails, the page is left indexable: a DB blip must not quietly de-index the blog.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  let hasLiveArticles = true
+  try {
+    hasLiveArticles = (await prisma.blogArticle.count({ where: liveArticleWhere() })) > 0
+  } catch {
+    hasLiveArticles = true
+  }
+  return {
+    title: "Fantasy Sports Blog – Strategy, Waiver Wire & Rankings | AllFantasy",
+    description:
+      "Fantasy sports blog: weekly strategy, waiver wire, trade value, draft prep, matchup previews, and ranking updates for NFL, NBA, MLB, NHL, NCAA, and Soccer.",
+    alternates: { canonical: `${BASE}/blog` },
+    openGraph: {
+      title: "Fantasy Sports Blog | AllFantasy",
+      description: "Strategy, waiver wire, draft prep, and rankings for fantasy football, basketball, baseball, hockey, and more.",
+      url: `${BASE}/blog`,
+      type: "website",
+    },
+    robots: { index: hasLiveArticles, follow: true },
+  }
 }
 
 type BlogIndexProps = {
@@ -36,7 +53,7 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexProps) {
     sp?.category && BLOG_CATEGORIES.includes(sp.category as any) ? sp.category : ""
   const articles = await prisma.blogArticle.findMany({
     where: {
-      publishStatus: "published",
+      ...liveArticleWhere(),
       ...(sport ? { sport } : {}),
       ...(category ? { category } : {}),
     },

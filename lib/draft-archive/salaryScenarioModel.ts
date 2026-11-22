@@ -1,7 +1,7 @@
 import {salaryHistory} from './salaryHistoryModel';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const integer=(v:unknown,min=0,max=1000000):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=min&&v<=max;
-export type CapYear={year:number;cap:number;committed:number;deadMoney:number;space:number};
+type CapYear={year:number;cap:number;committed:number;deadMoney:number;space:number};
 export type SalaryScenarioData={state:'ready'|'unavailable';capYear:number|null;minimumSalary:number;minYears:number;maxYears:number;holdback:number;teams:Array<{rosterId:string;years:CapYear[]}>};
 /** Ten-year fixed-contract baseline; future rollover, acquisitions and extensions are not assumed. */
 export function salaryScenarioData(specialty:unknown,start:string|null,season:number|null):SalaryScenarioData{

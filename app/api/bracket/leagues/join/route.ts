@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireVerifiedUser } from "@/lib/auth-guard"
 import { validateInviteCode, normalizeJoinCode } from "@/lib/league-invite"
+import { cfpInviteChallengeId, isPrivateCfpPool, verifyCfpInvite } from "@/lib/playoffs/cfpInvite"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,17 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const rawCode = body?.joinCode ?? body?.code
   if (!rawCode) return NextResponse.json({ error: "Missing joinCode" }, { status: 400 })
+
+  if (typeof rawCode === "string" && rawCode.trim().toUpperCase().startsWith("CFP1")) {
+    const id = cfpInviteChallengeId(rawCode)
+    const challenge = id && verifyCfpInvite(id, rawCode)
+      ? await prisma.playoffBracketChallenge.findUnique({ where: { id }, select: { id: true, sport: true, config: true } })
+      : null
+    if (!challenge || !isPrivateCfpPool(challenge.sport, challenge.config)) {
+      return NextResponse.json({ error: "Invalid code" }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true, leagueId: challenge.id, cfpInvite: true })
+  }
 
   const joinCode = normalizeJoinCode(rawCode)
   const validation = await validateInviteCode(joinCode, { userId: auth.userId })

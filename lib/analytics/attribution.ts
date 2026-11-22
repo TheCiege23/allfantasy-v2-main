@@ -18,7 +18,7 @@
  */
 
 /** Canonical platforms. `direct` = no campaign/referrer signal; `other` = a real but unmapped source. */
-export const ATTRIBUTION_PLATFORMS = [
+const ATTRIBUTION_PLATFORMS = [
   "tiktok",
   "instagram",
   "facebook",
@@ -31,7 +31,7 @@ export const ATTRIBUTION_PLATFORMS = [
   "other",
 ] as const
 
-export type AttributionPlatform = (typeof ATTRIBUTION_PLATFORMS)[number]
+type AttributionPlatform = (typeof ATTRIBUTION_PLATFORMS)[number]
 
 export type AttributionTouch = {
   platform: AttributionPlatform

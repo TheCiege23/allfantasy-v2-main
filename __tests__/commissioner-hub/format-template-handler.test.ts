@@ -16,6 +16,8 @@ const db = vi.hoisted(() => {
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: db.prisma }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'owner'))
 
 import { NextRequest } from 'next/server'
 import { PATCH } from '@/app/api/leagues/[leagueId]/commissioner-template/handler'

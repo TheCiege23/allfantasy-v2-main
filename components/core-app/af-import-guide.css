@@ -1,0 +1,487 @@
+/*
+ * AF Import — the per-platform "how to connect" guide (ImportGuide.tsx).
+ * Scoped under `.af-core`; every colour is an af-core token so the three themes follow.
+ * 11px is this app's type floor (__tests__/core-app/type-floor.test.ts).
+ */
+
+.af-core .af-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(420px 220px at 100% 0%, var(--accent-soft), transparent 70%),
+    var(--surface2);
+  overflow: hidden;
+}
+
+/* ── Head (a button on a phone, a plain header on a wide screen) ─────────── */
+
+.af-core .af-guide-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.af-core .af-guide-toggle {
+  cursor: pointer;
+  min-height: 56px;
+}
+.af-core .af-guide-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.af-core .af-guide-head .af-platform-mark {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+.af-core .af-guide-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.af-core .af-guide-head .af-label {
+  color: var(--accent);
+}
+.af-core .af-guide-title {
+  font: 900 17px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-core .af-guide-chevron {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.18s ease;
+}
+.af-core .af-guide[data-open='true'] .af-guide-chevron {
+  transform: rotate(180deg);
+}
+
+.af-core .af-guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+/* ── Chips under the head ─────────────────────────────────────────────── */
+
+.af-core .af-guide-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-core .af-guide-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line, var(--line));
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-core .af-guide-chip--good {
+  border-color: var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.af-core .af-guide-heads {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.af-core .af-guide-heads strong {
+  color: var(--warn);
+}
+
+/* ── Segmented controls: browser picker, and Fantrax's two ways in ───────── */
+
+.af-core .af-guide-seg {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-core .af-guide-seg-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: 800 12px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-core .af-guide-seg-btn[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.af-core .af-guide-seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.af-core .af-guide-seg--tracks .af-guide-seg-btn {
+  min-height: 40px;
+  font-size: 13px;
+}
+.af-core .af-guide-seg-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ── The steps: a numbered rail ───────────────────────────────────────── */
+
+.af-core .af-guide-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.af-core .af-guide-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: 16px;
+}
+.af-core .af-guide-step:last-child {
+  padding-bottom: 0;
+}
+/* The rail between numbers. Drawn from the circle's centre down to the next one. */
+.af-core .af-guide-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 30px;
+  bottom: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.af-core .af-guide-step[data-done='true']:not(:last-child)::before {
+  background: var(--good);
+}
+.af-core .af-guide-num {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 900;
+}
+.af-core .af-guide-step[data-current='true'] .af-guide-num {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.af-core .af-guide-step[data-done='true'] .af-guide-num {
+  border-color: var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-guide-step-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.af-core .af-guide-step-title {
+  margin: 0;
+  font: 800 14px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif;
+  color: var(--text);
+}
+.af-core .af-guide-step[data-done='true'] .af-guide-step-title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line2);
+}
+.af-core .af-guide-step-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-core .af-guide-step-body strong,
+.af-core .af-guide-path strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-guide-step-body a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.af-core .af-guide-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The browser-specific click path. */
+.af-core .af-guide-browsers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-core .af-guide-path {
+  margin: 0;
+  padding: 10px 12px 10px 30px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-guide-path li::marker {
+  color: var(--accent);
+  font-weight: 800;
+}
+.af-core .af-guide-or {
+  color: var(--muted);
+}
+.af-core .af-guide-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line2);
+  border-bottom-width: 2px;
+  background: var(--chip);
+  color: var(--text);
+  font: 700 11.5px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+}
+
+/* A drawn address bar with the ID lit up — where the ID lives, shown rather than described. */
+.af-core .af-guide-url {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-core .af-guide-url-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  min-width: 0;
+}
+.af-core .af-guide-url-lock {
+  flex: 0 0 auto;
+  color: var(--good);
+}
+.af-core .af-guide-url-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 600 12px/1.45 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+}
+.af-core .af-guide-url-dim {
+  color: var(--muted);
+}
+.af-core .af-guide-url-id {
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-weight: 800;
+}
+.af-core .af-guide-url-cap {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  padding-left: 4px;
+}
+.af-core .af-guide-url-cap strong {
+  color: var(--text2);
+}
+
+/* ── Common snags ─────────────────────────────────────────────────────── */
+
+.af-core .af-guide-snags {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.af-core .af-guide-snags-sum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-guide-snags-sum::-webkit-details-marker {
+  display: none;
+}
+.af-core .af-guide-snags-sum::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.af-core .af-guide-snags[open] .af-guide-snags-sum::after {
+  content: '–';
+}
+.af-core .af-guide-snags-sum:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.af-core .af-guide-snags-count {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+}
+.af-core .af-guide-snag-list {
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-core .af-guide-snag dt {
+  font: 800 13px/1.35 var(--font-archivo, Archivo), system-ui, sans-serif;
+  color: var(--text);
+}
+.af-core .af-guide-snag dd {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-core .af-guide-snag dd strong {
+  color: var(--text);
+}
+
+.af-core .af-guide-preview-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Paused platform (Yahoo) ──────────────────────────────────────────── */
+
+.af-core .af-guide--paused {
+  border-style: dashed;
+  border-color: var(--line2);
+}
+.af-core .af-guide--paused .af-guide-head .af-label {
+  color: var(--warn);
+}
+.af-core .af-guide-paused-body {
+  margin: 0;
+  padding: 0 18px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+/*
+ * ⚠ COLLAPSE IS A PHONE AND TABLET BEHAVIOUR ONLY. On a wide screen the guide is its own column
+ * beside the form and there is nothing to save by hiding it, so the toggle stops toggling.
+ */
+@media (max-width: 1023px) {
+  .af-core .af-guide[data-open='false'] .af-guide-body {
+    display: none;
+  }
+}
+@media (min-width: 1024px) {
+  .af-core .af-guide-toggle {
+    cursor: default;
+    pointer-events: none;
+  }
+  .af-core .af-guide-chevron {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-guide-chevron {
+    transition: none;
+  }
+}
+
+/* ── Screenshot slots (GuideScreenshot) ─────────────────────────────── */
+
+.af-core .af-guide-shot {
+  margin: 10px 0 0;
+}
+.af-core .af-guide-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.af-core .af-guide-shot--placeholder {
+  padding: 14px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.af-core .af-guide-shot--placeholder code {
+  color: var(--text2);
+}

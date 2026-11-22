@@ -20,6 +20,12 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }))
+// ⚠ Since Nov 2026 Washington is paid-block and NO state is full-block. This suite tests the
+// dormant full-block machinery with Washington as a stand-in — see helpers/standInFullBlockState.
+// The real policy is pinned in __tests__/washington-paid-block.test.ts.
+vi.mock("@/lib/geo/restrictedStates", async (orig) =>
+  (await import("./helpers/standInFullBlockState")).withStandInFullBlock(await orig()),
+)
 vi.mock("@/lib/geo/geoIpFetch", () => ({ fetchIpApi: vi.fn(), fetchProxycheck: vi.fn() }))
 // No Private Relay feed stored: every relay user is refused, the rule these tests pin.
 // __tests__/private-relay-placement.test.ts covers the feed being present.

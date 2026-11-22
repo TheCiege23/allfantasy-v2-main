@@ -12,6 +12,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: mock.db }))
 vi.mock('@/lib/survivor/survivorAccessControl', () => ({ resolveSurvivorAccessContext: mock.access }))
 vi.mock('@/lib/survivor/survivorSetupTransaction', () => ({ withSurvivorSetupTransaction: mock.lock }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import { GET, PUT } from '@/app/api/leagues/[leagueId]/survivor-tribe-setup/route'
 const ctx = { params: Promise.resolve({ leagueId: 'league' }) }
 const request = (slots = defaultTribeSlots(16, 4)) => new NextRequest('http://localhost/api/leagues/league/survivor-tribe-setup', { method: 'PUT', body: JSON.stringify({ tribeCount: 4, slots }) })

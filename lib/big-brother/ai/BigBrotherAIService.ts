@@ -10,7 +10,7 @@ import type { BigBrotherAIPromptType } from './BigBrotherAIPrompts'
 import { buildBigBrotherAIPrompt } from './BigBrotherAIPrompts'
 import { getRosterDisplayNamesForLeague } from './getRosterDisplayNames'
 
-export interface BigBrotherAIResult {
+interface BigBrotherAIResult {
   narrative: string
   model?: string
 }

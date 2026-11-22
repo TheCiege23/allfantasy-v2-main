@@ -86,3 +86,24 @@ it('explains missing ranking evidence in Spanish',()=>{
  language.language='es';render(<DraftPhase4 detail={detail}/>);
  expect(screen.getByText('No hay evidencia verificada de puestos por equipo para este draft.')).toBeInTheDocument();
 });
+describe('the lower half reads as a product, not a debug view',()=>{
+  it('keeps the model version inside the calibration drawer, not under the section title',()=>{
+    const {container}=render(<DraftPhase4 detail={detail}/>);
+    const section=container.querySelector('.af-draft-phase4')!;
+    const versionLine=[...section.querySelectorAll('p')].find(p=>p.textContent?.startsWith('Model version'));
+    expect(versionLine?.closest('details')).not.toBeNull();
+  });
+  it('groups the briefing actions: one primary Ask Chimmy button, then the review links together',()=>{
+    const {container}=render(<DraftPhase4 detail={detail}/>);
+    const actions=container.querySelector('.af-briefing-actions')!;
+    expect(actions.querySelector('.af-briefing-ask button')?.textContent).toBe('Ask Chimmy about this draft');
+    expect([...actions.querySelectorAll('.af-briefing-links a')].map(a=>a.textContent)).toEqual(['Check current lineup','Review waivers','Review trades','Prepare the next draft']);
+  });
+  it('lets the four-column rank comparison fit a phone instead of a 640px table',()=>{
+    const {container}=render(<DraftPhase4 detail={detail}/>);
+    expect(container.querySelector('[aria-label="Draft rank comparison"]')?.classList.contains('af-rank-compare')).toBe(true);
+    const css=readFileSync(resolve(process.cwd(),'components/core-app/af-draft-analysis.css'),'utf8');
+    expect(css).toMatch(/\.af-rank-compare table\{min-width:0\}/);
+    expect(css).not.toMatch(/\.af-draft-phase4 \.af-info-tip\{width:44px/);
+  });
+});

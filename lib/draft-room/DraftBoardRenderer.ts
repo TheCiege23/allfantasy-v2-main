@@ -11,7 +11,7 @@ export type PickCell = {
   isSnakeReversed: boolean
 }
 
-export type RoundNavigationState = {
+type RoundNavigationState = {
   round: number
   canGoPrev: boolean
   canGoNext: boolean

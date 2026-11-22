@@ -9,6 +9,7 @@
  * lib/league/scoringTypeSwitch.ts.
  */
 
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -21,6 +22,7 @@ import {
 } from '@/lib/category-scoring/leagueScoringType'
 import { decideSettingsEdit, recordMidSeasonSettingsChange } from '@/lib/league/settingsLifecycleGate'
 import { switchLeagueScoringType } from '@/lib/league/scoringTypeSwitch'
+import { settingsLockedResponse } from '@/lib/league/settingsLockGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ lea
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ ...describe(league.settings, String(league.sport)), isCommissioner: league.userId === session.user.id })
+  return NextResponse.json({ ...describe(league.settings, String(league.sport)), isCommissioner: await canCommissionerAct(leagueId, session.user.id, 'scoring') })
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
@@ -57,7 +59,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   const { leagueId } = await params
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, sport: true, settings: true } })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (league.userId !== session.user.id) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'scoring')
+  if (refused) return refused
+  // Switching points ↔ categories ↔ roto is a scoring change: a season's scoring lock covers it, as it covers
+  // every scoring editor (lib/league/settingsLock.ts). It used to be the one scoring write the lock missed.
+  const locked = await settingsLockedResponse(leagueId, 'scoring')
+  if (locked) return locked
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const input = { mode: body.mode, presetId: body.presetId, categoryIds: body.categoryIds, recordMode: body.recordMode }
@@ -72,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ leag
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
 
   if (result.changed) {
-    await recordMidSeasonSettingsChange(lifecycle, {
+    await recordMidSeasonSettingsChange(lifecycle, { alwaysLog: true,
       leagueId,
       userId: session.user.id,
       section: 'scoring',

@@ -62,14 +62,29 @@ export type BoardPlayer = {
   sampleGames: number | null
   /** Every other id this player is known by (Rolling Insights, Sleeper), for resolving a surface's id. */
   aliases: readonly string[]
+  rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
+  tradeMarket?: { percent: number; trades: number }
+  currentSeasonParticipant?: boolean
+  /** NBA date (Eastern) when a verified roster review found the player outside the NBA. */
+  verifiedNbaInactiveSince?: string
+  verifiedNbaTeam?: string
   sourceSeason?: number | null
+  /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
+  seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
   /**
    * A sport-specific sample bar, replacing the games bar when present. Baseball's: ten games is a weekend
    * hot streak (31 at-bats put a September call-up among the top five hitters, measured 2026-10-09), so an
    * MLB projection needs at-bats or innings behind it instead — `has` and `needs` are said in those terms.
    */
-  sampleBar?: { ok: boolean; has: string; needs: string }
+  sampleBar?: {
+    ok: boolean
+    has: string
+    needs: string
+    /** What `has` counts, as a number — so a surface can show "412 at-bats" in its own language. */
+    unit?: 'at_bats' | 'innings'
+    count?: number
+  }
 }
 
 /**
@@ -77,12 +92,12 @@ export type BoardPlayer = {
  * replacement levels would be computed from a fragment. Measured 2026-10-09: NBA 516 of 585 (88%) clear
  * it; NHL 219 of 1,049 (21%) — 707 of its projections already rest on 2–4 games of the new season.
  */
-export const MIN_BOARD_COVERAGE = 0.6
+const MIN_BOARD_COVERAGE = 0.6
 
 /** A starting lineup slot: how many per team and which positions may fill it. */
 export type LineupSlot = { slot: string; eligible: readonly string[]; count: number }
 
-export type SportSeasonWindow = {
+type SportSeasonWindow = {
   season: number
   seasonLabel: string
   gamesRemaining: number
@@ -98,12 +113,16 @@ export type SportSeasonWindow = {
 export type SportPointsContext = {
   sport: PointsGradedSport
   board: readonly BoardPlayer[]
+  rosterIndex?: ReadonlyMap<string, BoardPlayer>
+  /** Fantrax Soccer uses a verified Fantrax ID for every player in a league grade. */
+  requireProviderId?: boolean
   /** Best free agent per position (upper-cased), already computed against this league. */
   replacementByPosition: ReadonlyMap<string, { name: string; perGame: number }>
   window: SportSeasonWindow
   /** How the scoring was chosen: this league's rules, or the sport's defaults with no league. */
-  scoringBasis: 'league' | 'default'
+  scoringBasis: 'league' | 'default' | 'default_in_league' | 'partial_fantrax_soccer'
   teams: number
+  teamCountAssumed?: boolean
   /**
    * What `perGame` measures: fantasy points, or — in a category league — the sum of the player's per-game
    * category scores (`./sportCategoryValue.ts`). Absent means points.
@@ -115,10 +134,14 @@ export type SportPointsContext = {
    * Present in an NBA, NHL or MLB dynasty league: what the multi-season grade reads
    * (`./sportDynastyValue.ts`). Board id → age today, and the year of the next rookie draft.
    */
-  dynasty?: { ages: ReadonlyMap<string, number>; nextDraftYear: number }
+  dynasty?: import('./sportDynastyValue').SportDynastyContext
+  verifiedSoccerOwnGoals?: boolean
+  publishedSoccerPoints?: boolean
+  /** Only this provider’s alias may resolve an explicit roster ID. */
+  rosterProvider?: string
 }
 
-export const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
+const SPORT_PICKS_REASON = (sport: PointsGradedSport) =>
   `Draft picks have no ${SPORT_LABEL[sport]} price yet, so a deal carrying one is not graded.`
 export const SPORT_FAAB_REASON =
   'FAAB has no price on the over-replacement scale this sport is graded on, so a deal carrying it is not graded.'
@@ -126,9 +149,10 @@ export const SPORT_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 export function sportPointsBasis(
-  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'valueKind' | 'categoryList'>,
+  ctx: Pick<SportPointsContext, 'sport' | 'window' | 'scoringBasis' | 'teams' | 'teamCountAssumed' | 'valueKind' | 'categoryList' | 'verifiedSoccerOwnGoals' | 'publishedSoccerPoints'>,
 ): string {
   const label = SPORT_LABEL[ctx.sport]
+  const teamCountNote = ctx.teamCountAssumed ? ` This league has no verified team count. The grade uses ${ctx.teams} teams.` : ''
   const baseline = ctx.window.baselineSeasonLabel
     ? ` Projections are built from the ${ctx.window.baselineSeasonLabel} season until this one has enough games.`
     : ''
@@ -142,7 +166,11 @@ export function sportPointsBasis(
         : `the rest of the ${ctx.window.seasonLabel} ${label} regular season (about ${ctx.window.gamesRemaining} ${games})`
   const mlb = ctx.sport === 'MLB'
   // MLB rates are per appearance; the loader puts every pitcher on the team-game scale first.
-  const pitchers = mlb ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.' : ''
+  const pitchers = mlb
+    ? ' Pitchers count for the share of team games they pitched in that season — a starter about one in five.'
+    : ctx.sport === 'NHL'
+      ? ' Goalies count for the share of team games they played in that season — a starter about three in four, a backup about one in three.'
+      : ''
   if (ctx.valueKind === 'categories') {
     const where =
       ctx.scoringBasis === 'league'
@@ -162,21 +190,25 @@ export function sportPointsBasis(
         ].filter(Boolean)
     const how = notes.length ? ` ${notes.join(mlb ? '; ' : ' and ').replace(/^./, (c) => c.toUpperCase())}.` : ''
     const per = mlb ? 'per team game' : 'per game'
-    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, ${per}, then summed across ${ctx.categoryList ?? 'the categories'}.${how}${pitchers} Punting a category is not modelled.${baseline}`
+    return `Category value over the best free agent at each position for ${season}, on ${where}: each category is scored as standard deviations above or below the rosterable player pool, ${per}, then summed across ${ctx.categoryList ?? 'the categories'}.${how}${pitchers} Punting a category is not modelled.${baseline}${teamCountNote}`
   }
   const scoring =
     ctx.scoringBasis === 'league'
       ? 'scored under this league’s rules'
-      : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
+      : ctx.scoringBasis === 'default_in_league'
+        ? `scored on AllFantasy’s default ${label} points`
+        : ctx.scoringBasis === 'partial_fantrax_soccer'
+          ? 'scored on supported Fantrax Soccer rules. Some categories are omitted because their stats or rules cannot be reproduced'
+          : `scored on AllFantasy’s default ${label} points for a ${ctx.teams}-team league with standard lineups`
   const bonus = ctx.sport === 'NBA' || ctx.sport === 'NCAAB' ? ' Double-double and triple-double bonuses are not projected.' : ''
   // A quality start is a one-game test that a season line cannot pass or fail.
   const qs = mlb ? ' Quality starts are not projected.' : ''
-  // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`); the feed names no
-  // own-goal scorer, so own goals cannot be projected for anyone.
-  const clubs = soccer
-    ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in. Own goals are not projected.`
+  // Soccer's board blends two seasons and scales to club matches (`./soccerBoard.ts`).
+  const clubs = ctx.publishedSoccerPoints
+    ? ' Projections use the league’s published Fantrax fantasy-point totals per club match, including the scoring categories Fantrax applied.'
+    : soccer ? ` Players count for the share of their club’s matches they play. Each line is this season’s matches plus last season counted as up to ${SOCCER_PRIOR_APPEARANCES} more, so last season fades as this one fills in.${ctx.verifiedSoccerOwnGoals ? ' Own goals use verified match timelines.' : ' Own goals are not projected.'}`
     : ''
-  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}`
+  return `Points over the best free agent at each position for ${season}, ${scoring}.${bonus}${pitchers}${qs}${clubs}${baseline}${teamCountNote}`
 }
 
 /**
@@ -191,12 +223,14 @@ export function boardReadinessReason(args: {
   board: readonly BoardPlayer[]
   season: number
   seasonLabel: string
+  verifiedWire?: boolean
+  rosterDepth?: number
 }): string | null {
   const label = SPORT_LABEL[args.sport]
   if (args.board.length === 0) return `No ${label} projection could be scored, so this deal cannot be graded.`
   // College first: its cause is the turnover, and a thin board is only a symptom of it.
   if (args.sport === 'NCAAB') {
-    const prior = args.board.filter((p) => p.sourceSeason != null && p.sourceSeason < args.season).length
+    const prior = args.board.filter((p) => !p.currentSeasonParticipant && p.sourceSeason != null && p.sourceSeason < args.season).length
     if (prior / args.board.length > 0.5) {
       return `College rosters turn over every year, and these projections still come from last season, which includes players who have since left. College basketball grades start once the ${args.seasonLabel} season has games behind it.`
     }
@@ -207,7 +241,12 @@ export function boardReadinessReason(args: {
    * complete board.
    */
   const cleared = args.board.filter(meetsGamesBar).length
-  if (cleared / args.board.length < MIN_BOARD_COVERAGE) {
+  // A national college pool includes thousands of new players every November. A
+  // verified returning pool deep enough to fill this league can set replacement
+  // while newcomers accumulate the normal player-level sample.
+  const collegeDepth = args.sport === 'NCAAB' && args.rosterDepth != null && args.rosterDepth > 0 &&
+    args.board.every((p) => p.currentSeasonParticipant) && (args.verifiedWire || cleared >= args.rosterDepth)
+  if (!collegeDepth && cleared / args.board.length < MIN_BOARD_COVERAGE) {
     return `${label[0]!.toUpperCase()}${label.slice(1)} projections are switching to the ${args.seasonLabel} season, and most players have fewer than ${MIN_SAMPLE_GAMES} games behind them, so grades pause until the board fills in.`
   }
   return null
@@ -247,18 +286,32 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
   return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — ${covered} — and a points total would answer a different question, so this deal is not graded.`
 }
 
+export function isFantraxNbaCampusLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return sport === 'NBA' && isFantraxCampusProjectionLeague(sport, league)
+}
+
+export function isFantraxCampusProjectionLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return (sport === 'NBA' || sport === 'NCAAB') &&
+    league.platform?.trim().toLowerCase() === 'fantrax' && league.leagueType?.trim().toLowerCase() === 'c2c'
+}
+
 /**
  * Why a league that keeps players past this season is not graded here. This grade counts THIS season
  * only; in a dynasty or keeper league that ignores every season after it — young players most of all —
- * and no market prices those seasons for this sport yet. NBA, NHL and MLB dynasty leagues are the
- * exception: they are graded over five seasons by `./sportDynastyValue.ts` (2026-10-27).
+ * and no model prices those seasons for this sport yet. The supported pro dynasty leagues use
+ * the five-season model in `./sportDynastyValue.ts`.
  */
 export function multiSeasonFormatReason(leagueType: string | null | undefined, sport: PointsGradedSport): string | null {
   const t = String(leagueType ?? '').trim().toLowerCase()
   const kept = t.includes('dynasty') || t === 'keeper' || t === 'devy' || t === 'c2c' || t === 'salary_cap'
   if (!kept) return null
-  // NBA, NHL and MLB dynasty leagues have their own multi-season grade (`./sportDynastyValue.ts`).
-  if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB')) return null
+  if (t.includes('dynasty') && (sport === 'NBA' || sport === 'NHL' || sport === 'MLB' || sport === 'SOCCER' || sport === 'NCAAB')) return null
   return `This is a ${t.replace('_', ' ')} league, and ${SPORT_LABEL[sport]} grades so far count this season only — that would ignore every season after it, young players most of all. This deal is not graded.`
 }
 
@@ -277,12 +330,26 @@ function meetsGamesBar(p: Pick<BoardPlayer, 'sampleGames'>): boolean {
  * alias, with a sport prefix (`NBA:114`) stripped; a name must be carried by exactly one board player.
  */
 export function resolveBoardPlayer(
-  asset: { playerId?: string | null; name?: string | null },
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
   board: readonly BoardPlayer[],
   index?: ReadonlyMap<string, BoardPlayer>,
-): { ok: true; player: BoardPlayer } | { ok: false; reason: string } {
+  rosterIndex?: ReadonlyMap<string, BoardPlayer>,
+  requireProviderId = false,
+  rosterProvider?: string,
+): { ok: true; player: BoardPlayer } | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const label = String(asset.name ?? '').trim() || String(asset.playerId ?? '').trim() || 'A player'
   const raw = String(asset.playerId ?? '').trim()
+  const rosterId = asset.rosterPlayerId?.trim()
+  if (requireProviderId) {
+    const hit = rosterIndex?.get(rosterId || raw)
+    return hit ? { ok: true, player: hit }
+      : { ok: false, reason: `${label} has no projection linked to a verified Fantrax player ID.`, valuationGap: 'unresolved_player' }
+  }
+  if (rosterId && rosterIndex) {
+    const hit = rosterIndex.get(rosterId) ?? (!rosterProvider && raw ? rosterIndex.get(raw) : undefined)
+    return hit ? { ok: true, player: hit }
+      : { ok: false, reason: `${label} has no projection linked to this league’s player ID.`, valuationGap: 'unresolved_player' }
+  }
   if (raw) {
     const byId = index ?? indexBoard(board)
     const bare = raw.includes(':') ? raw.slice(raw.indexOf(':') + 1) : raw
@@ -293,16 +360,17 @@ export function resolveBoardPlayer(
   if (!name) return { ok: false, reason: `${label} has no projection on file.` }
   const matches = board.filter((p) => playerNamesAgree(p.name, name))
   if (matches.length === 1) return { ok: true, player: matches[0]! }
-  if (matches.length === 0) return { ok: false, reason: `${name} has no projection on file for this season.` }
-  return { ok: false, reason: `${name} matches ${matches.length} players with projections, so it is not clear who is being traded.` }
+  if (matches.length === 0) return { ok: false, reason: `${name} has no projection on file for this season.`, valuationGap: 'missing_projections' }
+  return { ok: false, reason: `${name} matches ${matches.length} players with projections, so it is not clear who is being traded.`, valuationGap: 'unresolved_player' }
 }
 
 /** Every id a board player answers to, mapped to him. An id two players share answers to neither. */
-export function indexBoard(board: readonly BoardPlayer[]): Map<string, BoardPlayer> {
+export function indexBoard(board: readonly BoardPlayer[], leagueRoster: boolean | 'provider' = false): Map<string, BoardPlayer> {
   const out = new Map<string, BoardPlayer>()
   const clashed = new Set<string>()
   for (const p of board) {
-    for (const id of [p.id, ...p.aliases]) {
+    const ids = leagueRoster === 'provider' ? [p.rosterAlias] : leagueRoster ? [p.id, p.rosterAlias] : [p.id, ...p.aliases]
+    for (const id of ids) {
       if (!id || clashed.has(id)) continue
       const prior = out.get(id)
       if (prior && prior !== p) {
@@ -373,32 +441,71 @@ export function replacementFromLineups(
 
 type Priced = { name: string; value: number }
 
+/** One player's price on the board, or why not — what a value lookup and the trade grade both read. */
+type BoardPlayerPrice =
+  | {
+      ok: true
+      player: BoardPlayer
+      /** The best free agent at his position, per game, under the league's rules. */
+      replacementPerGame: number
+      replacementName: string
+      /** Rest-of-season value over replacement: max(0, perGame − replacement) × games left. */
+      value: number
+    }
+  | { ok: false; reason: string; valuationGap?: 'unresolved_player' | 'missing_projections' }
+
+/**
+ * ONE player, priced the way the trade grade prices him (2026-11-16): the same resolution, sample bar,
+ * replacement level and rest-of-season multiplier. `priceSide` below calls this, so a player's value and
+ * a deal's grade cannot disagree about him. The refusal reasons are the grade's own, minus its
+ * "This deal is not graded." tail.
+ */
+export function priceBoardPlayer(
+  asset: { playerId?: string | null; rosterPlayerId?: string | null; name?: string | null },
+  ctx: SportPointsContext,
+  index: ReadonlyMap<string, BoardPlayer> = indexBoard(ctx.board),
+): BoardPlayerPrice {
+  const found = resolveBoardPlayer(asset, ctx.board, index, ctx.rosterIndex, ctx.requireProviderId, ctx.rosterProvider)
+  if (!found.ok) return { ok: false, reason: found.reason, valuationGap: found.valuationGap }
+  const { player } = found
+  if (!meetsSampleBar(player)) {
+    const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
+    const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
+    return { ok: false, reason: `${player.name}’s projection rests on ${has}, too few to price — values start at ${needs}.` }
+  }
+  const pos = player.position.trim().toUpperCase()
+  const replacement = ctx.replacementByPosition.get(pos)
+  if (!replacement) {
+    return {
+      ok: false,
+      reason: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level.`,
+    }
+  }
+  // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
+  return {
+    ok: true,
+    player,
+    replacementPerGame: replacement.perGame,
+    replacementName: replacement.name,
+    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining * (1 + (player.tradeMarket?.percent ?? 0) / 100),
+  }
+}
+
 function priceSide(
   assets: readonly TradeAssetInput[],
   ctx: SportPointsContext,
   index: ReadonlyMap<string, BoardPlayer>,
-): { priced: Priced[] } | { withheld: string } {
+): { priced: Priced[] } | { withheld: string; valuationGap?: 'unresolved_player' | 'missing_projections' } {
   const priced: Priced[] = []
   for (const asset of assets) {
     if (asset.kind === 'pick') return { withheld: SPORT_PICKS_REASON(ctx.sport) }
     if (asset.kind === 'faab') return { withheld: SPORT_FAAB_REASON }
-    const found = resolveBoardPlayer({ playerId: asset.playerId ?? null, name: asset.name ?? null }, ctx.board, index)
-    if (!found.ok) return { withheld: `${found.reason} This deal is not graded.` }
-    const { player } = found
-    if (!meetsSampleBar(player)) {
-      const has = player.sampleBar?.has ?? `${player.sampleGames} game${player.sampleGames === 1 ? '' : 's'}`
-      const needs = player.sampleBar?.needs ?? `${MIN_SAMPLE_GAMES} games`
-      return { withheld: `${player.name}’s projection rests on ${has}, too few to price — grades start at ${needs}. This deal is not graded.` }
+    const price = priceBoardPlayer(asset, ctx, index)
+    if (!price.ok) {
+      const reason = price.reason.replace(/ — values start at /, ' — grades start at ')
+      return { withheld: `${reason} This deal is not graded.`, ...(price.valuationGap ? { valuationGap: price.valuationGap } : {}) }
     }
-    const pos = player.position.trim().toUpperCase()
-    const replacement = ctx.replacementByPosition.get(pos)
-    if (!replacement) {
-      return {
-        withheld: `No free agent at ${pos || `${player.name}’s position`} has a projection to measure ${player.name} against, so there is no replacement level. This deal is not graded.`,
-      }
-    }
-    // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
-    priced.push({ name: player.name, value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining })
+    priced.push({ name: price.player.name, value: price.value })
   }
   return { priced }
 }
@@ -420,15 +527,16 @@ export function gradeSportPointsDeal(args: {
   }
   const index = indexBoard(ctx.board)
   const give = priceSide(args.give, ctx, index)
-  if ('withheld' in give) return { graded: false, reason: give.withheld, basis }
+  if ('withheld' in give) return { graded: false, reason: give.withheld, basis, ...(give.valuationGap ? { valuationGap: give.valuationGap } : {}) }
   const get = priceSide(args.get, ctx, index)
-  if ('withheld' in get) return { graded: false, reason: get.withheld, basis }
+  if ('withheld' in get) return { graded: false, reason: get.withheld, basis, ...(get.valuationGap ? { valuationGap: get.valuationGap } : {}) }
 
   const giveTotal = give.priced.reduce((s, p) => s + p.value, 0)
   const getTotal = get.priced.reduce((s, p) => s + p.value, 0)
   if (giveTotal <= 0 && getTotal <= 0) {
     return {
       graded: false,
+      valuationGap: 'at_replacement',
       reason: 'Nobody in this deal is projected above the best free agent at his position — every player in it could be replaced from the wire.',
       basis,
     }

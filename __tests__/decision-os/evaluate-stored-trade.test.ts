@@ -134,7 +134,7 @@ describe('evaluateStoredTrade', () => {
     const { evaluate, result } = run('B')
     expect(await result).toMatchObject({ ok: true, perspectiveTeamId: 'r2' })
     const input = evaluate.mock.calls[0]![0]
-    expect(input.give.assets).toEqual([{ kind: 'pick', year: 2027, round: 1, label: '2027 1st' }])
+    expect(input.give.assets).toEqual([{ kind: 'pick', year: 2027, round: 1, label: '2027 1st', draftSide: 'canton' }])
     expect(input.canonical).toMatchObject({ proposerRosterId: 'r2', receiverRosterId: 'r1' })
   })
 

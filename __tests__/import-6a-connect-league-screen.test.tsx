@@ -123,7 +123,7 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
     fireEvent.click(pill(/Yahoo/))
     if (!yahooLive) {
       /* Off: the pill stays visible; selecting it explains the pause and offers no field. */
-      expect(await screen.findByText(/Yahoo import is paused while Yahoo reviews our API access/)).toBeTruthy()
+      expect(await screen.findByText(/Yahoo import is coming soon — we're waiting on Yahoo to approve our API access/)).toBeTruthy()
       expect(document.querySelector('.af-im-field-row input')).toBeNull()
       return
     }
@@ -260,10 +260,17 @@ describe('6b — ESPN connect is in the import flow, not a trip to Settings', ()
     render(<ImportV4 />)
     fireEvent.click(pill(/ESPN/))
     await waitFor(() => expect(document.querySelector('.af-im-espn')).toBeTruthy())
-    /* And it leads — before the league-ID field, not after a failed import. */
+    /*
+     * It is on screen from the start — never only after a failed import. Since the guided flow
+     * (owner request, 2026-11-08) it sits AFTER the league box and its Test connection button:
+     * step 1 is the league, step 2 is connecting, and the test result labels step 2.
+     */
     const block = document.querySelector('.af-im-espn')!
     const field = document.querySelector('.af-im-field-row')!
-    expect(block.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const test = document.querySelector('[data-testid="espn-test-connection"]')!
+    expect(field.compareDocumentPosition(test) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(test.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(document.getElementById('espn-swid-input')).toBeTruthy()
   })
 
   it('never sends the user to /settings to connect ESPN', async () => {
@@ -304,6 +311,8 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
       getImportProviderSupportedSports: () => ['NFL'],
       // Matches this mock's availability: only Sleeper is importable.
       availableImportPlatformsPhrase: () => 'Sleeper',
+      // The screen reads its blocked-provider sentence from here, so the double must provide it.
+      importComingSoonMessage: (p: string) => `${p === 'sleeper' ? 'Sleeper' : 'Fleaflicker'} import is coming soon. You can import from Sleeper today.`,
     }))
   })
 
@@ -335,7 +344,7 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
     render(<Scoped defaultProvider="fleaflicker" />)
 
     expect(screen.getByText(/Fleaflicker selected\?/i)).toBeTruthy()
-    expect(screen.getByText(/isn't available yet — coming soon\./i)).toBeTruthy()
+    expect(screen.getByText(/Fleaflicker import is coming soon\. You can import from Sleeper today\./)).toBeTruthy()
     /* No field to type into for a provider that cannot be used. */
     expect(document.querySelector('.af-im-field-row input')).toBeNull()
   })
@@ -347,7 +356,7 @@ describe('6a rule 3 — an unreleased provider is visible, disabled and explaine
  * says what is actually happening.
  */
 describe('the Yahoo pause notice', () => {
-  const YAHOO_PAUSED = /Yahoo import is paused while Yahoo reviews our API access/
+  const YAHOO_PAUSED = /Yahoo import is coming soon — we're waiting on Yahoo to approve our API access/
 
   it('is absent on the Sleeper tab', () => {
     render(<ImportV4 defaultProvider="sleeper" />)

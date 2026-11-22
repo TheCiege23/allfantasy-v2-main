@@ -23,7 +23,7 @@ import { applyPlayoffSeedsToChallenges, type ApplyPlayoffSeedsSweep } from "./pl
  * idempotent.
  */
 
-export type CfpSeedSaveResult =
+type CfpSeedSaveResult =
   | {
       ok: true
       record: CfpSeedsRecord

@@ -140,7 +140,7 @@ describe('dashboard league list', () => {
   it('🛑 every membership query includes leagues the viewer co-runs through a tournament (no team needed)', () => {
     const src = readFileSync(join(__dirname, '..', 'lib', 'dashboard', 'get-dashboard-league-list.ts'), 'utf8')
     const branches = src.match(/\{ settings: \{ path: \[TOURNAMENT_CO_COMMISSIONERS_KEY\], array_contains: \[userId\] \} \}/g) ?? []
-    const membershipBlocks = src.match(/\{ rosters: \{ some: \{ platformUserId: userId \} \} \}/g) ?? []
+    const membershipBlocks = src.match(/\{ rosters: \{ some: \{ OR: \[\{ platformUserId: userId \}, \{ managerUserId: userId \}\] \} \} \}/g) ?? []
     expect(membershipBlocks.length).toBeGreaterThanOrEqual(2)
     expect(branches.length).toBe(membershipBlocks.length)
   })

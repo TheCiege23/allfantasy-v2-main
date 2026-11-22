@@ -5,7 +5,7 @@
  *
  * The input is structurally compatible with `AdminUser` from `@/lib/adminAuth`.
  */
-export type AdminAuditIdentityInput = {
+type AdminAuditIdentityInput = {
   email?: string | null;
   id?: string | null;
   name?: string | null;

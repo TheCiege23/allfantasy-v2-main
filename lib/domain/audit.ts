@@ -29,7 +29,7 @@ import { isPlatformReadScope } from './platformRead'
  * detection (entropy, vendor prefixes) is the secret scanner's job and belongs
  * at the push boundary, not here.
  */
-export const REDACTED_KEY_PATTERN =
+const REDACTED_KEY_PATTERN =
   /(password|passwd|secret|token|apikey|api_key|authorization|auth|credential|cookie|session|privatekey|private_key|clientsecret|client_secret|rsc_token|hash|salt)/i
 
 export const REDACTION_MARKER = '[redacted]'

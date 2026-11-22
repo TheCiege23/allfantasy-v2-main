@@ -211,7 +211,6 @@ export async function runLeagueDramaEngine(input: LeagueDramaEngineInput): Promi
       upsetMagnitude: c.signal?.upsetMagnitude,
       playoffSwing: c.signal?.playoffSwing,
       recencyWeight: c.signal?.recencyWeight,
-      managerBehaviorHeat: c.signal?.managerBehaviorHeat,
       leagueGraphHeat: c.signal?.leagueGraphHeat,
     })
     const saved = await ensureDramaEvent({

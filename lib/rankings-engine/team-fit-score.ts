@@ -31,17 +31,6 @@ export interface PositionalStrength {
   playerCount: number
 }
 
-export interface UserRankScoreOutput {
-  leagueRankScore: number
-  teamFitScore: number
-  goalAlignmentScore: number
-  riskFitScore: number
-  userRankScore: number
-  tfsBreakdown: TeamFitScoreBreakdown
-  goalDetails: GoalAlignmentScore
-  riskDetails: RiskFitScore
-}
-
 interface SlotGap {
   slot: string
   position: string

@@ -52,7 +52,17 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
   try {
     const allRows = await loadCareerLedger([userId])
 
-    if (allRows.length === 0) return null
+    if (allRows.length === 0) {
+      await prisma.userProfile.updateMany({
+        where: { userId, rankCalculatedAt: { not: null } },
+        data: {
+          xpTotal: 0n, xpLevel: 1, rankTier: 'Rookie', careerWins: 0, careerLosses: 0,
+          careerChampionships: 0, careerPlayoffAppearances: 0, careerSeasonsPlayed: 0, careerLeaguesPlayed: 0,
+          rankCalculatedAt: null,
+        },
+      })
+      return null
+    }
 
     const xp = careerXp(allRows)
     const careerWins = xp.wins

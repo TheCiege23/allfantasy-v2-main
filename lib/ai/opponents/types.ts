@@ -2,13 +2,13 @@
  * Shared types for AI opponent managers (deterministic core + optional LLM overlay).
  */
 
-export type BotThinkSpeed = "instant" | "fast" | "normal" | "realistic"
+type BotThinkSpeed = "instant" | "fast" | "normal" | "realistic"
 
-export type AggressionLevel = "off" | "low" | "medium" | "high"
+type AggressionLevel = "off" | "low" | "medium" | "high"
 
-export type PersonalityPoolMode = "balanced" | "random" | "commissioner_assigned"
+type PersonalityPoolMode = "balanced" | "random" | "commissioner_assigned"
 
-export type TeamStrategyMode = "contend" | "neutral" | "rebuild"
+type TeamStrategyMode = "contend" | "neutral" | "rebuild"
 
 /** Persisted in `league.settings.aiOpponents` — off by default everywhere. */
 export type AiOpponentsLeagueSettings = {

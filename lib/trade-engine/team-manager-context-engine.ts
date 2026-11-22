@@ -17,16 +17,16 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-export type PlayStyle =
+type PlayStyle =
   | 'aggressive_trader'
   | 'conservative'
   | 'win_now'
   | 'rebuild_focused'
   | 'balanced'
 
-export type TeamStrength = 'elite' | 'strong' | 'average' | 'weak' | 'rebuilding'
+type TeamStrength = 'elite' | 'strong' | 'average' | 'weak' | 'rebuilding'
 
-export interface TeamProfile {
+interface TeamProfile {
   teamId: string
   teamName: string
   contenderTier: string
@@ -48,7 +48,7 @@ export interface TeamProfile {
   totalValue: number
 }
 
-export interface ManagerProfile {
+interface ManagerProfile {
   /** Detected play style */
   playStyle: PlayStyle
   /** Trade frequency label */
@@ -67,7 +67,7 @@ export interface ManagerProfile {
   fairnessTolerance: number
 }
 
-export interface NeedFitResult {
+interface NeedFitResult {
   /** How many of this side's needs are filled by incoming assets */
   needsFilled: number
   /** Total needs count */
@@ -80,7 +80,7 @@ export interface NeedFitResult {
   positionsFilled: string[]
 }
 
-export interface ContextMultiplier {
+interface ContextMultiplier {
   /** Overall multiplier applied to the side's perceived trade value (0.7 - 1.3) */
   multiplier: number
   /** Breakdown of adjustments */
@@ -89,7 +89,7 @@ export interface ContextMultiplier {
   summary: string
 }
 
-export interface ContextAdjustment {
+interface ContextAdjustment {
   factor: string
   /** Positive = value boost, negative = value reduction */
   delta: number
@@ -97,7 +97,7 @@ export interface ContextAdjustment {
   category: 'team' | 'manager' | 'fit' | 'style'
 }
 
-export interface TeamManagerContextResult {
+interface TeamManagerContextResult {
   sideA: {
     teamProfile: TeamProfile
     managerProfile: ManagerProfile
@@ -116,7 +116,7 @@ export interface TeamManagerContextResult {
   promptBlock: string
 }
 
-export interface StyleMatchResult {
+interface StyleMatchResult {
   /** Whether trading styles are compatible */
   compatible: boolean
   /** Whether disagreement on fairness is likely */
@@ -178,7 +178,7 @@ function detectPlayStyle(
     return 'balanced'
   }
 
-  const { riskTolerance, consolidationBias, starterPremium, positionBias } = prefs
+  const { riskTolerance, starterPremium, positionBias } = prefs
 
   // Aggressive: high risk tolerance + high trade count + not picky about fairness
   if (riskTolerance > 0.4 && prefs.fairnessTolerance > 0.3) return 'aggressive_trader'

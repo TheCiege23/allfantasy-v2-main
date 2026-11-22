@@ -9,7 +9,7 @@ import {
   type ChimmyConversation,
 } from '@/lib/chimmy-conversation-service'
 
-export interface ConversationHistorySidebarProps {
+interface ConversationHistorySidebarProps {
   isOpen: boolean
   onClose?: () => void
   onSelectConversation?: (conversationId: string) => void

@@ -1,26 +1,4 @@
-import type {
-  CompanyIntelligenceInput,
-  CompanyIntelligenceResult,
-  RetentionDriverInsight,
-  ChurnRiskFactor,
-  FeatureAdoptionOpportunity,
-  CommissionerBehaviorInsight,
-  LeagueFormatEffectiveness,
-  EngagementHealthSummary,
-  CohortRecommendation,
-  MonetizationSignal,
-  DataQualityReport,
-  DriverStrength,
-  ChurnRiskLevel,
-  AdoptionGap,
-  CommissionerPrevalence,
-  EngagementSignal,
-  RetentionSignal,
-  HealthTier,
-  MonetizationPotential,
-  LeagueSignalAggregateSlice,
-  ArchetypeDistributionSlice,
-} from './types'
+import type { CompanyIntelligenceInput, CompanyIntelligenceResult, RetentionDriverInsight, ChurnRiskFactor, FeatureAdoptionOpportunity, CommissionerBehaviorInsight, LeagueFormatEffectiveness, EngagementHealthSummary, CohortRecommendation, MonetizationSignal, DataQualityReport, DriverStrength, ChurnRiskLevel, AdoptionGap, CommissionerPrevalence, EngagementSignal, RetentionSignal, HealthTier, MonetizationPotential } from './types'
 
 export const COMPANY_INTELLIGENCE_VERSION = '6.6.0'
 
@@ -203,7 +181,6 @@ function assembleRetentionDrivers(input: CompanyIntelligenceInput): RetentionDri
   const drivers: RetentionDriverInsight[] = []
   const dist = input.archetypeDistribution
   const signals = input.leagueSignals
-  const total = signals?.totalLeagues ?? dist?.totalClassified ?? 0
 
   // Driver 1: high-engagement format prevalence
   if (dist && dist.totalClassified > 0) {
@@ -405,7 +382,6 @@ function assembleFeatureAdoptionOpportunities(
 ): FeatureAdoptionOpportunity[] {
   const opps: FeatureAdoptionOpportunity[] = []
   const signals = input.leagueSignals
-  const dist = input.archetypeDistribution
 
   // Opportunity 1: waiver wire engagement gap
   if (signals && signals.totalLeagues > 0) {

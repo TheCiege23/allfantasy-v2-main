@@ -3,10 +3,7 @@
  * Supported sports: NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER.
  */
 
-import type { LeagueSport } from '@prisma/client'
 import type { PlatformSportRulesDraftTypeId } from '@/lib/draft-types/draftTypeRegistry'
-
-export type SportKey = LeagueSport | string
 
 /** A single roster slot rule: name, allowed positions, count, and whether it's a flex slot. */
 export interface RosterSlotRule {
@@ -31,7 +28,7 @@ export interface RosterRules {
 }
 
 /** Valid scoring format for a sport. */
-export interface ScoringFormatOption {
+interface ScoringFormatOption {
   value: string
   label: string
 }
@@ -58,7 +55,7 @@ export interface PlayerPoolRules {
 }
 
 /** Default pick-order mode when sport defaults do not specify another id. */
-export type SportRulesDefaultDraftType = Exclude<PlatformSportRulesDraftTypeId, 'mock_draft'>
+type SportRulesDefaultDraftType = Exclude<PlatformSportRulesDraftTypeId, 'mock_draft'>
 
 /** Draft options for a sport. */
 export interface DraftOptionRules {

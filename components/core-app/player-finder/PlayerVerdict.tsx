@@ -200,4 +200,3 @@ export function PlayerVerdict({
   )
 }
 
-export default PlayerVerdict

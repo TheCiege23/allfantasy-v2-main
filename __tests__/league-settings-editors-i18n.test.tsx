@@ -172,7 +172,7 @@ describe('🛑 the editors read Spanish in Spanish', () => {
     expect(englishIn(r.container)).toEqual([])
   })
 
-  it('the playoff editor — header, current format, badges, then a toggled stage’s impact preview', async () => {
+  it('the playoff editor — header, current format, badges, and the coming-soon notice', async () => {
     lang.language = 'es'
     stubFetch()
     const r = render(<PlayoffSettingsEditor leagueId="l1" />)
@@ -183,11 +183,10 @@ describe('🛑 the editors read Spanish in Spanish', () => {
       expect(text, s).toContain(s)
     }
     expect(englishIn(r.container)).toEqual([])
+    // Postseason stages are coming soon (2026-11-15): the notice reads Spanish, and a stage cannot be toggled.
+    expect(text).toContain('Las fases de postemporada reales llegan pronto')
     fireEvent.click(r.getByText('StageB'))
-    await r.findByText('Vista previa del impacto en el calendario')
-    text = r.container.textContent ?? ''
-    for (const s of ['Inicio de playoffs', 'Semanas de playoffs', 'Final', 'Guardar ajustes de playoffs']) expect(text, s).toContain(s)
-    expect(englishIn(r.container)).toEqual([])
+    expect(r.queryByText('Vista previa del impacto en el calendario')).toBeNull()
   })
 
   it('…and the editors still read English in English', async () => {

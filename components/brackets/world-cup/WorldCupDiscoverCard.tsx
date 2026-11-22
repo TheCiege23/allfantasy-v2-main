@@ -6,7 +6,7 @@ import { Globe2, Lock, Shield, Users } from "lucide-react"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { makeWcT } from "@/lib/world-cup/worldCupI18n"
 
-export type DiscoverCardModel = {
+type DiscoverCardModel = {
   id: string
   name: string
   seasonYear: number

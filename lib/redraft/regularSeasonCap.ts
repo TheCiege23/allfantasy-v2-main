@@ -44,16 +44,13 @@ export function maxPlayoffStartWeekForSport(sport?: unknown): number {
   return maxRegularSeasonWeeksForSport(sport) + 1
 }
 
-export function regularSeasonCapMessage(sport?: unknown): string {
+function regularSeasonCapMessage(sport?: unknown): string {
   return `The regular season can be at most ${maxRegularSeasonWeeksForSport(sport)} weeks.`
 }
 
-export function playoffStartCapMessage(sport?: unknown): string {
+function playoffStartCapMessage(sport?: unknown): string {
   return `Playoffs can start no later than week ${maxPlayoffStartWeekForSport(sport)} — the regular season can be at most ${maxRegularSeasonWeeksForSport(sport)} weeks.`
 }
-
-export const REGULAR_SEASON_CAP_MESSAGE = regularSeasonCapMessage()
-export const PLAYOFF_START_CAP_MESSAGE = playoffStartCapMessage()
 
 /** Does the regular-season cap apply to this league? `leagueType` null reads as redraft, the schema default. */
 export function regularSeasonCapApplies(league: { leagueType?: string | null; sport?: unknown }): boolean {

@@ -3,13 +3,7 @@
  * Call these when matchup updates, trades, waivers, or playoff events occur.
  */
 
-import type {
-  CommentaryContext,
-  MatchupCommentaryContext,
-  TradeReactionContext,
-  WaiverReactionContext,
-  PlayoffDramaContext,
-} from './types'
+import type { MatchupCommentaryContext, TradeReactionContext, WaiverReactionContext, PlayoffDramaContext } from './types'
 import { generateCommentary } from './CommentaryEngine'
 
 export type CommentaryCallback = (headline: string, body: string, eventType: string) => void

@@ -15,7 +15,7 @@
  * gating it would bounce every recipient to a login screen and read as the share
  * feature being broken rather than as a policy.
  */
-export const SHAREABLE_APP_LEAGUE_PATH = /^\/app\/league\/[^/]+\/news\//
+const SHAREABLE_APP_LEAGUE_PATH = /^\/app\/league\/[^/]+\/news\//
 
 export function requiresSessionAuth(pathname: string): boolean {
   if (pathname.startsWith('/af-rankings')) return true

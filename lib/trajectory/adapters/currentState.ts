@@ -13,7 +13,7 @@
  */
 import type { TrajectoryAdapter, TrajectoryPoint } from '../types'
 
-export interface CurrentStateParams {
+interface CurrentStateParams {
   /** The single, real, current value. */
   value: number
   /** ISO-8601 timestamp of the observation. */

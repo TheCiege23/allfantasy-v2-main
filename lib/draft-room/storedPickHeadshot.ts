@@ -15,7 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { canonicalName } from '@/lib/draft-room/player-canonical-identity'
 
-export type StoredPickHeadshotInput = {
+type StoredPickHeadshotInput = {
   sport: string | null | undefined
   playerId: string | null | undefined
   playerName: string

@@ -7,6 +7,11 @@
  *              'playable'  no empty slot, no starter on a bye, no starter listed Out / IR
  *   autoFill   AllFantasy fills only the slots that miss the standard, from the team's own bench, an
  *              hour at a time before kickoff. A starter who meets the standard is never moved.
+ *   optimize   AllFantasy sets the team's BEST lineup from projections each hour before kickoff, moving
+ *              any starter who is not locked (owner decision 2026-11-06, anti-tanking). This is the step
+ *              that removes the motive to tank: an eliminated manager cannot start a worse team on
+ *              purpose. It overrides the manager's choices, so it is a separate, explicit choice from
+ *              autoFill, off unless the commissioner turns it on.
  *
  * WHO IS ELIMINATED. Only what standings make certain, never an odds model:
  *   cannot_reach_line   in the regular season, more wins behind the last playoff spot than games left
@@ -30,7 +35,7 @@ export const ELIMINATED_LINEUP_RULE_KEY = 'eliminated_lineup_minimum'
 export type LineupStandard = 'filled' | 'playable'
 export const LINEUP_STANDARDS: readonly LineupStandard[] = ['filled', 'playable']
 
-export type EliminatedLineupRule = { standard: LineupStandard; autoFill: boolean }
+export type EliminatedLineupRule = { standard: LineupStandard; autoFill: boolean; optimize: boolean }
 
 const isStandard = (v: unknown): v is LineupStandard => typeof v === 'string' && (LINEUP_STANDARDS as readonly string[]).includes(v)
 
@@ -40,13 +45,13 @@ export function readEliminatedLineupRule(settings: unknown): EliminatedLineupRul
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const o = raw as Record<string, unknown>
   if (o.enabled !== true || !isStandard(o.standard)) return null
-  return { standard: o.standard, autoFill: o.autoFill === true }
+  return { standard: o.standard, autoFill: o.autoFill === true, optimize: o.optimize === true }
 }
 
 /** What a save may store: the rule switched on (with its standard), or off. */
 export function parseEliminatedLineupRule(
   input: unknown,
-): { ok: true; value: { enabled: true; standard: LineupStandard; autoFill: boolean } | { enabled: false } } | { ok: false; error: string } {
+): { ok: true; value: { enabled: true; standard: LineupStandard; autoFill: boolean; optimize: boolean } | { enabled: false } } | { ok: false; error: string } {
   if (input == null || input === false) return { ok: true, value: { enabled: false } }
   if (typeof input !== 'object' || Array.isArray(input)) return { ok: false, error: 'Send the lineup minimum as { enabled, standard, autoFill }.' }
   const o = input as Record<string, unknown>
@@ -54,7 +59,8 @@ export function parseEliminatedLineupRule(
   if (o.enabled !== true) return { ok: false, error: 'Say whether the lineup minimum is on.' }
   if (!isStandard(o.standard)) return { ok: false, error: 'Pick a standard: "filled" (no empty slots) or "playable" (no empty slots, byes or Out/IR starters).' }
   if (o.autoFill !== undefined && typeof o.autoFill !== 'boolean') return { ok: false, error: 'autoFill is on or off.' }
-  return { ok: true, value: { enabled: true, standard: o.standard, autoFill: o.autoFill === true } }
+  if (o.optimize !== undefined && typeof o.optimize !== 'boolean') return { ok: false, error: 'optimize is on or off.' }
+  return { ok: true, value: { enabled: true, standard: o.standard, autoFill: o.autoFill === true, optimize: o.optimize === true } }
 }
 
 export type StandingTeam = { rosterId: string; wins: number; losses: number; ties: number; playoffSeed: number | null }
@@ -141,7 +147,11 @@ export function describeRule(rule: EliminatedLineupRule, language: 'en' | 'es' =
     rule.standard === 'filled'
       ? es ? 'sin puestos vacíos' : 'with no empty slots'
       : es ? 'sin puestos vacíos, jugadores en descanso ni jugadores Out/IR' : 'with no empty slots, no starters on a bye and no starters listed Out/IR'
-  const fill = rule.autoFill
+  const fill = rule.optimize
+    ? es
+      ? ' Antes del inicio, AllFantasy alinea el mejor equipo posible según las proyecciones.'
+      : ' Before kickoff, AllFantasy sets the team’s best lineup from projections.'
+    : rule.autoFill
     ? es
       ? ' Si falta algo antes del inicio, AllFantasy cubre solo esos puestos con la banca del equipo.'
       : ' If one falls short before kickoff, AllFantasy fills only those slots from the team’s own bench.'

@@ -10,7 +10,7 @@ interface MobileSectionHeaderProps {
 
 const sectionInfo: Record<MainTab, { title: string; subtitle: string }> = {
   home: { title: 'Home', subtitle: 'Your career overview' },
-  trade: { title: 'Trade Center', subtitle: 'AI-powered trade tools' },
+  trade: { title: 'Trade Center', subtitle: 'Chimmy-powered trade tools' },
   strategy: { title: 'Strategy', subtitle: 'Plan your season' },
   alerts: { title: 'Alerts', subtitle: 'Market timing signals' },
   profile: { title: 'Profile', subtitle: 'Chat, share & settings' },

@@ -6,12 +6,12 @@
 import { reorderQueueByNeedRespectingLocks } from '@/lib/draft-queue-engine'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 
-export type DraftQueueAiReorderPlanMode =
+type DraftQueueAiReorderPlanMode =
   | 'persist'
   | 'suggestion_af_pro_required'
   | 'suggestion_ai_manage_disabled'
 
-export type DraftQueueAiReorderPlan = {
+type DraftQueueAiReorderPlan = {
   mode: DraftQueueAiReorderPlanMode
   /** Order to persist on `DraftQueue` when mode is `persist`; otherwise null. */
   persistOrder: QueueEntry[] | null
@@ -66,15 +66,22 @@ export function planDraftQueueAiReorder(input: {
   queue: QueueEntry[]
   rosterPositions: string[]
   sport: string
+  /** The league's starting slots and superflex/2QB flags, so need matches the draft engine's. */
+  rosterSlots?: string[]
+  isSF?: boolean
+  is2QB?: boolean
   hasProDraftAiAccess: boolean
   aiManageDraftQueueEnabled: boolean
 }): DraftQueueAiReorderPlan {
-  const { queue, rosterPositions, sport, hasProDraftAiAccess, aiManageDraftQueueEnabled } = input
+  const { queue, rosterPositions, sport, rosterSlots, isSF, is2QB, hasProDraftAiAccess, aiManageDraftQueueEnabled } = input
 
   const result = reorderQueueByNeedRespectingLocks({
     queue,
     rosterPositions,
     sport,
+    rosterSlots,
+    isSF,
+    is2QB,
   })
 
   if (!hasProDraftAiAccess) {
@@ -114,7 +121,7 @@ export function planDraftQueueAiReorder(input: {
 /** Used when entitlement/policy denies persist but we still want a labeled suggestion list. */
 export function suggestionOnlyExplanation(base: string, reason: 'af_pro' | 'ai_manage_disabled'): string {
   if (reason === 'af_pro') {
-    return `${base} (AF Pro required to save an AI-adjusted queue.)`
+    return `${base} (AF Pro required to save a Chimmy-adjusted queue.)`
   }
-  return `${base} Enable "AI manage draft queue" on your roster settings to save AI reorder.`
+  return `${base} Enable "Chimmy manage draft queue" on your roster settings to save Chimmy reorder.`
 }

@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, UserPlus, UserMinus, Shield, ShieldCheck } from 'lucide-react'
+import { Search, UserPlus, UserMinus, ShieldCheck } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   CO_COMMISSIONER_SCOPES,

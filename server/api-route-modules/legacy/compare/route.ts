@@ -14,6 +14,9 @@ import {
 } from '@/lib/sleeper-client'
 import { getUniversalAIContext } from '@/lib/ai-player-context'
 import { legacyPromptSeason } from '@/lib/legacy/promptSeason'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 const openai = getOpenAIRouteClient()
 
@@ -404,6 +407,17 @@ function buildManagerSnapshot(
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/compare", tool: "LegacyCompare" })(async (request: NextRequest) => {
   try {
+    /*
+     * AF Legacy (`legacy_manager_compare`). This route took no session at all: anyone could run the comparison
+     * model on any two Sleeper usernames. Now sign-in and the plan the /af-legacy Manager Comparison lock names.
+     */
+    const session = (await getServerSession(authOptions as never)) as { user?: { id?: string; email?: string | null } } | null
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized', message: 'Sign in to compare managers.' }, { status: 401 })
+    }
+    const plan = await requireFeatureEntitlement({ userId: session.user.id, userEmail: session.user.email ?? null, featureId: 'legacy_manager_compare' })
+    if (!plan.ok) return plan.response
+
     const ip = getClientIp(request)
     const body = await request.json()
     const { username_a, username_b } = body

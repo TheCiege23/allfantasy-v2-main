@@ -1,4 +1,4 @@
-export type StartSitRec = { playerId: string; action: string; confidence: number; reasoning: string }
+type StartSitRec = { playerId: string; action: string; confidence: number; reasoning: string }
 
 export async function generateStartSitRecs(
   _rosterId: string,

@@ -194,7 +194,6 @@ export function computeTeamNeeds(
 ): TeamNeedsMap {
   const starterSlots = rosterPositions.filter(s => s !== 'BN' && s !== 'IR' && s !== 'TAXI')
   const starters = rosterPlayers.filter(p => p.slot === 'starter')
-  const bench = rosterPlayers.filter(p => p.slot === 'bench')
 
   const weakestSlots = computeWeakestSlots(starters, starterSlots, allLeagueRosters)
   const biggestNeed = weakestSlots.length > 0 ? weakestSlots[0] : null

@@ -2,7 +2,7 @@
 
 import type { BroadcastMatchupRow } from '@/lib/broadcast-engine/types'
 
-export interface LiveScoreRendererProps {
+interface LiveScoreRendererProps {
   matchups: BroadcastMatchupRow[]
   leagueName: string | null
   sport: string

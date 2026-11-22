@@ -794,6 +794,24 @@ export function getWaiverDefaults(sportType: SportType, _formatType?: string | n
   if (String(_formatType ?? '').trim().toLowerCase() === 'zombie') {
     return { ...base, ...variantOverrides, sport_type: sportType, waiver_type: 'fcfs', processing_days: null, FAAB_budget_default: null, faab_enabled: false, continuous_waivers_behavior: false, free_agent_unlock_behavior: 'instant' }
   }
+  /*
+   * 🛑 A GUILLOTINE LEAGUE BIDS FOR THE CHOPPED TEAM'S PLAYERS, IN EVERY SPORT. The format had no row
+   * here, so it took the sport's base: an NBA or NHL guillotine was created on rolling or reverse
+   * standings with no budget (walked locally 2026-11-20: `waiverType: 'rolling'`, `faabBudget: null`),
+   * and the blind auction and the FAAB split on a chop had nothing to work with. Redraft already takes
+   * this same override. A sport whose base is FAAB is unchanged; a commissioner can still choose
+   * another waiver type in settings.
+   */
+  /*
+   * Keeper is redraft with keepers, and takes redraft's bidding default in every sport (owner's
+   * decision, 2026-11-20). It had no row either: an NBA or NHL keeper league was created on rolling
+   * or reverse standings while the same league as redraft got FAAB $100. NFL is unchanged.
+   */
+  if (normalizedVariant === 'GUILLOTINE' || normalizedVariant === 'KEEPER') {
+    const merged = { ...base, ...variantOverrides }
+    const budget = typeof merged.FAAB_budget_default === 'number' && merged.FAAB_budget_default > 0 ? merged.FAAB_budget_default : 100
+    return { ...merged, ...REDRAFT_FAAB_WAIVER_OVERRIDE, FAAB_budget_default: budget, sport_type: sportType }
+  }
   return {
     ...base,
     ...variantOverrides,

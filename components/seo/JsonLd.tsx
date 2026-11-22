@@ -1,11 +1,4 @@
-import {
-  getWebSiteSchema,
-  getOrganizationSchema,
-  getSoftwareApplicationSchema,
-  getFAQPageSchema,
-  getWebPageSchema,
-  buildStructuredDataScript,
-} from "@/lib/seo"
+import { getWebSiteSchema, getOrganizationSchema, getSoftwareApplicationSchema, getFAQPageSchema, buildStructuredDataScript } from "@/lib/seo"
 import type { ToolConfig } from "@/lib/seo-landing/config"
 import { getToolCanonical } from "@/lib/seo-landing/config"
 
@@ -58,4 +51,3 @@ export function PageJsonLd({ schemas }: { schemas: object | object[] }) {
   )
 }
 
-export { getWebPageSchema }

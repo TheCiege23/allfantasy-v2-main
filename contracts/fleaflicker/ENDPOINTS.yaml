@@ -87,6 +87,33 @@ transport:
         `schedulePeriod.low.season`. Assert it against the season you requested and refuse
         the payload when they differ.
 
+        🛑 BUT THAT KEY IS ABSENT ON A LEAGUE IN ITS CURRENT SEASON, SO "REFUSE UNLESS IT
+        EQUALS THE REQUEST" REFUSES EVERY LIVE LEAGUE. OBSERVED 2026-11-21 on league 344624
+        (NFL 2026, week 11 in progress — fixtures/scoreboard.NFL.2026.live.json): no `season`
+        key on `schedulePeriod.low` nor on any of the 17 `eligibleSchedulePeriods[].low`. The
+        pre-draft league 356670 (fixtures/scoreboard.NFL.json, also a 2026 league) is the same.
+        Three captures, two states of the key:
+
+          206154  last season 2021, any later season requested   season: 2021 on EVERY period
+          344624  in season 2026, 2026 requested                 no season key anywhere
+          356670  pre-draft 2026, 2026 requested                 no season key anywhere
+
+        What that supports, and no more: an explicit season is the authority; a body with none
+        is checked against its own dates. `eligibleSchedulePeriods[0].low.startEpochMilli` is
+        2026-09-08 on both key-less bodies and 2021-09-07 on the clamped one, and it does not
+        depend on what was requested. The rule the fetch service applies:
+
+          season stated            -> must equal the request, else refuse (the clamp case)
+          no season stated         -> the EARLIEST period's start year (UTC) must equal the
+                                      request, else refuse. Earliest, not the current period:
+                                      a late week starts in January of the next year.
+
+        ⚠ NOT OBSERVED, AND THE RULE DOES NOT DEPEND ON IT: what a live league returns for a
+        season PAST its current one (presumably this same key-less body, which the date check
+        refuses), and whether an explicitly requested PAST week of a live league carries the
+        key. ⚠ NFL only — how an NBA/NHL season spanning two calendar years is numbered is
+        unobserved; a wrong guess there refuses, as it did before.
+
         ══════════════════════════════════════════════════════════════════════════
         🛑 AND `season` IS NOT A COMMON PARAMETER AT ALL — SENDING IT TO THE WRONG
         ENDPOINT IS AN HTTP 400. This block previously said `required: true`, full
@@ -278,6 +305,10 @@ endpoints:
         eligibleSchedulePeriods: SchedulePeriod[]    # every period this league's season defines
       }
       SchedulePeriod = { ordinal: number, value: number, low: { ordinal: number, startEpochMilli: string (epoch ms, as a string) } }
+      # `low.season: number` is present on a PAST season's periods (2021 fixtures) and ABSENT on
+      # the current season's (2026 live + pre-draft fixtures) — see the `season` note above.
+      # On a live league the current period also carries `containsNow: true` and
+      # `low.isNow: true`; no other period has either key (omitted-false again).
 
       CONFIRMED 2026-09-11 for a league WITH a generated, played schedule
       (fixtures/scoreboard.NFL.2021.week1.json — league 206154, season 2021, period 1;
@@ -325,6 +356,29 @@ endpoints:
       ⚠ `games` IS ABSENT, NOT EMPTY, BEFORE A DRAFT. The pre-schedule fixture
       (scoreboard.NFL.json, league 356670) has no `games` key at all for any scoring_period.
       A writer must treat "no games key" as "nothing to write yet", never as a fetch failure.
+
+      OBSERVED 2026-11-21 — A WEEK IN PROGRESS (fixtures/scoreboard.NFL.2026.live.json, league
+      344624, 12 teams, period 11, captured after its first NFL game; team names, initials
+      and logo URLs replaced with placeholders, every key and every other value as captured):
+      Game = {
+        id: string,                                # a STRING ("58332594") — as it is in the 2021
+                                                   #   fixtures too, despite `number` above
+        home: Team, away: Team,
+        homeScore / awayScore: {
+          yetToPlay: number,                       # lineup slots still to play
+          yetToPlayPositions: string[],
+          alreadyPlayed?: number,                  # absent when 0
+          alreadyPlayedPositions?: string[],       # absent when none
+          score: { value?: number, formatted: string }
+        },
+        isInProgress: true                         # on all 6 games
+      }
+      - NO `isFinalScore`, `homeResult` or `awayResult` on any in-progress game.
+      - 🛑 A SIDE WITH NO POINTS YET IS `score: { formatted: "0" }` WITH NO `value` KEY — zero is
+        omitted exactly as `false` is. So `score.value` absent means "nothing scored yet" and
+        must not be read as a result of 0; a side that has scored carries `value`.
+      - This is the current week of an active season. A week that has NOT STARTED (no
+        `isInProgress`) is still unobserved — G-05(b) is narrowed, not closed.
 
       ⚠ A TIE WAS NOT OBSERVED. `homeResult`/`awayResult` are documented as the two values seen.
       Do not add a third from memory — probe a tied week, per the rule this contract exists for.

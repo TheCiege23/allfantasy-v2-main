@@ -84,4 +84,3 @@ export function SmsOptInExample() {
   )
 }
 
-export default SmsOptInExample

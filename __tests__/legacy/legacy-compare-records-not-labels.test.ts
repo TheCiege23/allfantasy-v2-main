@@ -14,6 +14,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// A plan holder: these tests are about what the paid route does once the plan gate lets the caller in.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null }),
+}))
+// /api/legacy/compare takes a signed-in caller since 2026-11-16 (it took no session before).
+vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'u1', email: null } }) }))
+vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+
 const mocks = vi.hoisted(() => ({ create: vi.fn() }))
 
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))

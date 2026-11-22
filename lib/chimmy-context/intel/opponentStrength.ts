@@ -19,7 +19,7 @@
  * nullable metric fields when not yet computed.
  */
 
-export type OpponentStrengthInput = {
+type OpponentStrengthInput = {
   /** Opponent LeagueTeam.id when available. */
   opponentTeamId: string | null
   /** Opponent LeagueTeam.aiPowerScore (pre-baked). */
@@ -43,7 +43,7 @@ export type OpponentStrengthInput = {
   opponentHistoricalSuccessScore?: number | null
 }
 
-export type OpponentStrengthRating =
+type OpponentStrengthRating =
   | "elite"
   | "above_average"
   | "average"

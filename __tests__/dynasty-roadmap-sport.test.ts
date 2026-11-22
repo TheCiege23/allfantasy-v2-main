@@ -16,6 +16,11 @@ const h = vi.hoisted(() => ({
 }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'u1' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+// These tests exercise the route for a user who HAS the plan; the gate itself is covered in
+// __tests__/monetization/gate-free-paid-features.test.ts.
+vi.mock('@/lib/subscription/entitlement-middleware', () => ({
+  requireFeatureEntitlement: vi.fn(async () => ({ ok: true, decision: {}, tokenSpend: null, tokenPreview: null })),
+}))
 vi.mock('@/lib/telemetry/usage', () => ({ withApiUsage: () => (handler: unknown) => handler }))
 vi.mock('@/lib/telemetry/llm-usage', () => ({ recordLlmUsage: vi.fn(async () => {}) }))
 vi.mock('@/lib/rate-limit', () => ({

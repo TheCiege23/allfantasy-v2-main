@@ -22,7 +22,7 @@ import { computeSeasonMaxPf } from '@/lib/commissioner-os/efl/maxPfEngine'
 import type { LineupSlotSpec } from '@/lib/lineup-optimizer/optimalLineup'
 import { normalizeToken } from '@/lib/redraft/lineupValidation'
 
-export type SavedWeekRoster = { week: number; playerIds: readonly string[] }
+type SavedWeekRoster = { week: number; playerIds: readonly string[] }
 
 export type NativeMaxPfTeam = {
   teamId: string
@@ -32,7 +32,7 @@ export type NativeMaxPfTeam = {
   current: readonly string[]
 }
 
-export type RosterSource = 'saved' | 'carried' | 'current'
+type RosterSource = 'saved' | 'carried' | 'current'
 
 /** The players who could have started for a team in a week (see the header). */
 export function rosterForWeek(team: NativeMaxPfTeam, week: number): { playerIds: readonly string[]; source: RosterSource } {

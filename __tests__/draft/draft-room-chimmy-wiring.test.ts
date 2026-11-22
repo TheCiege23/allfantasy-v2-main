@@ -14,7 +14,9 @@ const src = readFileSync(join(process.cwd(), 'components/app/draft-room/DraftRoo
 describe('draft room ↔ Chimmy wiring', () => {
   it('mounts the helper panel in the phone tray', () => {
     expect(src).not.toMatch(/helperPanel=\{undefined\}/)
-    expect(src).toMatch(/helperPanel=\{helperPanelNode\}/)
+    // 2026-11-19: the phone's Chimmy tab shows the merged Chimmy (next pick, suggestions, Chimmy).
+    expect(src).toMatch(/helperPanel=\{chimmyTabNode\}/)
+    expect(src.slice(src.indexOf('const chimmyTabNode = ('))).toMatch(/\{helperPanelNode\}/)
     const node = src.slice(src.indexOf('const helperPanelNode = ('), src.indexOf('const keeperPanel ='))
     expect(node).toMatch(/<DraftHelperPanel\s/)
   })
@@ -27,7 +29,11 @@ describe('draft room ↔ Chimmy wiring', () => {
   it('routes every Ask Chimmy button through openChimmy, not the bare mobile tab', () => {
     expect(src).not.toMatch(/setMobileTab\('helper'\)\}/)
     expect(src.match(/onAiSuggestionClick=\{openChimmy\}/g)?.length).toBe(1)
-    expect(src.match(/\sonClick=\{openChimmy\}/g)?.length).toBe(2)
+    // Room v2: the phone clock bar's "AI helper" chip is gone. 2026-11-19: the header's Ask Chimmy
+    // became the draft settings gear; Chimmy is reached from its tab in the dock / phone tray.
+    // The tablet "AF Legacy" body (and its Ask Chimmy button) became the Chimmy tab itself.
+    expect(src.match(/\sonClick=\{openChimmy\}/g)).toBeNull()
+    expect(src.match(/onOpenChimmy=\{openChimmy\}/g)).toBeNull()
   })
 
   it('opens only the Chimmy surface on screen, not every one (both layouts are always mounted)', () => {

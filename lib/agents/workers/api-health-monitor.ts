@@ -15,7 +15,7 @@ type ProviderStatusLevel = 'up' | 'down' | 'degraded'
 type FreshnessStatus = 'fresh' | 'stale' | 'empty'
 type OverallStatus = 'up' | 'degraded' | 'down'
 
-export interface HealthProviderEntry {
+interface HealthProviderEntry {
   status: ProviderStatusLevel
   lastSeen: string | null
   latencyMs?: number
@@ -26,13 +26,13 @@ export interface HealthProviderEntry {
   details?: string
 }
 
-export interface FreshnessEntry {
+interface FreshnessEntry {
   status: FreshnessStatus
   age: string
   checkedAt: string
 }
 
-export interface SystemHealthSnapshot {
+interface SystemHealthSnapshot {
   timestamp: string
   overall: OverallStatus
   providers: Record<string, HealthProviderEntry>
@@ -174,7 +174,7 @@ async function checkAnthropicHealth(): Promise<HealthProviderEntry> {
  * All three now come from the shared live probe: one max_tokens=1 completion per provider,
  * cached 10 min, key never returned. Anything but "answering" is `down`, with the reason.
  */
-export function aiProbeToHealthEntry(result: AiProviderProbeResult): HealthProviderEntry {
+function aiProbeToHealthEntry(result: AiProviderProbeResult): HealthProviderEntry {
   if (result.state === 'answering') {
     return { status: 'up', lastSeen: result.checkedAt, model: result.model ?? undefined }
   }
@@ -569,118 +569,6 @@ export async function runSystemHealthMonitor(args?: {
   return snapshot
 }
 
-export async function runDataFreshnessSweep() {
-  const dataFreshness = await buildDataFreshness()
-  const snapshot = (await getLatestSystemHealth()) ?? {
-    timestamp: new Date().toISOString(),
-    overall: 'up' as OverallStatus,
-    providers: {},
-    dataFreshness: {},
-    importCompleteness: { leagues: { synced: 0, stale: 0, total: 0 } },
-    alertHistory: [],
-    recoveryActions: [],
-  }
-
-  const nextSnapshot: SystemHealthSnapshot = {
-    ...snapshot,
-    timestamp: new Date().toISOString(),
-    dataFreshness,
-  }
-
-  await writeAgentCache(SYSTEM_HEALTH_CACHE, nextSnapshot)
-  return nextSnapshot
-}
-
-export async function preloadStaticAgentData() {
-  const jobs = await Promise.all(
-    (['NFL', 'NBA', 'MLB', 'NHL', 'NCAAB', 'NCAAF', 'SOCCER'] as SupportedSport[]).map(async (sport) => {
-      const [teams, schedule] = await Promise.all([
-        getSportsData({ sport, dataType: 'teams' }).catch(() => null),
-        getSportsData({ sport, dataType: 'schedule' }).catch(() => null),
-      ])
-
-      return { sport, teamsSource: teams?.source ?? null, scheduleSource: schedule?.source ?? null }
-    })
-  )
-
-  await writeAgentCache(
-    {
-      tier: '24h',
-      sport: 'GLOBAL',
-      dataType: 'static_preload',
-      identifier: 'daily',
-    },
-    {
-      refreshedAt: new Date().toISOString(),
-      jobs,
-    },
-    { ttlMs: 24 * 60 * 60 * 1000 }
-  )
-
-  return jobs
-}
-
-export async function preloadGameDayAgentData() {
-  const jobs = await Promise.all([
-    getSportsData({ sport: 'NFL', dataType: 'games' }).catch(() => null),
-    getSportsData({ sport: 'NFL', dataType: 'schedule' }).catch(() => null),
-  ])
-
-  await writeAgentCache(
-    {
-      tier: '1h',
-      sport: 'NFL',
-      dataType: 'gameday_preload',
-      identifier: 'sunday',
-    },
-    {
-      refreshedAt: new Date().toISOString(),
-      jobs: jobs.map((job) => ({ source: job?.source ?? null, cached: job?.cached ?? false })),
-    },
-    { ttlMs: 60 * 60 * 1000 }
-  )
-
-  return jobs
-}
-
-export async function preloadWaiverRecommendations() {
-  const leagues = await prisma.league.findMany({
-    where: {
-      lastSyncedAt: { not: null },
-    },
-    orderBy: [{ updatedAt: 'desc' }],
-    take: 50,
-    select: {
-      id: true,
-      sport: true,
-      scoring: true,
-      isDynasty: true,
-      settings: true,
-    },
-  })
-
-  await writeAgentCache(
-    {
-      tier: '1h',
-      sport: 'GLOBAL',
-      dataType: 'waiver_precompute',
-      identifier: 'wednesday',
-    },
-    {
-      refreshedAt: new Date().toISOString(),
-      leagues: leagues.map((league) => ({
-        id: league.id,
-        sport: league.sport,
-        format: league.isDynasty ? 'dynasty' : 'redraft',
-        scoring: league.scoring ?? null,
-      })),
-    },
-    { ttlMs: 60 * 60 * 1000 }
-  )
-
-  return { leaguesProcessed: leagues.length }
-}
-
 function readDraftDate(settings: unknown): Date | null {
   const record = settings && typeof settings === 'object' && !Array.isArray(settings)
     ? (settings as Record<string, unknown>)
@@ -691,7 +579,7 @@ function readDraftDate(settings: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-export async function preloadUpcomingDrafts() {
+async function preloadUpcomingDrafts() {
   const sessions = await prisma.draftSession.findMany({
     where: {
       status: 'pre_draft',

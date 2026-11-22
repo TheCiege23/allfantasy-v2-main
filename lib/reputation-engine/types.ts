@@ -30,7 +30,7 @@ export const DEFAULT_REPUTATION_TIER_THRESHOLDS: Record<ReputationTier, { min: n
 }
 
 /** Evidence types that feed reputation dimensions. */
-export const REPUTATION_EVIDENCE_TYPES = [
+const REPUTATION_EVIDENCE_TYPES = [
   'payment_complete',
   'lineup_consistency',
   'activity_frequency',
@@ -44,19 +44,6 @@ export const REPUTATION_EVIDENCE_TYPES = [
   'responsiveness',
 ] as const
 export type ReputationEvidenceType = (typeof REPUTATION_EVIDENCE_TYPES)[number]
-
-/** Dimension keys stored on ManagerReputationRecord. */
-export const REPUTATION_DIMENSIONS = [
-  'reliabilityScore',
-  'activityScore',
-  'tradeFairnessScore',
-  'sportsmanshipScore',
-  'commissionerTrustScore',
-  'toxicityRiskScore',
-  'participationQualityScore',
-  'responsivenessScore',
-] as const
-export type ReputationDimensionKey = (typeof REPUTATION_DIMENSIONS)[number]
 
 export interface ReputationScores {
   overallScore: number

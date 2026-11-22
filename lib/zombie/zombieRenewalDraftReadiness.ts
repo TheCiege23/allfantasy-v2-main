@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 
-export function needsRegisteredZombieRenewalSeats(settings:unknown) {
+function needsRegisteredZombieRenewalSeats(settings:unknown) {
   if(!settings||typeof settings!=='object'||Array.isArray(settings)) return false
   const renewal=(settings as Record<string,unknown>).zombie_renewal
   return Boolean(renewal&&typeof renewal==='object'&&!Array.isArray(renewal)&&(renewal as Record<string,unknown>).requiresRegisteredSeats===true)

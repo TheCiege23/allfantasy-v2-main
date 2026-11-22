@@ -31,7 +31,7 @@ import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 
 export const HARNESS_LEAGUE_ID = 'e2e-redraft-core-standings'
 export const HARNESS_LEAGUE_NAME = 'Sunday Night Redraft'
-export const SEASON = 2026
+const SEASON = 2026
 const WEEKS = 14
 const SCORED = 11
 const YOU = '4'
@@ -52,7 +52,7 @@ const IDS = TEAM_NAMES.map((_, i) => String(i + 1))
 /** Higher wins its game; the gaps are wide at both ends so the table settles a spot each way. */
 const STRENGTH: Record<string, number> = { '1': 10, '2': 8.4, '3': 6.2, '4': 6, '5': 5.7, '6': 5.4, '7': 5.1, '8': 4.8, '9': 1.4, '10': 0.2 }
 
-export const RULES: StandingsRules = {
+const RULES: StandingsRules = {
   playoffTeams: 6,
   playoffTeamsSource: 'league',
   byes: 2,
@@ -81,7 +81,8 @@ function score(week: number, id: string): number {
   return Math.round((96 + STRENGTH[id] * 3.4 + wobble * 2.6) * 10) / 10
 }
 
-function weekRows(week: number): WeekRow[] {
+/** `headToHead: false` — a points-only league (a guillotine with no weekly games): no matchup, so no result. */
+function weekRows(week: number, headToHead = true): WeekRow[] {
   const rows: WeekRow[] = []
   pairings(week).forEach(([a, b], m) => {
     let pa = score(week, a)
@@ -89,8 +90,8 @@ function weekRows(week: number): WeekRow[] {
     // The stronger side wins its game unless the gap is small; keeps the table readable and deterministic.
     if (STRENGTH[a] - STRENGTH[b] > 1.2 && pa <= pb) [pa, pb] = [pb + 4.2, pa]
     if (STRENGTH[b] - STRENGTH[a] > 1.2 && pb <= pa) [pa, pb] = [pb, pa + 4.2]
-    rows.push({ week, rosterId: a, matchupId: m + 1, pointsFor: pa, pointsAgainst: pb })
-    rows.push({ week, rosterId: b, matchupId: m + 1, pointsFor: pb, pointsAgainst: pa })
+    rows.push({ week, rosterId: a, matchupId: headToHead ? m + 1 : null, pointsFor: pa, pointsAgainst: headToHead ? pb : 0 })
+    rows.push({ week, rosterId: b, matchupId: headToHead ? m + 1 : null, pointsFor: pb, pointsAgainst: headToHead ? pa : 0 })
   })
   return rows
 }
@@ -99,16 +100,16 @@ function teamMeta(): TeamMeta[] {
   return IDS.map((id, i) => ({ rosterId: id, name: TEAM_NAMES[i], avatarUrl: null, isYou: id === YOU, division: null, reported: null }))
 }
 
-export function harnessStandings(): LeagueStandingsResult {
+export function harnessStandings({ headToHead = true }: { headToHead?: boolean } = {}): LeagueStandingsResult {
   const snapshots: WeekSnapshot[] = []
   const all: WeekRow[][] = []
   for (let w = 1; w <= SCORED; w += 1) {
-    const rows = weekRows(w)
+    const rows = weekRows(w, headToHead)
     all.push(rows)
     snapshots.push(advanceWeek(snapshots[w - 2] ?? null, SEASON, w, rows, IDS, `harness-${w}`))
   }
   const unplayed: RemainingGame[] = []
-  for (let w = SCORED + 1; w <= WEEKS; w += 1) for (const [a, b] of pairings(w)) unplayed.push({ week: w, a, b })
+  if (headToHead) for (let w = SCORED + 1; w <= WEEKS; w += 1) for (const [a, b] of pairings(w)) unplayed.push({ week: w, a, b })
   const board = buildStandingsBoard({ season: SEASON, snapshots, unplayed, teams: teamMeta(), rules: RULES })
 
   const pf = new Map(IDS.map((id) => [id, 0]))

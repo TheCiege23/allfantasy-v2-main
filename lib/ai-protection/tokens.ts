@@ -25,7 +25,7 @@ export async function checkTokenBalance(
     return {
       allowed: false,
       remaining: 0,
-      message: "Sign in to use token-metered AI features.",
+      message: "Sign in to use token-metered Chimmy features.",
     }
   }
 

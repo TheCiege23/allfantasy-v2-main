@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { seasonSetupBlocked } from '@/lib/tournament/seasonNativeContract'
 import { prisma } from '@/lib/prisma'
@@ -51,7 +52,7 @@ export async function getLeagueRole(leagueId: string, userId: string): Promise<L
   if (tournamentCoCommissioner) return 'co_commissioner'
 
   const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: managedRosterWhere(leagueId, userId),
     select: { id: true },
   })
   if (roster || await acceptedCoOwnerRosterId(leagueId, userId)) return 'member'

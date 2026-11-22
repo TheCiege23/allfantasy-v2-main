@@ -12,7 +12,7 @@ import {
   nominateZombieHordeSitOut,
 } from '@/lib/zombie/ZombieHordeSitOutEngine'
 
-export type ChimmyActionResult = {
+type ChimmyActionResult = {
   ok: boolean
   chimmyActionId?: string
   publicMessage?: string | null
@@ -20,7 +20,7 @@ export type ChimmyActionResult = {
   error?: string
 }
 
-export type ZombieChimmyIntent =
+type ZombieChimmyIntent =
   | 'use_serum'
   | 'use_weapon'
   | 'declare_bomb'
@@ -34,7 +34,7 @@ export type ZombieChimmyIntent =
   | 'unknown'
 
 /** Enhanced intent detection for @Chimmy messages. */
-export function detectZombieChimmyIntent(rawMessage: string): ZombieChimmyIntent {
+function detectZombieChimmyIntent(rawMessage: string): ZombieChimmyIntent {
   const lower = rawMessage.toLowerCase()
   if (!lower.includes('@chimmy')) return 'unknown'
 

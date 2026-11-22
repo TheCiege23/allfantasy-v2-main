@@ -9,7 +9,7 @@ import type {
   TimerMode,
 } from '@/lib/draft-defaults/DraftUISettingsResolver'
 
-export type DraftRoomSettingsModalProps = {
+type DraftRoomSettingsModalProps = {
   open: boolean
   onClose: () => void
   leagueId: string
@@ -348,32 +348,36 @@ export function DraftRoomSettingsModal({
                   onChange={(v) => setDraftUI((p) => ({ ...p, liveDraftChatSyncEnabled: v }))}
                 />
                 <ToggleRow
-                  label="AI ADP (league-aware)"
-                  helper="Uses anonymized league ADP when available."
+                  label="Chimmy ADP (league-aware)"
+                  helper="Shows Chimmy's ADP (built from AllFantasy drafts, anonymized) beside market ADP in the player pool."
                   checked={Boolean(draftUI.aiAdpEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, aiAdpEnabled: v }))}
                 />
                 <ToggleRow
-                  label="AI queue reorder suggestions"
+                  label="Chimmy queue reorder suggestions"
+                  helper="Chimmy can suggest a better order for a manager's queue. Nobody's queue changes unless they accept."
                   checked={Boolean(draftUI.aiQueueReorderEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, aiQueueReorderEnabled: v }))}
                 />
                 <ToggleRow
                   label="Traded pick color tint"
+                  helper="Colours a traded pick by the team that now owns it, so trades stand out on the board."
                   checked={Boolean(draftUI.tradedPickColorModeEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, tradedPickColorModeEnabled: v }))}
                 />
                 <ToggleRow
                   label="Highlight traded-pick owner names"
+                  helper="Shows the new owner's name in red on a traded pick."
                   checked={Boolean(draftUI.tradedPickOwnerNameRedEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, tradedPickOwnerNameRedEnabled: v }))}
                 />
                 <ToggleRow
                   label="Pick trading during draft"
+                  helper="Lets managers trade picks with each other while the draft is running."
                   checked={Boolean(draftUI.pickTradeEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, pickTradeEnabled: v }))}
@@ -389,7 +393,7 @@ export function DraftRoomSettingsModal({
                     />
                     <ToggleRow
                       label="Optional HeyGen Round 1 narration"
-                      helper="When your server has HEYGEN_API_KEY, queues a short clip after each Round 1 pick. Never blocks the draft."
+                      helper="Plays a short narrated clip after each Round 1 pick when video is set up. It never holds up the draft."
                       checked={Boolean(draftUI.roundOneHeyGenHighlightEnabled)}
                       disabled={!canEdit}
                       onChange={(v) => setDraftUI((p) => ({ ...p, roundOneHeyGenHighlightEnabled: v }))}
@@ -405,19 +409,21 @@ export function DraftRoomSettingsModal({
                 />
                 <ToggleRow
                   label="Commissioner force auto-pick"
-                  helper="Allows commissioner-triggered auto-picks when rules permit."
+                  helper="Lets the commissioner make the room pick for the team on the clock right now."
                   checked={Boolean(draftUI.commissionerForceAutoPickEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, commissionerForceAutoPickEnabled: v }))}
                 />
                 <ToggleRow
                   label="Member auto-pick (away mode)"
+                  helper="When a manager's clock runs out, the room picks for them (their queue first). Off: the pick waits or is skipped, per league rules."
                   checked={Boolean(draftUI.autoPickEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, autoPickEnabled: v }))}
                 />
                 <ToggleRow
-                  label="Orphan team AI manager"
+                  label="Orphan team Chimmy manager"
+                  helper="Chimmy drafts for any team that has no manager, so the draft never stalls on an empty seat."
                   checked={Boolean(draftUI.orphanTeamAiManagerEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, orphanTeamAiManagerEnabled: v }))}
@@ -434,7 +440,7 @@ export function DraftRoomSettingsModal({
                     }
                   >
                     <option value="cpu">CPU (deterministic)</option>
-                    <option value="ai">AI (with CPU fallback)</option>
+                    <option value="ai">Chimmy (with CPU fallback)</option>
                   </select>
                 </div>
 
@@ -456,12 +462,14 @@ export function DraftRoomSettingsModal({
 
                 <ToggleRow
                   label="Draft import tools"
+                  helper="Lets the commissioner import the draft order and picks from a file."
                   checked={Boolean(draftUI.importEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, importEnabled: v }))}
                 />
                 <ToggleRow
                   label="Draft order randomization (where applicable)"
+                  helper="Lets the commissioner shuffle the draft order before the draft starts."
                   checked={Boolean(draftUI.draftOrderRandomizationEnabled)}
                   disabled={!canEdit}
                   onChange={(v) => setDraftUI((p) => ({ ...p, draftOrderRandomizationEnabled: v }))}

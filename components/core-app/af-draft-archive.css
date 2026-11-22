@@ -69,3 +69,21 @@
    five columns no longer scroll sideways at the width nine did (112px a column, 1008px for nine). */
 .af-archive table{min-width:calc(var(--af-cols,9) * 112px)}
 .af-archive-cols-note{margin:.5rem 0 0;color:var(--text2);font-size:12px}
+
+/* Draft HQ lower half (2026-11-06): one pick-details switch, and the records grouped in a card. */
+.af-picks-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;margin:1rem 0 .5rem}
+.af-picks-head h3{margin:0}
+.af-archive .af-pick-details-toggle[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+.af-pick-details{display:grid;gap:.1rem;margin-top:.35rem}
+.af-archive-records{margin:1rem 0;padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.af-archive-records h3{margin:0 0 .5rem;font-size:1.05rem}
+.af-archive-records details{margin:0;border-top:1px solid var(--line)}
+.af-archive-records summary{display:flex;align-items:center}
+.af-archive-records nav{margin:.75rem 0 0}
+.af-archive-records-note{margin:.75rem 0 0;color:var(--text2);font-size:13px}
+.af-results-refresh{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem 1rem;padding:0 0 .75rem}
+.af-results-refresh p{margin:0}
+.af-results-refresh [role=status]{flex-basis:100%}
+.af-archive form a{min-height:44px;display:inline-flex;align-items:center}
+@media(max-width:767px){.af-archive-records{padding:.75rem}.af-results-refresh>button{width:100%}}
+

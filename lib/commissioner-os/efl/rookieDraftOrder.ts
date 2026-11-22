@@ -50,7 +50,7 @@ import type { MaxPfFreezeSnapshot, MaxPfFreezeState } from '@/lib/commissioner-o
  * order interleaves them — slot 6 is the League 2 promotion playoff loser and slot 14 is the
  * League 1 one. A rule without a tier could not tell them apart.
  */
-export type EflSlotRule =
+type EflSlotRule =
   /** The nth-lowest frozen value among the teams no structural role claimed. `groupIndex` is 1-based. */
   | { kind: 'reverse_max_pf'; tierLevel: number; groupIndex: number }
   | { kind: 'auto_promoted'; tierLevel: number }
@@ -62,7 +62,7 @@ export type EflSlotRule =
   /** A finishing position from that tier's own championship playoff. `place` is 1-based. */
   | { kind: 'tier_final_placement'; tierLevel: number; place: number }
 
-export type EflDraftSlot = {
+type EflDraftSlot = {
   slot: number
   rule: EflSlotRule
   teamId: string | null
@@ -80,7 +80,7 @@ export type EflDraftSlot = {
   explanation: string
 }
 
-export type EflRookieDraftOrderResult = {
+type EflRookieDraftOrderResult = {
   leagueId: string
   /** The season the draft is FOR. */
   season: number
@@ -148,7 +148,7 @@ export const EFL_ROOKIE_DRAFT_ORDER_V1: readonly EflSlotRule[] = Object.freeze([
   /* 32 */ { kind: 'tier_final_placement', tierLevel: 1, place: 1 },
 ])
 
-export type ResolveEflRookieDraftOrderInput = {
+type ResolveEflRookieDraftOrderInput = {
   leagueId: string
   /** The season the draft is FOR. */
   season: number

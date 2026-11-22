@@ -10,7 +10,10 @@ import { playerUnpricedReason } from '@/lib/trade-value/unpricedReason'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { loadLeagueForTrade } from '@/lib/trade-value-console/league-loader'
-import { resolveLeagueTradeChart, type LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+import { prisma } from '@/lib/prisma'
+import { searchOpenMarketDevy } from '@/lib/devy/openMarketDevy'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -112,27 +115,39 @@ export async function GET(req: NextRequest) {
 
   try {
     const leagueId = req.nextUrl.searchParams.get('leagueId')?.trim()
-    let chart: LeagueTradeChart | null = null
     if (leagueId) {
       const session = await getServerSession(authOptions)
-      const userId = session?.user?.id
+      const userId = (session?.user as { id?: string } | undefined)?.id
       if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
       const leagueRow = await loadLeagueForTrade({ leagueId, userId })
       if (!leagueRow) return NextResponse.json({ error: 'League unavailable' }, { status: 404 })
-      if (sportParam === 'NFL' || sportParam === 'ALL') {
-        chart = await resolveLeagueTradeChart({
-          leagueRow, leagueSnapshot: null, leagueNormCtx: null,
-          overrides: { leagueSize: leagueRow.leagueSize ?? 12 },
-        })
-      }
+      if (sportParam !== 'ALL' && normalizeToSupportedSport(sportParam) !== leagueRow.sport) return NextResponse.json([])
+      const metrics = await loadLeaguePlayerMetrics({ leagueId, searchName: q, limit: 12 })
+      return NextResponse.json((metrics?.rows ?? []).map(row => ({
+        kind: 'player', sport: metrics!.sport, playerId: row.rosterPlayerId ?? row.playerId, name: row.playerName,
+        position: row.position, team: '', value: row.dynastyTradeValue ?? row.tradeValue,
+        valueUnit: row.tradeValueUnit, rank: row.rank, weeklyProjection: row.weekly, source: 'allfantasy',
+        ...(leagueRow.platform === 'sleeper' && row.rosterPlayerId ?
+          { providerIdentity: { provider: 'sleeper', id: row.rosterPlayerId, position: row.position } } : {}),
+      })))
     }
     if (sportParam === 'NFL') {
-      const fc = await searchNflFantasyCalc(q.toLowerCase(), chart)
+      const fc = await searchNflFantasyCalc(q.toLowerCase(), null)
+      /*
+       * With no league, college prospects come back too — the open analyzer's "college player for a pro
+       * player" (`lib/devy/openMarketDevy.ts`). Their value is on the devy board's own dynasty Superflex
+       * scale; the grade rescales to the chart it grades on. Inside a league the league's devy rights
+       * decide who is tradable, so this stays NFL-only there.
+       */
+      if (!leagueId) {
+        const devy = await searchOpenMarketDevy(prisma, q, { limit: 5 })
+        return NextResponse.json([...fc, ...devy])
+      }
       return NextResponse.json(fc)
     }
 
     if (sportParam === 'ALL') {
-      const nfl = await searchNflFantasyCalc(q.toLowerCase(), chart)
+      const nfl = await searchNflFantasyCalc(q.toLowerCase(), null)
       const restSports = SUPPORTED_SPORTS.filter((s) => s !== 'NFL')
       const rest = await Promise.all(
         restSports.map(async (s) => {

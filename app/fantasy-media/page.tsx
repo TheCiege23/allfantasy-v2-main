@@ -32,7 +32,7 @@ export default async function FantasyMediaPage() {
         </div>
         <h1 className="text-2xl font-bold text-white">Fantasy video</h1>
         <p className="mt-1 text-sm text-white/60">
-          AI recap scripts + HeyGen video: weekly recaps, waiver targets, league recaps, and more.
+          Chimmy recap scripts + HeyGen video: weekly recaps, waiver targets, league recaps, and more.
         </p>
         <FantasyMediaListClient />
       </div>

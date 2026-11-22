@@ -56,7 +56,7 @@ export const PROSPECT_NOT_ON_LIST_MESSAGE =
   'This player is unavailable: he is not a current NHL prospect on the stored Fantrax player list.'
 export const PROSPECT_LIST_UNREADABLE_MESSAGE =
   'This prospect is unavailable right now: the stored Fantrax NHL player list could not be read.'
-export const LINKED_PROSPECT_ROSTERED_MESSAGE = 'This player is already on another roster in this league.'
+const LINKED_PROSPECT_ROSTERED_MESSAGE = 'This player is already on another roster in this league.'
 
 export type ProspectFreeAgencyLeague = {
   sport?: string | null
@@ -80,7 +80,7 @@ function matchesQuery(p: NhlFantraxProspect, query: string | null | undefined): 
   return !q || p.name.toLowerCase().includes(q)
 }
 
-export type NhlProspectFreeAgents = {
+type NhlProspectFreeAgents = {
   prospects: NhlFantraxProspect[]
   /** Prospects on no roster in this league. */
   total: number
@@ -222,9 +222,9 @@ export const PROSPECT_AWARD_UNREADABLE_MESSAGE =
   'This prospect could not be checked: the stored Fantrax NHL player list could not be read.'
 /** The processor's own words for a player already on a roster (process-engine.ts). */
 export const AWARD_TAKEN_BY_OTHER_MESSAGE = 'Player no longer available (awarded to another team in this run).'
-export const AWARD_TAKEN_BY_SELF_MESSAGE = 'Player no longer available.'
+const AWARD_TAKEN_BY_SELF_MESSAGE = 'Player no longer available.'
 
-export type NhlProspectAwardDecision =
+type NhlProspectAwardDecision =
   | {
       kind: 'award'
       /** The id to put on the roster: the claimed `fantrax:X`, or his pro roster id once linked. */
@@ -236,7 +236,7 @@ export type NhlProspectAwardDecision =
     }
   | { kind: 'fail'; message: string; extra?: Record<string, unknown> }
 
-export type NhlProspectAwardDb = NhlProspectDb &
+type NhlProspectAwardDb = NhlProspectDb &
   LinkDb & {
     sportsPlayer: {
       findMany(args: {

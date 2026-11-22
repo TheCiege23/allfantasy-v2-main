@@ -1,11 +1,10 @@
-import type { ProductId } from "./ShellRouteResolver"
 import {
   PRIMARY_NAV_ITEMS,
   PRODUCT_NAV_ITEMS,
   type NavLinkItem,
 } from "@/lib/navigation/NavLinkResolver"
 
-export interface NavItem {
+interface NavItem {
   href: string
   label: string
 }
@@ -65,4 +64,3 @@ export function getActiveNavHref(pathname: string | null): string | null {
   return null
 }
 
-export type { ProductId }

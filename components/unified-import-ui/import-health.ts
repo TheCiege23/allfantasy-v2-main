@@ -9,7 +9,7 @@
  * critical red · neutral white).
  */
 
-export type ImportHealthStatus = 'healthy' | 'attention' | 'incomplete' | 'failed' | 'pending'
+type ImportHealthStatus = 'healthy' | 'attention' | 'incomplete' | 'failed' | 'pending'
 
 export interface ImportHealthInput {
   /** Latest run's status when known. */
@@ -20,7 +20,7 @@ export interface ImportHealthInput {
   warningCounts?: { error?: number; warn?: number; info?: number } | null
 }
 
-export interface ImportHealthResult {
+interface ImportHealthResult {
   status: ImportHealthStatus
   label: string
   tone: 'positive' | 'caution' | 'critical' | 'neutral'

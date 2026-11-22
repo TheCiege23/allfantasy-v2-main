@@ -2,7 +2,7 @@ import "server-only"
 import { syncNbaCupTournament } from "./syncNbaCupTournament"
 
 /** Existing live-score worker owns ingestion; pool readers never poll ESPN or publish results. */
-export type NbaCupLiveTickResult = { activeGames: number; gamesPublished?: number; poolsUpdated?: number; providerFailures: number; skipped?: string }
+type NbaCupLiveTickResult = { activeGames: number; gamesPublished?: number; poolsUpdated?: number; providerFailures: number; skipped?: string }
 export async function refreshNbaCupLive(): Promise<NbaCupLiveTickResult> {
   const now = new Date()
   if (now.getUTCMonth() < 9) return { activeGames: 0, providerFailures: 0, skipped: "outside-cup-season" }

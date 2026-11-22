@@ -47,6 +47,12 @@ const h = vi.hoisted(() => ({
   sportsPlayerFindMany: vi.fn(),
 }))
 
+// The engine takes its per-league run lock through this module; its Postgres path calls
+// `prisma.$transaction`, which these tests count, so it is stubbed to always acquire.
+vi.mock('@/lib/automation/locks', () => ({
+  acquireAutomationLock: async () => ({ ok: true, backend: 'postgres' }),
+  releaseAutomationLock: async () => {},
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: h.leagueFindUnique },
@@ -78,6 +84,8 @@ vi.mock('@/lib/ai-learning-system/resolveLeagueSport', () => ({ resolveLeagueSpo
 vi.mock('@/lib/league-runtime/redraftRosterMoveSync', () => ({ planRedraftRosterMoveWrites: h.moves }))
 vi.mock('@/lib/guillotine/blindWaiverCutoff', () => ({ guillotineClaimsCutoff: async () => null }))
 vi.mock('@/lib/league/faabMirror', () => ({ copyGenericFaabToRedraft: async () => {} }))
+// The cross-engine holder check has its own reads and its own suite (waiver-run-redraft-holder.test.ts).
+vi.mock('@/lib/waiver-wire/redraftRosterHolder', () => ({ redraftHolderOtherThan: async () => null }))
 
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import {

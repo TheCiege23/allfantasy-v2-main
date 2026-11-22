@@ -62,7 +62,7 @@ export function AnalyticsTab({ player }: { player: PlayerIdentity }) {
     <div className="space-y-4">
       {data.aiInsights && (
         <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4">
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-purple-300/50">AI Insights</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-purple-300/50">Chimmy Insights</p>
           <p className="text-[13px] leading-relaxed text-white/70">{data.aiInsights}</p>
         </div>
       )}

@@ -9,7 +9,7 @@ import type { PlayerComparisonPremiumSnapshot } from '@/lib/player-comparison-ui
 import { PlayerComparisonPremiumView } from './PlayerComparisonPremiumView'
 import { Button } from '@/components/ui/button'
 
-export type PlayerComparisonDrawerProps = {
+type PlayerComparisonDrawerProps = {
   open: boolean
   onClose: () => void
   initialPayload: OpenPlayerComparisonPayload | null

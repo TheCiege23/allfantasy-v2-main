@@ -16,7 +16,7 @@ import { tradeCardPath, type TradeCard } from "@/lib/push-notifications/tradeCar
 import type { PushPayload } from "@/lib/push-notifications/types"
 
 /** Well-known players so the headshots render; the trade itself is obviously a sample. */
-export const TEST_TRADE_CARD: TradeCard = {
+const TEST_TRADE_CARD: TradeCard = {
   v: 1,
   kind: "offer",
   league: "Sample league",

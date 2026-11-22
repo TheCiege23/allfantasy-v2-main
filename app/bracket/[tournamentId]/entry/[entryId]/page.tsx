@@ -108,7 +108,7 @@ export default async function EntryBracketPage(
               </div>
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 <span className="mode-muted">
-                  Build your {sportUI.label} challenge with live context and AI assist.
+                  Build your {sportUI.label} challenge with live context and Chimmy assist.
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <BracketChimmyEntryLink

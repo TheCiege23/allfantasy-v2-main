@@ -386,3 +386,19 @@
 .nl-workspace[data-dynasty-background=true] .nl-league-heading>.nl-button{background:rgba(8,12,19,.65)}
 /* Season clock pill — "Year N · YYYY", Archivo condensed, gold-soft on a gold wash (AA on the heading). */
 .nl-workspace[data-dynasty-background=true] .nl-dyn-clock{color:var(--dyn-gold-soft,#F3D79F);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 42%,transparent);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+/* Sub-tabs of the open top tab (Sleeper's six, lib/league/nativeLeagueNavigation.ts): one row of pills above the
+   screen, scrolling sideways on a phone rather than wrapping. Top level on purpose, not inside any @media. */
+.nl-subtabs{display:flex;gap:8px;overflow-x:auto;margin:0 0 16px;padding-bottom:2px;scrollbar-width:none}
+.nl-subtabs::-webkit-scrollbar{display:none}
+.nl-subtabs button{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:999px;color:var(--text2);font-size:13px;font-weight:700;white-space:nowrap}
+.nl-subtabs button:hover{background:var(--chip)}
+.nl-subtabs button[aria-current=page]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.nl-subtabs .nl-nav-count{margin-left:0}
+@media (max-width:767px){.nl-subtabs button{min-height:44px}}
+
+/* Imported leagues in the same workspace (2026-11-22): where the league lives, under its name. */
+.nl-synced-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.nl-synced-bar .nl-synced-open{color:var(--gold)!important;border-color:color-mix(in srgb,var(--gold) 35%,transparent)}
+.nl-heading-name .nl-synced-note{flex-basis:100%;margin:0;font-size:12px;line-height:1.45;color:var(--text2)}
+@media (max-width:767px){.nl-synced-bar .nl-button{min-height:44px}}

@@ -11,7 +11,7 @@
  * production is the owner's decision, and a route that read-modify-writes `settings` keeps whatever
  * it read, so the stored value is unchanged by anything here.
  */
-export const CLIENT_HIDDEN_LEAGUE_SETTINGS_KEYS = ['psychologyCache', 'psychologyCachedAt'] as const
+const CLIENT_HIDDEN_LEAGUE_SETTINGS_KEYS = ['psychologyCache', 'psychologyCachedAt'] as const
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value)

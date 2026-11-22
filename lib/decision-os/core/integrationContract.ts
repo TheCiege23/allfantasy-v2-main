@@ -12,9 +12,9 @@ export type DecisionOSEvidenceSourceType =
   | 'user_input'
   | 'ai_narrative'
 
-export type DecisionOSTrustLevel = 'authoritative' | 'high' | 'medium' | 'low' | 'unverified'
+type DecisionOSTrustLevel = 'authoritative' | 'high' | 'medium' | 'low' | 'unverified'
 
-export type DecisionOSRecommendationType =
+type DecisionOSRecommendationType =
   | 'manager_intelligence'
   | 'league_intelligence'
   | 'commissioner_recommendation'
@@ -31,10 +31,10 @@ export type DecisionOSRecommendationType =
   | 'benchmark'
   | 'action_recommendation'
 
-export type DecisionOSRiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
-export type DecisionOSActionability = 'informational' | 'review' | 'recommended' | 'urgent' | 'blocked'
+type DecisionOSRiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical'
+type DecisionOSActionability = 'informational' | 'review' | 'recommended' | 'urgent' | 'blocked'
 
-export type DecisionOSEvidenceRef = {
+type DecisionOSEvidenceRef = {
   id: string
   sourceType: DecisionOSEvidenceSourceType
   sourceId: string
@@ -45,7 +45,7 @@ export type DecisionOSEvidenceRef = {
   metadata?: Record<string, unknown>
 }
 
-export type DecisionOSDerivationStep = {
+type DecisionOSDerivationStep = {
   id: string
   label: string
   inputEvidenceIds: string[]
@@ -54,7 +54,7 @@ export type DecisionOSDerivationStep = {
   confidenceDelta?: number
 }
 
-export type DecisionOSAiBoundary = {
+type DecisionOSAiBoundary = {
   usedAi: boolean
   role: 'none' | 'explanation_only' | 'summary_only' | 'unsupported'
   model?: string | null
@@ -90,56 +90,3 @@ export type DecisionOSInsight<TAction = unknown> = {
   metadata?: Record<string, unknown>
 }
 
-export function createDeterministicAiBoundary(
-  insufficientDataMessage?: string | null,
-): DecisionOSAiBoundary {
-  return {
-    usedAi: false,
-    role: 'none',
-    mayInventFacts: false,
-    mayOverrideEngineMath: false,
-    mustCiteEvidence: true,
-    insufficientDataMessage: insufficientDataMessage ?? null,
-  }
-}
-
-export function createExplanationOnlyAiBoundary(args: {
-  model?: string | null
-  insufficientDataMessage?: string | null
-} = {}): DecisionOSAiBoundary {
-  return {
-    usedAi: true,
-    role: 'explanation_only',
-    model: args.model ?? null,
-    mayInventFacts: false,
-    mayOverrideEngineMath: false,
-    mustCiteEvidence: true,
-    insufficientDataMessage: args.insufficientDataMessage ?? null,
-  }
-}
-
-export function assertDecisionOSInsightGrounded(insight: DecisionOSInsight): void {
-  if (!Number.isFinite(insight.confidence) || insight.confidence < 0 || insight.confidence > 100) {
-    throw new Error('Decision OS insight confidence must be 0-100')
-  }
-  if (!Number.isFinite(insight.dataCompleteness) || insight.dataCompleteness < 0 || insight.dataCompleteness > 100) {
-    throw new Error('Decision OS insight dataCompleteness must be 0-100')
-  }
-  if (insight.evidence.length === 0) {
-    throw new Error('Decision OS insight requires at least one evidence source')
-  }
-  const evidenceIds = new Set(insight.evidence.map((e) => e.id))
-  for (const step of insight.derivationChain) {
-    for (const id of step.inputEvidenceIds) {
-      if (!evidenceIds.has(id)) {
-        throw new Error(`Decision OS derivation step references missing evidence: ${id}`)
-      }
-    }
-  }
-  if (insight.aiBoundary.mayInventFacts !== false || insight.aiBoundary.mayOverrideEngineMath !== false) {
-    throw new Error('Decision OS AI boundary cannot invent facts or override engine math')
-  }
-  if (insight.aiBoundary.usedAi && !insight.aiBoundary.mustCiteEvidence) {
-    throw new Error('Decision OS AI explanations must cite evidence when possible')
-  }
-}

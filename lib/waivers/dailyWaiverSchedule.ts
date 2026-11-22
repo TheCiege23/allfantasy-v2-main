@@ -23,7 +23,7 @@ export const WAIVER_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 export type WaiverDayKey = (typeof WAIVER_DAY_KEYS)[number]
 
 /** JS `Date#getDay()` index for each key (Sun = 0). */
-export const WAIVER_DAY_JS_INDEX: Readonly<Record<WaiverDayKey, number>> = {
+const WAIVER_DAY_JS_INDEX: Readonly<Record<WaiverDayKey, number>> = {
   sun: 0,
   mon: 1,
   tue: 2,
@@ -52,12 +52,12 @@ export const DAILY_WAIVER_MODES = [
 ] as const
 export type DailyWaiverMode = (typeof DAILY_WAIVER_MODES)[number]
 
-export const LEAGUE_WAIVER_TYPES = ['faab', 'rolling', 'reverse_standings'] as const
-export type LeagueWaiverType = (typeof LEAGUE_WAIVER_TYPES)[number]
+const LEAGUE_WAIVER_TYPES = ['faab', 'rolling', 'reverse_standings'] as const
+type LeagueWaiverType = (typeof LEAGUE_WAIVER_TYPES)[number]
 
 const modeSchema = z.enum(DAILY_WAIVER_MODES)
 
-export const dailyWaiverScheduleSchema = z
+const dailyWaiverScheduleSchema = z
   .object({
     version: z.literal(1),
     enabled: z.boolean(),
@@ -106,7 +106,7 @@ export function readDailyWaiverScheduleFromSettings(settings: unknown): DailyWai
   return parseDailyWaiverSchedule((settings as Record<string, unknown>)[DAILY_WAIVER_SCHEDULE_SETTINGS_KEY])
 }
 
-export function normalizeLeagueWaiverType(raw: string | null | undefined): LeagueWaiverType {
+function normalizeLeagueWaiverType(raw: string | null | undefined): LeagueWaiverType {
   const t = String(raw ?? '').trim().toLowerCase().replace(/-/g, '_')
   if (t === 'faab') return 'faab'
   if (t === 'reverse_standings' || t === 'reverse_order') return 'reverse_standings'
@@ -401,4 +401,18 @@ export function isAutomatedWaiverRunBlocked(
 export function isWithinDropHold(droppedAt: Date | null | undefined, now: Date, holdHours: number | null | undefined): boolean {
   if (!droppedAt || !holdHours || holdHours <= 0) return false
   return now.getTime() - droppedAt.getTime() < holdHours * 3_600_000
+}
+
+/**
+ * A stored UTC "HH:MM" as the league's local clock time, for display (e.g. "03:00" in New York → "10:00 PM").
+ * Taken at `ref`, like the derivation above. Returns null for an unreadable time.
+ */
+export function utcProcessTimeAsLocalLabel(hhmm: string | null | undefined, timeZone: string | null | undefined, ref: Date = new Date()): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim())
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  const at = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate(), h, min))
+  return new Intl.DateTimeFormat('en-US', { timeZone: safeTimeZone(timeZone), hour: 'numeric', minute: '2-digit' }).format(at)
 }

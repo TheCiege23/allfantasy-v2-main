@@ -10,10 +10,15 @@ import {
 import type { StartVsApiResponse } from '@/lib/player-comparison-lab'
 import { cn } from '@/lib/utils'
 
-export interface StartVsComparisonModalProps {
+interface StartVsComparisonModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   data: StartVsApiResponse | null
+}
+
+function formatFactorScore(value: number | null, factor: string) {
+  const precision = /^(?:Week \d+|Weekly) projected points$/.test(factor) ? 2 : 1
+  return value == null ? '—' : value.toFixed(precision)
 }
 
 export function StartVsComparisonModal({ open, onOpenChange, data }: StartVsComparisonModalProps) {
@@ -82,8 +87,8 @@ export function StartVsComparisonModal({ open, onOpenChange, data }: StartVsComp
                         </span>
                       </div>
                       <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-white/50">
-                        <span>A: {row.player_a_score != null ? row.player_a_score.toFixed(1) : '—'}</span>
-                        <span>B: {row.player_b_score != null ? row.player_b_score.toFixed(1) : '—'}</span>
+                        <span>A: {formatFactorScore(row.player_a_score, row.factor)}</span>
+                        <span>B: {formatFactorScore(row.player_b_score, row.factor)}</span>
                       </div>
                     </li>
                   ))}

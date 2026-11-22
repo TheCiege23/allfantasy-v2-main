@@ -2,16 +2,16 @@ import "server-only"
 import { createHash } from "crypto"
 
 export const WORLD_CUP_CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
-export const WORLD_CUP_CHAT_IMAGE_TYPES = [
+const WORLD_CUP_CHAT_IMAGE_TYPES = [
   "image/png",
   "image/jpeg",
   "image/webp",
   "image/gif",
 ] as const
 
-export type WorldCupChatImageMimeType = typeof WORLD_CUP_CHAT_IMAGE_TYPES[number]
+type WorldCupChatImageMimeType = typeof WORLD_CUP_CHAT_IMAGE_TYPES[number]
 
-export type WorldCupChatImageUploadResult = {
+type WorldCupChatImageUploadResult = {
   assetId: string
   publicId: string
   secureUrl: string

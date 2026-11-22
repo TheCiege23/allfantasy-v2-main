@@ -17,6 +17,7 @@ import {
   type TradeOfferStatus,
 } from './tradeOfferCard'
 import { safeDisplayName } from './displayName'
+import { tradeStatusAlertFor, tradeStatusHref, tradeStatusRecipients } from './tradeStatusAlert'
 
 /**
  * A trade offer, posted into the DM between the two managers so they can find it in the
@@ -280,11 +281,58 @@ export async function postTradeStatusToDm(input: PostTradeStatusInput): Promise<
       }
     }
     await record(key, { state: 'posted', messageId: posted.id, postedAt: new Date().toISOString() })
+    // The alert that goes with the line (lib/chat-notifications/tradeStatusAlert.ts). After the claim
+    // and the post, so it is sent once per status like the line itself; never awaited by the trade.
+    queueTradeStatusAlert({ source: input.source, tradeId: input.tradeId, status: input.status, actorUserId: input.actorUserId ?? null, threadId, text, card })
     return { posted: true, threadId, messageId: posted.id }
   } catch (e) {
     await release(key)
     throw e
   }
+}
+
+/**
+ * Alert the managers in the DM — except whoever acted — that the trade moved. Sends nothing for a source
+ * or status `tradeStatusAlertFor` has no alert for. Fire-and-forget; never throws.
+ */
+function queueTradeStatusAlert(input: {
+  source: TradeOfferSource
+  tradeId: string
+  status: TradeOfferStatus
+  actorUserId: string | null
+  threadId: string
+  text: string
+  card: TradeOfferCard | null
+}): void {
+  const alert = tradeStatusAlertFor(input.source, input.status)
+  if (!alert) return
+  queueTradeDm(`alert:${input.source}:${input.status}`, async () => {
+    const members = await prisma.platformChatThreadMember.findMany({
+      where: { threadId: input.threadId, isBlocked: false },
+      select: { userId: true },
+    })
+    const recipients = tradeStatusRecipients(members.map((m) => m.userId), input.actorUserId)
+    if (recipients.length === 0) return
+    const { dispatchNotification } = await import('@/lib/notifications/NotificationDispatcher')
+    const leagueName = input.card?.leagueName?.trim()
+    for (const userId of recipients) {
+      await dispatchNotification({
+        userIds: [userId],
+        category: 'trade_accept_reject',
+        productType: 'app',
+        type: `trade_${input.status}`,
+        title: leagueName ? `${alert.title} · ${leagueName}` : alert.title,
+        body: input.text,
+        actionHref: tradeStatusHref(input.card, userId),
+        actionLabel: 'View trade',
+        leagueId: input.card?.leagueId ?? null,
+        severity: 'medium',
+        dedupePrefix: `trade-status-alert:${input.source}:${input.tradeId}:${input.status}`,
+        skipChannels: alert.email ? undefined : { email: true },
+        meta: { tradeSource: input.source, tradeId: input.tradeId, tradeStatus: input.status },
+      }).catch((e) => console.error('[trade-dm] status alert failed', { tradeId: input.tradeId, status: input.status, ...logSafe(e) }))
+    }
+  })
 }
 
 /** Fire-and-forget wrapper for request paths: returns at once, never throws, never rejects. */

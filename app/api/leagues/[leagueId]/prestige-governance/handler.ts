@@ -1,7 +1,7 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   buildAIPrestigeContext,
   buildPrestigeGovernanceSnapshot,
@@ -39,7 +39,7 @@ export async function GET(
     const includeSnapshot = parseBoolean(url.searchParams?.get('includeSnapshot'), true)
     const summaryLimit = Number.parseInt(url.searchParams?.get('summaryLimit') ?? '12', 10)
 
-    const commissioner = await isCommissioner(leagueId, userId)
+    const commissioner = await canCommissionerAct(leagueId, userId, 'view')
     const aiContext = await buildAIPrestigeContext(leagueId, sport)
 
     const [snapshot, managerSummary, teamSummary] = await Promise.all([

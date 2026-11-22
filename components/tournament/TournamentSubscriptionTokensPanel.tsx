@@ -20,7 +20,7 @@ export function TournamentSubscriptionTokensPanel({
     <div className="space-y-6">
       <WarRoomPanel
         title="Subscription access"
-        subtitle="AF Pro (player AI), AF Commissioner (ops AI), AF Supreme (both). Locked controls show upgrade paths."
+        subtitle="AF Pro (player Chimmy), AF Commissioner (ops Chimmy), AF Supreme (both). Locked controls show upgrade paths."
       >
         <div className="grid gap-4 sm:grid-cols-3">
           {(Object.keys(AF_PLANS) as AfPlanId[]).map((id) => {
@@ -65,7 +65,7 @@ export function TournamentSubscriptionTokensPanel({
         ) : null}
       </WarRoomPanel>
 
-      <WarRoomPanel title="AF Tokens" subtitle="Premium AI burns tokens by depth — quick (1), standard (2), deep (3).">
+      <WarRoomPanel title="AF Tokens" subtitle="Premium Chimmy burns tokens by depth — quick (1), standard (2), deep (3).">
         <div className="grid gap-3 md:grid-cols-3">
           {(Object.keys(AF_TOKEN_COST_TIERS) as Array<keyof typeof AF_TOKEN_COST_TIERS>).map((key) => {
             const tier = AF_TOKEN_COST_TIERS[key]

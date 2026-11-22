@@ -581,7 +581,7 @@ export default function WorldCupLeaderboard({
                         data-testid={`wc-lb-ai-health-${row.entryId}`}
                         className="mt-2 grid gap-1.5 rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] px-2.5 py-2 text-[11px] text-white/70 sm:grid-cols-4"
                       >
-                        <span><strong className="text-white">AI Win</strong> {aiInsight.aiWinProbability}%</span>
+                        <span><strong className="text-white">Chimmy Win</strong> {aiInsight.aiWinProbability}%</span>
                         <span><strong className="text-white">Health</strong> {aiInsight.bracketHealth}</span>
                         <span><strong className="text-white">Max</strong> {aiInsight.maxPossiblePoints}</span>
                         <span><strong className="text-white">Champion</strong> {aiInsight.championAlive ? t("wc.lb.alive") : t("wc.lb.busted")}</span>

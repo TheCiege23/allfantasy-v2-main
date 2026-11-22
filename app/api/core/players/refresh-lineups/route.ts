@@ -16,7 +16,7 @@
  * app, returning to it, and opening a league.
  */
 import { NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildRateLimit429, consumeRateLimit } from '@/lib/rate-limit'
 import { refreshLineupsNow } from '@/lib/import-os/collector/lineupRefresh'
 import { invalidateHomePortfolio } from '@/lib/core-app/homePortfolioSummary'
@@ -32,7 +32,7 @@ async function readLeagueId(request: Request): Promise<string | null> {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const rl = consumeRateLimit({ scope: 'players', action: 'refresh_lineups', sleeperUsername: auth.userId, maxRequests: 8, windowMs: 60_000 })

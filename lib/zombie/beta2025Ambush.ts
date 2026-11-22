@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { buildWeekKickoffMap, lockTeamLookupKeys } from '@/lib/redraft/lineupLock'
 import { resolveCurrentLockTeams } from '@/lib/redraft/lineupLockCurrentTeam'

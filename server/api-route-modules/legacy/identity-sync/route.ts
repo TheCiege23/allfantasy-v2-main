@@ -2,18 +2,18 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { syncIdentityMap } from '@/lib/unified-player-service'
 import { syncAPISportsPlayersToIdentityMap } from '@/lib/api-sports'
+import { requireAdminOrBearer } from '@/lib/adminAuth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/identity-sync", tool: "LegacyIdentitySync" })(async (request: NextRequest) => {
   try {
-    const authHeader = request.headers.get('x-admin-key')
-    const adminPassword = process.env.ADMIN_PASSWORD
-
-    if (adminPassword && authHeader !== adminPassword) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // 🛑 This was `if (adminPassword && header !== adminPassword)` — which ALLOWS every caller
+    // when ADMIN_PASSWORD is unset (a hash-only admin setup is supported). Fail closed, and use
+    // the shared gate: admin session, bearer, or x-admin-secret, all compared in constant time.
+    const gate = await requireAdminOrBearer(request)
+    if (!gate.ok) return gate.res
 
     console.log('[IdentitySync] Starting identity map sync...')
     const result = await syncIdentityMap()

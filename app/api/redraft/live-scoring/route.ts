@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -69,11 +71,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   }
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `LiveScoringRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftLiveScoringRuntime({
     seasonId,
     leagueId: resolvedLeagueId,
     week: parsedWeek.value,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })
@@ -92,7 +97,7 @@ export async function POST(request: Request) {
   const resolvedLeagueId = await leagueIdFromInput({ seasonId: body.seasonId, leagueId: body.leagueId })
   if (!resolvedLeagueId) return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(resolvedLeagueId, userId)
+  const gate = await assertLeagueCommissioner(resolvedLeagueId, userId, 'scoring')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
   const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')

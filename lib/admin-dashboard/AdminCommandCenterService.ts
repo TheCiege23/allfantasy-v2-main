@@ -36,6 +36,11 @@ import {
 } from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getPlayInstallStats, type PlayInstallStatsResult } from "@/lib/google-play/playInstallStats"
+import { describeMrrEstimate, estimateMrr, formatUsdCents } from "@/lib/monetization/mrrEstimate"
+import { EXCLUDE_STORE_TEST_SUBSCRIPTIONS, EXCLUDE_STORE_TEST_SUBSCRIPTIONS_SQL } from "@/lib/monetization/storeTestSubscriptions"
+import { describeProWeekStats, loadProWeekStats, type ProWeekStats } from "@/lib/referral/proWeekStats"
+import { describeRetention, loadRetentionStats } from "@/lib/billing/retentionStats"
+import type { RetentionStats } from "@/lib/billing/retention"
 
 type MetricValue = number | string
 
@@ -409,6 +414,7 @@ async function countActiveSubscriberUsers(): Promise<number> {
     SELECT COUNT(DISTINCT "userId") AS count
     FROM "user_subscriptions"
     WHERE "status" IN ('active', 'trialing', 'past_due')
+      AND ${EXCLUDE_STORE_TEST_SUBSCRIPTIONS_SQL}
   `
   return Number(rows[0]?.count ?? 0)
 }
@@ -626,6 +632,10 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   // Start independent reports before the main query batch. A cold external API
   // must never add its full timeout to the database work on the critical path.
   const waitlistPromise = loadWaitlist()
+  // "Give a week, get a week" (lib/referral/proWeek.ts). A failed read reports "not tracked", never a 0.
+  const proWeekPromise: Promise<ProWeekStats | null> = loadProWeekStats(prisma as never).catch(() => null)
+  // Retention (lib/billing/retention.ts): failed→recovered, trials→paid, cancelled→came back. A failed read is "not tracked".
+  const retentionPromise: Promise<RetentionStats | null> = loadRetentionStats(prisma as never).catch(() => null)
   const leaguesByPlatformPromise = loadLeaguesByPlatform()
   const aiProvidersPromise = Promise.race([
     probeAiProviders().catch(() => null),
@@ -728,14 +738,18 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     countActiveSubscriberUsers(),
     countAdminUsers(),
     prisma.userSubscription.findMany({
+      // Apple sandbox / App Review purchases are not subscribers: lib/monetization/storeTestSubscriptions.ts
+      where: EXCLUDE_STORE_TEST_SUBSCRIPTIONS,
       select: {
         status: true,
         sku: true,
+        // The MRR estimate counts only store-billed rows (lib/monetization/mrrEstimate.ts).
+        source: true,
         plan: { select: { code: true } },
       },
     }),
     prisma.userSubscription.count({
-      where: { status: { in: FAILED_OR_CANCELED_STATUSES } },
+      where: { status: { in: FAILED_OR_CANCELED_STATUSES }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS },
     }),
     prisma.bracketPayment.count({ where: { status: { in: ["completed", "paid", "succeeded"] } } }),
     prisma.bracketPayment.aggregate({
@@ -859,8 +873,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: today } } }).catch(() => 0),
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
     // ── Subscription velocity ────────────────────────────────────────────────
-    prisma.userSubscription.count({ where: { createdAt: { gte: today } } }),
-    prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: today }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
     // ── Revenue breakdown ────────────────────────────────────────────────────
     prisma.bracketPayment.aggregate({
       where: { status: { in: ["completed", "paid", "succeeded"] }, createdAt: { gte: today } },
@@ -894,7 +908,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       where: { status: { in: ["completed", "paid", "succeeded"] }, createdAt: { gte: sevenHoursAgo } },
       _sum: { amountCents: true },
     }),
-    prisma.userSubscription.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
+    prisma.userSubscription.count({ where: { createdAt: { gte: sevenHoursAgo }, ...EXCLUDE_STORE_TEST_SUBSCRIPTIONS } }),
     prisma.tokenLedger.aggregate({
       where: { tokenDelta: { gt: 0 }, createdAt: { gte: sevenHoursAgo } },
       _sum: { tokenDelta: true },
@@ -916,7 +930,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   ])
 
   // Keep these outside the positional query array, but await them together.
-  const [waitlist, leaguesByPlatform] = await Promise.all([waitlistPromise, leaguesByPlatformPromise])
+  const [waitlist, leaguesByPlatform, proWeek, retention] = await Promise.all([waitlistPromise, leaguesByPlatformPromise, proWeekPromise, retentionPromise])
+  const retentionNotes = retention ? describeRetention(retention) : null
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -935,6 +950,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     },
     { annual: 0, monthly: 0, unknown: 0 }
   )
+  const mrr = estimateMrr(subscriptions.map((sub) => ({ status: sub.status, source: sub.source, sku: sub.sku, planCode: sub.plan.code })))
   const activeSubscriptionUserCount = activeSubscriptionUsers
   const completedRevenueCents = bracketPaymentRevenue._sum.amountCents ?? null
   const inviteAccepts = worldCupInviteUseSummary._sum.useCount ?? 0
@@ -1028,7 +1044,22 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments only"),
       metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
       metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
-      notTracked("MRR estimate", "Subscription prices are not reliably stored on subscription rows"),
+      /*
+       * MRR (2026-11-15): the price is still not stored on the row, but the SKU is, and the catalog
+       * prices every SKU — the same prices Stripe is checked against. GROSS LIST PRICE, before coupons
+       * and store fees, so it can over-state and never under-state; the note says so.
+       */
+      metric("MRR estimate", formatUsdCents(mrr.mrrCents), describeMrrEstimate(mrr)),
+      proWeek
+        ? metric("Referral Pro weeks (30 days)", proWeek.granted30d, describeProWeekStats(proWeek))
+        : notTracked("Referral Pro weeks (30 days)", "Could not read referral weeks"),
+      ...(retention && retentionNotes
+        ? [
+            metric("Failed payments (30 days)", retention.failedInvoices, retentionNotes.payments),
+            metric("Free trials (30 days)", retention.trialsStarted, retentionNotes.trials),
+            metric("Cancellations (30 days)", retention.cancellations, retentionNotes.cancellations),
+          ]
+        : [notTracked("Retention (30 days)", "Could not read payment, trial and cancellation events")]),
     ],
     tokens: [
       metric("Token balances total", tokenBalanceSummary._sum.balance ?? 0),

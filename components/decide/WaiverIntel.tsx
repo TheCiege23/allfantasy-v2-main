@@ -41,7 +41,11 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
     >
       <div className="bdx-kick">
         <h2 className="bdx-disp">{es ? 'Inteligencia de agentes libres' : 'Waiver intelligence'}</h2>
-        <span className="bdx-sub">
+        {/*
+          On /core the budget and what you have left are the Waivers screen's FAAB tile; this line said
+          them a second time (2026-11-14). The Decide deck has no such tile, so it keeps the line.
+        */}
+        {surface === 'core' ? null : <span className="bdx-sub">
           {intel
             ? es
               ? `${intel.budget != null ? `presupuesto de $${intel.budget}` : 'sin presupuesto FAAB'}${intel.myRemaining != null ? ` · te quedan $${intel.myRemaining}` : ''}`
@@ -49,7 +53,7 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
             : es
               ? 'ofertas calibradas con esta liga y el mercado'
               : 'bids calibrated to this room + the market'}
-        </span>
+        </span>}
       </div>
 
       {loading ? (
@@ -123,7 +127,12 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
                           The why, on the page — it used to live only in `title`, and a phone or a
                           tablet has no hover, so iOS and Android readers never saw it.
                         */}
-                        {t.reasoning.length > 0 ? <span className="bdx-reason">{reasons}</span> : null}
+                        {/*
+                          On /core each reason repeats the row or the card beside it — the value is on the
+                          row, "fills" and "can't play" are its tags, and the formula and the room's median
+                          are in "How this room bids" (2026-11-14). They printed under every player.
+                        */}
+                        {t.reasoning.length > 0 && surface !== 'core' ? <span className="bdx-reason">{reasons}</span> : null}
                       </span>
                       <span className="k" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {t.suggestedBid != null ? `${es ? 'oferta' : 'bid'} ~$${t.suggestedBid}` : '—'}

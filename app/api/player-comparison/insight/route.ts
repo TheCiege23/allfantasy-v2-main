@@ -115,7 +115,7 @@ async function paidToolPost(req: Request) {
     userId = session?.user?.id ?? null
     if (!userId) {
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'Sign in to use AI player comparison explanations.' },
+        { error: 'Unauthorized', message: 'Sign in to use Chimmy player comparison explanations.' },
         { status: 401 }
       )
     }

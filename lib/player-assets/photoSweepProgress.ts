@@ -1,4 +1,4 @@
-export type PhotoSweepCursor = { priority: string | null; general: string | null }
+type PhotoSweepCursor = { priority: string | null; general: string | null }
 export function readPhotoSweepCursor(value: unknown): PhotoSweepCursor {
   const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
   const id = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 128 ? v : null

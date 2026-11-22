@@ -21,7 +21,7 @@ export interface ManagerDNA {
   rosterCounts: Record<string, number>
 }
 
-export interface ManagerDNAInput {
+interface ManagerDNAInput {
   teamName: string
   ownerName: string
   teamIdx: number
@@ -36,12 +36,12 @@ export interface ManagerDNAInput {
   leagueSize: number
 }
 
-export function computeManagerDNA(
+function computeManagerDNA(
   input: ManagerDNAInput,
   adpPool: ADPEntry[],
   allInputs: ManagerDNAInput[]
 ): ManagerDNA {
-  const { teamName, ownerName, teamIdx, wins, losses, ties, pointsFor, performances, rosterPlayerIds, isDynasty, leagueSize, currentRank } = input
+  const { teamName, ownerName, teamIdx, wins, losses, ties, performances, rosterPlayerIds, isDynasty, leagueSize } = input
   const name = teamName || ownerName || `Manager ${teamIdx + 1}`
   const gamesPlayed = Math.max(1, wins + losses + ties)
   const winRate = wins / gamesPlayed

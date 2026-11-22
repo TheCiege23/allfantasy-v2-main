@@ -28,7 +28,7 @@ const SPORT_CARDS = [
     sport: 'NFL',
     status: 'Active' as const,
     description:
-      'Full AI draft intelligence — pick recommendations, tier cliffs, roster build strategy, and live board tracking.',
+      'Full Chimmy draft intelligence — pick recommendations, tier cliffs, roster build strategy, and live board tracking.',
     href: '/mock-draft',
     ctaLabel: 'Open NFL AF Legacy',
   },
@@ -65,7 +65,7 @@ const SPORT_CARDS = [
 const FEATURES = [
   {
     Icon: Zap,
-    title: 'AI Pick Advisor',
+    title: 'Chimmy Pick Advisor',
     description:
       'Chimmy surfaces best-available recommendations at each pick based on your roster needs and tier position.',
     style: 'cyan',
@@ -132,7 +132,7 @@ const HOW_IT_WORKS = [
     step: '02',
     title: 'Let Chimmy monitor tiers, roster needs, and draft flow',
     description:
-      'The AI engine tracks tier breaks, positional scarcity, and opponent tendencies in real time as your draft unfolds.',
+      'Chimmy engine tracks tier breaks, positional scarcity, and opponent tendencies in real time as your draft unfolds.',
   },
   {
     step: '03',
@@ -220,7 +220,7 @@ export default function WarRoomPage() {
           </div>
 
           <p className="mx-auto mb-8 max-w-2xl text-[15px] leading-relaxed text-white/60 sm:text-[16px]">
-            Your AI-powered draft command center for smarter picks, sharper roster builds, and better
+            Your Chimmy-powered draft command center for smarter picks, sharper roster builds, and better
             fantasy decisions.
           </p>
 
@@ -266,7 +266,7 @@ export default function WarRoomPage() {
       {/* ── Hidden SEO headings ───────────────────────────────────────────── */}
       <div className="sr-only">
         <h2>Fantasy Football Draft Tool</h2>
-        <h2>AI Draft Assistant</h2>
+        <h2>Chimmy Draft Assistant</h2>
         <h2>Dynasty Draft AF Legacy</h2>
         <h2>Multi-Sport Fantasy Draft Preview</h2>
       </div>
@@ -450,11 +450,11 @@ export default function WarRoomPage() {
             </p>
           </div>
           <p className="mb-3 text-[13px] leading-relaxed text-white/45">
-            AllFantasy is built for fantasy sports strategy, league management, AI analysis, and
+            AllFantasy is built for fantasy sports strategy, league management, Chimmy analysis, and
             community. We do not offer sportsbook, casino, or gambling services.
           </p>
           <p className="text-[13px] leading-relaxed text-white/45">
-            AI recommendations are designed to support your decisions, not guarantee outcomes. Every
+            Chimmy recommendations are designed to support your decisions, not guarantee outcomes. Every
             pick suggestion comes with an explanation so you stay in control.
           </p>
           <p className="mt-3 text-[11px] text-white/25">

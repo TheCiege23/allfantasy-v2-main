@@ -38,4 +38,3 @@ export interface LeagueTemplatePayload {
   templateSettingsOverrides?: Record<string, unknown>
 }
 
-export type LeagueTemplatePayloadJson = Record<string, unknown>

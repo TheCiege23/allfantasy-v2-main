@@ -7,7 +7,7 @@ import { verifyGuestSessionToken } from '@/lib/guest-mode/guestSessionToken'
  * caller's perspective — the common case (`no-token`) is simply "this sign-in
  * had no pending trial to migrate."
  */
-export type GuestClaimResult =
+type GuestClaimResult =
   | { claimed: true; legacyUserId: string }
   | {
       claimed: false

@@ -1,4 +1,4 @@
-export type IncrementalSeasonPlan = {
+type IncrementalSeasonPlan = {
   yearsToDiscover: number[]
   reusedYears: number[]
 }

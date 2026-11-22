@@ -83,7 +83,7 @@ async function handleBusinessDemo(
   const parsed = emailSchema.safeParse({ email: body?.email });
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.errors[0]?.message || "Enter a valid work email." },
+      { error: parsed.error.issues[0]?.message || "Enter a valid work email." },
       { status: 400, headers: corsHeaders }
     );
   }
@@ -255,7 +255,7 @@ export const POST = withApiUsage({
     const result = emailSchema.safeParse({ email: body?.email });
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || "Invalid email" },
+        { error: result.error.issues[0]?.message || "Invalid email" },
         { status: 400, headers: corsHeaders }
       );
     }

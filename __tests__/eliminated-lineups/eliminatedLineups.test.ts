@@ -77,8 +77,10 @@ describe('what a lineup is short of', () => {
 
 describe('the rule', () => {
   it('reads only a well-formed rule that is on', () => {
-    expect(readEliminatedLineupRule({ eliminated_lineup_minimum: { enabled: true, standard: 'filled', autoFill: true } })).toEqual({ standard: 'filled', autoFill: true })
-    expect(readEliminatedLineupRule({ eliminated_lineup_minimum: { enabled: true, standard: 'playable' } })).toEqual({ standard: 'playable', autoFill: false })
+    expect(readEliminatedLineupRule({ eliminated_lineup_minimum: { enabled: true, standard: 'filled', autoFill: true } })).toEqual({ standard: 'filled', autoFill: true, optimize: false })
+    expect(readEliminatedLineupRule({ eliminated_lineup_minimum: { enabled: true, standard: 'playable' } })).toEqual({ standard: 'playable', autoFill: false, optimize: false })
+    // Anti-tanking: the full best lineup is its own explicit choice, never implied by autoFill.
+    expect(readEliminatedLineupRule({ eliminated_lineup_minimum: { enabled: true, standard: 'playable', optimize: true } })).toEqual({ standard: 'playable', autoFill: false, optimize: true })
     for (const bad of [{ enabled: false, standard: 'filled' }, { enabled: 'yes', standard: 'filled' }, { enabled: true, standard: 'strict' }, true, 'on', null]) {
       expect(readEliminatedLineupRule({ eliminated_lineup_minimum: bad })).toBeNull()
     }
@@ -86,7 +88,9 @@ describe('the rule', () => {
   })
 
   it('a save stores it on or off, and refuses anything else', () => {
-    expect(parseEliminatedLineupRule({ enabled: true, standard: 'playable', autoFill: true })).toEqual({ ok: true, value: { enabled: true, standard: 'playable', autoFill: true } })
+    expect(parseEliminatedLineupRule({ enabled: true, standard: 'playable', autoFill: true })).toEqual({ ok: true, value: { enabled: true, standard: 'playable', autoFill: true, optimize: false } })
+    expect(parseEliminatedLineupRule({ enabled: true, standard: 'playable', optimize: true })).toEqual({ ok: true, value: { enabled: true, standard: 'playable', autoFill: false, optimize: true } })
+    expect(parseEliminatedLineupRule({ enabled: true, standard: 'playable', optimize: 'yes' })).toMatchObject({ ok: false })
     expect(parseEliminatedLineupRule({ enabled: false })).toEqual({ ok: true, value: { enabled: false } })
     expect(parseEliminatedLineupRule(null)).toEqual({ ok: true, value: { enabled: false } })
     for (const bad of [{ enabled: true }, { enabled: true, standard: 'strict' }, { enabled: true, standard: 'filled', autoFill: 'yes' }, { standard: 'filled' }, 'on', []]) {

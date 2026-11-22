@@ -67,7 +67,7 @@ export async function countChimmyAiCallsToday(
   }
 }
 
-export type ChimmyRateLimitResult = {
+type ChimmyRateLimitResult = {
   allowed: boolean
   used: number
   limit: number

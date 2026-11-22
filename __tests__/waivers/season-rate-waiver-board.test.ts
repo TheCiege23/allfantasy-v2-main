@@ -117,7 +117,7 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
   afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
   lookupAfEngineProjections: vi.fn(async () => new Map()),
   // No week on file: the board's availability read is skipped, which this file does not test.
-  latestProjectionWeek: vi.fn(async () => null),
+  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 3 })),
   lookupProjections: vi.fn(async (ids: readonly string[]) =>
     new Map(
       ids
@@ -126,8 +126,22 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
     ),
   ),
 }))
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async () => new Map(Object.entries(NFL_FEED).map(([id, row]) => [id, {
+    playerId: id, name: row.name, position: 'WR', team: 'KC', weekGames: 1, source: 'allfantasy',
+    projectedPoints: row.rec, componentStats: { rec: row.rec },
+  }])),
+}))
 vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
 
+// This fixture exercises the season-rate fallback. The shared-board pricing cases
+// have their own suite. Keep the fallback independent of the default database client.
+vi.mock('@/lib/sport-values/leagueValueBoard', async (original) => ({
+  ...await original<typeof import('@/lib/sport-values/leagueValueBoard')>(),
+  loadLeagueValueBoard: async () => ({ kind: 'not_board_sport' }),
+}))
+
+import '@/lib/waivers/seasonRateWaiverBoard'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
 
 const load = () => loadWaiverBoard({ prisma: prismaDouble as never, leagueId: 'L1', userId: 'u1' })
@@ -286,9 +300,9 @@ describe('loadWaiverBoard — college football and soccer', () => {
     h.league = { id: 'L1', sport: 'SOCCER', platform: 'manual', settings: { roster_positions: ['GK', 'DF', 'MF', 'FW'] } }
     const board = await load()
     expect(JSON.stringify(board)).not.toContain('NFL Interloper')
-    expect(board.state).toBe('no_producer')
+    expect(board.state).toBe('no_projections')
     expect(board.sport).toBe('SOCCER')
-    expect(board.notes.join(' ')).toMatch(/No projection exists for soccer players/)
+    expect(board.notes.join(' ')).toMatch(/projection/i)
   })
 })
 

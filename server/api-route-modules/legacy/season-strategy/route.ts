@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getOrComputeStrategy, getStrategyHistory } from '@/lib/season-strategy'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 const PostSchema = z.object({
   league_id: z.string().min(1).max(64),
@@ -30,6 +31,14 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/season-strategy", tool
       rateLimit: { action: 'season_strategy', maxRequests: 3, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * `planning_tools` (Pro) was enforced only by the FeatureGate around StrategyPlanner in the browser;
+     * a direct POST computed the strategy for anyone. A guest actor (`guest:…`) holds no plan, so it gets
+     * the same lock the screen already shows it.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'planning_tools' })
+    if (!plan.ok) return plan.response
 
     const result = await getOrComputeStrategy(league_id, roster_id, gate.identity.sleeperUsername, force_refresh)
 

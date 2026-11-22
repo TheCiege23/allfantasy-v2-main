@@ -1,18 +1,4 @@
-import type {
-  Recommendation,
-  RecommendationSet,
-  RecommendationPriority,
-  RecommendationSeverity,
-  RecommendationConfidence,
-  RecommendationCategory,
-  RecommendedAction,
-  ManagerRecommendationInput,
-  CommissionerRecommendationInput,
-  PlatformRecommendationInput,
-  RecommendationEngineInput,
-  RecommendationEngineResult,
-  DetectedPatternSlice,
-} from './types'
+import type { Recommendation, RecommendationSet, RecommendationPriority, RecommendationSeverity, RecommendationConfidence, ManagerRecommendationInput, CommissionerRecommendationInput, PlatformRecommendationInput, RecommendationEngineInput, RecommendationEngineResult, DetectedPatternSlice } from './types'
 
 export const RECOMMENDATION_VERSION = '6.4.0'
 

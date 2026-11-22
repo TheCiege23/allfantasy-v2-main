@@ -702,3 +702,57 @@
   background: var(--accent-soft, rgba(34, 211, 238, 0.12));
 }
 .af-core .af-wlb-proj { white-space: nowrap; }
+
+/*
+ * ── Waivers on a phone (2026-11-07) ──
+ * Live at 375px the screen was 2,575px: Competitive Edge listed all eleven rivals (995px) and Worth
+ * adding carried three coverage notes under a one-line finding. Rivals now show the top three at every
+ * width with "Show all N managers" (WaiverCompetitiveEdge, RIVALS_PREVIEW); on a phone the notes fold
+ * behind "How this list was built". Wide screens keep the notes open and never see that toggle.
+ * Top level, appended.
+ */
+.af-core .af-wv-edge-more,
+.af-core .af-wlb-notes-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 0;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-wv-edge-more:focus-visible,
+.af-core .af-wlb-notes-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core .af-wlb-notes-toggle {
+  display: none;
+}
+@media (max-width: 640px) {
+  .af-core .af-wlb-notes-toggle {
+    display: flex;
+    justify-content: space-between;
+    border-style: solid;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .af-core .af-wlb-notes-toggle::after {
+    content: '▾' / '';
+    color: var(--accent);
+  }
+  .af-core .af-wlb-notes-toggle[aria-expanded='true']::after {
+    content: '▴' / '';
+  }
+  .af-core .af-wlb-notes:not([data-open]) {
+    display: none;
+  }
+}

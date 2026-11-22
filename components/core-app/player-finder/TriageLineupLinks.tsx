@@ -134,4 +134,3 @@ export function TriageLineupLinks({
   )
 }
 
-export default TriageLineupLinks

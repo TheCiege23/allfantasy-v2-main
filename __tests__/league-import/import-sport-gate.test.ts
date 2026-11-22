@@ -75,7 +75,7 @@ const EXPECTED: Record<ImportProvider, ImportSupportedSport[]> = {
   sleeper: ['NFL'],
   espn: ['NFL', 'MLB'],
   yahoo: ['NFL'],
-  fantrax: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'],
+  fantrax: ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER'],
   mfl: ['NFL'],
   fleaflicker: ['NFL'],
 }
@@ -151,6 +151,10 @@ describe('import sport gate — every provider', () => {
       }
     })
   }
+
+  it.each(['sleeper', 'espn', 'yahoo', 'mfl', 'fleaflicker'] as const)('%s still requires a Soccer mapping', async (provider) => {
+    expect(await runFor(provider, 'SOCCER')).toMatchObject({ success: false, code: 'UNSUPPORTED_SPORT' })
+  })
 
   it('Sleeper: a league Sleeper sent without a sport is refused even though the mapper says NFL', async () => {
     sportBox.sleeperRaw = null

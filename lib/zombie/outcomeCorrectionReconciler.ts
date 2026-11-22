@@ -8,7 +8,6 @@ import { computeWeeklyWinnings } from '@/lib/zombie/weeklyWinningsEngine'
 import { parseZombieSettlementSnapshot } from '@/lib/zombie/weeklySettlementSnapshot'
 import { planZombieOutcomeReplay } from '@/lib/zombie/outcomeCorrectionPlanner'
 
-const pair = (home: string, away: string | null) => home + ':' + (away ?? '')
 const round2 = (value: number) => Math.round(value * 100) / 100
 
 /**

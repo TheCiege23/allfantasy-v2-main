@@ -611,7 +611,6 @@ export async function transferIdol(
       t.powerCategory,
     ]),
   )
-  const fromBuckets = await rosterHiddenBuckets(idol.leagueId, idol.rosterId, templateCat)
   const toBuckets = await rosterHiddenBuckets(idol.leagueId, toRoster.id, templateCat)
   const cat = idol.powerCategory ?? templateCat.get(idol.powerType) ?? ''
 

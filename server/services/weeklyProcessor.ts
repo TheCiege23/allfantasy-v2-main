@@ -39,7 +39,7 @@ function mergePlayerStatsIntoTeam(target: TeamStatTotals, rawStats: Record<strin
   }
 }
 
-export type ProcessWeekResult = {
+type ProcessWeekResult = {
   leagueId: string
   season: number
   week: number
@@ -270,6 +270,8 @@ export async function processLeagueWeek(params: {
             team: player.team,
             points: player.points,
           })),
+          // The league's own roster seats — the ones matchup scoring (`buildBestBallSlots`) seats.
+          league.settings,
         )
         const optimizedStarterIds = new Set(optimized.starterIds)
 

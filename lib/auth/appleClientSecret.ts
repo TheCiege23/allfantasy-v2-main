@@ -24,7 +24,7 @@ function base64url(input: Buffer | string): string {
 }
 
 /** Env vars hold the .p8 as one line with literal "\n" more often than not. */
-export function normalizeApplePrivateKey(raw: string): string {
+function normalizeApplePrivateKey(raw: string): string {
   return raw.trim().replace(/\\n/g, "\n")
 }
 

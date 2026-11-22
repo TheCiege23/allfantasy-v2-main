@@ -5,7 +5,7 @@ import {
   type ThemeId,
 } from "@/lib/theme/constants"
 
-export interface ThemePreferenceSyncInput {
+interface ThemePreferenceSyncInput {
   profileThemePreference: string | null
   storedThemePreference: string | null
 }

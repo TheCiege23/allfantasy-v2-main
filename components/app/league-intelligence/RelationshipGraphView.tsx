@@ -113,7 +113,7 @@ export function RelationshipGraphView({
         json?.readableSummary ??
           json?.metricsInterpretation ??
           json?.momentumStoryline ??
-          "No AI explanation available for this relationship."
+          "No Chimmy explanation available for this relationship."
       );
     } catch (e) {
       setRelationshipInsight(e instanceof Error ? e.message : "Failed to explain relationship");

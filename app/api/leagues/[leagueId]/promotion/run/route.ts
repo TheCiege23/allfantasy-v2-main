@@ -1,7 +1,7 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { runPromotionRelegation } from '@/lib/promotion-relegation'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,7 @@ export async function POST(
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
     try {
-      await assertCommissioner(leagueId, userId)
+      await assertCommissionerAccess(leagueId, userId, 'league')
     } catch {
       return NextResponse.json({ error: 'Forbidden: commissioner only' }, { status: 403 })
     }

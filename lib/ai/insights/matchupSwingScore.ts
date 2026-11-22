@@ -15,7 +15,7 @@
  */
 import type { InsightPool } from "./types"
 
-export type MatchSwingScore = {
+type MatchSwingScore = {
   matchId: string
   matchDescription: string
   round: string
@@ -36,7 +36,7 @@ export type MatchSwingScore = {
   swingScore: number
 }
 
-export type MatchupSwingSummary = {
+type MatchupSwingSummary = {
   matches: MatchSwingScore[]
   /** Highest composite swing score — the match most likely to change the leaderboard. */
   topSwingMatch: MatchSwingScore | null

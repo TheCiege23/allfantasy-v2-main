@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
 
   // League OS supplies the ruleset from maintained state when it is under 60s old. GET only —
   // the generate/advance/finalize paths in POST persist rows and must read live rules.
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
 
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: commissioner.status })
 
   const seasonId = await seasonIdFromInput({ seasonId: body.seasonId, leagueId })

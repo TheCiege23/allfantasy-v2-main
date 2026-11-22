@@ -21,6 +21,9 @@ export const waiverLineupBoardMessages = defineMessages({
     colOver: 'Replaces',
     showing: (shown: number, total: number) => `${shown} of ${total}`,
     yourBestLineup: 'your best lineup',
+    /** Phone only: the coverage notes under Worth adding fold behind this (WaiverLineupBoard). */
+    howThisListWasBuilt: 'How this list was built',
+    hideListNotes: 'Hide these notes',
     perGame: ' per game',
     weekSuffix: (week: number) => ` · wk ${week}`,
     proj: 'proj',
@@ -29,6 +32,10 @@ export const waiverLineupBoardMessages = defineMessages({
     formChip: (games: number | undefined) => `form · ${games}g`,
     seasonRateTitle: "A per-game rate from AllFantasy's season projection, not a projection for this week",
     seasonRateChip: 'per game · season',
+    /** What a league-value-board add rests on: games, or in baseball at-bats or innings. */
+    sampleChip: (kind: 'games' | 'at_bats' | 'innings', count: number, thin: boolean) =>
+      `${kind === 'innings' ? count : Math.round(count)} ${kind === 'games' ? 'games' : kind === 'at_bats' ? 'at-bats' : 'innings'}${thin ? ' · thin sample' : ''}`,
+    gamesTitle: "What this value rests on: this season's games, plus last season's while this one is young",
     rosteredChip: (pct: number) => `${pct}% rostered`,
     rosteredTitle: (leagues: number) => `Share of the ${leagues} Sleeper leagues synced to AllFantasy this season that roster him`,
     addedChip: (leagues: number) => `+${leagues} ${leagues === 1 ? 'add' : 'adds'}`,
@@ -67,6 +74,8 @@ export const waiverLineupBoardMessages = defineMessages({
     colOver: 'Reemplaza a',
     showing: (shown, total) => `${shown} de ${total}`,
     yourBestLineup: 'tu mejor alineación',
+    howThisListWasBuilt: 'Cómo se armó esta lista',
+    hideListNotes: 'Ocultar estas notas',
     perGame: ' por partido',
     weekSuffix: (week) => ` · sem ${week}`,
     proj: 'proy',
@@ -75,6 +84,9 @@ export const waiverLineupBoardMessages = defineMessages({
     formChip: (games) => `forma · ${games} p`,
     seasonRateTitle: 'Un promedio por partido de la proyección de temporada de AllFantasy, no una proyección para esta semana',
     seasonRateChip: 'por partido · temporada',
+    sampleChip: (kind, count, thin) =>
+      `${kind === 'innings' ? count : Math.round(count)} ${kind === 'games' ? 'partidos' : kind === 'at_bats' ? 'turnos al bate' : 'entradas'}${thin ? ' · muestra corta' : ''}`,
+    gamesTitle: 'En qué se apoya este valor: los partidos de esta temporada, más los de la anterior mientras esta es joven',
     rosteredChip: (pct: number) => `${pct}% en plantillas`,
     rosteredTitle: (leagues: number) => `Proporción de las ${leagues} ligas de Sleeper sincronizadas con AllFantasy esta temporada que lo tienen en plantilla`,
     addedChip: (leagues: number) => `+${leagues} ${leagues === 1 ? 'alta' : 'altas'}`,

@@ -1,7 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLeagueRole, isCommissionerRole, requireCommissionerRole } from '@/lib/league/permissions'
+import { getLeagueRole, requireCommissionerRole } from '@/lib/league/permissions'
 import { LOCK_GROUPS, LOCK_GROUP_LABELS, type LockGroup } from '@/lib/league/settingsLock'
 import { readLockView, setLockedGroups, startUnlockVote } from '@/lib/league/settingsLockService'
 
@@ -31,7 +32,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (!role) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const view = await readLockView(leagueId)
   if (!view) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  return NextResponse.json({ ...view, canEdit: isCommissionerRole(role) })
+  return NextResponse.json({ ...view, canEdit: await canCommissionerAct(leagueId, userId, 'league') })
 }
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
@@ -39,7 +40,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (e) {
     if (e instanceof Response) return e
     throw e
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
   try {
-    await requireCommissionerRole(leagueId, userId)
+    await requireCommissionerRole(leagueId, userId, 'league')
   } catch (e) {
     if (e instanceof Response) return e
     throw e

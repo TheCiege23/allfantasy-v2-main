@@ -27,7 +27,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { FranchiseRole } from './franchiseLink'
 
-export type PairableLeague = {
+type PairableLeague = {
   /** `League.id` for a pro league, `FantraxLeague.id` for a college snapshot. */
   id: string
   platform: string
@@ -79,7 +79,7 @@ export type PairableLeague = {
   completeForOwner: boolean
 }
 
-export type PairableLeagues = {
+type PairableLeagues = {
   pro: PairableLeague[]
   college: PairableLeague[]
   /** Leagues in a COMPLETE franchise, so the UI can say so instead of hiding them. */

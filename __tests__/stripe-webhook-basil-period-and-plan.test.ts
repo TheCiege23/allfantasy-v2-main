@@ -242,5 +242,8 @@ describe("duplicatePlanReason", () => {
     expect(duplicatePlanReason(new Set(["af_supreme"]), "af_commissioner")).toBe("has_supreme")
     expect(duplicatePlanReason(new Set(["af_pro"]), "af_supreme")).toBeNull()
     expect(duplicatePlanReason(new Set(), "af_pro")).toBeNull()
+    // 🛑 Supreme does not include AF Legacy (SUPREME_INCLUDED_PLAN_IDS): a Supreme member can buy it.
+    expect(duplicatePlanReason(new Set(["af_supreme"]), "af_war_room")).toBeNull()
+    expect(duplicatePlanReason(new Set(["af_supreme"]), "af_pro")).toBe("has_supreme")
   })
 })

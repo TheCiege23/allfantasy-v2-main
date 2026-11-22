@@ -5,7 +5,7 @@ import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-p
 import { formatNflStatCell } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 
 /** Shared 13-column grid: PROJ×2, RUSH×3, REC×3, PASS×5 */
-export const NFL_DRAFT_POOL_STATS_GRID =
+const NFL_DRAFT_POOL_STATS_GRID =
   'grid w-full min-w-[min(720px,100%)] grid-cols-[repeat(13,minmax(1.75rem,1fr))] gap-x-1'
 
 function Cell({ children }: { children: React.ReactNode }) {

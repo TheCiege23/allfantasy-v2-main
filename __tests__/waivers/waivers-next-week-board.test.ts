@@ -67,6 +67,19 @@ vi.mock('@/lib/projections/futureWeekProjectionStore', () => ({
   },
 }))
 
+vi.mock('@/lib/af-projections/nflLeagueWeek', () => ({
+  loadAfNflWeek: async (at: { week: number }) => {
+    if (at.week === 5) {
+      if (!h.ready) return new Map()
+      const { futureWeekStoreReader } = await import('@/lib/projections/futureWeekProjectionStore')
+      const rows = await futureWeekStoreReader.readTopLines({ sport: 'NFL', week: 5, afterWeek: 4, season: '2026', source: 'allfantasy', limit: 100 })
+      return new Map(rows.map((r) => [r.playerId, { ...r, componentStats: r.stats }]))
+    }
+    const { prisma } = await import('@/lib/prisma')
+    const rows = await prisma.fantasyProjection.findMany({})
+    return new Map(rows.map((r) => [r.playerId, { ...r, componentStats: (r.stats as { stats: unknown }).stats }]))
+  },
+}))
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { chooseClaimWeek, SPENT_SHARE } from '@/lib/core-app/waiverClaimWeek'
 import { FUTURE_WEEK_STALE_MS } from '@/lib/projections/futureWeekProjections'

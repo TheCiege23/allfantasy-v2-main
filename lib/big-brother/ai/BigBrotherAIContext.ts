@@ -11,7 +11,7 @@ import { getEligibility } from '../BigBrotherEligibilityEngine'
 import { getFinalNomineeRosterIds } from '../BigBrotherNominationEngine'
 import { getJuryMembers } from '../BigBrotherJuryEngine'
 
-export type BigBrotherAIContextType =
+type BigBrotherAIContextType =
   | 'hoh_challenge_presenter'
   | 'veto_challenge_presenter'
   | 'ceremony_announcer'

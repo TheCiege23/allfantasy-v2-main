@@ -15,7 +15,7 @@ const ASSET_LABELS: Record<SocialAssetType, string> = {
   draft_highlights: 'draft highlights',
   rivalry_moments: 'rivalry moments',
   bracket_challenge_highlights: 'bracket challenge highlights',
-  ai_insight_moments: 'AI insight moments',
+  ai_insight_moments: 'Chimmy insight moments',
   sport_platform_highlights: 'sport-specific platform highlights',
 };
 

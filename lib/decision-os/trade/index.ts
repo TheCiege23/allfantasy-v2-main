@@ -18,12 +18,11 @@ export * from './rules'
 export * from './decision'
 export * from './parity'
 export * from './tradeCardAdapter'
-export * from './outcome'
 // Phase E.2 — the Canonical Trade Memo (rehosts the pure value engine onto CanonicalAsset inputs).
 export * from './canonicalMemo'
 export * from './canonicalEvaluator'
 
-export interface RunTradeEvaluateInput {
+interface RunTradeEvaluateInput {
   worldInput: TradeWorldInput
   userId: string
   leagueId: string
@@ -33,7 +32,7 @@ export interface RunTradeEvaluateInput {
   snapshotConfidenceScore: number | null
 }
 
-export interface RunTradeEvaluateDeps {
+interface RunTradeEvaluateDeps {
   decision: TradeDecisionDeps
   /** When present, run the Parity Gate against the persisted deterministic snapshot (shadow mode). */
   shadow?: { snapshot: TradeValueSnapshot }

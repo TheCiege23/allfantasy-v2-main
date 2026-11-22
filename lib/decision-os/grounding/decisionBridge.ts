@@ -1,30 +1,35 @@
 import 'server-only'
 
-import type { UserLeague } from '@/app/dashboard/types'
-import type { LineupActionItem } from '@/lib/lineup-actions/types'
 import { assertLeagueCommissioner } from '@/lib/league/league-access'
-import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
-import { loadLineupSetInputs } from '../lineup/loader'
-import { runLineupSetDecision } from '../lineup'
-import { productionLineupWorldDeps, productionLineupDecisionDeps } from '../lineup/deps'
 import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
 import { runWaiverClaimDecision } from '../waiver'
 import type { WaiverClaimRecommendation } from '../waiver/decision'
-import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
+import { worldInputFromFacts } from '../waiver/loader'
+import { createWaiverOsLoaders } from '../waiver-os'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
+import { loadWaiverCalibrationForLeague } from '../waiver/calibrationStore'
+import { createCommissionerOsLoaders } from '../commissioner-os'
+// The inactive flag's graded record — the one loader the hub's flag also reads, so the two never disagree.
+import { loadInactiveFlagRecord } from '@/lib/commissioner-hub/inactiveFlagRecord'
 import { waiverEngineInputFrom } from '../waiver/engineInput'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
-import type { GroundedSlice, GroundingGap } from './packet'
+import type { GroundedSlice } from './packet'
 
 /**
- * R2.3–R2.5 — producers that RUN a live engine and hand the packet its decision.
+ * R2.3 / R2.6 — producers that RUN a live engine and hand the packet its decision.
+ *
+ * ⚠ THE R2.4 LINEUP BRIDGE IS GONE (2026-11-17). Owner decision 2026-09-29 made My Team's
+ * `optimizeLineup` (`lineup/bestLineup.ts`) the one start/sit answer, and Chimmy reads it through
+ * `lib/chimmy/myTeamLineupGrounding.ts`. The `lineupDecision` slice that ran the second engine here
+ * had not been requested by any intent since it measured 37s against a 3s ceiling, so the bridge,
+ * the slice and the engine behind it were deleted together.
  *
  * ── 🛑 WHY THIS IS A SEPARATE MODULE FROM `packet.ts` ───────────────────────────────────────
  * `packet.ts` already carries nineteen imports. Pulling an engine's dependency tree into it would
- * make every consumer of the packet type pay for the lineup loader, and `leagueValueFormat.ts` was
+ * make every consumer of the packet type pay for an engine's loader, and `leagueValueFormat.ts` was
  * split out earlier in exactly this situation for exactly this reason. The packet calls one
  * function per engine and knows nothing about how a decision is produced.
  *
@@ -35,15 +40,9 @@ import type { GroundedSlice, GroundingGap } from './packet'
  * nothing persists the result. A bridge reading that table would return nothing, for every league,
  * silently — the `ingestCFBDStats` failure this codebase has already paid for once.
  *
- * Running them is cheap: `resolveLineupWorld` and `buildLineupDCO` are pure and synchronous, and
- * the orchestrator's own docstring says Prisma reads live in an injected loader at the route seam.
- * The cost is the loader, and it is one call.
- *
  * ── ⚠ NO SHADOW DEPS ARE PASSED, DELIBERATELY ───────────────────────────────────────────────
- * `runLineupSetDecision` accepts an optional `shadow` that runs the LEGACY recommender too and
- * compares them. That is parity infrastructure for the route that owns it; a chat turn wants the
- * decision, not a second opinion, and passing it would double the work for a comparison nobody
- * reads here.
+ * An engine's optional `shadow` runs a LEGACY recommender too and compares them. That is parity
+ * infrastructure for the route that owns it; a chat turn wants the decision, not a second opinion.
  *
  * ── ⚠ THE ENGINES ARE NOT MODIFIED, AND NOTHING HERE MAY CHANGE ONE ────────────────────────
  * Every function below is a caller. Pipeline A is live, load-bearing and correct; if a change here
@@ -67,92 +66,9 @@ function failed(engine: string, detail: string): GroundedSlice<DecisionFact> {
   }
 }
 
-/**
- * One recommended lineup change, in one line.
- *
- * ⚠ NAMED FIELDS ONLY. A generic stringifier over this shape would emit `[object Object]` into a
- * prompt as though it were a fact, which is why `decisionToSlice` requires a describer rather than
- * guessing. Returns null when there is nothing nameable, and the count still reports the action.
- */
-function describeLineupAction(a: LineupActionItem): string | null {
-  const who = a.playerName ?? a.playerId
-  if (!who) return null
-  const slot = a.slotLabel ? ` at ${a.slotLabel}` : ''
-  const why = a.reasonType ? ` (${a.reasonType})` : ''
-  const act = a.recommendedAction ? `${a.recommendedAction}: ` : ''
-  return `${act}${who}${slot}${why}`
-}
-
 export interface DecisionBridgeArgs {
   userId?: string | null
   leagueId?: string | null
-}
-
-/**
- * R2.4 — the lineup decision for this user in this league.
- *
- * ⚠ USER- AND WEEK-SCOPED, WHICH IS WHY IT BELONGS IN THE PACKET AND NOT IN A FEED. The scorecard
- * marks the lineup FEED ineligible for the domain-os store precisely because a lineup fact is
- * never a league fact — it is about one manager in one week. The packet is built per request with
- * a userId, so it can carry what a league-keyed store cannot. That distinction is the reason this
- * bridge lives here.
- */
-export async function loadLineupDecisionSlice(args: DecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
-  const userId = args.userId ?? null
-  const leagueId = args.leagueId ?? null
-  if (!userId || !leagueId) {
-    return {
-      present: false,
-      value: null,
-      asOf: null,
-      servedFrom: null,
-      confidence: null,
-      conclusive: { ok: true },
-      gap: {
-        reason: 'not_requested',
-        detail: 'A lineup decision needs both a signed-in user and a league.',
-        remedy: 'Ask about a specific league while signed in.',
-      },
-    }
-  }
-
-  try {
-    const input = await loadLineupSetInputs(userId, leagueId)
-    if (!input) {
-      /*
-       * ⚠ A NULL LOADER RESULT IS NOT AN ERROR AND MUST NOT READ AS ONE. `loadLineupSetInputs`
-       * returns null when the league has no roster for this user or no resolved season — normal
-       * states for an unimported or off-season league, and `not_synced` is the honest reason.
-       */
-      return {
-        present: false,
-        value: null,
-        asOf: null,
-        servedFrom: null,
-        confidence: null,
-        conclusive: { ok: true },
-        gap: {
-          reason: 'not_synced',
-          detail: 'No roster or season is resolved for this user in this league yet.',
-          remedy: 'Import or re-sync the league so the roster and current week are known.',
-        },
-      }
-    }
-
-    const result = await runLineupSetDecision(input, {
-      world: productionLineupWorldDeps(),
-      decision: productionLineupDecisionDeps(),
-      // No `shadow` — see the header.
-    })
-
-    return decisionToSlice(result.decision, {
-      reason: 'not_computed',
-      detail: 'The lineup engine returned no decision.',
-      remedy: 'It runs again on the next request.',
-    }, { describeAction: describeLineupAction })
-  } catch (err) {
-    return failed('lineup', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
-  }
 }
 
 /**
@@ -244,15 +160,16 @@ export async function loadCommissionerHealthDecisionSlice(
   }
 
   try {
-    const access = await assertLeagueCommissioner(leagueId, userId)
+    const access = await assertLeagueCommissioner(leagueId, userId, 'view')
     if (!access?.ok) return notEntitled()
 
-    // Safe to assert: the line above verified it. The loader filters on this flag.
-    const minimal = [{ id: leagueId, isCommissioner: true } as unknown as UserLeague]
-    // `dynastySignals`: a dynasty league's pick balance and taxi findings ride in `alerts`, so the
-    // decision below — and the line Chimmy reads — carries them. A no-op for every other league.
-    const snapshots = await getCommissionerHubHealthForUser(userId, minimal, { dynastySignals: true })
-    const snapshot = snapshots.find((s) => s?.leagueId === leagueId) ?? null
+    /*
+     * Through Commissioner OS (2026-11-20): the same snapshot the hub builds — `getCommissionerHubHealthForUser`
+     * with dynasty signals, so a dynasty league's pick balance and taxi findings ride in `alerts` — held for five
+     * minutes per (commissioner, league) instead of rebuilt on every question. Access was proved just above, on
+     * this request; a stored snapshot never stands in for that check.
+     */
+    const snapshot = await createCommissionerOsLoaders().loadHealthSnapshot({ userId, leagueId })
 
     if (!snapshot) {
       return {
@@ -298,7 +215,8 @@ export async function loadCommissionerHealthDecisionSlice(
 
     const result = await runCommissionerHealthDecision(
       { snapshot, userId },
-      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot) },
+      // The inactive flag's graded record (the learning loop, 2026-11-20); the rules use it only in a native league.
+      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot, { inactiveFlags: await loadInactiveFlagRecord() }) },
       // No `shadow` — see the header.
     )
 
@@ -343,6 +261,16 @@ export interface WaiverDecisionBridgeArgs extends DecisionBridgeArgs {
   onClaims?: (claims: readonly WaiverClaimRecommendation[], confidencePct: number | null) => void
 }
 
+/*
+ * 🛑 THE WAIVER FACTS GO THROUGH WAIVER OS NOW (2026-11-20 re-score, Kernel ⚠ → ✅). This bridge — every Chimmy waiver
+ * question and the weekly engine run (`weeklyEngineCalls.ts`) — called `loadWaiverWorldFacts` directly, so the
+ * domain's registered feed was read only by `/api/waiver-ai/engine` behind `DECISION_OS_WAIVER_LIVE`. It reads the
+ * user-level resource entry: FAAB, priority and settings for this manager, held five minutes (`waiverResourceSource`
+ * — short because FAAB moves on every processed claim), derived by the same `loadWaiverWorldFacts` on a miss, and a
+ * store problem falls through to that derivation. A null result is still "no roster resolved", never cached.
+ */
+const waiverOs = createWaiverOsLoaders()
+
 export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
   const userId = args.userId ?? null
   const leagueId = args.leagueId ?? null
@@ -363,7 +291,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
   }
 
   try {
-    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    const facts = await waiverOs.loadWorldFacts(userId, leagueId)
     if (!facts) {
       /*
        * ⚠ THE HONEST DEGRADE, AND IT IS THE LIKELY PATH FOR SOME PROVIDERS.
@@ -386,7 +314,11 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
+    const [pool, calibration] = await Promise.all([
+      loadWaiverPool(leagueId, facts.sport, facts.rosterId),
+      // The engine's graded record — only in a redraft full-PPR NFL league; elsewhere nothing changes.
+      loadWaiverCalibrationForLeague(leagueId),
+    ])
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
@@ -443,7 +375,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
         poolIncomplete: pool.poolIncomplete,
         pricing: pool.pricing,
       },
-      { decision: buildLiveWaiverDecisionDeps(facts) },
+      { decision: buildLiveWaiverDecisionDeps(facts, calibration.calibration) },
     )
 
     if (args.onClaims) {

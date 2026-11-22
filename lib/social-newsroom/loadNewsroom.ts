@@ -75,7 +75,7 @@ const STORY_WINDOW_MS = 36 * 60 * 60 * 1000
 const HIGHLIGHT_WINDOW_MS = 4 * 24 * 60 * 60 * 1000
 
 /** YouTube thumbnail for a watch/short/youtu.be URL — the video's own poster, served by YouTube. */
-export function youtubeThumbnail(url: string): string | null {
+function youtubeThumbnail(url: string): string | null {
   const m = /(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/.exec(url)
   return m ? `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` : null
 }

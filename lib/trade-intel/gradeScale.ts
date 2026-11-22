@@ -47,7 +47,7 @@ export function letterFor(avgNetPerSeason: number): GradeLetter {
 
 /** Shown in place of a letter when nothing has been credited to either side. */
 export const NO_SIGNAL_MARK = '–'
-export const NO_SIGNAL_CAPTION = 'too early to grade'
+const NO_SIGNAL_CAPTION = 'too early to grade'
 
 /**
  * The mark and caption for one side of a completed trade.
@@ -82,6 +82,20 @@ export function realizedGradeDisplay(args: {
  * So projections get their own function, in this file rather than beside the UI,
  * so nobody meets one without the other.
  */
+
+/**
+ * The signed gap, in whole percent of the larger side: + means the `give` side receives more.
+ * (Moved here from lib/decision-os/trade/tradeGrade.ts, which re-exports it, on 2026-11-14.)
+ *
+ * ⚠ ROUNDED SYMMETRICALLY, AND THAT IS WHAT MAKES THE MIRROR EXACT. `Math.round` rounds a half UP,
+ * so −9.5 became −9 (a C) while +9.5 became 10 (a B): the two managers in one offer, each graded
+ * from their own side, could read "you C, them C" and "you B, them D". Rounding the magnitude and
+ * restoring the sign makes grading the swapped deal and mirroring the grade the same operation.
+ */
+export function signedGapPct(giveValue: number, getValue: number): number {
+  const raw = ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
+  return raw < 0 ? -Math.round(-raw) : Math.round(raw)
+}
 
 /** Value gap, as a percentage, inside which a deal reads as even. */
 export const PROJECTED_EVEN_BAND = 10

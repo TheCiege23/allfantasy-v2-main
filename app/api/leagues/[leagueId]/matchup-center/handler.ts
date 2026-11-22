@@ -21,14 +21,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   const sp = req.nextUrl.searchParams
   const season = sp.get('season') ? Number(sp.get('season')) : undefined
   const week = sp.get('week') ? Number(sp.get('week')) : undefined
+  const game = sp.get('game') ? Number(sp.get('game')) : undefined
   const seasonKey = Number.isFinite(season!) ? String(season) : 'current'
   const weekKey = Number.isFinite(week!) ? String(week) : 'current'
+  const gameKey = Number.isInteger(game!) && game! >= 1 ? String(game) : '1'
 
   const out = await dedupeLeagueRequest(
     {
       leagueId,
       surface: 'matchup_center',
-      fragments: [userId, seasonKey, weekKey],
+      fragments: [userId, seasonKey, weekKey, gameKey],
     },
     () =>
       withLeagueEngineTimedOperation(
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
             viewerUserId: userId,
             season: Number.isFinite(season!) ? season : undefined,
             week: Number.isFinite(week!) ? week : undefined,
+            game: Number.isInteger(game!) && game! >= 1 ? game : undefined,
           }),
       ),
   )

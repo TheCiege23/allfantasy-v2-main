@@ -19,6 +19,12 @@ export const MLB_ROSTER_SLOTS: RosterSlotDef[] = [
   { key: 'CI', label: 'Corner Infielder', shortLabel: 'CI', color: '#22d3ee', category: 'flex', eligiblePositions: ['1B', '3B'], defaultCount: 1, minCount: 0, maxCount: 3 },
   { key: 'MI', label: 'Middle Infielder', shortLabel: 'MI', color: '#818cf8', category: 'flex', eligiblePositions: ['2B', 'SS'], defaultCount: 1, minCount: 0, maxCount: 3 },
   { key: 'OF', label: 'Outfielder', shortLabel: 'OF', color: '#34d399', category: 'offense', eligiblePositions: ['OF', 'LF', 'CF', 'RF'], defaultCount: 3, minCount: 0, maxCount: 7 },
+  // Split outfield and a designated hitter, for leagues that start one of each (off by default). A
+  // player listed only as OF fits any of the three outfield seats, as in lib/core-app/sportSlotEligibility.ts.
+  { key: 'LF', label: 'Left Field', shortLabel: 'LF', color: '#34d399', category: 'offense', eligiblePositions: ['LF', 'OF'], defaultCount: 0, minCount: 0, maxCount: 3 },
+  { key: 'CF', label: 'Center Field', shortLabel: 'CF', color: '#10b981', category: 'offense', eligiblePositions: ['CF', 'OF'], defaultCount: 0, minCount: 0, maxCount: 3 },
+  { key: 'RF', label: 'Right Field', shortLabel: 'RF', color: '#059669', category: 'offense', eligiblePositions: ['RF', 'OF'], defaultCount: 0, minCount: 0, maxCount: 3 },
+  { key: 'DH', label: 'Designated Hitter', shortLabel: 'DH', color: '#f472b6', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'], defaultCount: 0, minCount: 0, maxCount: 3 },
   { key: 'UTIL', label: 'Utility', shortLabel: 'UTIL', color: '#e879f9', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'], defaultCount: 1, minCount: 0, maxCount: 4 },
   { key: 'H', label: 'Hitter (Any)', shortLabel: 'H', color: '#ec4899', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'], defaultCount: 0, minCount: 0, maxCount: 4 },
   // Pitchers

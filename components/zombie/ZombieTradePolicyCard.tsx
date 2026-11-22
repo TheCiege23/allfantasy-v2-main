@@ -5,6 +5,8 @@ import { Lock } from 'lucide-react'
 
 /**
  * Zombie-only trades policy: lock Serum/Weapon trades after games complete (stored in `commissionerUiPrefs`).
+ * Enforced by `validateBetaTradeItems` (lib/zombie/beta2025ItemTrades.ts) — the card used to say "@chimmy enforces
+ * this", and nothing did.
  */
 export function ZombieTradePolicyCard({ leagueId }: { leagueId: string }) {
   const [locked, setLocked] = useState(false)
@@ -59,8 +61,8 @@ export function ZombieTradePolicyCard({ leagueId }: { leagueId: string }) {
         <div className="min-w-0 flex-1">
           <p className="text-[12px] font-bold text-[#c8ffc0]">Zombie item trades</p>
           <p className="mt-1 text-[11px] leading-relaxed text-white/45">
-            When enabled, Serums and Weapons cannot be traded after the relevant game window for the week has completed.
-            Commissioners can still review history. @chimmy enforces this when configured.
+            When on, Serums and Weapons can&apos;t be traded between two teams once both teams&apos; starters have kicked off
+            for the week. Trading opens again when the week resolves. The trade center enforces it.
           </p>
           <label className="mt-3 flex cursor-pointer items-center gap-2 text-[11px] text-white/75">
             <input

@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   if (intent === 'create') {
     const leagueId = typeof body.leagueId === 'string' ? body.leagueId : ''
     if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const denied = await survivorHostGuard(leagueId, userId)
     if (denied) return denied
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     if (!challengeId) return NextResponse.json({ error: 'challengeId required' }, { status: 400 })
     const ch = await prisma.survivorChallenge.findUnique({ where: { id: challengeId } })
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const gate = await assertLeagueCommissioner(ch.leagueId, userId)
+    const gate = await assertLeagueCommissioner(ch.leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const denied = await survivorHostGuard(ch.leagueId, userId)
     if (denied) return denied
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     if (!challengeId) return NextResponse.json({ error: 'challengeId required' }, { status: 400 })
     const ch = await prisma.survivorChallenge.findUnique({ where: { id: challengeId } })
     if (!ch) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const gate = await assertLeagueCommissioner(ch.leagueId, userId)
+    const gate = await assertLeagueCommissioner(ch.leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const denied = await survivorHostGuard(ch.leagueId, userId)
     if (denied) return denied

@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LeagueContext } from '@/lib/core-app/leagueContext'
 
 vi.mock('server-only', () => ({}))
+const metricRead = vi.hoisted(() => vi.fn(async () => ({ season: 2026, week: 3, unit: 'fantasy points', rows: [] })))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: metricRead }))
 
 const db = vi.hoisted(() => ({
   sport: 'NBA',
@@ -155,19 +157,13 @@ describe('Matchup pricing — an NFL namesake’s injury never zeroes an NBA sta
     for (const [args] of sportsPlayerFindMany.mock.calls) expect(args.where.sport).toBe('NBA')
   })
 
-  it('🛑 every fantasy_projections read names the league sport (an NFL row sharing the id is not his line)', async () => {
+  it.each(['NBA', 'NFL'])('reads %s projections through the league and its roster identity space', async sport => {
+    db.sport = sport
     projectionFindMany.mockClear()
+    metricRead.mockClear()
     await load()
-    expect(projectionFindMany).toHaveBeenCalled()
-    for (const [args] of projectionFindMany.mock.calls) expect((args.where as { sport?: string }).sport).toBe('NBA')
-  })
-
-  it('control: an NFL league sends the projection read it always did — no sport key', async () => {
-    db.sport = 'NFL'
-    projectionFindMany.mockClear()
-    await load()
-    expect(projectionFindMany).toHaveBeenCalled()
-    for (const [args] of projectionFindMany.mock.calls) expect('sport' in args.where).toBe(false)
+    expect(metricRead).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', week: 3, rosterIds: expect.arrayContaining(['1001', '2002']) }))
+    expect(projectionFindMany).not.toHaveBeenCalled()
   })
 
   it('🛑 and so does the Best Ball position read', async () => {

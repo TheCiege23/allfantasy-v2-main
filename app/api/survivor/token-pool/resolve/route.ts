@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) {
       return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
     }

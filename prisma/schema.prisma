@@ -446,6 +446,28 @@ model PlayerTeamHistory {
   @@map("player_team_history")
 }
 
+model SportsStatCoverage {
+  sport                String
+  source               String
+  periodId             String
+  kind                 String
+  identitySpace        String
+  season               Int
+  week                 Int?
+  startTime            DateTime @db.Timestamptz(6)
+  endTime              DateTime @db.Timestamptz(6)
+  teams                String[]
+  participantIds       String[]
+  gameKeys             String[]
+  recordedAt           DateTime @default(now()) @db.Timestamptz(6)
+  firstFinalObservedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([sport, source, periodId])
+  @@index([sport, startTime], map: "sports_stat_coverage_window_idx")
+  @@index([sport, season, week], map: "sports_stat_coverage_week_idx")
+  @@map("sports_stat_coverage")
+}
+
 model SportsGame {
   id         String    @id @default(uuid())
   sport      String
@@ -1809,6 +1831,12 @@ model ChimmyAdvice {
   slot          String?  @db.VarChar(16)
   confidencePct Int?     @map("confidence_pct")
   givenAt       DateTime @default(now()) @map("given_at")
+  /// What the advice knew (2026-11-14, the advice ledger): each player's projection when it was said.
+  recProjected  Float?   @map("rec_projected")
+  altProjected  Float?   @map("alt_projected")
+  /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
+  /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
+  withdrawnAt   DateTime? @map("withdrawn_at")
 
   @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
@@ -1856,8 +1884,9 @@ model MatchupOddsSnapshot {
 /// AllFantasy league uuid. `teamExternalId` is the platform roster id (`LeagueTeam.externalId`).
 ///
 /// Retention: the writer keeps the current and previous season per league and deletes older ones.
-/// ⚠ Code is raw SQL and treats a missing table as "no history", so it is safe before the migration
-/// (`prisma/migrations-pending/20261106120000_league_odds_snapshots`, moved to `prisma/migrations/` only when the owner authorises applying it) is applied.
+/// Created by `prisma/migrations/20261106120000_league_odds_snapshots`, applied to production on
+/// 2026-11-06 on the owner's instruction. ⚠ Code is raw SQL and treats a missing table as "no
+/// history", so a database that has not run it yet still renders.
 model LeagueOddsSnapshot {
   id             String   @id
   leagueId       String   @map("league_id") @db.VarChar(128)
@@ -2006,6 +2035,9 @@ model LeagueTrade {
   partnerName       String?
   valueGiven        Float?
   valueReceived     Float?
+  /// Waiver budget (FAAB) this side gave / received in the trade. NULL = not read (older rows), not zero.
+  budgetGiven       Float?
+  budgetReceived    Float?
   tradeDate         DateTime?
   createdAt         DateTime           @default(now())
   analysisResult    Json?
@@ -2018,6 +2050,8 @@ model LeagueTrade {
   performanceData   Json?
   platform          String             @default("sleeper")
   playerAgeData     Json?
+  /// The situation around the trade when the live sync first saw it: league settings, both rosters just before, records, FAAB (`lib/trade-market/tradeContextSnapshot.ts`). Null for trades seen only by a backfill.
+  contextSnapshot   Json?
   sport             String             @default("nfl")
   history           LeagueTradeHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
 
@@ -2493,6 +2527,42 @@ model TradeBlockEntry {
   @@index([sleeperLeagueId, isActive, updatedAt(sort: Desc)], map: "idx_trade_block_league_active")
   @@index([sleeperLeagueId, rosterId], map: "idx_trade_block_roster")
   @@map("trade_block_entries")
+}
+
+/// One stretch in which the commissioner's manager table called a NATIVE league's manager inactive
+/// (lib/commissioner-hub/inactiveFlagLedger.ts, 2026-11-20), graded two weeks later: did the manager do
+/// something of their own again (`came_back`) or not (`stayed_away`). A stretch is keyed by the last action
+/// it was idle FROM, so a manager who returns and goes quiet again opens a new row, and re-showing the same
+/// flag writes nothing. Counts only leave the server (the advice record); rows name a roster, never a person.
+model CommissionerInactiveFlag {
+  id           String    @id @default(cuid())
+  leagueId     String
+  rosterId     String
+  /// The manager's own last action when the flag was raised — the stretch's key.
+  lastActionAt DateTime  @db.Timestamptz(6)
+  flaggedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  /// `came_back` | `stayed_away`; null until two weeks have passed.
+  outcome      String?   @db.VarChar(16)
+  gradedAt     DateTime? @db.Timestamptz(6)
+
+  @@unique([leagueId, rosterId, lastActionAt])
+  @@index([outcome, flaggedAt])
+  @@map("commissioner_inactive_flags")
+}
+
+/// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade
+/// block cards. Shown to other managers only as an anonymous COUNT per player, never as who marked it.
+/// Keyed by the AllFantasy league and user and the player id the league's rosters use.
+model LeagueTradeInterest {
+  id        String   @id @default(cuid())
+  leagueId  String   @db.VarChar(64)
+  userId    String   @db.VarChar(64)
+  playerId  String   @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@unique([leagueId, userId, playerId], map: "uq_league_trade_interest")
+  @@index([leagueId, playerId], map: "idx_league_trade_interest_player")
+  @@map("league_trade_interests")
 }
 
 model TradeAnalysisSnapshot {
@@ -3327,13 +3397,18 @@ model WeeklyMatchup {
   /// this migration and lib/fantasy-os/sync/collector/index.ts for the full history.
   rosterId      String
   matchupId     Int?
+  /// Which of the roster's games in this week the row is: 1 for the only game in a league that plays
+  /// one a week (every row written before this column existed), 1..N in a league whose teams play
+  /// several games a week (Fantrax leagues with 3 or 5). The roster-week key alone kept one game
+  /// and dropped the rest.
+  game          Int      @default(1)
   pointsFor     Float
   pointsAgainst Float
   win           Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@unique([leagueId, seasonYear, week, rosterId])
+  @@unique([leagueId, seasonYear, week, rosterId, game])
   @@index([leagueId, seasonYear, week])
   @@index([leagueId, seasonYear, rosterId])
 }
@@ -3955,8 +4030,13 @@ model PlayerAnalyticsSnapshot {
 }
 
 model AppUser {
+  /// Optional matching hint, never proof of ownership or payment.
+  leaguesafeEmail             String? @db.VarChar(254)
+  leagueSafeConnectionsCreated LeagueSafeConnection[] @relation("LeagueSafeConnectionCreator")
+  leagueSafeLedgerEntriesCreated DuesLedgerEntry[] @relation("LeagueSafeLedgerCreator")
+
   id                                       String                                 @id @default(uuid())
-  email                                    String                                 @unique
+  email                                    String?                                @unique
   emailVerified                            DateTime?
   username                                 String                                 @unique
   passwordHash                             String?
@@ -3975,6 +4055,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  sleeperCareerSurvival                    SleeperCareerSurvival[]
   fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
@@ -4728,6 +4809,8 @@ model PlayoffBracketPick {
   entryId      String                  @map("entry_id")
   seriesId     String                  @map("series_id")
   pickTeamName String                  @map("pick_team_name")
+  confirmedAt  DateTime?               @map("confirmed_at")
+  draftTeamName String?                @map("draft_team_name")
   createdAt    DateTime                @default(now()) @map("created_at")
   updatedAt    DateTime                @updatedAt @map("updated_at")
   challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -6268,6 +6351,8 @@ enum LeagueLifecycleState {
 }
 
 model League {
+  leagueSafeConnection LeagueSafeConnection?
+
   id                                    String                                 @id @default(uuid())
   pirateProtectionSets                  PirateProtectionSet[]
   pirateClaims                          PirateClaim[]
@@ -7037,6 +7122,89 @@ model IntegrityFlag {
   @@index([leagueId, flagType])
   @@index([createdAt])
   @@map("integrity_flags")
+}
+
+/// What each manager could see when his lineup locked: one row per team per week (2026-11-07).
+///
+/// 🛑 NOTHING ELSE STORES A PROJECTION AS IT WAS AT KICKOFF. `fantasy_projections` is upserted daily
+/// and injury status is overwritten on every sync, so a week-close judgement of "did he start his best
+/// players" read TODAY's numbers — a player hurt on Monday night looked like a bad Sunday start. The
+/// hourly writer (lib/integrity/lineupLockSnapshots.ts) refreshes every player whose game has not
+/// started and FREEZES each one at his own kickoff, so the score is computed from what the manager saw.
+///
+/// `rosterId` is the RedraftRoster id — the id the tanking flags and the week's saved lineups use.
+/// Code ships ahead of migration 20261107120000_lineup_lock_snapshots: reads return nothing and the
+/// writer skips while the table is absent, so applying it only turns the score on.
+model LineupLockSnapshot {
+  id               String    @id @default(cuid())
+  leagueId         String    @map("league_id")
+  rosterId         String    @map("roster_id")
+  season           Int
+  week             Int
+  /// `{ [playerId]: { name, position, proj, status, bye, team, frozenAt } }` — see lineupLockSnapshots.ts.
+  players          Json
+  /// The league's starting seats when captured: `[{ slot, eligible[] }]`.
+  slots            Json
+  /// Filled when the week is scored (lib/integrity/lineupIntegrityScore.ts). Null until then.
+  startedProj      Float?    @map("started_proj")
+  optimalProj      Float?    @map("optimal_proj")
+  ratio            Float?
+  startedTopCount  Int?      @map("started_top_count")
+  starterCount     Int?      @map("starter_count")
+  excludedIds      String[]  @default([]) @map("excluded_ids")
+  /// Why a week was not scored (`thin_projections`, `no_lineup`, …). A skipped week neither counts nor breaks a run.
+  skipReason       String?   @map("skip_reason")
+  scoredAt         DateTime? @map("scored_at")
+  algorithmVersion String?   @map("algorithm_version")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([leagueId, rosterId, season, week])
+  @@index([leagueId, season, week])
+  @@map("lineup_lock_snapshots")
+}
+
+/// Every completed trade's value AS PRICED WHEN IT HAPPENED, one row per trade (2026-11-07).
+///
+/// 🛑 THE COLLUSION REVIEW RE-PRICED FINISHED TRADES ON TODAY'S VALUES. A deal that was fair in
+/// September could read as a 60% heist in November because one player broke out — hindsight, not
+/// collusion. The three trade engines each keep a partial record (frozen Sleeper originals, a native
+/// proposal snapshot, a redraft snapshot on another value scale), none covering every trade. This
+/// table is the one record the trade audit, the pair check and the review read.
+///
+/// WRITE-ONCE. `basis` says how a row was priced and every surface prints it:
+///   `at_completion` — graded when the trade settled (the post-trade integrity scan);
+///   `trade_date`    — an imported trade's frozen original priced on its own date;
+///   `first_audited` — no trade-time price existed; graded on the day it was first audited.
+///
+/// Sides are the trade review's sides: A is the side the grade is written from. `gapPct` is signed
+/// from side A (+ means A received more). Code ships ahead of migration
+/// 20261107130000_trade_value_audits: reads return nothing and writes skip while the table is absent.
+model TradeValueAudit {
+  id          String    @id @default(cuid())
+  leagueId    String    @map("league_id")
+  /// `af:<AfLeagueTrade.id>` | `redraft:<proposalId>` | `sleeper:<transaction id>`.
+  tradeKey    String    @map("trade_key")
+  source      String
+  sideATeamId String    @map("side_a_team_id")
+  sideBTeamId String    @map("side_b_team_id")
+  sideAName   String    @map("side_a_name")
+  sideBName   String    @map("side_b_name")
+  /// Asset labels each side SENT, for the review list ("Ja'Marr Chase", "2027 1st", "$40 FAAB").
+  sideAGave   Json      @map("side_a_gave")
+  sideBGave   Json      @map("side_b_gave")
+  /// League value of what each side SENT, as priced (see `basis`).
+  sideAValue  Float     @map("side_a_value")
+  sideBValue  Float     @map("side_b_value")
+  gapPct      Float     @map("gap_pct")
+  basis       String
+  completedAt DateTime? @map("completed_at")
+  pricedAt    DateTime  @map("priced_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([leagueId, tradeKey])
+  @@index([leagueId, completedAt])
+  @@map("trade_value_audits")
 }
 
 model LeagueIntegritySettings {
@@ -8325,6 +8493,15 @@ model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
   platformUserId       String
+  /// The AllFantasy user who runs this team, when that is not what `platformUserId` says.
+  ///
+  /// `platformUserId` is the roster's unique key within its league (`@@unique([leagueId, platformUserId])`),
+  /// which the provider sync relies on to keep one row per team. So when a league lets one manager run
+  /// several teams (lib/league/multiTeamManagers.ts), the manager's first team keeps their user id there and
+  /// every further team keeps a key of its own and names the manager here. Null on every row written
+  /// before 2026-11-18 and on imported teams: read it together with `platformUserId`
+  /// (lib/league/viewerTeams.ts `listHeldTeams`), never alone.
+  managerUserId        String?
   /// The same team's row in `redraft_rosters`, when one is known.
   ///
   /// Exists because the guillotine engines disagree about what a team IS: the automation engine
@@ -8373,6 +8550,7 @@ model Roster {
   @@index([leagueId])
   @@index([leagueId, updatedAt])
   @@index([platformUserId])
+  @@index([leagueId, managerUserId], map: "idx_rosters_league_manager")
   @@map("rosters")
 }
 
@@ -8644,6 +8822,8 @@ enum LeagueTeamManagerKind {
 }
 
 model LeagueTeam {
+  leagueSafeMembers LeagueSafeMember[]
+
   id                   String                    @id @default(uuid())
   leagueId             String
   externalId           String
@@ -8716,6 +8896,8 @@ model LeagueTeam {
   performances         TeamPerformance[]
   aiOpponentAssignment AiOpponentTeamAssignment?
 
+  // Composite key prevents cross-league member mappings.
+  @@unique([id, leagueId])
   @@unique([leagueId, externalId])
   @@index([leagueId, pointsFor])
   @@index([divisionId])
@@ -8781,6 +8963,15 @@ model LeagueAuth {
   oauthSecret String?
   espnSwid    String?
   espnS2      String?
+  /// 'ok' | 'needs_reconnect'. NULL = not checked since the column existed; reads as healthy.
+  /// Written by lib/league-import/espn/espnConnectionHealth.ts. Migration:
+  /// prisma/migrations-pending/20261108120000_league_auth_connection_health.
+  connectionStatus    String?
+  lastVerifiedAt      DateTime?
+  lastFailureAt       DateTime?
+  lastFailureCode     String?
+  /// When the user was last told to reconnect — throttles the notification to once per outage.
+  reconnectNotifiedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -13395,6 +13586,40 @@ model RankingsBacktestResult {
   @@map("rankings_backtest_results")
 }
 
+/// Draft recommendation record (2026-11-14): what the ONE draft engine recommended at the moment
+/// advice was served, in BOTH replacement-value modes, with the projections each one saw. A
+/// forward test: FantasyProjection is upserted in place, so draft-day projections cannot be
+/// recovered later — these rows are the point-in-time record a backtest cannot rebuild. Written
+/// fire-and-forget by lib/shared-services/draft/recommendationRecorder.ts; scored by
+/// scripts/draft-backtest.ts --recorded. One row per pick moment per surface (dedupeKey).
+model DraftRecommendationRecord {
+  id              String   @id @default(cuid())
+  dedupeKey       String   @unique @map("dedupe_key") @db.VarChar(191)
+  surface         String   @db.VarChar(32)
+  sport           String   @db.VarChar(16)
+  leagueId        String?  @map("league_id")
+  sessionKey      String   @map("session_key") @db.VarChar(191)
+  rosterKey       String   @map("roster_key") @db.VarChar(191)
+  overallPick     Int      @map("overall_pick")
+  round           Int
+  servedMode      String   @map("served_mode") @db.VarChar(16)
+  observeName     String?  @map("observe_name")
+  observePosition String?  @map("observe_position") @db.VarChar(8)
+  activeName      String?  @map("active_name")
+  activePosition  String?  @map("active_position") @db.VarChar(8)
+  agree           Boolean
+  projectionCount Int      @map("projection_count")
+  poolSize        Int      @map("pool_size")
+  detail          Json
+  engineVersion   String   @map("engine_version") @db.VarChar(32)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([leagueId])
+  @@index([sport, agree])
+  @@map("draft_recommendation_records")
+}
+
 model DraftPredictionSnapshot {
   id             String               @id @default(uuid())
   leagueId       String
@@ -14806,6 +15031,9 @@ model RedraftRoster {
   seasonId                 String
   leagueId                 String
   ownerId                  String
+  /// The AllFantasy user who runs this team when `ownerId` is a key of its own: a manager's second and
+  /// later teams in a league (see `Roster.managerUserId`). `ownerId` stays unique per season. Null otherwise.
+  managerUserId            String?
   ownerName                String
   teamName                 String?
   avatarUrl                String?
@@ -14857,6 +15085,7 @@ model RedraftRoster {
 
   @@unique([seasonId, ownerId])
   @@index([seasonId])
+  @@index([seasonId, managerUserId], map: "idx_redraft_rosters_season_manager")
   @@map("redraft_rosters")
 }
 
@@ -15845,6 +16074,30 @@ model PlayerWeeklyScore {
   @@unique([playerId, week, season, sport])
   @@index([sport, week, season])
   @@map("player_weekly_scores")
+}
+
+/// A player's position for one scoring week, recorded when that week's weekly score is written and
+/// FROZEN when the week finalizes (lib/bestball/weekPositions.ts). There was no position history
+/// anywhere: `SportsPlayer.position` and the roster rows hold the CURRENT position only, so rescoring
+/// a past best ball week seated a re-listed player at today's position. Best ball reads this before
+/// falling back to the current position. Same ids and sport keys as `PlayerWeeklyScore`.
+model PlayerWeekPosition {
+  playerId   String
+  sport      String
+  season     Int
+  week       Int
+  /// The position the weekly score was computed with; null when the roster row had none.
+  position   String?
+  /// What recorded it, e.g. `weekly_score_sync`.
+  source     String
+  /// Set when the week's weekly scores finalize; a frozen row is never rewritten.
+  frozen     Boolean  @default(false)
+  recordedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([playerId, sport, season, week])
+  @@index([sport, season, week])
+  @@map("player_week_positions")
 }
 
 model RedraftPlayoffBracket {
@@ -20271,4 +20524,170 @@ model CommunityReport {
   @@index([status, createdAt])
   @@index([targetType, targetId])
   @@map("community_reports")
+}
+
+model SleeperCareerSurvival {
+  userId           String   @map("user_id")
+  platformLeagueId String   @map("platform_league_id")
+  season           Int
+  evidence         Json
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, platformLeagueId, season])
+  @@map("sleeper_career_survival")
+}
+
+/// Phase 0: immutable Gmail captures. No transaction/body-template parsing.
+enum LeagueSafeEmailProcessingStatus {
+  captured
+  parsed
+  unparseable
+  rejected
+}
+
+model LeagueSafeRawEmail {
+  id                 String                         @id @default(cuid())
+  /// Gmail immutable message id, from the single confirmed bot inbox.
+  messageId          String                         @unique
+  /// Sender-supplied RFC Message-ID, preserved for inspection, not deduplication.
+  rfcMessageId       String?
+  /// Gmail internalDate (actual receipt), not the sender's Date header.
+  receivedAt         DateTime
+  from               String
+  to                 String
+  subject            String
+  rawBody            String                         @db.Text
+  authResults        Json
+  processingStatus   LeagueSafeEmailProcessingStatus @default(captured)
+  /// Nullable until an explicit connection assignment; capture does not assign it.
+  leagueConnectionId String?
+  leagueConnection   LeagueSafeConnection? @relation(fields: [leagueConnectionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  ledgerEntries      DuesLedgerEntry[]
+
+  /// Phase 2 manual parsing only. Raw MIME and delivery authentication remain immutable.
+  parsedPayload      Json?
+  parserVersion      String?                        @db.VarChar(64)
+  parseAttemptedAt   DateTime?
+  parseError         String?                        @db.VarChar(64)
+  /// Indexed, not unique: preserve every source notification for the same transaction.
+  parseDedupeKey     String?                        @db.VarChar(100)
+
+  rejectionReason    String?
+  createdAt          DateTime                       @default(now())
+
+  @@unique([id, leagueConnectionId])
+  @@index([createdAt, id])
+  @@index([processingStatus, createdAt, id])
+  @@index([leagueConnectionId])
+  @@index([parseDedupeKey])
+}
+
+/// Phase 1 models only: no email parsing, routing, or automatic ledger writes.
+enum LeagueSafeConnectionStatus {
+  pending_invite
+  active
+  stale
+  disconnected
+}
+
+enum LeagueSafeMatchMethod {
+  exact_email
+  secondary_email
+  name_exact
+  name_fuzzy
+  manual
+}
+
+enum DuesLedgerEntryType {
+  payment
+  late_fee
+  refund
+  payout
+  adjustment
+}
+
+enum DuesLedgerSourceType {
+  email
+  screenshot
+  manual
+}
+
+model LeagueSafeConnection {
+  id              String @id @default(cuid())
+  /// A League row already identifies its season; at most one connection per row.
+  afLeagueId      String @unique
+  /// Preserve plus tags; the shared inbox may serve multiple connections.
+  botAddress      String @default("allfantasysportsapp@gmail.com") @db.VarChar(254)
+  lsLeagueName    String @db.VarChar(256)
+  status          LeagueSafeConnectionStatus @default(pending_invite)
+  lastEmailAt     DateTime?
+  createdBy       String
+  /// Base assessment, not a stored paid/unpaid state. Per-member override is optional.
+  duesAmountCents Int @default(0)
+  currency        String @default("usd") @db.VarChar(3)
+  dueAt           DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  league          League @relation(fields: [afLeagueId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator         AppUser @relation("LeagueSafeConnectionCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  members         LeagueSafeMember[]
+  rawEmails       LeagueSafeRawEmail[]
+  ledgerEntries   DuesLedgerEntry[]
+
+  @@unique([id, afLeagueId])
+  @@index([botAddress])
+  @@index([lsLeagueName])
+  @@index([status, lastEmailAt])
+  @@index([createdBy])
+}
+
+model LeagueSafeMember {
+  id                  String @id @default(cuid())
+  connectionId        String
+  /// Duplicated scope is protected by composite foreign keys, not caller convention.
+  afLeagueId          String
+  lsDisplayName       String @db.VarChar(256)
+  lsEmail             String? @db.VarChar(254)
+  afTeamId            String?
+  /// Null until a matching method is chosen; a suggestion is not a confirmed identity.
+  matchMethod         LeagueSafeMatchMethod?
+  confirmedByCommish  Boolean @default(false)
+  duesAmountCents     Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  connection          LeagueSafeConnection @relation(fields: [connectionId, afLeagueId], references: [id, afLeagueId], onDelete: Restrict, onUpdate: Restrict)
+  team                LeagueTeam? @relation(fields: [afTeamId, afLeagueId], references: [id, leagueId], onDelete: Restrict, onUpdate: Restrict)
+  ledgerEntries       DuesLedgerEntry[]
+
+  @@unique([id, connectionId])
+  @@index([connectionId, lsEmail])
+  @@index([afTeamId, afLeagueId])
+}
+
+model DuesLedgerEntry {
+  id               String @id @default(cuid())
+  connectionId     String
+  memberId         String
+  type             DuesLedgerEntryType
+  /// Positive magnitude except signed adjustments. SQL checks enforce this contract.
+  amountCents      Int
+  occurredAt       DateTime
+  sourceRawEmailId String?
+  sourceType       DuesLedgerSourceType
+  /// Required, globally unique and supplied by the future writer for idempotency.
+  dedupeKey        String @unique @db.VarChar(256)
+  /// Null is reserved for system/email entries; manual/screenshot entries need an actor.
+  createdBy        String?
+  notes            String? @db.Text
+  createdAt        DateTime @default(now())
+  connection       LeagueSafeConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  member           LeagueSafeMember @relation(fields: [memberId, connectionId], references: [id, connectionId], onDelete: Restrict, onUpdate: Restrict)
+  /// A source email must already be assigned to this same connection.
+  sourceRawEmail   LeagueSafeRawEmail? @relation(fields: [sourceRawEmailId, connectionId], references: [id, leagueConnectionId], onDelete: Restrict, onUpdate: Restrict)
+  creator          AppUser? @relation("LeagueSafeLedgerCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([connectionId, memberId, occurredAt, id])
+  @@index([sourceRawEmailId, connectionId])
+  @@index([createdBy])
 }

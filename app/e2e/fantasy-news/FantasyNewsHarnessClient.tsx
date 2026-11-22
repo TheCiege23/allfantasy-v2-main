@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { getPlayerPageHref } from "@/lib/fantasy-news-aggregator/playerLinkResolver"
 
 type FeedType = "player" | "team"
 
@@ -23,7 +24,8 @@ export default function FantasyNewsHarnessClient() {
     [feedType]
   )
   const playerName = query || (feedType === "player" ? "Josh Allen" : "KC")
-  const playerLink = `/af-rankings?q=${encodeURIComponent(playerName)}`
+  // Mirrors lib/fantasy-news-aggregator/playerLinkResolver.ts: a feed-named player opens their page.
+  const playerLink = getPlayerPageHref(playerName, { sport: "NFL" })
 
   const handleShare = async () => {
     const payload = {

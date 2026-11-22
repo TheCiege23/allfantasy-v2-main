@@ -36,7 +36,7 @@
 import type { KickerScoringBreakdown, KickerSourceKind } from './types'
 
 /** Canonical kicker components this engine can score from the available data. */
-export type KickerComponent =
+type KickerComponent =
   | 'fieldGoalMade'
   | 'fieldGoalMissed'
   | 'extraPointMade'

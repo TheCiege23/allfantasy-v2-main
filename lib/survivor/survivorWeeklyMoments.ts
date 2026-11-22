@@ -14,7 +14,7 @@ import { isCouncilReadComplete } from './survivorRevealGate'
  * elimination — so nothing here can surface a result while the scroll is still being read. Seen state is stored per user so a moment plays once.
  */
 
-export interface TorchOutMoment {
+interface TorchOutMoment {
   key: string
   councilId: string
   week: number
@@ -26,7 +26,7 @@ export interface TorchOutMoment {
   seen: boolean
 }
 
-export interface ImmunityMoment {
+interface ImmunityMoment {
   key: string
   week: number
   tribeId: string
@@ -39,16 +39,16 @@ export interface ImmunityMoment {
   seen: boolean
 }
 
-export interface WeeklyMomentsPayload {
+interface WeeklyMomentsPayload {
   torchOut: TorchOutMoment | null
   immunity: ImmunityMoment[]
 }
 
-export function torchMomentKey(councilId: string): string {
+function torchMomentKey(councilId: string): string {
   return `torch:${councilId}`
 }
 
-export function immunityMomentKey(week: number, tribeId: string): string {
+function immunityMomentKey(week: number, tribeId: string): string {
   return `immunity:${week}:${tribeId}`
 }
 

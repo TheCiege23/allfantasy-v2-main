@@ -7,7 +7,7 @@ import { defineMessages } from '@/lib/i18n/messages'
 export const recentClipsMessages = defineMessages({
   en: {
     xPosts: 'X posts',
-    matchNote: 'Matched by full name or verified handle in the caption; this does not confirm who appears in the video.',
+    matchNote: 'Matched to your players by the post’s caption.',
     show: 'Show',
     allClips: 'All clips',
     plays: 'Plays',
@@ -21,7 +21,7 @@ export const recentClipsMessages = defineMessages({
     kindInterview: 'Interview',
     kindCommentary: 'Commentary',
     feedChecked: 'Feed checked',
-    hourlyRefresh: 'Hourly pilot refresh',
+    hourlyRefresh: 'Updates hourly',
     privacyNote: 'Loading a post shares browser data with X. Some videos only play on X.',
     xPrivacy: 'X privacy',
     /** The locale a clip's time and the feed's check time are formatted in. */
@@ -29,7 +29,7 @@ export const recentClipsMessages = defineMessages({
   },
   es: {
     xPosts: 'Publicaciones de X',
-    matchNote: 'Coincidencias por nombre o usuario verificado en el texto; no confirman quién aparece en el video.',
+    matchNote: 'Emparejado con tus jugadores por el texto de la publicación.',
     show: 'Mostrar',
     allClips: 'Todos los clips',
     plays: 'Jugadas',

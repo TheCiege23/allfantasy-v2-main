@@ -16,11 +16,12 @@ const staticImports = (file: string) =>
   [...read(file).matchAll(/^import (?:type )?[^'";]*? from '([^']+)'/gm)].map((m) => m[1]).sort()
 
 describe('domain-os-refresh → Class rating wiring', () => {
-  it('🛑 runs BEFORE the league walk, whose early return would otherwise skip it, and cannot throw out', () => {
+  it('🛑 cannot be skipped by another writer\'s empty result, and cannot throw out', () => {
+    // The per-league walk and its `if (leagues.length === 0) return counts` are retired (2026-11-17);
+    // nothing in the run may return early ahead of a writer.
     const at = src.indexOf('counts.classRating = await runClassRatingDaily(')
-    const walkReturn = src.indexOf('if (leagues.length === 0) return counts')
     expect(at).toBeGreaterThan(0)
-    expect(walkReturn).toBeGreaterThan(at)
+    expect(src).not.toMatch(/^\s*if \([^)]*\) return counts\s*$/m)
     expect(src.slice(at, at + 400)).toMatch(/\.catch\(\s*\(e: unknown\) => \{\s*const out = emptyClassRatingCounts\(\)\s*out\.failed = 1/)
     expect(src).toMatch(/classRating: emptyClassRatingCounts\(\),/)
   })

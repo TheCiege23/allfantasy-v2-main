@@ -6,7 +6,7 @@ import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderServ
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 
-export type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
+type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
 
 export type UpcomingPick = { overall: number; round: number; slot: number }
 

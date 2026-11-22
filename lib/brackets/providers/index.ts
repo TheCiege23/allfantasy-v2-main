@@ -92,11 +92,6 @@ export async function selectBestProvider(): Promise<BracketDataProvider> {
   return cachedProvider
 }
 
-export function getProviderById(id: string): BracketDataProvider | null {
-  const providers = buildProviders()
-  return providers.find((p) => p.id === id) ?? null
-}
-
 export function listProviders(): Array<{ id: string; name: string }> {
   return buildProviders().map((p) => ({ id: p.id, name: p.name }))
 }

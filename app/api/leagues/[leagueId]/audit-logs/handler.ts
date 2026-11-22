@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getAuditLogs } from '@/server/services/auditService'
-import { getLeagueRole } from '@/lib/league/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +16,7 @@ export async function GET(
 
   // The RAW rows — before/after state included, which can carry what the league must not see. Members
   // read the worded league log instead (GET /api/leagues/:id/league-log, lib/league-log/leagueLog.ts).
-  const role = await getLeagueRole(params.leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!(await canCommissionerAct(params.leagueId, userId, 'view'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams.get('limit') || '40')))
   const cursor = req.nextUrl.searchParams.get('cursor') ?? undefined

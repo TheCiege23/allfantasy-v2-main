@@ -101,18 +101,7 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
       .catch(() => {})
   }, [pendingStages, config, leagueId, playoffStartWeek])
 
-  const toggleStage = useCallback((stageId: string, isPremiumStage: boolean) => {
-    if (isPremiumStage && !isPremium) {
-      setGateOpen(true)
-      return
-    }
-    setPendingStages((prev) => {
-      const next = new Set(prev)
-      if (next.has(stageId)) next.delete(stageId)
-      else next.add(stageId)
-      return next
-    })
-  }, [isPremium])
+  // Stages cannot be toggled until real postseason games are scored (see the notice below).
 
   /** Resolves true when the stages saved. */
   const save = useCallback(async (): Promise<boolean> => {
@@ -170,6 +159,14 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
         </div>
       )}
 
+      {/*
+        🛑 THESE STAGES NEVER CHANGED THE PLAYOFFS: no bracket, schedule or scorer reads them. They show as
+        "coming soon" and cannot be toggled; the server refuses a change too (playoff-settings route).
+      */}
+      <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/60" data-testid="playoff-stages-coming-soon">
+        {t('lsEd.po.comingSoon')}
+      </p>
+
       {/* Stage toggles */}
       <div className="space-y-2">
         {stages.map((stage) => {
@@ -180,7 +177,9 @@ export function PlayoffSettingsEditor({ leagueId, playoffStartWeek }: { leagueId
             <button
               key={stage.id}
               type="button"
-              onClick={() => toggleStage(stage.id, stage.premium)}
+              disabled
+              aria-disabled="true"
+              onClick={() => undefined}
               className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
                 locked
                   ? 'cursor-pointer border-white/5 bg-white/[0.01] opacity-60 hover:opacity-80'

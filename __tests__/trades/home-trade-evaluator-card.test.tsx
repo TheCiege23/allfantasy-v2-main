@@ -73,8 +73,19 @@ describe('Evaluate a trade on Home', () => {
     await waitFor(() => expect(card.querySelector(".af-tc-team[data-side='get'] .af-tc-partner-select select")).not.toBeNull())
   })
 
-  it('is not drawn at all with no leagues in scope', () => {
+  /*
+   * Changed 2026-11-11: a manager with no imported league is exactly who the open-market grade is for, so
+   * the card is drawn for everyone and opens the league-free analyzer — still folded, still no roster read.
+   */
+  it('with no leagues, still folded, opens the open-market analyzer and reads no roster', () => {
     const { container } = render(<HomeTradeEvaluatorCard leagues={[]} viewerId="v1" />)
-    expect(container.querySelector('[data-testid=home-trade-evaluator]')).toBeNull()
+    const card = container.querySelector('[data-testid=home-trade-evaluator]') as HTMLDetailsElement
+    expect(card).not.toBeNull()
+    expect(card.open).toBe(false)
+    expect(card.querySelector('summary')?.textContent).toContain('no league needed')
+    open(card)
+    expect(card.querySelector('#af-tc-generic-title')?.textContent).toContain('Quick trade analyzer')
+    expect(card.querySelector('.af-tc-hub-league-select')).toBeNull()
+    expect(rosterReads()).toEqual([])
   })
 })

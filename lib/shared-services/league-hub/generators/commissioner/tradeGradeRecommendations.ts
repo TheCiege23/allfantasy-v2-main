@@ -42,7 +42,7 @@ export function generateTradeGradeRecommendations(
       evidence: [{ label: 'Trade count', detail: String(tradeCount), source: 'resolveMissionControlSnapshot' }],
       sourceFreshness: context.syncFreshness,
       executionCapability: 'recommendation_only',
-      action: { label: 'Open Trade Analyzer', href: '/dynasty-trade-analyzer' },
+      action: { label: 'Open Trade Analyzer', href: '/trade-evaluator?mode=league' },
       commissionerScope: 'league_wide',
       publicationAudience: 'commissioner_only',
       // Never a governance flag here — an uneven trade alone is never grounds for intervention.

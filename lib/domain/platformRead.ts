@@ -66,7 +66,7 @@ export const PLATFORM_READ_CATEGORIES = [
   'SECURITY_REVIEW',
 ] as const
 
-export type PlatformReadCategory = (typeof PLATFORM_READ_CATEGORIES)[number]
+type PlatformReadCategory = (typeof PLATFORM_READ_CATEGORIES)[number]
 
 // ─── The scope ───────────────────────────────────────────────────────────────
 
@@ -89,10 +89,6 @@ const scopeStore = new AsyncLocalStorage<PlatformReadScope>()
  */
 export function isPlatformReadScope(): boolean {
   return scopeStore.getStore() !== undefined
-}
-
-export function currentPlatformReadScope(): PlatformReadScope | undefined {
-  return scopeStore.getStore()
 }
 
 // ─── The separate pool ───────────────────────────────────────────────────────
@@ -128,21 +124,16 @@ function getPlatformClient(): PrismaClient {
   return platformClient
 }
 
-export async function disconnectPlatformClient(): Promise<void> {
-  await platformClient?.$disconnect()
-  platformClient = null
-}
-
 // ─── The audited action ──────────────────────────────────────────────────────
 
-export type PlatformReadDeps = {
+type PlatformReadDeps = {
   readonly authorize?: Authorize
   readonly writeAudit?: WriteAudit
   /** Injectable for tests; production omits it and gets the platform pool. */
   readonly client?: Pick<PrismaClient, '$transaction'>
 }
 
-export type PlatformReadRequest = {
+type PlatformReadRequest = {
   readonly targetTenantId: string
   readonly category: PlatformReadCategory
   readonly resourceType?: string
@@ -218,7 +209,7 @@ export async function withPlatformRead<T>(
 
 // ─── The operator-facing view ────────────────────────────────────────────────
 
-export type OperatorVisibleAuditRow = {
+type OperatorVisibleAuditRow = {
   readonly at: Date
   readonly action: string
   readonly resourceType: string

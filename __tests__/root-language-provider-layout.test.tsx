@@ -71,7 +71,6 @@ const globalErrorSource = fs.readFileSync(path.join(process.cwd(), "app", "globa
 const dashboardErrorSource = fs.readFileSync(path.join(process.cwd(), "app", "dashboard", "error.tsx"), "utf8")
 const leagueRouteErrorSource = fs.readFileSync(path.join(process.cwd(), "app", "league", "[leagueId]", "error.tsx"), "utf8")
 const dashboardUnavailableStateSource = fs.readFileSync(path.join(process.cwd(), "components", "dashboard", "DashboardUnavailableState.tsx"), "utf8")
-const landingPageClientSource = fs.readFileSync(path.join(process.cwd(), "components", "landing", "LandingPageClient.tsx"), "utf8")
 const homeTopNavSource = fs.readFileSync(path.join(process.cwd(), "components", "navigation", "HomeTopNav.tsx"), "utf8")
 const syncProfilePreferencesSource = fs.readFileSync(path.join(process.cwd(), "components", "auth", "SyncProfilePreferences.tsx"), "utf8")
 const middlewareSource = fs.readFileSync(path.join(process.cwd(), "middleware.ts"), "utf8")
@@ -475,7 +474,6 @@ describe("root language provider layout", () => {
 
   it("keeps homepage and root chrome language reads provider-safe", () => {
     for (const [file, source] of [
-      ["components/landing/LandingPageClient.tsx", landingPageClientSource],
       ["components/navigation/HomeTopNav.tsx", homeTopNavSource],
       ["components/auth/SyncProfilePreferences.tsx", syncProfilePreferencesSource],
     ] as const) {

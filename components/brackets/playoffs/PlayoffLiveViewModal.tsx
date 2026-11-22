@@ -29,7 +29,7 @@ import { formatLabel } from "@/lib/playoffs/singleGame"
  * modal shows the game-level detail it actually has.
  */
 
-export type PlayoffLiveViewModalProps = {
+type PlayoffLiveViewModalProps = {
   series: PlayoffSeriesView | null
   sport: string
   onClose: () => void

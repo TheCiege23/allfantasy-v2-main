@@ -1,7 +1,7 @@
 import type { TradeDriverData, TradeVerdict, TradeLean } from './trade-engine'
 import type { AcceptDriver } from './types'
 
-export type GptInputContract = {
+type GptInputContract = {
   mode: 'TRADE_EVALUATOR' | 'INSTANT'
   verdict: TradeVerdict
   lean: TradeLean
@@ -86,31 +86,25 @@ confidenceDrivers:
 ${confidenceBlock}`
 }
 
-export type StructuredBullet = {
+type StructuredBullet = {
   text: string
   driverId: string
 }
 
-export type StructuredSensitivity = {
+type StructuredSensitivity = {
   text: string
   driverId: string
 }
 
-export type GptNarrativeOutput = {
+type GptNarrativeOutput = {
   bullets: StructuredBullet[]
   sensitivity: StructuredSensitivity
 }
 
-export type ValidationResult = {
+type ValidationResult = {
   valid: boolean
   cleaned: GptNarrativeOutput | null
   violations: string[]
-}
-
-export const AI_OUTPUT_INVALID_FALLBACK = {
-  analysis: [] as string[],
-  error: 'AI_OUTPUT_INVALID' as const,
-  fallback: 'Narrative unavailable due to driver mismatch.',
 }
 
 const REQUIRED_DRIVER_IDS = ['ar_market_mismatch', 'ar_volatility_delta']

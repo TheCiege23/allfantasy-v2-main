@@ -5,7 +5,7 @@ import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
 import { defaultNflGameTime } from '@/lib/weather/defaultGameTimes'
 import { calculateWeatherImpact } from '@/lib/weather/weatherImpactEngine'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, getTrendingPlayers, getValueTier } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getLiveAdpByName, lookupLiveAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
 import { isInjuryDesignation, latestInjuryClaims } from '@/lib/injuries/matchInjuryRows'
@@ -51,7 +51,6 @@ function extractPlayerAndTeamMentions(message: string): { players: string[]; tea
   }
 
   const foundTeams: Set<string> = new Set()
-  const upper = message.toUpperCase()
   const lower = message.toLowerCase()
 
   for (const t of teamPatterns) {

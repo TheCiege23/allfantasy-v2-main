@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { readableApiError } from '@/lib/http/readableApiError'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { isInIosAppClient } from '@/lib/platform/iosApp'
+import { useProWeekOffer } from '@/lib/referral/useProWeekOffer'
 // af-core.css carries the .af-core token layer (--surface, --surface2, --line2,
 // --accent …) for all three modes. AfCoreShell imports it for screens inside the
 // shell; these pages render standalone at /login and /signup, so without it every
@@ -20,6 +22,7 @@ import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialP
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
+import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -44,7 +47,7 @@ import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOpti
  * stated, not something implied.
  */
 
-export type AuthMode = 'signin' | 'signup'
+type AuthMode = 'signin' | 'signup'
 
 /** Shared with the landing and pricing navs, so all three public surfaces match. */
 function Shield() {
@@ -162,7 +165,7 @@ const PROVIDERS: { id: SocialProvider; label: string }[] = [
 ]
 
 /** Which way someone chose to sign up — counted so the Google-first layout can be judged. */
-function trackSignupMethod(method: SocialProvider | 'email'): void {
+function trackSignupMethod(method: SocialProvider | 'email' | 'phone'): void {
   if (typeof window === 'undefined') return
   void fetch('/api/analytics/track', {
     method: 'POST',
@@ -183,7 +186,15 @@ function trackSignupMethod(method: SocialProvider | 'email'): void {
  * same facts with the same links; it records nothing — the buttons' consent handling is
  * unchanged by this (see signupConsentCookie.ts for the separate, pre-existing gap there).
  */
-function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: boolean }) {
+function OAuthGrid({
+  callbackUrl,
+  lead = false,
+  leadDivider = 'Or sign up with email',
+}: {
+  callbackUrl: string
+  lead?: boolean
+  leadDivider?: string
+}) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
   return (
@@ -242,16 +253,200 @@ function OAuthGrid({ callbackUrl, lead = false }: { callbackUrl: string; lead?: 
             <Link href="/disclaimer?from=signup">State notice</Link> · <Link href="/terms">Terms</Link> ·{' '}
             <Link href="/privacy">Privacy</Link>
           </p>
-          <div className="af-au-divider">
-            <span className="af-label">Or sign up with email</span>
-          </div>
+          {/* Only when a provider button is actually shown above it; otherwise "Or" divides nothing. */}
+          {PROVIDERS.some((p) => isSocialProviderEnabled(p.id)) ? (
+            <div className="af-au-divider">
+              <span className="af-label">{leadDivider}</span>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>
   )
 }
 
+/*
+ * Sign in with a text code — no password. Step one asks /api/auth/phone/login/start to
+ * text a code (it only does so for a number on a verified account, and answers the same
+ * either way); step two hands the code to the `phone-code` next-auth provider.
+ */
+function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; onUsePassword: () => void }) {
+  const router = useRouter()
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function sendCode(e?: React.FormEvent) {
+    e?.preventDefault()
+    setError(null)
+    if (phone.replace(/\D/g, '').length < 10) {
+      setError('Enter your phone number, including the area code.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/phone/login/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      })
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (!res.ok) {
+        setError(readableApiError(data, 'We could not send a code. Please try again.'))
+        return
+      }
+      setSentTo(phone.trim())
+      setCode('')
+    } catch {
+      setError('We could not send a code. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function verify(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!/^\d{4,10}$/.test(code.replace(/\s/g, ''))) {
+      setError('Enter the 6-digit code from the text.')
+      return
+    }
+    setLoading(true)
+    try {
+      const result = await signIn('phone-code', {
+        phone: sentTo ?? phone.trim(),
+        code: code.replace(/\s/g, ''),
+        redirect: false,
+        callbackUrl,
+      })
+      if (result?.error) {
+        setError(
+          result.error === 'CredentialsSignin'
+            ? 'That code didn’t work. Check it, or send a new one.'
+            : resolveLoginErrorMessage(result.error),
+        )
+      } else {
+        router.replace(callbackUrl)
+      }
+    } catch {
+      setError('Something went wrong signing in. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      {sentTo === null ? (
+        <form className="af-au-form" onSubmit={sendCode} data-testid="signin-phone-form">
+          <div className="af-au-field">
+            <label htmlFor="signin-phone" className="af-label">Phone number</label>
+            <input
+              id="signin-phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              aria-describedby="signin-phone-hint"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <span id="signin-phone-hint" className="af-au-hint">
+              We’ll text you a 6-digit code. Use the number saved on your account.
+            </span>
+          </div>
+          {error ? (
+            <p className="af-au-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="af-btn af-au-submit" disabled={loading}>
+            {loading ? 'Sending…' : 'Text me a code'}
+          </button>
+        </form>
+      ) : (
+        <form className="af-au-form" onSubmit={verify} data-testid="signin-code-form">
+          <p className="af-au-hint" role="status">
+            If {sentTo} is on an AllFantasy account, we’ve texted it a code. It may take a minute.
+          </p>
+          <label className="af-au-field">
+            <span className="af-label">Code</span>
+            <input
+              name="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              maxLength={10}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </label>
+          {error ? (
+            <p className="af-au-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="af-btn af-au-submit" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+          <p className="af-au-alt">
+            <button type="button" className="af-au-linkbtn" onClick={() => void sendCode()} disabled={loading}>
+              Send a new code
+            </button>
+            {' · '}
+            <button
+              type="button"
+              className="af-au-linkbtn"
+              onClick={() => {
+                setSentTo(null)
+                setError(null)
+              }}
+            >
+              Use a different number
+            </button>
+          </p>
+        </form>
+      )}
+      <p className="af-au-alt">
+        <button type="button" className="af-au-linkbtn" onClick={onUsePassword} data-testid="signin-use-password">
+          Sign in with a password instead
+        </button>
+      </p>
+    </>
+  )
+}
+
 function SignIn({ callbackUrl }: { callbackUrl: string }) {
+  useReferralClickFromUrl()
+  const [method, setMethod] = useState<'password' | 'code'>('password')
+
+  return (
+    <div className="af-au-card">
+      <header className="af-au-head">
+        <div>
+          <h1 className="af-au-title">Welcome back</h1>
+          <p className="af-au-sub">Sign in to your leagues.</p>
+        </div>
+      </header>
+
+      {method === 'code' ? (
+        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} />
+      ) : (
+        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} />
+      )}
+
+      <DevBypassSignIn callbackUrl={callbackUrl} />
+
+      <OAuthGrid callbackUrl={callbackUrl} />
+    </div>
+  )
+}
+
+function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUseCode: () => void }) {
   const router = useRouter()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -288,14 +483,7 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
   }
 
   return (
-    <div className="af-au-card">
-      <header className="af-au-head">
-        <div>
-          <h1 className="af-au-title">Welcome back</h1>
-          <p className="af-au-sub">Sign in to your leagues.</p>
-        </div>
-      </header>
-
+    <>
       <form className="af-au-form" onSubmit={onSubmit}>
         <label className="af-au-field">
           <span className="af-label">Email, username or phone</span>
@@ -335,11 +523,12 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-
-      <DevBypassSignIn callbackUrl={callbackUrl} />
-
-      <OAuthGrid callbackUrl={callbackUrl} />
-    </div>
+      <p className="af-au-alt">
+        <button type="button" className="af-au-linkbtn" onClick={onUseCode} data-testid="signin-use-code">
+          Text me a code instead
+        </button>
+      </p>
+    </>
   )
 }
 
@@ -387,8 +576,51 @@ function DevBypassSignIn({ callbackUrl }: { callbackUrl: string }) {
   )
 }
 
+/** `?ref=CODE` on the sign-up page itself — a short token, or nothing. */
+function referralFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const ref = new URLSearchParams(window.location.search).get('ref')?.trim() ?? ''
+  return /^[A-Za-z0-9]{4,16}$/.test(ref) ? ref : null
+}
+
+/**
+ * A visitor who arrived on a friend's referral link (`/signup?ref=`) is told what bringing a league earns
+ * them both (lib/referral/proWeek.ts). Read after mount — the URL is not known on the server — and never
+ * inside the iOS app, which does not advertise the offer (App Store 3.1.1 / 3.1.3).
+ */
+function useReferralProWeekLine(): number {
+  const [referred, setReferred] = useState(false)
+  useEffect(() => {
+    setReferred(Boolean(referralFromUrl()) && !isInIosAppClient())
+  }, [])
+  useReferralClickFromUrl()
+  const offer = useProWeekOffer(referred)
+  return referred ? offer.days : 0
+}
+
+/**
+ * A `?ref=` code on the sign-in or sign-up page itself (a leaguemate invite sends signed-out visitors
+ * here with one, 2026-11-15) is recorded as a click — the same POST the landing page's ReferralTracker
+ * makes, which the auth pages do not mount. That sets the `af_ref` cookie, which is what credits a
+ * Google / Apple / Spotify / Discord sign-up (SocialAccountLinkingService); the email form also sends the
+ * code in its body. Once per page view; a failure changes nothing on screen.
+ */
+function useReferralClickFromUrl(): void {
+  useEffect(() => {
+    const ref = referralFromUrl()
+    if (!ref) return
+    void fetch('/api/referral/track-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref }),
+      credentials: 'same-origin',
+    }).catch(() => undefined)
+  }, [])
+}
+
 function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter()
+  const proWeekDays = useReferralProWeekLine()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -406,6 +638,23 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const [terms, setTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /*
+   * Sign up with a phone number instead of an email (2026-11-14). The number is proven by a
+   * texted code BEFORE the account exists (/api/auth/phone/signup/start, then the code goes to
+   * /api/auth/register as phoneVerificationCode), so a phone account is born verified and can
+   * sign in later with a text code. Email becomes optional on this path.
+   */
+  const [method, setMethod] = useState<'email' | 'phone'>('email')
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [codeSentTo, setCodeSentTo] = useState<string | null>(null)
+
+  function switchMethod(next: 'email' | 'phone') {
+    setMethod(next)
+    setCodeSentTo(null)
+    setCode('')
+    setError(null)
+  }
 
   // Names the missing agreement rather than failing generically — with two
   // boxes, "please accept the terms" does not say which one was skipped.
@@ -421,7 +670,16 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       setError(`Please accept ${missing.join(' and ')} to continue.`)
       return
     }
-    if (!email.trim() || !password || !displayName.trim()) {
+    if (method === 'phone') {
+      if (!displayName.trim() || !password) {
+        setError('Fill in your name, phone number and a password.')
+        return
+      }
+      if (phone.replace(/\D/g, '').length < 10) {
+        setError('Enter your phone number, including the area code.')
+        return
+      }
+    } else if (!email.trim() || !password || !displayName.trim()) {
       setError('Fill in your name, email and a password.')
       return
     }
@@ -430,14 +688,41 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       return
     }
 
-    trackSignupMethod('email')
+    // Phone, step one: text the code. The account is created only once the code comes back.
+    if (method === 'phone' && codeSentTo === null) {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/auth/phone/signup/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone.trim() }),
+        })
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+        if (!res.ok) {
+          setError(readableApiError(data, 'We could not text a code. Please try again.'))
+          return
+        }
+        setCodeSentTo(phone.trim())
+      } catch {
+        setError('We could not text a code. Please try again.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    if (method === 'phone' && !/^\d{4,10}$/.test(code.replace(/\s/g, ''))) {
+      setError('Enter the 6-digit code from the text.')
+      return
+    }
+
+    trackSignupMethod(method)
     setLoading(true)
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
+          ...(email.trim() ? { email: email.trim() } : {}),
           password,
           displayName: displayName.trim(),
           // The disclaimer box states 18+ explicitly, so it carries both flags.
@@ -445,8 +730,17 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           ageConfirmed: disclaimer,
           disclaimerAgreed: disclaimer,
           termsAgreed: terms,
-          verificationMethod: 'EMAIL',
+          verificationMethod: method === 'phone' ? 'PHONE' : 'EMAIL',
+          ...(method === 'phone'
+            ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
+            : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
+          /*
+           * A friend's code in this page's own URL (`/signup?ref=CODE`, 2026-11-15). The auth pages do not
+           * mount ReferralTracker, so the `af_ref` cookie is only there when the visitor came through the
+           * landing; the register route prefers this and falls back to the cookie.
+           */
+          ...(referralFromUrl() ? { referralCode: referralFromUrl() } : {}),
         }),
       })
 
@@ -480,11 +774,11 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
        */
       const createdUserId = typeof data.userId === 'string' ? data.userId : null
       if (createdUserId) {
-        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method: 'email' })
+        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method })
       }
 
       const signedIn = await signIn('credentials', {
-        login: email.trim(),
+        login: method === 'phone' ? (codeSentTo ?? phone.trim()) : email.trim(),
         password,
         redirect: false,
         callbackUrl,
@@ -510,11 +804,24 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
-          <p className="af-au-sub">Free to create or connect leagues. Next: verify your email, then choose how to start.</p>
+          <p className="af-au-sub">
+            {method === 'phone'
+              ? 'Free to create or connect leagues. We’ll text you a code to confirm your number.'
+              : 'Free to create or connect leagues. Next: bring in your league. We’ll email you a link to confirm your address.'}
+          </p>
+          {proWeekDays > 0 ? (
+            <p className="af-au-sub" data-testid="signup-pro-week-offer">
+              <strong>You were invited.</strong> Bring your league and you and your friend both get {proWeekDays} days of AF Pro, free.
+            </p>
+          ) : null}
         </div>
       </header>
 
-      <OAuthGrid callbackUrl={callbackUrl} lead />
+      <OAuthGrid
+        callbackUrl={callbackUrl}
+        lead
+        leadDivider={method === 'phone' ? 'Or sign up with your phone' : 'Or sign up with email'}
+      />
 
       <form className="af-au-form" onSubmit={onSubmit}>
         <label className="af-au-field">
@@ -528,8 +835,24 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           />
         </label>
 
+        {method === 'phone' ? (
+          <label className="af-au-field">
+            <span className="af-label">Phone number</span>
+            <input
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={phone}
+              readOnly={codeSentTo !== null}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </label>
+        ) : null}
+
         <label className="af-au-field">
-          <span className="af-label">Email</span>
+          <span className="af-label">{method === 'phone' ? 'Email (optional)' : 'Email'}</span>
           <input
             type="email"
             autoComplete="email"
@@ -561,7 +884,9 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             onChange={(e) => setSleeperHandle(e.target.value)}
           />
           <span className="af-au-hint">
-            Link it now and, once your email is verified, your Sleeper leagues import in one click.
+            {method === 'phone'
+              ? 'Link it now and your Sleeper leagues import in one click.'
+              : 'Link it now and your Sleeper leagues import in one click, right after you sign up.'}
           </span>
         </label>
 
@@ -587,6 +912,31 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           </span>
         </label>
 
+        {method === 'phone' && codeSentTo !== null ? (
+          <div className="af-au-field" data-testid="signup-code-step">
+            <p className="af-au-hint" role="status">
+              We texted a code to {codeSentTo}. It may take a minute.{' '}
+              <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('phone')}>
+                Change number
+              </button>
+            </p>
+            <label htmlFor="signup-code" className="af-label">
+              Code
+            </label>
+            <input
+              id="signup-code"
+              name="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              maxLength={10}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </div>
+        ) : null}
+
         {error ? (
           <p className="af-au-error" role="alert">
             {error}
@@ -594,8 +944,25 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         ) : null}
 
         <button type="submit" className="af-btn af-au-submit" disabled={loading}>
-          {loading ? 'Creating account…' : 'Create account'}
+          {loading
+            ? method === 'phone' && codeSentTo === null
+              ? 'Sending…'
+              : 'Creating account…'
+            : method === 'phone' && codeSentTo === null
+              ? 'Text me a code'
+              : 'Create account'}
         </button>
+        <p className="af-au-alt">
+          {method === 'phone' ? (
+            <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('email')} data-testid="signup-use-email">
+              Sign up with email instead
+            </button>
+          ) : (
+            <button type="button" className="af-au-linkbtn" onClick={() => switchMethod('phone')} data-testid="signup-use-phone">
+              Sign up with your phone number instead
+            </button>
+          )}
+        </p>
       </form>
     </div>
   )
@@ -610,7 +977,7 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return <>
-    {callbackUrl.startsWith('/brackets/leagues/') ? <AndroidBracketAppOption /> : null}
+    {callbackUrl.startsWith('/brackets/leagues/') ? <><AndroidBracketAppOption /><IosBracketAppOption /></> : null}
     {mode === 'signin' ? <SignIn callbackUrl={callbackUrl} /> : <SignUp callbackUrl={callbackUrl} />}
   </>
 }
@@ -620,10 +987,37 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   const requested = params?.get('callbackUrl')
   const callback = requested ? safeRedirectPath(requested) : null
   const destination = mode === 'signup' ? '/login' : '/signup'
-  const href = callback ? `${destination}?callbackUrl=${encodeURIComponent(callback)}` : destination
-  return <span className="af-au-switch">
-    {mode === 'signup' ? <>Already have an account? <Link href={href}>Sign in</Link></> : <>New here? <Link href={href}>Create account</Link></>}
-  </span>
+  // A leaguemate invite's referral code survives the switch between the two (2026-11-15).
+  const ref = params?.get('ref')?.trim() ?? ''
+  const qs = new URLSearchParams()
+  if (callback) qs.set('callbackUrl', callback)
+  if (/^[A-Za-z0-9]{4,16}$/.test(ref)) qs.set('ref', ref)
+  const href = qs.toString() ? `${destination}?${qs.toString()}` : destination
+  /*
+   * The landing page's header pair, minus the half you are already on: /signup offers
+   * Sign in (outlined), /login offers Sign up (filled). The other links sit behind the
+   * menu so the row fits a 320px phone. `details` keeps the menu working without JS.
+   */
+  return <div className="af-au-nav">
+    {mode === 'signup' ? (
+      <Link href={href} className="af-btn af-btn--ghost af-au-switch" data-testid="auth-switch">Sign in</Link>
+    ) : (
+      <Link href={href} className="af-btn af-au-switch" data-testid="auth-switch">Sign up</Link>
+    )}
+    <details className="af-au-menu">
+      <summary aria-label="Open navigation menu">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
+          <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </summary>
+      <div className="af-au-menu-panel">
+        <Link href="/">Home</Link>
+        <Link href="/demo" data-testid="signup-try-demo">Try the demo</Link>
+        <Link href="/pricing" data-hide-in-ios-app>Pricing</Link>
+        <Link href="/commissioners">For commissioners</Link>
+      </div>
+    </details>
+  </div>
 }
 
 export function AuthV4({ mode }: { mode: AuthMode }) {

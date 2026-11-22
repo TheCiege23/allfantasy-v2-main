@@ -38,12 +38,12 @@ import type { ChimmyAlertUserPreferences } from './types'
 /** A swap must gain this many projected points for the week before Chimmy messages about it. */
 export const WAIVER_CHECK_MIN_GAIN = 2
 /** Leagues named in one message; the rest are a tap away on the Waivers board. */
-export const WAIVER_CHECK_MAX_LEAGUES = 5
+const WAIVER_CHECK_MAX_LEAGUES = 5
 
-export const WAIVER_CHECK_OPENS_BEFORE_MS = 60 * 60 * 60 * 1000
-export const WAIVER_CHECK_CLOSES_BEFORE_MS = 12 * 60 * 60 * 1000
+const WAIVER_CHECK_OPENS_BEFORE_MS = 60 * 60 * 60 * 1000
+const WAIVER_CHECK_CLOSES_BEFORE_MS = 12 * 60 * 60 * 1000
 /** Last week's final game must have kicked off at least this long ago — it is over, not in play. */
-export const LAST_WEEK_SETTLED_AFTER_MS = 4 * 60 * 60 * 1000
+const LAST_WEEK_SETTLED_AFTER_MS = 4 * 60 * 60 * 1000
 
 /** The alert type, as the Chimmy alert controls name types they can mute. */
 export const WAIVER_CHECK_ALERT_TYPE = 'waiver_check'
@@ -70,7 +70,7 @@ export function lastKickoff(games: readonly ScheduledGame[]): Date | null {
   return last == null ? null : new Date(last)
 }
 
-export type WaiverCheckWindow = 'early' | 'open' | 'closed'
+type WaiverCheckWindow = 'early' | 'open' | 'closed'
 
 export function waiverCheckWindow(args: {
   /** The coming week's first kickoff. */
@@ -173,7 +173,7 @@ export function describePick(p: WaiverPick): string {
   return `add ${who(p.add)}, drop ${p.drop.name} — +${fmt(p.netGain)} projected pts in week ${p.week}${faab}.`
 }
 
-export type WaiverCheckMessage = {
+type WaiverCheckMessage = {
   title: string
   body: string
   actionHref: string
