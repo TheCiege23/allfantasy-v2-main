@@ -211,6 +211,13 @@ export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL
 
 /** AF Pro on the purchase surface, tagged so the plans page can tell this button's buyers apart. */
 export const CHIMMY_PRO_TOOL_UPGRADE_HREF = '/upgrade?plan=af_pro&from=chimmy-pro-tool'
+/** The same plan without a `from`, for a tracked button that names its own source (`chimmyLockSource`). */
+export const CHIMMY_PRO_TOOL_UPGRADE_PATH = '/upgrade?plan=af_pro'
+
+/** `lock_chimmy_<first refused tool>` — which paid Chimmy tool the button sold, on the growth page. PURE. */
+export function chimmyLockSource(tools: readonly ChimmyProOnlyTool[]): string {
+  return `lock_chimmy_${tools[0] ?? 'answer'}`.slice(0, 48)
+}
 
 /**
  * `meta.proUpsell`: the AF Pro tools a free user's answer reached for and the EXECUTOR refused.

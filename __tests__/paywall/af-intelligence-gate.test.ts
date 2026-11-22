@@ -120,3 +120,15 @@ describe("Chimmy's basic trade answer", () => {
     }
   })
 })
+
+describe('the growth page reads the AF Intelligence locks as one group', () => {
+  it('sums only the AF Intelligence sources, and names them', async () => {
+    const { afIntelligenceConversion, entrySourceLabel } = await import('@/lib/admin-dashboard/growthRevenue')
+    const r = (entrySource: string, viewed: number, clicked: number, paid: number) => ({ entrySource, viewed, clicked, checkouts: paid, trials: 0, paid })
+    const out = afIntelligenceConversion([r('lock_af_adp_draft_room', 40, 6, 1), r('lock_chimmy_evaluate_trade', 20, 4, 2), r('win_back', 99, 50, 9), r('lock_commissioner_depth', 10, 1, 1)])
+    expect(out.total).toMatchObject({ viewed: 60, clicked: 10, paid: 3 })
+    expect(out.rows.map((x) => x.entrySource)).toEqual(['lock_chimmy_evaluate_trade', 'lock_af_adp_draft_room'])
+    expect(entrySourceLabel('lock_af_adp_draft_room')).toBe('AF ADP lock (draft room)')
+    expect(entrySourceLabel('lock_chimmy_evaluate_trade')).toBe('Chimmy: full trade breakdown')
+  })
+})

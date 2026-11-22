@@ -2,10 +2,11 @@
 
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
-import Link from 'next/link'
+import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
 import {
-  CHIMMY_PRO_TOOL_UPGRADE_HREF,
+  CHIMMY_PRO_TOOL_UPGRADE_PATH,
   VERDICT_LABEL,
+  chimmyLockSource,
   VERDICT_SOURCE_LABEL,
   proUpsellLine,
   type ChimmyFaabCard,
@@ -35,9 +36,20 @@ export function ChimmyProUpsell({ tools }: { tools: readonly ChimmyProOnlyTool[]
   return (
     <div className="af-cm-proupsell" data-testid="chimmy-pro-upsell">
       <span className="af-cm-proupsell-line">{proUpsellLine(tools, language)}</span>
-      <Link href={CHIMMY_PRO_TOOL_UPGRADE_HREF} className="af-cm-outofanswers-btn" data-primary="true">
+      {/*
+        Tracked like every /core lock (2026-11-22): seen and clicked are recorded, and `from=lock_chimmy_<tool>` names
+        which paid tool sold the plan on the growth page — it was one untracked link for every tool. Hidden in an iOS
+        build that sells nothing (CoreDepthLockCta's `data-ios-purchase`).
+      */}
+      <CoreDepthLockCta
+        href={CHIMMY_PRO_TOOL_UPGRADE_PATH}
+        source={chimmyLockSource(tools)}
+        requiredPlan="AF Pro"
+        className="af-cm-outofanswers-btn"
+        testId="chimmy-pro-upsell-cta"
+      >
         {es ? 'Obtener AF Pro' : 'Get AF Pro'}
-      </Link>
+      </CoreDepthLockCta>
     </div>
   )
 }
