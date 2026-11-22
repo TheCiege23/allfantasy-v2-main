@@ -5,6 +5,7 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
+import { DevyBucketCounts, IdpViewSwitch, type IdpViewMode } from '@/components/league/native/ImportedLeagueExtras'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
 
@@ -67,14 +68,16 @@ const TEAMS: UserLeagueTeam[] = [
 ]
 
 /** Harness only (app/e2e is 404 in production): the real workspace and League home for an imported league, no database. */
-export default function ImportedLeagueWorkspaceHarnessClient() {
+export default function ImportedLeagueWorkspaceHarnessClient({ extras = false }: { extras?: boolean }) {
   const [activeTab, setActiveTab] = useState('native_home')
+  const [idpView, setIdpView] = useState<IdpViewMode>('full')
   const tabIds = TABS.map(tab => tab.id)
   return (
     <NativeLeagueWorkspace
       native={false}
       sourceLeagueId="e2e-fantrax-league"
       importActions={null}
+      headingExtras={extras ? <DevyBucketCounts stats={{ active: 18, taxi: 3, devy: 6 }} /> : null}
       league={IMPORTED}
       leagues={[IMPORTED, NATIVE]}
       tabs={TABS}
@@ -111,6 +114,8 @@ export default function ImportedLeagueWorkspaceHarnessClient() {
             imported
           />
         </div>
+      ) : extras && activeTab === 'roster' ? (
+        <div><IdpViewSwitch value={idpView} onChange={setIdpView} /><p data-testid="imported-harness-tab">Tab body: roster, IDP view {idpView} (unchanged screen)</p></div>
       ) : (
         <p data-testid="imported-harness-tab">Tab body: {activeTab} (unchanged screen, not part of this harness)</p>
       )}

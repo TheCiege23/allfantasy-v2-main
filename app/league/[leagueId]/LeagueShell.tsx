@@ -20,6 +20,7 @@ import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
 import { redraftSkinSport, resolveLeagueSkin } from '@/lib/league/leagueTypeSkin'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
+import { DevyBucketCounts, IdpViewSwitch } from '@/components/league/native/ImportedLeagueExtras'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { nativeScreenFor } from '@/lib/league/native/lineupScreenRouting'
@@ -1738,6 +1739,8 @@ export function LeagueShell({
               />
             ) : null
           }
+          // The old league header's devy counts, for an imported devy league (2026-11-22). Native leagues never showed them.
+          headingExtras={!nativeWorkspace && devyConfig !== null && devyConfig !== 'none' ? <DevyBucketCounts stats={devyBucketStats} /> : null}
           league={selectedLeague}
           leagues={leagueList}
           tabs={tabDefs}
@@ -1985,6 +1988,16 @@ export function LeagueShell({
             </div>
 
             {/* Renew League banner - shown to commissioner when season ends */}
+            {/*
+              The old league header's IDP view switch, for an imported IDP league in the workspace (2026-11-22). It only
+              changes the classic Team tab's view, so it sits above that tab instead of on every screen.
+            */}
+            {workspaceShell && !nativeWorkspace && idpLeagueActive && ['team', 'roster', 'squad'].includes(activeTab) ? (
+              <div className="px-4 pt-3 lg:px-6">
+                <IdpViewSwitch value={idpViewMode} onChange={setIdpViewMode} />
+              </div>
+            ) : null}
+
             <RenewLeagueBanner
               leagueId={league.id}
               currentSeason={Number(selectedLeague.season ?? new Date().getFullYear())}
