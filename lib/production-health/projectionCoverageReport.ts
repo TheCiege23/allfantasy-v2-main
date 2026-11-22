@@ -3,7 +3,7 @@ import 'server-only'
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-import { categoryLeagueReason, isFantraxNbaCampusLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
+import { categoryLeagueReason, isFantraxCampusProjectionLeague, isPointsGradedSport } from '@/lib/decision-os/trade/sportPointsValue'
 import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { readImportedPlayerMetadata } from '@/lib/league-import/importedPlayerMetadata'
 import { leagueIdColumn } from '@/lib/waivers/seasonRatePool'
@@ -79,7 +79,7 @@ async function auditSport(sport: LeagueSport, now: Date, requestedLeagueId?: str
   }
   const allIds = [...rosterIds.keys()].sort()
   const ids = allIds.slice(0, MAX_PLAYERS)
-  const projectionOnly = isFantraxNbaCampusLeague(sport, league)
+  const projectionOnly = isFantraxCampusProjectionLeague(sport, league)
   const valueBoard = isPointsGradedSport(sport)
     ? loadLeagueValueBoard(league.id, {}, projectionOnly ? { projectionOnly: true } : undefined)
     : undefined
