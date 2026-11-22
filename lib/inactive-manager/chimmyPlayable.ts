@@ -11,7 +11,7 @@ import {
   type ManagedLineups,
 } from './inactiveManagerMode'
 
-/** The plan that lets Chimmy run more than its free team(s): the league owner's AF Commissioner. */
+/** The plan that lets Chimmy run more than its free team(s): the league owner's AF Pro or AF Supreme. */
 const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot'
 
 /**

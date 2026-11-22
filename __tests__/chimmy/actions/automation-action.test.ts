@@ -33,7 +33,8 @@ const PLAN = {
   needsPlan: [],
   needsPlanEs: [],
 }
-const facts = (settings: unknown = {}, commissionerPlan = false) => ({ native: true, facts: { settings, commissionerPlan } })
+// Chimmy autopilot is AF Pro / AF Supreme (autopilotPlan) since 2026-11-22; the other automations stay AF Commissioner.
+const facts = (settings: unknown = {}, plan = false) => ({ native: true, facts: { settings, commissionerPlan: plan, autopilotPlan: plan } })
 
 beforeEach(() => {
   process.env.NEXTAUTH_SECRET = 'test-secret'
@@ -103,7 +104,7 @@ describe('proposeAutomationChange', () => {
   })
 
   it('refuses autopilot handover without the plan, and an unchanged rule', async () => {
-    expect((await proposeAutomationChange({ leagueId: 'L1', userId: 'u1', handoverDays: 14, handoverTo: 'autopilot', now: NOW })).text).toMatch(/AF Commissioner/)
+    expect((await proposeAutomationChange({ leagueId: 'L1', userId: 'u1', handoverDays: 14, handoverTo: 'autopilot', now: NOW })).text).toMatch(/AF Pro or AF Supreme/)
     h.facts.mockResolvedValue(facts({ inactive_auto_handover: { days: 14, to: 'lineups', since: NOW.toISOString(), byUserId: 'u1' } }))
     expect((await proposeAutomationChange({ leagueId: 'L1', userId: 'u1', handoverDays: 14, now: NOW })).text).toMatch(/already on/)
     expect((await proposeAutomationChange({ leagueId: 'L1', userId: 'u1', handoverDays: 0, now: NOW })).ok).toBe(true)

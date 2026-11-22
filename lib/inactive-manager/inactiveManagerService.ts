@@ -54,7 +54,7 @@ export const AUTOPILOT_ON_ACTION = 'chimmy_autopilot.on'
 export const AUTOPILOT_OFF_ACTION = 'chimmy_autopilot.off'
 export const AUTOPILOT_FEATURE = 'commissioner_chimmy_autopilot' as const
 
-/** Chimmy autopilot is on the AF Commissioner plan — the LEAGUE OWNER's, as with the other commissioner tools. */
+/** Chimmy autopilot is on AF Pro and AF Supreme (owner decision 2026-11-22) — the LEAGUE OWNER's plan, as before. */
 export async function autopilotEntitled(leagueOwnerUserId: string | null | undefined): Promise<boolean> {
   if (!leagueOwnerUserId) return false
   // A site admin's own league is a test league: every Chimmy team in it plays, plan or no plan. Without
@@ -262,7 +262,7 @@ export async function applyChimmyAutopilot(leagueId: string, userId: string, ros
     return { ...current, [rosterId]: { ...base, autopilot: { style: nextStyle, since: entry?.autopilot?.since ?? now, byUserId: userId } } }
   })
   if (overFree) {
-    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. The AF Commissioner plan lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
+    return { ok: false, status: 402, error: `Chimmy runs ${CHIMMY_FREE_TEAMS} team for free. AF Pro or AF Supreme lets it run up to ${CHIMMY_MANAGER_LIMIT}.` }
   }
   if (overLimit) {
     return { ok: false, status: 409, error: `Chimmy can run up to ${teamLimit} teams in a league. Take Chimmy off a team first.` }
@@ -296,7 +296,7 @@ export async function setAutoHandover(leagueId: string, userId: string, input: u
   if (!league) return { ok: false, status: 404, error: 'League not found' }
   if (resolveWriteAuthority(league.platform) !== 'NATIVE') return { ok: false, status: 409, error: 'AllFantasy can only run teams in leagues it runs.' }
   if (parsed.value?.to === 'autopilot' && !(await autopilotEntitled(league.userId))) {
-    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of the AF Commissioner plan. Lineup management is free.' }
+    return { ok: false, status: 402, error: 'Handing teams to Chimmy autopilot is part of AF Pro and AF Supreme. Lineup management is free.' }
   }
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`

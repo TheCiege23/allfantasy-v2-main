@@ -31,6 +31,8 @@ vi.mock('@/server/services/permissionService', () => ({ isElevatedCommissioner: 
 vi.mock('@/server/services/auditService', () => ({ logAction: m.log }))
 vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: async () => 'commissioner' }))
 vi.mock('@/lib/stat-corrections/applyStatCorrections', () => ({ ownerHasAfCommissionerPlan: async () => m.state.plan }))
+// Chimmy autopilot's plan (AF Pro / AF Supreme since 2026-11-22), read separately from AF Commissioner.
+vi.mock('@/lib/inactive-manager/inactiveManagerService', () => ({ autopilotEntitled: async () => m.state.plan }))
 vi.mock('@/lib/rookie-order/liveRookieOrderService', () => ({
   readLiveRookieOrderSettings: () => ({ enabled: false, config: { nonPlayoff: 'reverse_max_pf', playoff: 'finish_then_seed', withinRound: 'worse_seed' } }),
   saveLiveRookieOrderSettings: m.saveLive,
