@@ -598,7 +598,66 @@ export function extractScoringSettings(
    * exists always wins.
    */
   if (hasScoringRules(stored)) return stored
-  return fantraxStoredRules(s) ?? stored
+  return fantraxStoredRules(s) ?? hostedNflPanelRules(s) ?? stored
+}
+
+/**
+ * The scoring panel's key for a stat, in the vocabulary this file scores (`rec`, `pass_yd`, ...).
+ * Only stats a projection can carry; kicking and team-defense buckets have no projection to price.
+ * The IDP keys need no entry: the projection already carries them under the panel's own names
+ * (`COMPONENT_RULE_KEYS` in lib/af-projections/idpScoring.ts).
+ */
+const HOSTED_NFL_PANEL_TO_RULE: Readonly<Record<string, string>> = {
+  passing_yards: 'pass_yd',
+  passing_td: 'pass_td',
+  interception_thrown: 'pass_int',
+  passing_2pt: 'pass_2pt',
+  passing_attempt: 'pass_att',
+  completion: 'pass_cmp',
+  rushing_yards: 'rush_yd',
+  rushing_td: 'rush_td',
+  rushing_2pt: 'rush_2pt',
+  rush_attempt: 'rush_att',
+  reception: 'rec',
+  receiving_yards: 'rec_yd',
+  receiving_td: 'rec_td',
+  receiving_2pt: 'rec_2pt',
+  fumble: 'fum',
+  fumble_lost: 'fum_lost',
+}
+
+/**
+ * A league AllFantasy hosts keeps its NFL rules in `settings.nfl_scoring_config.rules`, the store
+ * the commissioner's scoring panel saves and live scoring reads (lib/redraft/leagueScoringRules.ts).
+ *
+ * 🛑 SOME HOSTED LEAGUES HAVE THEIR RULES ONLY THERE (production, 2026-11-22: five NFL leagues, a
+ * zombie league among them, with `scoringSettings: { rules: [], preset: 'fb_half_ppr', ... }`).
+ * This file read `scoringSettings` alone, found no rule, and every projection in the league came
+ * back empty: a dash beside every player on Team, Matchup and Players, while the same league
+ * scored its games correctly. Read only when nothing else gives a rule, so a stored rulebook wins.
+ */
+function hostedNflPanelRules(s: Record<string, unknown>): Record<string, unknown> | null {
+  const config = s.nfl_scoring_config
+  const rules = config && typeof config === 'object' && !Array.isArray(config) ? (config as Record<string, unknown>).rules : null
+  return projectionRulesFromNflPanelRules(rules)
+}
+
+/**
+ * The scoring panel's rules (`passing_yards`, `reception`, ...) in the vocabulary projections are
+ * scored in (`pass_yd`, `rec`, ...), or null when they carry no rule a projection can use. Also what
+ * league creation writes into `scoringSettings.rules`, so a new league stores a rulebook where every
+ * reader looks (lib/league-creation/LeagueBootstrapOrchestrator.ts).
+ */
+export function projectionRulesFromNflPanelRules(rules: unknown): Record<string, number> | null {
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null
+  const out: Record<string, number> = {}
+  for (const [key, raw] of Object.entries(rules as Record<string, unknown>)) {
+    const weight = readNumber(raw)
+    if (weight == null) continue
+    const rule = HOSTED_NFL_PANEL_TO_RULE[key] ?? (key.startsWith('idp_') ? key : null)
+    if (rule) out[rule] = weight
+  }
+  return hasScoringRules(out) ? out : null
 }
 
 /**
