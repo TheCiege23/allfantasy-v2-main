@@ -28,6 +28,13 @@ import {
  * ⚠ A TRADE THAT CANNOT BE REBUILT IS MARKED, not left empty — `{ unavailable: reason }`. Left empty it would be picked
  * again on every run, newest first, and the trades behind it would never be reached. A later version can retry those.
  *
+ * OFFSEASON TRADES (about 60% of all trades are offseason or week ≤ 1) have no "week before". Their roster comes from
+ * the SAME season's week-1 rows with the trade undone: each side's week-1 roster, minus what it received, plus what it
+ * gave. ⚠ Approximate and labelled `week1_unwound`: moves made between the trade and week 1 (a rookie draft, waiver
+ * claims) are in that roster. If the week-1 rows already PREDATE the trade (a trade made during week 1, after the
+ * lineups locked — the players a side gave are still on it and the ones it got are not), the rows are used as they are.
+ * Such a trade waits until its season has week-1 rows; trades marked `no_trade_week` by the first version are retried.
+ *
  * DB-first: database reads and one write per trade, no provider call. `TRADE_CONTEXT_BACKFILL=off` switches it off.
  */
 
@@ -46,7 +53,32 @@ export type BackfillUnavailable = {
   capturedAt: string
 }
 
-export type BackfillTradeRow = { managerId: string; partnerRosterId: number | null }
+export type BackfillTradeRow = {
+  managerId: string
+  partnerRosterId: number | null
+  /** Player ids this side gave and got (`LeagueTrade.playersGiven/Received`). Only the offseason rebuild needs them. */
+  playersGiven?: string[]
+  playersReceived?: string[]
+}
+
+/** Player ids out of a stored `playersGiven/Received` column: plain ids, or objects carrying one. PURE. */
+export function tradePlayerIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((p) => {
+    if (typeof p === 'string' || typeof p === 'number') return String(p).trim() ? [String(p).trim()] : []
+    if (p && typeof p === 'object') {
+      const o = p as Record<string, unknown>
+      const id = o.id ?? o.playerId ?? o.sleeperId ?? o.player_id
+      return typeof id === 'string' || typeof id === 'number' ? [String(id)] : []
+    }
+    return []
+  })
+}
+
+/** The week whose rows hold a trade's roster: the week before, or week 1 for an offseason trade. */
+export function rosterWeekFor(week: number): number {
+  return week > 1 ? week - 1 : 1
+}
 
 export type BackfillCandidate = {
   leagueId: string
@@ -83,6 +115,26 @@ export function sidesOf(rows: BackfillTradeRow[]): Array<{ rosterId: string; man
   ]
 }
 
+/**
+ * Do the week-1 rows show the rosters AFTER the trade? Counts, across both sides, players a side got that are on it
+ * (after) against players a side gave that are still on it (before). A tie — including no evidence at all — is read as
+ * after, since an offseason trade is made before week 1 far more often than during it. PURE.
+ */
+export function week1RowsAfterTrade(
+  rows: BackfillTradeRow[],
+  sides: Array<{ rosterId: string }>,
+  byRoster: Map<string, WeeklyRosterRow[]>,
+): boolean {
+  let after = 0
+  let before = 0
+  sides.forEach((side, i) => {
+    const held = new Set((byRoster.get(side.rosterId) ?? []).map((r) => r.playerId))
+    for (const id of rows[i]?.playersReceived ?? []) if (held.has(id)) after += 1
+    for (const id of rows[i]?.playersGiven ?? []) if (held.has(id)) before += 1
+  })
+  return after >= before
+}
+
 function rosterPositionsOf(settings: unknown): string[] | null {
   const s = settings && typeof settings === 'object' ? (settings as Record<string, unknown>) : null
   const raw = s ? (s.roster_positions ?? s.rosterPositions) : null
@@ -112,16 +164,25 @@ export function buildRebuiltTradeContext(input: {
   })
   const sides = sidesOf(c.rows)
   if (!sides) return unavailable('one_side_stored')
-  if (!(c.week > 1)) return unavailable('no_trade_week')
-  const rosterWeek = c.week - 1
+  const offseason = !(c.week > 1)
+  const rosterWeek = rosterWeekFor(c.week)
 
   const byRoster = new Map<string, WeeklyRosterRow[]>()
   for (const r of input.rosterRows) byRoster.set(r.rosterId, [...(byRoster.get(r.rosterId) ?? []), r])
   if (sides.some((s) => !(byRoster.get(s.rosterId)?.length))) return unavailable('no_roster_rows')
+  const unwind = offseason && week1RowsAfterTrade(c.rows, sides, byRoster)
 
-  const out: TradeContextSide[] = sides.map(({ rosterId, managerId }) => {
+  const out: TradeContextSide[] = sides.map(({ rosterId, managerId }, i) => {
     const results = input.resultRows.filter((r) => r.rosterId === rosterId && r.week < c.week)
-    const rosterBefore: TradeContextPlayer[] = (byRoster.get(rosterId) ?? [])
+    let held = (byRoster.get(rosterId) ?? []).map((r) => ({ playerId: r.playerId, isStarter: r.isStarter as boolean | null }))
+    if (unwind) {
+      // Undo the trade: drop what this side got, put back what it gave (lineup unknown for a player put back).
+      const got = new Set(c.rows[i]?.playersReceived ?? [])
+      held = held.filter((r) => !got.has(r.playerId))
+      const have = new Set(held.map((r) => r.playerId))
+      for (const id of c.rows[i]?.playersGiven ?? []) if (!have.has(id)) { held.push({ playerId: id, isStarter: null }); have.add(id) }
+    }
+    const rosterBefore: TradeContextPlayer[] = held
       .map((r) => ({
         id: r.playerId,
         position: input.positions.get(r.playerId)?.position ?? null,
@@ -154,7 +215,7 @@ export function buildRebuiltTradeContext(input: {
   return {
     version: TRADE_CONTEXT_SNAPSHOT_VERSION,
     source: 'backfill_rebuilt',
-    rosterBasis: { kind: 'weekly_rows', week: rosterWeek },
+    rosterBasis: unwind ? { kind: 'week1_unwound', week: rosterWeek } : { kind: 'weekly_rows', week: rosterWeek },
     provider: c.platform,
     capturedAt,
     tradeAt: c.tradeAt?.toISOString() ?? null,
@@ -224,10 +285,12 @@ export async function backfillTradeContexts(
       const seasonKey = `${c.leagueId}:${c.season}`
       if (!results.has(seasonKey)) results.set(seasonKey, deps.loadResultRows(c.leagueId, c.season))
       if (!leagues.has(c.leagueId)) leagues.set(c.leagueId, deps.loadLeague(c.leagueId))
-      const weekKey = `${seasonKey}:${c.week - 1}`
-      if (c.week > 1 && !rosters.has(weekKey)) rosters.set(weekKey, deps.loadRosterRows(c.leagueId, c.season, c.week - 1))
-      const rosterRows = c.week > 1 ? await rosters.get(weekKey)! : []
-      const ids = [...new Set(rosterRows.map((r) => r.playerId))]
+      const rosterWeek = rosterWeekFor(c.week)
+      const weekKey = `${seasonKey}:${rosterWeek}`
+      if (!rosters.has(weekKey)) rosters.set(weekKey, deps.loadRosterRows(c.leagueId, c.season, rosterWeek))
+      const rosterRows = await rosters.get(weekKey)!
+      // A player put back by the offseason unwind needs his position too.
+      const ids = [...new Set([...rosterRows.map((r) => r.playerId), ...c.rows.flatMap((r) => r.playersGiven ?? [])])]
       const context = buildRebuiltTradeContext({
         candidate: c,
         rosterRows,
@@ -253,7 +316,12 @@ export function defaultTradeContextBackfillDeps(budget: { remainingMs: () => num
       const keys = await prisma.$queryRaw<Array<{ league: string; tx: string }>>`
         SELECT h."sleeperLeagueId" AS league, lt."transactionId" AS tx
         FROM "LeagueTrade" lt JOIN "LeagueTradeHistory" h ON h.id = lt."historyId"
-        WHERE lt."contextSnapshot" IS NULL AND lt."tradeDate" IS NOT NULL AND lt."tradeDate" < ${olderThan}
+        WHERE (lt."contextSnapshot" IS NULL OR lt."contextSnapshot"->>'unavailable' = 'no_trade_week')
+          AND lt."tradeDate" IS NOT NULL AND lt."tradeDate" < ${olderThan}
+          -- An offseason trade waits for its season's week-1 rows, so it neither crowds the draw nor gets marked early.
+          AND (lt.week > 1 OR EXISTS (
+            SELECT 1 FROM league_player_weekly_scores w
+            WHERE w."leagueId" = h."sleeperLeagueId" AND w."seasonYear" = lt.season AND w.week = 1))
         GROUP BY 1, 2
         ORDER BY max(lt."tradeDate") DESC
         LIMIT ${limit}`
@@ -262,6 +330,7 @@ export function defaultTradeContextBackfillDeps(budget: { remainingMs: () => num
         where: { OR: keys.map((k) => ({ transactionId: k.tx, history: { sleeperLeagueId: k.league } })) },
         select: {
           transactionId: true, season: true, week: true, tradeDate: true, platform: true, sport: true, partnerRosterId: true,
+          playersGiven: true, playersReceived: true,
           history: { select: { sleeperLeagueId: true, sleeperUsername: true } },
         },
       })
@@ -272,7 +341,10 @@ export function defaultTradeContextBackfillDeps(budget: { remainingMs: () => num
           leagueId: r.history.sleeperLeagueId, transactionId: r.transactionId, season: r.season, week: r.week,
           tradeAt: r.tradeDate, platform: r.platform, sport: r.sport, rows: [],
         }
-        c.rows.push({ managerId: r.history.sleeperUsername, partnerRosterId: r.partnerRosterId })
+        c.rows.push({
+          managerId: r.history.sleeperUsername, partnerRosterId: r.partnerRosterId,
+          playersGiven: tradePlayerIds(r.playersGiven), playersReceived: tradePlayerIds(r.playersReceived),
+        })
         byKey.set(key, c)
       }
       // Newest first, as selected.
@@ -303,7 +375,12 @@ export function defaultTradeContextBackfillDeps(budget: { remainingMs: () => num
     },
     save: async (leagueId, transactionId, context) =>
       (await prisma.leagueTrade.updateMany({
-        where: { transactionId, history: { sleeperLeagueId: leagueId }, contextSnapshot: { equals: Prisma.DbNull } },
+        // First capture wins — except over the first version's `no_trade_week` marker, which this version can fill.
+        where: {
+          transactionId,
+          history: { sleeperLeagueId: leagueId },
+          OR: [{ contextSnapshot: { equals: Prisma.DbNull } }, { contextSnapshot: { path: ['unavailable'], equals: 'no_trade_week' } }],
+        },
         data: { contextSnapshot: context as unknown as Prisma.InputJsonValue },
       })).count,
     remainingMs: budget.remainingMs,

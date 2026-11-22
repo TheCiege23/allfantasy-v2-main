@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
@@ -33,10 +34,10 @@ export type InstantAutopickReason = 'autopilot' | 'autopick_me' | 'timed_out'
 /** Picks the clock made (never a person, never a skip). */
 export const CLOCK_PICK_SOURCES = ['auto', 'strategy-autopick'] as const
 
-/** Pure: a roster nobody manages — no user, or one of the orphan / Chimmy placeholder ids. */
+/** Pure: a roster nobody manages — no user, or a seat placeholder id (orphan, Chimmy, open slot). */
 export function isUnmanagedSeat(managerKey: string | null | undefined): boolean {
   const key = String(managerKey ?? '').trim()
-  return !key || key.startsWith('orphan-') || key.startsWith('ai-manager-')
+  return !key || isSeatPlaceholderUserId(key)
 }
 
 /** Unmanaged rosters in this draft that already had a pick made by the clock. */

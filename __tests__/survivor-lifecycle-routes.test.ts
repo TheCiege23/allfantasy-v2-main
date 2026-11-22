@@ -256,6 +256,20 @@ describe('host opens Tribal Council', () => {
   })
 })
 
+describe('host locks the vote', () => {
+  it('a lock the service refuses by throwing is answered with the reason, not a bare 500', async () => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
+    assertLeagueCommissionerMock.mockResolvedValue({ ok: true })
+    ;(prismaMock.survivorTribalCouncil.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ leagueId: 'league-1' })
+    lockVotingMock.mockRejectedValueOnce(new Error('Autonomous council needs finalized scores for every eligible target'))
+    const { POST } = await import('@/app/api/survivor/tribal/route')
+    const response = await POST(new Request('http://localhost/api/survivor/tribal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leagueId: 'league-1', action: 'lock', councilId: 'c-1' }) }))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: 'Autonomous council needs finalized scores for every eligible target' })
+  })
+})
+
 describe('playing commissioner manual action restrictions', () => {
   it('blocks council elimination before executing a manual control', async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'playing-owner' } })

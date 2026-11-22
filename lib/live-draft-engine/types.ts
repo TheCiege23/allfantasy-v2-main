@@ -173,6 +173,8 @@ export interface DraftPickSnapshot {
   amount?: number | null
   /** Market ADP when the pick was made (`pickMetadata.adpAtPick`); absent on older picks. */
   adpAtPick?: number | null
+  /** Why the clock picked this player (`pickMetadata.autopick.reason`); absent on a pick a person made. */
+  autoPickReason?: string | null
   createdAt: string
 }
 

@@ -48,6 +48,20 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, locked: due.length, reading: reading.length })
 }
 
+/**
+ * A refusal the service threw (one council a week; no ballots and no final scores to fall back on) is
+ * the host's answer, not a server fault: it used to surface as a bare 500 with no text, so the host
+ * saw a failure and no reason. Only the service's own short, one-line reasons are shown. Anything
+ * else (a database error) stays a 500 with generic text and is logged.
+ */
+function hostRefusal(error: unknown, fallback: string): NextResponse {
+  const message = error instanceof Error ? error.message : ''
+  const refusal = message && !message.includes('\n') && message.length <= 120 && !/prisma/i.test(message)
+  if (refusal) return NextResponse.json({ error: message }, { status: 409 })
+  console.error('[survivor/tribal]', fallback, error)
+  return NextResponse.json({ error: fallback }, { status: 500 })
+}
+
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -75,18 +89,11 @@ export async function POST(req: NextRequest) {
     const week = typeof body.week === 'number' ? body.week : 1
     const tribeId = typeof body.tribeId === 'string' ? body.tribeId : null
     const deadline = typeof body.deadline === 'string' ? new Date(body.deadline) : new Date(Date.now() + 3600000)
-    // A refusal (one council a week, an unknown tribe) is the host's answer, not a server fault: it
-    // used to surface as a bare 500 with no text, so the host saw a failure and no reason.
     try {
       const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
       return NextResponse.json(council)
     } catch (error) {
-      // Only the service's own one-line refusals are shown. Anything else (a database error) is a fault.
-      const message = error instanceof Error ? error.message : ''
-      const refusal = message && !message.includes('\n') && message.length <= 120 && !/prisma/i.test(message)
-      if (refusal) return NextResponse.json({ error: message }, { status: 409 })
-      console.error('[survivor/tribal] open council failed', error)
-      return NextResponse.json({ error: 'Could not open council' }, { status: 500 })
+      return hostRefusal(error, 'Could not open council')
     }
   }
 
@@ -130,7 +137,13 @@ export async function POST(req: NextRequest) {
     if (!council || council.leagueId !== leagueId) {
       return NextResponse.json({ error: 'Council not found' }, { status: 404 })
     }
-    const locked = await lockVoting(councilId)
+    let locked: Awaited<ReturnType<typeof lockVoting>>
+    try {
+      locked = await lockVoting(councilId)
+    } catch (error) {
+      // e.g. no ballots and the week's scores are not final yet, so nobody can be named.
+      return hostRefusal(error, 'Could not lock the vote')
+    }
     if (!locked.ok) return NextResponse.json({ error: locked.error, code: locked.code }, { status: 409 })
     // No outcome here: the verdict is published when the last ballot of the read is released.
     return NextResponse.json({ ok: true, readInProgress: !locked.complete })

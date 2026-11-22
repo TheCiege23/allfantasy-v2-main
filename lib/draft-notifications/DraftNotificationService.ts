@@ -3,6 +3,7 @@
  * Uses unified dispatcher for in-app + email + SMS per user preferences.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { rosterManagerKey, teamScopedKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
@@ -34,7 +35,7 @@ export async function getAppUserIdForRoster(rosterId: string): Promise<string | 
   })
   // A manager's further team has a key of its own and names them (lib/league/rosterManager.ts).
   const managerId = roster ? rosterManagerKey(roster) : null
-  if (!managerId || managerId.startsWith('orphan-')) return null
+  if (!managerId || isSeatPlaceholderUserId(managerId)) return null
   return (await resolveAppUserIds([managerId]))[0] ?? null
 }
 
@@ -57,7 +58,7 @@ export async function getLeagueMemberAppUserIds(leagueId: string): Promise<strin
   const ids = new Set<string>()
   for (const r of rosters) {
     const managerId = rosterManagerKey(r)
-    if (managerId && !managerId.startsWith('orphan-')) ids.add(managerId)
+    if (managerId && !isSeatPlaceholderUserId(managerId)) ids.add(managerId)
   }
   const resolved = await resolveAppUserIds(Array.from(ids))
   /*
@@ -590,7 +591,7 @@ async function buildDraftStartingEmailsByUser(
   const baseUrl = getBaseUrl()
   for (const roster of rosters) {
     const userId = rosterManagerKey(roster)
-    if (!userId || String(userId).startsWith('orphan-')) continue
+    if (!userId || isSeatPlaceholderUserId(String(userId))) continue
     const slot = slotByRosterId.get(roster.id)
     if (slot == null) continue
     // A failed queue read must not render the "your queue is empty" warning

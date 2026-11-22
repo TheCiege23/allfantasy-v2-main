@@ -25,6 +25,7 @@ import { decideLeadSide, type LeadReason, type LeadSide } from './leadSide'
 import { collegeProFormatOf, collegeSportFor, combinedTotal, normalizeCollegeSport, readCollegeProScoring, type CollegeProFormat, type CollegeProScoring } from './format'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { loadCollegePoints } from './collegePoints'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 
 export type { CollegeProFormat, CollegeProScoring }
 
@@ -53,11 +54,13 @@ export type CollegeProSide = CollegeProLists & {
   unavailable: string | null
   /** This week's points per player. A player with nothing yet is absent, never 0. */
   points: Record<string, number>
+  /** AF fantasy points for this scoring week, keyed by imported roster player ID. */
+  weeklyProjections?: Record<string, number>
   score: CollegeProScore
 }
 
 export type CollegeProScore = {
-  /** The NFL week this score is for. */
+  /** The scoring week this total is for. */
   week: number | null
   /** The starters' points, or null when none has scored yet. */
   total: number | null
@@ -462,7 +465,8 @@ async function loadFantraxProPair(args: {
   const toPointsInput = (ps: typeof proPlayers) =>
     ps.map((p) => ({ id: p.id, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position }))
 
-  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap] = await Promise.all([
+  const rosterIds = [...new Set(proPlayers.map((p) => p.id).filter(Boolean))]
+  const [proPoints, collegePointsDaily, games, proSnap, collegeSnap, proMetrics] = await Promise.all([
     period ? loadDailyPoints({ sport: 'NBA', window: period.window, players: toPointsInput(proPlayers) }).catch(() => null) : Promise.resolve(null),
     period && collegeSport === 'NCAAB'
       ? loadDailyPoints({ sport: 'NCAAB', window: period.window, players: toPointsInput(collegePlayers) }).catch(() => null)
@@ -472,6 +476,9 @@ async function loadFantraxProPair(args: {
       .findUnique({ where: { id: proHalf.memberLeagueId }, select: { transactions: true, season: true, matchups: true, roster: true, standings: true } })
       .catch(() => null),
     prisma.fantraxLeague.findUnique({ where: { id: collegeHalf.memberLeagueId }, select: { transactions: true, season: true } }).catch(() => null),
+    format === 'c2c' && period && rosterIds.length
+      ? loadLeaguePlayerMetrics({ leagueId: league.id, week: period.number, rosterIds, limit: rosterIds.length, includeTradeValues: false, now }).catch(() => null)
+      : Promise.resolve(null),
   ])
 
   const listsOf = (ps: typeof proPlayers, minorsAsTaxi: boolean) =>
@@ -515,6 +522,9 @@ async function loadFantraxProPair(args: {
     players: toPlayerMap(proPlayers),
     unavailable: proHalf.unavailableReason ?? (proPlayers.length ? null : 'Your NBA roster could not be read from Fantrax.'),
     points: proPoints?.points ?? {},
+    weeklyProjections: proMetrics?.unit === 'fantasy points'
+      ? Object.fromEntries(proMetrics.rows.flatMap((p) => p.rosterPlayerId && p.weekly != null ? [[p.rosterPlayerId, p.weekly]] : []))
+      : undefined,
     score: {
       week: period?.number ?? null,
       total: proPoints ? sumStarterPoints(proLists.starters, proPoints.points) : null,

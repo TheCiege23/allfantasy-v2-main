@@ -648,6 +648,31 @@ function fellBack<T>(options: Dash34Options, read: Dash34Read, fallback: T): (er
   }
 }
 
+/** How many Sleeper leagues the live lineup check reads at once. */
+const LIVE_SLEEPER_LEAGUE_BOUND = 8
+
+/**
+ * `fn` over `items`, at most `limit` running at once, starting the next item as soon as any running
+ * one settles. Results come back in input order. A rejection rejects the whole run, as
+ * `Promise.all` over batches did.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker))
+  return results
+}
+
 export async function getDash34Data(
   userId: string,
   leagueRows: Dash34LeagueRow[],
@@ -764,19 +789,22 @@ async function loadDash34Data(
       select: { leagueId: true, season: { select: { season: true } } },
     }).catch(() => [])),
     timing.read('provider', async () => {
-      const rows: Array<{ leagueId: string; playerData: unknown }> = []
-      // Keep the eight-league bound and authoritative current lineup checks.
-      for (let i = 0; i < sleeperLeagues.length; i += 8) {
-        const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
-          const team = teamByLeague.get(l.id)
-          const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
-          if (!team || !sourceId) return null
-          const playerData = await currentSleeperRoster(sourceId, team)
-          return playerData ? { leagueId: l.id, playerData } : null
-        }))
-        for (const row of batch) if (row) rows.push(row)
-      }
-      return rows
+      /*
+       * Keep the eight-league bound and authoritative current lineup checks.
+       *
+       * ⚠ A POOL, NOT BATCHES (2026-11-22). This ran eight leagues, waited for ALL eight, then
+       * started the next eight — so every batch cost its slowest league, and on a 90-league account
+       * the step took 6.6s. Now a league starts the moment any running one finishes. Still at most
+       * eight at once; results keep the league order the batches gave.
+       */
+      const found = await mapWithConcurrency(sleeperLeagues, LIVE_SLEEPER_LEAGUE_BOUND, async (l) => {
+        const team = teamByLeague.get(l.id)
+        const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
+        if (!team || !sourceId) return null
+        const playerData = await currentSleeperRoster(sourceId, team)
+        return playerData ? { leagueId: l.id, playerData } : null
+      })
+      return found.flatMap((row) => (row ? [row] : []))
     }),
   ])
   const sleeperIds = new Set(sleeperLeagues.map((l) => l.id))
