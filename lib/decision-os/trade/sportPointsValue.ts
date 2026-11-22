@@ -283,6 +283,14 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
   return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — ${covered} — and a points total would answer a different question, so this deal is not graded.`
 }
 
+export function isFantraxNbaCampusLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return sport === 'NBA' && league.platform?.trim().toLowerCase() === 'fantrax' &&
+    league.leagueType?.trim().toLowerCase() === 'c2c'
+}
+
 /**
  * Why a league that keeps players past this season is not graded here. This grade counts THIS season
  * only; in a dynasty or keeper league that ignores every season after it — young players most of all —

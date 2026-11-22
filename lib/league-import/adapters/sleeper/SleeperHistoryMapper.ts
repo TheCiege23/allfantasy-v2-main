@@ -1,6 +1,6 @@
 import type { IExternalHistoryMapper } from '../../mappers/ExternalHistoryMapper'
 import type { NormalizedDraftPick, NormalizedTransaction, NormalizedStandingsEntry } from '../../types'
-import type { SleeperImportPayload } from './types'
+import { sleeperTradeWaiverBudget, type SleeperImportPayload } from './types'
 import { sleeperPointsAgainst } from './SleeperPointsAgainst'
 
 export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> = {
@@ -32,6 +32,8 @@ export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> 
       roster_ids: (t.roster_ids ?? []).map(String),
       draft_picks: t.draft_picks,
       week: t.week,
+      // A trade's FAAB transfers, when Sleeper stated them — absent stays absent (never read ≠ none moved).
+      ...(t.type === 'trade' && sleeperTradeWaiverBudget(t.waiver_budget) ? { waiver_budget: sleeperTradeWaiverBudget(t.waiver_budget)! } : {}),
     }))
 
     const rosters = source.rosters ?? []

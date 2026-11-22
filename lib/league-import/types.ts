@@ -278,6 +278,11 @@ export interface NormalizedTransaction {
   roster_ids: string[]
   draft_picks?: unknown[]
   /**
+   * FAAB moved between rosters in a TRADE, when the provider stated it (`sleeperTradeWaiverBudget`). Absent = not read.
+   * Only Sleeper fills it today.
+   */
+  waiver_budget?: Array<{ sender: string; receiver: string; amount: number }>
+  /**
    * Scoring week the transaction belongs to, stamped from the FETCH LOOP rather than read off the
    * payload. Sleeper's transactions endpoint is per-week (`/league/{id}/transactions/{week}`), so
    * the week is authoritative at the call site and needs no field on the provider's response.

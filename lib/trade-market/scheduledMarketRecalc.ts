@@ -4,9 +4,11 @@ import {
   bookKey,
   MARKET_BOOKS,
   recalculateFormatMarkets,
+  stampAllTradeFormats,
   writeLineupFactorTable,
   type BookResult,
   type LineupFactorTable,
+  type StampAllResult,
 } from './formatMarkets'
 
 /**
@@ -37,6 +39,13 @@ export type ScheduledMarketRecalcResult = {
   attempts: Array<{ sinceSeason: number; refused: string[]; written: number }>
   /** `LeagueTrade` rows given a `leagueFormat` / `isSuperFlex` this run (only empty rows are filled). */
   tradesStamped: number
+  /**
+   * The dated market (`datedMarketLearner.ts`) per book, from the FRESHEST window — every book, published or not —
+   * with its gap to the current market. This is what the switch to `TRADE_MARKET_LEARNER=dated` is decided on.
+   */
+  /** Every season's trades given a league type (`stampAllTradeFormats`); null when the pass failed. */
+  formatBackfill: StampAllResult | null
+  datedShadow: Array<{ concept: string; sinceSeason: number; learner: 'current' | 'dated' } & NonNullable<BookResult['dated']>>
 }
 
 export function marketWindows(now = new Date()): number[] {
@@ -47,7 +56,7 @@ export function marketWindows(now = new Date()): number[] {
 
 export async function runScheduledMarketRecalc(
   prisma: PrismaClient,
-  opts: { now?: Date; recalc?: typeof recalculateFormatMarkets; writeLineup?: typeof writeLineupFactorTable } = {},
+  opts: { now?: Date; recalc?: typeof recalculateFormatMarkets; writeLineup?: typeof writeLineupFactorTable; stampAll?: typeof stampAllTradeFormats } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
   const writeLineup = opts.writeLineup ?? writeLineupFactorTable
@@ -57,6 +66,7 @@ export async function runScheduledMarketRecalc(
   let lineupTable: LineupFactorTable | null = null
   let tradesUsed = 0
   let tradesStamped = 0
+  const datedShadow: ScheduledMarketRecalcResult['datedShadow'] = []
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -69,6 +79,10 @@ export async function runScheduledMarketRecalc(
     const r = await recalc(prisma, { sinceSeason, dryRun: false, requireCentred: true, skipBooks: done, writeLineupFactors: false, stampTrades, now: opts.now })
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
     tradesStamped += r.tradesStamped ?? 0
+    // The freshest window measures every book (nothing is skipped yet), so its comparison is the complete one.
+    if (sinceSeason === windows[0]) {
+      for (const b of r.books) if (b.dated) datedShadow.push({ concept: b.concept, sinceSeason, learner: b.learner ?? 'current', ...b.dated })
+    }
     attempts.push({ sinceSeason, refused: r.books.filter((b) => b.refused).map((b) => b.concept), written: r.books.reduce((s, b) => s + b.written, 0) })
     for (const b of r.books) {
       // A book a fresher window already published is never replaced by an older one.
@@ -104,6 +118,9 @@ export async function runScheduledMarketRecalc(
       measured: lineupTable.factors.length,
     }
   }
+  // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
+  const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
+
   return {
     written: books.reduce((s, b) => s + b.written, 0),
     published: books.reduce((s, b) => s + b.published, 0),
@@ -112,5 +129,7 @@ export async function runScheduledMarketRecalc(
     lineup,
     attempts,
     tradesStamped,
+    formatBackfill,
+    datedShadow,
   }
 }

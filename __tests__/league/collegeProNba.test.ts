@@ -4,9 +4,11 @@ const h = vi.hoisted(() => ({
   leagues: {} as Record<string, Record<string, unknown>>,
   attach: vi.fn(async (a: { role: string }) => ({ ok: true as const, linkId: 'link-1', role: a.role })),
   paired: new Map<string, unknown>(),
+  metrics: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: {
@@ -72,6 +74,14 @@ const PERIODS = [
 beforeEach(() => {
   h.attach.mockClear()
   h.paired.clear()
+  h.metrics.mockReset().mockResolvedValue({
+    unit: 'fantasy points',
+    rows: [
+      { rosterPlayerId: 'p1', playerId: 'r1', weekly: 123.51, perGame: 41.17 },
+      { rosterPlayerId: 'p2', playerId: 'r2', weekly: 0, perGame: 19.24 },
+      { rosterPlayerId: 'p3', playerId: 'r3', weekly: null, perGame: 11.24 },
+    ],
+  })
   h.leagues = {
     nba: { id: 'nba', name: 'Road To Glory NBA', platform: 'fantrax', platformLeagueId: 'snap-nba', sport: 'NBA', leagueType: 'c2c', leagueVariant: null, settings: { fantrax_scoring_periods: PERIODS } },
     cbb: { id: 'cbb', name: 'Road To Glory NCAA Basketball', platform: 'fantrax', platformLeagueId: 'snap-cbb', sport: 'NCAAB', leagueType: 'c2c', leagueVariant: null, settings: {} },
@@ -144,6 +154,16 @@ describe('the combined page for an NBA league on Fantrax', () => {
     expect(proSide.taxi).toEqual(['p3'])
     expect(proSide.score).toMatchObject({ week: 5, total: 10, opponent: { name: 'Boston Celtics', total: 10 } })
     expect(r.sides.find((s) => s.role === 'college')?.score.total).toBe(10)
+  })
+
+  it('publishes the AF weekly totals by Fantrax roster ID, preserving zero and missing', async () => {
+    h.paired.set('nba', { viewingRole: 'pro', sides: [pro, college] })
+    const now = new Date('2026-11-21T18:00:00Z')
+    const r = await loadCollegeProRoster('nba', 'u1', now)
+    expect(h.metrics).toHaveBeenCalledOnce()
+    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'nba', week: 5, rosterIds: ['p1', 'p2', 'p3'], limit: 3, includeTradeValues: false, now })
+    expect(r.applies && r.sides.find((s) => s.role === 'pro')?.weeklyProjections).toEqual({ p1: 123.51, p2: 0 })
+    expect(r.applies && r.sides.find((s) => s.role === 'college')?.weeklyProjections).toBeUndefined()
   })
 
   it('combined scoring is head to head across two Fantrax leagues once the teams are matched', async () => {

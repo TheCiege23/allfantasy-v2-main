@@ -5,6 +5,7 @@
 
 import { getLeagueHistory, getLeagueRosters, getLeagueTransactions, getPlayoffBracket, type SleeperRoster } from "@/lib/sleeper-client";
 import type { HistoricalSeasonRef, NormalizedStandingRow, NormalizedTradeFact } from "./types";
+import { sleeperTradeWaiverBudget } from "@/lib/league-import/adapters/sleeper/types";
 
 const DEFAULT_WEEKS = 18;
 
@@ -168,6 +169,8 @@ export async function fetchSleeperTradesForSeason(
         })),
         created: sleeperTradeCompletedAt(t),
         creator: t.creator ?? "",
+        // FAAB each way (`waiver_budget`), when Sleeper stated it; absent stays absent — never read is not none moved.
+        ...(sleeperTradeWaiverBudget(t.waiver_budget) ? { waiverBudget: sleeperTradeWaiverBudget(t.waiver_budget) } : {}),
       });
     }
   }

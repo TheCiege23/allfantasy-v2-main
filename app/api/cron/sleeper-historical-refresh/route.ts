@@ -9,6 +9,7 @@ import {
 } from "@/lib/league-import/sleeper/historicalRefreshCounters"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { followRenewedSleeperLeagues } from "@/lib/league-import/sleeper/followRenewedLeagues"
+import { backfillTradeContexts, defaultTradeContextBackfillDeps, TRADE_CONTEXT_BACKFILL_MIN_RUNWAY_MS } from "@/lib/trade-market/tradeContextBackfill"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -280,6 +281,18 @@ export async function GET(request: Request) {
         }
       }
 
+      /*
+       * TRADE CONTEXT FOR WHAT THE LIVE SYNC NEVER SAW (2026-11-22). The trades this rotation just wrote — and every
+       * other history writer's — arrive with no situation attached; rebuild it from stored weekly rows on whatever
+       * budget the leagues left. Database only, no provider call. See lib/trade-market/tradeContextBackfill.ts.
+       */
+      const tradeContexts =
+        budget.remainingMs() > TRADE_CONTEXT_BACKFILL_MIN_RUNWAY_MS
+          ? await backfillTradeContexts(defaultTradeContextBackfillDeps(budget)).catch((e: unknown) => ({
+              error: e instanceof Error ? e.message.slice(0, 160) : "failed",
+            }))
+          : { skipped: "no budget left" }
+
       return {
         status: leaguesFailed > 0 ? ("partial" as const) : ("success" as const),
         rowsRead: ordered.length,
@@ -301,6 +314,7 @@ export async function GET(request: Request) {
           remainingMs: budget.remainingMs(),
           matchupSeasons,
           renewals,
+          tradeContexts,
         },
       }
     },

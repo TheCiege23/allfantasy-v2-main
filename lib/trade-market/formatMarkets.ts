@@ -15,6 +15,15 @@ import {
   type CompletedTradeObservation,
 } from './completedTradeObservations'
 import { isCentred } from './sinceSeasonArg'
+import {
+  captureDayFor,
+  computeDatedBook,
+  datedLearnerLive,
+  emptyDatedGather,
+  recencyWeight,
+  type DatedBookComparison,
+  type DatedGather,
+} from './datedMarketLearner'
 
 /**
  * The AllFantasy trade market, SPLIT BY THE FORMAT EACH TRADE WAS MADE IN.
@@ -143,6 +152,51 @@ export async function stampTradeFormats(
     }
   }
   return updated
+}
+
+/** Trade histories resolved per run by `stampAllTradeFormats`, drawn at random from those still unlabelled. */
+export const STAMP_ALL_HISTORY_LIMIT = 5000
+
+export type StampAllResult = { histories: number; resolved: number; unresolved: number; rowsStamped: number }
+
+/**
+ * EVERY TRADE'S LEAGUE TYPE, IN EVERY SEASON (owner's call, 2026-11-22 — the census "league-type gap").
+ *
+ * `stampTradeFormats` labels only the trades the market's own window reads (this season and the two before), so every
+ * older trade kept a null `leagueFormat`: 11,761 of 29,808 NFL trades in the 2026-11-22 census, at least 10,898 of them
+ * from 2018–2023. That is not a lookup failure — those leagues resolve like any other — and it is not harmless:
+ * `comprehensive-trade-learning` reads null as REDRAFT and 1QB, and the history the next learner step reads is exactly
+ * those seasons.
+ *
+ * So: trade histories still unlabelled, in any season, through the same three-step lookup the market uses
+ * (`resolveTradeLeagues`: the current league, that season's own stored settings, then today's settings), labelled by
+ * history. Only EMPTY rows are written, as before. A random draw of histories per run, so one that cannot be resolved
+ * never holds a place ahead of the rest; the ones that resolve drop out of the draw, and the rest are said out loud.
+ */
+export async function stampAllTradeFormats(prisma: PrismaClient, limit = STAMP_ALL_HISTORY_LIMIT): Promise<StampAllResult> {
+  const rows = await prisma.$queryRaw<Array<{ historyId: string }>>(Prisma.sql`
+    SELECT "historyId" FROM (SELECT DISTINCT "historyId" FROM "LeagueTrade" WHERE "leagueFormat" IS NULL) h
+    ORDER BY random() LIMIT ${limit}`)
+  const ids = rows.map((r) => r.historyId).filter(Boolean)
+  if (ids.length === 0) return { histories: 0, resolved: 0, unresolved: 0, rowsStamped: 0 }
+  const leagues = await resolveTradeLeagues(prisma, ids)
+  const groups = new Map<string, string[]>()
+  for (const [historyId, league] of leagues) {
+    const key = `${league.tradeFormat}|${league.book.qbFormat === 'SUPERFLEX'}`
+    groups.set(key, [...(groups.get(key) ?? []), historyId])
+  }
+  let rowsStamped = 0
+  for (const [key, historyIds] of groups) {
+    const [leagueFormat, sf] = key.split('|')
+    for (const part of chunk(historyIds)) {
+      const r = await prisma.leagueTrade.updateMany({
+        where: { historyId: { in: part }, leagueFormat: null },
+        data: { leagueFormat, isSuperFlex: sf === 'true' },
+      })
+      rowsStamped += r.count
+    }
+  }
+  return { histories: ids.length, resolved: leagues.size, unresolved: ids.length - leagues.size, rowsStamped }
 }
 
 /** Sleeper `settings.type`: 0 redraft, 1 keeper, 2 dynasty. */
@@ -279,6 +333,8 @@ export type LineupObservation = {
 
 type FormatGather = {
   byBook: Map<string, CompletedTradeGather>
+  /** The same trades measured on the chart of their own day (`datedMarketLearner.ts`), per book. */
+  byBookDated: Map<string, DatedGather>
   lineupObservations: LineupObservation[]
   /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
   formatStamps: Array<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>
@@ -353,7 +409,7 @@ async function loadTradeFaab(prisma: PrismaClient, txIds: readonly string[]): Pr
 
 export async function gatherFormatObservations(
   prisma: PrismaClient,
-  opts: { sinceSeason: number },
+  opts: { sinceSeason: number; now?: Date },
 ): Promise<FormatGather> {
   const skipped: Record<string, number> = {}
   const bump = (k: string) => (skipped[k] = (skipped[k] ?? 0) + 1)
@@ -475,7 +531,119 @@ export async function gatherFormatObservations(
     }
   }
 
-  return { byBook, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
+  /*
+   * THE SAME TRADES, MEASURED ON THEIR OWN DAY (`datedMarketLearner.ts`). A separate pass, so the current market above
+   * is exactly what it was; a failure here leaves the dated market empty and says why, and costs the current one nothing.
+   */
+  const byBookDated = new Map<string, DatedGather>()
+  for (const b of MARKET_BOOKS) byBookDated.set(bookKey(b), emptyDatedGather())
+  try {
+    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, now: opts.now ?? new Date() })
+  } catch {
+    for (const g of byBookDated.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
+  }
+
+  return { byBook, byBookDated, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Each trade measured on the capture nearest before its date (within two weeks), as a ratio of what the other side paid
+ * to the player's own value that day, weighted by recency. One distinct-days read per book, one read per capture day
+ * actually needed — never every daily capture of every player.
+ */
+async function gatherDatedObservations(
+  prisma: PrismaClient,
+  ctx: {
+    unique: Map<string, TradeRow>
+    leagues: Map<string, ResolvedTradeLeague>
+    faab: Map<string, TradeFactSide[]>
+    meta: Map<string, { name: string; position: string | null }>
+    charts: Map<string, Map<string, number>>
+    byBookDated: Map<string, DatedGather>
+    now: Date
+  },
+): Promise<void> {
+  const bump = (g: DatedGather, k: string) => (g.skipped[k] = (g.skipped[k] ?? 0) + 1)
+  const days = new Map<string, number[]>()
+  for (const b of MARKET_BOOKS) {
+    const rows = await prisma.$queryRaw<Array<{ day: Date }>>(Prisma.sql`
+      SELECT DISTINCT date_trunc('day', "capturedAt") AS day FROM "PlayerValueSnapshot"
+      WHERE source = 'FANTASYCALC' AND format = ${b.format} AND "qbFormat" = ${b.qbFormat}
+      ORDER BY 1`)
+    days.set(bookKey(b), rows.map((r) => new Date(r.day).getTime()).filter(Number.isFinite))
+  }
+
+  const plan: Array<{ t: TradeRow; key: string; day: number; league: ResolvedTradeLeague }> = []
+  const needed = new Map<string, Set<string>>()
+  for (const t of ctx.unique.values()) {
+    const league = ctx.leagues.get(t.historyId)
+    if (!league) continue // counted by the current pass as unknown_league_format
+    const key = bookKey(league.book)
+    const g = ctx.byBookDated.get(key)!
+    if (!t.tradeDate) {
+      bump(g, 'undated')
+      continue
+    }
+    const day = captureDayFor(days.get(key) ?? [], t.tradeDate)
+    if (day == null) {
+      bump(g, 'no_dated_chart')
+      continue
+    }
+    const dk = `${key}|${day}`
+    const ids = needed.get(dk) ?? new Set<string>()
+    for (const id of [...asIds(t.playersGiven), ...asIds(t.playersReceived)]) ids.add(id)
+    needed.set(dk, ids)
+    plan.push({ t, key, day, league })
+  }
+
+  const dated = new Map<string, Map<string, number>>()
+  for (const [dk, ids] of needed) {
+    const [key, dayStr] = dk.split('|') as [string, string]
+    const book = MARKET_BOOKS.find((b) => bookKey(b) === key)!
+    const day = Number(dayStr)
+    const m = new Map<string, number>()
+    for (const part of chunk([...ids])) {
+      const rows = await prisma.playerValueSnapshot.findMany({
+        where: { source: 'FANTASYCALC', format: book.format, qbFormat: book.qbFormat, sleeperId: { in: part }, capturedAt: { gte: new Date(day), lt: new Date(day + DAY_MS) } },
+        // One row per player — that day's newest capture — never his whole history (latest-player-value-snapshots guard).
+        distinct: ['sleeperId'],
+        orderBy: [{ sleeperId: 'asc' }, { capturedAt: 'desc' }],
+        select: { sleeperId: true, value: true },
+      })
+      for (const r of rows) if (!m.has(r.sleeperId)) m.set(r.sleeperId, Number(r.value))
+    }
+    dated.set(dk, m)
+  }
+
+  for (const { t, key, day, league } of plan) {
+    const g = ctx.byBookDated.get(key)!
+    const faabMoved = faabForTradeRow(t, ctx.faab.get(t.transactionId))
+    const attributed = attributeTrade(t, dated.get(`${key}|${day}`)!, {
+      allowPicks: league.book.format === 'DYNASTY',
+      extraGiven: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
+      extraReceived: faabMoved ? normalizedFaabValue(faabMoved.received, league.faabBudget) : 0,
+    })
+    if (attributed.kind === 'skip') {
+      bump(g, attributed.reason)
+      continue
+    }
+    const today = ctx.charts.get(key)!
+    const weight = recencyWeight(t.tradeDate, ctx.now)
+    let used = false
+    for (const { id, own, observedValue } of attributed.records) {
+      const baseValue = today.get(id)
+      // The ratio is applied to TODAY's value, so a player off today's board has nowhere to land.
+      if (!baseValue || baseValue <= 0 || own <= 0) continue
+      const entry = g.byPlayer.get(id) ?? { name: ctx.meta.get(id)?.name ?? null, position: ctx.meta.get(id)?.position ?? null, baseValue, observations: [] }
+      entry.observations.push({ transactionId: t.transactionId, ratio: observedValue / own, weight })
+      g.byPlayer.set(id, entry)
+      used = true
+    }
+    if (used) g.tradesUsed++
+    else bump(g, 'off_todays_board')
+  }
 }
 
 // ─── Lineup factors ─────────────────────────────────────────────────────────────────────────────────
@@ -615,6 +783,10 @@ export type BookResult = {
   tradesUsed: number
   medianAdjustment: number | null
   refused: 'not_centred' | null
+  /** Which market was published: `current` (today's chart) or `dated` (`TRADE_MARKET_LEARNER=dated`). */
+  learner?: 'current' | 'dated'
+  /** The dated market for this book and its gap to the current one — computed every run, published only when live. */
+  dated?: DatedBookComparison
 }
 
 /** Per-book values from one gather. PURE. */
@@ -634,11 +806,15 @@ function computeBookValues(gather: CompletedTradeGather): { values: CompletedTra
   return { values, medianAdjustment: adj.length ? adj[Math.floor(adj.length / 2)]! : null }
 }
 
+/** The dated market's rows carry their own version, so a row's model is recoverable from the row. */
+const DATED_CALCULATION_VERSION = 'ct3.0-dated'
+
 async function writeBook(
   prisma: PrismaClient,
   concept: string,
   values: readonly CompletedTradeMarketValue[],
   generatedAt: Date,
+  calculationVersion: string = FORMAT_CALCULATION_VERSION,
 ): Promise<number> {
   const sport = 'NFL'
   let written = 0
@@ -665,7 +841,7 @@ async function writeBook(
       direction: v.direction,
       published: v.published,
       sourceVersion: COMPLETED_SOURCE_VERSION,
-      calculationVersion: FORMAT_CALCULATION_VERSION,
+      calculationVersion,
       reasons: v.reasons as unknown as object,
       generatedAt,
     }
@@ -686,7 +862,7 @@ async function writeBook(
             confidence: row.confidence,
             sampleSize: row.sampleSize,
             reasonSummary: v.reasons as unknown as object,
-            calculationVersion: FORMAT_CALCULATION_VERSION,
+            calculationVersion,
             generatedAt,
           },
         })
@@ -714,11 +890,13 @@ export async function recalculateFormatMarkets(
     /** Also fill empty `LeagueTrade.leagueFormat` / `isSuperFlex` for every resolved trade (`stampTradeFormats`). */
     stampTrades?: boolean
     now?: Date
+    env?: NodeJS.ProcessEnv
   },
 ): Promise<{ books: BookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
   const dryRun = opts.dryRun !== false
   const generatedAt = opts.now ?? new Date()
-  const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason })
+  const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason, now: generatedAt })
+  const datedLive = datedLearnerLive(opts.env)
 
   const books: BookResult[] = []
   const baselines = new Map<string, (v: number) => number>()
@@ -728,11 +906,16 @@ export async function recalculateFormatMarkets(
     baselines.set(key, tierBaselines(gather))
     const concept = bookConcept(book)
     if (opts.skipBooks?.has(key)) continue
-    const { values, medianAdjustment } = computeBookValues(gather)
+    const current = computeBookValues(gather)
+    const datedBook = computeDatedBook(gathered.byBookDated.get(key)!, current.values)
+    // ⚠ The same centring gate, on the median of whichever market is being published.
+    const values = datedLive ? datedBook.values : current.values
+    const medianAdjustment = datedLive ? datedBook.comparison.medianAdjustment : current.medianAdjustment
+    const tradesUsed = datedLive ? datedBook.comparison.tradesUsed : gather.tradesUsed
     const published = values.filter((v) => v.published).length
     const refused = !dryRun && opts.requireCentred === true && published > 0 && !isCentred(medianAdjustment) ? ('not_centred' as const) : null
-    const written = !dryRun && refused === null ? await writeBook(prisma, concept, values, generatedAt) : 0
-    books.push({ book, concept, evaluated: values.length, published, written, tradesUsed: gather.tradesUsed, medianAdjustment, refused })
+    const written = !dryRun && refused === null ? await writeBook(prisma, concept, values, generatedAt, datedLive ? DATED_CALCULATION_VERSION : FORMAT_CALCULATION_VERSION) : 0
+    books.push({ book, concept, evaluated: values.length, published, written, tradesUsed, medianAdjustment, refused, learner: datedLive ? 'dated' : 'current', dated: datedBook.comparison })
   }
 
   const lineup = computeLineupFactors(
