@@ -20,6 +20,7 @@ import { hasIdpRosterSlot } from './idpRosterSlots'
 import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
 import { notifyCommissionerOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
 import { joinExistingLeagueAsLeagueMate, otherAccountsCopy } from './joinExistingLeagueAsLeagueMate'
+import { equivalentPlatformLeagueIds, platformLeagueIdWhere } from './samePlatformLeague'
 import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
@@ -875,7 +876,8 @@ export async function claimExistingLeagueForMember(args: {
     where: {
       userId: { not: userId },
       platform: provider,
-      platformLeagueId,
+      // The same provider league under any id it is stored by (Fantrax: see samePlatformLeague.ts).
+      platformLeagueId: await platformLeagueIdWhere(provider, platformLeagueId),
       season: seasonYear,
     },
     // Oldest first: with several copies already present, always the same one, never an arbitrary pick.
@@ -1007,7 +1009,7 @@ export async function joinExistingLeagueAsCoCommissioner(args: {
 }): Promise<PersistImportedLeagueResult | null> {
   const { userId, provider, platformLeagueId, seasonYear } = args
   const otherLeague = await (prisma as any).league.findFirst({
-    where: { userId: { not: userId }, platform: provider, platformLeagueId, season: seasonYear },
+    where: { userId: { not: userId }, platform: provider, platformLeagueId: await platformLeagueIdWhere(provider, platformLeagueId), season: seasonYear },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, sport: true },
   })
@@ -1047,7 +1049,7 @@ export async function persistImportedLeagueFromNormalization(
       ? normalized.league.season
       : new Date().getFullYear()
 
-  const existing = await (prisma as any).league.findFirst({
+  const exact = await (prisma as any).league.findFirst({
     where: {
       userId,
       platform: provider,
@@ -1055,6 +1057,18 @@ export async function persistImportedLeagueFromNormalization(
       season: seasonYear,
     },
   })
+  /*
+   * The same account importing the same Fantrax league again (a different "which team is yours?"
+   * choice makes a new snapshot, so a new id) refreshes its league instead of adding a copy. The
+   * exact id wins when it exists; otherwise the oldest league stored under a sibling id.
+   */
+  const siblingIds = exact ? [] : (await equivalentPlatformLeagueIds(provider, platformLeagueId)).filter((id) => id !== platformLeagueId)
+  const existing = exact ?? (siblingIds.length
+    ? await (prisma as any).league.findFirst({
+        where: { userId, platform: provider, platformLeagueId: { in: siblingIds }, season: seasonYear },
+        orderBy: { createdAt: 'asc' },
+      })
+    : null)
 
   if (existing && !allowUpdateExisting) {
     throw new ImportedLeagueConflictError('This league already exists in your account')
