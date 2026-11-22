@@ -517,13 +517,15 @@ export async function writeAfProjectionSnapshotsForSeason(
     string,
     { stats: Record<string, number>; position: string | null; opponent?: string | null }
   > | null = null
-  try {
-    const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
-    const board = await getWeekBoard(String(targetSeason), targetWeek)
-    weekBoard = board?.players ?? null
-    if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
-  } catch (err) {
-    errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+  if (sport === 'NFL') {
+    try {
+      const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
+      const board = await getWeekBoard(String(targetSeason), targetWeek)
+      weekBoard = board?.players ?? null
+      if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
+    } catch (err) {
+      errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // Weekly snapshots only when a real regular-season week is being played (or the caller
