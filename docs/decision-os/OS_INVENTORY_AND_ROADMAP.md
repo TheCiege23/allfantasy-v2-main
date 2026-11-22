@@ -201,12 +201,12 @@ survive.** Same seven axes and weights. Where an audit was stricter than this fi
 |---|---|---|---|
 | League | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: three live redraft runtimes read rules directly — `resolveNflRedraftTradeRuntime.ts`, `resolveNflRedraftWaiverRuntime.ts`, `resolveNflRedraftLiveScoringRuntime.ts`. Their GET routes read through League OS now (below) |
 | Import | ~82 | ~82 | Kernel ⚠: only the packet reads the feed. Cron ⚠: `fantasy-os-exec-sync` writes nothing unless `FANTASY_OS_EXEC_SYNC_LIVE=true` (code default off; production not read here) |
-| Projection | ~93 | ~93 | Kernel ⚠: every live projection read (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) bypasses the feed. Engine is ✅, not n/a: graded accuracy moves the projected number |
-| Player Value | ~90 | ~90 | Kernel ⚠: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly; only the non-NFL league board reads through the feed |
+| Projection | ~93 | ~93 → **~100, n/a by design** | Kernel ⚠ → **n/a, not ⚠** (owner's call, 2026-11-21): the three display readers (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) stay on their indexed table reads — the feed cannot serve them without making them worse (below). Engine is ✅, not n/a: graded accuracy moves the projected number |
+| Player Value | ~90 | ~90 → **~100, n/a by design** | Kernel ⚠ → **n/a, not ⚠**: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly, on purpose — the feed holds today's value only (below). The non-NFL league board reads through the feed |
 | Waiver | ~93 | ~93 → **~100, rewired** | Kernel ⚠ → ✅: the AI waiver panel's route (`/api/ai/waivers/recommend`) called `loadWaiverWorldFacts` directly. It reads through Waiver OS now (below) |
 | Lineup | ~72.5 | ~85 → **~100 in this change** | Feed is n/a by this file's rule, not ❌. Cron ⚠ was REAL: the lineup and slate-lock alerts used the weekly-feed optimizer, not My Team's `optimizeLineup` — **fixed in this change** (below) |
 | Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
-| Commissioner | ~78 | ~85 | Kernel ⚠: the hub rebuilds health live; only Chimmy reads the feed. Chimmy ⚠: no commissioner tool — the slice arrives only on a commissioner-classified turn |
+| Commissioner | ~78 | ~85 → ~93 | Kernel ⚠ → **n/a, not ⚠**: the hub builds health live because it is the feed's WRITER — it primes the entry Chimmy reads (below). Chimmy ⚠ stands: no commissioner tool — the slice arrives only on a commissioner-classified turn |
 | Draft | ~93 | ~93 → ~100 in this change | Engine ⚠: the record was an appended sentence with no level — **it now states High / Medium / Low** (below) |
 | Manager Psychology | ~90 | ~90 | Kernel ⚠: both user screens (`ManagerRecordSheet`, the commissioner Managers view) build live; only Chimmy reads the feed |
 | **Decision OS hub** | ~86 | ~93 → ~100 in this change | Learning ✅ by the waiver, bench and trade evidence the second audit verified (the third missed them). Operability ⚠: a late slice inside an on-time packet was never logged — **logged now** (below) |
@@ -228,6 +228,31 @@ ruleset live, as League OS's own header requires of anything that persists on th
 user-level resource entry (`createWaiverOsLoaders().loadWorldFacts`) — the entry Chimmy's waiver answer already reads,
 held five minutes because FAAB and priority move on every processed claim — and reports the feed's outcomes. A miss or a
 store problem derives through the same `loadWaiverWorldFacts`. Test: `__tests__/ai/waiver-recommendation-through-waiver-os.test.ts`.
+
+**Projection (3 of 6): n/a by design, not rewired** (owner's call, 2026-11-21, after the widening was costed). Projection
+OS's feed holds what the DECISION path needs (points, rescore state, stored components) and none of what these screens
+show (weather, rest of season, the pre-weather number, the reason a number moved). Widening it was costed and refused,
+because the feed would make every one of the three worse:
+- `createOsFeed` stores a whole result as ONE `domain_os_facts` row and has no in-memory layer, so the projections
+  route would load and parse a sport-week's full list per request to show 100 rows, where it reads ~300 indexed rows now.
+- The canonical source reads at most 2,000 rows per sport-week (`loadProjectionFacts`, `take: 2000`, newest first), so
+  the draft pool — which reads by player id, uncapped — would silently lose a projection for every player past the cap.
+  It also falls back to an earlier season's baseline (`season: { lte }`), which a per-season feed key cannot do.
+- Chimmy's projection tool, asked with no week, takes the newest week-scoped row of ANY week; the feed holds one week.
+So these readers stay on `lib/af-projections/readAfProjections.ts`, as Lineup's screens stay live. The packet's
+projection slice still reads through the feed, where the shape fits.
+
+**Player Value (4 of 6): n/a by design, not rewired.** The same finding as Projection. Value OS's `marketValueSource`
+caches today's `CanonicalValue` per player — a value and its provenance — and the card and Chimmy's value tool show the
+overall and position ranks and the 7-day move (`loadPlayerMarketValue` reads up to 40 snapshots per player to find the
+one closest to seven days back). The feed holds neither, so they stay on `lib/core-app/playerMarketValue.ts`, one
+indexed per-player read.
+
+**Commissioner hub (5 of 6): n/a, not ⚠ — the hub is the writer.** `lib/core-app/commissionerHub.ts` builds the
+health snapshot live and hands it to Commissioner OS (`primeCommissionerHealthSnapshot`), so Chimmy's next read inside
+five minutes serves exactly the numbers the commissioner is looking at (2026-11-20). Reading the hub back through the
+feed would show a commissioner a five-minute-old count right after they cleared it — approve a trade, reload, still
+pending. The screen stays live and keeps writing.
 
 **Built in this change (no migration):**
 - **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
