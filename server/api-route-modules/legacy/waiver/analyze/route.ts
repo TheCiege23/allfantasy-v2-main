@@ -48,6 +48,7 @@ import {
 } from '@/lib/legacy-tool/notifications'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 const openai = getOpenAIRouteClient()
 
@@ -201,8 +202,36 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/waiver/analyze", tool:
     })
     if (!gate.ok) return gate.response
 
+    /*
+     * AF Legacy (`legacy_waiver_analysis`): the /af-legacy screen locks this action (Waiver AI), and that lock was the only one —
+     * a direct POST ran the model for anyone. A guest actor (`guest:…`) holds no plan and gets the same lock.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_waiver_analysis' })
+    if (!plan.ok) return plan.response
+
     const resolvedUsername = gate.identity.sleeperUsername
-    const resolvedUserId = sleeperUserIdentity?.userId || undefined
+    /*
+     * `sleeperUser.userId` is caller-supplied too. It picks the roster to analyse AND keys the
+     * decision log, the private coaching DM and the confidence-risk history -- so a signed-in
+     * caller could attribute writes to anyone's Sleeper id. It is accepted only when it is the
+     * Sleeper id linked to the caller's own account; a different id is a visible 403. When no
+     * link row can be read, it is dropped and the id is looked up from the verified username.
+     */
+    const suppliedUserId = String(sleeperUserIdentity?.userId || '').trim()
+    let resolvedUserId: string | undefined
+    if (suppliedUserId) {
+      const linked = await prisma.legacyUser
+        .findUnique({ where: { sleeperUsername: resolvedUsername }, select: { sleeperUserId: true } })
+        .catch(() => null)
+      const linkedId = linked?.sleeperUserId?.trim() || ''
+      if (linkedId && linkedId !== suppliedUserId) {
+        return NextResponse.json(
+          { error: 'You can only act on your own linked Sleeper account.', code: 'SLEEPER_USER_ID_MISMATCH' },
+          { status: 403 },
+        )
+      }
+      resolvedUserId = linkedId || undefined
+    }
     const normalizedLeagueId = String(league_id || '').trim()
 
     if (!resolvedUsername || !normalizedLeagueId) {

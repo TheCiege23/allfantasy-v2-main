@@ -44,14 +44,14 @@ import { easternDateKey, shiftDateKey } from './rankingsEngine'
 import { buildPortfolioInsights, dailyValuesOf, latestCaptureDay } from './portfolioInsights'
 import type { PortfolioDailyTotals, PortfolioInsights, RecordedValueDay } from './portfolioInsightsTypes'
 
-export const PORTFOLIO_INSIGHTS_SCREEN = 'portfolio-insights'
+const PORTFOLIO_INSIGHTS_SCREEN = 'portfolio-insights'
 const TTL_MS = 20 * 60_000
 const STALE_WHILE_REVALIDATE_MS = 6 * 60 * 60_000
 
-export const TOTALS_KEY_PREFIX = 'core-portfolio:totals:v1:'
-export const TOTALS_RETENTION_DAYS = 400
+const TOTALS_KEY_PREFIX = 'core-portfolio:totals:v1:'
+const TOTALS_RETENTION_DAYS = 400
 /** Stored days the chart reads back. A little over the value window, so its first day has a record. */
-export const RECORDED_LOOKBACK_DAYS = 35
+const RECORDED_LOOKBACK_DAYS = 35
 
 export function totalsKey(etDate: string, userId: string): string {
   return `${TOTALS_KEY_PREFIX}${etDate}:u=${userId}`
@@ -185,7 +185,7 @@ export function emptyPortfolioTotalsCounts(): PortfolioTotalsCounts {
 
 /** Users built per fire. The route fires every 30 minutes, so this reaches ~480 users a day. */
 export const TOTALS_USERS_PER_FIRE = 10
-export const TOTALS_BUDGET_MS = 45_000
+const TOTALS_BUDGET_MS = 45_000
 const MAX_CANDIDATES = 5000
 
 /**

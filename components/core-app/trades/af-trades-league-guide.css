@@ -1,0 +1,128 @@
+/*
+ * One league's Trades tab, the guide pass (2026-11-13): the short league switcher, the "More ways to find
+ * a trade" fold, and the completed-trade card's "How these were graded" fold.
+ * (components/core-app/screens/TradeCenter.tsx, Trades.tsx, lib/core-app/tradesLeagueGuide.ts)
+ *
+ * ⚠ Every block is at depth 0 — never inside another @media — and core tokens only (--text, --muted,
+ * --faint, --line, --chip, --accent), which af-core.css redefines for the light theme.
+ */
+
+/* ── Switch league: one line per league ─────────────────────────────── */
+.af-tlg-switch {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.af-tlg-switch-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-tlg-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+a.af-tlg-switch-row:hover,
+a.af-tlg-switch-row:focus-visible {
+  background: var(--chip);
+}
+.af-tlg-switch-row[aria-current='page'] {
+  background: var(--chip);
+}
+.af-tlg-switch-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tlg-switch-meta {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--faint);
+}
+.af-tlg-switch-here {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-tlg-switch-more {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── More ways to find a trade: the folds inside it sit as a list ───── */
+.af-tlg-more > :not(summary) + :not(summary) {
+  margin-top: 10px;
+}
+
+/* ── A completed trade: "How these were graded", on every width ─────── */
+/*
+ * The trades screen's own toggle exists only at phone width (af-trades.css). Here it is at every width,
+ * because the fold now holds the basis paragraph that used to be printed in full on each card.
+ * `.af-tr` raises the specificity above af-trades.css, whichever sheet lands last.
+ */
+.af-core .af-tr .af-tr-why-toggle.af-tlg-why-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 8px 0 0;
+  padding: 0 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-core .af-tr .af-tr-why-toggle.af-tlg-why-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The result and the most valuable asset stay in view on a phone too; only the "how" folds. */
+.af-core .af-tr .af-tr-card:not([data-why-open]) .af-tr-leaguegrade-why {
+  display: grid;
+}
+.af-tlg-why {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--chip);
+}
+.af-tlg-why p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .af-core .af-tr .af-tr-why-toggle.af-tlg-why-toggle {
+    display: flex;
+    width: 100%;
+  }
+}

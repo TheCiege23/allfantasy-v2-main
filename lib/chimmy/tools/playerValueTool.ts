@@ -2,9 +2,19 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { findPricedPlayersByName, isUnpriced, loadPlayerMarketValue } from '@/lib/core-app/playerMarketValue'
+import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from '@/lib/core-app/valueBook'
 
 /**
  * What one player is worth, for the model to read.
+ *
+ * 🛑 THE NUMBER IS THE PLAYER CARD'S (re-score 2026-11-17). It is read by `loadPlayerMarketValue` — the card's own
+ * read — on the league's own chart (`valueBookFor`, the rule every screen uses), or on the card's cross-league
+ * chart when no league is in scope. This tool used to quote the `AllFantasyMarketPlayerValue` house table instead,
+ * so "what is he worth?" in chat could disagree with his card. The house value, where one is published, now follows
+ * as a separately-labelled second measure rather than as THE value.
+ *
+ * (The notes below on concepts describe that house table.)
  *
  * ── WHY THIS EXISTS ────────────────────────────────────────────────────────────────────────
  * `get_available_players` already surfaces AllFantasy market values, but only as a RANKED LIST
@@ -54,15 +64,51 @@ const SELECT = {
  */
 function notFound(asked: string): string {
   return [
-    `NO PUBLISHED ALLFANTASY VALUE ROW MATCHED "${asked}".`,
+    `NO MARKET VALUE IS ON FILE FOR "${asked}" ON THIS CHART.`,
     'This is NOT a finding that the player is worthless, unranked, or unknown to AllFantasy,',
-    'and you must NOT say any of those. Only a few hundred players carry a published house value,',
-    'so a miss is expected for most of the league. You must NOT substitute a number from general',
-    'knowledge, from another site, or from your own estimate — a made-up value is the worst answer',
-    'here, because the user cannot tell it apart from a real one.',
-    'Say plainly that we do not publish a value for that player, and offer to compare two players',
+    'and you must NOT say any of those. The market prices the players who trade — kickers and',
+    'defenders are not priced, and deep reserves often are not — so a miss is expected for many names.',
+    'You must NOT substitute a number from general knowledge, from another site, or from your own',
+    'estimate — a made-up value is the worst answer here, because the user cannot tell it apart from a real one.',
+    'Say plainly that we have no market value for that player, and offer to compare two players',
     'we do value, or check the spelling of the name.',
   ].join(' ')
+}
+
+/** The chart a league prices on, or the card's cross-league chart. Never a default posing as the league's. */
+async function bookFor(leagueId: string | null | undefined): Promise<{ book: ValueBook; basis: string }> {
+  if (leagueId) {
+    const row = await prisma.league
+      .findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, sport: true } })
+      .catch(() => null)
+    if (row && String(row.sport ?? 'NFL').toUpperCase() === 'NFL') {
+      return { book: valueBookFor(row.settings, row.leagueType ?? null), basis: "this league's chart" }
+    }
+  }
+  return { book: CROSS_LEAGUE_BOOK, basis: 'the cross-league chart (no NFL league in scope), as the league-less player card shows' }
+}
+
+function chartLabel(book: ValueBook): string {
+  return `${book.format === 'DYNASTY' ? 'dynasty' : 'redraft'}, ${book.qbFormat === 'SUPERFLEX' ? 'superflex' : 'one-QB'}`
+}
+
+/** The house value as a SECOND, labelled measure — or nothing. Never presented as the player's value. */
+async function houseValueLines(target: string): Promise<string[]> {
+  const rows = await prisma.allFantasyMarketPlayerValue
+    .findMany({ where: { published: true, sport: 'NFL' }, select: SELECT, orderBy: { marketValue: 'desc' } })
+    .catch(() => [] as Array<Record<string, unknown>>)
+  const matches = rows.filter(
+    (r) => normalizePlayerName(String((r as { playerName?: unknown }).playerName ?? '')) === target,
+  ) as Array<{ marketValue: number; leagueConcept: string | null; scoringFormat: string | null }>
+  if (!matches.length) return []
+  return [
+    'Also published: the AllFantasy trade-market value, built from completed trades — a DIFFERENT measure from the chart value above. Quote it only if the user asks about the AllFantasy market:',
+    ...matches.map((m) => {
+      const concept = String(m.leagueConcept ?? '').trim() || 'market'
+      const scoring = m.scoringFormat?.trim()
+      return `- ${scoring ? `${concept}, ${scoring}` : concept}: ${m.marketValue.toLocaleString()}`
+    }),
+  ]
 }
 
 /**
@@ -71,7 +117,7 @@ function notFound(asked: string): string {
  * Never throws — the caller turns an exception into "could not read", but a lookup that returns a
  * misleading sentence is worse than one that throws, so the refusals above are the real product.
  */
-export async function buildPlayerValueContext(args: { playerName: string }): Promise<string> {
+export async function buildPlayerValueContext(args: { playerName: string; leagueId?: string | null }): Promise<string> {
   const asked = args.playerName.trim()
   if (!asked) {
     return 'No player name was given, so nothing was looked up. Ask the user which player they mean.'
@@ -80,95 +126,56 @@ export async function buildPlayerValueContext(args: { playerName: string }): Pro
   const target = normalizePlayerName(asked)
   if (!target) return notFound(asked)
 
-  /*
-   * ⚠ FETCHED AND MATCHED IN MEMORY RATHER THAN FILTERED IN SQL, DELIBERATELY.
-   *
-   * The stored `playerName` is raw ("Ja'Marr Chase", "Marvin Harrison Jr."), and the user types
-   * whatever they type. Matching needs `normalizePlayerName` — the identity authority, which
-   * delegates to `canonicalName` for the apostrophe and generational-suffix rules — and that is
-   * JavaScript, not SQL.
-   *
-   * 🛑 REIMPLEMENTING IT AS A SQL `regexp_replace` IS THE ONE THING NOT TO DO HERE. CLAUDE.md
-   * records the measurement: a SQL copy of this normalizer disagreed with the real one on 7.2% of
-   * 500 rows, on exactly these cases. The table is a few hundred published rows, so reading it is
-   * cheap and correctness is free.
-   */
-  const rows = await prisma.allFantasyMarketPlayerValue
-    .findMany({
-      where: { published: true, sport: 'NFL' },
-      select: SELECT,
-      orderBy: { marketValue: 'desc' },
-    })
-    .catch(() => [] as Array<Record<string, unknown>>)
+  const { book, basis } = await bookFor(args.leagueId)
+  const { capturedAt, matches } = await findPricedPlayersByName(asked, book)
 
-  if (rows.length === 0) {
+  /*
+   * These must not collapse into one sentence. "We have no values at all" (or could not read them) and "we have
+   * values and none is his" are different facts, and only the second says anything about the player.
+   */
+  if (!capturedAt) {
     return [
-      'NO PUBLISHED ALLFANTASY VALUES ARE ON FILE AT ALL, so nothing could be looked up.',
+      'NO MARKET VALUES ARE ON FILE AT ALL FOR THIS CHART, so nothing could be looked up.',
       'This is NOT a finding about this player. Say we cannot read player values right now;',
       'do NOT give a number for anyone.',
     ].join(' ')
   }
 
-  const matches = rows.filter(
-    (r) => normalizePlayerName(String((r as { playerName?: unknown }).playerName ?? '')) === target,
-  ) as Array<{
-    playerName: string | null
-    position: string | null
-    team: string | null
-    marketValue: number
-    leagueConcept: string | null
-    scoringFormat: string | null
-    confidence: number
-  }>
-
-  if (matches.length === 0) return notFound(asked)
-
-  const display = matches[0].playerName?.trim() || asked
-  const position = matches[0].position?.trim() || null
-  const team = matches[0].team?.trim() || null
-  const who = [display, position, team].filter(Boolean).join(', ')
-
-  const lines: string[] = [
-    `AllFantasy published market value for ${who}:`,
-    ...matches.map((m) => {
-      const concept = String(m.leagueConcept ?? '').trim() || 'market'
-      const scoring = m.scoringFormat?.trim()
-      const label = scoring ? `${concept}, ${scoring}` : concept
-      return `- ${label}: ${m.marketValue.toLocaleString()} (confidence ${m.confidence})`
-    }),
-  ]
-
-  /*
-   * ⚠ THE SCALE HAS TO BE NAMED OR THE NUMBER IS UNREADABLE. 6,552 means nothing on its own, and
-   * a model given a bare figure will reach for a comparison it invents. The 0–10000 convention is
-   * FantasyCalc's, which is why two AllFantasy numbers can be compared to each other and an
-   * AllFantasy number cannot be compared to a KeepTradeCut one.
-   */
-  lines.push(
-    'These are AllFantasy house values on a 0-10000 scale, where 10000 is the most valuable asset in the game. Compare them only to other AllFantasy values — never to KeepTradeCut, Sleeper or FantasyCalc numbers, which use different scales.',
-  )
-
+  if (matches.length === 0) {
+    const house = await houseValueLines(target)
+    return house.length ? [notFound(asked), ...house].join('\n') : notFound(asked)
+  }
   if (matches.length > 1) {
-    lines.push(
-      'The values above are for DIFFERENT league concepts and are not alternatives to average. Quote the one matching the league the user is asking about, and say which concept it is.',
-    )
-  } else {
-    const only = String(matches[0].leagueConcept ?? '').trim()
-    if (only) {
-      lines.push(
-        `Only the ${only} value is published for this player. Do NOT present it as a value for any other format — if the user is asking about a different concept, say we do not publish one.`,
-      )
-    }
+    return [
+      `More than one player named "${asked}" is priced: ${matches.map((m) => [m.name, m.position].filter(Boolean).join(', ')).join('; ')}.`,
+      'Do NOT pick one. Ask the user which player they mean (position or team), then look up that one.',
+    ].join(' ')
   }
 
-  /*
-   * ⚠ WHAT THIS NUMBER IS NOT. Named explicitly because the most common follow-up question is a
-   * start/sit one, and a long-term asset value is a bad answer to it — the same trap
-   * `availablePlayersTool` names when it warns against ranking a rookie over a producer.
-   */
-  lines.push(
-    'This is long-term asset worth for trading, NOT a projection of this week\'s points and NOT a start/sit ranking. If the user is asking who to start, say this number does not answer that.',
-  )
-
+  const player = matches[0]!
+  const market = await loadPlayerMarketValue(player.sleeperId, player.position, book)
+  if (!market.available) {
+    return isUnpriced(player.position) ? `${market.reason} ${notFound(asked)}` : notFound(asked)
+  }
+  const m = market.data
+  const who = [player.name, player.position].filter(Boolean).join(', ')
+  const lines: string[] = [
+    `${who} — market value on ${basis} (${chartLabel(book)}): ${m.value.toLocaleString()}` +
+      `${m.overallRank != null ? `, #${m.overallRank} overall` : ''}${m.positionRank != null ? `, #${m.positionRank} at his position` : ''}` +
+      `${m.delta ? `, ${m.delta.change >= 0 ? '+' : ''}${m.delta.change.toLocaleString()} over ${m.delta.days} days` : ''}` +
+      ` (as of ${m.capturedAt.slice(0, 10)}).`,
+    'This is the SAME number his player card shows for this league. Quote it as his value.',
+    /*
+     * ⚠ THE SCALE HAS TO BE NAMED OR THE NUMBER IS UNREADABLE. 6,552 means nothing on its own, and a model given a
+     * bare figure will reach for a comparison it invents.
+     */
+    'The scale runs 0-10000, where 10000 is the most valuable asset in the game. Compare it only to other values on this same chart — never to KeepTradeCut or Sleeper numbers, which use different scales.',
+    /*
+     * ⚠ WHAT THIS NUMBER IS NOT. Named explicitly because the most common follow-up question is a start/sit one,
+     * and a long-term asset value is a bad answer to it.
+     */
+    "This is long-term asset worth for trading, NOT a projection of this week's points and NOT a start/sit ranking. If the user is asking who to start, say this number does not answer that.",
+  ]
+  lines.push(...(await houseValueLines(target)))
   return lines.join('\n')
 }

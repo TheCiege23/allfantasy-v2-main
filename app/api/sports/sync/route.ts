@@ -23,7 +23,8 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 
 export const POST = withApiUsage({ endpoint: "/api/sports/sync", tool: "SportsSync" })(async (request: NextRequest) => {
   /**
-   * Request examples (Bearer ADMIN_PASSWORD required):
+   * Request examples (an admin session, or Bearer / x-admin-secret BRACKET_ADMIN_SECRET;
+   * ADMIN_PASSWORD is accepted only outside production):
    *
    * NFL teams sync:
    * { "source": "api_sports", "type": "teams", "sport": "NFL", "season": "2025" }

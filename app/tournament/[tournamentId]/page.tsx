@@ -225,7 +225,8 @@ export default function TournamentHomePage() {
   const tournamentMedia = LEAGUE_TYPE_MEDIA.tournament
   const feederCards: FeederCard[] = useMemo(() => {
     if (!legacyFeederLeagues) return []
-    return legacyFeederLeagues.map((row) => ({
+    // The round the tournament is in: after a cut the earlier round's leagues are history, not feeders.
+    return legacyFeederLeagues.filter((row) => row.inCurrentRound !== false).map((row) => ({
       id: row.tournamentLeagueId,
       href: `/league/${row.leagueId}?openChat=league`,
       name: row.name,

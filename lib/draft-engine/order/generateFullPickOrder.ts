@@ -11,7 +11,7 @@ import {
 } from '@/lib/live-draft-engine/DraftOrderService'
 import type { DraftType } from '@/lib/live-draft-engine/types'
 
-export type PlannedPickSlot = {
+type PlannedPickSlot = {
   overall: number
   round: number
   slot: number

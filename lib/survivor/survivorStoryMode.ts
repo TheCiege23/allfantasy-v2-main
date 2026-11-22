@@ -30,7 +30,7 @@ export const SURVIVOR_STORY_TONE_LABELS: Record<SurvivorStoryTone, { label: stri
   playful: { label: 'Playful', hint: 'Light and cheeky, for leagues that like a laugh.' },
 }
 
-export function isSurvivorStoryTone(value: unknown): value is SurvivorStoryTone {
+function isSurvivorStoryTone(value: unknown): value is SurvivorStoryTone {
   return typeof value === 'string' && (SURVIVOR_STORY_TONES as readonly string[]).includes(value)
 }
 

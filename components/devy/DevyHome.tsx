@@ -93,7 +93,7 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
     )
   }
 
-  const { config, draftPhase, draftPhaseInfo, sport } = summary
+  const { config, draftPhaseInfo, sport } = summary
   const adapterLabel = summary.sportAdapterId === 'nfl_devy' ? 'NCAA Football' : summary.sportAdapterId === 'nba_devy' ? 'NCAA Basketball' : 'Devy'
 
   const home: DevyHomeBlock = { league: summary.league ?? null, my: summary.my ?? null, feed: summary.feed ?? [] }

@@ -63,7 +63,7 @@ const STROKE = {
  * Bar controls that are not nav destinations: the league-first bar's Chimmy, Play and Me, and the
  * More button. They used unicode marks (✦ ⊕ ◉ ⋯) beside drawn destination icons on the same bar.
  */
-export type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
+type ShellIconKey = 'chimmy' | 'play' | 'me' | 'more'
 
 const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
   /* House. */
@@ -163,6 +163,13 @@ const PATHS: Partial<Record<CoreNavKey | ShellIconKey, ReactNode>> = {
       <circle cx="9.2" cy="6.5" r="2" />
       <circle cx="15.4" cy="12" r="2" />
       <circle cx="8" cy="17.5" r="2" />
+    </>
+  ),
+  /* Gear — one league's own settings (2026-11-15). */
+  'league-settings': (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6" />
     </>
   ),
   /* Mortarboard — college prospects. */
@@ -334,4 +341,3 @@ export function CoreNavIcon({ navKey, size = 18 }: { navKey: CoreNavKey | ShellI
   )
 }
 
-export default CoreNavIcon

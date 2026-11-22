@@ -27,6 +27,9 @@ import { getRedraftSportIntegration } from '@/lib/redraft-creation/sport-config'
 import type { SoccerPipeline } from '@/lib/redraft-creation/sport-config'
 import { soccerPipelineToPrismaVariant } from '@/lib/redraft-creation/create-redraft-league'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
+import { guillotineCalendarFit, planGuillotineChopSchedule } from '@/lib/guillotine/calendarFit'
+import { PERIOD_WEEKS_KEY, readPeriodWeeks, supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
+import { ADVANCED_KEY, readAdvanced } from '@/lib/guillotine/chopSchedule'
 import type { PresetEngineOutput } from '@/lib/league-creation/canonical/types'
 import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
@@ -34,6 +37,7 @@ import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromW
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { bestBallSettingsHaveNoPlayoffs } from '@/lib/bestball/noPlayoffSeason'
 import { GUILLOTINE_BEST_BALL_KEY } from '@/lib/guillotine/guillotineBestBall'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 import { ncaafPlayoffWindow } from '@/lib/league-defaults/ncaafPlayoffWindow'
@@ -44,6 +48,7 @@ import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashP
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
 import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
+import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 type Tx = Prisma.TransactionClient
@@ -165,7 +170,7 @@ function buildOpenTeamName(slotNumber: number): string {
   return `Open Team ${slotNumber}`
 }
 
-export type CanonicalCreateTransactionResult = {
+type CanonicalCreateTransactionResult = {
   leagueId: string
   homepageUrl: string
   inviteUrl: string
@@ -212,6 +217,19 @@ export async function createCanonicalLeagueInTransaction(
           language: body.language ?? null,
         })
       : null
+  /*
+   * 🛑 "NO PLAYOFFS" MUST SAVE NO PLAYOFFS. The normalizer keeps `playoffFormat: 'none'` beside the
+   * team count it was given (6 by default), and that 6 reached League.playoffTeams and the playoff start
+   * week below — so a season-long league was built a bracket it said it did not have. Either signal
+   * (format none, or 0 teams) is no playoffs, saved one way everywhere; the season engine then crowns
+   * the regular-season leader (lib/bestball/noPlayoffSeason.ts). A tournament's rounds are its
+   * post-season and are untouched.
+   */
+  const bestBallNoPlayoffs = bestBallSettings != null && bestBallSettingsHaveNoPlayoffs(bestBallSettings)
+  if (bestBallSettings && bestBallNoPlayoffs) {
+    bestBallSettings.playoffTeams = 0
+    bestBallSettings.playoffFormat = 'none'
+  }
   const foundationDefaults = getFoundationLeagueDefaults({
     sport,
     format: formatId,
@@ -397,6 +415,11 @@ export async function createCanonicalLeagueInTransaction(
     },
   }
 
+  if (bestBallNoPlayoffs) {
+    mergedSettings.playoff_team_count = 0
+    mergedSettings.playoffSettings = { ...foundationDefaults.playoffSettings, playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: null, playoff_start_week: null, ...(bestBallSettings!.matchupFormat === 'cumulative' ? { seedingRule: 'points_only' } : {}) }
+  }
+
   if (bestBallSettings?.contestStructure === 'tournament') {
     const end = tournamentRoundEnds(bestBallSettings).at(-1)!
     mergedSettings.playoff_team_count = 0
@@ -523,7 +546,37 @@ export async function createCanonicalLeagueInTransaction(
   // Best ball Guilly: lineups set themselves (lib/guillotine/guillotineBestBall.ts). The settings flag,
   // never `bestBallMode`, which would make this a Best Ball league everywhere.
   if (isGuillotine && body.conceptSetup?.guillotineBestBall === true) mergedSettings[GUILLOTINE_BEST_BALL_KEY] = true
+  // MLB Guilly: two-week elimination periods (lib/guillotine/eliminationPeriods.ts). Anything else is
+  // refused by validateCreateLeague; the default (no key) is one week.
+  if (isGuillotine && supportsTwoWeekPeriods(sport) && body.conceptSetup?.guillotinePeriodWeeks === 2) mergedSettings[PERIOD_WEEKS_KEY] = 2
   const guillotineProfile = isGuillotine ? getGuillotineSportConfig(sport) : undefined
+  /*
+   * 🛑 A LARGE GUILLY COULD NOT FINISH. The config below is one chop a week from week 1 to the sport's
+   * last regular-season week, whatever the team count, so an NFL league of 20+ ended week 18 with
+   * several teams alive. When that schedule cannot reach the endgame, plan the fewest opening
+   * double-chop weeks that can (lib/guillotine/calendarFit.ts) — the "double-elimination weeks" the
+   * team-count limits already promise. Refuse only when even four chops every week cannot finish.
+   */
+  if (isGuillotine && guillotineProfile?.regularSeasonWeeks) {
+    const calendar = {
+      teamCount: managerCount,
+      startWeek: 1,
+      endWeek: guillotineProfile.regularSeasonWeeks,
+      baseChops: 1,
+      threshold: guillotineEndgame.threshold,
+      finalPeriods: guillotineEndgame.cumulativePeriods,
+      periodWeeks: readPeriodWeeks(mergedSettings),
+    }
+    if (!guillotineCalendarFit({ ...calendar, advanced: readAdvanced(mergedSettings) }).fits) {
+      const planned = planGuillotineChopSchedule(calendar)
+      if (!planned) {
+        throw new Error(
+          `A ${managerCount}-team Guilly league cannot reach a champion in ${calendar.endWeek} weeks, even with four chops every ${calendar.periodWeeks === 2 ? 'two-week period' : 'week'}. Choose fewer teams.`,
+        )
+      }
+      mergedSettings[ADVANCED_KEY] = planned
+    }
+  }
   const guillotineDefaultWaiverDelayHours = guillotineProfile?.dailyGames ? 48 : 24
   const scoringSettings = foundationDefaults.scoringSettings
   const playoffSettings = foundationDefaults.playoffSettings
@@ -604,7 +657,7 @@ export async function createCanonicalLeagueInTransaction(
    */
   const survivorPlanEnd = formatId === 'survivor' ? readSurvivorFullSeasonPlan(mergedSettings)?.endWeek ?? null : null
   const playoffStartWeekColumn: number | null =
-    scoringMode === 'roto' || isGuillotine
+    scoringMode === 'roto' || isGuillotine || bestBallNoPlayoffs
       ? null
       : survivorPlanEnd != null
         ? survivorPlanEnd + 1
@@ -630,6 +683,17 @@ export async function createCanonicalLeagueInTransaction(
       leagueSize: managerCount,
       sport,
       leagueType: formatId,
+      /*
+       * ⚠ THE LEAGUE ROW CARRIES ITS OWN COPY OF THE WAIVER TYPE, AND IT DEFAULTS TO "rolling".
+       * The engine reads `leagueWaiverSettings` (written below from `waiverDefaults`), but the
+       * commissioner's waiver panel and the league constitution read these columns. Left unset, a
+       * redraft league that runs FAAB told its commissioner "rolling" and hid the FAAB budget field.
+       * Zombie keeps its own override after this.
+       */
+      waiverType: waiverDefaults.waiver_type,
+      ...(waiverDefaults.waiver_type === 'faab' && typeof waiverDefaults.FAAB_budget_default === 'number'
+        ? { waiverBudget: waiverDefaults.FAAB_budget_default }
+        : {}),
       ...(formatId === 'zombie' ? { waiverType: 'fcfs', waiverHours: 0 } : {}),
       /*
        * 🛑 A ZOMBIE LEAGUE WAS CREATED WITH `leagueVariant: null`, AND EVERY ZOMBIE SURFACE KEYS ON THE
@@ -886,13 +950,17 @@ export async function createCanonicalLeagueInTransaction(
 
   if (formatId === 'c2c') {
     const setup = (body.conceptSetup ?? {}) as Record<string, unknown>
+    const c2cSeparateDrafts =
+      supportsSeparateStartupDrafts('c2c', sport) && !(setup.mergedCollegeDraft === true || setup.startupFormat === 'merged')
     await tx.c2CLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        startupFormat: readString(setup, 'startupFormat', 'merged'),
-        mergedStartupDraft: setup.startupFormat !== 'separate',
-        separateStartupCollegeDraft: setup.startupFormat === 'separate',
+        // Two drafts unless the commissioner chose one merged draft, where the pool can keep them apart
+        // (lib/draft-defaults/startupCollegeDraft.ts); a college-sport league keeps its one draft.
+        startupFormat: c2cSeparateDrafts ? 'separate' : 'merged',
+        mergedStartupDraft: !c2cSeparateDrafts,
+        separateStartupCollegeDraft: c2cSeparateDrafts,
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
         collegeSports: [sport] as Prisma.InputJsonValue,
         collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
@@ -958,6 +1026,17 @@ export async function createCanonicalLeagueInTransaction(
         taxiDeadlineWeek: ds.taxiLockDeadlineWeek != null ? num(ds.taxiLockDeadlineWeek, 0) || null : null,
       },
     })
+    /*
+     * 🛑 THE LEAGUE COLUMN TOO. The taxi squad size has two stores (lib/taxi/taxiSlotsSync.ts): this
+     * config, and `League.taxiSlots`, which lineup validation, the rollover housekeeping and the rookie
+     * taxi placement read. Creation wrote only the config, so a new dynasty league said "4" in its
+     * settings and 0 on the column: no lineup save could put a player on the taxi squad, and drafted
+     * rookies stayed on the bench, until the commissioner re-saved the size (found re-walking a
+     * dynasty league, 2026-11-19). Plain dynasty only: devy and C2C size theirs on their own config.
+     */
+    if (formatId === 'dynasty') {
+      await tx.league.update({ where: { id: league.id }, data: { taxiSlots: taxiSlotsForCreate } })
+    }
   }
 
   /**
@@ -1236,12 +1315,49 @@ export async function createCanonicalLeagueInTransaction(
       : null
   const sessionDevyConfig =
     (draftSettings.devyConfig as Record<string, unknown> | null | undefined) ?? dynastyDevyConfig
+  /*
+   * Devy and C2C: a pro draft, then a college draft, unless the commissioner chose one merged draft
+   * (lib/draft-defaults/startupCollegeDraft.ts). Only where the pool keeps pro and college apart (NFL,
+   * NBA); a college-sport league keeps one draft, as before.
+   */
+  const startupPlan =
+    (formatId === 'devy' || formatId === 'c2c') && supportsSeparateStartupDrafts(formatId, sport)
+      ? planStartupDrafts({
+          format: formatId,
+          rounds: draftRounds,
+          devyConfig: sessionDevyConfig ?? null,
+          c2cConfig: (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null,
+          collegeDraftRounds:
+            formatId === 'devy'
+              ? readNumber((foundationDefaults.devyConfig ?? {}) as Record<string, unknown>, 'devySlotCount', 4)
+              : readNumber(
+                  ((foundationDefaults as unknown as Record<string, unknown>).c2cSettings ?? {}) as Record<string, unknown>,
+                  'collegeDraftRounds',
+                  6,
+                ),
+          merged:
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).mergedCollegeDraft === true ||
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).startupFormat === 'merged',
+        })
+      : null
+  if (startupPlan) {
+    // The row this transaction just created carries the settings to extend.
+    const created = (league as { settings?: unknown }).settings ?? mergedSettings
+    const settings = created && typeof created === 'object' ? (created as Record<string, unknown>) : {}
+    await tx.league.update({
+      where: { id: league.id },
+      data: { settings: { ...settings, [STARTUP_COLLEGE_DRAFT_SETTINGS_KEY]: startupPlan.state } as Prisma.InputJsonValue },
+    })
+  }
+  const firstDraftDevyConfig = startupPlan ? startupPlan.first.devyConfig : sessionDevyConfig
+  const firstDraftC2cConfig = startupPlan ? startupPlan.first.c2cConfig : (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null
   await tx.draftSession.create({
     data: {
       leagueId: league.id,
       status: 'pre_draft',
       draftType: coreDraft,
-      rounds: draftRounds,
+      rounds: startupPlan ? startupPlan.first.rounds : draftRounds,
+      ...(startupPlan?.first.draftModeLabel ? { draftModeLabel: startupPlan.first.draftModeLabel } : {}),
       teamCount: managerCount,
       timerSeconds,
       slotOrder: draftSlotOrder as Prisma.InputJsonValue,
@@ -1251,8 +1367,8 @@ export async function createCanonicalLeagueInTransaction(
       thirdRoundReversal,
       cpuAutoPick: true,
       aiAutoPick: isAuto,
-      ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),
-      ...(draftSettings.c2cConfig ? { c2cConfig: draftSettings.c2cConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftDevyConfig ? { devyConfig: firstDraftDevyConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftC2cConfig ? { c2cConfig: firstDraftC2cConfig as Prisma.InputJsonValue } : {}),
       ...(keeperBootstrap
         ? {
             keeperConfig: keeperBootstrap.draftKeeperConfig as unknown as Prisma.InputJsonValue,

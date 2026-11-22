@@ -30,7 +30,7 @@ type NegotiationSweetener = {
   }
 }
 
-export type NegotiationBlock = {
+type NegotiationBlock = {
   dmMessages: NegotiationMessage[]
   counters: NegotiationCounter[]
   sweeteners: NegotiationSweetener[]
@@ -39,7 +39,7 @@ export type NegotiationBlock = {
 
 export type NegotiationData = NegotiationBlock
 
-export type NegotiationTone = NegotiationMessage["tone"]
+type NegotiationTone = NegotiationMessage["tone"]
 
 type Props = {
   open: boolean

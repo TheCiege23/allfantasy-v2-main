@@ -1,6 +1,6 @@
 import { PricedAsset, pricePlayer, pricePick, ValuationContext, UserTrade, TradeDelta, PickInput } from './hybrid-valuation';
 
-export interface AlternativeOption {
+interface AlternativeOption {
   label: string;
   assets: PricedAsset[];
   totalValue: number;

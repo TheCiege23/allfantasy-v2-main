@@ -17,7 +17,7 @@ export const DEFAULT_PLAYER_NEWS_LEVEL: PlayerNewsLevel = 'starters'
 
 /** How a person is connected to the player the news is about. */
 export type PlayerNewsRelation = 'starter' | 'rostered' | 'player_follower' | 'team_follower'
-export type PlayerNewsRoute = 'instant' | 'digest' | 'drop'
+type PlayerNewsRoute = 'instant' | 'digest' | 'drop'
 
 export function routePlayerNews(level: PlayerNewsLevel, _relation: PlayerNewsRelation, _opts: { instantWorthy: boolean }): PlayerNewsRoute {
   if (level === 'off') return 'drop'

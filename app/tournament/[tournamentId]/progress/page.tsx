@@ -10,11 +10,6 @@ export default function TournamentProgressPage() {
   const { shell, rounds, tournamentLeagues, conferences, participant } = ctx
   const [tab, setTab] = useState<'bracket' | 'list'>('bracket')
 
-  const myConf = useMemo(
-    () => conferences.find((c) => c.id === participant?.currentConferenceId) ?? conferences[0],
-    [conferences, participant?.currentConferenceId],
-  )
-
   const byRound = useMemo(() => {
     const m = new Map<string, typeof tournamentLeagues>()
     for (const tl of tournamentLeagues) {

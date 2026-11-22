@@ -2,6 +2,10 @@
  * Draft access: league owner or commissioner can access; members can view/submit when on clock.
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
+import { isImportViewer } from '@/lib/league/importViewers'
+import { listHeldTeams, rememberedActiveTeamIds } from '@/lib/league/viewerTeams'
+import { chooseDraftRosterId, resolveOnClockRosterIdForLeague } from './onClockRoster'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
@@ -63,6 +67,9 @@ export async function canAccessLeagueDraft(leagueId: string, userId: string | un
   })
   if (team) return true
   if (await acceptedCoOwnerRosterId(leagueId, userId)) return true
+  // A league mate with no team who joined an already-imported league may read it (lib/league/importViewers.ts).
+  const viewerLeague = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  if (isImportViewer(viewerLeague?.settings, userId)) return true
   return (await getDevBypassFallbackRosterId(leagueId, userId)) != null
 }
 
@@ -78,10 +85,10 @@ export async function canSubmitPickForRoster(
   if (await isCommissioner(leagueId, userId)) return true
   const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   if (!roster) return false
-  if (roster.platformUserId === userId) return true
+  if (isRosterManagedBy(roster, userId)) return true
   if (await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)) return true
 
   const devFallbackRosterId = await getDevBypassFallbackRosterId(leagueId, userId)
@@ -91,22 +98,47 @@ export async function canSubmitPickForRoster(
 }
 
 /**
+ * Every roster this user may act for in the league's draft: each team they hold, or, holding none, the
+ * team they co-own (then the dev-bypass fallback). A manager who runs several teams is on the clock
+ * whenever ANY of these is, so "is it my turn" must be asked of the whole list.
+ */
+export async function getCurrentUserRosterIdsForLeague(
+  leagueId: string,
+  userId: string | undefined
+): Promise<string[]> {
+  if (!userId) return []
+  const held = await listHeldTeams(leagueId, userId)
+  if (held.length > 0) return held.map((team) => team.rosterId)
+  const coOwnedRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
+  if (coOwnedRosterId) return [coOwnedRosterId]
+  const devFallbackRosterId = await getDevBypassFallbackRosterId(leagueId, userId)
+  return devFallbackRosterId ? [devFallbackRosterId] : []
+}
+
+/**
  * Current user's roster id for this league (for draft room: "am I on the clock?" and auto-pick).
- * Uses platformUserId = userId; returns null if user has no roster in the league.
+ * Returns null if the user has no roster in the league.
+ *
+ * With several teams this is the one named by `requestedRosterId` when the user holds it; otherwise the
+ * one on the clock in the league's live draft, so "is it my turn" and "pick for my team" are about the
+ * team that is up; otherwise the team they last switched to; otherwise their first.
  */
 export async function getCurrentUserRosterIdForLeague(
   leagueId: string,
-  userId: string | undefined
+  userId: string | undefined,
+  requestedRosterId?: string | null
 ): Promise<string | null> {
-  if (!userId) return null
-  const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
-    select: { id: true },
-  })
-  if (roster) return roster.id
-  const coOwnedRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-  if (coOwnedRosterId) return coOwnedRosterId
-  return getDevBypassFallbackRosterId(leagueId, userId)
+  const rosterIds = await getCurrentUserRosterIdsForLeague(leagueId, userId)
+  if (rosterIds.length <= 1) return rosterIds[0] ?? null
+  // Several teams: the one named, else the one on the clock (so the room is always about the team that
+  // is up), else the team they last switched to, else the first.
+  const requested = typeof requestedRosterId === 'string' ? requestedRosterId.trim() : ''
+  if (requested && rosterIds.includes(requested)) return requested
+  const [onClockRosterId, rememberedRosterIds] = await Promise.all([
+    resolveOnClockRosterIdForLeague(leagueId).catch(() => null),
+    rememberedActiveTeamIds(),
+  ])
+  return chooseDraftRosterId({ rosterIds, onClockRosterId, rememberedRosterIds })
 }
 
 /**
@@ -121,8 +153,8 @@ export async function canSubmitDispersalPickForUser(
   if (!userId) return false
   const roster = await prisma.roster.findFirst({
     where: { id: rosterId, leagueId },
-    select: { id: true, platformUserId: true },
+    select: { id: true, platformUserId: true, managerUserId: true },
   })
   if (!roster) return false
-  return roster.platformUserId === userId || await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)
+  return isRosterManagedBy(roster, userId) || await isAcceptedCoOwnerForRoster(leagueId, rosterId, userId)
 }

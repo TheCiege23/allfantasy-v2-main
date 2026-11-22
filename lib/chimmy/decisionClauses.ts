@@ -29,7 +29,7 @@ const CLAUSE_BREAK = new RegExp(
   'i',
 )
 
-export type CompoundDecision = {
+type CompoundDecision = {
   /** The first decision clause: the only text any engine sees. */
   primary: string
   /** Every later decision clause, left unanswered and named back to the user. */

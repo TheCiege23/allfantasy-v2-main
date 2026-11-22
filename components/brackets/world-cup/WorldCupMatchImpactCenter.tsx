@@ -93,7 +93,7 @@ type MatchImpact = {
   championName: string | null
 }
 
-export type WorldCupMatchImpactCenterProps = {
+type WorldCupMatchImpactCenterProps = {
   challengeId: string
   picks: WorldCupPickView[]
   matches: WorldCupMatchView[]

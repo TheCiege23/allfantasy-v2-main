@@ -13,6 +13,16 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `R-05` | `headshot` is **omitted**, not null, when ESPN has no photo; the derived CDN URL then **404s** | 40/49 athletes carry it; all 40 load; all 9 without it 404 at `.../mens-college-basketball/players/full/{id}.png`. So the field is authoritative — no point constructing URLs for athletes that lack it. |
 | `R-06` | `jersey` is a **string** | `"5"`, `"55"`. `SportsPlayer.number` is an int. |
 
+## Resolved by probe, 2026-11-19 — NBA, NHL and MLB team lists, do NOT re-test
+
+| ID | Finding | Evidence |
+|---|---|---|
+| `R-07` | `teams?limit=1000` returns every club: NBA **30**, NHL **32**, MLB **30**, all `isActive`, none `isAllStar` | `fixtures/teams.{NBA,NHL,MLB}.json`, committed untrimmed; counts in `ENDPOINTS.yaml` `teams.measured_2026_11_19` |
+| `R-08` | The list is current: NHL has **Utah Mammoth** (`UTAH`) and no Arizona; MLB has **Athletics** (`ATH`, no city) and no Oakland | Same fixtures. `lib/sport-teams/SportTeamMetadataRegistry.ts` listed NHL `ARI` and MLB `OAK` until 2026-11-19; it now builds its NBA, MLB and NHL lists from these captures (via `lib/league/copyLeagueTeamTables.ts`), keeping the codes providers send (`CWS`), and `__tests__/sport-teams/team-registry-current.test.ts` pins it |
+| `R-09` | Each team's default 500px crest is `teamlogos/<sport>/500/<abbreviation lower-case>.png`; the White Sox are `CHW`/`chw.png` (Rolling Insights and the registry say `CWS`) | `logos[]` with `rel` `default`, for all 92 teams. Crests from this CDN were already in use for every sport's team logo; no new image-rights question (compare `E-05`, which is about player headshots) |
+| `R-10` | NFL `teams?limit=1000` returns all **32** clubs; Washington is `WSH`/`wsh.png`, and `lib/sport-teams/SportTeamMetadataRegistry.ts` built `was.png`. Both files load from the CDN (checked 2026-11-19), so nothing was broken; the key is now `wsh` to match the capture | `fixtures/teams.NFL.json`, committed untrimmed; `__tests__/league/copy-league-team-tables.test.ts` checks every NFL crest the app builds against it |
+| `R-11` | Every team in the four captures has a dark-background crest, `rel` `["full","dark"]`, at the default crest's path with `/500/` → `/500-dark/` | `fixtures/teams.{NFL,NBA,NHL,MLB}.json`; `darkCrestUrl` in `lib/league/copyLeague.ts` |
+
 ## Measured against our data, 2026-10-01 (read-only, no provider calls)
 
 | ID | Finding |
@@ -178,3 +188,38 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   so for those regular-season week numbers a team's "earliest kickoff that week" is an August preseason
   game. The ESPN writer reads `seasonType: 'regular'` rows only for this reason.
 
+
+## Team-defense (D/ST) scoring, 2026-11-17 — resolved from committed fixtures and season stats, no probe
+
+- `D-02` RESOLVED, FIXTURE ONLY: every NFL team-defense scoring rule is `points: 0` with its real weight in
+  `pointsOverrides["16"]` (lineup slot 16 = D/ST). Measured in `fixtures/fantasy-league.NFL.2026.json`: 27 of
+  46 `scoringItems` carry an override, every override is keyed `"16"`, and wherever an item has both a non-zero
+  `points` and an override (93, 101–104, 206, 209) the two are equal. The importer read `points` only, so every
+  imported ESPN league stored its D/ST rules as 0. It now reads the slot-16 override when `points` is 0.
+- `D-03` RESOLVED, NO ESPN PROBE: ESPN D/ST stat ids → Sleeper keys, derived by the hand-run
+  `scripts/compare-espn-sleeper-stat-ids.mjs` (its season-total ESPN read predates this note; Sleeper's
+  public weekly DEF stats supplied per-game points allowed). Proof is the `teamDefense` section of
+  `lib/scoring-defaults/espn-stat-id-evidence.json`; the mapping is in `ScoringKeyAliasResolver.ts`.
+  `S-01` (past-week ESPN lineups) is NOT touched by this and stays declined.
+  - Points-allowed bucket edges were SEARCHED against Sleeper's per-game points allowed, not recalled:
+    0 | 1–6 | 7–13 | 14–17 | 18–21 | 22–27 | 28–34 | 35–45 | 46+.
+  - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
+  - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
+    carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.
+
+
+## Knockout / total-points league with no schedule, 2026-11-20 — recorded without probing
+
+- `KO-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
+  scores stored, so its Guilly tab has nothing to show. Measured on production, read-only: the league
+  syncs daily (`syncStatus: synced`, 18 rosters of 15 players), and its matchup sync state
+  (`SportsDataCache` key `external_matchup_sync:espn:<leagueId>:2026`) reads `status: synced,
+  weeksWritten: 0, weeksUnchanged: 0, soloRowsWritten: 0` in NFL week 11. Per the note on that counter in
+  `lib/import-os/collector/externalMatchupParity.ts`, all three at zero means ESPN served NO schedule
+  entries for this league, paired or solo; unpaired entries would have landed as solo rows. It is the
+  only one of 10 in-season ESPN leagues with no `WeeklyMatchup` rows.
+  - What is not known: where ESPN carries each team's points per week for a league with no schedule
+    (a standings or team view, or per-period team totals), and that view's shape.
+    `fixtures/fantasy-league.NFL.2026.json` is a head-to-head league and cannot answer it.
+  - Not probed. Resolving it needs a capture of this league format through `scripts/probe.sh`, committed
+    as a fixture in the same change, and the owner's go-ahead.

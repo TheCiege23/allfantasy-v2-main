@@ -376,7 +376,7 @@ export async function generateWorldCupChimmyPrivateReply(input: {
     model = isGeneralDeterministicReply ? "sports-cache" : "policy"
     reply = deterministic
   } else if (input.deterministicOnly) {
-    reply = "I can answer saved pool questions here, but deeper Chimmy AI analysis requires AF Pro. Ask me who is leading, explain the scoring, summarize this pool, or show your path to win and I will use only stored pool data."
+    reply = "I can answer saved pool questions here, but deeper Chimmy analysis requires AF Pro. Ask me who is leading, explain the scoring, summarize this pool, or show your path to win and I will use only stored pool data."
   } else if (!input.context || grounding.dataQuality.confidence === "none") {
     provider = "unavailable"
     model = "policy"
@@ -535,13 +535,13 @@ export async function generateWorldCupChimmyPrivateReply(input: {
 
     if (cacheResult.cacheHit) {
       // Served from cache — no LLM call was made
-      reply = cacheResult.text || "I could not reach Chimmy AI right now. Your prompt stayed private, and you can try again in a moment."
+      reply = cacheResult.text || "I could not reach Chimmy right now. Your prompt stayed private, and you can try again in a moment."
       provider = "cache"
       model = "cache"
       validatorResult = "clean" // cached text was already validated
     } else if (!cacheResult.text) {
       // LLM was unavailable
-      reply = "I could not reach Chimmy AI right now. Your prompt stayed private, and you can try again in a moment."
+      reply = "I could not reach Chimmy right now. Your prompt stayed private, and you can try again in a moment."
       provider = cacheResult.provider ?? "unavailable"
       model = cacheResult.model ?? "unavailable"
       validatorResult = validatorResult ?? "unavailable"

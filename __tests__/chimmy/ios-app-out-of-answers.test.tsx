@@ -122,11 +122,11 @@ describe('the Chimmy drawer in the iOS app', () => {
   })
 })
 
-describe('the AI-access line in the legacy right rail', () => {
+describe('Chimmy-access line in the legacy right rail', () => {
   it('in the app: what the account has, never a purchase', () => {
-    expect(inIosAppAccessLine({ hasSubscription: true, tokenBalance: 0 })).toBe('Premium AI active.')
-    expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 1 })).toBe('1 AI token available.')
-    expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 30 })).toBe('30 AI tokens available.')
+    expect(inIosAppAccessLine({ hasSubscription: true, tokenBalance: 0 })).toBe('Premium Chimmy active.')
+    expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 1 })).toBe('1 Chimmy token available.')
+    expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 30 })).toBe('30 Chimmy tokens available.')
     expect(inIosAppAccessLine({ hasSubscription: false, tokenBalance: 0 })).toBe('2 free Chimmy questions a day.')
   })
 

@@ -437,7 +437,7 @@ export default function LeagueHomeShellPage() {
                 Refresh League Data
               </button>
               <Link href="/legacy" className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-center text-sm text-cyan-200 hover:bg-cyan-500/20">
-                Open Legacy AI
+                Open Legacy Chimmy
               </Link>
             </div>
           </div>
@@ -637,7 +637,7 @@ export default function LeagueHomeShellPage() {
             )}
 
             {activeTab === "Waivers" && (
-              <Card title="Waiver AI Panel (Legacy Market Refresh)">
+              <Card title="Waiver Chimmy Panel (Legacy Market Refresh)">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => void refreshWaiverPanel()}
@@ -661,13 +661,13 @@ export default function LeagueHomeShellPage() {
                     </ul>
                   </div>
                 ) : (
-                  <InlineNote text="No waiver AI data yet. Refresh to pull live market/waiver signals." />
+                  <InlineNote text="No waiver Chimmy data yet. Refresh to pull live market/waiver signals." />
                 )}
               </Card>
             )}
 
             {activeTab === "Trades" && (
-              <Card title="Trade AI Panel (Legacy Trade Command Center)">
+              <Card title="Trade Chimmy Panel (Legacy Trade Command Center)">
                 {tradeTab.loading ? (
                   <InlineNote text="Loading trade command center..." />
                 ) : tradeTab.insufficientData ? (
@@ -709,7 +709,7 @@ export default function LeagueHomeShellPage() {
             )}
 
             {activeTab === "Draft" && (
-              <Card title="Draft AI Panel (AF Legacy Draft)">
+              <Card title="Draft Chimmy Panel (AF Legacy Draft)">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <label className="text-xs text-white/70">Round</label>
                   <input

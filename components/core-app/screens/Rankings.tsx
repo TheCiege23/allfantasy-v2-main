@@ -27,10 +27,14 @@ import { PhoneFold } from '@/components/core-app/rankings/PhoneFold'
 import { TrendLine } from '@/components/core-app/rankings/TrendLine'
 import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilterBar'
 import { RankingsBoardHead, RankingsHero } from '@/components/core-app/rankings/RankingsHero'
+import { RankingsBoardFoot, RankingsYouRow } from '@/components/core-app/rankings/RankingsGuide'
+import { rankingsHeadline } from '@/lib/core-app/rankingsGuide'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
 import AfRankingsPage from '@/components/rankings/AfRankingsClient'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { RankingsMoreNote } from '@/components/core-app/rankings/RankingsMoreNote'
 
 /**
  * Rankings — handoff 14a, rebuilt around three separate scopes.
@@ -337,48 +341,11 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
   const boardCols = boardColumns(g, data)
   return (
     <>
-      {g.you ? (
-        <section className="af-rk-card af-rk-youstrip" aria-label="Your place on this board">
-          <div>
-            <p className="af-rk-eyebrow">You on {g.label}</p>
-            <p className="af-rk-bigrank">
-              #{g.you.rank}
-              <small> of {g.you.of}</small>
-            </p>
-            <p className="af-rk-sub">
-              {g.metricLabel}: <b>{g.you.display}</b>
-            </p>
-          </div>
-          <MovementChips m={g.you.movement} tracked={g.movementTracked} />
-          <div className="af-rk-headact">
-            <Link className="af-rk-btn" href={`${g.rows.find((r) => r.isYou)?.explainHref ?? '#'}`} scroll={false}>
-              Why this rank?
-            </Link>
-            <Link className="af-rk-btn" href={`/core/rankings${qs([['scope', 'portfolio'], ...filterParams(data.filters)])}`}>
-              My portfolio
-            </Link>
-            <a
-              className="af-rk-btn"
-              href={chimmyHref(
-                `I'm #${g.you.rank} of ${g.you.of} on the AllFantasy ${g.label} board (${g.metricLabel}: ${g.you.display})` +
-                  (g.you.movement.sevenDay ? `, ${g.you.movement.sevenDay > 0 ? 'up' : 'down'} ${Math.abs(g.you.movement.sevenDay)} in 7 days` : '') +
-                  (g.rivals[0] ? `. @${g.rivals[0].handle} is right above me at ${g.rivals[0].display}` : '') +
-                  '. What is holding my rank back, and what would move it most?',
-              )}
-            >
-              Ask Chimmy
-            </a>
-          </div>
-        </section>
-      ) : data.signedIn ? (
-        <p className="af-rk-note">
-          You are not on this board yet — it needs {data.filters.minSample}+ league-seasons with results
-          {data.filtersLabel !== 'All leagues' ? ` in ${data.filtersLabel}` : ''}. Your portfolio tab shows everything you have imported.
-        </p>
-      ) : null}
-
-      {g.rivals.length > 0 ? <RivalsCard g={g} /> : null}
-
+      {/*
+        2026-11-14: the "You on Overall #18 of 19" box is gone — the headline says your place, and the row
+        under it (RankingsYouRow) says how it moved, with Why and Ask Chimmy. Its "My portfolio" button
+        repeated the tab above it. A manager not on the board is told so by the headline.
+      */}
       {/*
         Tablet and desktop: when a row is being explained, the board and the explanation sit side by
         side, so "why" never pushes the board off screen. Phone: stacked, explanation first.
@@ -387,12 +354,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
       <ExplainPanel g={g} data={data} />
 
       <section className="af-rk-card af-rk-explainsplit-main">
-        <RankingsBoardHead
-          shown={g.rows.length}
-          population={data.population}
-          you={g.you ? { rank: g.you.rank, of: g.you.of } : null}
-          overall={g.board === 'overall'}
-        />
+        <RankingsBoardHead />
         <PhoneFold id="af-rk-board-controls" summary={boardControlsSummary(g, boardCols)}>
         {g.divisionFilter ? (
           <div className="af-rk-classbar" role="group" aria-label="Who is on this board" data-active={g.divisionFilter.active ? 'true' : 'false'}>
@@ -453,25 +415,27 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
           />
         )}
 
-        <p className="af-rk-note">
-          {data.population === 0
-            ? 'No manager has been ranked yet.'
-            : `Ranked across ${g.rows.length} of the ${data.population} ${data.population === 1 ? 'manager' : 'managers'} whose careers have been scored — not the whole user base.`}
-          {g.belowSample > 0
-            ? ` ${g.belowSample} more ${g.belowSample === 1 ? 'is' : 'are'} under the ${data.filters.minSample}-league-season minimum.`
-            : ''}
-          {g.unmeasured > 0 ? ` ${g.unmeasured} ${g.unmeasured === 1 ? 'has' : 'have'} nothing this board can measure.` : ''}
-          {g.movementTracked
-            ? g.trackingSince
-              ? ` Movement is measured against daily snapshots kept since ${fmtDay(g.trackingSince)}.`
-              : ' Movement starts once the first daily snapshot is written.'
-            : ' Movement is shown on the unfiltered Overall board only.'}
-        </p>
-        <p className="af-rk-fresh">
-          <b>Freshness</b> Built from {g.freshness.ledgerRows.toLocaleString(getAppIntlLocale())} league-seasons · newest import{' '}
-          {fmtDate(g.freshness.newestImport)} · least recently updated manager {fmtDate(g.freshness.stalestManager)} ·
-          calculated {fmtStamp(data.computedAt)}
-        </p>
+        <RankingsBoardFoot
+          shown={g.rows.length}
+          population={data.population}
+          belowSample={g.belowSample}
+          minSample={data.filters.minSample}
+          updated={fmtStamp(data.computedAt)}
+        >
+          {g.board === 'overall' ? <MethodList /> : null}
+          <p className="af-rk-note">
+            {g.unmeasured > 0 ? `${g.unmeasured} ${g.unmeasured === 1 ? 'manager has' : 'managers have'} nothing this board can measure. ` : ''}
+            {g.movementTracked
+              ? g.trackingSince
+                ? `Movement is measured against daily snapshots kept since ${fmtDay(g.trackingSince)}.`
+                : 'Movement starts once the first daily snapshot is written.'
+              : 'Movement is shown on the unfiltered Overall board only.'}
+          </p>
+          <p className="af-rk-fresh">
+            <b>Freshness</b> Built from {g.freshness.ledgerRows.toLocaleString(getAppIntlLocale())} league-seasons · newest import{' '}
+            {fmtDate(g.freshness.newestImport)} · least recently updated manager {fmtDate(g.freshness.stalestManager)}
+          </p>
+        </RankingsBoardFoot>
         {/* Inside the board's card: sticky only while the board is on screen, never over the "you" strip above it. */}
         {g.you ? (
           <YouBar
@@ -484,7 +448,17 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
       </section>
       </div>
 
-      <MethodCard />
+      {/*
+        2026-11-20 — "More detail" (owner: the core site is confusing). The board and your row lead the
+        page. "Next to pass" sat above the board and repeated the gap the headline already gives ("4.4
+        behind @alpha"), so it moved, unchanged, into the one fold under the board. How the board is
+        scored stays in the board's own foot (RankingsBoardFoot), next to the "of N" it explains.
+      */}
+      {g.rivals.length > 0 ? (
+        <MoreDetail note={<RankingsMoreNote which="community" />} testId="rk-more">
+          <RivalsCard g={g} />
+        </MoreDetail>
+      ) : null}
     </>
   )
 }
@@ -535,11 +509,14 @@ function RivalsCard({ g }: { g: GlobalView }) {
   )
 }
 
-function MethodCard() {
+/**
+ * How the Overall board is scored — inside "How this board is scored" under the board (2026-11-14). It
+ * was its own card at the foot of the page, and the board head carried the same weights as a legend.
+ */
+function MethodList() {
   const pct = (n: number) => `${Math.round(n * 100)}%`
   return (
-    <section className="af-rk-card">
-      <p className="af-rk-eyebrow">How the Overall board is scored</p>
+    <>
       <ul className="af-rk-method">
         <li>
           <b>Win rate · {pct(SCORE_WEIGHTS.winRate)}</b> per game, so a 13- and a 17-week season weigh by games played.
@@ -559,7 +536,7 @@ function MethodCard() {
         Platform and league type never change a score — they are filters. Small samples are pulled toward average.{' '}
         <Link href="/core/rankings?view=faq#rk-faq-score">Full method →</Link>
       </p>
-    </section>
+    </>
   )
 }
 
@@ -666,7 +643,7 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         </p>
       ) : null}
       <p className="af-rk-note">
-        XP is a ladder, not a ranking: losses never subtract, and imported Sleeper, ESPN and Yahoo seasons count the same
+        XP is a ladder, not a ranking: losses never subtract, and imported seasons count the same
         as leagues played here. Playoff berths only count once games have been played.
       </p>
     </section>
@@ -773,50 +750,6 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
       </div>
 
       <section className="af-rk-card">
-        <p className="af-rk-eyebrow">Where my score comes from</p>
-        {s.score == null ? (
-          <p className="af-rk-empty">No league-season in this view has a result yet, so there is nothing to score.</p>
-        ) : (
-          <ComponentBars score={s} />
-        )}
-      </section>
-
-      <section className="af-rk-card">
-        <p className="af-rk-eyebrow">Trends</p>
-        <div className="af-rk-trends">
-          <TrendLine
-            title="7-day rank"
-            invert
-            points={p.daily.map((d) => ({ label: d.label, value: d.rank }))}
-            format={(n) => String(n)}
-            empty={p.trackingSince ? 'No daily snapshot in the last week includes you.' : 'Daily snapshots have not started yet.'}
-          />
-          <TrendLine
-            title="Weekly rank"
-            invert
-            points={p.weekly.map((d) => ({ label: `Week of ${d.label}`, value: d.rank }))}
-            format={(n) => String(n)}
-            empty={p.trackingSince ? `Weekly points start ${fmtDay(p.trackingSince)}; none recorded yet.` : 'Weekly snapshots have not started yet.'}
-          />
-          <TrendLine
-            title="Score by season"
-            points={p.seasons.map((t) => ({ label: `${t.season} (${t.record})`, value: t.seasonScore }))}
-            empty="No season has a result yet."
-          />
-          <TrendLine
-            title="Career score"
-            points={p.seasons.map((t) => ({ label: `Through ${t.season}`, value: t.careerScore }))}
-            empty="No season has a result yet."
-          />
-        </div>
-        <p className="af-rk-note">
-          Season and career lines are computed from your league-seasons. Daily and weekly lines come only from
-          snapshots taken at the time{p.trackingSince ? `, kept since ${fmtDay(p.trackingSince)}` : ''} — they are never
-          rebuilt after the fact.
-        </p>
-      </section>
-
-      <section className="af-rk-card">
         <p className="af-rk-eyebrow">
           My league-seasons <TopicTip topic="scoringIndex" />
           <span className="af-rk-spacer" />
@@ -853,7 +786,58 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
         </p>
       </section>
 
-      <Ladder tiers={data.ladder} />
+      {/*
+        2026-11-20 — "More detail". My portfolio leads with my score, my level and my league-seasons. How
+        the score is built (the component table), the trend lines and the level ladder moved, unchanged,
+        into the one fold at the bottom.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="portfolio" />} testId="rk-more">
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">Where my score comes from</p>
+          {s.score == null ? (
+            <p className="af-rk-empty">No league-season in this view has a result yet, so there is nothing to score.</p>
+          ) : (
+            <ComponentBars score={s} />
+          )}
+        </section>
+
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">Trends</p>
+          <div className="af-rk-trends">
+            <TrendLine
+              title="7-day rank"
+              invert
+              points={p.daily.map((d) => ({ label: d.label, value: d.rank }))}
+              format={(n) => String(n)}
+              empty={p.trackingSince ? 'No daily snapshot in the last week includes you.' : 'Daily snapshots have not started yet.'}
+            />
+            <TrendLine
+              title="Weekly rank"
+              invert
+              points={p.weekly.map((d) => ({ label: `Week of ${d.label}`, value: d.rank }))}
+              format={(n) => String(n)}
+              empty={p.trackingSince ? `Weekly points start ${fmtDay(p.trackingSince)}; none recorded yet.` : 'Weekly snapshots have not started yet.'}
+            />
+            <TrendLine
+              title="Score by season"
+              points={p.seasons.map((t) => ({ label: `${t.season} (${t.record})`, value: t.seasonScore }))}
+              empty="No season has a result yet."
+            />
+            <TrendLine
+              title="Career score"
+              points={p.seasons.map((t) => ({ label: `Through ${t.season}`, value: t.careerScore }))}
+              empty="No season has a result yet."
+            />
+          </div>
+          <p className="af-rk-note">
+            Season and career lines are computed from your league-seasons. Daily and weekly lines come only from
+            snapshots taken at the time{p.trackingSince ? `, kept since ${fmtDay(p.trackingSince)}` : ''} — they are never
+            rebuilt after the fact.
+          </p>
+        </section>
+
+        <Ladder tiers={data.ladder} />
+      </MoreDetail>
     </>
   )
 }
@@ -958,11 +942,17 @@ function LeagueBody({ league }: { league: LeagueView }) {
           </div>
         </div>
       )}
-      <LeaguePowerCard league={league} />
-      <p className="af-rk-fresh">
-        <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
-        {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
-      </p>
+      {/*
+        2026-11-20 — "More detail". The standings are the page. The stored power score and the sync line
+        moved, unchanged, into the one fold at the foot of the card.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="league" />} testId="rk-more">
+        <LeaguePowerCard league={league} />
+        <p className="af-rk-fresh">
+          <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
+          {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
+        </p>
+      </MoreDetail>
     </section>
   )
 }
@@ -1244,7 +1234,14 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
         ) : null}
       </section>
 
-      <ClassMethodCard />
+      {/*
+        2026-11-20 — "More detail". Your Class, your rated weeks (the "you" bar jumps to them) and the
+        board stay on screen; how Class is rated moved, unchanged, into the one fold at the bottom. The
+        empty state keeps it in its card — there it is the only thing to read.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="class" />} testId="rk-more">
+        <ClassMethodCard />
+      </MoreDetail>
     </>
   )
 }
@@ -1397,41 +1394,61 @@ function portfolioTabs(data: RankingsData) {
 /* ─────────────────────────────── the screen ─────────────────────────────── */
 
 export function Rankings({ data, leagueId = null }: { data: RankingsData; leagueId?: string | null }) {
-  const compareHref = `/core/rankings${qs([['view', 'compare'], ...filterParams(data.filters)])}`
   const hidden: Array<[string, string]> = [
     ...(data.scope !== 'global' ? ([['scope', data.scope]] as Array<[string, string]>) : []),
     ...(data.global && data.global.board !== 'overall' ? ([['board', data.global.board]] as Array<[string, string]>) : []),
   ]
   const resetHref = `/core/rankings${qs(hidden)}`
+  const g = data.scope === 'global' ? data.global : null
+  /*
+    2026-11-14: two buttons. Compare, Your Career and Find a League moved to More tools at the foot of the
+    page (lib/core-app/moreTools.ts). With a row under the headline they join it, so every button on the
+    top of the page is in one row; without one they sit beside the title as before.
+  */
+  const headActions = (
+    <>
+      {data.shareUrl ? (
+        <span className="af-rk-share">
+          <ShareMomentButton url={data.shareUrl} filename="allfantasy-rank.png" title="My AllFantasy rank" label="Share rank card" />
+        </span>
+      ) : null}
+      <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
+        How ranking works
+      </Link>
+    </>
+  )
 
   return (
     <div className="af-rk">
       <RankingsHero
+        headline={rankingsHeadline(data)}
+        scope={data.scope}
+        /* The community board says when it was worked out on the line under it (RankingsBoardFoot). */
         computedLine={
-          <>
-            Calculated {fmtStamp(data.computedAt)} from {data.population} ranked{' '}
-            {data.population === 1 ? 'manager' : 'managers'}
-          </>
+          g ? null : (
+            <>
+              Calculated {fmtStamp(data.computedAt)} from {data.population} ranked{' '}
+              {data.population === 1 ? 'manager' : 'managers'}
+            </>
+          )
         }
-        actions={
-          <>
-            {data.shareUrl ? (
-              <span className="af-rk-share">
-                <ShareMomentButton url={data.shareUrl} filename="allfantasy-rank.png" title="My AllFantasy rank" label="Share rank card" />
-              </span>
-            ) : null}
-            <Link className="af-rk-btn" href={compareHref}>
-              Compare
-            </Link>
-            <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
-              How ranking works
-            </Link>
-            <Link className="af-rk-btn" href="/core/career">Your Career</Link>
-            <Link className="af-rk-btn" href="/find-league">Find a League</Link>
-          </>
+        belowHead={
+          g?.you ? (
+            <RankingsYouRow
+              movement={g.movementTracked ? g.you.movement : null}
+              whyHref={g.rows.find((r) => r.isYou)?.explainHref ?? null}
+              chimmyHref={chimmyHref(
+                `I'm #${g.you.rank} of ${g.you.of} on the AllFantasy ${g.label} board (${g.metricLabel}: ${g.you.display})` +
+                  (g.you.movement.sevenDay ? `, ${g.you.movement.sevenDay > 0 ? 'up' : 'down'} ${Math.abs(g.you.movement.sevenDay)} in 7 days` : '') +
+                  (g.rivals[0] ? `. @${g.rivals[0].handle} is right above me at ${g.rivals[0].display}` : '') +
+                  '. What is holding my rank back, and what would move it most?',
+              )}
+              extra={headActions}
+            />
+          ) : null
         }
+        actions={g?.you ? null : headActions}
         you={data.you}
-        community={data.global?.you ? { rank: data.global.you.rank, of: data.global.you.of } : null}
         // My portfolio carries the full level card (crest, tier, XP breakdown) in its own body.
         showLevel={data.scope !== 'portfolio'}
       />
@@ -1447,6 +1464,7 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
           options={data.options}
           hidden={hidden}
           resetHref={resetHref}
+          label={data.filtersLabel}
         />
       ) : null}
 

@@ -13,9 +13,9 @@
 export const MIN_SLOTS = 2
 export const MAX_SLOTS = 8
 /** Slots closer than this are one slot offered twice. */
-export const MIN_SLOT_GAP_MS = 60 * 60 * 1000
+const MIN_SLOT_GAP_MS = 60 * 60 * 1000
 /** A slot must be at least this far ahead, or the league cannot answer in time. */
-export const MIN_LEAD_MS = 2 * 60 * 60 * 1000
+const MIN_LEAD_MS = 2 * 60 * 60 * 1000
 
 export type SlotError = 'too_few' | 'too_many' | 'invalid_time' | 'in_the_past' | 'too_close'
 
@@ -65,7 +65,7 @@ export function bestSlot(slots: readonly SlotTally[]): SlotTally | null {
   return [...answered].sort((a, b) => b.count - a.count || Date.parse(a.startsAt) - Date.parse(b.startsAt))[0]!
 }
 
-export type ReminderWindow = '24h' | '1h'
+type ReminderWindow = '24h' | '1h'
 
 /**
  * Which pre-draft reminder is due: the day-before one from 25h out down to 2h, the hour-before one in

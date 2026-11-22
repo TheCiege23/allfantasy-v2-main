@@ -64,7 +64,7 @@ export async function POST(
     const { hasAccess } = await new EntitlementResolver().resolveForUser(userId, 'pro_draft_ai')
     if (!hasAccess) {
       return NextResponse.json(
-        { error: mode === 'draft_as_me' ? 'AF Pro required to have Chimmy draft like you.' : 'AF Pro required to enable AI queue auto-pick.' },
+        { error: mode === 'draft_as_me' ? 'AF Pro required to have Chimmy draft like you.' : 'AF Pro required to enable Chimmy queue auto-pick.' },
         { status: 403 }
       )
     }

@@ -44,4 +44,3 @@ export function ResponsiveDetails({
   )
 }
 
-export default ResponsiveDetails

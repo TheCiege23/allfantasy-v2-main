@@ -245,6 +245,52 @@ describe('loadSportPointsBase', () => {
     expect(kept).toMatchObject({ ok: false, reason: expect.stringContaining('count this season only') })
   })
 
+  it('scores Fantrax NBA Campus-to-Canton weekly rates from the league season without granting a trade grade', async () => {
+    nbaPlayer('a', 'Alpha', 'C', { points: 24, total_rebounds: 3 }, 24, 2026)
+    db.projections.push({ ...db.projections[0]!, season: 2027, computedAt: NOW, adjustmentFactors: { perGameRates: { points: 999 } } })
+    db.identities[0]!.fantraxId = 'ft-alpha'
+    db.rosters = [{ playerData: { players: ['ft-alpha'] } }]
+    schedule(['BOS', 'NYK'], 3, 'regular', 2026)
+    const league = { id: 'C2C', platform: 'fantrax', season: 2026, leagueType: 'c2c', leagueSize: 12, settings: {} }
+
+    const projected = await loadSportPointsBase({ sport: 'NBA', league, now: NOW, projectionOnly: true })
+    expect(projected).toMatchObject({ ok: true, ctx: { window: { season: 2026 }, valueKind: 'points' } })
+    if (!projected.ok) throw new Error(projected.reason)
+    expect(projected.ctx.rosterIndex?.get('ft-alpha')).toMatchObject({ id: 'a' })
+    expect(projected.ctx.rosterIndex?.get('ft-alpha')?.perGame).toBeCloseTo(27.6)
+    expect(projected.ctx.replacementByPosition.size).toBe(0)
+    expect(projected.ctx.dynasty).toBeUndefined()
+
+    const grade = createSportPointsGrader({ sport: 'NBA', league }, {
+      loadBase: args => loadSportPointsBase({ ...args, now: NOW }),
+    })
+    expect(await grade!.grade([], [])).toMatchObject({ graded: false, reason: expect.stringContaining('c2c league') })
+    expect(await loadSportPointsBase({ sport: 'NBA', league: { ...league, platform: 'sleeper' }, now: NOW, projectionOnly: true }))
+      .toMatchObject({ ok: false, reason: expect.stringContaining('c2c league') })
+  })
+
+  it('reads Fantrax college Campus-to-Canton projections from completed games without enabling trade grades', async () => {
+    const now = new Date('2026-11-22T19:45:00Z')
+    db.identities = [{ id: 'college-player', canonicalName: 'Campus Player', fantraxId: 'ft-campus',
+      rollingInsightsId: 'ri-college', sleeperId: null, position: 'G' }]
+    db.rosters = [{ playerData: { players: ['ft-campus'] } }]
+    db.matchRows = Array.from({ length: 10 }, (_, i) => ({
+      playerId: 'college-player', season: 2026, team: 'DUKE', gameId: 'college-' + i,
+      gameDate: new Date(Date.UTC(2026, 10, i + 1)),
+      normalizedStatMap: { seasonType: 'regular', gameFinal: true, stats: { points: 24, minutes: 1800 } },
+    }))
+    db.games = [{ homeTeam: 'DUKE', awayTeam: 'UNC', seasonType: 'regular', season: 2026, startTime: new Date('2026-12-01T00:00:00Z') }]
+    const league = { id: 'campus', platform: 'fantrax', season: 2026, leagueType: 'c2c', leagueSize: 12,
+      settings: { sportConfig: { categoryPoints: { pts: 2 } } } }
+    const result = await loadSportPointsBase({ sport: 'NCAAB', league, now, projectionOnly: true })
+    if (!result.ok) throw new Error(result.reason)
+    expect(result.ctx.rosterIndex?.get('ft-campus')).toMatchObject({ id: 'college-player', perGame: 48, sampleGames: 10 })
+    expect(result.ctx.replacementByPosition.size).toBe(0)
+    expect(await loadSportPointsBase({ sport: 'NCAAB', league, now })).toMatchObject({
+      ok: false, reason: expect.stringContaining('c2c league'),
+    })
+  })
+
   it('loads an NBA dynasty league with each player’s age and the next rookie draft', async () => {
     nbaPlayer('a', 'Alpha', 'C', { points: 40 })
     nbaPlayer('b', 'Beta', 'C', { points: 30 })
@@ -462,6 +508,33 @@ describe('loadSportPointsBase', () => {
     })
   })
 
+  describe('NHL (goalies on the team-game scale, 2026-11-16)', () => {
+    function nhlPlayer(id: string, name: string, position: string, rates: Record<string, number>, sample: number) {
+      db.projections.push({
+        playerId: id, playerName: name, position, season: 2026,
+        adjustmentFactors: { perGameRates: rates, confidenceReasons: [`${sample} games in the season sample`], sourceSeason: 2025 },
+      })
+      db.identities.push({ id, canonicalName: name, rollingInsightsId: `ri-${id}`, sleeperId: null })
+    }
+    function nhlBoard() {
+      for (let i = 0; i < 14; i++) nhlPlayer(`s${i}`, `Skater ${i}`, ['C', 'LW', 'RW', 'D'][i % 4]!, { goals: 0.2 + i * 0.02, assists: 0.3, shots_on_goal: 2.5 }, 82)
+      // The same per-game line, over 62 games and over 24: a starter and a backup.
+      nhlPlayer('starter', 'Starter', 'G', { win: 0.55, saves: 26, goals_allowed: 2.5 }, 62)
+      nhlPlayer('backup', 'Backup', 'G', { win: 0.55, saves: 26, goals_allowed: 2.5 }, 24)
+      for (let i = 0; i < 4; i++) nhlPlayer(`g${i}`, `Goalie ${i}`, 'G', { win: 0.4, saves: 24, goals_allowed: 3 }, 50)
+    }
+
+    it('🛑 a backup counts for the games he plays — the same line over 24 games is worth 24/62 of the starter’s', async () => {
+      nhlBoard()
+      schedule(['Team A', 'Team B', 'Team C', 'Team D'], 30, null)
+      const out = await loadSportPointsBase({ sport: 'NHL', league: null, format: 'points', now: NOW })
+      if (!out.ok) throw new Error(out.reason)
+      const value = (name: string) => out.ctx.board.find((p) => p.name === name)!.perGame
+      expect(value('Backup') / value('Starter')).toBeCloseTo(24 / 62, 6)
+      expect(sportPointsBasis(out.ctx)).toContain('Goalies count for the share of team games they played')
+    })
+  })
+
   describe('MLB', () => {
     // Stored the way `mlbPerGameRates` writes them: engine keys, per APPEARANCE, target 2027 from 2026.
     type Run = { season?: number; computedAt?: Date }
@@ -494,6 +567,16 @@ describe('loadSportPointsBase', () => {
         mlbPlayer(`old${i}`, `Old Row ${i}`, 'SS', { E: 0.05, PO: 1.2 }, 140, { season: 2027, computedAt: new Date('2026-10-09T07:50:41Z') })
       }
     }
+
+    it('keeps a future season when only a thin preseason schedule is posted', async () => {
+      mlbBoard({ season: 2027 })
+      schedule(['Club 0', 'Club 1'], 1, 'pre', 2027)
+      const out = await loadSportPointsBase({ sport: 'MLB', league: null, format: 'points', now: NOW })
+      expect(out).toMatchObject({
+        ok: true,
+        ctx: { window: { season: 2027, gamesRemaining: 162, scheduleKnown: false } },
+      })
+    })
 
     it('reads the newest run, not the highest season on file', async () => {
       flickeredBoard()

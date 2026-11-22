@@ -54,8 +54,7 @@ export default function DraftBoardCoveragePage() {
           { playerName: 'Example Wing', playerId: 'two', position: 'SF', team: 'FA' }]}
         canDraft onRemove={noop} onReorder={noop} autoPickFromQueue={false} onAutoPickFromQueueChange={noop}
         awayMode={false} onAwayModeChange={noop} presentationVariant="redraft_snake" />}
-        intelBody={<div>Intel</div>} chimmyBody={<div>Chimmy</div>} rosterBody={<div>Roster</div>}
-        warRoomBody={<div>AF Legacy</div>} activityBody={<div>Activity</div>} chatBody={<div>Chat</div>} />
+        chimmyBody={<div>Chimmy</div>} rosterBody={<div>Roster</div>} chatBody={<div>Chat</div>} />
     </section>
     {/* Below 1280px the room's dock is the center tab bar; at 768px it gets about 300px, at 1024 about 400. */}
     {[240, 300, 400].map(width => <section key={width} data-testid={`coverage-mid-dock-${width}`} style={{ width }}>

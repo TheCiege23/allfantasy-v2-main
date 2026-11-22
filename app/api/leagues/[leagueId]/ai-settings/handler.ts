@@ -3,11 +3,11 @@
  * PATCH: Update AI feature toggles (commissioner only).
  */
 
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { getLeagueAISettings, updateLeagueAISettings } from '@/lib/ai-settings'
 import type { LeagueAISettings } from '@/lib/ai-settings'
 
@@ -30,7 +30,7 @@ export async function GET(
   try {
     const [settings, commissioner] = await Promise.all([
       getLeagueAISettings(leagueId),
-      isCommissioner(leagueId, userId),
+      canCommissionerAct(leagueId, userId, 'view'),
     ])
     return NextResponse.json({
       settings,
@@ -54,7 +54,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

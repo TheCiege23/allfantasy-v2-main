@@ -1,8 +1,8 @@
 import { playerNamesAgree } from '@/lib/player-identity/externalIdNamespace'
 import { proTeamCode } from '@/lib/player-identity/proFantraxIdentityPlan'
 
-export type SoccerOwnGoal = { player: string; club: string }
-export type SoccerGoalReceipt = { eventId: string; ownGoals: SoccerOwnGoal[] }
+type SoccerOwnGoal = { player: string; club: string }
+type SoccerGoalReceipt = { eventId: string; ownGoals: SoccerOwnGoal[] }
 export const EPL_GOAL_RECEIPT_PREFIX = 'thesportsdb:epl:goals:'
 
 function record(value: unknown): Record<string, unknown> | null {

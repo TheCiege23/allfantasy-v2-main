@@ -16,7 +16,7 @@
 
 import type { EnvelopeRefusal } from './types'
 
-export type RefusalScope =
+type RefusalScope =
   /** Nothing may be answered. Suppresses recommendation AND alternatives. */
   | 'response'
   /**
@@ -29,7 +29,7 @@ export type RefusalScope =
   /** An action cannot be performed. Informational analysis is untouched. */
   | 'action'
 
-export type RefusalSeverity = 'blocking' | 'partial'
+type RefusalSeverity = 'blocking' | 'partial'
 
 export type ScopedRefusal = EnvelopeRefusal & {
   scope: RefusalScope
@@ -43,7 +43,7 @@ export type ScopedRefusal = EnvelopeRefusal & {
  * eventually mark a `response` refusal `partial`, and that combination reads to
  * a renderer as "show the answer anyway".
  */
-export function severityFor(scope: RefusalScope): RefusalSeverity {
+function severityFor(scope: RefusalScope): RefusalSeverity {
   return scope === 'response' ? 'blocking' : 'partial'
 }
 
@@ -74,7 +74,7 @@ export function defaultScopeFor(code: EnvelopeRefusal['code']): RefusalScope {
   return DEFAULT_SCOPE[code] ?? 'response'
 }
 
-export type RefusalEffect = {
+type RefusalEffect = {
   /** Suppress the recommendation and alternatives entirely. */
   suppressAll: boolean
   /** Suppress the team-specific conclusion only. */

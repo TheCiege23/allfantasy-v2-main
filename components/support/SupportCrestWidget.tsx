@@ -282,4 +282,3 @@ export function SupportCrestWidget({ defaultEmail = '' }: { defaultEmail?: strin
   )
 }
 
-export default SupportCrestWidget

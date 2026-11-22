@@ -16,13 +16,13 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
-import { resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
+import { resolveGuillotineLiveWeek, resolveGuillotineWeekState } from '@/lib/guillotine/guillotineCurrentWeek'
 import { getLiveDangerTiers } from '@/lib/guillotine/chopWatchLoad'
 import { claimedPlayerIds } from '@/lib/guillotine/choppedReleases'
 import { fetchAdpByPlayerKey } from '@/lib/redraft-war-room/redraftFreeAgentPool'
@@ -97,7 +97,15 @@ export async function buildGuillotineWarRoomContext(
   const configState: DataState = config ? 'available' : 'missing'
 
   // Current period = latest GuillotinePeriodScore week, else config start, else 1 (shared rule).
-  const { week: currentWeek, latestScoredAt } = await resolveGuillotineWeekState(leagueId, config)
+  const { week: scoredWeek, latestScoredAt } = await resolveGuillotineWeekState(leagueId, config)
+  /*
+   * The war room is about the week being PLAYED: its danger tiers, projections and week label.
+   * It used the latest scored week for all of them, and a week is scored only when it is chopped, so
+   * from week 2 on it ranked the field on a week already settled and its tiers could never be live
+   * (`getLiveDangerTiers` previews the week still to chop). Settled season totals still come from the
+   * last scored week, which is what "scores as of" names.
+   */
+  const currentWeek = await resolveGuillotineLiveWeek(leagueId, config).catch(() => scoredWeek)
 
   // --- roster template → required starters ---
   const requiredByPosition: Record<string, number> = {}
@@ -146,7 +154,7 @@ export async function buildGuillotineWarRoomContext(
 
   type PeriodScoreRow = { rosterId: string; periodPoints: number; seasonPointsCumul: number }
   const periodScores = (await prisma.guillotinePeriodScore
-    .findMany({ where: { leagueId, weekOrPeriod: currentWeek }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
+    .findMany({ where: { leagueId, weekOrPeriod: scoredWeek }, select: { rosterId: true, periodPoints: true, seasonPointsCumul: true } })
     .catch(() => [])) as PeriodScoreRow[]
   const periodByRoster = new Map(periodScores.map((s) => [s.rosterId, s]))
 
@@ -215,7 +223,7 @@ export async function buildGuillotineWarRoomContext(
       rosterId: r.id,
       ownerId: r.platformUserId ?? r.id,
       // An orphan's key is a placeholder, not a name.
-      ownerName: meta?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
+      ownerName: meta?.ownerName ?? (isSeatPlaceholderUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
       teamName: meta?.teamName ?? null,
       isUserTeam: r.platformUserId === userId,
       eliminated: Boolean(st?.choppedAt),
@@ -240,7 +248,9 @@ export async function buildGuillotineWarRoomContext(
       rank: t.eliminated ? null : (danger?.rank ?? null),
       seasonPointsCumul: danger?.seasonPointsCumul ?? score?.seasonPointsCumul ?? 0,
       // This week's score is not saved until the chop; a live row carries it.
-      periodPoints: score?.periodPoints ?? (dangerLive && danger ? danger.projectedPoints : null),
+      // A live row carries this week's score so far. The saved score is last week's unless the week
+      // on screen is itself the last one scored (a finished season), so it is used only then.
+      periodPoints: dangerLive && danger ? danger.projectedPoints : scoredWeek === currentWeek ? score?.periodPoints ?? null : null,
       tier,
       pointsFromChopZone: t.eliminated ? null : (danger?.pointsFromChopZone ?? null),
     }

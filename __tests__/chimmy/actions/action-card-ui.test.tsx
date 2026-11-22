@@ -1,12 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
-import ChimmyActionCardTray from '@/components/chimmy/ChimmyActionCardTray'
 import {
   confirmChimmyActionCard,
-  publishChimmyActionCards,
   readActionCards,
   resetChimmyActionCardsForTest,
   type ChimmyActionCard as Card,
@@ -149,16 +147,5 @@ describe('readActionCards and the tray', () => {
     expect(readActionCards({ actionCards: [LINEUP, { kind: 'lineup' }, { ...TRADE, trade: { youGive: [], youGet: [] } }, 'x'] })).toEqual([LINEUP])
     expect(readActionCards({})).toEqual([])
     expect(readActionCards(null)).toEqual([])
-  })
-
-  it('shows published cards newest first and lets one be dismissed', async () => {
-    render(<ChimmyActionCardTray />)
-    expect(screen.queryByTestId('chimmy-action-tray')).toBeNull()
-    act(() => publishChimmyActionCards([LINEUP]))
-    act(() => publishChimmyActionCards([TRADE, LINEUP]))
-    const cards = screen.getAllByTestId('chimmy-action-card')
-    expect(cards.map((c) => c.getAttribute('data-action-kind'))).toEqual(['trade', 'lineup'])
-    fireEvent.click(screen.getAllByLabelText('Dismiss')[0]!)
-    expect(screen.getAllByTestId('chimmy-action-card')).toHaveLength(1)
   })
 })

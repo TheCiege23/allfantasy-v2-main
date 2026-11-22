@@ -15,18 +15,7 @@ import {
 import type { GraphQueryInput } from "./GraphQueryService";
 import { buildRelationshipMap } from "./LeagueRelationshipMapBuilder";
 import type { RelationshipMapInput, RelationshipMapOutput } from "./LeagueRelationshipMapBuilder";
-import {
-  buildLeagueRelationshipProfile as buildRelationshipProfile,
-  getManagerInfluenceProfile as getManagerProfile,
-  getMostInfluentialManager as mostInfluentialManager,
-  getMostShapingTradeRelationship as mostShapingTradeRelationship,
-  getDefiningRivalry as definingRivalry,
-  getRepeatedEliminators as repeatedEliminators,
-  getDynastyControl as dynastyControl,
-  getCentralManagers as centralManagers,
-} from "./GraphInfluenceEngine";
-import type { GraphInfluenceInput } from "./GraphInfluenceEngine";
-import type { LeagueGraphSnapshotPayload, LeagueRelationshipProfile, ManagerInfluenceProfile } from "./types";
+import type { LeagueGraphSnapshotPayload } from "./types";
 
 export interface BuildGraphInput extends BuildSnapshotInput {}
 
@@ -110,52 +99,3 @@ export async function buildLeagueRelationshipMap(
 
 // ─── Relationship & Influence Engine ─────────────────────────────────────────
 
-/**
- * Builds LeagueRelationshipProfile: rivalries, trade clusters, influence leaders,
- * central/isolated managers, dynasty power transitions, elimination patterns.
- * When season is null, includes all dynasty history.
- */
-export async function buildLeagueRelationshipProfile(
-  input: GraphInfluenceInput
-): Promise<LeagueRelationshipProfile> {
-  return buildRelationshipProfile(input);
-}
-
-/** Returns ManagerInfluenceProfile for a manager (entityId or userId). */
-export async function getManagerInfluenceProfile(
-  leagueId: string,
-  managerIdentifier: string,
-  season?: number | null
-): Promise<ManagerInfluenceProfile | null> {
-  return getManagerProfile(leagueId, managerIdentifier, season);
-}
-
-/** Who is the most influential manager? */
-export async function queryMostInfluentialManager(leagueId: string, season?: number | null) {
-  return mostInfluentialManager(leagueId, season);
-}
-
-/** Which trade relationship has shaped the league the most? */
-export async function queryMostShapingTradeRelationship(leagueId: string, season?: number | null) {
-  return mostShapingTradeRelationship(leagueId, season);
-}
-
-/** Which rivalry has defined this dynasty era? */
-export async function queryDefiningRivalry(leagueId: string, season?: number | null) {
-  return definingRivalry(leagueId, season);
-}
-
-/** Who keeps knocking the same manager out? */
-export async function queryRepeatedEliminators(leagueId: string, season?: number | null) {
-  return repeatedEliminators(leagueId, season);
-}
-
-/** Which franchises have controlled the league over recent seasons? */
-export async function queryDynastyControl(leagueId: string, season?: number | null) {
-  return dynastyControl(leagueId, season);
-}
-
-/** Which managers sit at the center of league activity? */
-export async function queryCentralManagers(leagueId: string, season?: number | null, limit?: number) {
-  return centralManagers(leagueId, season, limit);
-}

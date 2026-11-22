@@ -34,7 +34,7 @@ import './redraft-tailwind-tabs.css'
 import { usesDynastyBackground } from '@/lib/league-media/dynastyBackground'
 import '@/components/dynasty/dynasty-details.css'
 
-export type WarRoomTabProps = {
+type WarRoomTabProps = {
   league: UserLeague
   sport?: string
   dashboardEmbed?: boolean
@@ -155,14 +155,15 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       },
       {
         title: 'Mock draft simulator',
-        description: 'Practice drafts with AI helpers and AF Legacy context.',
+        description: 'Practice drafts with Chimmy helpers and AF Legacy context.',
         href: '/mock-draft-simulator',
         icon: Wrench,
       },
       {
         title: 'Trade finder',
         description: 'Find partners and structure dynasty / redraft trades.',
-        href: '/trade-finder',
+        /* The one trade finder, on the Trades screen (2026-11-12; /trade-finder redirects there). */
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         icon: Coins,
       },
       {
@@ -172,19 +173,20 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         icon: BookOpen,
       },
       {
-        title: 'Dynasty trade analyzer',
-        description: 'Value-based trade breakdowns for dynasty leagues.',
-        href: '/dynasty-trade-analyzer',
+        title: 'Trade analyzer',
+        description: 'Grade a trade in this league, with its own scoring and dynasty values.',
+        /* The Trade Analyzer's league tab, on this league (the dynasty analyzer was merged into it, 2026-11-12). */
+        href: `/trade-evaluator?leagueId=${encodeURIComponent(league.id)}`,
         icon: Scale,
       },
       {
         title: 'Power rankings',
-        description: 'League and player power views with AI commentary.',
+        description: 'League and player power views with Chimmy commentary.',
         href: '/power-rankings',
         icon: Sparkles,
       },
     ],
-    [sportQs],
+    [sportQs, league.id],
   )
 
   const gatedTools: GatedTool[] = useMemo(
@@ -242,7 +244,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         featureId: 'war_room_pipeline_analysis',
         title: 'Pipeline analysis',
         description: 'Prospect and pipeline evaluation (AF Legacy).',
-        href: '/trade-finder',
+        href: `/core/trades?league=${encodeURIComponent(league.id)}#trade-finder`,
         cta: 'Analyze pipeline',
       },
     ],

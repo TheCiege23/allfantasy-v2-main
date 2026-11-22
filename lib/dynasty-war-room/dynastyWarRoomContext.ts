@@ -19,8 +19,9 @@
  * See lib/dynasty-war-room/types.ts for the contract.
  */
 
+import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -209,7 +210,7 @@ export async function buildDynastyWarRoomContext(
   const rosterRows = (await prisma.roster
     .findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
+      select: { id: true, platformUserId: true, managerUserId: true, playerData: true, faabRemaining: true },
     })
     .catch(() => [])) as RosterRow[]
 
@@ -402,14 +403,14 @@ export async function buildDynastyWarRoomContext(
       rosterId: r.id,
       ownerId: r.platformUserId,
       // An orphan's key is a placeholder, not a name (imported orphans used to be keyed '').
-      ownerName: team?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId) ? '' : r.platformUserId),
+      ownerName: team?.ownerName ?? (isSeatPlaceholderUserId(r.platformUserId) ? '' : r.platformUserId),
       teamName: team?.teamName ?? null,
       wins: team?.wins ?? 0,
       losses: team?.losses ?? 0,
       ties: team?.ties ?? 0,
       pointsFor: team?.pointsFor ?? 0,
       playoffSeed: team?.currentRank ?? null,
-      isUserTeam: r.platformUserId === userId,
+      isUserTeam: isRosterManagedBy(r, userId),
       players: (byRoster.get(r.id) ?? []).map(toPlayerFact),
       // Keyed by the roster that holds each pick now, in Roster.id space for every platform.
       picks: pickCapital.picksByRosterId.get(r.id) ?? [],

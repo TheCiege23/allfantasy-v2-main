@@ -155,7 +155,7 @@ export default function LeagueDramaDashboardPage() {
           <div>
             <h1 className="text-lg font-semibold text-amber-100">League Drama Timeline</h1>
             <p className="text-xs text-white/60">
-              Ranked storylines with filters, timeline navigation, and AI story summaries.
+              Ranked storylines with filters, timeline navigation, and Chimmy story summaries.
             </p>
           </div>
           <Link

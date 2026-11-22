@@ -1,15 +1,24 @@
 import type { IExternalScheduleMapper } from '../../mappers/ExternalScheduleMapper'
-import type { NormalizedMatchup } from '../../types'
 import type { SleeperImportPayload } from './types'
 
-/** Group Sleeper matchups by matchup_id so we have roster_id_1 vs roster_id_2. */
-function pairMatchups(matchups: { roster_id: number; matchup_id: number; points: number }[]) {
-  const byMatchup: Record<number, { roster_id: number; points: number }[]> = {}
+/**
+ * Group Sleeper matchups by matchup_id so we have roster_id_1 vs roster_id_2.
+ *
+ * A roster with no `matchup_id` has no opponent that week (a playoff bye, or a team out of the
+ * bracket). Those used to share one group keyed "null", so the first two were paired as if they had
+ * played each other and the rest were dropped. Each is now its own entry with no second roster: its
+ * points are kept and no game is invented.
+ */
+function pairMatchups(matchups: { roster_id: number; matchup_id: number | null; points: number }[]) {
+  const byMatchup = new Map<string, { roster_id: number; points: number }[]>()
+  let unpaired = 0
   matchups.forEach((m) => {
-    if (!byMatchup[m.matchup_id]) byMatchup[m.matchup_id] = []
-    byMatchup[m.matchup_id].push({ roster_id: m.roster_id, points: m.points })
+    const id = Number(m.matchup_id)
+    const key = m.matchup_id != null && Number.isFinite(id) && id > 0 ? `m:${id}` : `bye:${(unpaired += 1)}`
+    if (!byMatchup.has(key)) byMatchup.set(key, [])
+    byMatchup.get(key)!.push({ roster_id: m.roster_id, points: m.points })
   })
-  return Object.values(byMatchup).map((pair) => {
+  return [...byMatchup.values()].map((pair) => {
     const [a, b] = pair
     return {
       roster_id_1: String(a?.roster_id ?? ''),

@@ -12,7 +12,7 @@ import { normalizeToSupportedSport, DEFAULT_SPORT } from '@/lib/sport-scope'
 import { resolveSinceFromTimeframe } from '@/lib/global-meta-engine/timeframe'
 import { getStrategyLabelForSport } from './SportStrategyResolver'
 
-export interface StrategyMetaLeagueDiagnostics {
+interface StrategyMetaLeagueDiagnostics {
   leagueId: string
   sport: string
   leagueFormat: string
@@ -27,7 +27,7 @@ export interface StrategyMetaLeagueDiagnostics {
   skippedReason?: string
 }
 
-export interface StrategyMetaDiagnostics {
+interface StrategyMetaDiagnostics {
   totalLeagues: number
   processedLeagues: number
   totalTeamsAnalyzed: number
@@ -36,7 +36,7 @@ export interface StrategyMetaDiagnostics {
   byLeague: StrategyMetaLeagueDiagnostics[]
 }
 
-export interface StrategyMetaGenerationResult {
+interface StrategyMetaGenerationResult {
   reports: number
   errors: string[]
   diagnostics?: StrategyMetaDiagnostics

@@ -42,4 +42,3 @@ export function TodayRecord({ state }: { state: SectionState<TodayRecordData> })
   )
 }
 
-export default TodayRecord

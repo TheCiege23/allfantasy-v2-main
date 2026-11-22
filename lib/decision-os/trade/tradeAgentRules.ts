@@ -14,16 +14,16 @@
 
 import { marketLetterOf, type TradeGradeView } from './tradeGrade'
 
-export const AGENT_MAX_PER_MANAGER = 3
+const AGENT_MAX_PER_MANAGER = 3
 
 /** The letter a deal must read for BOTH sides. See the header: the mirror allows nothing higher. */
-export const AGENT_LETTER = 'C'
+const AGENT_LETTER = 'C'
 
 /** League types the agent suggests in (decision: redraft, dynasty and keeper NFL leagues). */
-export const AGENT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'dynasty', 'keeper'])
+const AGENT_LEAGUE_TYPES: ReadonlySet<string> = new Set(['redraft', 'dynasty', 'keeper'])
 
 /** The UTC hours the nightly run works in. The hourly cron returns at once outside them. */
-export const AGENT_WINDOW_UTC_HOURS: ReadonlySet<number> = new Set([3, 4, 5, 6, 7, 8, 9, 10])
+const AGENT_WINDOW_UTC_HOURS: ReadonlySet<number> = new Set([3, 4, 5, 6, 7, 8, 9, 10])
 
 export type AgentAsset = { playerId: string; name: string; position: string }
 
@@ -61,7 +61,7 @@ export function agentLeagueRefusal(args: { sport: string | null | undefined; lea
   return null
 }
 
-export type SurvivorTradeSeat = { userId: string; playerState: string; tribeId: string | null }
+type SurvivorTradeSeat = { userId: string; playerState: string; tribeId: string | null }
 
 /**
  * Who may trade with whom in a Survivor league, as a group per manager: only managers still in the

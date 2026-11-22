@@ -2,12 +2,19 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   FantraxImportDraftPick,
+  FantraxImportFuturePick,
   FantraxImportPayload,
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
 import { assignFantraxTeamIds } from './fantraxTeamIds'
-import { readStoredFantraxDerived, readStoredFantraxDraft } from './fantraxSnapshotHistory'
+import {
+  readStoredFantraxDerived,
+  readStoredFantraxDraft,
+  readStoredFantraxFuturePicks,
+  readStoredFantraxTeamLogos,
+  rekeyFantraxFuturePicks,
+} from './fantraxSnapshotHistory'
 import { fantraxSoccerPosition, isFantraxSplitSeasonFinished, isFantraxSplitSeasonSport, mapFantraxLineupSlots, mapFantraxRosterSlots, usesFantraxPeriodCalendar } from './fantraxProSports'
 
 type LegacyStanding = {
@@ -676,6 +683,9 @@ export async function fetchFantraxLeagueForImport(
     else rosterByTeam.set(label, [player])
   }
   const userTeamId = resolveTeamId(userTeam, teamMap)
+  const storedLogos = readStoredFantraxTeamLogos(leagueRecord.transactions)
+  const logoByFantraxTeamId = new Map(storedLogos.map((l) => [l.teamId, l.logoUrl]))
+  const logoByTeamLabel = new Map(storedLogos.flatMap((l) => (l.teamName && normalizeTeamLabel(l.teamName) ? [[normalizeTeamLabel(l.teamName), l.logoUrl] as const] : [])))
   const standingsByNormalizedTeam = new Map<string, LegacyStanding>()
   for (const standing of standings) {
     const label = asString(standing.team)
@@ -705,7 +715,8 @@ export async function fetchFantraxLeagueForImport(
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
       managerName: isUserTeam ? username : teamName,
       teamName,
-      logoUrl: null,
+      /* Synced by the browser connector from the logged-in site; the public API has none (GAPS F-14, F-20). */
+      logoUrl: logoByFantraxTeamId.get(asString(standing?.fantraxTeamId)) ?? logoByTeamLabel.get(normalizeTeamLabel(teamName)) ?? null,
       wins: asNumber(standing?.wins, 0) ?? 0,
       losses: asNumber(standing?.losses, 0) ?? 0,
       ties: asNumber(standing?.ties, 0) ?? 0,
@@ -901,6 +912,12 @@ export async function fetchFantraxLeagueForImport(
   })
   const draftPicks = boardPicks.length > 0 ? boardPicks : exportDraftPicks
 
+  /* Future-season picks, re-keyed from Fantrax's team ids to ours. Absent when none are on file. */
+  const storedFuturePicks = readStoredFantraxFuturePicks(leagueRecord.transactions)
+  const futurePicks: FantraxImportFuturePick[] | undefined = storedFuturePicks
+    ? rekeyFantraxFuturePicks(storedFuturePicks, teamIdFor)
+    : undefined
+
   const storedDerived = readStoredFantraxDerived(leagueRecord.transactions)
   const derivedTransactions: FantraxImportTransaction[] = []
   for (const move of storedDerived.moves) {
@@ -946,7 +963,7 @@ export async function fetchFantraxLeagueForImport(
    * league reached My Team and the add/drop gate with no lineup, and nothing could tell it was IDP.
    * Same `positionConstraints` read; unlike NBA/NHL it is all-or-nothing (see mapFantraxLineupSlots).
    */
-  const proSlots = splitSeason && (sport === 'NBA' || sport === 'NHL')
+  const proSlots = sport === 'NCAAB' || (splitSeason && (sport === 'NBA' || sport === 'NHL'))
     ? mapFantraxRosterSlots(sport, sourceSettings?.rosterInfo)
     : sport === 'NFL' || sport === 'NCAAF' || sport === 'MLB' || sport === 'SOCCER'
       ? mapFantraxLineupSlots(sport, sourceSettings?.rosterInfo)
@@ -1007,12 +1024,21 @@ export async function fetchFantraxLeagueForImport(
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),
         ...(proSlots && proSlots.gaps.length > 0 ? { rosterSlotGaps: proSlots.gaps } : {}),
+        // Divisions, re-keyed from Fantrax's team id to ours (the id every team row is stored under).
+        divisionByTeamId: Object.fromEntries(
+          standings.flatMap((standing) => {
+            const division = sourceSettings?.teamDivisions?.[asString(standing.fantraxTeamId)]
+            const teamId = resolveTeamId(asString(standing.team), teamMap)
+            return division && teamId ? [[teamId, division]] : []
+          }),
+        ),
       },
     },
     teams,
     schedule,
     transactions: [...transactions, ...derivedTransactions],
     draftPicks,
+    ...(futurePicks ? { futurePicks } : {}),
     historySources: {
       draftBoard: boardPicks.length > 0,
       exportTransactions: transactions.length,

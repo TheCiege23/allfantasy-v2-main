@@ -135,4 +135,3 @@ export function Legacy({ data }: { data: CareerData | null }) {
   )
 }
 
-export default Legacy

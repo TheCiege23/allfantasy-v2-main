@@ -9,7 +9,7 @@ import {
   trackShareFallback,
 } from "@/lib/share-engine/ShareTrackingService";
 
-export interface NativeShareActionProps {
+interface NativeShareActionProps {
   payload: SharePayload;
   onShare?: () => void;
   className?: string;

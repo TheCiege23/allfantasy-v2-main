@@ -16,9 +16,32 @@ import {
   BigBrotherEvictionMoment,
   BigBrotherSpecialtyHome,
   NominationPicker,
+  bbHohWeekBody,
+  bbTieBreakRule,
   revealCounts,
   revealTicks,
 } from '@/components/big-brother/BigBrotherSpecialtyHome'
+
+/*
+ * The home screen said "The HOH only votes to break a tie" for every league. By default a tie evicts
+ * the nominee with fewer season points (evictionTieBreakMode: 'season_points') and the HOH never votes.
+ */
+describe('tie-break wording follows the league setting', () => {
+  it('defaults to season points when the setting is missing or season_points', () => {
+    expect(bbTieBreakRule(undefined)).toBe('A tie sends home the nominee with fewer season points.')
+    expect(bbTieBreakRule('season_points')).toBe('A tie sends home the nominee with fewer season points.')
+  })
+  it('names each other mode', () => {
+    expect(bbTieBreakRule('hoh_vote')).toBe('The HOH only votes to break a tie.')
+    expect(bbTieBreakRule('random')).toBe('A tie is broken at random.')
+    expect(bbTieBreakRule('commissioner')).toBe('The commissioner breaks a tie.')
+  })
+  it("the HOH's card says whether they vote", () => {
+    expect(bbHohWeekBody('season_points', 8)).toBe('You name two nominees. You don’t vote at the eviction.')
+    expect(bbHohWeekBody('hoh_vote', 8)).toBe('You name two nominees. You only vote to break a tie.')
+    expect(bbHohWeekBody('season_points', 3)).toBe('You name two nominees, then cast the only eviction vote.')
+  })
+})
 
 afterEach(() => {
   vi.useRealTimers()

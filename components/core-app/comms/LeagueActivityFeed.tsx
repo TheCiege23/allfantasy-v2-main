@@ -80,7 +80,7 @@ function whenLabel(iso: string): string {
   return `${Math.round(hours / 24)}d ago`
 }
 
-export function LeagueActivityFeed({ onOpenLeague }: { onOpenLeague?: (leagueId: string) => void }) {
+function LeagueActivityFeed({ onOpenLeague }: { onOpenLeague?: (leagueId: string) => void }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null)
   const [throttled, setThrottled] = useState(false)
   const [error, setError] = useState<string | null>(null)

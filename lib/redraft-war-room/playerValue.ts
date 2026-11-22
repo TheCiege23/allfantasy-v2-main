@@ -10,7 +10,7 @@ import type { RedraftPlayerFact } from './types'
 
 export type ValueSource = 'projection' | 'ros_projection' | 'season_avg' | 'adp' | 'none'
 
-export interface PlayerValue {
+interface PlayerValue {
   value: number
   source: ValueSource
 }

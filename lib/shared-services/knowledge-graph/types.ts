@@ -64,7 +64,7 @@ export interface ConfidenceEnvelope {
 }
 
 /** as_of/computed_at versioning per the Knowledge Graph spec Part 7 — never overwritten, every recomputation is a new version. */
-export interface VersionedDerivation<T> {
+interface VersionedDerivation<T> {
   /** The point in time this value describes. */
   asOf: Date
   /** When this specific version was computed — may be later than asOf. */

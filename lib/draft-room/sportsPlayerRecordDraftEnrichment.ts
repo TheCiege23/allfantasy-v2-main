@@ -35,7 +35,7 @@ export type SportsPlayerRecordDraftAugment = {
   rookieHint: boolean | null
 }
 
-export type NbaDraftSeasonRates = {
+type NbaDraftSeasonRates = {
   assistsPerGame?: number | null
   stealsPerGame?: number | null
   blocksPerGame?: number | null
@@ -334,7 +334,7 @@ export type SportsPlayerRecordDraftMaps = {
   loose: Map<string, SportsPlayerRecordDraftAugment>
 }
 
-export type SprLookupMeta = {
+type SprLookupMeta = {
   matchType: IdentityMatchType
   confidence: number
   reason: string
@@ -343,7 +343,7 @@ export type SprLookupMeta = {
   strictHitAfterIdMiss: boolean
 }
 
-export type SprLookupResult = {
+type SprLookupResult = {
   augment: SportsPlayerRecordDraftAugment | null
   meta: SprLookupMeta
 }
@@ -530,23 +530,3 @@ export function lookupSportsPlayerRecordAugmentDetailed(
   }
 }
 
-/**
- * @param poolExternalOrRecordId — `SportsPlayerRecord.id` / pool `player_id` when aligned with sports_players cache.
- */
-export function lookupSportsPlayerRecordAugment(
-  maps: SportsPlayerRecordDraftMaps,
-  sport: LeagueSport,
-  name: string,
-  position: string,
-  team: string | null | undefined,
-  poolExternalOrRecordId?: string | null,
-): SportsPlayerRecordDraftAugment | null {
-  return lookupSportsPlayerRecordAugmentDetailed(
-    maps,
-    sport,
-    name,
-    position,
-    team,
-    poolExternalOrRecordId,
-  ).augment
-}

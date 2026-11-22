@@ -11,6 +11,7 @@
  * in — a bare league id would let anyone queue requests at any league.
  */
 
+import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -20,7 +21,19 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
-import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { managersHere } from '@/lib/league/managersHere'
+import { notifyCommissionerOfJoin, notifyInviterOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+
+/**
+ * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
+ * invite brings a league exactly as importing one does, so it earns both a free week of AF Pro. Fired
+ * after the join is committed, never awaited, never throws; the award claims once per friend.
+ */
+function rewardReferredJoin(userId: string): void {
+  void import('@/lib/referral/proWeekGrant')
+    .then((m) => m.awardReferralProWeekOnImport(userId))
+    .catch(() => undefined)
+}
 import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -28,6 +41,8 @@ import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import { isPaidLeagueSettings } from '@/lib/league/paidLeague'
+import { draftHasStarted, postDraftJoinLockKind, POST_DRAFT_JOIN_LOCK_MESSAGE } from '@/lib/league-join/postDraftJoinLock'
+import { resolveApprovedRequestLeague } from '@/lib/public-discovery/privateLeagueRequests'
 import { paidLeagueGeoMessage, paidLeagueGeoVerdict } from '@/lib/geo/paidLeagueGeo'
 import {
   CLAIM_REFUSAL_MESSAGE,
@@ -99,7 +114,11 @@ export async function POST(req: NextRequest) {
       body.action === 'sleeper_claim_start'
         ? await startSleeperTeamClaim({ userId, leagueId, teamExternalId })
         : await verifySleeperTeamClaim({ userId, leagueId, teamExternalId })
-    if (result.ok) return NextResponse.json(result)
+    if (result.ok) {
+      // A verified claim puts them on their team: that is joining the league.
+      if (body.action === 'sleeper_claim_verify') rewardReferredJoin(userId)
+      return NextResponse.json(result)
+    }
     const status =
       result.reason === 'not_member' || result.reason === 'linked_elsewhere' || result.reason === 'other_account'
         ? 403
@@ -120,41 +139,59 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
+  /*
+   * A private league's commissioner approved this manager's Find a League request
+   * (`app/api/find-league/leagues/[leagueId]/request`). The approval is the invitation: no code,
+   * no password and no invite link is needed, and a link the commissioner later switches off does
+   * not withdraw it. Everything after this — paid-state rule, division gate (an invited path, since
+   * the league is private), capacity, the post-draft lock, duplicate accounts — runs exactly as for
+   * a code.
+   */
+  let result: { leagueId: string }
+  if (body.action === 'join_approved_request') {
+    const approved = await resolveApprovedRequestLeague(body.leagueId, userId)
+    if (!approved.ok) return NextResponse.json({ error: approved.error, code: approved.code }, { status: approved.status })
+    if (approved.alreadyMember) {
+      return NextResponse.json({ success: true, leagueId: approved.leagueId, alreadyMember: true })
+    }
+    result = { leagueId: approved.leagueId }
+  } else {
+    if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
 
-  const validation = await validateFantasyInviteCode(code, { password, userId })
-  if (!validation.valid) {
-    if (validation.error === 'ALREADY_MEMBER' && validation.preview?.leagueId) {
-      return NextResponse.json({
-        success: true,
-        leagueId: validation.preview.leagueId,
-        alreadyMember: true,
-      })
+    const validation = await validateFantasyInviteCode(code, { password, userId })
+    if (!validation.valid) {
+      if (validation.error === 'ALREADY_MEMBER' && validation.preview?.leagueId) {
+        return NextResponse.json({
+          success: true,
+          leagueId: validation.preview.leagueId,
+          alreadyMember: true,
+        })
+      }
+      const statusByError: Record<string, number> = {
+        INVALID_CODE: 404,
+        EXPIRED: 410,
+        LEAGUE_FULL: 409,
+        PASSWORD_REQUIRED: 400,
+        INCORRECT_PASSWORD: 400,
+        INVITE_DISABLED: 403,
+        ALREADY_MEMBER: 409,
+      }
+      const messageByError: Record<string, string> = {
+        INVALID_CODE: 'Invalid invite code',
+        EXPIRED: 'Invite expired',
+        LEAGUE_FULL: 'League is full',
+        PASSWORD_REQUIRED: 'League password is required',
+        INCORRECT_PASSWORD: 'Incorrect password',
+        INVITE_DISABLED: 'Invite link is disabled',
+        ALREADY_MEMBER: 'You are already in this league',
+      }
+      return NextResponse.json(
+        { error: messageByError[validation.error] ?? 'Failed to validate invite' },
+        { status: statusByError[validation.error] ?? 400 }
+      )
     }
-    const statusByError: Record<string, number> = {
-      INVALID_CODE: 404,
-      EXPIRED: 410,
-      LEAGUE_FULL: 409,
-      PASSWORD_REQUIRED: 400,
-      INCORRECT_PASSWORD: 400,
-      INVITE_DISABLED: 403,
-      ALREADY_MEMBER: 409,
-    }
-    const messageByError: Record<string, string> = {
-      INVALID_CODE: 'Invalid invite code',
-      EXPIRED: 'Invite expired',
-      LEAGUE_FULL: 'League is full',
-      PASSWORD_REQUIRED: 'League password is required',
-      INCORRECT_PASSWORD: 'Incorrect password',
-      INVITE_DISABLED: 'Invite link is disabled',
-      ALREADY_MEMBER: 'You are already in this league',
-    }
-    return NextResponse.json(
-      { error: messageByError[validation.error] ?? 'Failed to validate invite' },
-      { status: statusByError[validation.error] ?? 400 }
-    )
+    result = validation.preview
   }
-  const result = validation.preview
 
   /*
    * Paid leagues are restricted in some states (lib/geo/restrictedStates). Find a League already
@@ -208,7 +245,11 @@ export async function POST(req: NextRequest) {
       { userId, leagueId: result.leagueId },
       tx,
     )
-    if (priorClaim?.viaOtherAccount) {
+    const multiTeamLeague = priorClaim?.viaOtherAccount
+      ? await tx.league.findUnique({ where: { id: result.leagueId }, select: { settings: true } })
+      : null
+    // The commissioner can allow one person to run several teams, each under its own account.
+    if (priorClaim?.viaOtherAccount && !readAllowMultiTeamManagers(multiTeamLeague?.settings)) {
       return {
         success: false as const,
         status: 409,
@@ -227,6 +268,9 @@ export async function POST(req: NextRequest) {
           platform: true,
           leagueSize: true,
           leagueVariant: true,
+          leagueType: true,
+          bestBallMode: true,
+          guillotineMode: true,
           userId: true,
         },
       }),
@@ -296,12 +340,15 @@ export async function POST(req: NextRequest) {
       return { success: false as const, status: 409, error: 'League is full' }
     }
 
-    if ((league.leagueVariant === 'survivor' || league.leagueVariant === 'survivor_guillotine') &&
-        draftSession?.status && draftSession.status !== 'pre_draft') {
+    const lockKind = postDraftJoinLockKind(league)
+    const draftStarted = draftHasStarted(draftSession?.status)
+    // Survivor refuses every late join, a team takeover included — unchanged from before.
+    if (lockKind === 'survivor' && draftStarted) {
       return {
         success: false as const,
         status: 409,
-        error: 'Survivor leagues lock new joins after the draft starts.',
+        error: POST_DRAFT_JOIN_LOCK_MESSAGE.survivor,
+        code: 'DRAFT_STARTED' as const,
       }
     }
 
@@ -360,6 +407,22 @@ export async function POST(req: NextRequest) {
         },
       })
       if (unclaimedCount > 0) claimPrompt = true
+    }
+
+    /*
+     * Best Ball and Guillotine teams are made by the draft (lib/league-join/postDraftJoinLock.ts).
+     * Taking over a team that was drafted — an orphan, an open seat, an imported placeholder — is
+     * still allowed above; only a FRESH roster, which would have no players and no contest entry,
+     * is refused once the draft has started. The transaction rolls back nothing here: neither
+     * branch above wrote anything when it found no team.
+     */
+    if (!claim.claimed && !claimPrompt && draftStarted && (lockKind === 'best_ball' || lockKind === 'guillotine')) {
+      return {
+        success: false as const,
+        status: 409,
+        error: POST_DRAFT_JOIN_LOCK_MESSAGE[lockKind],
+        code: 'DRAFT_STARTED' as const,
+      }
     }
 
     const roster = claim.claimed && claim.rosterId
@@ -498,9 +561,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (!joinResult.alreadyMember) {
+    rewardReferredJoin(userId)
     // After the commit, and never awaited by the response: the join stands whatever the alert does.
     void notifyCommissionerOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] commissioner join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+    void notifyInviterOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] inviter join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+    void notifyLeagueMatesOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] league mates join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
     })
   }
 
@@ -565,12 +635,23 @@ export async function GET(req: NextRequest) {
     resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
+  // Who is already here (lib/league/managersHere.ts): names for the people in this league to see.
+  const claimedTeams = await prisma.leagueTeam.findMany({
+    where: { leagueId, claimedByUserId: { not: null } },
+    select: { teamName: true, ownerName: true, claimedByUserId: true },
+  }).catch(() => [])
+  const claimedIds = [...new Set(claimedTeams.map((t) => t.claimedByUserId).filter((id): id is string => Boolean(id)))]
+  const profiles = claimedIds.length
+    ? await prisma.userProfile.findMany({ where: { userId: { in: claimedIds } }, select: { userId: true, displayName: true, sleeperUsername: true } }).catch(() => [])
+    : []
+  const nameById = new Map(profiles.map((p) => [p.userId, p.displayName?.trim() || p.sleeperUsername?.trim() || '']))
+
   return NextResponse.json({
     leagueName: league.name,
     inviteCode: result.inviteCode,
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
-    claim: { teamCount, claimedCount },
+    claim: { teamCount, claimedCount, managersHere: managersHere(claimedTeams, nameById, userId) },
     guillotineSeats,
   })
 }

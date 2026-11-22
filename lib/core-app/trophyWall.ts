@@ -28,7 +28,7 @@ export type Plaque = {
   latest: boolean
 }
 
-export type OpenPlaque = {
+type OpenPlaque = {
   title: string
   ringNumber: number
   record: string | null

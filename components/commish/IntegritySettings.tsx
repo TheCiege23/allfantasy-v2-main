@@ -60,7 +60,7 @@ export type IntegritySettingsValue = {
   tankingPickPenaltiesSupported?: boolean
 }
 
-export type TankingPenaltiesValue = {
+type TankingPenaltiesValue = {
   enabled: boolean
   penalty?: 'forfeit_pick' | 'lottery_odds' | 'faab'
   pickAtStrike: number

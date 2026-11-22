@@ -62,11 +62,20 @@ export function LeagueSettingsHomeContainer({
   ctx,
   onExit,
   initialSubPage = null,
+  onSubPageReturn,
+  exitTo = 'home',
 }: {
   ctx: SubPanelContext
   onExit?: () => void
+  /** Where onExit lands — the Settings tab's hub or the league home — so the back button says so. */
+  exitTo?: 'home' | 'settings'
   /** Opens straight into this sub-page (an old settings link routed here); members get the list. */
   initialSubPage?: SettingsSubPageId | null
+  /**
+   * Called after a sub-page closes. The league Settings hub opens this container straight onto one
+   * editor and passes this to return there, rather than leaving the manager on this list.
+   */
+  onSubPageReturn?: () => void
 }) {
   const league = ctx.league
   const leagueId = league.id
@@ -279,6 +288,7 @@ export function LeagueSettingsHomeContainer({
         sections={sections}
         renderSubPage={renderSubPage}
         onExit={onExit}
+        exitTo={exitTo}
         initialSubPage={initialSubPage}
         inSeason={phase === 'Regular season' || phase === 'Playoffs'}
         managers={{
@@ -286,6 +296,8 @@ export function LeagueSettingsHomeContainer({
           total: effectiveLeague.leagueSize ?? teams.length,
           inviteUrl: inviteRow?.copyText ?? null,
         }}
+        // Not onSubPageReturn: the center keeps one editor open and "closes" it on every category
+        // switch. Its Back button (onExit) is the way back to the hub.
         onSubPageClosed={() => setReloadKey((k) => k + 1)}
         header={header}
         redraft={redraft}
@@ -300,7 +312,8 @@ export function LeagueSettingsHomeContainer({
       canEdit={ctx.isCommissioner}
       renderSubPage={renderSubPage}
       onExit={onExit}
-      onSubPageClosed={() => setReloadKey((k) => k + 1)}
+      exitTo={exitTo}
+      onSubPageClosed={() => { setReloadKey((k) => k + 1); onSubPageReturn?.() }}
       initialSubPage={ctx.isCommissioner ? initialSubPage : null}
       header={header}
       redraft={redraft}

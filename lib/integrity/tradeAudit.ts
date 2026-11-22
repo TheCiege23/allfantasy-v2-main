@@ -53,7 +53,7 @@ export type AuditRow = {
 }
 
 /** One trade from a chosen team's point of view. */
-export type TeamTradeLine = {
+type TeamTradeLine = {
   tradeKey: string
   completedAt: string | null
   partnerTeamId: string
@@ -108,9 +108,9 @@ export function auditTeams(rows: readonly AuditRow[]): { teamId: string; name: s
 }
 
 /** The minimum trades between one pair before frequency means anything. */
-export const PAIR_MIN_TRADES = 3
+const PAIR_MIN_TRADES = 3
 /** How many times the league's expected count a pair must reach. */
-export const PAIR_MULTIPLE = 3
+const PAIR_MULTIPLE = 3
 
 export type PairFinding = {
   teamIds: [string, string]
@@ -122,6 +122,22 @@ export type PairFinding = {
   outside: number
   /** Net value received by the first team across the pair's trades, as a share of everything exchanged. */
   netShareToFirst: number
+  /** The middle value gap (unsigned, %) of the pair's trades with EACH OTHER. */
+  gapTogether: number
+  /**
+   * Each team's trades with EVERYONE ELSE: how many, and their middle value gap (unsigned, %). Null gap below
+   * `PAIR_ELSEWHERE_MIN` trades — too few to set beside the pair's own. Same order as `teamIds`. (2026-11-22)
+   */
+  elsewhere: [{ trades: number; gap: number | null }, { trades: number; gap: number | null }]
+}
+
+/** A team needs this many trades with other partners before its "elsewhere" gap is stated. */
+export const PAIR_ELSEWHERE_MIN = 3
+
+const medianAbs = (rows: readonly AuditRow[]): number => {
+  const s = rows.map((r) => Math.abs(r.gapPct)).sort((a, b) => a - b)
+  if (s.length === 0) return 0
+  return Math.round(s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2)
 }
 
 /**
@@ -165,6 +181,12 @@ export function pairFrequency(rows: readonly AuditRow[], teamCount: number): Pai
       expected: Math.round(expected * 10) / 10,
       outside: list.filter((r) => fairnessBand(r.gapPct) === 'outside').length,
       netShareToFirst: total > 0 ? toFirst / total : 0,
+      gapTogether: medianAbs(list),
+      elsewhere: [first, second].map((id) => {
+        const other = id === first ? second : first
+        const rest = rows.filter((r) => (r.sideATeamId === id || r.sideBTeamId === id) && r.sideATeamId !== other && r.sideBTeamId !== other)
+        return { trades: rest.length, gap: rest.length >= PAIR_ELSEWHERE_MIN ? medianAbs(rest) : null }
+      }) as PairFinding['elsewhere'],
     })
   }
   return out.sort((a, b) => b.count - a.count)

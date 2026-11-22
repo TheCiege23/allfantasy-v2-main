@@ -4,7 +4,7 @@
 
 import { getPlayerMetaTrendsForMeta, getPositionMetaTrends } from '@/lib/global-meta-engine/MetaQueryService'
 import { normalizeSportForMeta } from '@/lib/global-meta-engine/SportMetaResolver'
-import type { DraftPlayer, MetaDraftInput, MetaDraftOutput } from './types'
+import type { MetaDraftInput, MetaDraftOutput } from './types'
 
 function normalizeName(name: string): string {
   return String(name ?? '')
@@ -19,7 +19,7 @@ function normalizeName(name: string): string {
  * Return meta-adjusted scores for available players (trend score, draft rate, position trend).
  */
 export async function predictWithMeta(input: MetaDraftInput): Promise<MetaDraftOutput> {
-  const { sport, available, round } = input
+  const { sport, available } = input
   const normalizedSport = normalizeSportForMeta(sport)
 
   const [playerTrends, positionTrends] = await Promise.all([

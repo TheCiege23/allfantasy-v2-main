@@ -12,7 +12,7 @@
 
 import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 
-export type DynastyDraftKind = 'combined' | 'rookie' | 'startup' | 'supplemental' | 'dispersal'
+type DynastyDraftKind = 'combined' | 'rookie' | 'startup' | 'supplemental' | 'dispersal'
 
 /**
  * Which dynasty draft this is. `null` for a non-dynasty league and for an imported roster
@@ -67,7 +67,7 @@ export function shouldDefaultRookiesOnly(draftModeLabel: string | null | undefin
   return String(draftModeLabel ?? '').trim().toLowerCase() === 'rookie'
 }
 
-export type RookieAuctionPolicyNote = {
+type RookieAuctionPolicyNote = {
   policy: 'block' | 'budget' | 'nominations'
   /** How many traded rookie picks were converted when the auction was created. */
   tradeCount: number

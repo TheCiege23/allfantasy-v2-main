@@ -50,6 +50,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/ai-learning-system/recordTradeParticipants', () => ({ recordTradeOutcomeForBothManagers: vi.fn() }))
 vi.mock('@/lib/trade-market/redraftTradeMarketEvents', () => ({ recordRedraftTradeMarketEvent: vi.fn(async () => undefined) }))
 vi.mock('@/lib/chat-notifications/tradeOfferDm', () => ({ queueTradeStatusInDm: vi.fn() }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET as review } from '@/app/api/leagues/[leagueId]/trades/[tradeId]/review/route'
 import { POST as nativeDecision } from '@/app/api/leagues/[leagueId]/trades/[tradeId]/commissioner/route'
@@ -65,8 +67,8 @@ const OK = {
   ok: true,
   review: REVIEW,
   sideNames: ['Alpha', 'Bravo'],
-  receipt: { receiptId: 'rcpt_1', grade: { graded: true, letter: 'F', partnerLetter: 'A', percentDiff: -48, giveValue: 6000, getValue: 3100, label: 'x', recommendation: 'y' }, assets: [] },
-  trade: { origin: { source: 'af', platform: 'allfantasy', deepLink: null } },
+  receipt: { receiptId: 'rcpt_1', grade: { graded: true, letter: 'F', partnerLetter: 'A', percentDiff: -48, giveValue: 6000, getValue: 3100, label: 'x', recommendation: 'y', leagueType: { type: 'redraft', label: 'Redraft', basis: 'confirmed' } }, assets: [] },
+  trade: { sport: 'NFL', origin: { source: 'af', platform: 'allfantasy', deepLink: null } },
 }
 
 const get = (qs: string) =>
@@ -116,6 +118,8 @@ describe('GET …/trades/{id}/review', () => {
       tradeGrade: { grade: 'F', partnerGrade: 'A' },
       explanation: { noteToLeague: 'Flagged for the commissioner: a heavily lopsided value gap.', source: 'template' },
       actOn: null,
+      // What the panel needs to decide whether the letter's graded record applies (NFL redraft only).
+      recordScope: { sport: 'NFL', leagueType: 'redraft' },
     })
   })
 

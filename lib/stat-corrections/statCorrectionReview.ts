@@ -33,7 +33,7 @@ export type StarterStatLine = {
   days?: ReadonlyArray<{ storedStats: Record<string, number> | null; freshStats: Record<string, number> | null }>
 }
 
-export type ReviewMatchup = {
+type ReviewMatchup = {
   matchupId: string
   homeRosterId: string
   awayRosterId: string
@@ -51,7 +51,7 @@ export type PlayerCorrection = {
   delta: number
 }
 
-export type MatchupSide = { rosterId: string; before: number; after: number }
+type MatchupSide = { rosterId: string; before: number; after: number }
 
 export type MatchupCorrection = {
   matchupId: string

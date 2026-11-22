@@ -4,9 +4,11 @@
 
 import { importComingSoonMessage, isImportProviderAvailable } from './provider-ui-config';
 import { parseFantraxLeagueId } from './fantrax/fantraxApi';
+import { isYahooSnapshotSourceId } from './yahoo/snapshot/yahooSnapshotModel';
 import type { ImportProvider } from './types';
+import type { ImportReviewOverrides } from './review/types';
 
-export interface CommissionerAttestation {
+interface CommissionerAttestation {
   accepted: boolean;
   statement?: string;
 }
@@ -31,7 +33,7 @@ function toWireAttestation(
   };
 }
 
-export interface FetchPreviewResult {
+interface FetchPreviewResult {
   ok: boolean;
   data?: unknown;
   error?: string;
@@ -44,7 +46,7 @@ export interface FetchPreviewResult {
   verificationRequired?: boolean;
 }
 
-export interface SubmitImportResult {
+interface SubmitImportResult {
   ok: boolean;
   data?: { league: { id: string; name: string; sport: string } };
   error?: string;
@@ -78,7 +80,7 @@ export interface SubmitImportResult {
   joinedExisting?: boolean;
 }
 
-export interface DiscoverProviderLeaguesResult {
+interface DiscoverProviderLeaguesResult {
   ok: boolean;
   data?: unknown;
   error?: string;
@@ -187,7 +189,7 @@ function importRequestErrorMessage(e: unknown): string {
 }
 
 /** Shown when the server answered with something that is not JSON — an empty 500, an HTML error page. */
-export const IMPORT_SERVER_FAILURE_MESSAGE =
+const IMPORT_SERVER_FAILURE_MESSAGE =
   'Import failed on our side — nothing was changed. Try again in a minute.';
 
 /**
@@ -245,7 +247,8 @@ export async function fetchImportPreview(
    */
   options?: { allowPreviewOnly?: boolean }
 ): Promise<FetchPreviewResult> {
-  if (!isImportProviderAvailable(provider)) {
+  // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
+  if (!isImportProviderAvailable(provider) && !(provider === 'yahoo' && isYahooSnapshotSourceId(sourceInput))) {
     return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
@@ -313,9 +316,12 @@ export async function submitImportCreation(
      * imports with no cookies as a member (see `espnPublicMemberImport.ts`).
      */
     espnLeagueRunBy?: 'espn' | 'member' | 'me'
+    /** Edits from the "Review your import" screen, applied server-side to the fresh fetch. */
+    reviewOverrides?: ImportReviewOverrides | null
   }
 ): Promise<SubmitImportResult> {
-  if (!isImportProviderAvailable(provider)) {
+  // A pasted Yahoo league (yahoo-snapshot:<id>) is allowed through; the server decides who may use it.
+  if (!isImportProviderAvailable(provider) && !(provider === 'yahoo' && isYahooSnapshotSourceId(sourceInput))) {
     return { ok: false, error: importComingSoonMessage(provider) };
   }
   const trimmed = sourceInput?.trim();
@@ -335,6 +341,7 @@ export async function submitImportCreation(
         ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
         ...(options?.claimSourceTeamId?.trim() ? { claimSourceTeamId: options.claimSourceTeamId.trim() } : {}),
         ...(provider === 'espn' && options?.espnLeagueRunBy ? { espnLeagueRunBy: options.espnLeagueRunBy } : {}),
+        ...(options?.reviewOverrides ? { reviewOverrides: options.reviewOverrides } : {}),
       }),
     });
     const data = await readImportResponseBody(res);

@@ -24,7 +24,7 @@ const PLAN_DISPLAY: Record<string, string> = {
   af_supreme: "AF Supreme",
 }
 
-export type GateDef = {
+type GateDef = {
   featureId: SubscriptionFeatureId
   label: string
   description: string

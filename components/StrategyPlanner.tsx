@@ -226,8 +226,6 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
     info: { icon: <Info className="w-4 h-4 text-blue-400" />, color: 'border-blue-500/30 bg-blue-500/10' },
   };
 
-  const selectedLeague = leagues.find(l => l.league_id === selectedLeagueId);
-
   if (!strategy && !loading) {
     return (
       <div className="space-y-6">
@@ -237,7 +235,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Season Strategy Planner</h3>
           <p className="text-white/60 text-sm max-w-md mx-auto mb-6">
-            Get an AI-powered roadmap for your season. We&apos;ll analyze your roster, standings, draft capital,
+            Get a Chimmy-powered roadmap for your season. We&apos;ll analyze your roster, standings, draft capital,
             and schedule to classify your team and build a phased action plan.
           </p>
         </div>
@@ -317,9 +315,9 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
             <RefreshCw className="w-8 h-8 text-purple-300 animate-spin" />
           </div>
           <h3 className="text-lg font-semibold text-white mb-2">Analyzing Your Season...</h3>
-          <p className="text-white/50 text-sm">Valuing roster, computing standings, and generating AI roadmap</p>
+          <p className="text-white/50 text-sm">Valuing roster, computing standings, and generating Chimmy roadmap</p>
           <div className="mt-6 max-w-xs mx-auto space-y-2">
-            {['Valuing all league rosters', 'Computing draft capital', 'Classifying team direction', 'Generating AI roadmap'].map((step, i) => (
+            {['Valuing all league rosters', 'Computing draft capital', 'Classifying team direction', 'Generating Chimmy roadmap'].map((step, i) => (
               <div key={i} className="flex items-center gap-2 text-xs text-white/40">
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" style={{ animationDelay: `${i * 0.3}s` }} />
                 {step}
@@ -751,7 +749,7 @@ export default function StrategyPlanner({ leagues, sleeperUsername }: StrategyPl
             className="flex items-center gap-2 text-sm font-semibold text-white/80 mb-3 hover:text-white transition"
           >
             <Zap className="w-4 h-4 text-cyan-400" />
-            AI Strategy Roadmap
+            Chimmy Strategy Roadmap
             {showRoadmap ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
           {showRoadmap && (

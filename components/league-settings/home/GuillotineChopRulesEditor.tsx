@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { DEFAULT_ADVANCED, MAX_CHOPS_PER_WEEK, describeSchedule, isDefault, type GuillotineAdvanced } from '@/lib/guillotine/chopSchedule'
 import { SettingsSubPageFooter } from './LeagueSettingsHome'
 
-export type SaveChopRules = (a: GuillotineAdvanced) => Promise<{ ok: true; value: GuillotineAdvanced; lines: string[] } | { ok: false; error: string }>
+type SaveChopRules = (a: GuillotineAdvanced) => Promise<{ ok: true; value: GuillotineAdvanced; lines: string[] } | { ok: false; error: string }>
 
 /** PATCH /api/leagues/:id/guillotine/summary `{ advanced }` — commissioner-only, AF Commissioner to change. */
 export function patchChopRules(leagueId: string): SaveChopRules {

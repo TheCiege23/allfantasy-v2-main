@@ -101,19 +101,35 @@ export async function GET(req: NextRequest) {
      * /api/spotify/token reads `notificationPreferences.spotify.isPremium` to
      * decide whether the Web Playback SDK can stream — and nothing ever wrote
      * that field, so every user read as free forever. Persist the real
-     * `product` from GET /v1/me here. An absent product (user-read-private not
-     * granted) is stored as not-Premium: fail closed, never invented.
+     * `product` from GET /v1/me here.
+     *
+     * ⚠ AN ABSENT `product` IS UNKNOWN, NOT FREE. This used to store
+     * `product === 'premium'`, so a missing field became `false`. Since the
+     * February 2026 Web API changes, GET /v1/me no longer returns `product` for
+     * Development Mode apps at all — so that line told every Premium listener to
+     * buy Premium. Record the tier only when Spotify supplied it, and mark it with
+     * `premiumSource` so readStoredPremium can tell a real answer from the old
+     * defaulted `false`. When it is unknown, the Web Playback SDK reports a free
+     * account itself (`account_error`).
      */
     const existingProfile = await prisma.userProfile.findUnique({
       where: { userId: session.user.id },
       select: { notificationPreferences: true },
     })
     const prefs = (existingProfile?.notificationPreferences ?? {}) as Record<string, unknown>
+    const {
+      isPremium: _stalePremium,
+      premiumSource: _stalePremiumSource,
+      ...previousSpotify
+    } = (prefs.spotify ?? {}) as Record<string, unknown>
+    const reportedProduct = typeof profile?.product === 'string' ? profile.product : null
     const mergedPrefs = {
       ...prefs,
       spotify: {
-        ...((prefs.spotify ?? {}) as Record<string, unknown>),
-        isPremium: profile?.product === 'premium',
+        ...previousSpotify,
+        ...(reportedProduct
+          ? { isPremium: reportedProduct === 'premium', premiumSource: 'spotify-product' }
+          : {}),
         displayName: profile?.display_name ?? null,
       },
     } as Prisma.InputJsonValue

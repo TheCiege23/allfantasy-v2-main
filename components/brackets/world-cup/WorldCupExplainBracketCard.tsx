@@ -160,7 +160,7 @@ export default function WorldCupExplainBracketCard({
           {!loading && entryId && (
             <span className="inline-flex items-center gap-1 text-[11px] text-white/40 sm:ml-1">
               <Coins className="h-3 w-3" />
-              Uses AI tokens
+              Uses Chimmy tokens
             </span>
           )}
         </div>

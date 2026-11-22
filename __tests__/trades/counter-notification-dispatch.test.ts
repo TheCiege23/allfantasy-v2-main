@@ -270,9 +270,9 @@ describe('a fresh offer notifies its receiver — trade_proposed previously fire
     expect(sentNotices().filter((n) => n.type === 'trade_countered')).toHaveLength(0)
   })
 
-  it('⚠ never notifies the actor about their own action', async () => {
-    /* Proposing to a roster you own must not push a notification to yourself. */
-    await freshOffer(roster(ROSTER_B, USER_A))
+  it('⚠ an offer to a team you own yourself is refused, and notifies nobody', async () => {
+    /* One manager, two teams: no trading between them (lib/league-trade-engine/ownTeamTrade.ts). */
+    await expect(freshOffer(roster(ROSTER_B, USER_A))).rejects.toThrow('You cannot trade between your own teams.')
 
     expect(mockIngest).not.toHaveBeenCalled()
   })

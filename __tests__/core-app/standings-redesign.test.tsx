@@ -71,6 +71,8 @@ describe('Standings — the league table’s new columns', () => {
   it('prints PF minus PA, signed, and the AF Power rank on every row', () => {
     const b = board()
     const { container } = render(<StandingsBoardView board={b} initial={DEFAULT_STANDINGS_VIEW} />)
+    // 2026-11-14: Diff and AF are behind "More columns".
+    fireEvent.click(within(container).getByTestId('standings-more-columns'))
     const table = container.querySelector('table.af-stb-table') as HTMLElement
     const heads = within(table).getAllByRole('columnheader').map((h) => h.textContent)
     expect(heads).toContain('Diff')

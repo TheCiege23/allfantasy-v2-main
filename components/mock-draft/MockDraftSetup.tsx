@@ -60,7 +60,7 @@ const ROOM_MODE_OPTIONS = [
   { value: 'cpu_only', label: 'CPU-only simulation room' },
 ]
 
-export interface MockDraftSetupProps {
+interface MockDraftSetupProps {
   /** Initial config (e.g. from league) */
   initialConfig?: Partial<MockDraftConfig>
   /** Leagues for optional "use league" prefill */

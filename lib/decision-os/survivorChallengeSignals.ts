@@ -10,7 +10,7 @@ import { SEVERITY_RANK, type AttentionSignalSeverity, type DecisionOsAttentionSi
  * `loadBuilderBoard`) and never invents one. Ids only, never another manager's answer.
  */
 
-export interface SurvivorChallengeSignalChallenge {
+interface SurvivorChallengeSignalChallenge {
   challengeId: string
   title: string
   status: string
@@ -32,8 +32,8 @@ export interface SurvivorChallengeSignalInput {
 
 const HOUR_MS = 3_600_000
 /** A challenge that locks inside a day is worth a nudge; inside two hours it is urgent. */
-export const CHALLENGE_DUE_WINDOW_MS = 24 * HOUR_MS
-export const CHALLENGE_URGENT_MS = 2 * HOUR_MS
+const CHALLENGE_DUE_WINDOW_MS = 24 * HOUR_MS
+const CHALLENGE_URGENT_MS = 2 * HOUR_MS
 
 const isEs = (language: string | null | undefined) => String(language ?? '').toLowerCase().startsWith('es')
 

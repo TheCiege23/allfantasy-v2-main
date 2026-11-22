@@ -48,6 +48,24 @@ describe('phone bottom bar', () => {
     expect(barPaths({ selectedLeagueId: 'L1' })).toEqual(['/core', '/core/waivers', '/core/my-team', '/core/matchup', '/core/trades'])
   })
 
+  /* My team, Waivers and Matchup are league-only since 2026-11-12; Your week, Live and Player Finder take their slots. */
+  it('swaps the league-only tabs for Your week, Live and Player Finder with no league selected', () => {
+    const paths = barPaths({ selectedLeagueId: null })
+    expect(paths).toEqual(['/core', '/core/week', '/core/live', '/core/players', '/core/trades'])
+    expect(new Set(paths).size).toBe(paths.length)
+  })
+
+  /* "Live scores" and "Player Finder" wrapped to two lines at 390px; the bar uses their short forms. */
+  it('labels the no-league bar with short forms where a nav item has one', () => {
+    const { container } = render(
+      <AfCoreShell active="home" leagues={[]} syncAge={{ label: 'just now', stale: false }} syncEligibleCount={0} selectedLeagueId={null}>
+        <div>screen</div>
+      </AfCoreShell>,
+    )
+    const items = [...container.querySelectorAll('.af-tabbar > .af-tabbar-item')]
+    expect(items.map((el) => el.textContent)).toEqual(['Home', 'Your week', 'Live', 'Players', 'Trades', 'More'])
+  })
+
   /* Waivers took the Leagues slot (2026-11-07, owner's call); the league tray opens from More. */
   it('puts Waivers second, and opens the league tray from More in place rather than navigating away', async () => {
     const { container } = render(

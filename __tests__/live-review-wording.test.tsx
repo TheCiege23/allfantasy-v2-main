@@ -49,7 +49,9 @@ describe('🛑 Waiver intelligence on /core is styled', () => {
     render(<WaiverIntel leagueId="lg-1" surface="core" />)
     const root = screen.getByTestId('waiver-intel')
     expect(root.className.split(' ')).toEqual(expect.arrayContaining(['bdx', 'bdx-embed', 'bdx-embed-core']))
-    await waitFor(() => expect(screen.getByText(/\$100 budget/)).toBeTruthy())
+    // On /core the budget is the screen's FAAB tile, so the panel no longer repeats it (2026-11-14).
+    await waitFor(() => expect(screen.getByText('Waiver intelligence')).toBeTruthy())
+    expect(screen.queryByText(/\$100 budget/)).toBeNull()
   })
 
   it('inside the deck it adds nothing — the deck already provides the scope', () => {
@@ -80,10 +82,12 @@ describe('Waivers wording', () => {
     expect(describeTiebreakRule('earliest_claim')).not.toMatch(/_/)
   })
 
-  it('names the platform properly, and a league AllFantasy runs is not "only read"', () => {
+  it('names the platform properly, and never calls a league "only read"', () => {
     const screenSrc = src('components/core-app/screens/Waivers.tsx')
     expect(screenSrc).toContain('platformLabel(data.league.platform)')
-    expect(screenSrc).toContain('Claims for this league are made here, on AllFantasy.')
+    // The claims footnote went (2026-11-14): the button and the banner over every league tab say where claims are made.
+    expect(screenSrc).not.toContain("copy('Claims are made on your platform. AllFantasy only reads your league.')")
+    expect(screenSrc).not.toContain('af-wv-footnote')
   })
 
   it('the board states ownership as its own sentence', () => {

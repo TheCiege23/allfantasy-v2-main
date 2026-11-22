@@ -61,6 +61,7 @@ function fbPreset(
         'keeper',
         'best_ball',
         'guillotine',
+        'survivor_guillotine',
         'survivor',
         'tournament',
         'devy',

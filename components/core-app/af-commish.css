@@ -1910,6 +1910,15 @@
   line-height: 1.45;
   color: var(--muted);
 }
+.af-core .af-cm-audit-market {
+  margin: 8px 0 0;
+}
+.af-core .af-cm-audit-market li {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .af-core .af-cm-audit-post {
   display: flex;
   flex-wrap: wrap;

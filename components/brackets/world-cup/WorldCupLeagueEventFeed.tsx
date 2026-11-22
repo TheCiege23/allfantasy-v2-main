@@ -71,7 +71,7 @@ export default function WorldCupLeagueEventFeed({ challengeId }: { challengeId: 
             {e.eventTitle}
             {e.isAiGenerated ? (
               <span className="rounded bg-white/10 px-1 py-0.5 text-[11px] font-semibold text-white/50">
-                AI
+                Chimmy
               </span>
             ) : null}
           </div>

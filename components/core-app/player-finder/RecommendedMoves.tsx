@@ -107,4 +107,3 @@ export function RecommendedMoves({
   )
 }
 
-export default RecommendedMoves

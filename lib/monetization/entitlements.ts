@@ -48,9 +48,9 @@ export const ENTITLEMENTS = {
   },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
-    label: 'Commissioner AI Tools',
+    label: 'Commissioner Chimmy Tools',
     description:
-      'AI-powered league management tools including ceremony narration, weekly recaps, and commissioner copilot.',
+      'Chimmy-powered league management tools including ceremony narration, weekly recaps, and commissioner copilot.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
@@ -58,7 +58,7 @@ export const ENTITLEMENTS = {
   },
   commissioner_ai_narration: {
     key: 'commissioner_ai_narration',
-    label: 'AI Ceremony Narration',
+    label: 'Chimmy Ceremony Narration',
     description:
       'Chimmy writes dramatic HOH, eviction, and finale ceremonies for your Big Brother league.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
@@ -68,7 +68,7 @@ export const ENTITLEMENTS = {
   },
   commissioner_ai_recap: {
     key: 'commissioner_ai_recap',
-    label: 'AI Weekly Recaps',
+    label: 'Chimmy Weekly Recaps',
     description: 'Automated episode and weekly league recaps with commissioner tone controls.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -86,7 +86,7 @@ export const ENTITLEMENTS = {
   },
   commissioner_ai_jury_briefing: {
     key: 'commissioner_ai_jury_briefing',
-    label: 'Jury Briefing AI',
+    label: 'Jury Briefing Chimmy',
     description: 'Structured jury-phase analysis and narrative support for finale voting context.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -95,22 +95,22 @@ export const ENTITLEMENTS = {
   commissioner_nomination_analysis: {
     key: 'commissioner_nomination_analysis',
     label: 'HOH Nomination Analysis',
-    description: 'Private AI analysis of who to nominate based on threat level and jury implications.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+    description: 'Private Chimmy analysis of who to nominate based on threat level and jury implications.',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
   },
   commissioner_pov_analysis: {
     key: 'commissioner_pov_analysis',
     label: 'POV Strategy Analysis',
-    description: 'AI-assisted veto week planning and backdoor risk assessment.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+    description: 'Chimmy-assisted veto week planning and backdoor risk assessment.',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
   },
   commissioner_devy_scouting: {
     key: 'commissioner_devy_scouting',
-    label: 'Devy Scouting AI',
+    label: 'Devy Scouting Chimmy',
     description: 'Prospect evaluation, declaration-year projections, and pipeline health analysis.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -118,17 +118,17 @@ export const ENTITLEMENTS = {
   },
   commissioner_cap_advice: {
     key: 'commissioner_cap_advice',
-    label: 'Cap Space AI Advice',
+    label: 'Cap Space Chimmy Advice',
     description:
-      'AI-powered salary cap recommendations including cut candidates, extension targets, and cap burden warnings.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+      'Chimmy-powered salary cap recommendations including cut candidates, extension targets, and cap burden warnings.',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
   },
   commissioner_weather_projections: {
     key: 'commissioner_weather_projections',
     label: 'AF Weather Projections',
-    description: 'AI-adjusted projections based on live weather data for outdoor sports.',
+    description: 'Chimmy-adjusted projections based on live weather data for outdoor sports.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
@@ -136,7 +136,7 @@ export const ENTITLEMENTS = {
   },
   commissioner_power_rankings: {
     key: 'commissioner_power_rankings',
-    label: 'AI Power Rankings',
+    label: 'Chimmy Power Rankings',
     description: 'Chimmy generates league-wide power rankings with per-team reasoning each week.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -146,7 +146,7 @@ export const ENTITLEMENTS = {
   commissioner_fairness_audit: {
     key: 'commissioner_fairness_audit',
     label: 'League Fairness Audit',
-    description: 'AI monitors voting patterns and nomination trends to flag potential fairness issues.',
+    description: 'Chimmy monitors voting patterns and nomination trends to flag potential fairness issues.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
@@ -154,14 +154,14 @@ export const ENTITLEMENTS = {
   commissioner_constitution_generator: {
     key: 'commissioner_constitution_generator',
     label: 'Constitution Generator',
-    description: 'AI writes a full league constitution based on your current settings.',
+    description: 'Chimmy writes a full league constitution based on your current settings.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
   },
   commissioner_idp_analysis: {
     key: 'commissioner_idp_analysis',
-    label: 'IDP AI Analysis',
+    label: 'IDP Chimmy Analysis',
     description: 'Chimmy-powered IDP start/sit, waiver, and matchup tools for your league.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -170,7 +170,7 @@ export const ENTITLEMENTS = {
   },
   commissioner_c2c_scouting: {
     key: 'commissioner_c2c_scouting',
-    label: 'C2C Scouting AI',
+    label: 'C2C Scouting Chimmy',
     description: 'Campus-to-campus scouting, taxi transition advice, and combined NFL/CFB context.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
@@ -191,17 +191,17 @@ export const ENTITLEMENTS = {
     key: 'commissioner_chimmy_autopilot',
     label: 'Chimmy Autopilot',
     description:
-      'Chimmy runs a team whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Requires AF Commissioner subscription.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+      'Chimmy runs a team — drafting for it and managing it — whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Part of AF Pro and AF Supreme (owner decision 2026-11-22; it was AF Commissioner).',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
     highlightParam: 'chimmy_autopilot',
   },
   commissioner_integrity_monitoring: {
     key: 'commissioner_integrity_monitoring',
     label: 'Integrity Monitoring',
     description:
-      'AI-powered anti-collusion and anti-tanking monitoring for your leagues. Automatically analyzes trades and weekly lineups for suspicious patterns using on-field data only.',
+      'Chimmy-powered anti-collusion and anti-tanking monitoring for your leagues. Automatically analyzes trades and weekly lineups for suspicious patterns using on-field data only.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
@@ -209,7 +209,7 @@ export const ENTITLEMENTS = {
   },
   pro_draft_ai: {
     key: 'pro_draft_ai',
-    label: 'AI Draft Assistant',
+    label: 'Chimmy Draft Assistant',
     description: 'Chimmy-powered draft board help with tier breaks and positional scarcity.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
@@ -218,8 +218,8 @@ export const ENTITLEMENTS = {
   },
   pro_waiver_ai: {
     key: 'pro_waiver_ai',
-    label: 'AI Waiver Targets',
-    description: 'AI-ranked waiver wire targets based on your league scoring and roster needs.',
+    label: 'Chimmy Waiver Targets',
+    description: 'Chimmy-ranked waiver wire targets based on your league scoring and roster needs.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
@@ -227,8 +227,8 @@ export const ENTITLEMENTS = {
   },
   commissioner_waiver_ai: {
     key: 'commissioner_waiver_ai',
-    label: 'Commissioner Waiver AI',
-    description: 'AI-powered league-wide waiver tools: settings health check, suspicious behavior detection, collusion risk, and fairness analysis.',
+    label: 'Commissioner Waiver Chimmy',
+    description: 'Chimmy-powered league-wide waiver tools: settings health check, suspicious behavior detection, collusion risk, and fairness analysis.',
     requiredPlan: ['af_commissioner', 'af_supreme'],
     upgradeUrl: '/commissioner-upgrade',
     upgradeLabel: 'Get AF Commissioner',
@@ -236,8 +236,8 @@ export const ENTITLEMENTS = {
   },
   pro_trade_ai: {
     key: 'pro_trade_ai',
-    label: 'AI Trade Analyzer',
-    description: 'Evaluate trade offers with AI-powered win-now vs future value analysis.',
+    label: 'Chimmy Trade Analyzer',
+    description: 'Evaluate trade offers with Chimmy-powered win-now vs future value analysis.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
@@ -245,7 +245,7 @@ export const ENTITLEMENTS = {
   },
   pro_lineup_optimizer: {
     key: 'pro_lineup_optimizer',
-    label: 'AI Lineup Optimizer',
+    label: 'Chimmy Lineup Optimizer',
     description:
       'Chimmy sets your optimal starting lineup based on projections, matchups, and injury news.',
     requiredPlan: ['af_pro', 'af_supreme'],
@@ -255,7 +255,7 @@ export const ENTITLEMENTS = {
   },
   pro_start_sit: {
     key: 'pro_start_sit',
-    label: 'AI Start/Sit',
+    label: 'Chimmy Start/Sit',
     description: 'Chimmy gives you personalized start/sit recommendations based on your roster and matchup.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
@@ -265,7 +265,7 @@ export const ENTITLEMENTS = {
   pro_matchup_analysis: {
     key: 'pro_matchup_analysis',
     label: 'Matchup Analysis',
-    description: 'AI analysis of your weekly matchup including threat assessment and scoring projections.',
+    description: 'Chimmy analysis of your weekly matchup including threat assessment and scoring projections.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
@@ -273,7 +273,7 @@ export const ENTITLEMENTS = {
   },
   pro_player_comparison: {
     key: 'pro_player_comparison',
-    label: 'AI Player Comparison',
+    label: 'Chimmy Player Comparison',
     description: 'Side-by-side player outlooks with rest-of-season and weekly context.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
@@ -282,7 +282,7 @@ export const ENTITLEMENTS = {
   pro_af_projections: {
     key: 'pro_af_projections',
     label: 'AF Crest Projections',
-    description: 'AI-adjusted projections including weather and contextual factors shown on player cards.',
+    description: 'Chimmy-adjusted projections including weather and contextual factors shown on player cards.',
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
@@ -298,7 +298,7 @@ export const ENTITLEMENTS = {
   },
   pro_autocoach: {
     key: 'pro_autocoach',
-    label: 'AI Auto Start/Sit Protection',
+    label: 'Chimmy Auto Start/Sit Protection',
     description:
       'Pre-lock automation: swaps clearly unavailable starters using live status and Start/Sit projections. Per-player game locks — not Best Ball, not in-game fixes.',
     requiredPlan: ['af_pro', 'af_supreme'],
@@ -319,14 +319,14 @@ export const ENTITLEMENTS = {
   war_room_devy_rankings: {
     key: 'war_room_devy_rankings',
     label: 'Devy Rankings',
-    description: 'AI-generated college player rankings with campus scoring and pro projection scores.',
+    description: 'Chimmy-generated college player rankings with campus scoring and pro projection scores.',
     requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
   },
   war_room_draft_strategy: {
     key: 'war_room_draft_strategy',
-    label: 'Draft Strategy AI',
+    label: 'Draft Strategy Chimmy',
     description: 'Real-time draft board advice with tier-break alerts and positional scarcity callouts.',
     requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
@@ -336,7 +336,7 @@ export const ENTITLEMENTS = {
   war_room_pipeline_analysis: {
     key: 'war_room_pipeline_analysis',
     label: 'Pipeline Health Analysis',
-    description: "AI assessment of your dynasty roster's campus/taxi/active pipeline health.",
+    description: "Chimmy assessment of your dynasty roster's campus/taxi/active pipeline health.",
     requiredPlan: ['af_war_room'],
     upgradeUrl: '/upgrade?plan=war_room',
     upgradeLabel: 'Get AF Legacy',
@@ -405,6 +405,6 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   manager_psychology: 'af_pro',
   dispersal_draft: 'af_commissioner',
   integrity_monitoring: 'af_commissioner',
-  chimmy_autopilot: 'af_commissioner',
+  chimmy_autopilot: 'af_pro',
   commissioner_waiver_ai: 'af_commissioner',
 }

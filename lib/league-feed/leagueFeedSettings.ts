@@ -11,7 +11,7 @@ export type LeagueFeedSettings = {
   }
 }
 
-export const DEFAULT_LEAGUE_FEED_SETTINGS: LeagueFeedSettings = {
+const DEFAULT_LEAGUE_FEED_SETTINGS: LeagueFeedSettings = {
   enabled: true,
   aiFlavorEnabled: true,
   verbosity: "medium",

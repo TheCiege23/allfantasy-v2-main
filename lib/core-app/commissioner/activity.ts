@@ -46,7 +46,7 @@ export type LeagueMemberActivity = SectionState<{
   basis: string
 }>
 
-export type ImportedActivityInput = {
+type ImportedActivityInput = {
   kind: 'imported'
   /** `readManagerActivity(leagueId, windowDays)` — current-window and prior-window move counts per manager. */
   managers: Array<{ managerName: string; currentCount: number; priorCount: number; lastActionAt?: Date | null }>
@@ -63,7 +63,7 @@ export type ImportedActivityInput = {
   eventCount: number
 }
 
-export type NativeActivityInput = {
+type NativeActivityInput = {
   kind: 'native'
   /** `getLeagueManagerHealth(leagueId).rows`, or null when that read failed. */
   rows: Array<{
@@ -194,6 +194,11 @@ export type MemberActivityReads =
       native: false
       managers: ImportedActivityInput['managers'] | null
       window: { lastActivityAt: Date | null; eventCount: number } | null
+      /**
+       * Team and owner names of the teams a chopped league has eliminated (lib/guillotine/eliminatedTeams.ts).
+       * A chopped manager can make no move, so without this every one of them read as inactive.
+       */
+      eliminatedNames?: readonly string[]
     }
 
 /**
@@ -214,11 +219,13 @@ export function memberActivityFromReads(
       reason: copy(language).activityLeagueUnreadable,
     }
   }
+  // A chopped team is out of the league, not inactive: it leaves both the move list and the silent list.
+  const out = new Set(reads.eliminatedNames ?? [])
   return resolveMemberActivity(
     {
       kind: 'imported',
-      managers: reads.managers,
-      teams: ownedTeamNames(teams),
+      managers: reads.managers.filter((mgr) => !out.has(mgr.managerName)),
+      teams: ownedTeamNames(teams).filter((name) => !out.has(name)),
       lastActivityAt: reads.window.lastActivityAt,
       eventCount: reads.window.eventCount,
     },
@@ -254,7 +261,7 @@ export function staleActivityReason(input: {
 
 // ── Team identity helpers ────────────────────────────────────────────────────
 
-export type TeamIdentityRow = {
+type TeamIdentityRow = {
   teamName?: string | null
   ownerName?: string | null
   platformUserId?: string | null

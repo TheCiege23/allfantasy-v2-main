@@ -6,7 +6,7 @@ import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosLoaderText, severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface AlertCardProps {
+interface AlertCardProps {
   message: string
   severity: SeverityTier
   onClick?: () => void

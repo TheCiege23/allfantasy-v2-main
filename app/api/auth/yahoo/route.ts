@@ -14,7 +14,12 @@ import {
   YAHOO_FANTASY_SCOPE,
   YAHOO_RETURN_TO_COOKIE,
 } from '@/lib/yahoo/oauthConfig'
-import { isYahooImportLive, YAHOO_COMING_SOON_ERROR } from '@/lib/yahoo/yahooAvailability'
+import {
+  isYahooImportLive,
+  isYahooOpenForUser,
+  isYahooPreviewConfigured,
+  YAHOO_COMING_SOON_ERROR,
+} from '@/lib/yahoo/yahooAvailability'
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID
 const APP_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || 'https://www.allfantasy.ai'
@@ -38,11 +43,23 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
    * flow only walks the manager into an error. Back to where they started, with a notice ImportV4
    * and the legacy page both render.
    */
+  type SessionLike = { user?: { id?: string } } | null
+  const readSession = async () => (await getServerSession(authOptions as never)) as SessionLike
+  let session: SessionLike | undefined
   if (!isYahooImportLive()) {
-    return NextResponse.redirect(buildYahooReturnUrl(returnTo, APP_URL, { yahoo_error: YAHOO_COMING_SOON_ERROR }))
+    /*
+     * Owner preview (YAHOO_PREVIEW_USER_IDS): an allowlisted user may connect while everyone else
+     * still sees "coming soon". With no list configured the session is never read, so the default
+     * path is byte-for-byte what it was. A signed-out allowlisted user gets "coming soon" too —
+     * sign in first, then click Connect.
+     */
+    session = isYahooPreviewConfigured() ? await readSession() : null
+    if (!isYahooOpenForUser(session?.user?.id)) {
+      return NextResponse.redirect(buildYahooReturnUrl(returnTo, APP_URL, { yahoo_error: YAHOO_COMING_SOON_ERROR }))
+    }
   }
 
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  if (session === undefined) session = await readSession()
   if (!session?.user?.id) {
     // Carry the destination through login so signing in does not lose the errand.
     return NextResponse.redirect(`${APP_URL}/login?callbackUrl=${encodeURIComponent(`/api/auth/yahoo?returnTo=${returnTo}`)}`)

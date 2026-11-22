@@ -7,6 +7,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/core-app/connectLeagueReads', () => ({ loadConnectLeagueFacts: h.facts }))
 
 import {
+  CONFIRM_EMAIL_NUDGE,
   connectLeagueCopy,
   connectLeagueHref,
   connectLeagueStep,
@@ -25,9 +26,9 @@ describe('which step', () => {
   it('says nothing once we know a team, whatever else is true', () => {
     expect(connectLeagueStep({ claimedTeams: 1, leagueCount: 0, verified: false })).toBe('none')
   })
-  it('asks for verification first — the import refuses an unverified account', () => {
-    expect(connectLeagueStep({ claimedTeams: 0, leagueCount: 0, verified: false })).toBe('verify')
-    expect(connectLeagueStep({ claimedTeams: 0, leagueCount: 3, verified: false })).toBe('verify')
+  it('🛑 never puts verification in front of the league — import takes an unverified account (2026-11-15)', () => {
+    expect(connectLeagueStep({ claimedTeams: 0, leagueCount: 0, verified: false })).toBe('connect')
+    expect(connectLeagueStep({ claimedTeams: 0, leagueCount: 3, verified: false })).toBe('claim')
   })
   it('tells someone with no leagues to connect one, and someone with leagues to find their team', () => {
     expect(connectLeagueStep({ claimedTeams: 0, leagueCount: 0, verified: true })).toBe('connect')
@@ -44,10 +45,11 @@ describe('which step', () => {
     expect(connectLeagueHref({ sleeperLinked: false })).toBe('/import')
   })
   it('never says AI to a customer, and never promises a write', () => {
-    for (const step of ['verify', 'connect', 'claim'] as const) {
+    for (const step of ['connect', 'claim'] as const) {
       const c = connectLeagueCopy(step)
       for (const t of [c.title, c.body, c.cta]) expect(t).not.toMatch(/\bAI\b/)
     }
+    for (const t of [CONFIRM_EMAIL_NUDGE.body, CONFIRM_EMAIL_NUDGE.cta]) expect(t).not.toMatch(/\bAI\b/)
     expect(connectLeagueCopy('connect').body).toMatch(/Read-only/)
   })
   it('opens Chimmy in the new league with the lineup question typed', () => {
@@ -87,10 +89,20 @@ describe('ConnectLeagueCard', () => {
     expect(screen.getByRole('link', { name: 'Connect your account' }).getAttribute('href')).toBe('/import?provider=sleeper')
   })
 
-  it('offers a fresh verification link before anything else', async () => {
-    await show({ claimedTeams: 0, leagueCount: 0, verified: false, sleeperLinked: false })
+  it('🛑 an unverified account still gets the league first, with confirming as a nudge under it', async () => {
+    const { container } = await show({ claimedTeams: 0, leagueCount: 0, verified: false, sleeperLinked: false })
+    expect(screen.getByRole('link', { name: 'Connect a league' }).getAttribute('href')).toBe('/import')
     expect(screen.getByRole('button', { name: 'Send the link again' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /Connect/ })).toBeNull()
+    expect(screen.getByText(CONFIRM_EMAIL_NUDGE.body)).toBeTruthy()
+    // The league action comes before the confirmation nudge in the card.
+    const link = container.querySelector('a.af-connect-go')!
+    const nudge = container.querySelector('[data-kind="confirm-email"]')!
+    expect(link.compareDocumentPosition(nudge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a verified account sees no confirmation nudge', async () => {
+    const { container } = await show({ claimedTeams: 0, leagueCount: 0, verified: true, sleeperLinked: false })
+    expect(container.querySelector('[data-kind="confirm-email"]')).toBeNull()
   })
 })
 

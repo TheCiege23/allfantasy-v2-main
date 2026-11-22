@@ -10,7 +10,7 @@ export const POST = withApiUsage({ endpoint: "/api/questionnaire", tool: "Questi
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid data' },
+        { error: result.error.issues[0]?.message || 'Invalid data' },
         { status: 400 }
       )
     }

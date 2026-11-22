@@ -258,3 +258,75 @@ describe('TradeCenterPanel — pure helpers', () => {
     expect(teamStanding({ ...THREE_WAY, status: 'awaiting_votes' } as never, 'r4', 'r2')).toBe('accepted')
   })
 })
+
+describe('TradeCenterPanel — how the letter has held up (the learning loop, build item 7)', () => {
+  const RECORD = {
+    season: 2026,
+    bench: null,
+    pickups: null,
+    trades: [{ letter: 'B', n: 25, netPerWeek: -1.3, aheadPct: 36 }],
+  }
+  const grade = (type: string) => ({
+    graded: true, letter: 'B', partnerLetter: 'D', percentDiff: 8, getValue: 5400, giveValue: 5000,
+    basis: 'Redraft · 12 teams · PPR', lines: [], moves: [], leagueType: { type, label: type, source: 'platform' },
+  })
+  const withGrade = (type: string) => ({ ...INCOMING, leagueGrade: grade(type), leagueGradeSide: 'viewer' })
+
+  beforeEach(async () => {
+    const { __resetAdviceRecordForTests } = await import('@/components/core-app/useAdviceRecord')
+    __resetAdviceRecordForTests()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push({ url: String(url), method: 'GET', body: null })
+      if (String(url) === '/api/advice-record') return { ok: true, status: 200, json: async () => ({ record: RECORD }) }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }))
+  })
+
+  it('an NFL redraft grade says how deals graded that letter have scored, and warns when they have not held up', async () => {
+    fetchTradesPanel.mockResolvedValue({ ok: true, data: { ...DATA, activeTrades: [withGrade('redraft')] } })
+    const r = renderPanel({ sport: 'NFL' })
+    fireEvent.click((await r.findAllByText('You, Gridiron Goons'))[0]!.closest('button')!)
+    const line = await r.findByTestId('tcp-grade-record')
+    expect(line.textContent).toBe(
+      'How B grades have held up: across 25 graded redraft trades, the team we graded B scored 1.3 PPR a week less than the players it gave up (ahead in 36%). This letter has not held up so far, so weigh it with care.',
+    )
+    expect(line.getAttribute('data-verdict')).toBe('not_held_up')
+  })
+
+  it('a dynasty grade, or another sport, carries no line — the ledger grades NFL redraft deals only', async () => {
+    fetchTradesPanel.mockResolvedValue({ ok: true, data: { ...DATA, activeTrades: [withGrade('dynasty')] } })
+    const r = renderPanel({ sport: 'NFL' })
+    fireEvent.click((await r.findAllByText('You, Gridiron Goons'))[0]!.closest('button')!)
+    await r.findByText(/Grade B/)
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/advice-record')).toBe(true))
+    expect(r.queryByTestId('tcp-grade-record')).toBeNull()
+    cleanup()
+
+    calls = []
+    fetchTradesPanel.mockResolvedValue({ ok: true, data: { ...DATA, activeTrades: [withGrade('redraft')] } })
+    const nba = renderPanel({ sport: 'NBA' })
+    fireEvent.click((await nba.findAllByText('You, Gridiron Goons'))[0]!.closest('button')!)
+    await nba.findByText(/Grade B/)
+    expect(nba.queryByTestId('tcp-grade-record')).toBeNull()
+    expect(calls.some((c) => c.url === '/api/advice-record')).toBe(false)
+  })
+
+  it('Trade OS 2026-11-21: says how sure the letter is, beside the grade, and the grade itself is unchanged', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push({ url: String(url), method: 'GET', body: null })
+      if (String(url) === '/api/advice-record') {
+        return { ok: true, status: 200, json: async () => ({ record: { ...RECORD, tradeConfidence: { B: { heldRate: 0.48, decided: 31 } } } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }))
+    fetchTradesPanel.mockResolvedValue({ ok: true, data: { ...DATA, activeTrades: [withGrade('redraft')] } })
+    const r = renderPanel({ sport: 'NFL' })
+    fireEvent.click((await r.findAllByText('You, Gridiron Goons'))[0]!.closest('button')!)
+    const line = await r.findByTestId('tcp-grade-confidence')
+    expect(line.textContent).toBe(
+      'How sure this B is: Low. About 48% of our B grades on redraft trades have held up (31 decided, recent ones weighted more). Treat this deal as closer than the letter suggests.',
+    )
+    expect(line.getAttribute('data-level')).toBe('low')
+    await r.findByText(/Grade B/)
+  })
+})

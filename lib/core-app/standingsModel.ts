@@ -79,7 +79,7 @@ export type TeamMeta = {
   reported: ReportedRecord | null
 }
 
-export type Tiebreaker = TiebreakerKey
+type Tiebreaker = TiebreakerKey
 
 export type StandingsRules = {
   playoffTeams: number
@@ -107,7 +107,7 @@ export type StandingsRules = {
  * ⚠ SHORT KEYS BECAUSE THESE ARE STORED — one `sportsDataCache` row per league per week (see
  * `standingsSnapshots.ts`). Every field is a plain number or string so the row round-trips through JSON.
  */
-export type SnapshotTeam = {
+type SnapshotTeam = {
   /** rosterId */
   r: string
   /** Head-to-head wins / losses / ties, from paired rows only. */
@@ -147,7 +147,7 @@ export type WeekSnapshot = {
   teams: SnapshotTeam[]
 }
 
-export const SNAPSHOT_VERSION = 1 as const
+const SNAPSHOT_VERSION = 1 as const
 
 /** A row counts as played once either side has put up a point. Same rule as `currentWeek.ts`. */
 export function isScoredRow(r: { pointsFor: number; pointsAgainst: number }): boolean {
@@ -404,7 +404,7 @@ export function readStandingsRules(
 
 export type RemainingGame = { week: number; a: string; b: string }
 
-export type BoardInput = {
+type BoardInput = {
   season: number
   /** Every scored regular-season week, ascending — stored and freshly computed alike. */
   snapshots: WeekSnapshot[]
@@ -421,7 +421,7 @@ export type BoardInput = {
 
 export type Zone = 'bye' | 'playoff' | 'bubble' | 'out' | 'eliminated'
 
-export type ProjectedRecord = Record3 & {
+type ProjectedRecord = Record3 & {
   pointsFor: number
   /** Where this projected record would seed. */
   seed: number
@@ -488,7 +488,7 @@ export type BoardTeam = {
   projected: ProjectedRecord | null
 }
 
-export type NextGame = {
+type NextGame = {
   week: number
   opponentId: string
   opponentName: string
@@ -503,7 +503,7 @@ export type NextGame = {
  * whatever every other game does; "lose N more" means N more losses put it out whatever every other
  * game does. Neither credits help from elsewhere, so the true number can be lower — never higher.
  */
-export type PlayoffPath = {
+type PlayoffPath = {
   /** More wins that guarantee a playoff spot. 0 once clinched; null when even winning out does not guarantee it. */
   winsToClinch: number | null
   /** More losses that guarantee elimination. 0 once eliminated; null when clinched or no number of losses does. */
@@ -512,7 +512,7 @@ export type PlayoffPath = {
   gamesLeft: number
 }
 
-export type HistoryPoint = { week: number; seed: number; powerRank: number }
+type HistoryPoint = { week: number; seed: number; powerRank: number }
 
 export type StandingsBoard = {
   season: number
@@ -558,7 +558,7 @@ export const MIN_WEEKS_TO_PROJECT = 3
 /** Floor on σ — the same floor Season Outlook uses. */
 const SIGMA_FLOOR = 12
 
-export function winPct(r: Record3): number | null {
+function winPct(r: Record3): number | null {
   const g = r.wins + r.losses + r.ties
   return g > 0 ? (r.wins + r.ties / 2) / g : null
 }
@@ -677,7 +677,7 @@ function compareOfficial(a: OrderRow, b: OrderRow, ctx: OrderCtx): number {
   return a.name.localeCompare(b.name)
 }
 
-export type ExplainCtx = OrderCtx & {
+type ExplainCtx = OrderCtx & {
   tiebreakerSource: 'platform' | 'assumed' | 'league'
   platformLabel: string
   /** True when the order is the platform's own rank rather than our rule. */

@@ -1,5 +1,5 @@
 /** Game updates lose their value when delivered after the moment has passed. */
-export function isLiveGameAlert(type: string | undefined): boolean {
+function isLiveGameAlert(type: string | undefined): boolean {
   return /^(game_|live_score)/.test(type ?? '')
 }
 

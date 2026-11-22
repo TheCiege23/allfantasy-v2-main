@@ -15,11 +15,11 @@
  * from (server-side prerender doesn't have window.location).
  */
 
-export type AllFantasyAdpDraftMode = 'real' | 'mock' | 'test'
+type AllFantasyAdpDraftMode = 'real' | 'mock' | 'test'
 
-export const ALLFANTASY_ADP_FLAG_ENV = 'NEXT_PUBLIC_USE_ALLFANTASY_ADP'
-export const ALLFANTASY_ADP_DRAFT_MODE_ENV = 'NEXT_PUBLIC_ALLFANTASY_ADP_DRAFT_MODE'
-export const ALLFANTASY_ADP_URL_PARAM = 'adpMode'
+const ALLFANTASY_ADP_FLAG_ENV = 'NEXT_PUBLIC_USE_ALLFANTASY_ADP'
+const ALLFANTASY_ADP_DRAFT_MODE_ENV = 'NEXT_PUBLIC_ALLFANTASY_ADP_DRAFT_MODE'
+const ALLFANTASY_ADP_URL_PARAM = 'adpMode'
 
 /**
  * Returns true when the AllFantasy AI ADP feature flag is on. Reads

@@ -47,9 +47,9 @@ export type EflTierStanding = {
  * League 1 (tier 3). Naming it by the destination would make slot 9 ("League 2 Promotion Playoff
  * Winner") ambiguous against slot 17 ("League 1 Promotion Playoff Winner").
  */
-export type EflPlayoffKind = 'promotion' | 'relegation'
+type EflPlayoffKind = 'promotion' | 'relegation'
 
-export type EflPlayoffId = {
+type EflPlayoffId = {
   kind: EflPlayoffKind
   tierLevel: number
 }

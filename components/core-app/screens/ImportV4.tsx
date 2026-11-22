@@ -4,6 +4,7 @@ import Link from 'next/link'
 import posthog from 'posthog-js'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { IMPORT_SEARCH_MIN_ROWS, matchesImportSearch } from '@/lib/league-import/importListSearch'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
  * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
@@ -31,10 +32,14 @@ import {
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
+import { YahooSnapshotImport } from '@/components/core-app/import/YahooSnapshotImport'
+import { openYahooCopyPaste, useYahooCopyPasteEnabled } from '@/components/core-app/import/yahooCopyPaste'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-app/import/EspnLeagueCheck'
+import { EspnTeamCodeVerify } from '@/components/core-app/import/EspnTeamCodeVerify'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -56,6 +61,9 @@ import {
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 import { detectProviderFromLink } from '@/lib/league-import/detectProviderFromLink'
 import { postImportChimmyHref } from '@/lib/core-app/connectLeague'
+import { ImportReviewPanel, type ImportReviewState } from '@/components/import/ImportReviewPanel'
+import { readImportReview } from '@/lib/league-import/review/readImportReview'
+import type { ImportReview, ImportReviewOverrides } from '@/lib/league-import/review/types'
 import { ImportVerifyGate } from '@/components/core-app/import/ImportVerifyGate'
 
 /**
@@ -238,6 +246,11 @@ type Phase =
        * Secret ID). Ticking "I'm the commissioner" sets `attested`, and the commit then records it.
        */
       canConfirmCommissioner: boolean
+      /*
+       * "Review your import", built server-side. Null when the server is older or the review could
+       * not be built — the panel below then shows exactly what it showed before this existed.
+       */
+      review: ImportReview | null
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -268,6 +281,8 @@ type Phase =
        * theirs was imported, and the league was not new.
        */
       joinedExisting: boolean
+      /** A team-less league mate: co-owner of a shared team, or a viewer. Null for a team claim. */
+      joinedAs?: 'co_owner' | 'viewer' | null
     }
 
 interface PreviewTeam {
@@ -507,16 +522,12 @@ const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   mfl: 'League ID · API key required',
 }
 
-/** Why an unavailable provider cannot be used, in the user's terms. */
-const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  /*
-   * Yahoo. The 2026-08-29 copy ("sign-in is not working yet — connecting returns you here still
-   * disconnected") described a bug that is no longer the reason: import is off while Yahoo reviews
-   * the app's Fantasy Sports API access (see the note on the yahoo entry in provider-ui-config).
-   * Says that, and says it is temporary, without naming plumbing the reader cannot act on.
-   */
-  yahoo: "Yahoo import is paused while Yahoo reviews our API access. We'll turn it back on as soon as it's approved.",
-}
+/*
+ * Why an unavailable provider cannot be used is `importComingSoonMessage` in provider-ui-config —
+ * the same sentence the landing strip, /commissioners and the import API's refusal use. This screen
+ * used to carry its own Yahoo line ("paused while Yahoo reviews our API access"), a third wording of
+ * one status; it now reads the shared one, which also names where the user CAN import from today.
+ */
 
 /**
  * Some gate failures name a prerequisite without saying where to satisfy it —
@@ -984,8 +995,24 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Search boxes for the two long lists. Each clears when its list is replaced. */
+  const [leagueSearch, setLeagueSearch] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
+  useEffect(() => setLeagueSearch(''), [leagues])
+  const previewSourceId = phase.k === 'preview' ? phase.sourceId : null
+  useEffect(() => setTeamSearch(''), [previewSourceId])
   /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
   const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
+  /*
+   * A PUBLIC ESPN league its commissioner already brought to AllFantasy, reached by a leaguemate with
+   * no proof (the source id). The no-cookie "pick your team" import refuses it on purpose
+   * (`LEAGUE_RUN_BY_COMMISSIONER` in espnPublicMemberImport.ts): that league is run by a person, and
+   * a picked team proves nothing. What it needs is the same proof the commissioner gave, and on a
+   * phone that is the team code. Once the code is on their team the preview's gate finds it, the
+   * commit attaches them to their own team in the commissioner's copy
+   * (`claimExistingLeagueForMember`), and nothing here is trusted on its own.
+   */
+  const [espnJoinProof, setEspnJoinProof] = useState<string | null>(null)
   const [verifyResuming, setVerifyResuming] = useState(false)
   /* Fantrax Secret ID: stored via the same encrypted `leagueAuth` row every other
      provider uses, never held in component state after it is saved. */
@@ -1003,6 +1030,9 @@ export function ImportV4({
   const [espnCheck, setEspnCheck] = useState<EspnLeagueCheckStatus>({ k: 'idle' })
 
   const selectable = isImportProviderAvailable(provider)
+  /* Yahoo is coming soon, but an allowlisted account can import it by copy-paste instead. */
+  const yahooCopyPasteEnabled = useYahooCopyPasteEnabled()
+  const yahooViaPaste = provider === 'yahoo' && !selectable && yahooCopyPasteEnabled
   // Provider display name comes from the shared config, never a local literal — the same
   // reason availability does (see the header note).
   const providerLabel = getImportProviderLabel(provider)
@@ -1267,9 +1297,23 @@ export function ImportV4({
 
   const deepLinked = useRef(false)
 
+  /*
+   * Edits from the review panel. A ref as well as state: the commit can be re-entered from the
+   * verification and attestation gates, long after the panel has unmounted, and the edits must
+   * still travel with it.
+   */
+  const reviewOverridesRef = useRef<ImportReviewOverrides | null>(null)
+  const [reviewState, setReviewState] = useState<ImportReviewState | null>(null)
+  const onReviewStateChange = useCallback((next: ImportReviewState) => {
+    reviewOverridesRef.current = next.overrides
+    setReviewState(next)
+  }, [])
+
   const runPreview = useCallback(
     async (sourceId: string, attest = false) => {
       setError(null)
+      reviewOverridesRef.current = null
+      setReviewState(null)
       setPhase({ k: 'previewing', sourceId })
       const res = await fetchImportPreview(
         provider,
@@ -1312,6 +1356,7 @@ export function ImportV4({
         importBlockedReason?: unknown
         managers?: unknown
         commissionerConfirmable?: unknown
+        review?: unknown
       }
       trackImportGateResult({
         provider,
@@ -1348,6 +1393,7 @@ export function ImportV4({
          * strength of a missing field.
          */
         coverage: readPreviewCoverage(payload?.dataQuality?.coverageNarrative),
+        review: readImportReview(payload?.review),
       })
     },
     [provider, espnConnected]
@@ -1381,12 +1427,13 @@ export function ImportV4({
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force || confirmReimportOfDeleted || claimTeamId || espnRunBy
+        force || confirmReimportOfDeleted || claimTeamId || espnRunBy || reviewOverridesRef.current
           ? {
               ...(force ? { force: true } : {}),
               ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
               ...(claimTeamId ? { claimSourceTeamId: claimTeamId } : {}),
               ...(espnRunBy ? { espnLeagueRunBy: espnRunBy } : {}),
+              ...(reviewOverridesRef.current ? { reviewOverrides: reviewOverridesRef.current } : {}),
             }
           : undefined
       )
@@ -1428,6 +1475,16 @@ export function ImportV4({
           })
           return
         }
+        if (provider === 'espn' && res.code === 'LEAGUE_RUN_BY_COMMISSIONER') {
+          /*
+           * Their invite link landed them here, and this used to end with "ask them for the invite
+           * link" — the link they had just used. Re-open the preview in join mode instead; the
+           * team-code panel below takes it from there.
+           */
+          setEspnJoinProof(sourceId)
+          await runPreview(sourceId, attested)
+          return
+        }
         setError(res.error || 'We could not finish that import.')
         setPhase({ k: 'idle' })
         return
@@ -1443,6 +1500,7 @@ export function ImportV4({
         league_existed?: boolean
         skipped?: boolean
         joinedExisting?: boolean
+        joinedAs?: 'co_owner' | 'viewer' | null
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -1485,13 +1543,14 @@ export function ImportV4({
            still reports existed:true, because the league does still exist. */
         skipped: Boolean(data?.skipped),
         joinedExisting: Boolean(data?.joinedExisting),
+        joinedAs: data?.joinedAs === 'co_owner' || data?.joinedAs === 'viewer' ? data.joinedAs : null,
       })
     },
     // `leagues` is read for the deleted-league confirmation; see importOneLeague.
     // `leagues` joins the deps for the sport lookup above. Safe: runCommit is
     // referenced only from onClick handlers, never from an effect's dep array,
     // so a new identity per discovery re-runs nothing.
-    [provider, leagues, espnConnected]
+    [provider, leagues, espnConnected, runPreview]
   )
 
   /**
@@ -2251,6 +2310,12 @@ export function ImportV4({
               Create a new league <span aria-hidden>&rarr;</span>
             </Link>
           </p>
+          <p className="af-im-create-option">
+            Just looking?{' '}
+            <Link href="/demo" data-testid="import-try-demo">
+              Try the demo league <span aria-hidden>&rarr;</span>
+            </Link>
+          </p>
         </nav>
       </header>
 
@@ -2357,8 +2422,27 @@ export function ImportV4({
             </p>
           ) : null}
 
+          {leagues.length >= IMPORT_SEARCH_MIN_ROWS ? (
+            <div className="af-im-field af-im-list-search">
+              <input
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                value={leagueSearch}
+                onChange={(e) => setLeagueSearch(e.target.value)}
+                placeholder={rowsAreTeams ? 'Search by team name' : 'Search by league name'}
+                aria-label={rowsAreTeams ? 'Search teams' : 'Search leagues'}
+                data-testid="import-league-search"
+              />
+            </div>
+          ) : null}
+          {leagueSearch.trim() && !leagues.some((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])) ? (
+            <p className="af-im-field-help" role="status" data-testid="import-league-search-empty">
+              Nothing matches &ldquo;{leagueSearch.trim()}&rdquo;. Check the spelling or clear the search.
+            </p>
+          ) : null}
           <ul className="af-im-league-list">
-            {leagues.map((l) => {
+            {leagues.filter((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])).map((l) => {
               /*
                * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
                * DOING. It marked the one row being previewed or committed while the
@@ -2595,7 +2679,11 @@ export function ImportV4({
           {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
             const available = opt.available
             const active = provider === opt.provider
-            const tag = available ? PROVIDER_PILL_TAG[opt.provider] : 'Coming soon'
+            const tag = available
+              ? PROVIDER_PILL_TAG[opt.provider]
+              : opt.provider === 'yahoo' && yahooCopyPasteEnabled
+                ? 'copy-paste'
+                : 'Coming soon'
             return (
               <button
                 key={opt.provider}
@@ -2662,7 +2750,9 @@ export function ImportV4({
             {selectable
               ? PROVIDER_TAGLINE[provider] ??
                 (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
-              : 'Paused — see below'}
+              : yahooViaPaste
+                ? 'Copy-paste for now — see below'
+                : 'Paused — see below'}
           </span>
           {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
             .map((sport) => (
@@ -2684,6 +2774,20 @@ export function ImportV4({
           providerLabel={providerLabel}
           available={selectable}
           espnConnected={espnConnected}
+          pausedNote={
+            yahooViaPaste
+              ? {
+                  title: 'By copy-paste for now',
+                  body: (
+                    <>
+                      Yahoo&rsquo;s direct connection isn&rsquo;t open yet. Copy two pages from your league &mdash;
+                      settings and standings &mdash; into the checklist and it imports. On a computer, the Send to
+                      AllFantasy bookmark makes it one click per page.
+                    </>
+                  ),
+                }
+              : undefined
+          }
           mark={
             <span className="af-platform af-platform-mark" data-platform={provider} aria-hidden>
               {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
@@ -2725,13 +2829,26 @@ export function ImportV4({
           looking at, so it gets the "selected?" framing and a full sentence rather
           than a footnote.
         */}
-        {!selectable ? (
+        {yahooViaPaste ? (
+          /*
+            Yahoo is not live, but this account has the copy-paste way in (lib/yahoo/yahooAvailability.ts).
+            A "coming soon" sentence here buried the one path that works under three dead ends.
+          */
+          <div className="af-im-blocked af-im-blocked--selected af-im-ys-cta" role="status">
+            <span className="af-im-blocked-line">
+              <span className="af-label">Yahoo</span>
+              <span>Bring your league in now by copying a few pages from Yahoo.</span>
+            </span>
+            <button type="button" className="af-im-fx-go" onClick={openYahooCopyPaste}>
+              Import by copy-paste →
+            </button>
+          </div>
+        ) : !selectable ? (
           <p className="af-im-blocked af-im-blocked--selected" role="status">
             <span className="af-im-blocked-line">
               <span className="af-label">{providerLabel} selected?</span>
               <span>
-                {BLOCKED_REASON[provider] ??
-                  `${providerLabel} isn't available yet — coming soon.`}
+                {importComingSoonMessage(provider)}
               </span>
             </span>
           </p>
@@ -3132,6 +3249,12 @@ export function ImportV4({
         */}
         {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
           <p className="af-im-fx-link af-im-fx-link--foot">
+            {/*
+              A FULL RELOAD ON PURPOSE, so not <Link>. This is the page linking to itself: the
+              provider is `useState(defaultProvider)`, which a client-side navigation would keep,
+              leaving the old tile selected under a `?provider=fantrax` URL.
+            */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- see the note above */}
             <a href="/import?provider=fantrax">
               Have a Fantrax CSV export? Bank it now →
             </a>
@@ -3146,10 +3269,18 @@ export function ImportV4({
           foot of the import screen rather than inside a provider step: you
           reach it after importing both halves, not while importing one.
         */}
+        {/*
+          Yahoo by copy-paste, for while Yahoo's API access is unapproved. A foot link like the two
+          around it, opening in place. Renders nothing unless the server says this account may use it
+          (lib/yahoo/yahooAvailability.ts), so it is invisible outside the rollout. Its own file, like
+          FantraxUpload, to keep this one stable.
+        */}
+        <YahooSnapshotImport />
+
         <p className="af-im-fx-link af-im-fx-link--foot">
-          <a href="/core/connect-leagues">
+          <Link href="/core/connect-leagues">
             Run a college league alongside a pro one? Connect them →
-          </a>
+          </Link>
         </p>
       </section>
       )}
@@ -3173,6 +3304,43 @@ export function ImportV4({
         <details className="af-im-fx-disclosure">
           <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
           <FantraxUpload />
+        </details>
+      ) : null}
+
+      {/*
+        What an import cannot bring, and where it goes instead. Fantrax's API has no completed-trade
+        feed and lists future picks for rounds 1-4 only, so both arrive through the commissioner's
+        trade-history upload — which lives on a different screen that nothing here pointed to.
+
+        ⚠ IT NAMES THE EXPORT, BECAUSE THE WRONG ONE IS ONE CLICK AWAY. Fantrax's Transactions page
+        offers Trades and Claims/Drops side by side and downloads either under a near-identical file
+        name. The Claims/Drops file is refused by the uploader ("missing columns: From, To"), which
+        reads as the upload being broken rather than as the wrong file.
+      */}
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">After importing: add trades and later-round picks</summary>
+          <div className="af-im-fx-after">
+            <p>
+              Fantrax does not share completed trades, or future draft picks past round 4. A
+              commissioner can add both for an NFL league:
+            </p>
+            <ol>
+              <li>
+                On Fantrax, open Transactions &rarr; History, choose <strong>Trades</strong> (not
+                Claims/Drops) and download the CSV.
+              </li>
+              <li>
+                Here, open the league&rsquo;s Commissioner screen and go to &ldquo;Trades and draft
+                archive&rdquo;.
+              </li>
+              <li>
+                Choose &ldquo;Upload trade history CSV&rdquo; and pick the file with{' '}
+                <strong>Trade</strong> in its name.
+              </li>
+            </ol>
+            <p>Uploading the same file again does not add a trade twice.</p>
+          </div>
         </details>
       ) : null}
 
@@ -3236,6 +3404,16 @@ export function ImportV4({
             We read this league from {providerLabel}. Importing builds a read-only copy — nothing
             changes on {providerLabel}.
           </p>
+          {phase.review ? (
+            <ImportReviewPanel
+              embedded
+              review={phase.review}
+              provider={provider}
+              blockedReason={phase.importBlockedReason}
+              onRerun={() => void runPreview(phase.sourceId, phase.attested)}
+              onReviewStateChange={onReviewStateChange}
+            />
+          ) : null}
           {/*
             ── What you are about to get ──────────────────────────────────────────
             Rendered ONLY when the preview actually said something. `phase.coverage` is null both
@@ -3313,7 +3491,7 @@ export function ImportV4({
             Only for a public league we could read but not prove membership in. "ESPN runs it" and
             "someone else" import with no cookies as a member; "I'm the commissioner" needs proof.
           */}
-          {previewImportState(provider, phase).espnAsk ? (
+          {previewImportState(provider, phase).espnAsk && espnJoinProof !== phase.sourceId ? (
             <fieldset className="af-im-runby" data-testid="import-espn-run-by">
               <legend className="af-label">Who&rsquo;s the commissioner of this league on ESPN?</legend>
               {ESPN_RUN_BY_OPTIONS.map((o) => (
@@ -3358,8 +3536,28 @@ export function ImportV4({
                   </>
                 )}
               </p>
+              {phase.teams.length >= IMPORT_SEARCH_MIN_ROWS ? (
+                <div className="af-im-field af-im-list-search">
+                  <input
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                    placeholder="Search by team or manager name"
+                    aria-label="Search teams"
+                    data-testid="import-preview-team-search"
+                  />
+                </div>
+              ) : null}
+              {teamSearch.trim() && !phase.teams.some((t) => matchesImportSearch(teamSearch, [t.teamName, t.ownerName])) ? (
+                <p className="af-im-field-help" role="status" data-testid="import-preview-team-search-empty">
+                  No team matches &ldquo;{teamSearch.trim()}&rdquo;. Try the manager&rsquo;s name, or clear the search.
+                </p>
+              ) : null}
               <ul className="af-im-league-list">
-                {phase.teams.map((t) => {
+                {/* The picked team stays on screen whatever is typed, so the choice is never hidden. */}
+                {phase.teams.filter((t) => phase.claimTeamId === t.teamId || matchesImportSearch(teamSearch, [t.teamName, t.ownerName])).map((t) => {
                   const picked = phase.claimTeamId === t.teamId
                   /* A commissioner's team is claimable only with proof — the server refuses it too. */
                   const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
@@ -3396,11 +3594,35 @@ export function ImportV4({
             </p>
           ) : null}
           {previewImportState(provider, phase).espnAsk && phase.espnRunBy === 'me' ? (
-            <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
-              Connect ESPN above so we can confirm you run this league &mdash; it takes about two
-              minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
-              the commissioner tools.
-            </p>
+            <>
+              <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
+                Connect ESPN above so we can confirm you run this league &mdash; it takes about two
+                minutes on a computer. Then press Import: you&rsquo;ll get invites, team assignments and
+                the commissioner tools.
+              </p>
+              {/*
+                The phone path (2026-11-15). A commissioner on Android sat on the cookie step polling
+                for a connection a phone can never make, and left. A code on their ESPN team proves
+                the same thing the cookie does — control of that team — and the gate finds it on the
+                next preview by itself (`lib/league-import/espn/espnTeamCode.ts`).
+              */}
+              <EspnTeamCodeVerify
+                leagueInput={phase.sourceId}
+                onVerified={() => void runPreview(phase.sourceId, phase.attested)}
+              />
+            </>
+          ) : null}
+          {previewImportState(provider, phase).espnAsk && espnJoinProof === phase.sourceId ? (
+            <div data-testid="import-espn-join-proof">
+              <p className="af-im-field-help" role="status">
+                <strong>Your commissioner already set this league up on AllFantasy.</strong> Confirm which
+                team is yours and you&rsquo;ll join their league on your own team.
+              </p>
+              <EspnTeamCodeVerify
+                leagueInput={phase.sourceId}
+                onVerified={() => void runPreview(phase.sourceId, phase.attested)}
+              />
+            </div>
           ) : null}
           {/*
             ── Are you the commissioner? ───────────────────────────────────────────
@@ -3425,11 +3647,17 @@ export function ImportV4({
             <button
               type="button"
               className="af-btn af-im-submit"
-              disabled={previewImportState(provider, phase).blocked || previewImportState(provider, phase).needsPick}
+              disabled={
+                previewImportState(provider, phase).blocked ||
+                previewImportState(provider, phase).needsPick ||
+                // The review's own gate: nothing blocking left, open warnings acknowledged.
+                Boolean(phase.review && reviewState && !reviewState.ready)
+              }
               // The second half of the contract described on the row button above:
               // `import-commit` is the step the canonical import spec proves.
               data-testid="import-commit"
-              onClick={() =>
+              onClick={() => {
+                reviewState?.markConfirmed()
                 void runCommit(
                   phase.sourceId,
                   phase.attested,
@@ -3437,9 +3665,11 @@ export function ImportV4({
                   phase.claimTeamId,
                   previewImportState(provider, phase).espnMember ? phase.espnRunBy : null,
                 )
-              }
+              }}
             >
-              {importButtonLabel(provider, phase)}
+              {previewImportState(provider, phase).espnAsk && espnJoinProof === phase.sourceId
+                ? 'Confirm your team first'
+                : importButtonLabel(provider, phase)}
             </button>
             <button
               type="button"
@@ -3490,7 +3720,11 @@ export function ImportV4({
             issue={doneIssue}
             noteText={
               phase.joinedExisting
-                ? `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
+                ? phase.joinedAs === 'co_owner'
+                  ? `${phase.leagueName} was already on AllFantasy. You've been added to the team you share, as its co-owner. Nothing was changed on ${providerLabel}.`
+                  : phase.joinedAs === 'viewer'
+                    ? `${phase.leagueName} was already on AllFantasy. You don't have a team in it right now, so you've been added as a viewer: you can follow the league and its chat. Nothing was changed on ${providerLabel}.`
+                    : `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
                 : phase.skipped
                   ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
                   : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
@@ -3583,6 +3817,16 @@ export function ImportV4({
           sourceId={phase.sourceId}
           leagueName={phase.leagueName}
         />
+      ) : null}
+
+      {/*
+        Someone who just joined a league already here: who else made it over, and the league's invite
+        link to bring the rest (owner's ask, 2026-11-21). The panel names the managers already in it.
+      */}
+      {phase.k === 'done' && phase.leagueId && phase.joinedExisting ? (
+        <section className="af-im-card" data-testid="import-joined-league-mates">
+          <LeagueInvitePanel leagueId={phase.leagueId} leagueName={phase.leagueName} />
+        </section>
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}

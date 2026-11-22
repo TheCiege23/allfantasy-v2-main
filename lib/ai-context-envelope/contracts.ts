@@ -66,9 +66,6 @@ export interface ProviderRawOutput {
   [key: string]: unknown
 }
 
-/** Provider output contract: all providers normalize to this shape before UI rendering. */
-export type ProviderOutputContract = NormalizedToolOutput
-
 function clampScore(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)))
 }

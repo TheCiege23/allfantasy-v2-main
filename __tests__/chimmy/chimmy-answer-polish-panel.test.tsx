@@ -193,3 +193,48 @@ describe('a private @chimmy reply in league chat', () => {
     expect(screen.queryByTestId('chimmy-verdict')).toBeNull()
   })
 })
+
+/*
+ * AF Pro depth (lib/chimmy/chimmyDepth.ts, owner's choices 2026-11-16): a free answer whose question
+ * needed a Pro tool gets ONE line and a Get AF Pro button; an answer that quoted the user's earlier
+ * chats gets a "From your past chats" chip. Both from meta the server built from what the executor
+ * did — never from the prose, which is pinned by the second case.
+ */
+describe('AF Pro depth on the panel', () => {
+  it('shows the upgrade line and button under a free answer the executor refused a Pro tool for', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'You are 7-3 and two games up on the cut line.', meta: {
+      leagueGrounding: GROUNDING, toolsUsed: ['get_league_standings'], proUpsell: ['get_playoff_outlook', 'find_trade_ideas', 'not_a_tool'] } })
+    const turn = await ask('What are my playoff odds?', 'You are 7-3 and two games up on the cut line.')
+    const upsell = within(turn).getByTestId('chimmy-pro-upsell')
+    expect(upsell.textContent).toContain('AF Pro adds the playoff simulator and trade ideas.')
+    expect(within(upsell).getByRole('link', { name: 'Get AF Pro' }).getAttribute('href')).toBe('/upgrade?plan=af_pro&from=chimmy-pro-tool')
+    expect(within(turn).queryByTestId('chimmy-past-chats')).toBeNull()
+  })
+
+  it('prose that mentions AF Pro, with no refusal in meta, gets no button', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'AF Pro adds the playoff simulator.', meta: { leagueGrounding: GROUNDING, toolsUsed: [] } })
+    const turn = await ask('Odds?', 'AF Pro adds the playoff simulator.')
+    expect(within(turn).queryByTestId('chimmy-pro-upsell')).toBeNull()
+  })
+
+  it('marks an answer that recalled past chats — live, and again from the stored transcript', async () => {
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    answers.push({ response: 'On Nov 2 I said hold Bijan.', meta: { leagueGrounding: GROUNDING, toolsUsed: ['recall_past_chats'], recalledPastChats: true } })
+    const turn = await ask('What did you tell me about Bijan?', 'On Nov 2 I said hold Bijan.')
+    expect(within(turn).getByTestId('chimmy-past-chats').textContent).toBe('From your past chats')
+    expect(within(turn).queryByTestId('chimmy-pro-upsell')).toBeNull()
+    cleanup()
+
+    // A new tab: no sessionStorage, so the chip below came from the stored row (readStoredDisplay).
+    sessionStorage.clear()
+    historyTurns = [
+      { id: 'hist-0', role: 'you', text: 'What did you tell me about Bijan?', leagueId: 'L1' },
+      { id: 'hist-1', role: 'chimmy', text: 'On Nov 2 I said hold Bijan.', leagueId: 'L1', grounding: GROUNDING, recalledPastChats: true },
+    ]
+    render(<ChimmyChatPageClient userId="u1" leagues={LEAGUES} tokenCost={9} planAllowance={null} leagueId="L1" />)
+    const stored = (await screen.findByText('On Nov 2 I said hold Bijan.')).closest('.af-cm-turn') as HTMLElement
+    expect(within(stored).getByTestId('chimmy-past-chats')).toBeTruthy()
+  })
+})

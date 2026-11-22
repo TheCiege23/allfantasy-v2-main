@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Play, Pause, SkipForward, RefreshCw, Download, RotateCcw, Users, Loader2, Link, ArrowUp, ArrowDown, X, TrendingUp, TrendingDown, Minus, Star, Handshake, Check, Newspaper, Beaker, Zap, Clock3, Bot } from 'lucide-react'
+import { Play, Pause, SkipForward, RefreshCw, Download, RotateCcw, Users, Loader2, Link, ArrowUp, ArrowDown, X, TrendingUp, TrendingDown, Minus, Star, Handshake, Check, Newspaper, Beaker, Zap, Clock3 } from 'lucide-react'
 import { useAI } from '@/hooks/useAI'
 import { toast } from 'sonner'
 import { AIDraftAssistantPanel } from '@/components/mock-draft'
@@ -424,7 +424,7 @@ export default function MockDraftSimulatorClient({
   const [autopickMode, setAutopickMode] = useState<'queue-first' | 'bpa' | 'need-based'>('queue-first')
   const [draftPool, setDraftPool] = useState<'rookie' | 'vet' | 'combined'>('combined')
   const [casualMode, setCasualMode] = useState(false)
-  const [onClockPick, setOnClockPick] = useState<number | null>(null)
+  const [, setOnClockPick] = useState<number | null>(null)
   const [tradeResult, setTradeResult] = useState<any>(null)
   const [isTrading, setIsTrading] = useState(false)
   const [adpData, setAdpData] = useState<ADPPlayer[]>([])
@@ -467,13 +467,13 @@ export default function MockDraftSimulatorClient({
   const [retroLoading, setRetroLoading] = useState(false)
   const [retroData, setRetroData] = useState<any>(null)
   const [retroCalibration, setRetroCalibration] = useState<any>(null)
-  const [livePlayback, setLivePlayback] = useState(true)
+  const [livePlayback] = useState(true)
   const [isLivePlaying, setIsLivePlaying] = useState(false)
-  const [secondsPerPick, setSecondsPerPick] = useState(10)
+  const [secondsPerPick] = useState(10)
   const [clockSecondsLeft, setClockSecondsLeft] = useState(10)
   const [completedPicks, setCompletedPicks] = useState(0)
-  const [replaceAbsentWithAi, setReplaceAbsentWithAi] = useState(true)
-  const [absentManagers, setAbsentManagers] = useState<Set<string>>(new Set())
+  const [replaceAbsentWithAi] = useState(true)
+  const [absentManagers] = useState<Set<string>>(new Set())
   const [livePredictions, setLivePredictions] = useState<Array<{ manager: string; predictedPlayer: string; position: string; probability: number; reason: string }>>([])
   const [liveSuggestion, setLiveSuggestion] = useState<any>(null)
   const [liveIntelLoading, setLiveIntelLoading] = useState(false)
@@ -537,10 +537,9 @@ export default function MockDraftSimulatorClient({
   )
   const requireNflAdvancedTool = useCallback(() => {
     if (selectedSport === 'NFL') return true
-    toast.error('This advanced AI tool is currently available for NFL mock drafts only.')
+    toast.error('This advanced Chimmy tool is currently available for NFL mock drafts only.')
     return false
   }, [selectedSport])
-  const managerNames = useMemo(() => Array.from(new Set(draftResults.map((p) => p.manager))).filter(Boolean), [draftResults])
 
   useEffect(() => {
     if (initialLeagueId && selectedLeagueId !== initialLeagueId) setSelectedLeagueId(initialLeagueId)
@@ -1060,14 +1059,6 @@ export default function MockDraftSimulatorClient({
     setClockSecondsLeft(secondsPerPick)
   }, [draftResults.length, secondsPerPick])
 
-  const toggleAbsentManager = useCallback((manager: string) => {
-    setAbsentManagers((prev) => {
-      const next = new Set(prev)
-      if (next.has(manager)) next.delete(manager)
-      else next.add(manager)
-      return next
-    })
-  }, [])
   const startMockDraft = async () => {
     if (!selectedLeagueId) return toast.error('Select a league first')
     setIsSimulating(true)
@@ -1107,7 +1098,7 @@ export default function MockDraftSimulatorClient({
         toast.success(`Mock draft complete! ${inlineProposals.length} trade offer${inlineProposals.length > 1 ? 's' : ''} from other managers.`)
       } else {
         setTradeProposals({})
-        toast.success(livePlayback ? 'Live room started. AI bots are drafting for absent managers.' : 'Mock draft complete! AI drafted for all managers.')
+        toast.success(livePlayback ? 'Live room started. Chimmy bots are drafting for absent managers.' : 'Mock draft complete! Chimmy drafted for all managers.')
       }
     }
     setIsSimulating(false)
@@ -1445,8 +1436,6 @@ export default function MockDraftSimulatorClient({
     toast.success('Draft board saved as PDF!')
   }
 
-
-
   const simulateTrade = async (direction: 'up' | 'down', pickNumber: number) => {
     if (draftResults.length === 0 || !selectedLeagueId) return
     if (!requireNflAdvancedTool()) return
@@ -1479,7 +1468,6 @@ export default function MockDraftSimulatorClient({
     }
     setIsTrading(false)
   }
-
 
   const handleTradeAction = async (pickNumber: number, action: 'accept' | 'reject') => {
     if (!requireNflAdvancedTool()) return
@@ -1622,7 +1610,7 @@ export default function MockDraftSimulatorClient({
               onClick={() => setUseAiBoardAdp((prev) => !prev)}
               data-testid="mock-draft-ai-adp-toggle"
             >
-              {useAiBoardAdp ? 'AI ADP On' : 'AI ADP Off'}
+              {useAiBoardAdp ? 'Chimmy ADP On' : 'Chimmy ADP Off'}
             </Button>
           </div>
           <div className="md:col-span-3">
@@ -1711,7 +1699,7 @@ export default function MockDraftSimulatorClient({
           <div className="inline-flex items-center gap-3 glass-card rounded-2xl px-8 py-6">
             <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
             <div className="text-left">
-              <p className="text-lg font-semibold text-white">AI is drafting...</p>
+              <p className="text-lg font-semibold text-white">Chimmy is drafting...</p>
               <p className="text-sm text-gray-400">
                 Analyzing {selectedSport === 'NFL' ? 'live ADP' : `the imported ${selectedSport} player pool`}, team needs &amp; real draft tendencies
               </p>
@@ -1788,10 +1776,10 @@ export default function MockDraftSimulatorClient({
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div className="rounded-xl border border-yellow-700/30 bg-yellow-950/15 p-3">
                     <div className="text-xs font-semibold uppercase tracking-wider text-yellow-300 mb-1">Scout Recommendation</div>
-                    {liveIntelLoading ? <div className="text-xs text-gray-400">Updating AI scout...</div> : (
+                    {liveIntelLoading ? <div className="text-xs text-gray-400">Updating Chimmy scout...</div> : (
                       <>
                         <div className="text-sm text-gray-200">{liveSuggestion?.suggestions?.[0]?.player || 'Waiting for user pick context'}</div>
-                        <div className="text-xs text-gray-400">{liveSuggestion?.suggestions?.[0]?.reason || liveSuggestion?.aiInsight || 'AI will suggest a pick when your slot is on the clock.'}</div>
+                        <div className="text-xs text-gray-400">{liveSuggestion?.suggestions?.[0]?.reason || liveSuggestion?.aiInsight || 'Chimmy will suggest a pick when your slot is on the clock.'}</div>
                       </>
                     )}
                   </div>
@@ -1841,7 +1829,7 @@ export default function MockDraftSimulatorClient({
                           </p>
                           <div className="flex items-center gap-3 mt-1">
                             <span className="text-xs text-cyan-400">
-                              {useAiBoardAdp ? 'AI ADP' : 'ADP'}: {getDisplayedAdp(player).toFixed(1)}
+                              {useAiBoardAdp ? 'Chimmy ADP' : 'ADP'}: {getDisplayedAdp(player).toFixed(1)}
                             </span>
                             {player.value != null && (
                               <span className="text-xs text-emerald-400">Value: {player.value.toFixed(0)}</span>
@@ -1939,7 +1927,7 @@ export default function MockDraftSimulatorClient({
                               </Badge>
                               <span className="text-sm text-gray-400">{pick.team}</span>
                               {pick.isBotPick && (
-                                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">AI BOT</span>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Chimmy bot</span>
                               )}
                             </div>
                           ) : (
@@ -1956,7 +1944,7 @@ export default function MockDraftSimulatorClient({
                             return (
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-500">{useAiBoardAdp ? 'AI ADP' : 'ADP'} {displayedAdp.toFixed(1)}</span>
+                                  <span className="text-gray-500">{useAiBoardAdp ? 'Chimmy ADP' : 'ADP'} {displayedAdp.toFixed(1)}</span>
                                   <span className={`font-bold flex items-center gap-0.5 ${
                                     isSteal ? 'text-emerald-400' : isReach ? 'text-orange-400' : 'text-gray-400'
                                   }`}>
@@ -2231,7 +2219,7 @@ export default function MockDraftSimulatorClient({
             <Users className="h-12 w-12 mx-auto mb-4 text-gray-700" />
             <p className="text-lg mb-1">Ready to draft</p>
             <p className="text-sm text-gray-600">
-              AI will draft for all managers based on {selectedSport === 'NFL' ? 'live ADP data' : `the imported ${selectedSport} player pool`} and real tendencies
+              Chimmy will draft for all managers based on {selectedSport === 'NFL' ? 'live ADP data' : `the imported ${selectedSport} player pool`} and real tendencies
             </p>
           </div>
         </div>
@@ -2366,7 +2354,7 @@ export default function MockDraftSimulatorClient({
       <Dialog open={forecastOpen} onOpenChange={setForecastOpen}>
         <DialogContent className="max-w-4xl bg-black/95 border-cyan-900/40">
           <DialogHeader>
-            <DialogTitle>AI Predicted Draft Board ({forecastMeta?.rounds || 2} rounds  -  {forecastMeta?.simulations || 0} sims)</DialogTitle>
+            <DialogTitle>Chimmy Predicted Draft Board ({forecastMeta?.rounds || 2} rounds  -  {forecastMeta?.simulations || 0} sims)</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-1">
             {boardForecasts.length > 0 && (() => {
@@ -3048,7 +3036,6 @@ export default function MockDraftSimulatorClient({
               const baseTop = base.topTargets[0]
               const scenTop = scen.topTargets[0]
               const changed = baseTop?.player !== scenTop?.player
-              const probDelta = (scenTop?.probability || 0) - (baseTop?.probability || 0)
               const borderStyle: Record<string, string> = {
                 yes: 'border-violet-500/30 bg-violet-500/[0.03]',
                 no: 'border-gray-800 bg-white/[0.01]',
@@ -3166,7 +3153,7 @@ export default function MockDraftSimulatorClient({
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-gray-950 border-amber-800/50">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl text-amber-300">
-              <Check className="h-5 w-5" /> Post-Draft Retrospective - AI vs Reality
+              <Check className="h-5 w-5" /> Post-Draft Retrospective - Chimmy vs Reality
             </DialogTitle>
           </DialogHeader>
 

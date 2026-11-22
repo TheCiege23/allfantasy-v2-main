@@ -29,8 +29,7 @@ import { resolveSportForTrend } from '@/lib/player-trend/SportTrendContextResolv
 import type { SlotOrderEntry } from './types'
 import { buildKeeperLocks } from './keeper/KeeperDraftOrder'
 import type { KeeperConfig, KeeperSelection } from './keeper/types'
-import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
-import { assignRookieContract } from '@/lib/salary-cap/RookieContractService'
+import { signRookieContractForPick } from '@/lib/salary-cap/RookieContractService'
 import { isDraftBoardFull, isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import {
   DRAFT_PICK_DUPLICATE_PLAYER,
@@ -182,7 +181,8 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     currentOnClockRosterId: onClockRosterId,
     existingPicks: session.picks
       .filter((p) => !isDraftPickRowEmpty(p))
-      .map((p) => ({ playerName: p.playerName, position: p.position })),
+      .map((p) => ({ playerName: p.playerName, position: p.position, playerId: p.playerId ?? null })),
+    playerId: input.playerId ?? null,
     sessionStatus: session.status,
     commissionerOverride: input.commissionerOverride === true || input.source === 'commissioner',
   })
@@ -720,26 +720,20 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   // ── Salary cap: auto-assign rookie contract on snake draft picks ──
   try {
-    const capConfig = await getSalaryCapConfig(input.leagueId)
-    if (capConfig?.startupDraftType === 'snake' && effectiveRosterId) {
-      const resolvedPlayerId = pick.playerId ?? input.playerId ?? null
-      const capYear = new Date().getFullYear()
-      await assignRookieContract(
-        input.leagueId,
-        effectiveRosterId,
-        resolvedPlayerId ?? `draft-${overall}`,
-        input.playerName.trim(),
-        input.position,
+    await signRookieContractForPick({
+      leagueId: input.leagueId,
+      rosterId: effectiveRosterId ?? null,
+      playerId: pick.playerId ?? input.playerId ?? null,
+      playerName: input.playerName,
+      position: input.position,
+      overall,
+    }).catch((err: unknown) => {
+      logStructured('error', 'submit_pick', 'salary_cap_contract_failed', {
+        leagueId: input.leagueId,
         overall,
-        capYear
-      ).catch((err: unknown) => {
-        logStructured('error', 'submit_pick', 'salary_cap_contract_failed', {
-          leagueId: input.leagueId,
-          overall,
-          error: String(err),
-        })
+        error: String(err),
       })
-    }
+    })
   } catch {
     // non-fatal: contract assignment failure should never block pick persistence
   }
@@ -834,6 +828,18 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
 
   const poolError = await prepareSeasonDraftPool(input.leagueId)
   if (poolError) return { success: false, error: poolError }
+  // A pick that arrives with no player id (some autopick paths) is given the id its stats are filed
+  // under before it is saved; without one the player never scores (lib/draft/resolveMissingPickPlayerId.ts).
+  if (!String(input.playerId ?? '').trim() && input.playerName && (!input.assetType || input.assetType === 'player')) {
+    try {
+      const league = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { sport: true } })
+      const { resolveMissingNflPickPlayerId } = await import('@/lib/draft/resolveMissingPickPlayerId')
+      const found = await resolveMissingNflPickPlayerId({ sport: league?.sport ? String(league.sport) : null, playerName: input.playerName, position: input.position })
+      if (found) input = { ...input, playerId: found }
+    } catch {
+      // Best-effort: the pick is saved as it came.
+    }
+  }
   const lockResult = await withPickLock(input.leagueId, () => _submitPickCore(input))
   if (!lockResult.acquired) {
     // Competing instance is writing — tell client to refresh and retry.

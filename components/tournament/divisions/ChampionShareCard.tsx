@@ -17,7 +17,7 @@ import { DivisionCrest } from './DivisionArt'
 
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
-export function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
+function ShareCardFace({ card, view, size, showPath, showStats }: { card: ShareCard; view: HubView; size: ShareSize; showPath: boolean; showStats: boolean }) {
   const { width, height } = SHARE_SIZES[size]
   const division = view.identity.divisions[card.divisionIndex]
   const conference = view.identity.conferences[card.conferenceIndex] ?? view.identity.conferences[0]!
@@ -54,14 +54,14 @@ export function ShareCardFace({ card, view, size, showPath, showStats }: { card:
         </ol>
       )}
       <div style={{ position: 'absolute', left: 64, right: 64, bottom: 48, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <span style={{ fontSize: 28, letterSpacing: 4, fontWeight: 800, color: '#c7cbe0' }}>ALLFANTASY.AI</span>
+        <span style={{ fontSize: 28, letterSpacing: 4, fontWeight: 800, color: '#c7cbe0' }}>ALLFANTASY</span>
         <span style={{ fontSize: 40, color: '#e8b84a', fontFamily: 'Caveat, cursive' }}>created by KB</span>
       </div>
     </div>
   )
 }
 
-export type ChatShareTarget = { tournamentId: string; entryId: string }
+type ChatShareTarget = { tournamentId: string; entryId: string }
 
 export function ChampionShareStudio({ card, view, shareUrl, chatShare }: { card: ShareCard; view: HubView; shareUrl: string; chatShare?: ChatShareTarget | null }) {
   const [size, setSize] = useState<ShareSize>('story')

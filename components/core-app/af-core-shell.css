@@ -1801,6 +1801,11 @@
   color: var(--bad);
 }
 
+/* An ESPN elimination league that knocked you out: the whole line is the verdict, so it is red. */
+.af-core .af-rail-row-rank[data-knocked-out] .af-rail-row-rank-pos {
+  color: var(--bad);
+}
+
 /*
  * ⚠ WHAT THE RANK WAS MEASURED FROM, AND IT IS NOT OPTIONAL. Before kickoff
  * every score in the league is 0, so the order comes entirely from the
@@ -2347,6 +2352,48 @@ html[data-mode='light'] .af-core {
   .af-core .af-sk-block {
     animation: none;
     background-image: none;
+  }
+}
+
+/*
+ * The visible "this is loading" over the skeleton (app/core/loading.tsx). Fixed to the middle of
+ * the VIEWPORT, not the content column, so on a phone it is where the eye lands — the iOS app
+ * opens straight onto this. Pointer events pass through; it never blocks the page arriving.
+ */
+.af-core .af-sk-status {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  pointer-events: none;
+}
+.af-core .af-sk-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--af-sk-fill);
+  border-top-color: #0b8dcb;
+  animation: af-sk-spin 0.9s linear infinite;
+}
+@keyframes af-sk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.af-core .af-sk-status-text {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #eef0fa);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-sk-spinner {
+    animation: none;
   }
 }
 
@@ -4932,4 +4979,87 @@ button.af-rail-sport:focus-visible {
 /* The bracket promo now follows the home screen (2026-11-06): space above it, not below. */
 .af-core .af-core-bracket-promo {
   margin: 18px 0 0;
+}
+
+/*
+ * Inside a league (2026-11-15): the rail's one way out to everything account-wide, and Notifications
+ * in the top bar with its count. See AfCoreShell and LEAGUE_RAIL_OMITTED_SECTIONS.
+ */
+.af-core .af-nav-group-exit { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.af-core .af-nav-all-arrow { margin-left: auto; color: var(--faint); }
+.af-core .af-topbar-inbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--af-radius-inner, 12px);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.af-core .af-topbar-inbox[data-active='true'] { border-color: var(--accent-line); color: var(--accent); }
+.af-core .af-topbar-inbox-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bad, #ef4444);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+}
+@media (max-width: 1080px) {
+  .af-core .af-topbar-inbox-label { display: none; }
+}
+@media (max-width: 720px) {
+  .af-core .af-topbar-inbox { display: none; }
+}
+
+/* Sub-tabs of the open league tab (LEAGUE_TABS, lib/core-app/leagueDestinations.ts): one row of pill links above the
+   screen, scrolling sideways on a phone rather than wrapping. Same tokens as the native league page's .nl-subtabs.
+   Top level on purpose, not inside any @media. */
+.af-subtabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.af-subtabs::-webkit-scrollbar {
+  display: none;
+}
+.af-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.af-subtab:hover {
+  background: var(--chip);
+}
+.af-subtab[aria-current='page'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+@media (max-width: 719px) {
+  .af-subtab {
+    min-height: 44px;
+  }
 }

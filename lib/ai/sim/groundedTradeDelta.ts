@@ -38,7 +38,7 @@ import type { GroundedTradeDelta, GroundedWeekDelta } from './types'
  * DB-only. No provider calls (db-first boundary stays clean).
  */
 
-export type GroundedTradeAsset = { name: string; position: string }
+type GroundedTradeAsset = { name: string; position: string }
 
 /** Mirrors matchupProjections.isResolvableId — `name:` descriptors cannot join a projection. */
 function isResolvableId(raw: unknown): raw is string {

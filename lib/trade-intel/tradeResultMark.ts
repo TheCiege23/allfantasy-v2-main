@@ -10,7 +10,7 @@ import type { TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
  * would put two grades on one trade. The design keeps the observed result separate from the grade and
  * never lets it rewrite one.
  */
-export type ResultMark = { mark: string; caption: string; color: string }
+type ResultMark = { mark: string; caption: string; color: string }
 
 /** The outcome for one side, from its net points. No letter, ever. */
 export function resultMark(

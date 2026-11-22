@@ -15,6 +15,17 @@
   font-family: Archivo, system-ui, sans-serif;
 }
 
+/*
+ * Inside AfCoreShell (/core/leagues) the shell's `.af-content` already owns the gutter and the
+ * bottom inset for the floating buttons, so the screen drops its own centred cap and padding and
+ * fills the content column like every other /core screen. Standalone renders are untouched.
+ */
+.af-content .af-ml {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .af-ml-head {
   display: flex;

@@ -2,6 +2,7 @@ import { ANNUAL_C2C_DRAFT, annualC2CDraftSeason } from './annualC2CDraft'
 import { isC2CVariant } from '@/lib/c2c/campusLineup'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { getC2CPhaseConfig } from '@/lib/merged-devy-c2c/draft/C2CDraftOrchestration'
+import { nativeLeagueStatusPatch } from '@/lib/league/nativeLeagueStatus'
 import { readRookieAuctionSettings } from '@/lib/live-draft-engine/auction/rookieAuctionSettings'
 import { planRookieAuction } from '@/lib/live-draft-engine/auction/rookieAuctionPickPolicy'
 import { readPickTermsRecords, parseFuturePickRef } from '@/lib/league-trade-engine/pickTerms'
@@ -348,13 +349,18 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
       }
     }
 
-    // Standings seat the draft only under the automatic order — an AF Commissioner setting, off by
-    // default. A configured weighted lottery must have produced a complete draw above.
+    // Standings seat the draft unless the league switched the automatic order off: worst record
+    // first by default, lowest max PF for an AF Commissioner league that chose it
+    // (lib/rookie-order/automaticRookieOrder.ts). A configured weighted lottery must have produced
+    // a complete draw above.
     const method = lotteryLeague
       ? 'weighted_lottery'
       : slotOrder
         ? null
-        : await automaticRookieOrderMethod({ userId: league.userId ?? null, settings: league.settings })
+        : await automaticRookieOrderMethod(
+            { userId: league.userId ?? null, settings: league.settings },
+            { configMethod: dynasty?.rookiePickOrderMethod ?? null },
+          )
     if (!slotOrder && outgoingId && method) {
       const standings = await prisma.redraftRoster.findMany({
         where: { leagueId, seasonId: outgoingId },
@@ -530,6 +536,7 @@ export async function createNextLeagueDraft(leagueId: string, actorUserId: strin
           data: {
             ...(combined ? { season: incoming.season } : {}),
             lifecycleState: 'pre_draft',
+            ...nativeLeagueStatusPatch(league.platform, 'pre_draft'),
             lifecycleMetadata: {
               ...meta,
               lastTransitionAt: now.toISOString(),

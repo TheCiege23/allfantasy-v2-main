@@ -19,6 +19,7 @@ import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { poolDashboardCopy } from "@/lib/brackets/poolDashboardCopy"
 import { bracketInviteUrl } from "@/lib/brackets/inviteUrl"
 import AndroidBracketAppOption from "@/components/brackets/AndroidBracketAppOption"
+import IosBracketAppOption from "@/components/brackets/IosBracketAppOption"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
 import { useNbaCupLiveView } from "./useNbaCupLiveView"
 import NbaCupTournamentPanel from "./NbaCupTournamentPanel"
@@ -288,6 +289,7 @@ export default function PlayoffBracketShell({ initialView, initialInviteCode }: 
     <BracketQuickNav current="league" leagueId={safeChallenge.id} language={language} />
     <main className="af-bracket-experience af-pd">
       <AndroidBracketAppOption />
+      <IosBracketAppOption />
       <div className="af-bx-top af-pd-top">
         <Link href="/brackets" className="af-pd-back"><ArrowLeft className="h-4 w-4" aria-hidden />{copy.allBrackets}</Link>
         <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} className="af-pd-wordmark" />

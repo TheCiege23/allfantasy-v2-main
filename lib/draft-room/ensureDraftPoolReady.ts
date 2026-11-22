@@ -10,6 +10,8 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { STARTUP_COLLEGE_DRAFT_LABEL, STARTUP_PRO_DRAFT_LABEL } from '@/lib/draft-defaults/startupCollegeDraft'
 import { compactDraftPoolCacheKey } from './draftPoolCacheKey'
 import {
   getEffectiveLeagueRosterTemplate,
@@ -20,7 +22,6 @@ import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraft
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { getApiCached } from '@/lib/api-performance'
 import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
-import { CURRENT_DRAFT_SESSION_ORDER } from './currentDraftSession'
 
 export type EnsureDraftPoolReadyResult =
   | { ok: true; source: 'db-cache' | 'memory-cache' | 'rebuilt' }
@@ -114,6 +115,20 @@ function resolveRosterFingerprint(effectiveLeagueTemplate: EffectiveLeagueTempla
   )}`
 }
 
+async function startupDraftPhaseSuffix(leagueId: string): Promise<string> {
+  try {
+    const session = await prisma.draftSession.findFirst({
+      where: { leagueId },
+      orderBy: CURRENT_DRAFT_SESSION_ORDER,
+      select: { draftModeLabel: true },
+    })
+    const label = String(session?.draftModeLabel ?? '').toLowerCase()
+    return label === STARTUP_PRO_DRAFT_LABEL || label === STARTUP_COLLEGE_DRAFT_LABEL ? `:phase-${label}` : ''
+  } catch {
+    return ''
+  }
+}
+
 export async function resolveDraftPoolCacheContext(
   leagueId: string,
   options?: { effectiveLeagueTemplate?: EffectiveLeagueTemplate },
@@ -129,8 +144,11 @@ export async function resolveDraftPoolCacheContext(
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
     select: { id: true, draftModeLabel: true },
   })
+  // An annual combined C2C draft gets its own pool per session; a two-draft Devy / C2C startup offers a
+  // different pool in each draft, and this cache is per league: the college draft must not be served the
+  // pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
   const scope = draft?.draftModeLabel === ANNUAL_C2C_DRAFT ? `:${draft.id}` : ''
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,

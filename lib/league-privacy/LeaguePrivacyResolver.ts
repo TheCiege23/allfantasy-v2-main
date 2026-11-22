@@ -72,10 +72,19 @@ function fromStorage(settings: Record<string, unknown>): LeaguePrivacySettings {
 export async function getLeaguePrivacySettings(leagueId: string): Promise<LeaguePrivacySettings> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { settings: true },
+    select: { settings: true, disableInviteLinks: true },
   })
   const settings = (league?.settings as Record<string, unknown>) ?? {}
-  return fromStorage(settings)
+  return withInviteColumn(fromStorage(settings), league?.disableInviteLinks)
+}
+
+/**
+ * ⚠ THE INVITE LINK HAS TWO SWITCHES (2026-11-15): this setting and the `League.disableInviteLinks` column the settings
+ * patch writes. A join is refused when EITHER says off (lib/league-invite/InviteValidationResolver.ts), so the editor
+ * shows the link off when either is off, and saving the switch here writes both.
+ */
+function withInviteColumn(out: LeaguePrivacySettings, disableInviteLinks: boolean | null | undefined): LeaguePrivacySettings {
+  return disableInviteLinks === true ? { ...out, allowInviteLink: false } : out
 }
 
 /**
@@ -87,7 +96,7 @@ export async function updateLeaguePrivacySettings(
 ): Promise<LeaguePrivacySettings> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { settings: true },
+    select: { settings: true, disableInviteLinks: true },
   })
   if (!league) throw new Error('League not found')
 
@@ -114,10 +123,14 @@ export async function updateLeaguePrivacySettings(
 
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: next as any, updatedAt: new Date() },
+    data: {
+      settings: next as any,
+      updatedAt: new Date(),
+      ...(patch.allowInviteLink !== undefined ? { disableInviteLinks: !patch.allowInviteLink } : {}),
+    },
   })
 
-  return fromStorage(next)
+  return withInviteColumn(fromStorage(next), patch.allowInviteLink !== undefined ? !patch.allowInviteLink : league.disableInviteLinks)
 }
 
 /**
@@ -187,19 +200,3 @@ export function checkLeaguePassword(leagueId: string, password: string, storedHa
   return verifyPassword(password, leagueId, storedHash)
 }
 
-/**
- * Find league id by invite code (from League.settings.inviteCode). Case-insensitive match.
- */
-export async function findLeagueIdByInviteCode(code: string): Promise<string | null> {
-  const normalized = code?.trim()
-  if (!normalized) return null
-  const leagues = await prisma.league.findMany({
-    select: { id: true, settings: true },
-  })
-  const found = leagues.find((l) => {
-    const s = (l.settings as Record<string, unknown>) ?? {}
-    const c = (s.inviteCode as string) ?? ''
-    return c && c.toString().toLowerCase() === normalized.toLowerCase()
-  })
-  return found?.id ?? null
-}

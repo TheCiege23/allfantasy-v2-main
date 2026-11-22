@@ -8,9 +8,21 @@ export const runtime = "nodejs"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
-import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
+import { TradeReviewPurchase } from "@/components/monetization/TradeReviewPurchase"
+import { usePostPurchaseSync } from "@/hooks/usePostPurchaseSync"
+import { dispatchStateRefreshEvent } from "@/lib/state-consistency/state-events"
+import type { TradeGradeView } from "@/lib/decision-os/trade/tradeGrade"
+import {
+  readTradeReviewDraft, saveTradeReviewDraft, tradeReviewPath, type TradeReviewAsset, type TradeReviewDraft,
+} from "@/lib/monetization/tradeReviewDraft"
+import { GenericTradeAnalyzer } from "@/components/core-app/screens/GenericTradeAnalyzer"
+import { TradeMarketMovers } from "@/components/trade-market/TradeMarketMovers"
+import { TradeShareButton, type ShareAsset } from "@/components/trade-evaluator/TradeShareButton"
+import "@/components/core-app/af-core.css"
+import "@/components/core-app/af-trade-center.css"
 import {
   GradeLeaguePicker,
   gradeLeagueOptions,
@@ -299,7 +311,7 @@ const PHASES: Array<{ key: PhaseKey; label: string; icon: string }> = [
   { key: "plan", label: "Planning", icon: "📋" },
   { key: "pricing", label: "Pricing", icon: "💰" },
   { key: "engine", label: "Engine", icon: "⚙️" },
-  { key: "ai", label: "AI", icon: "🧠" },
+  { key: "ai", label: "Chimmy", icon: "🧠" },
   { key: "check", label: "Check", icon: "✅" },
 ]
 
@@ -359,6 +371,17 @@ function emptyPick(): TradePick {
   }
 }
 
+/** A side as the share link stores it: named players and labelled picks only. */
+function shareAssetsOf(side: TradeSide): ShareAsset[] {
+  const players = side.players
+    .filter((p) => p.name.trim())
+    .map((p) => ({ id: (p.id || p.name).slice(0, 100), name: p.name.trim().slice(0, 200), type: "player" as const }))
+  const picks = side.picks
+    .filter((k) => k.year && k.round)
+    .map((k) => ({ id: k.id.slice(0, 100), name: `${k.year} Round ${k.round}`, type: "pick" as const }))
+  return [...players, ...picks]
+}
+
 function emptySide(name: string, firstPlayerName = ""): TradeSide {
   return {
     teamName: name,
@@ -367,6 +390,33 @@ function emptySide(name: string, firstPlayerName = ""): TradeSide {
     players: [emptyPlayer(firstPlayerName)],
     picks: [],
     faab: 0,
+  }
+}
+
+function draftAssets(side: TradeSide): TradeReviewAsset[] {
+  const players = side.players.filter((player) => player.name.trim()).map(({ name, position, team, age }) => ({
+    kind: "player" as const, name: name.trim(), position, team, age,
+  }))
+  const picks = side.picks.map((pick) => ({
+    kind: "pick" as const, year: Number(pick.year), round: Number(pick.round),
+    tier: pick.projectedRange === "unknown" ? undefined : pick.projectedRange, draftSide: pick.draftSide,
+  }))
+  return [...players, ...picks, ...(side.faab > 0 ? [{ kind: "faab" as const, amount: side.faab }] : [])]
+}
+
+function restoreSide(name: string, assets: TradeReviewAsset[], info?: TradeReviewDraft["senderInfo"]): TradeSide {
+  const side = { ...emptySide(name), ...info }
+  const players = assets.flatMap((asset) => asset.kind === "player" ? [{
+    ...emptyPlayer(asset.name), position: asset.position ?? "", team: asset.team ?? "", age: asset.age ?? "",
+  }] : [])
+  return {
+    ...side,
+    players: players.length ? players : side.players,
+    picks: assets.flatMap((asset) => asset.kind === "pick" ? [{
+      id: uid(), year: String(asset.year), round: String(asset.round), draftSide: asset.draftSide,
+      projectedRange: asset.tier ?? "unknown",
+    }] : []),
+    faab: assets.reduce((sum, asset) => asset.kind === "faab" ? sum + asset.amount : sum, 0),
   }
 }
 
@@ -404,14 +454,14 @@ function scoringFromLinkedLeague(league: LinkedLeague): ScoringFormat | null {
 
 function providerList(payload: ApiTradeResponse) {
   const providers = payload.aiProviders
-  if (!providers) return ["AI"]
+  if (!providers) return ["Chimmy"]
 
   const labels: string[] = []
   if (providers.openai === "ok") labels.push("OpenAI")
   if (providers.anthropic === "ok") labels.push("Anthropic")
   if (providers.xai === "ok" || providers.grok === "ok") labels.push("Grok")
   if (providers.deepseek === "ok") labels.push("DeepSeek")
-  return labels.length > 0 ? labels : ["AI"]
+  return labels.length > 0 ? labels : ["Chimmy"]
 }
 
 function buildNegotiationSteps(payload: ApiTradeResponse) {
@@ -553,7 +603,7 @@ function LoadingState({ phase }: { phase: PhaseKey }) {
           ))}
         </div>
         <h2 className="mt-5 text-xl font-bold text-white">Running multi-stage trade analysis</h2>
-        <p className="mt-2 text-sm text-white/50">Planning, pricing, engine reasoning, AI synthesis, and output checks.</p>
+        <p className="mt-2 text-sm text-white/50">Planning, pricing, engine reasoning, Chimmy synthesis, and output checks.</p>
       </div>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-5">
@@ -838,10 +888,23 @@ function AssetPanel({
 
 function TradeHubInner() {
   const playerCompareUi = usePlayerComparisonUIOptional()
+  const { data: session, status: sessionStatus } = useSession()
+  const viewerId = session?.user?.id
   const searchParams = useSearchParams()
   const previewSender = searchParams?.get("previewSender") ?? ""
   const previewReceiver = searchParams?.get("previewReceiver") ?? ""
+  const reviewDraftId = searchParams?.get("review") ?? ""
   const linkedLeagueIdParam = searchParams?.get("leagueId") ?? ""
+  const postPurchaseSync = usePostPurchaseSync({ successMessage: "Purchase complete. Your trade is ready to review." })
+  /*
+   * The open-market grade is the default: it needs no login and no imported league, which is who this
+   * page was failing ("Not graded" without a league). A `?leagueId=` link, or `?mode=league`, opens the
+   * league analysis instead.
+   */
+  const modeParam = searchParams?.get("mode") ?? ""
+  const [mode, setMode] = useState<"market" | "league">(
+    modeParam === "league" || (linkedLeagueIdParam && modeParam !== "market") ? "league" : "market"
+  )
 
   const [sender, setSender] = useState<TradeSide>(() => emptySide("Sender Team", previewSender))
   const [receiver, setReceiver] = useState<TradeSide>(() => emptySide("Receiver Team", previewReceiver))
@@ -853,8 +916,14 @@ function TradeHubInner() {
   const [linkedLeagueId, setLinkedLeagueId] = useState("")
   const [leagueRows, setLeagueRows] = useState<LinkedLeague[]>([])
   const [phase, setPhase] = useState<PhaseKey>("plan")
+  const [grading, setGrading] = useState(false)
+  const [freeGrade, setFreeGrade] = useState<{ fingerprint: string; grade: TradeGradeView } | null>(null)
+  const [carriedDraft, setCarriedDraft] = useState(false)
   const [loading, setLoading] = useState(false)
+  const draftIdRef = useRef<string | null>(null)
   const [result, setResult] = useState<TradeResult | null>(null)
+  /* The two sides as they were GRADED — what a share link stores, even if the inputs change after. */
+  const [gradedSides, setGradedSides] = useState<{ sender: TradeSide; receiver: TradeSide } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
@@ -866,7 +935,40 @@ function TradeHubInner() {
     () => receiver.players.some((player) => player.name.trim()) || receiver.picks.length > 0 || receiver.faab > 0,
     [receiver]
   )
-  const canEvaluate = senderHasAssets && receiverHasAssets && !loading
+  const canEvaluate = senderHasAssets && receiverHasAssets && !loading && !grading
+
+  const draft = useMemo<TradeReviewDraft>(() => ({
+    give: draftAssets(sender), get: draftAssets(receiver),
+    leagueId: linkedLeagueId || undefined,
+    sport, format, qbFormat, scoring, asOfDate,
+    senderInfo: { teamName: sender.teamName, record: sender.record, isProMember: sender.isProMember },
+    receiverInfo: { teamName: receiver.teamName, record: receiver.record, isProMember: receiver.isProMember },
+  }), [asOfDate, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
+  const gradeFingerprint = JSON.stringify(draft)
+  const visibleGrade = freeGrade?.fingerprint === gradeFingerprint ? freeGrade.grade : null
+
+  useEffect(() => {
+    if (!reviewDraftId || sessionStatus === "loading" || draftIdRef.current === reviewDraftId) return
+    const saved = readTradeReviewDraft(reviewDraftId, viewerId)
+    if (!saved) return
+    draftIdRef.current = reviewDraftId
+    setSender(restoreSide("Sender Team", saved.give, saved.senderInfo))
+    setReceiver(restoreSide("Receiver Team", saved.get, saved.receiverInfo))
+    setSport(saved.sport)
+    setFormat(saved.format)
+    if (saved.qbFormat) setQbFormat(saved.qbFormat)
+    if (saved.scoring) setScoring(saved.scoring)
+    if (saved.asOfDate) setAsOfDate(saved.asOfDate)
+    setLinkedLeagueId(saved.leagueId ?? "")
+    setCarriedDraft(true)
+  }, [reviewDraftId, sessionStatus, viewerId])
+
+  const saveReviewReturnPath = useCallback(() => {
+    const id = saveTradeReviewDraft(draft, draftIdRef.current, viewerId)
+    if (!id) return null
+    draftIdRef.current = id
+    return tradeReviewPath(id)
+  }, [draft, viewerId])
 
   const miniCompare = useMemo(() => {
     const a = sender.players.find((player) => player.name.trim())?.name.trim() ?? ""
@@ -950,6 +1052,8 @@ function TradeHubInner() {
     setAsOfDate("")
     setPhase("plan")
     setResult(null)
+    setFreeGrade(null)
+    setCarriedDraft(false)
     setError(null)
   }, [])
 
@@ -959,6 +1063,35 @@ function TradeHubInner() {
     setResult(null)
     setError(null)
   }, [receiver, sender])
+
+  async function gradeTrade() {
+    if (!canEvaluate) return
+    setGrading(true)
+    setError(null)
+    setFreeGrade(null)
+    setResult(null)
+    try {
+      const response = await fetch("/api/trade-value/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sportFilter: sport, leagueId: draft.leagueId ?? null,
+          strategy: "neutral", teamContext: "neutral", skipAi: true,
+          sideGive: draft.give, sideGet: draft.get,
+          isDynasty: format !== "redraft",
+          ...(sport === "NFL" ? { lineup: { qb: 1, sf: qbFormat === "sf" ? 1 : 0 } } : {}),
+          ...(scoring === "Points" ? { scoringFormat: "points" } : {}),
+        }),
+      })
+      const data = await response.json() as { grade?: TradeGradeView; error?: string }
+      if (!response.ok || !data.grade) throw new Error(data.error ?? "Could not grade this trade.")
+      setFreeGrade({ fingerprint: gradeFingerprint, grade: data.grade })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not grade this trade.")
+    } finally {
+      setGrading(false)
+    }
+  }
 
   const evaluate = useCallback(async () => {
     if (!canEvaluate) return
@@ -1044,10 +1177,12 @@ function TradeHubInner() {
          * it saying which player, and what to do about it. Prefer the sentence; keep the code
          * as the fallback for responses that carry no message.
          */
+        if (response.status === 402) dispatchStateRefreshEvent({ domain: "tokens", source: "trade-review" })
         throw new Error(data.message ?? data.error ?? `Trade evaluator returned ${response.status}`)
       }
 
       setResult({ ...mapApiResponse(data, response.headers, asOfDate), gradedLeagueId: linkedLeagueId || null })
+      setGradedSides({ sender, receiver })
     } catch (requestError: unknown) {
       setError(requestError instanceof Error ? requestError.message : "Trade analysis failed.")
     } finally {
@@ -1063,7 +1198,7 @@ function TradeHubInner() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                AI Trade Analyzer
+                Chimmy Trade Analyzer
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.24em] text-white/50">
                 PECR
@@ -1103,25 +1238,51 @@ function TradeHubInner() {
 
         <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:p-8">
           <div className="max-w-3xl">
-            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
+            <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">
+              {mode === "market" ? "Free · No import needed" : "League analysis"}
+            </div>
             <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
               Grade a trade before you send it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
-              Put the players and picks on each side, choose the league it&apos;s in, and see a letter grade for both
-              teams against the current market, with Chimmy&apos;s read on the deal.
+              Put the players, picks and FAAB on each side and get a letter grade for both teams — no league
+              import needed. Values come from the current market, adjusted by what managers actually paid in
+              completed trades across AllFantasy leagues.
             </p>
           </div>
         </div>
 
-        <InContextMonetizationCard
-          className="mt-6"
-          title="Trade Analyzer access"
-          featureId="trade_analyzer"
-          tokenRuleCodes={["ai_trade_analyzer_full_review"]}
-          testIdPrefix="trade-monetization"
-        />
+        <div className="mt-6 flex flex-wrap gap-2" role="tablist" aria-label="How to grade this trade" data-testid="trade-evaluator-mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "market"}
+            onClick={() => setMode("market")}
+            data-testid="trade-evaluator-mode-market"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "market" ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Quick grade — no league needed
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "league"}
+            onClick={() => setMode("league")}
+            data-testid="trade-evaluator-mode-league"
+            className={`touch-manipulation min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold ${mode === "league" ? "border-violet-400/60 bg-violet-500/15 text-violet-100" : "border-white/10 text-white/60 hover:text-white"}`}
+          >
+            Grade in my league
+          </button>
+        </div>
 
+        {mode === "market" ? (
+          <div className="af-core mt-2" data-testid="trade-evaluator-market-mode">
+            <GenericTradeAnalyzer />
+            <TradeMarketMovers limit={6} heading="What real trades say right now" testId="trade-evaluator-market-movers" />
+          </div>
+        ) : null}
+
+        {mode === "league" ? (<>
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <AssetPanel label="Sender · Giving" accent="#06b6d4" side={sender} campusToCanton={campusToCanton} onChange={setSender} onClear={() => setSender(emptySide("Sender Team"))} />
           <AssetPanel label="Receiver · Giving" accent="#a78bfa" side={receiver} campusToCanton={campusToCanton} onChange={setReceiver} onClear={() => setReceiver(emptySide("Receiver Team"))} />
@@ -1154,7 +1315,7 @@ function TradeHubInner() {
               </button>
             ) : (
               <Link
-                href={`/player-compare?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
+                href={`/player-comparison-lab?playerA=${encodeURIComponent(miniCompare.a)}&playerB=${encodeURIComponent(miniCompare.b)}&sport=${encodeURIComponent(sport)}`}
                 data-testid="trade-evaluator-mini-compare-fallback"
                 className="inline-flex shrink-0 text-sm font-medium text-cyan-300 underline hover:text-cyan-100"
               >
@@ -1261,7 +1422,7 @@ function TradeHubInner() {
         <div className="mt-6 flex flex-col items-center gap-3">
           <button
             type="button"
-            onClick={() => void evaluate()}
+            onClick={() => void gradeTrade()}
             disabled={!canEvaluate}
             data-testid="trade-evaluate-button"
             className="w-full max-w-xl touch-manipulation rounded-2xl px-6 py-4 text-base font-black tracking-wide text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
@@ -1270,12 +1431,42 @@ function TradeHubInner() {
               boxShadow: canEvaluate ? "0 10px 32px rgba(8,145,178,0.28)" : "none",
             }}
           >
-            {loading ? "Analyzing Trade..." : "Evaluate Trade"}
+            {grading ? "Grading trade…" : "Get free trade verdict"}
           </button>
           {!senderHasAssets || !receiverHasAssets ? (
             <p className="text-xs text-white/35">Add at least one player, pick, or FAAB on both sides to enable analysis.</p>
           ) : null}
         </div>
+
+        {visibleGrade ? (
+          <section className="mt-4 rounded-2xl border border-white/10 p-4" aria-live="polite" data-testid="trade-free-verdict">
+            <h2 className="font-bold">Free trade verdict</h2>
+            {visibleGrade.graded ? (
+              <>
+                <p className="mt-2 text-sm text-white/85">
+                  Sender {visibleGrade.letter} · Receiver {visibleGrade.partnerLetter} · {Math.abs(visibleGrade.percentDiff ?? 0)}% value gap
+                </p>
+                {visibleGrade.label ? <p className="mt-1 text-sm text-white/70">{visibleGrade.label}</p> : null}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-white/85">{visibleGrade.reason}</p>
+            )}
+            {asOfDate ? <p className="mt-2 text-sm text-white/65">The free verdict uses current values.</p> : null}
+          </section>
+        ) : null}
+        {postPurchaseSync.state.phase !== "idle" ? (
+          <div className="mt-4 rounded-xl border border-white/10 p-3 text-sm" role="status">
+            {postPurchaseSync.state.message}
+            {postPurchaseSync.state.phase === "pending" || postPurchaseSync.state.phase === "failed" ? (
+              <button type="button" className="ml-2 underline" disabled={postPurchaseSync.isSyncing} onClick={() => void postPurchaseSync.retrySync()}>
+                Refresh access
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {(visibleGrade?.graded || carriedDraft) && !result && senderHasAssets && receiverHasAssets ? (
+          <TradeReviewPurchase busy={loading || grading} onReview={() => void evaluate()} saveReturnPath={saveReviewReturnPath} />
+        ) : null}
 
         {canEvaluate ? (
           <TradeSimulationStrip
@@ -1447,7 +1638,7 @@ function TradeHubInner() {
                 <div className="rounded-3xl border border-white/8 bg-[#0c0c1e] p-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-300">
-                      AI Analysis
+                      Chimmy Analysis
                     </span>
                     {result.fairnessMethod ? (
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">
@@ -1546,6 +1737,23 @@ function TradeHubInner() {
                   </div>
                 ) : null}
 
+                {/*
+                  Share — moved here from the retired /dynasty-trade-analyzer (2026-11-12). Only on a
+                  live league grade: the share page prints THE grade, and a historical (as-of-date)
+                  comparison carries no letter to print.
+                */}
+                {result.live && result.rawPayload.tradeGrade && gradedSides ? (
+                  <TradeShareButton
+                    sideA={shareAssetsOf(gradedSides.sender)}
+                    sideB={shareAssetsOf(gradedSides.receiver)}
+                    grade={result.rawPayload.tradeGrade}
+                    teamAName={gradedSides.sender.teamName}
+                    teamBName={gradedSides.receiver.teamName}
+                    factors={result.analysisBullets}
+                    leagueContext={null}
+                  />
+                ) : null}
+
                 {result.betterAlternatives.length > 0 ? (
                   <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Better Alternatives</div>
@@ -1590,6 +1798,7 @@ function TradeHubInner() {
             </p>
           </div>
         ) : null}
+        </>) : null}
       </div>
     </div>
   )

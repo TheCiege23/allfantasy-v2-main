@@ -42,7 +42,7 @@ import type {
   FleaflickerScoringRule,
 } from '@/lib/league-import/fleaflicker/types'
 
-export interface NormalizedFleaflickerRule {
+interface NormalizedFleaflickerRule {
   /** Provider-native: `category.id` as a string. Not the abbreviation — it collides. */
   stat_key: string
   /**

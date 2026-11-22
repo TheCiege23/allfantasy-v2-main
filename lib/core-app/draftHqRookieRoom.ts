@@ -27,7 +27,7 @@ import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { readRookieDraftCalendarSettings } from '@/lib/dynasty-core/rookieDraftCalendar'
 import { leagueCalendar } from './leagueCalendar'
 
-export type RookieRoomSlot = { slot: number; rosterId: string; displayName: string }
+type RookieRoomSlot = { slot: number; rosterId: string; displayName: string }
 
 /** The `DraftSession` facts the room reads, already parsed by Draft HQ's loader. */
 export type RookieRoomSession = {
@@ -45,7 +45,7 @@ export type RookieRoomSession = {
 }
 
 /** The future-pick inventory's shape (`DynastyOutlook['picks']`), restated so this module stays client-safe. */
-export type RookieRoomInventory =
+type RookieRoomInventory =
   | {
       available: true
       coverage: 'complete' | 'traded_only' | 'none'
@@ -53,7 +53,7 @@ export type RookieRoomInventory =
     }
   | { available: false; reason: string }
 
-export type RookieBoardPick = {
+type RookieBoardPick = {
   overall: number
   label: string
   /** Who holds the pick now. */

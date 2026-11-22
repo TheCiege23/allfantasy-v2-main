@@ -1,9 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from "next/server"
 import type { Prisma } from "@prisma/client"
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth"
-import { assertCommissioner } from "@/lib/commissioner/permissions"
 import { isOwnerOrLeagueCommissioner } from "@/lib/commissioner/leagueCommissionerAccount"
 import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
@@ -31,8 +30,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!(await canCommissionerAct(leagueId, userId, 'view'))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
@@ -117,7 +115,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch (e) {
     const st = (e as Error & { status?: number }).status ?? 403
     return NextResponse.json({ error: "Forbidden" }, { status: st })

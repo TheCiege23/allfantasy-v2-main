@@ -13,41 +13,28 @@ import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
 import { isValidIanaTimeZone } from "@/lib/timezone"
-import { getDiscoverySports } from "./discovery-sports"
 import { draftFitsWindow, rankBandFor, timeZoneRegionFor } from "./findLeagueFilters"
 import {
   getCachedBracketCards,
   getCachedComputedDiscoveryList,
   getCachedCreatorCards,
   getCachedFantasyCards,
+  getCachedPrivateFantasyCards,
   getComputedDiscoveryListCacheKey,
   setCachedBracketCards,
   setCachedComputedDiscoveryList,
   setCachedCreatorCards,
   setCachedFantasyCards,
+  setCachedPrivateFantasyCards,
   clearDiscoveryCache as clearDiscoveryCardCaches,
 } from "./DiscoveryCache"
 import {
   queryPublicBracketLeagueCards,
   queryPublicCreatorLeagueCards,
   queryPublicFantasyLeagueCards,
+  queryPrivateRequestableFantasyLeagueCards,
 } from "./DiscoveryQueryLayer"
-import type {
-  DiscoveryCard,
-  DiscoverLeaguesInput,
-  DiscoverLeaguesResult,
-  DiscoveryFormat,
-  DraftStatusFilter,
-  DraftTypeFilter,
-  DraftWhenFilter,
-  DiscoveryLeagueStyle,
-  DiscoverySort,
-  EntryFeeFilter,
-  LeagueStyleFilter,
-  RankBand,
-  RankBandFilter,
-  TimeZoneRegionFilter,
-} from "./types"
+import type { DiscoveryCard, DiscoverLeaguesInput, DiscoverLeaguesResult, DiscoveryFormat, DraftStatusFilter, DraftTypeFilter, DraftWhenFilter, DiscoverySort, EntryFeeFilter, LeagueStyleFilter, RankBand, RankBandFilter, TimeZoneRegionFilter } from "./types"
 
 export function clearDiscoveryCache(): void {
   clearDiscoveryCardCaches()
@@ -99,6 +86,7 @@ function normalizeStyle(value: unknown): LeagueStyleFilter {
     value === "best_ball" ||
     value === "keeper" ||
     value === "survivor" ||
+    value === "guillotine" ||
     value === "bracket" ||
     value === "community"
     ? value
@@ -144,11 +132,11 @@ export function calculateDiscoveryRankingEffectScore(
 }
 
 export function matchesDiscoveryLeagueStyle(
-  card: Pick<DiscoveryCard, "leagueStyle">,
+  card: Pick<DiscoveryCard, "leagueStyle" | "alsoStyles">,
   style: LeagueStyleFilter
 ): boolean {
   if (style === "all") return true
-  return card.leagueStyle === style
+  return card.leagueStyle === style || (card.alsoStyles ?? []).includes(style)
 }
 
 function applyVisibility(cards: DiscoveryCard[], visibility: "public" | "all"): DiscoveryCard[] {
@@ -314,6 +302,26 @@ async function fetchPublicFantasyLeagues(options: {
     take: DISCOVERY_TAKE,
   })
   setCachedFantasyCards(options.baseUrl, options.sport, options.query, cards)
+  return cards
+}
+
+/**
+ * Private leagues that are recruiting, as "ask to join" cards. Only the finder's "Public & private"
+ * view reads them (discoverPublicLeagues with visibility "all"); every other caller of discovery —
+ * Chimmy, saved-search alerts, creator pages, recommendations — keeps seeing public leagues only.
+ */
+async function fetchPrivateRequestableFantasyLeagues(options: {
+  sport: string | null
+  query: string | null
+}): Promise<DiscoveryCard[]> {
+  const cached = getCachedPrivateFantasyCards(options.sport, options.query)
+  if (cached) return cached
+  const cards = await queryPrivateRequestableFantasyLeagueCards({
+    sport: options.sport,
+    query: options.query,
+    take: DISCOVERY_TAKE,
+  })
+  setCachedPrivateFantasyCards(options.sport, options.query, cards)
   return cards
 }
 
@@ -625,9 +633,12 @@ export async function discoverPublicLeagues(
     }
   }
 
-  const [fantasyCards, bracketCards, creatorCards] = await Promise.all([
+  const [fantasyCards, privateFantasyCards, bracketCards, creatorCards] = await Promise.all([
     format === "all" || format === "fantasy"
       ? fetchPublicFantasyLeagues({ sport, query, baseUrl })
+      : Promise.resolve([]),
+    visibility === "all" && (format === "all" || format === "fantasy")
+      ? fetchPrivateRequestableFantasyLeagues({ sport, query })
       : Promise.resolve([]),
     format === "all" || format === "bracket"
       ? fetchPublicBracketLeagues({ sport, query, baseUrl })
@@ -637,7 +648,7 @@ export async function discoverPublicLeagues(
       : Promise.resolve([]),
   ])
 
-  let combined = [...fantasyCards, ...bracketCards, ...creatorCards]
+  let combined = [...fantasyCards, ...privateFantasyCards, ...bracketCards, ...creatorCards]
   combined = applyVisibility(combined, visibility)
   const tierResolved = await applyTierPolicy(combined, viewerContext)
   combined = tierResolved.cards

@@ -115,8 +115,6 @@ export function MessagePoll({
   )
 }
 
-export default MessagePoll
-
 /** "Sat, Aug 29, 5:00 PM PDT" in the browser's own zone and the app's language; null when unreadable. */
 function localTimeLabel(iso: string): string | null {
   const d = new Date(iso)

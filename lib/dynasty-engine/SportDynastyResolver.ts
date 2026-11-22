@@ -3,24 +3,20 @@
  * Different sports have different peak ages and dynasty relevance.
  */
 
-import { DYNASTY_SPORTS, normalizeSportForDynasty, type DynastySport } from './types'
-
-export function getDynastySports(): readonly DynastySport[] {
-  return DYNASTY_SPORTS
-}
+import { normalizeSportForDynasty, type DynastySport } from './types'
 
 export function resolveSportForDynasty(sport: string): DynastySport {
   return normalizeSportForDynasty(sport)
 }
 
-export type PeakAgeRange = { peakStart: number; peakEnd: number; hardCliff: number }
+type PeakAgeRange = { peakStart: number; peakEnd: number; hardCliff: number }
 
 /**
  * Sports whose aging is modelled on their OWN per-position curves below, rather than borrowed
  * from an NFL archetype. Consumers that historically ran an NFL-shaped curve (NFL archetype
  * mapping, NFL-only position tables) branch on this so NFL output stays byte-identical.
  */
-export const SPORTS_WITH_NATIVE_AGING_CURVES: readonly DynastySport[] = ['MLB', 'NBA', 'NHL', 'SOCCER']
+const SPORTS_WITH_NATIVE_AGING_CURVES: readonly DynastySport[] = ['MLB', 'NBA', 'NHL', 'SOCCER']
 
 export function hasNativeAgingCurve(sport: string): boolean {
   return SPORTS_WITH_NATIVE_AGING_CURVES.includes(normalizeSportForDynasty(sport))
@@ -36,7 +32,7 @@ export function hasNativeAgingCurve(sport: string): boolean {
  * (lib/devy/devyOptionValue.ts prices NCAAF prospects for NFL devy leagues from measured draft and
  * arrival rates; that is a different question — value on arrival in the NFL — and is not reused.)
  */
-export const COLLEGE_DYNASTY_SPORTS: readonly DynastySport[] = ['NCAAF', 'NCAAB']
+const COLLEGE_DYNASTY_SPORTS: readonly DynastySport[] = ['NCAAF', 'NCAAB']
 
 export function isCollegeDynastySport(sport: string): boolean {
   return COLLEGE_DYNASTY_SPORTS.includes(normalizeSportForDynasty(sport))
@@ -185,8 +181,3 @@ export function getPeakAgeRange(
   return pick(NFL_RANGES[pos] ?? NFL_DEFAULT)
 }
 
-/** Whether the sport/format is typically dynasty-oriented (long-term roster value). */
-export function isDynastyRelevant(sport: string): boolean {
-  const s = normalizeSportForDynasty(sport)
-  return DYNASTY_SPORTS.includes(s)
-}

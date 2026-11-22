@@ -111,6 +111,23 @@ export async function POST(
       previousGive,
       previousReceive,
     })
+    // A card in the draft room's chat, so the whole room sees the picks move. Keyed on the proposal,
+    // so a retried accept cannot post it twice. Fire-and-forget: chat never fails the trade.
+    void import('@/lib/draft-room/postDraftRoomEventChat')
+      .then(({ postDraftRoomEventChat, describeDraftPickTrade }) =>
+        postDraftRoomEventChat({
+          leagueId,
+          actorUserId: userId,
+          idempotencyKey: `draft-event:trade:${proposalId}`,
+          event: describeDraftPickTrade({
+            proposerName: proposal.proposerName || previousGive || 'A team',
+            receiverName: proposal.receiverName || previousReceive || 'another team',
+            giveRound: proposal.giveRound,
+            receiveRound: proposal.receiveRound,
+          }),
+        }),
+      )
+      .catch(() => {})
     // The answer, under the offer card in the two managers' DM. Fire-and-forget; no-op when there is no card.
     queueTradeStatusInDm({ source: 'draft_pick', tradeId: proposalId, status: 'accepted', actorUserId: userId, detail: 'The picks have moved.' })
     const updated = await buildSessionSnapshot(leagueId)

@@ -3,7 +3,7 @@
  * Supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, Soccer.
  */
 
-export const DRAFT_NOTIFICATION_EVENT_TYPES = [
+const DRAFT_NOTIFICATION_EVENT_TYPES = [
   'draft_on_the_clock',
   'draft_three_picks_away',
   'draft_two_picks_away',

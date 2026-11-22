@@ -19,7 +19,7 @@ vi.mock('@/lib/prisma', () => ({
     $queryRaw: h.queryRaw,
     leagueTeam: { findMany: h.teamFindMany, findFirst: h.teamFindFirst },
     league: { findUnique: h.leagueFind },
-    weeklyMatchup: { findUnique: h.matchupFind },
+    weeklyMatchup: { findFirst: h.matchupFind }, // the roster's first game of the week
   },
 }))
 
@@ -247,9 +247,8 @@ describe('getUpsetForCard', () => {
       opponentProjectedPoints: 110.8,
     })
     expect(h.teamFindMany.mock.calls[0][0].where).toEqual({ leagueId: 'af-ice', claimedByUserId: 'u1' })
-    expect(h.matchupFind.mock.calls[0][0].where).toEqual({
-      leagueId_seasonYear_week_rosterId: { leagueId: 'sl-ice', seasonYear: 2026, week: 1, rosterId: '4' },
-    })
+    expect(h.matchupFind.mock.calls[0][0].where).toEqual({ leagueId: 'sl-ice', seasonYear: 2026, week: 1, rosterId: '4' })
+    expect(h.matchupFind.mock.calls[0][0].orderBy).toEqual({ game: 'asc' })
     expect((rawCall().values[2] as { values: unknown[] }).values).toEqual(['sl-ice', '4'])
     expect(h.teamFindFirst.mock.calls[0][0].where).toEqual({ leagueId: 'af-ice', externalId: '9' })
   })

@@ -8,7 +8,7 @@ import UncertaintyNotice from './UncertaintyNotice'
 import MissingDataNotice from './MissingDataNotice'
 import CaveatsBlock from './CaveatsBlock'
 
-export interface AIEvidencePresentationProps {
+interface AIEvidencePresentationProps {
   /** Normalized tool output (evidence, uncertainty, missingData, caveats, confidence). */
   output: NormalizedToolOutput
   /** Show confidence (default true). Confidence is always displayed when true. */

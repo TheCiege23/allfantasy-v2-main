@@ -1,8 +1,4 @@
 export { MatchupShareCard, MATCHUP_SHARE_CARD_ID } from './MatchupShareCard'
-export type { MatchupShareCardProps } from './MatchupShareCard'
 export { MatchupShareBar } from './MatchupShareBar'
-export type { MatchupShareBarProps } from './MatchupShareBar'
 export { MatchupShareModal } from './MatchupShareModal'
-export type { MatchupShareModalProps } from './MatchupShareModal'
 export { MatchupSharePageContent } from './MatchupSharePageContent'
-export type { MatchupSharePageContentProps } from './MatchupSharePageContent'

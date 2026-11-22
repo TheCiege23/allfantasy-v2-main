@@ -8,13 +8,11 @@ export const TOKEN_ENTRY_TYPES = {
   ADJUSTMENT: "adjustment",
 } as const
 
-export type TokenEntryType = (typeof TOKEN_ENTRY_TYPES)[keyof typeof TOKEN_ENTRY_TYPES]
-
 export type TokenSpendRuleCode = (typeof TOKEN_SPEND_RULE_MATRIX)[number]["code"]
 
-export type TokenSpendRuleTier = "low" | "mid" | "high"
+type TokenSpendRuleTier = "low" | "mid" | "high"
 
-export type TokenSpendRuleSeed = {
+type TokenSpendRuleSeed = {
   code: TokenSpendRuleCode
   category: "ai_feature" | "commissioner_function"
   featureLabel: string
@@ -29,7 +27,7 @@ export type TokenSpendRuleSeed = {
 
 export type TokenRefundRuleCode = "feature_execution_failed"
 
-export type TokenRefundRuleSeed = {
+type TokenRefundRuleSeed = {
   code: TokenRefundRuleCode
   description: string
   maxAgeMinutes: number | null
@@ -40,24 +38,24 @@ export type TokenRefundRuleSeed = {
 export const TOKEN_PACKAGE_SEEDS = [
   {
     sku: "af_tokens_5",
-    title: "AllFantasy AI Tokens (250)",
-    description: "250 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Chimmy Tokens (250)",
+    description: "250 Chimmy tokens for metered premium Chimmy actions.",
     tokenAmount: 250,
     priceUsdCents: 499,
     isActive: true,
   },
   {
     sku: "af_tokens_10",
-    title: "AllFantasy AI Tokens (600)",
-    description: "600 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Chimmy Tokens (600)",
+    description: "600 Chimmy tokens for metered premium Chimmy actions.",
     tokenAmount: 600,
     priceUsdCents: 899,
     isActive: true,
   },
   {
     sku: "af_tokens_25",
-    title: "AllFantasy AI Tokens (1,500)",
-    description: "1,500 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Chimmy Tokens (1,500)",
+    description: "1,500 Chimmy tokens for metered premium Chimmy actions.",
     tokenAmount: 1500,
     priceUsdCents: 1999,
     isActive: true,

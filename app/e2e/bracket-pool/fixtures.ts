@@ -51,11 +51,16 @@ const entries: PlayoffChallengeView['entries'] = NAMES.map((name, i) => ({
   createdAt: CREATED,
 }))
 
-/** The viewer picked every home team in round 1 (so two upsets cost them), then a path to the final. */
+/** The viewer picked every home team in round 1 (so two upsets cost them) and advanced those teams to the final:
+ *  a later-round pick is the team picked in the series feeding its home slot. */
+const pickedBySeries = new Map<number, string>()
+for (const s of [...series].sort((a, b) => a.roundIndex - b.roundIndex)) {
+  pickedBySeries.set(s.seriesNumber, s.sourceSeriesHome == null ? s.homeTeamName : pickedBySeries.get(s.sourceSeriesHome)!)
+}
 const picks: PlayoffPickView[] = series.map((s) => ({
   id: `pick-${s.id}`, entryId: 'ent-1', seriesId: s.id,
-  pickTeamName: s.roundIndex === 1 ? s.homeTeamName : s.homeTeamName,
-  confirmedAt: '2027-04-19T22:00:00.000Z', confirmedTeamName: s.homeTeamName, draftTeamName: null,
+  pickTeamName: pickedBySeries.get(s.seriesNumber)!,
+  confirmedAt: '2027-04-19T22:00:00.000Z', confirmedTeamName: pickedBySeries.get(s.seriesNumber)!, draftTeamName: null,
   createdAt: CREATED, updatedAt: CREATED,
 }))
 

@@ -902,3 +902,14 @@ next `migrate deploy` on a database without it RUNS it.**
   so it was created outside migrate. The next `migrate deploy` there records this migration and
   changes nothing, because every statement is `IF NOT EXISTS`. The original SQL would have FAILED
   there and blocked every later deploy.
+
+## 2026-11-14: `trade_history_indexes` moved, on the owner's instruction
+
+`20261106150000_trade_history_indexes` (#3310) is now
+`prisma/migrations/20261114230000_trade_history_indexes`. Its two `@@index` declarations had been in
+`schema.prisma` since 2026-11-06, so the post-deploy drift check after
+`20261114220000_draft_recommendation_records` reported both as NEW drift. It had no ledger row and
+creates only two indexes (`IF NOT EXISTS`, no data change), so the next guarded `migrate deploy` runs
+it. It was renamed past the last applied migration so it applies in order. Check
+`dw_transaction_facts`' size first (`railway run node scripts/check-table-sizes.mjs`): a plain
+`CREATE INDEX` blocks writes to that table while it builds.

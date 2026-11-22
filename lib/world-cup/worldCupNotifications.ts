@@ -11,7 +11,7 @@ import {
   type WorldCupNotificationType,
 } from "./worldCupNotificationPreferences"
 
-export type WorldCupNotificationDiagnostics = {
+type WorldCupNotificationDiagnostics = {
   userId: string
   type: WorldCupNotificationType
   inAppSent: boolean
@@ -68,7 +68,7 @@ async function getWorldCupChallengeName(challengeId: string) {
   return challenge?.name ? String(challenge.name) : "World Cup Pool"
 }
 
-export async function getWorldCupChallengeParticipantUserIds(challengeId: string) {
+async function getWorldCupChallengeParticipantUserIds(challengeId: string) {
   const findMany = (prisma as any)?.worldCupBracketParticipant?.findMany
   if (typeof findMany !== "function") return []
   const participants = await findMany({
@@ -224,29 +224,6 @@ export async function notifyWorldCupAllMention(input: {
     smsBody: `New @all post in World Cup pool ${poolName}. Open AllFantasy to read it.`,
     sourceKeyPrefix: `world-cup-chat-all:${input.messageId}`,
     messageId: input.messageId,
-    severity: "medium",
-  })
-}
-
-export async function notifyWorldCupCommissionerAnnouncement(input: {
-  challengeId: string
-  poolName?: string
-  senderUserId?: string | null
-  announcement: string
-  sourceId: string
-}) {
-  const poolName = input.poolName ?? await getWorldCupChallengeName(input.challengeId)
-  const participantUserIds = await getWorldCupChallengeParticipantUserIds(input.challengeId)
-  return dispatchWorldCupNotification({
-    userIds: participantUserIds,
-    excludeUserIds: input.senderUserId ? [input.senderUserId] : [],
-    challengeId: input.challengeId,
-    type: "commissionerAnnouncement",
-    title: `Commissioner announcement in ${poolName}`,
-    body: truncateText(input.announcement, 240),
-    // The announcement's words stay in-app: user-written text is not sent over the A2P campaign.
-    smsBody: `New commissioner announcement in World Cup pool ${poolName}. Open AllFantasy to read it.`,
-    sourceKeyPrefix: `world-cup-commissioner-announcement:${input.sourceId}`,
     severity: "medium",
   })
 }

@@ -20,9 +20,9 @@ import {
 } from '@/lib/tournament/broadcastAudience'
 
 /** Long enough for a redraft brief; short enough to survive a chat paste. */
-export const MAX_BROADCAST_LENGTH = 1500
+const MAX_BROADCAST_LENGTH = 1500
 
-export type BroadcastResult =
+type BroadcastResult =
   | {
       ok: true
       announcementId: string

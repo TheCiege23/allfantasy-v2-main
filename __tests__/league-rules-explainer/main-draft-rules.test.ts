@@ -144,7 +144,7 @@ describe('the Draft section', () => {
         'Overnight, the clock stops from 22:00 to 08:00 (league time).',
         'If a manager’s clock runs out, a pick is made for them: the first available player in their queue, otherwise the best player available.',
         'The draft order is set by a weighted lottery.',
-        'Teams without a manager are drafted by Chimmy, the AI manager.',
+        'Teams without a manager are drafted by Chimmy, Chimmy manager.',
       ]),
     )
     expect(lines.some((l) => l.startsWith('The draft is scheduled for ') && l.endsWith('and starts by itself at that time.'))).toBe(true)
@@ -230,7 +230,7 @@ describe('"What changed" lines for the draft keys', () => {
       'Third-round reversal: Off → On — Third-round reversal: round 3 goes in the same order as round 2, then the order keeps reversing from there.',
     )
     expect(line('draftAutostart', true, false)).toBe('Draft starts by itself: On → Off — the commissioner now starts the draft.')
-    expect(line('draftOrphanPicks', null, 'ai')).toBe('Drafting for teams without a manager: Off → Chimmy — Teams without a manager are drafted by Chimmy, the AI manager.')
+    expect(line('draftOrphanPicks', null, 'ai')).toBe('Drafting for teams without a manager: Off → Chimmy — Teams without a manager are drafted by Chimmy, Chimmy manager.')
     expect(line('draftOvernightPause', null, { from: '22:00', to: '08:00', picksAllowed: false })).toBe('Overnight clock pause: Off → 22:00–08:00')
     expect(line('draftAuctionBudget', 200, 300)).toBe('Auction budget: $200 → $300')
     expect(line('draftStartAt', null, '2026-09-01T23:30:00.000Z')).toMatch(/^Draft time: Not scheduled → .+2026/)

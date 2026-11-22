@@ -15,7 +15,7 @@ import type {
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 
-export const NFL_REDRAFT_LIVE_SCORING_CONTEXT_MODEL_VERSION = 'nfl-redraft-live-scoring-context-v1' as const
+const NFL_REDRAFT_LIVE_SCORING_CONTEXT_MODEL_VERSION = 'nfl-redraft-live-scoring-context-v1' as const
 
 export type NflRedraftLiveGameStatus =
   | 'scheduled'
@@ -33,7 +33,7 @@ export type NflRedraftLiveClockContext = {
   display: string | null
 }
 
-export type NflRedraftLiveStatLine = {
+type NflRedraftLiveStatLine = {
   stats: Record<string, number>
   source: string | null
   updatedAtIso: string | null
@@ -54,7 +54,7 @@ export type NflRedraftStatCorrectionRecord = {
   applied: boolean
 }
 
-export type NflRedraftLiveRefreshContext = {
+type NflRedraftLiveRefreshContext = {
   scoringRefreshTimestamp: string | null
   matchupRefreshTimestamp: string | null
   standingsRefreshRequired: boolean
@@ -80,7 +80,7 @@ export type NflRedraftLiveScoringContext = {
   providerFallback: NflRedraftProviderFallbackMetadata
 }
 
-export type NormalizeNflRedraftProviderLiveScoringOptions = {
+type NormalizeNflRedraftProviderLiveScoringOptions = {
   now?: Date
   fetchedAtIso?: string | null
   sourceUpdatedAtIso?: string | null

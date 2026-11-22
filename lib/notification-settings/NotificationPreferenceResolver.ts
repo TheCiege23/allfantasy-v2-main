@@ -27,8 +27,18 @@ const PUSH_DEFAULT_OFF = new Set<NotificationCategoryId>([
   "live_game_alerts", "followed_team_scores", "matchup_results", "waiver_processing", "ai_alerts", "autocoach",
 ])
 
+/**
+ * Which devices push may reach. Each is ON unless the person switched it off.
+ *
+ * 🛑 DESKTOP WAS OFF UNLESS SWITCHED ON, AND THAT DROPPED EVERY DESKTOP "ALLOW" (fixed 2026-11-15).
+ * The sign-in sheet asks desktop browsers for permission and saves the subscription, but `desktop`
+ * defaulted to false and nothing ever flipped it, so `sendPushToUser` filtered every desktop
+ * subscription out: a person who said yes on their laptop got nothing unless they also found the
+ * "Desktop browser push" toggle in Settings. Push only ever reaches a browser that granted permission,
+ * so on-by-default cannot buzz anyone who did not ask; an explicit `false` is still honoured.
+ */
 export function resolvePushDevices(saved: NotificationPreferences | null | undefined) {
-  return { mobile: saved?.pushDevices?.mobile !== false, desktop: saved?.pushDevices?.desktop === true }
+  return { mobile: saved?.pushDevices?.mobile !== false, desktop: saved?.pushDevices?.desktop !== false }
 }
 
 export function isPushAndInAppOnly(id: NotificationCategoryId): boolean {
@@ -57,6 +67,8 @@ export function getDefaultCategoryPreferences(
   opts: { smsConsented?: boolean } = {},
 ): NotificationChannelPrefs {
   if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
+  // Additional provider alerts are opt-in; native AF defaults stay unchanged.
+  if (id.startsWith("imported_")) return { ...DEFAULT_CHANNEL, enabled: false, email: false }
   return {
     ...DEFAULT_CHANNEL,
     push: !PUSH_DEFAULT_OFF.has(id),

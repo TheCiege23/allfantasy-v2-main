@@ -2,7 +2,7 @@
  * Machine-readable roster / lineup blocking codes for notifications, UI, and analytics.
  * Align with product spec; extend as new rules are implemented.
  */
-export const ROSTER_LEGALITY_CODES = [
+const ROSTER_LEGALITY_CODES = [
   'ROSTER_OVER_LIMIT',
   'SECTION_OVERFLOW',
   'IR_PLAYER_NO_LONGER_ELIGIBLE',

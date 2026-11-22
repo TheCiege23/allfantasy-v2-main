@@ -39,7 +39,7 @@ export function shouldRunTradeLive(
   return String(env['DECISION_OS_TRADE_LIVE'] ?? '').trim().toLowerCase() === 'true'
 }
 
-export interface TradeShadowResult {
+interface TradeShadowResult {
   ran: boolean
   proposalId: string
   result?: RunTradeEvaluateResult
@@ -52,7 +52,7 @@ export interface TradeShadowResult {
   canonical?: CanonicalTradeShadowResult
 }
 
-export interface TradeShadowDeps {
+interface TradeShadowDeps {
   loadWorldFacts: (input: { leagueId: string; seasonId: string; proposerRosterId: string; receiverRosterId: string }) => Promise<TradeWorldFacts | null>
   /** Build the decision deps from the persisted deterministic snapshot (the wrap-fidelity memo). */
   buildDecisionDeps: (memo: TradeValueSnapshot) => TradeDecisionDeps

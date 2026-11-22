@@ -1,7 +1,7 @@
 import { resolvePostAuthIntentDestination } from "@/lib/auth/PostAuthIntentRouter"
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute"
 
-export interface SignupQueryShape {
+interface SignupQueryShape {
   next?: string | null
   callbackUrl?: string | null
   returnTo?: string | null

@@ -6,9 +6,6 @@
  * are properties of the ROSTER and the CALENDAR rather than of the assets.
  */
 
-/** Slot names that are not a playing position. */
-const NON_PLAYING = new Set(['BN', 'IR', 'TAXI', 'RES', 'BENCH'])
-
 /** Reserve assignments free active spots; incoming players require active space
  * until the manager explicitly assigns them to an eligible reserve slot. */
 export function activeRosterCapacity(args: {
@@ -46,7 +43,7 @@ export function activeRosterCapacity(args: {
  * drops is not a 3-for-1; it is a 1-for-1 plus two donations to the league.
  */
 
-export type RosterCrunch = {
+type RosterCrunch = {
   rosterSize: number | null
   held: number
   /** Net change in bodies this deal causes. */
@@ -95,7 +92,7 @@ export function assessRosterCrunch(args: {
  * anything with a future is all that is tradeable.
  */
 
-export type DeadlineWindow = {
+type DeadlineWindow = {
   weeksOfUse: number | null
   /** Weeks until trades close. Null when the league has no deadline. */
   weeksToDeadline: number | null
@@ -140,7 +137,7 @@ export function assessDeadline(args: {
  * the unpriced players are all coming TO you, the deal looks worse than it is.
  */
 
-export type UnpricedExposure = {
+type UnpricedExposure = {
   giveUnpriced: number
   getUnpriced: number
   giveTotal: number
@@ -192,7 +189,7 @@ export function assessUnpriced(args: {
  * costs, and inventing one would be the most confident guess in the model.
  */
 
-export type Concentration = {
+type Concentration = {
   /** Share of total value held by the single most valuable player, 0..1. */
   topShare: number | null
   topShareAfter: number | null

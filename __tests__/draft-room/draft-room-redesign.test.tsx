@@ -16,9 +16,13 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 
 import { DraftModeBanner, resolveDraftRoomMode } from '@/components/app/draft-room/DraftModeBanner'
 import {
+  AuctionBidDock,
   AuctionSpotlightPanel,
+  AuctionTeamsPanel,
   buildAuctionTeamLines,
+  goingCall,
   nominationTurnsUntil,
+  upcomingNominators,
 } from '@/components/app/draft-room/AuctionSpotlightPanel'
 import { clockProgressPercent } from '@/components/app/draft-room/DraftTopBar'
 import type { AuctionSessionSnapshot, DraftPickSnapshot } from '@/lib/live-draft-engine/types'
@@ -162,9 +166,9 @@ describe('AuctionSpotlightPanel', () => {
 
   it('shows the viewer budget, max bid and nomination turn', () => {
     render(<AuctionSpotlightPanel {...base} auction={auction()} onBid={() => {}} />)
-    expect(screen.getByTestId('auction-viewer-stats').textContent).toContain('$195 of $200')
-    expect(screen.getByTestId('auction-viewer-max-bid').textContent).toBe('$182')
-    expect(screen.getByTestId('auction-viewer-nominate-in').textContent).toBe('In 2 turns')
+    expect(screen.getByTestId('auction-viewer-stats').textContent).toContain('$195 left of $200')
+    expect(screen.getByTestId('auction-viewer-max-bid').textContent).toBe('max bid $182')
+    expect(screen.getByTestId('auction-viewer-nominate-in').textContent).toBe('you nominate in 2')
     expect(screen.getByTestId('auction-highest-bidder').textContent).toBe('High bidder: Beta')
     expect(screen.getByTestId('auction-current-nominator').textContent).toContain('Beta')
   })
@@ -199,5 +203,108 @@ describe('AuctionSpotlightPanel', () => {
     expect(screen.getByTestId('auction-viewer-stats').textContent).toContain('$195 de $200')
     expect(screen.getByTestId('auction-highest-bidder').textContent).toBe('Puja más alta: Beta')
     expect(screen.getByText('Ganados recientemente')).toBeTruthy()
+  })
+})
+
+/**
+ * Auction stage redesign (2026-11-15): one compact stage per state, budgets in a Teams panel, a
+ * phone bid dock, and one clock (the top bar's) — the stage adds only "going once / twice".
+ */
+describe('auction stage states', () => {
+  const base = {
+    currentUserRosterId: 'r1',
+    isCommissioner: false,
+    onNominate: () => {},
+    onResolve: () => {},
+    onBid: () => {},
+    timerRemainingSeconds: 30,
+    timerStatus: 'running' as const,
+    rosterSize: 15,
+    picks: [pick(1, 'r1', 'Atlas Runner', 5), pick(2, 'r2', 'Beta Back', 50)],
+  }
+
+  it('calls going once at 10 seconds and going twice at 5, only while running', () => {
+    expect(goingCall(30, 'running')).toBeNull()
+    expect(goingCall(10, 'running')).toBe('once')
+    expect(goingCall(5, 'running')).toBe('twice')
+    expect(goingCall(0, 'running')).toBeNull()
+    expect(goingCall(4, 'paused')).toBeNull()
+  })
+
+  it('scales going once / twice to a short bid clock (the mock auction)', () => {
+    expect(goingCall(8, 'running', 8)).toBeNull()
+    expect(goingCall(5, 'running', 8)).toBeNull()
+    expect(goingCall(4, 'running', 8)).toBe('once')
+    expect(goingCall(2, 'running', 8)).toBe('twice')
+    expect(goingCall(10, 'running', 30)).toBe('once')
+  })
+
+  it('lists who nominates next, wrapping round the order', () => {
+    expect(upcomingNominators(order, 1, 5).map((o) => o.rosterId)).toEqual(['r3', 'r1'])
+    expect(upcomingNominators([], 0, 5)).toEqual([])
+  })
+
+  it('shows bidding controls when someone else leads, and no second clock', () => {
+    render(<AuctionSpotlightPanel {...base} auction={auction()} />)
+    expect(screen.getByTestId('auction-stage').getAttribute('data-state')).toBe('bidding')
+    expect(screen.getByTestId('auction-quick-bid-1').textContent).toBe('Bid $41')
+    expect(screen.getByTestId('auction-stage').textContent).not.toMatch(/30s/)
+  })
+
+  it('hides bid buttons while the viewer leads and says what winning leaves them', () => {
+    render(<AuctionSpotlightPanel {...base} timerRemainingSeconds={6} auction={auction({ currentBidderRosterId: 'r1' })} />)
+    expect(screen.getByTestId('auction-stage').getAttribute('data-state')).toBe('leading')
+    expect(screen.queryByTestId('auction-quick-bid-1')).toBeNull()
+    expect(screen.getByTestId('auction-highest-bidder').textContent).toBe('You lead')
+    expect(screen.getByTestId('auction-leading').textContent).toContain('Going once')
+    expect(screen.getByTestId('auction-leading').textContent).toContain('You’ll have $155 left with 13 spots')
+  })
+
+  it('turns into the nominate step on the viewer’s turn, with queue picks one tap away', () => {
+    const onNominate = vi.fn()
+    const queue = [{ playerName: 'North Star', position: 'QB', team: 'BAL' }, { playerName: 'Orbit Slot', position: 'WR', team: 'SF' }]
+    render(
+      <AuctionSpotlightPanel
+        {...base}
+        onNominate={onNominate}
+        queue={queue}
+        auction={auction({ currentNomination: null, nominationOrderIndex: 0, currentBid: 0, currentBidderRosterId: null })}
+      />,
+    )
+    expect(screen.getByTestId('auction-stage').getAttribute('data-state')).toBe('nominate')
+    fireEvent.click(screen.getByTestId('auction-nominate-queue-0'))
+    expect(onNominate).toHaveBeenCalledWith(queue[0])
+    expect(screen.getByTestId('auction-last-sale').textContent).toContain('Beta Back → Beta')
+  })
+
+  it('offers the commissioner Sell now with a bid and Pass without one', () => {
+    const { unmount } = render(<AuctionSpotlightPanel {...base} isCommissioner auction={auction()} />)
+    expect(screen.getByTestId('auction-resolve-button').textContent).toBe('Sell now')
+    unmount()
+    render(<AuctionSpotlightPanel {...base} isCommissioner auction={auction({ currentBid: 0, currentBidderRosterId: null })} />)
+    expect(screen.getByTestId('auction-resolve-button').textContent).toBe('Pass')
+  })
+
+  it('phone dock bids the next amount, and only shows status while the viewer leads', () => {
+    const onBid = vi.fn()
+    const { unmount } = render(<AuctionBidDock {...base} onBid={onBid} auction={auction()} />)
+    fireEvent.click(screen.getByTestId('auction-dock-bid'))
+    fireEvent.click(screen.getByTestId('auction-dock-plus5'))
+    expect(onBid.mock.calls).toEqual([[41], [45]])
+    unmount()
+    render(<AuctionBidDock {...base} onBid={onBid} auction={auction({ currentBidderRosterId: 'r1' })} />)
+    expect(screen.getByTestId('auction-dock-leading')).toBeTruthy()
+    expect(screen.queryByTestId('auction-dock-bid')).toBeNull()
+  })
+
+  it('phone dock renders nothing with no player on the block', () => {
+    const { container } = render(<AuctionBidDock {...base} auction={auction({ currentNomination: null })} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('keeps every budget and recent wins in the Teams panel', () => {
+    render(<AuctionTeamsPanel {...base} auction={auction()} />)
+    expect(screen.getByTestId('auction-budgets').textContent).toContain('$150')
+    expect(screen.getByTestId('auction-recently-won').textContent).toContain('Beta Back')
   })
 })

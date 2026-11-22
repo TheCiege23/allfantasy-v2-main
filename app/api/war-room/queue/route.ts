@@ -1,3 +1,4 @@
+import { draftQueueKeyForUser } from '@/lib/league/teamScopedKey'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireUserId, requireLeagueWarRoom } from '@/lib/war-room/war-room-api'
@@ -47,7 +48,8 @@ export async function POST(req: NextRequest) {
 
   const replaced = await replaceDraftQueueEntries({
     draftSessionId: session.id,
-    userId: auth.userId,
+    // The queue of the team this manager is on (lib/league/teamScopedKey.ts).
+    userId: await draftQueueKeyForUser(gate.ctx.leagueId, auth.userId),
     entries,
   })
 

@@ -64,7 +64,7 @@ function DirectionIndicator({ direction }: { direction: ChampionshipTrajectoryVi
   )
 }
 
-export function ChampionshipTrajectory({
+function ChampionshipTrajectory({
   snapshot,
   loading = false,
 }: {

@@ -55,7 +55,15 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
    * returning its inputs too so a surface can record a receipt).
    */
   { file: 'lib/core-app/archivedTradeGrade.ts', entry: /gradeArchivedTrade(?:WithInputs)?\(/, what: 'archived-trade grading (the /core Trades list and the player card)' },
-  { file: 'lib/core-app/trades.ts', entry: /gradeArchivedTradeRows\(/, what: 'the /core Trades grade list' },
+  /*
+   * 2026-11-17: the /core Trades read moved into `leagueTradeRowGrades.ts`, shared with the Trade Center's
+   * provider-completed history. /core Trades and the Trade Center are pinned to that loader, and the loader to
+   * the archived-trade grader.
+   */
+  { file: 'lib/core-app/leagueTradeRowGrades.ts', entry: /gradeArchivedTradeRows\(/, what: 'the stored-trade grade read (/core Trades and the Trade Center)' },
+  { file: 'lib/core-app/trades.ts', entry: /loadGradedLeagueTradeRows\(/, what: 'the /core Trades grade list' },
+  { file: 'lib/provider-trades/providerCompletedHistory.ts', entry: /\?\? loadGradedLeagueTradeRows\b/, what: 'the Trade Center\u2019s completed trades on ESPN, Yahoo, MFL and Fleaflicker leagues' },
+  { file: 'app/api/league/trades-panel/route.ts', entry: /buildProviderCompletedHistory\(/, what: 'the Trade Center history tab, imported leagues' },
   { file: 'lib/core-app/playerCard.ts', entry: /gradeArchivedTradeRows\(/, what: 'the player card’s trades' },
   { file: 'lib/core-app/tradesBoard.ts', entry: /gradeArchivedTrade\(/, what: 'the cross-league trades board' },
   /* The one trade engine, Phase 1 (2026-09-26): these call `evaluateTrade()` and show its receipt's letter. */
@@ -65,8 +73,6 @@ const SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   /* Phase 2 (2026-09-27): an existing trade by reference — loadTrade() → the one engine. */
   { file: 'lib/decision-os/trade/evaluateStoredTrade.ts', entry: /evaluate:\s*evaluateTrade,/, what: 'evaluateStoredTrade, whose default grader is the one engine' },
   { file: 'app/api/trades/evaluate/route.ts', entry: /evaluateStoredTrade\(/, what: 'POST /api/trades/evaluate' },
-  /* 2026-09-27: the dynasty trade analyzer's letter, in the league the viewer chose. */
-  { file: 'app/api/dynasty-trade-analyzer/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the dynasty trade analyzer' },
   /* 2026-09-27: /trade-finder's candidates (see lib/trade-finder/candidateGrades.ts). */
   { file: 'app/api/trade-finder/route.ts', entry: /gradeDeal\(/, what: 'the /trade-finder page’s suggested trades' },
   /* 2026-09-29: the /core Player Finder's "trade for him" card — it printed a second engine's verdict until then. */
@@ -311,17 +317,10 @@ describe('no screen prints a second engine’s verdict beside the one grade', ()
     expect(src).toMatch(/tradeGrade = receiptGradeFields\(receipt\)/)
   })
 
-  it('the dynasty trade analyzer names no winner but the letter’s', () => {
-    const src = code('components/DynastyTradeForm.tsx')
-    expect(src).not.toMatch(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/)
-    expect(src).toMatch(/winnerFromLeagueGrade\(tradeGrade,/)
-  })
-
   it('positive controls: each shape matches the code it replaced', () => {
     expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test("Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}")).toBe(true)
     expect(/runTradeAnalysis\(/.test('engine = await runTradeAnalysis({')).toBe(true)
     expect(/\bverdict:|fairnessScore|fairnessConfidence/.test('      verdict: deterministicVerdict,')).toBe(true)
-    expect(/detVerdict\.winnerLabel|sections\.valueVerdict\.edge\b|\ba\.winner\b|\ba\.dynastyVerdict\b/.test("winner: a.winner || 'Even',")).toBe(true)
   })
 })
 
@@ -419,7 +418,9 @@ describe('Chimmy — explains the one grade, never makes one (design step 7)', (
 
   it('the tool loop’s answer is held to the letters the engine gave', () => {
     const route = code('app/api/chat/chimmy/route.ts')
-    expect(route).toMatch(/tradeGrades: \[\] as ChimmyTradeGrade\[\]/)
+    // One list, started empty, shared with the grounding packet's graded inbox (2026-11-20).
+    expect(route).toMatch(/const packetTradeGrades: ChimmyTradeGrade\[\] = \[\]/)
+    expect(route).toMatch(/tradeGrades: packetTradeGrades,/)
     expect(route).toMatch(/enforceTradeLetters\(\{\s*answer: loop\.text,\s*grades: toolContext\.tradeGrades,/)
   })
 })
@@ -674,44 +675,25 @@ describe('the /trade/[id] share page prints the stored one grade, never the stor
 })
 
 /*
- * 2026-09-29: the dynasty trade analyzer printed the dual-brain engine's confidence, net delta,
- * acceptance %, side totals, veto risk, partner-fit score and "Ready to Send" call beside the one grade.
- * The route sends an allowlisted view; behaviour in __tests__/dynasty-trade/dynasty-analyzer-no-private-verdict.test.ts.
- */
-describe('the dynasty trade analyzer sends and prints no dual-brain verdict', () => {
-  const ROUTE_PRIVATE = /deterministicVerdict: detVerdict|dynastyVerdict:|aiVerdict:|winner: detVerdict|acceptanceProbability:|\bsections,\n/
-
-  it('the route sends the allowlisted sections and no verdict fields', () => {
-    const src = code('app/api/dynasty-trade-analyzer/route.ts')
-    expect(src).toMatch(/sections: dynastyAnalyzerSectionsForClient\(sections, gate\.filteredCounters\)/)
-    expect(ROUTE_PRIVATE.test(src)).toBe(false)
-  })
-
-  it('positive control: the shape matches the lines the route sent', () => {
-    expect(ROUTE_PRIVATE.test('      deterministicVerdict: detVerdict,')).toBe(true)
-    expect(ROUTE_PRIVATE.test('        dynastyVerdict: detVerdict.winnerLabel,')).toBe(true)
-    expect(ROUTE_PRIVATE.test('      sections,\n      deterministicVerdict')).toBe(true)
-  })
-})
-
-/*
  * 2026-09-29: components/TradeFinderClient.tsx — unimported since 2026-04-02 (/trade-finder renders
  * app/trade-finder/page.tsx) — carried a private letter (`computeTradeGrade`), an invented "+12%" win
  * probability and a read of the analyzer's `dynastyVerdict`. Deleted rather than repointed.
  */
-describe('/trade-finder has one client, and it is the graded one', () => {
-  it('the old client with its own letter is gone, and the page reads the graded candidates', () => {
+describe('/trade-finder has no client of its own', () => {
+  it('the old client with its own letter is gone, and the page only redirects to the Trades screen finder', () => {
     expect(existsSync(resolve(process.cwd(), 'components/TradeFinderClient.tsx'))).toBe(false)
+    // 2026-11-12: /trade-finder retired into /core/trades#trade-finder.
     const page = code('app/trade-finder/page.tsx')
-    expect(page).toMatch(/toFinderTrades/)
-    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
+    expect(page).toMatch(/permanentRedirect\(/)
+    expect(page).toMatch(/\/core\/trades/)
+    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict|fetch\(/)
   })
 
   /*
    * 2026-09-30: TradeFinderClient was the only importer of components/PartnerMatchView.tsx, which was
    * the only importer of ManagerStyleBadge (a null compatibility stub), ReputationBadge and
    * LegacyScoreBadge. Censused in all four import forms, tests and mocks — nothing else named them.
-   * The API routes they fetched stay: /trade-finder still calls /api/trade-partner-match itself.
+   * (2026-11-12: /trade-finder itself then retired, and /api/trade-partner-match with it.)
    */
   it.each([
     'components/PartnerMatchView.tsx',

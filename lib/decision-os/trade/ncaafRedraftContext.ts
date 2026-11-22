@@ -2,10 +2,13 @@ import 'server-only'
 
 import type { TradeValuationGap } from './tradeGrade'
 
+import { loadCompletedSportDeals, sportMarketAdjustments } from '@/lib/trade-market/sportCompletedMarket'
+import { leagueIdColumn, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import { prisma } from '@/lib/prisma'
 import { collegePlayerIds } from '@/lib/c2c/campusLineup'
 import { latestNcaafProjectionSeason, lookupNcaafProjections, lookupNcaafProjectionsForCfbdLinks } from '@/lib/core-app/ncaafProjections'
-import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
+import { extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { bridgeNcaafRosterIdsToCfbdIds, type NcaafRosterNamespace } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
@@ -52,8 +55,8 @@ const REPLACEMENT_SCAN = 250
 
 export { rosteredIdsOf } from './tradePlayers'
 
-function perGameFrom(componentStats: Record<string, unknown> | null | undefined, rules: Record<string, unknown>): number | null {
-  const scored = computeLeagueProjectedPoints(componentStats, rules)
+function perGameFrom(componentStats: Record<string, unknown> | null | undefined, rules: Record<string, unknown>, position: string | null | undefined): number | null {
+  const scored = scoreNcaafProjection(componentStats, rules, position)
   return scored && Number.isFinite(scored.points) ? scored.points : null
 }
 
@@ -239,8 +242,27 @@ export async function loadNcaafRedraftBase(league: {
   }
   const perGameByRosterId = new Map<string, NcaafPerGame>()
   for (const [id, proj] of projections) {
-    const perGame = perGameFrom(proj.componentStats, rules)
+    const perGame = perGameFrom(proj.componentStats, rules, proj.position)
     if (perGame != null) perGameByRosterId.set(id, { perGame, position: proj.position ?? null })
+  }
+
+  const format = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: league.id }, select: { leagueType: true, season: true } })).catch(() => null)
+  const deals = format?.season === season ? await loadCompletedSportDeals('NCAAF', season, format.leagueType).catch(() => []) : []
+  const column = leagueIdColumn(league.platform, 'NCAAF')
+  if (deals.length && column) {
+    const ids = [...new Set(deals.flatMap((t) => [...t.given, ...t.received]))]
+    const [rates, links] = await Promise.all([
+      prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NCAAF', season, week: null, eventId: null, playerId: { in: ids } },
+        select: { playerId: true, position: true, adjustmentFactors: true } }),
+      resolveRosterIdsToKeys(prisma, 'NCAAF', column, rosteredIds),
+    ])
+    const chart = new Map<string, number>()
+    for (const row of rates) {
+      const value = perGameFrom(readComponentStats(row.adjustmentFactors), rules, row.position)
+      if (value != null) chart.set(row.playerId, value)
+    }
+    const adjustments = sportMarketAdjustments(deals, chart)
+    for (const [id, line] of perGameByRosterId) line.tradeMarket = adjustments.get(links.get(id) ?? '')
   }
 
   const bestFreeAgent = async (position: string): Promise<NcaafReplacement | null> => {
@@ -276,7 +298,7 @@ export async function loadNcaafRedraftBase(league: {
         : rosteredSet.has(row.playerId) ||
         ids.some((l) => [l.rollingInsightsId, l.espnId, l.fantraxId].some((id) => id != null && rosteredSet.has(id)))
       if (rosteredHere) continue
-      const perGame = perGameFrom(readComponentStats(row.adjustmentFactors), rules)
+      const perGame = perGameFrom(readComponentStats(row.adjustmentFactors), rules, position)
       if (perGame == null) continue
       if (!best || perGame > best.perGame) best = { name: row.playerName ?? 'A free agent', perGame }
     }

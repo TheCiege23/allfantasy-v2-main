@@ -32,7 +32,7 @@ export async function resolveAnnualC2CPick(db: Db, leagueId: string, sport: stri
   const pick = (await loadAnnualC2CPickPool(leagueId))(candidate)
   if (pick !== 'c2c_college') return pick
   if (sport === 'NBA') {
-    return await verifyNcaabCollegeDraftPick(db, { ...candidate, now: new Date() }) ? pick : null
+    return await verifyNcaabCollegeDraftPick(db, { ...candidate, playerId: candidate.playerId, now: new Date() }) ? pick : null
   }
   if (sport !== 'NFL' || !candidate.playerId) return null
   const row = await db.devyPlayer.findUnique({

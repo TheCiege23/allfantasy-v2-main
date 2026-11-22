@@ -25,7 +25,13 @@ async function parse<T>(res: Response): Promise<T> {
 
 export async function fetchBestBallWarRoomState(
   leagueId: string,
-): Promise<{ context: BestBallWarRoomContext; construction: BestBallConstructionResult | null; depth: BestBallDepthResult | null }> {
+): Promise<{
+  context: BestBallWarRoomContext
+  construction: BestBallConstructionResult | null
+  depth: BestBallDepthResult | null
+  /** True when the viewer lacks `roster_construction_planning`; `construction` is then null. */
+  constructionLocked?: boolean
+}> {
   const res = await fetch(base(leagueId), { credentials: 'include' })
   return parse(res)
 }

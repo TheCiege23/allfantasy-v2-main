@@ -1,5 +1,4 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
 import { withTenant } from '@/lib/domain/db'
 import { resolveDeploymentTenantId } from '@/lib/domain/deploymentTenant'
 import { seasonContractHash } from './seasonCalendarVerification'

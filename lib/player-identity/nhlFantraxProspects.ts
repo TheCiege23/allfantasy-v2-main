@@ -71,7 +71,7 @@ export type NhlFantraxProspect = {
   orgTeam: string | null
 }
 
-export type NhlFantraxProspectCounts = {
+type NhlFantraxProspectCounts = {
   universe: number
   prospects: number
   linked: number

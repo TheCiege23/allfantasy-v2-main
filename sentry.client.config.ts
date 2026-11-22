@@ -4,9 +4,9 @@
  * @sentry/nextjs 10, it is the ONLY `sentry.*.config.ts` file the SDK injects. The server is set
  * up by `initSentryServer()` via `instrumentation.ts`, not by a config file.
  *
- * This is the one client init in practice. `ErrorTrackingInit` also calls `initSentryClient()`,
- * but that loads `@sentry/nextjs` through a bare-specifier dynamic `import()`, which a browser
- * cannot resolve, so it never initialises a second client.
+ * This is the ONLY client init. `initSentryClient()` was removed on 2026-11-14: it loaded
+ * `@sentry/nextjs` through a bare-specifier dynamic `import()` built with `new Function`, which a
+ * browser cannot resolve (so it never initialised anything) and which the CSP now refuses as eval.
  *
  * Sampling, span attributes and the resource-span filter live in
  * `lib/observability/clientTelemetry.ts`, with the reasoning and the measurements behind them.

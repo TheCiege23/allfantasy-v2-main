@@ -11,7 +11,7 @@ import { SEVERITY_RANK, type AttentionSignalSeverity, type DecisionOsAttentionSi
  * only, never names. Nothing here reveals another manager's reward or blocker.
  */
 
-export interface SurvivorRewardSignalReward {
+interface SurvivorRewardSignalReward {
   rewardId: string
   type: string
   status: string

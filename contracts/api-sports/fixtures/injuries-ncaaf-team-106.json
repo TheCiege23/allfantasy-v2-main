@@ -1,0 +1,9 @@
+{
+  "get": "injuries",
+  "parameters": {
+    "team": "106"
+  },
+  "errors": [],
+  "results": 0,
+  "response": []
+}

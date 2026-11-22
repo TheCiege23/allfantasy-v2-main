@@ -359,4 +359,3 @@ export function SurvivorFormatTab({ leagueId }: SurvivorFormatTabProps) {
   )
 }
 
-export default SurvivorFormatTab

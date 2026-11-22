@@ -326,6 +326,30 @@ export async function GET(request: Request) {
   }
 
   /*
+   * "Auto-switch injured starters" (lib/lineup-automation/autoSwitchInjuredService): the commissioner's
+   * per-team switch on Member Settings. Hourly, swap a starter at or past the chosen injury level for the
+   * best healthy bench player, inside the chosen window before his game, while the owner has Pro.
+   * Guarded and on its own job identity, like the sweeps around it.
+   */
+  let autoSwitchInjured: unknown = null
+  try {
+    const { runAutoSwitchInjured } = await import('@/lib/lineup-automation/autoSwitchInjuredService')
+    autoSwitchInjured = await withSyncJobRun(
+      { jobName: 'cron-auto-switch-injured', trigger: 'cron' },
+      () => runAutoSwitchInjured(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.swapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { unchanged: r.unchanged, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] auto switch injured failed', e)
+    autoSwitchInjured = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * Fill an empty starting spot before lock (lib/lineup-automation/fillEmptyStartersService): on by
    * default in every weekly-lineup league played on AllFantasy, unless the commissioner switched it off.
    * Fills only empty spots from the bench and tells the commissioner about a spot nobody can play.
@@ -457,7 +481,7 @@ export async function GET(request: Request) {
   }
 
   /*
-   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * Chimmy autopilot (AF Pro / AF Supreme): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
    */
@@ -620,5 +644,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

@@ -107,7 +107,7 @@ const NBA_PLAYER: TotalsGroup = {
   },
 }
 
-export const SEASON_TOTALS_GROUPS: Readonly<Record<string, readonly TotalsGroup[]>> = {
+const SEASON_TOTALS_GROUPS: Readonly<Record<string, readonly TotalsGroup[]>> = {
   NHL: [NHL_SKATER],
   NBA: [NBA_PLAYER],
 }
@@ -116,7 +116,7 @@ export const SEASON_TOTALS_GROUPS: Readonly<Record<string, readonly TotalsGroup[
  * Every scorer key a sport's season totals price exactly, for EVERY row they price: a key mapped (or
  * structurally 0) in each group. Empty = the sport has no mapping.
  */
-export function seasonTotalsMappedKeys(sport: string): Set<string> {
+function seasonTotalsMappedKeys(sport: string): Set<string> {
   const groups = (SEASON_TOTALS_GROUPS[sport.toUpperCase()] ?? []).map(
     (g) => new Set<string>([...Object.keys(g.keys), ...(g.zeroKeys ?? [])]),
   )

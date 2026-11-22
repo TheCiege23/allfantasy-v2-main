@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { getZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { ZombieSceneBackground } from './ZombieSceneBackground'
@@ -8,7 +8,7 @@ import { ZombieSceneBackground } from './ZombieSceneBackground'
 const ZOMBIE_INTRO_VIDEO = '/league-type-zombie-intro.mp4'
 const STORAGE_PREFIX = 'af_zombie_intro_seen_'
 
-export interface ZombieIntroModalProps {
+interface ZombieIntroModalProps {
   leagueId: string
   userId: string
   leagueName: string
@@ -28,7 +28,7 @@ export function ZombieIntroModal({
   forceReplay = false,
 }: ZombieIntroModalProps) {
   const [visible, setVisible] = useState(false)
-  const [videoKey, setVideoKey] = useState(0)
+  const [videoKey] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
 
   const storageKey = `${STORAGE_PREFIX}${leagueId}_${userId}`

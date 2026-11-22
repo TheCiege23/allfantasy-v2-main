@@ -4,14 +4,14 @@
  * file only arranges those rows. No scoring rule lives here.
  */
 
-export type C2CRightRow = {
+type C2CRightRow = {
   id: string
   devyPlayerId: string
   state: string
   c2cLineupRole?: string | null
 }
 
-export type C2CPlayerRow = {
+type C2CPlayerRow = {
   id: string
   name: string
   position: string
@@ -20,7 +20,7 @@ export type C2CPlayerRow = {
   draftEligibleYear?: number | null
 }
 
-export type C2CScoreRow = { devyPlayerId: string; season: number; week: number; points: number }
+type C2CScoreRow = { devyPlayerId: string; season: number; week: number; points: number }
 
 export type C2CCampusStarter = {
   rightsId: string
@@ -35,7 +35,7 @@ export type C2CCampusStarter = {
 const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX']
 
 /** A rights row the lineup sync marked as a starter (same predicate as lib/data/league-home.ts). */
-export function isCampusStarter(r: Pick<C2CRightRow, 'c2cLineupRole' | 'state'>): boolean {
+function isCampusStarter(r: Pick<C2CRightRow, 'c2cLineupRole' | 'state'>): boolean {
   return r.c2cLineupRole === 'STARTER' || r.state === 'COLLEGE_STARTER'
 }
 

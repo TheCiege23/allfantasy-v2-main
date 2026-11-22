@@ -2,6 +2,8 @@ import type { MetaEventPayload } from "@/lib/meta-events"
 import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 import { purchaseWithGooglePlay } from "@/lib/monetization/google-play-client"
 import { isAppleApp, purchaseWithApple } from "@/lib/monetization/apple-iap-client"
+import { entrySourceFromSearch, normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -13,6 +15,11 @@ export type MonetizationCheckoutRequest = {
   returnPath: string
   /** Optional sponsor/promo code to pre-apply at checkout (e.g. "WassupFred"). Server validates — client cannot spoof discounts. */
   couponCode?: string | null
+  /**
+   * Which surface sent the buyer here (`lock_player_depth`, …). Defaults to the page's own `?from=`,
+   * so every purchase surface reports it without being changed (lib/monetization/upgradeEntrySource.ts).
+   */
+  entrySource?: string | null
 }
 
 export type MonetizationCheckoutResult =
@@ -22,18 +29,14 @@ export type MonetizationCheckoutResult =
   | { ok: false; error: string }
 
 const CHECKOUT_TIMEOUT_MS = 12_000
+/** A plan switch charges the card and waits on the invoice, so it gets longer than starting Checkout. */
+const SWITCH_TIMEOUT_MS = 30_000
 const inFlightCheckoutRequests = new Map<string, Promise<MonetizationCheckoutResult>>()
 
 function resolveCheckoutEndpoint(productType: MonetizationCheckoutProductType): CheckoutEndpoint {
   return productType === "subscription"
     ? "/api/monetization/checkout/subscription"
     : "/api/monetization/checkout/tokens"
-}
-
-function normalizeReturnPath(path: string): string {
-  const value = String(path ?? "").trim()
-  if (!value.startsWith("/")) return "/pricing"
-  return value.length > 200 ? value.slice(0, 200) : value
 }
 
 export async function resolveCheckoutUrl(
@@ -65,11 +68,14 @@ export async function resolveCheckoutUrl(
   const normalizedRequest: MonetizationCheckoutRequest = {
     sku,
     productType: request.productType,
-    returnPath: normalizeReturnPath(request.returnPath),
+    returnPath: resolveSafeReturnPath(request.returnPath),
     couponCode: normalizedCoupon,
   }
+  const entrySource =
+    normalizeEntrySource(request.entrySource) ??
+    (typeof window === "undefined" ? null : entrySourceFromSearch(window.location?.search))
   const endpoint = resolveCheckoutEndpoint(request.productType)
-  const requestKey = `${normalizedRequest.productType}:${normalizedRequest.sku}:${normalizedRequest.returnPath}:${normalizedCoupon ?? ""}`
+  const requestKey = `${normalizedRequest.productType}:${normalizedRequest.sku}:${normalizedRequest.returnPath}:${normalizedCoupon ?? ""}:${entrySource ?? ""}`
   const existing = inFlightCheckoutRequests.get(requestKey)
   if (existing) return existing
 
@@ -84,25 +90,53 @@ export async function resolveCheckoutUrl(
           sku: normalizedRequest.sku,
           returnPath: normalizedRequest.returnPath,
           ...(normalizedRequest.couponCode ? { couponCode: normalizedRequest.couponCode } : {}),
+          ...(entrySource ? { entrySource } : {}),
         }),
         signal: controller.signal,
       })
-      const data = (await response.json().catch(() => ({}))) as {
+      let data = (await response.json().catch(() => ({}))) as {
         url?: string
         error?: string
         message?: string
+        code?: string
         metaEvent?: MetaEventPayload
+      }
+      let status = response.status
+      /*
+       * Supreme over Pro / Commissioner switches the plan in place and charges the card on file — no Checkout
+       * page — so the server asks first (`confirm_switch`). Nothing is charged unless the buyer says yes.
+       */
+      if (status === 409 && data.code === "confirm_switch") {
+        // The first request's timer must not run while the buyer reads the dialog.
+        globalThis.clearTimeout(timeoutId)
+        const yes = typeof window !== "undefined" && window.confirm(data.message ?? "Switch your current plan to AF Supreme?")
+        if (!yes) return { ok: false, error: "No change made — you're still on your current plan." }
+        const switchController = new AbortController()
+        const switchTimeoutId = globalThis.setTimeout(() => switchController.abort(), SWITCH_TIMEOUT_MS)
+        const confirmed = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sku: normalizedRequest.sku,
+            returnPath: normalizedRequest.returnPath,
+            ...(entrySource ? { entrySource } : {}),
+            confirmSwitch: true,
+          }),
+          signal: switchController.signal,
+        }).finally(() => globalThis.clearTimeout(switchTimeoutId))
+        data = (await confirmed.json().catch(() => ({}))) as typeof data
+        status = confirmed.status
       }
       /*
        * Signed out (or the session lapsed): send them to sign in and back, rather than printing the
        * route's bare "Unauthorized" under the plan they just chose. Every purchase surface already
        * navigates to `url` on ok, so this needs nothing from any of them.
        */
-      if (response.status === 401) {
+      if (status === 401) {
         const here = typeof window === "undefined" ? normalizedRequest.returnPath : `${window.location.pathname}${window.location.search}`
         return { ok: true, url: `/login?callbackUrl=${encodeURIComponent(here || "/pricing")}`, signIn: true }
       }
-      if (!response.ok || !data.url) {
+      if (status < 200 || status >= 300 || !data.url) {
         return {
           ok: false,
           // A geo refusal puts a code in `error` (PAID_GEO_BLOCKED, VPN_BLOCKED)

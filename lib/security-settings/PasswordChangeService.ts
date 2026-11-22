@@ -3,7 +3,7 @@
  * Calls POST /api/user/password/change.
  */
 
-export interface PasswordChangeResult {
+interface PasswordChangeResult {
   ok: boolean
   error?: "WRONG_PASSWORD" | "WEAK_PASSWORD" | "NO_PASSWORD" | "MISSING_FIELDS" | string
   message?: string

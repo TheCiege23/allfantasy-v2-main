@@ -11,7 +11,7 @@
  */
 import type { SimRng } from './rng'
 
-export type SimPosition = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF'
+type SimPosition = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF'
 
 export type SimPlayer = {
   playerId: string
@@ -24,7 +24,7 @@ export type SimPlayer = {
   adp: number
 }
 
-export const NFL_TEAMS = [
+const NFL_TEAMS = [
   'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC',
   'LAC', 'LAR', 'LV', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF', 'TB', 'TEN', 'WAS',
 ] as const

@@ -6,8 +6,6 @@
 export * from './types'
 export {
   getPlayoffStagesBySport,
-  getPremiumPlayoffStages,
-  getDefaultPlayoffStages,
   validateStageIds,
   hasPremiumStages,
 } from './PlayoffStageRegistry'
@@ -16,5 +14,4 @@ export { getPlayoffConfig, savePlayoffConfig, stageEditorPlayoffStartWeek } from
 export {
   resolvePlayoffStartWeek,
   readChosenPlayoffStartWeek,
-  sportDefaultPlayoffStartWeek,
 } from './resolvePlayoffStartWeek'

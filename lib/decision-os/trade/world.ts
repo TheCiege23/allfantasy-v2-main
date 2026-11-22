@@ -28,7 +28,7 @@ export interface TradeRosterFacts {
   playoffSeed: number | null
 }
 
-export interface TradeDeadlineState {
+interface TradeDeadlineState {
   passed: boolean
   week: number | null
   provenance: 'derived_approximate'

@@ -83,6 +83,7 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (load) => {
         periodScores: [],
       }
     }),
+    getFantraxDraftPicks: async () => ({ ok: true, data: { current: [], future: [] } }),
     getFantraxDraftResults: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no draft (sim)' } })),
     getFantraxDraftPicks: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no picks (sim)' } })),
     getFantraxLeagues: vi.fn(async () => ({ ok: false, failure: { kind: 'not_found', message: 'no secret (sim)' } })),

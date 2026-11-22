@@ -19,6 +19,8 @@ import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { computeStartupDraftCapacity, formatCountsTaxiAndDevy } from '@/lib/draft/draftSettingsPolicy'
+import { resolveSGCreateConfig, sgSetupHref } from '@/lib/survivor-guillotine/createFit'
+import { writeSGRulesInTransaction } from '@/lib/survivor-guillotine/rulesWrite'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -35,7 +37,7 @@ function prismaErrorDetail(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-export type ExecuteCanonicalLeagueCreationResult =
+type ExecuteCanonicalLeagueCreationResult =
   | { ok: true; response: CreateLeagueSuccessResponse }
   | { ok: false; status: number; response: CreateLeagueErrorResponse }
 
@@ -86,6 +88,19 @@ export async function executeCanonicalLeagueCreation(args: {
     return { ok: false, status: 400, response: { success: false, error: message,
       errors: [{ path: 'conceptSetup.zombieLeagueCount', message }] } }
   }
+  // Survivor Guilly: the season rules are fitted and validated here, before anything is written, and
+  // committed in the same transaction as the league below. A request that cannot be fitted is refused
+  // whole rather than leaving a plain redraft league behind without its rules.
+  const sgCreate = resolveSGCreateConfig({
+    concept: body.concept,
+    sport: body.sport,
+    teamCount: body.teamCount,
+    conceptSetup: body.conceptSetup,
+  })
+  if (sgCreate.kind === 'invalid') {
+    return { ok: false, status: 400, response: { success: false, error: sgCreate.message,
+      errors: [{ path: sgCreate.path, message: sgCreate.message }] } }
+  }
   let createdLeagueId = ''
   let homepageUrl = ''
   let universeId: string | undefined
@@ -120,9 +135,21 @@ export async function executeCanonicalLeagueCreation(args: {
             acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
           })
         }
+        if (sgCreate.kind === 'ok') {
+          await writeSGRulesInTransaction(tx as Prisma.TransactionClient, created.leagueId, sgCreate.config)
+          // Land on the season setup page: tribes, powers and the calendar are tuned there.
+          return { ...created, homepageUrl: sgSetupHref(created.leagueId), universeId: undefined, children: [] }
+        }
         return { ...created, universeId: undefined, children: [] }
       },
-      { maxWait: 20000, timeout: leagueCount > 1 ? 90000 : args.sourceLeagueId ? 60000 : 25000 }
+      // A big league writes two rows per team in this transaction (and a carryover several more), so
+      // the budget grows with the team count: 250 teams get about two more minutes.
+      {
+        maxWait: 20000,
+        timeout:
+          (leagueCount > 1 ? 90000 : args.sourceLeagueId ? 60000 : 25000) +
+          Math.max(0, Number(body.teamCount) - 32) * (args.sourceLeagueId ? 1500 : 500),
+      }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl
@@ -249,9 +276,17 @@ async function finishCreatedLeague(
          * bench; IR is never filled by a draft). College basketball's preset was 12 rounds for 13 such
          * spots, so every team finished the draft one player short — while the first roster edit already
          * resizes a redraft draft to that same count (syncDraftRoundsToRoster). Found by the redraft
-         * simulation, 2026-11-09. Keeper drafts are left alone: their keepers fill the rest.
+         * simulation, 2026-11-09.
+         *
+         * A KEEPER league's first draft grows too. It was left alone on the reasoning that "keepers fill the
+         * rest", but a new league has no keepers, and in later years each keeper takes a pick on the board in
+         * the round he cost (createNextLeagueDraft) rather than a spot beside it. So the first draft left
+         * every team short — NFL 16 rounds for 17 spots — while the first roster edit resized it anyway
+         * (keeper simulation, 2026-11-10: 26 of 27 leagues).
          */
-        const redraftActive = engine.leagueFormatId === 'redraft' ? computeStartupDraftCapacity(template.template?.slots ?? []) : 0
+        const redraftActive = engine.leagueFormatId === 'redraft' || engine.leagueFormatId === 'keeper'
+          ? computeStartupDraftCapacity(template.template?.slots ?? [])
+          : 0
         const growTo = engine.leagueFormatId === 'dynasty' && startupCapacity > 0 && !devyRounds
           ? capacity
           : redraftActive > 0 && !devyRounds ? Math.min(template.totalRosterSlots, redraftActive) : 0

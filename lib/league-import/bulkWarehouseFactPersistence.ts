@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 const WAREHOUSE_FACT_BATCH_SIZE = 250
 
-export interface SeasonStandingFactWrite {
+interface SeasonStandingFactWrite {
   leagueId: string
   sport: string
   season: number
@@ -66,7 +66,7 @@ export async function persistSeasonStandingFacts(rows: SeasonStandingFactWrite[]
   return written
 }
 
-export interface ImmutableTransactionFactWrite {
+interface ImmutableTransactionFactWrite {
   transactionId: string
   leagueId: string
   sport: string

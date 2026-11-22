@@ -1,8 +1,9 @@
 import type { UserLeague } from '@/app/dashboard/types'
 import { resolveLeagueHomeHrefFromListRow } from '@/lib/dashboard/league-list-destination'
+import { leagueSwitchHref } from '@/lib/league/leagueSwitchHref'
 
 export type WorkspaceTab = { id: string; label: string }
-export type WorkspaceNavItem = WorkspaceTab & { icon: string }
+type WorkspaceNavItem = WorkspaceTab & { icon: string }
 
 export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 'status'>) {
   const phase = String(league.lifecycleState || league.status || 'setup').toLowerCase()
@@ -14,7 +15,7 @@ export function nativeLeaguePhase(league: Pick<UserLeague, 'lifecycleState' | 's
 }
 
 /** A `t` from useLanguage/useOptionalLanguage: returns the key itself when it has no entry. */
-export type NavTranslate = (key: string) => string
+type NavTranslate = (key: string) => string
 
 /** English fallback when no `t` is passed or the key is missing, so a server render or a test never shows a raw key. */
 function translator(t?: NavTranslate) {
@@ -90,14 +91,49 @@ const SALARY_CAP_NAV: Record<string, [string, string, string]> = {
   cap_contracts: ['league.nav.cap.contracts', 'Contracts', 'capContracts'],
   cap_team_builder: ['league.nav.cap.teamBuilder', 'Team builder', 'capBuilder'],
   cap_auction: ['league.nav.cap.auction', 'Startup auction', 'capAuction'],
-  cap_ai: ['league.nav.cap.ai', 'Cap AI', 'insight'],
+  cap_ai: ['league.nav.cap.ai', 'Cap Chimmy', 'insight'],
   cap_rules: ['league.nav.cap.rules', 'Cap rules', 'capRules'],
 }
 
 /** Group ids are stable across languages; `title` is what the reader sees. */
-export type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'salarycap' | 'week' | 'more'
+type NativeNavGroupId = 'league' | 'dynasty' | 'survivor' | 'bigbrother' | 'salarycap'
 
-export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate) {
+/**
+ * One sidebar entry. A top tab (Matchup, Team, League, …) carries its sub-tabs in `children`, which the workspace
+ * draws as a tab strip above the screen; `id` is the sub-tab it opens first. A format item (Dynasty hub, Island, …)
+ * is its own only child.
+ */
+export type NativeNavTab = WorkspaceNavItem & { children: WorkspaceNavItem[] }
+export type NativeNavGroup = { id: NativeNavGroupId; title: string; items: NativeNavTab[] }
+
+/** The top tab a sub-tab belongs to (`children` includes it), or null when no sidebar entry reaches it. */
+export function nativeNavTabFor(groups: NativeNavGroup[], tabId: string): NativeNavTab | null {
+  for (const group of groups) for (const item of group.items) if (item.children.some(child => child.id === tabId)) return item
+  return null
+}
+
+/** Every screen the sidebar reaches, sub-tabs included: what "is this tab still reachable" means now. */
+export function nativeNavLeafIds(groups: NativeNavGroup[]): string[] {
+  return groups.flatMap(group => group.items.flatMap(item => item.children.map(child => child.id)))
+}
+
+export type NativeNavOptions = {
+  /**
+   * The draft is over (regular season, playoffs or offseason). Until then Draft is a top tab of its own; after it,
+   * Draft HQ moves under League, where the draft results live.
+   */
+  draftDone?: boolean
+}
+
+/**
+ * The league sidebar, following Sleeper's six tabs (owner's decision 2026-11-17, docs/league-page/SLEEPER_TABS_PLAN.md,
+ * and 2026-11-19: "Sleeper's six only"): Matchup · Team · League · Trade · News · Settings, plus Draft until the draft
+ * is done. The 21 flat items the sidebar used to list (four groups: This league, This week, More tools, Your record)
+ * are sub-tabs of those, with the same tab ids, so every deep link (`?view=…`) still opens the same screen.
+ *
+ * Format groups (Dynasty, Survivor, Big Brother, Salary cap) stay groups of their own, below the six.
+ */
+export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: boolean, isSurvivor = false, t?: NavTranslate, options: NativeNavOptions = {}): NativeNavGroup[] {
   const tr = translator(t)
   const used = new Set<string>()
   const item = (key: string, english: string, icon: string, ...ids: string[]): WorkspaceNavItem[] => {
@@ -106,20 +142,56 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     used.add(id)
     return [{ id, label: tr(key, english), icon }]
   }
-  const primary = [
-    ...item('league.nav.leagueHome', 'League home', 'home', 'native_home', 'home'),
-    // A guillotine league's defining screen (chop line, danger zone, history) sat under "More tools".
+  /** A top tab from its sub-tabs; no sub-tab, no tab. */
+  const top = (key: string, english: string, icon: string, children: WorkspaceNavItem[]): NativeNavTab[] =>
+    children.length ? [{ id: children[0].id, label: tr(key, english), icon, children }] : []
+  const solo = (items: WorkspaceNavItem[]): NativeNavTab[] => items.map(entry => ({ ...entry, children: [entry] }))
+
+  const draftHq = () => item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft')
+  const draftTab = options.draftDone ? [] : top('league.nav.tab.draft', 'Draft', 'draft', draftHq())
+  const matchup = top('league.nav.tab.matchup', 'Matchup', 'matchup', [
+    // A guillotine league's defining screen (chop line, danger zone, history): this week's scoring decides it.
     ...item('league.nav.guilly', 'Guilly', 'guillotine', 'guillotine'),
-    ...item('league.nav.myTeam', 'My team', 'team', 'roster', 'team', 'squad'),
     ...item('league.nav.matchup', 'Matchup', 'matchup', 'matchups', 'matchup', 'fixtures'),
-    ...item('league.nav.playersWaivers', 'Players & waivers', 'players', 'waivers', 'players'),
-    ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
-    ...item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft'),
+    ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
+    ...item('league.nav.schedule', 'Schedule', 'schedule', 'schedule'),
+    ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
+  ])
+  const team = top('league.nav.tab.team', 'Team', 'team', [
+    ...item('league.nav.myTeam', 'My team', 'team', 'roster', 'team', 'squad'),
+    ...item('league.nav.playersWaivers', 'Players & waivers', 'players', 'waivers'),
+    ...item('league.nav.playerSearch', 'Player search', 'players', 'players'),
+    ...item('league.nav.myPicks', 'My picks', 'picks', 'my-picks'),
+    ...item('league.nav.chimmyCoaching', 'Chimmy Coaching', 'insight', 'ai_coaching'),
+  ])
+  /*
+   * An imported league has no League home tab: its first page is Decide (What's next, record, standing, standings),
+   * which is that league's overview. It sits where native leagues keep theirs, under League, rather than as a Trade
+   * sub-tab it would open on (2026-11-22, imported leagues moved into this workspace).
+   */
+  const nativeOverview = item('league.nav.overview', 'Overview', 'home', 'native_home', 'home')
+  const overview = nativeOverview.length ? nativeOverview : item('league.nav.overview', 'Overview', 'home', 'decide')
+  const leagueChildren = [
+    ...overview,
     ...(isSurvivor ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
+    ...item('league.nav.activity', 'Activity', 'more', 'activity'),
     ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
-    // Commissioner lands on the League Settings page (?view=settings); the old commissioner tab stays under More tools.
-    ...(commissioner ? item('league.nav.commissioner', 'Commissioner', 'settings', 'settings', 'commissioner', 'league') : []),
+    ...item('league.nav.legacy', 'Legacy', 'legacy', 'legacy', 'history'),
+    ...(options.draftDone ? draftHq() : []),
   ]
+  const trade = top('league.nav.tab.trade', 'Trade', 'trades', [
+    ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
+    ...(used.has('decide') ? [] : item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide')),
+  ])
+  const news = top('league.nav.tab.news', 'News', 'intel', [
+    ...item('league.nav.news', 'News', 'intel', 'news'),
+    ...item('league.nav.liveIntel', 'Live Intel', 'intel', 'draft_intel'),
+  ])
+  // Native Settings is the League Settings page, read-only for members (LeagueShell); commissioner tools are theirs only.
+  const settings = top('league.nav.tab.settings', 'Settings', 'settings', [
+    ...item('league.nav.leagueSettings', 'League settings', 'settings', 'settings'),
+    ...(commissioner ? item('league.nav.commissionerTools', 'Commissioner tools', 'settings', 'commissioner') : []),
+  ])
   /*
    * Dynasty / Taxi / Picks used to fall into "More tools" with the generic icon. The tabs only exist when
    * LeagueShell's tab list says the league is dynasty (isDynastyLeague), so this group needs no check of its own.
@@ -147,27 +219,25 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     return { id: tab.id, label: tr(key, english), icon }
   })
   for (const set of SAME_SCREEN_ALIASES) if (set.some(id => used.has(id))) for (const id of set) used.add(id)
-  const weekly = [
-    ...item('league.nav.warRoom', 'War Room', 'war', 'war_room'),
-    ...item('league.nav.liveScores', 'Live scores', 'scores', 'scores'),
-    ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
-  ]
-  // Secondary tools remain reachable; role checks stay in the server and existing tab registry.
-  const more = tabs
-    .filter(tab => !used.has(tab.id) && tab.id !== 'settings' && !(tab.id === 'home' && used.has('native_home')) && (commissioner || tab.id !== 'commissioner'))
+  /*
+   * Any other tab (a format's own screen such as the Pirate Deck, or one added later) is still reachable: it becomes a
+   * sub-tab of League, which is where Sleeper keeps the rest of the league. It used to be a "More tools" item. Role
+   * checks stay in the server and in LeagueShell's tab list; Settings and Commissioner tools are placed above.
+   */
+  const rest: WorkspaceNavItem[] = tabs
+    .filter(tab => !used.has(tab.id) && tab.id !== 'settings' && tab.id !== 'commissioner' && !(tab.id === 'home' && used.has('native_home')))
     .map(tab => {
+      used.add(tab.id)
       const distinct = DISTINCT_LEFTOVER_LABELS[tab.id]
-      const label = distinct ? tr(distinct[0], distinct[1]) : tab.label
-      return { ...tab, label, icon: MORE_TOOL_ICONS[tab.id] ?? 'more' }
+      return { id: tab.id, label: distinct ? tr(distinct[0], distinct[1]) : tab.label, icon: MORE_TOOL_ICONS[tab.id] ?? 'more' }
     })
-  const groups: Array<{ id: NativeNavGroupId; title: string; items: WorkspaceNavItem[] }> = [
-    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: primary },
-    { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: dynasty },
-    { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: survivor },
-    { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: bigBrother },
-    { id: 'salarycap', title: tr('league.nav.group.salaryCap', 'Salary cap'), items: salaryCap },
-    { id: 'week', title: tr('league.nav.group.thisWeek', 'This week'), items: weekly },
-    { id: 'more', title: tr('league.nav.group.moreTools', 'More tools'), items: more },
+  const league = top('league.nav.tab.league', 'League', 'standings', [...leagueChildren, ...rest])
+  const groups: NativeNavGroup[] = [
+    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: [...draftTab, ...matchup, ...team, ...league, ...trade, ...news, ...settings] },
+    { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: solo(dynasty) },
+    { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: solo(survivor) },
+    { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: solo(bigBrother) },
+    { id: 'salarycap', title: tr('league.nav.group.salaryCap', 'Salary cap'), items: solo(salaryCap) },
   ]
   return groups.filter(group => group.items.length)
 }
@@ -193,8 +263,16 @@ export function nativeLeagueRecordLinks(leagueId: string, t?: NavTranslate): Arr
   ]
 }
 
+/**
+ * The rail, ⌘K switcher and phone prev/next link: the other league, on the page open now. An imported target opens the
+ * matching /core screen (lib/league/leagueSwitchHref.ts), where it used to drop the page and open /core's front page. A
+ * tournament hub row keeps its own destination.
+ */
 export function leagueSectionHref(league: UserLeague, view: string) {
   const href = resolveLeagueHomeHrefFromListRow(league)
-  if (!href.startsWith('/league/')) return href
-  return `${href}?view=${encodeURIComponent(view)}`
+  const native = /^\/league\/([^/?#]+)$/.exec(href)
+  const imported = /^\/core\?league=([^&#]+)$/.exec(href)
+  const id = native?.[1] ?? imported?.[1]
+  if (!id) return href
+  return leagueSwitchHref({ id: decodeURIComponent(id), platform: native ? 'allfantasy' : 'imported' }, { view })
 }

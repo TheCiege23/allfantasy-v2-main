@@ -1,11 +1,11 @@
 // @vitest-environment node
 /**
- * Phase 2.55 — maintenance cron ACTIVATION GATE (route-level, no database).
+ * The Decision OS background cron (route-level, no database).
  *
- * Proves the off-by-default `DECISION_OS_MAINTENANCE_ENABLED` gate: authentication runs first (401 stands even
- * when disabled), and an authenticated-but-disabled request is fully inert — the maintenance runner and the
- * production deps factory (the ONLY paths to any DB / provider / token / freshness work) are never invoked.
- * Both are mocked, so this test needs no database and makes no paid provider call.
+ * Its three-brain maintenance step — behind `DECISION_OS_MAINTENANCE_ENABLED` — was RETIRED 2026-11-19 (re-score
+ * build item 9): nothing ever produced a three-brain run, and every reader of a saved analysis went in the same
+ * change. The runner and its deps factory stay MOCKED here on purpose: the route no longer imports them, and the
+ * assertions that they are never called are what fail if anyone wires the step back without a decision to.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
@@ -82,7 +82,7 @@ const req = (opts: { auth?: string } = {}) => {
 }
 const authed = () => req({ auth: `Bearer ${SECRET}` })
 
-describe('decision-os maintenance cron — activation gate', () => {
+describe('decision-os maintenance cron — the three-brain step is retired', () => {
   it('1. unauthorized + disabled → 401; runner + deps never touched', async () => {
     delete process.env.DECISION_OS_MAINTENANCE_ENABLED
     const res = await GET(req()) // no Authorization header
@@ -100,53 +100,22 @@ describe('decision-os maintenance cron — activation gate', () => {
     expect(depsMock).not.toHaveBeenCalled()
   })
 
-  it('3. authorized + MISSING flag → disabled inert response', async () => {
-    delete process.env.DECISION_OS_MAINTENANCE_ENABLED
-    const res = await GET(authed())
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    // The route carries other, independently gated work (draft outcomes, advice learning), so this
-    // asserts the maintenance contract rather than the whole envelope. `toEqual` on the envelope
-    // made an unrelated additive field a failure once already.
-    expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
-    // Inertness is the actual guarantee, and it is stronger asserted directly:
-    expect(runMock).not.toHaveBeenCalled()
-    expect(depsMock).not.toHaveBeenCalled()
-  })
-
-  it('4. authorized + "false" → disabled inert response', async () => {
-    process.env.DECISION_OS_MAINTENANCE_ENABLED = 'false'
-    const res = await GET(authed())
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    // Asserts the maintenance contract rather than the whole envelope (see test 3).
-    expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
-    // Inertness is the actual guarantee, and it is stronger asserted directly:
-    expect(runMock).not.toHaveBeenCalled()
-    expect(depsMock).not.toHaveBeenCalled()
-  })
-
-  it('4b. authorized + any non-exact-"true" value ("1","yes","TRUE","","enabled") → disabled', async () => {
-    for (const v of ['1', 'yes', 'TRUE', '', 'enabled', ' true ']) {
-      process.env.DECISION_OS_MAINTENANCE_ENABLED = v
+  it('3. authorized → 200; the three-brain runner is never reached, whatever DECISION_OS_MAINTENANCE_ENABLED says', async () => {
+    for (const v of [undefined, 'false', 'true', '1', 'yes']) {
+      if (v === undefined) delete process.env.DECISION_OS_MAINTENANCE_ENABLED
+      else process.env.DECISION_OS_MAINTENANCE_ENABLED = v
       const res = await GET(authed())
-      expect(await res.json(), `value=${JSON.stringify(v)} must be disabled`).toMatchObject({
-        ok: true,
-        enabled: false,
-        status: 'maintenance_disabled',
-      })
+      expect(res.status, `value=${JSON.stringify(v)}`).toBe(200)
+      const body = await res.json()
+      expect(body.ok).toBe(true)
+      // No maintenance envelope any more: nothing ran to report.
+      expect(body).not.toHaveProperty('tickId')
+      expect(body).not.toHaveProperty('enabled')
     }
     expect(runMock).not.toHaveBeenCalled()
     expect(depsMock).not.toHaveBeenCalled()
-  })
-
-  it('5. authorized + EXACTLY "true" → reaches the maintenance runner (deps built once, runner invoked once)', async () => {
-    process.env.DECISION_OS_MAINTENANCE_ENABLED = 'true'
-    const res = await GET(authed())
-    expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ ok: true, enabled: true })
-    expect(depsMock).toHaveBeenCalledTimes(1)
-    expect(runMock).toHaveBeenCalledTimes(1)
+    // The cron's other work still runs on every authorized tick.
+    expect(adviceLearningMock).toHaveBeenCalledTimes(5)
   })
 
   it('6/7. disabled path performs ZERO runner/deps work (the only route to DB/providers/tokens) — no paid calls possible', async () => {
@@ -213,14 +182,6 @@ describe('decision-os maintenance cron — tick heartbeat', () => {
     expect(outcome.errors ?? []).toEqual([])
   })
 
-  it('records a maintenance throw as FAILED', async () => {
-    process.env.DECISION_OS_MAINTENANCE_ENABLED = 'true'
-    runMock.mockRejectedValueOnce(new Error('lease lost'))
-    const res = await GET(authed())
-    expect(res.status).toBe(500)
-    const [, outcome] = recordRunMock.mock.calls[0] as [unknown, { errors?: string[] }]
-    expect(outcome.errors).toEqual(['lease lost'])
-  })
 })
 
 describe('decision-os maintenance cron — Chimmy outcome loop', () => {

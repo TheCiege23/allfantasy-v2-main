@@ -2,9 +2,9 @@
  * MentionNotificationBridge — call mentions API after sending a message so mentioned users get notified.
  */
 
-export const MENTIONS_ENDPOINT = "/api/shared/chat/mentions"
+const MENTIONS_ENDPOINT = "/api/shared/chat/mentions"
 
-export function getMentionsPayload(threadId: string, messageId: string, mentionedUsernames: string[]): {
+function getMentionsPayload(threadId: string, messageId: string, mentionedUsernames: string[]): {
   threadId: string
   messageId: string
   mentionedUsernames: string[]

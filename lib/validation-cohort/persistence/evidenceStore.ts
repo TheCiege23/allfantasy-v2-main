@@ -16,7 +16,7 @@ import type { NormalizedLeagueFacts, EvidenceCategory, DiscoveredLeague } from '
 import type { LeagueEvidenceBundle } from '../evidence/contracts'
 import type { ActivityEvidence } from '../evidence/activityEvidence'
 
-export const EVIDENCE_STORE_VERSION = '8.2.0'
+const EVIDENCE_STORE_VERSION = '8.2.0'
 
 /** One league's persisted evidence. `evidence` marks only categories an import actually OBSERVED. */
 export type PersistedLeagueEvidence = {

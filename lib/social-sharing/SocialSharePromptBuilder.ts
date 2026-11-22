@@ -4,8 +4,7 @@
  */
 
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
-import type { AchievementShareType, AchievementShareContext } from './types';
-import { ACHIEVEMENT_SHARE_TYPES } from './types';
+import type { AchievementShareContext } from './types';
 
 const SHARE_TYPE_LABELS: Record<string, string> = {
   winning_matchup: 'winning a matchup',

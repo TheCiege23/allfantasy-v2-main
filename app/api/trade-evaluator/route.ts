@@ -10,7 +10,6 @@ import {
   clampNegotiationToAllowed,
 } from '@/lib/trade-finder/negotiation-helpers'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
@@ -2006,7 +2005,6 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
       sensitivitySentence: tradeDriverData.sensitivitySentence,
     } : null
 
-
     let negotiationToolkit: import('@/lib/trade-engine/types').NegotiationToolkit | null = null
     if (tradeDriverData) {
       const benchAssets: Asset[] = (data.sender.roster || [])
@@ -2282,7 +2280,7 @@ const paidToolPost = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Tra
     }
     logAiFailure(error, { tool: 'TradeEvaluator', endpoint: '/api/trade-evaluator' })
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid request format', details: error.errors }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request format', details: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: 'Failed to evaluate trade' }, { status: 500 })
   }

@@ -39,6 +39,20 @@ const base = (settings: Record<string, unknown>) => ({
 })
 
 describe('NativeWaiversScreen', () => {
+  it('an imported league is told up front that a claim here stays in AllFantasy; a native league is not', async () => {
+    // The settings route's Write Authority (lib/league/write-authority.ts) marks an imported league `shadow`.
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: true, sourceLabel: 'Fantrax' } }))
+    const { unmount } = render(<NativeWaiversScreen league={{ ...league, platform: 'fantrax' } as UserLeague} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.getByTestId('shadow-league-waiver-notice').textContent).toContain('nothing is submitted to Fantrax')
+    unmount()
+
+    stubFetch(base({ waiverType: 'faab', faabBudget: 100, writeAuthority: { shadow: false } }))
+    render(<NativeWaiversScreen league={league} />)
+    await screen.findByText('Tank Bigsby')
+    expect(screen.queryByTestId('shadow-league-waiver-notice')).toBeNull()
+  })
+
   it('a FAAB league claims through the claim drawer, never an instant add', async () => {
     const calls = stubFetch(base({ waiverType: 'faab', faabBudget: 100 }))
     render(<NativeWaiversScreen league={league} />)
@@ -74,7 +88,8 @@ describe('NativeWaiversScreen', () => {
     expect(await screen.findByText('Tank Bigsby')).toBeTruthy()
     expect(screen.getByAltText('Tank Bigsby').getAttribute('src')).toBe(nfl.headshotUrl)
     expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nfl.teamLogoUrl)
-    expect(screen.getByText('RUSH YDS 766 · TD 7')).toBeTruthy()
+    // Each season figure under its own label (a labelled strip on a phone, one line on a wide screen).
+    expect(screen.getByTestId('native-waivers-stats-p1').textContent).toBe('RUSH YDS766TD7')
     unmount()
 
     const nba = {
@@ -89,6 +104,6 @@ describe('NativeWaiversScreen', () => {
     expect(await screen.findByText('Jalen Brunson')).toBeTruthy()
     expect(screen.getByAltText('Jalen Brunson').getAttribute('src')).toBe(nba.headshotUrl)
     expect(screen.getByTestId('waiver-team-logo').getAttribute('src')).toBe(nba.teamLogoUrl)
-    expect(screen.getByText('PTS/G 26 · REB/G 3.3 · AST/G 6.8')).toBeTruthy()
+    expect(screen.getByTestId('native-waivers-stats-n1').textContent).toBe('PTS/G26REB/G3.3AST/G6.8')
   })
 })

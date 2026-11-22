@@ -1,7 +1,7 @@
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { CombinedAdpInputs, LiveDraftBrainContext } from './types'
 
-export interface CombinedAdpResult {
+interface CombinedAdpResult {
   externalAdp: number | null
   siteAdp: number | null
   combinedAdp: number
@@ -91,7 +91,7 @@ export function computeContextAnchorAdp(args: CombinedAdpInputs, baseAdp: number
   return clamp(anchor, 1, 500)
 }
 
-export function buildContextLabel(ctx?: LiveDraftBrainContext): string {
+function buildContextLabel(ctx?: LiveDraftBrainContext): string {
   if (!ctx) return 'Unknown context'
   const sport = normalizeToSupportedSport(String(ctx.sport))
   const fmt = String(ctx.draftFormat ?? 'CUSTOM')

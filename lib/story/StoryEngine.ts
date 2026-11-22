@@ -11,7 +11,7 @@ import { buildStoryContext, type StoryDataSource } from './storyContextBuilder'
 import { buildStoryPrompt, generateStoryDraft } from './storyGenerator'
 import { ALL_STORY_TYPES, type StoryContext, type StoryDraft, type StoryPrompt, type StoryType } from './types'
 
-export interface StoryEngineRequest {
+interface StoryEngineRequest {
   leagueId: string
   type: StoryType
   principal?: FeatureGatePrincipal

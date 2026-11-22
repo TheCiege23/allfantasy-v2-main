@@ -76,6 +76,28 @@ describe('ESPN NFL import against a real league', () => {
     ])
   })
 
+  it('stores no waiver budget for a league that does not use one', async () => {
+    // The fixture league runs traditional waivers, yet ESPN still sends acquisitionBudget: 100.
+    expect(raw.settings.acquisitionSettings).toMatchObject({ isUsingAcquisitionBudget: false, acquisitionBudget: 100 })
+    const { payload, normalized } = await importFixture()
+    expect(payload.teams.every((t) => t.faabRemaining === 100)).toBe(true) // what ESPN implies, kept raw
+    expect(normalized.league.waiver_type).toBe('priority')
+    expect(normalized.league.faab_budget).toBeNull()
+    expect(normalized.rosters.map((r) => r.faab_remaining)).toEqual(Array(10).fill(null))
+  })
+
+  it('keeps the budget and what each team has left when the league bids', async () => {
+    const bidding = structuredClone(raw)
+    bidding.settings.acquisitionSettings.isUsingAcquisitionBudget = true
+    bidding.teams[0].transactionCounter.acquisitionBudgetSpent = 37
+    const { normalized } = await importFixture(bidding)
+    expect(normalized.league.waiver_type).toBe('faab')
+    expect(normalized.league.faab_budget).toBe(100)
+    const left = normalized.rosters.map((r) => r.faab_remaining)
+    expect(left[0]).toBe(63)
+    expect(left.slice(1)).toEqual(Array(9).fill(100))
+  })
+
   it("ranks teams by ESPN's current seed, never 0 and never the projection", async () => {
     const { payload } = await importFixture()
     const rank = Object.fromEntries(payload.teams.map((t) => [t.teamId, t.rank]))

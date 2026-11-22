@@ -15,7 +15,8 @@ export function useNotifications(
   limit = 8,
   options?: { usePlaceholders?: boolean; leagueId?: string | null }
 ) {
-  const usePlaceholders = options?.usePlaceholders ?? true
+  // Sample notifications are for development screens only: a real person with an empty bell sees an empty bell.
+  const usePlaceholders = options?.usePlaceholders ?? false
   const leagueId = options?.leagueId ?? null
   const [notifications, setNotifications] = useState<PlatformNotification[]>([])
   const [loading, setLoading] = useState(true)

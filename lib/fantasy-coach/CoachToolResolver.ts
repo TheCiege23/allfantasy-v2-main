@@ -7,7 +7,6 @@ type CoachHrefParams = Record<string, string | number | undefined | null>;
 const TRADE_ANALYZER = '/trade-evaluator';
 const WAIVER_AI = '/waiver-ai';
 const RANKINGS = '/core/rankings';
-const PLAYER_PAGE = '/player-comparison';
 const PLAYER_DECISION_TOOL = '/tools/player-decision';
 
 function withQuery(basePath: string, params: CoachHrefParams = {}): string {
@@ -55,16 +54,6 @@ export function getRankingsToolHref(
     scope: 'league',
     league: leagueId,
     source: 'coach-mode',
-    ...params,
-  });
-}
-
-export function getPlayerPageHref(
-  playerName: string,
-  params: CoachHrefParams = {}
-): string {
-  return withQuery(PLAYER_PAGE, {
-    player: playerName,
     ...params,
   });
 }

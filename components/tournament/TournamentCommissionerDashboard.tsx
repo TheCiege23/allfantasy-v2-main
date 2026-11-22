@@ -131,7 +131,7 @@ type AccessFlags = {
   canEditHubSettings: boolean
 }
 
-export type LegacyStandingsSnapshot = {
+type LegacyStandingsSnapshot = {
   round: {
     id: string
     roundNumber: number
@@ -350,7 +350,9 @@ export function TournamentCommissionerDashboard({
           </div>
         ) : null}
 
-        <div className="flex gap-1.5 overflow-x-auto px-2 py-3 sm:px-3">
+        {/* Wraps rather than scrolls: as a sideways scroller it hid 3 of the 12 tabs at 1440, 8 at 820 and 10 on a
+            phone, with nothing showing more existed (tournament gaps audit, 2026-11-09). Two columns on a phone. */}
+        <div className="grid grid-cols-2 gap-1.5 px-2 py-3 [&>button]:text-left sm:flex sm:flex-wrap sm:px-3" data-testid="tournament-commissioner-tabs">
           {tabs.map((tb) => (
             <WarRoomTabButton
               key={tb.id}
@@ -696,9 +698,18 @@ async function copyText(value: string, successMessage: string, errorMessage: str
   toast.error(errorMessage)
 }
 
-function resolvePublicTournamentUrl(tournamentId: string): string {
-  if (typeof window === 'undefined') return `/tournament/${tournamentId}`
-  return `${window.location.origin}/tournament/${tournamentId}`
+/**
+ * The public hub link, absolute once mounted. The first render returns the bare path on BOTH sides: reading
+ * `window.location.origin` during render made the server print `/tournament/<id>` and the browser print
+ * `https://…/tournament/<id>`, so a dashboard opened straight on the Media tab failed hydration.
+ */
+function usePublicTournamentUrl(tournamentId: string): string {
+  const path = `/tournament/${tournamentId}`
+  const [url, setUrl] = useState(path)
+  useEffect(() => {
+    setUrl(`${window.location.origin}${path}`)
+  }, [path])
+  return url
 }
 
 function StandingsTab({ tournamentId, summary }: { tournamentId: string; summary: Summary | null }) {
@@ -1038,7 +1049,7 @@ function ChatTab({
 
 function MediaTab({ tournamentId, feederLeagues }: { tournamentId: string; feederLeagues: Summary['feederLeagues'] }) {
   const { t, tInterpolate } = useLanguage()
-  const publicUrl = resolvePublicTournamentUrl(tournamentId)
+  const publicUrl = usePublicTournamentUrl(tournamentId)
 
   return (
     <Panel title={t('tournament.commissioner.media.title')} subtitle={t('tournament.commissioner.media.subtitle')}>

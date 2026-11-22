@@ -7,9 +7,9 @@ import type { SurvivorGovernanceSettings } from './survivorGovernanceSettings'
 
 export const CONDUCT_STRIKE_ISSUED = 'conduct_strike_issued'
 export const CONDUCT_STRIKE_REVOKED = 'conduct_strike_revoked'
-export const CONDUCT_STRIKE_REASON_MAX = 280
+const CONDUCT_STRIKE_REASON_MAX = 280
 
-export interface ConductAuditRow {
+interface ConductAuditRow {
   id: string
   action: string
   targetUserId: string | null

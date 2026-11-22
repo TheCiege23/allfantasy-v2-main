@@ -15,7 +15,7 @@ import {
 } from './rules-engine'
 import { teamCountOptionsWithImported } from '@/lib/league-creation/importedTeamCount'
 
-export type ImportedLeagueTemplateSource = {
+type ImportedLeagueTemplateSource = {
   name: string | null
   sport: string
   leagueType: string | null

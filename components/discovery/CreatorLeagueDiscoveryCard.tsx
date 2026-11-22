@@ -7,7 +7,7 @@ import { trackDiscoveryJoinClick } from "@/lib/discovery-analytics/client"
 import { getFanCredBoundaryDisclosureShort } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface CreatorLeagueDiscoveryCardProps {
+interface CreatorLeagueDiscoveryCardProps {
   league: DiscoveryCard
 }
 
@@ -133,7 +133,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
-              AI-enabled
+              Chimmy-enabled
             </span>
           )}
         </div>

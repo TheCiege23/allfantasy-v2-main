@@ -98,8 +98,11 @@ export async function POST(
   const rosterId = target.rosterId
 
   switch (action) {
-    case 'roster-construction':
+    case 'roster-construction': {
+      const plan = await requireEntitlement('roster_construction_planning')
+      if (typeof plan !== 'string') return plan
       return NextResponse.json({ construction: evaluateRosterConstruction(context, rosterId) })
+    }
     case 'depth':
       return NextResponse.json({ depth: evaluateDepth(context, rosterId) })
     case 'upside':

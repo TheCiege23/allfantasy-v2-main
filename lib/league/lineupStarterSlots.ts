@@ -23,7 +23,7 @@ import {
   readSavedRosterLayout,
 } from '@/lib/redraft-core-contract/savedRosterLayout'
 
-export type LineupSlotLeague = NflRedraftCoreLeagueShape & { settings?: unknown }
+type LineupSlotLeague = NflRedraftCoreLeagueShape & { settings?: unknown }
 
 /** Display name for a canonical slot token: `FLX` reads as FLEX, `SF` as SUPERFLEX. */
 function slotLabelKey(raw: string): string {
@@ -60,7 +60,7 @@ function settingsRecordOf(league: LineupSlotLeague): Record<string, unknown> {
 }
 
 /** The locked redraft DEFAULT contract when this league uses the locked shell, else null. */
-export function resolveLockedRedraftLineupContract(league: LineupSlotLeague): RedraftDefaultContract | null {
+function resolveLockedRedraftLineupContract(league: LineupSlotLeague): RedraftDefaultContract | null {
   if (!isNflRedraftCoreDashboardLeague(league)) return null
   const settingsRecord = settingsRecordOf(league)
   return getRedraftDefaultContract({
@@ -70,7 +70,7 @@ export function resolveLockedRedraftLineupContract(league: LineupSlotLeague): Re
   })
 }
 
-export type LockedRedraftStarterLayout = {
+type LockedRedraftStarterLayout = {
   /** One canonical token per starter slot, in display order (QB, RB, …, FLX, K, DEF). */
   starterOrder: string[]
   benchSlots: number

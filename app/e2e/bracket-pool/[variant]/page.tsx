@@ -10,10 +10,18 @@ import { VIEWS } from '../fixtures'
  *   /e2e/bracket-pool/pool    ← NBA pool mid first round, the viewer a member
  *   /e2e/bracket-pool/owner   ← the same pool as its owner
  *   /e2e/bracket-pool/empty   ← a new pool, nothing picked or played
+ *   …?screen=entry            ← the same view on the bracket pick screen (entries/[entryId])
  */
-export default async function BracketPoolHarnessPage({ params }: { params: Promise<{ variant: string }> }) {
+export default async function BracketPoolHarnessPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ variant: string }>
+  searchParams: Promise<{ screen?: string }>
+}) {
   if (process.env.NODE_ENV === 'production') notFound()
   const { variant } = await params
   if (!(variant in VIEWS)) notFound()
-  return <BracketPoolHarnessClient variant={variant as keyof typeof VIEWS} />
+  const { screen } = await searchParams
+  return <BracketPoolHarnessClient variant={variant as keyof typeof VIEWS} screen={screen === 'entry' ? 'entry' : 'dashboard'} />
 }

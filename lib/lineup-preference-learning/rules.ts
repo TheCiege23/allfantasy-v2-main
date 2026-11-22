@@ -5,8 +5,8 @@
 export const LINEUP_PREFERENCE_UPDATE_RULES = {
   title: 'Update rules',
   bullets: [
-    'Reinforcement strength scales down when the accepted AI edge was large (objective-first).',
-    'Close-call accepts strengthen implied traits; rejects penalize AI-implied traits and reinforce user-aligned traits.',
+    'Reinforcement strength scales down when the accepted Chimmy edge was large (objective-first).',
+    'Close-call accepts strengthen implied traits; rejects penalize Chimmy-implied traits and reinforce user-aligned traits.',
     'Bench promotions bump position trust metadata and archetype traits (veteran/rookie/star/streamer).',
     'Auto-sub allow/deny events adjust allows_auto_sub; injury contingency events adjust injury_contingency_trust.',
     'Each update caps confidence in [0, 1], increments sample size, appends a short example (max 8 kept).',

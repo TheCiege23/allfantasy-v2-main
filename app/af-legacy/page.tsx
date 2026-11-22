@@ -5,10 +5,8 @@ import dynamic from 'next/dynamic'
 import { GracefulImage } from '@/components/media/GracefulImage'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { XP_PER_LEVEL, TIERS } from "@/lib/ranking/config"
 import FeedbackModal from "@/app/components/FeedbackModal"
 import LegacyTutorial from "@/app/components/LegacyTutorial"
-import AIGMStatusIndicator from "@/app/components/AIGMStatusIndicator"
 import HeroMetricAI from "@/app/components/HeroMetricAI"
 // Deferred: only rendered once reportCardLeague + username are both set, pulls in recharts.
 const PortfolioChart = dynamic(() => import("@/components/PortfolioChart"), { ssr: false })
@@ -82,39 +80,14 @@ import BottomTabBar from "@/components/mobile/BottomTabBar"
 import type { MainTab } from "@/components/mobile/BottomTabBar"
 import SubTabNav from "@/components/mobile/SubTabNav"
 import MobileSectionHeader from "@/components/mobile/MobileSectionHeader"
-import { ConfidenceBadge, TrustExplanationSheet, TrustTimeline } from "@/components/ai-confidence"
+import { ConfidenceBadge, TrustExplanationSheet } from "@/components/ai-confidence"
 import { RiskFlags as AIRiskFlags } from "@/components/ai"
 import { convertConfidenceRiskToTrustData, buildDataSources } from "@/lib/analytics/confidence-types"
-import type { TrustData, TrustTimelinePoint } from "@/lib/analytics/confidence-types"
-import { 
-  MessageSquareText, 
-  HelpCircle, 
-  BarChart3, 
-  ArrowLeftRight, 
-  Target, 
-  Search, 
-  TrendingUp, 
-  Trophy, 
-  Radio, 
-  Swords, 
-  MessageCircle, 
-  Share2, 
-  PackageOpen,
-  ShoppingBag,
-  Sparkles,
-  Shield,
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  ChevronRight,
-  ChevronDown,
-  History,
-  X,
-  LayoutGrid,
-  Lightbulb
-} from "lucide-react"
+import type { TrustData } from "@/lib/analytics/confidence-types"
+import { MessageSquareText, HelpCircle, BarChart3, ArrowLeftRight, Target, Search, TrendingUp, Trophy, Radio, Swords, MessageCircle, Share2, PackageOpen, ShoppingBag, Sparkles, Shield, CheckCircle2, Info, ChevronRight, X, LayoutGrid, Lightbulb } from "lucide-react"
 import { useAnalytics } from "@/app/hooks/useAnalytics"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ')
@@ -138,16 +111,6 @@ function HeroMetric({ value, label, helper, accent = 'cyan' }: { value: string; 
     </div>
   )
 }
-
-const tier_xp_thresholds = TIERS
-  .slice()
-  .sort((a, b) => a.tier - b.tier)
-  .map((t) => ({
-    tier: t.tier,
-    name: t.name,
-    minLevel: t.minLevel,
-    minXp: t.minLevel * XP_PER_LEVEL,
-  }))
 
 type Tab = 'overview' | 'trade' | 'finder' | 'player-finder' | 'waiver' | 'rankings' | 'pulse' | 'compare' | 'chat' | 'mock-draft' | 'share' | 'transfer' | 'strategy' | 'shop' | 'ideas'
 
@@ -774,29 +737,6 @@ function LeagueHistoryAccordion({
   )
 }
 
-function CooldownPill(props: { label?: string; ms: number; tone?: 'cyan' | 'purple' | 'slate' }) {
-  const { label = 'Cooldown', ms, tone = 'slate' } = props
-  if (!ms || ms <= 0) return null
-
-  const toneClass =
-    tone === 'cyan'
-      ? 'bg-cyan-500/10 border-cyan-400/25 text-cyan-200'
-      : tone === 'purple'
-      ? 'bg-purple-500/10 border-purple-400/25 text-purple-200'
-      : 'bg-white/5 border-white/10 text-white/60'
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] leading-none ${toneClass}`}
-      title={`${label}: ${formatCooldown(ms)}`}
-    >
-      <span className="opacity-70">⏳</span>
-      <span className="opacity-80">{label}</span>
-      <span className="font-semibold">{formatCooldown(ms)}</span>
-    </span>
-  )
-}
-
 function ToolStatCard({ label, value, icon, accent, subValue }: { label: string; value: string; icon?: string; accent?: 'cyan' | 'purple' | 'emerald' | 'amber' | 'rose'; subValue?: string }) {
   const accentClasses = {
     cyan: 'from-cyan-500/20 to-cyan-500/5 border-cyan-400/25 hover:border-cyan-400/40',
@@ -892,7 +832,6 @@ function AFLegacyContent() {
   const [newPlatformLeagueCount, setNewPlatformLeagueCount] = useState('')
   const [newPlatformNotes, setNewPlatformNotes] = useState('')
 
-
   const [error, setError] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'complete'>('idle')
   const [importProgress, setImportProgress] = useState(0)
@@ -900,7 +839,7 @@ function AFLegacyContent() {
   const [importNotice, setImportNotice] = useState<LegacyDataStatus | null>(null)
   // One impression beacon per distinct notice (state+reason), never per status poll.
   const firedNoticeBeacons = useRef<Set<string>>(new Set())
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [, setJobId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<ProfileStats | null>(null)
   const [specialtyStats, setSpecialtyStats] = useState<SpecialtyStats | null>(null)
@@ -915,7 +854,7 @@ function AFLegacyContent() {
   const [trustSheetOpen, setTrustSheetOpen] = useState(false)
   const [trustSheetData, setTrustSheetData] = useState<TrustData | null>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [, setAiLoading] = useState(false)
   const [shareText, setShareText] = useState('')
   const [shareStyle, setShareStyle] = useState<'balanced' | 'humble' | 'trash_talk'>('balanced')
   const [sharePlatform, setSharePlatform] = useState<'x' | 'threads' | 'instagram' | 'tiktok'>('x')
@@ -936,7 +875,7 @@ function AFLegacyContent() {
   const [sharePlayerLoading, setSharePlayerLoading] = useState(false)
   const [sharePlayerError, setSharePlayerError] = useState('')
   const [showTutorial, setShowTutorial] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
+  const [, setShowFeedback] = useState(false)
 
   const [backfillLoading, setBackfillLoading] = useState(false)
   const [backfillResult, setBackfillResult] = useState<string>('')
@@ -950,7 +889,6 @@ function AFLegacyContent() {
   const [aiCoachLoading, setAiCoachLoading] = useState(false)
   const [aiCoachError, setAiCoachError] = useState('')
   const [showAiExplain, setShowAiExplain] = useState(false)
-  const [insightExpanded, setInsightExpanded] = useState(false)
   const [rankLastRefreshed, setRankLastRefreshed] = useState<number>(0)
   const [autoHydrateTriggered, setAutoHydrateTriggered] = useState(false)
   const [rankChangeDrivers, setRankChangeDrivers] = useState<any[]>([])
@@ -997,14 +935,6 @@ function AFLegacyContent() {
     fantasyPoints?: number
   }>>([])
 
-  // Trade History state
-  const [historyLeagueId, setHistoryLeagueId] = useState('')
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyProgress, setHistoryProgress] = useState(0)
-  const [historyTrades, setHistoryTrades] = useState<Array<any>>([])
-  const [historyGradedTrades, setHistoryGradedTrades] = useState<Record<string, any>>({})
-  const [historyError, setHistoryError] = useState('')
-  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null)
   const [c2cDevyLoading, setC2cDevyLoading] = useState(false)
   const [c2cDevyLeague, setC2cDevyLeague] = useState<{ name: string; season: number; teamCount: number } | null>(null)
 
@@ -1117,7 +1047,7 @@ function AFLegacyContent() {
   const [reportCardTradesByYear, setReportCardTradesByYear] = useState<Record<string, any[]>>({})
   const [reportCardSummary, setReportCardSummary] = useState<any>(null)
   const [tradeAnalytics, setTradeAnalytics] = useState<any>(null)
-  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [, setAnalyticsLoading] = useState(false)
   const [valuationMode, setValuationMode] = useState<'atTime' | 'hindsight'>('atTime')
   const [analyticsTradesCache, setAnalyticsTradesCache] = useState<any>(null)
   const [tradeFilter, setTradeFilter] = useState<'all' | 'wins' | 'losses' | 'even'>('all')
@@ -1151,21 +1081,15 @@ function AFLegacyContent() {
   
   // Trade Notifications state
   const [tradeNotifications, setTradeNotifications] = useState<any[]>([])
-  const [tradeNotifLoading, setTradeNotifLoading] = useState(false)
-  const [showTradeNotifs, setShowTradeNotifs] = useState(false)
-  const [newTradeCount, setNewTradeCount] = useState(0)
-  const [highlightedTradeId, setHighlightedTradeId] = useState<string | null>(null)
+  const [, setTradeNotifLoading] = useState(false)
+  const [, setShowTradeNotifs] = useState(false)
+  const [, setNewTradeCount] = useState(0)
+  const [, setHighlightedTradeId] = useState<string | null>(null)
   
   // URL params for deep linking from email notifications
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname() ?? '/af-legacy'
-
-  // Email signup state
-  const [emailForAlerts, setEmailForAlerts] = useState('')
-  const [emailSignupLoading, setEmailSignupLoading] = useState(false)
-  const [emailSignupSuccess, setEmailSignupSuccess] = useState(false)
-  const [emailSignupError, setEmailSignupError] = useState('')
 
   // Waiver AI state
   const [waiverDynastyLeagues, setWaiverDynastyLeagues] = useState<any[]>([])
@@ -1176,7 +1100,7 @@ function AFLegacyContent() {
   const [waiverLeaguesLoading, setWaiverLeaguesLoading] = useState(false)
   const [expandedWaivers, setExpandedWaivers] = useState<Record<number, boolean>>({})
   const [waiverGoal, setWaiverGoal] = useState<'win-now' | 'balanced' | 'rebuild' | ''>('')
-  const [waiverRiskTolerance, setWaiverRiskTolerance] = useState(50)
+  const [waiverRiskTolerance] = useState(50)
 
   // League Rankings state
   const [rankingsDynastyLeagues, setRankingsDynastyLeagues] = useState<any[]>([])
@@ -1303,13 +1227,10 @@ function AFLegacyContent() {
   const [mockTimerNow, setMockTimerNow] = useState<number>(Date.now())
   const [mockDraftFormat, setMockDraftFormat] = useState<'snake' | 'linear' | 'auction'>('snake')
   const [mockEnable3RR, setMockEnable3RR] = useState(false)
-  const [mockAllowAiTrades, setMockAllowAiTrades] = useState(true)
-  const [mockAllowFuturePickTrades, setMockAllowFuturePickTrades] = useState(true)
-  const [mockTimezone, setMockTimezone] = useState('America/New_York')
   const [mockManagers, setMockManagers] = useState<Array<{ id: string; displayName: string; avatar?: string; draftSlot?: number | null }>>(() =>
     Array.from({ length: 12 }, (_, i) => ({ id: `default-${i + 1}`, displayName: `Team ${i + 1}`, draftSlot: i + 1 }))
   )
-  const [mockManagersLoading, setMockManagersLoading] = useState(false)
+  const [, setMockManagersLoading] = useState(false)
   const [mockSleeperImportLoading, setMockSleeperImportLoading] = useState(false)
   const [mockImportedLeagueName, setMockImportedLeagueName] = useState<string>('')
   const [mockDraftPicks, setMockDraftPicks] = useState<Array<{ overall: number; round: number; slot: number; manager: string; playerName: string; position: string; pickedAt: string }>>([])
@@ -1497,13 +1418,13 @@ function AFLegacyContent() {
       'trade': 'Fantasy Football Trade Analyzer (Dynasty & Redraft) | AllFantasy',
       'finder': 'Fantasy Football Trade Finder Tool | Discover Winning Trades with Chimmy',
       'player-finder': 'Fantasy Football Player Finder & Value Tool | AllFantasy',
-      'waiver': 'Fantasy Football Waiver Wire AI | Best Pickup Suggestions',
+      'waiver': 'Fantasy Football Waiver Wire Chimmy | Best Pickup Suggestions',
       'rankings': 'Fantasy Football League Rankings & Power Rankings | AllFantasy',
       'pulse': 'Fantasy Football Market Pulse & Player Sentiment | AllFantasy',
       'compare': 'Fantasy Football Player Comparison Tool | Start or Sit with Chimmy',
       'chat': 'Chimmy, Your Fantasy Football Coach | Personalized Advice & Strategy',
       'share': 'Share Your Fantasy Football Career Report Card | AllFantasy',
-      'transfer': 'Transfer Fantasy Football Leagues from Sleeper, Yahoo & More',
+      'transfer': 'Transfer Fantasy Football Leagues from Sleeper & More',
       'strategy': 'Season Strategy Planner | Chimmy-Powered Fantasy Football Roadmap',
       'shop': 'Official AllFantasy Merch | Shop AF Gear on Etsy',
       'mock-draft': 'Chimmy-Powered Mock Draft Simulator & Predict Board | AllFantasy',
@@ -1658,7 +1579,7 @@ function AFLegacyContent() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setTradeIdeasError(data.error || 'Failed to generate trade ideas')
+        setTradeIdeasError(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to generate trade ideas'))
         return
       }
       setTradeIdeasResults(data.ideas || [])
@@ -1765,7 +1686,7 @@ function AFLegacyContent() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to generate proposals')
+      if (!res.ok) throw new Error(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Failed to generate proposals'))
       setGoalProposalResult(data)
       if (data.partners?.length > 0) setGoalProposalExpandedPartner(0)
     } catch (err: any) {
@@ -2103,7 +2024,7 @@ function AFLegacyContent() {
       
       const rawResponse = await res.json()
       if (!res.ok) {
-        setInlineTradeError(rawResponse.error || 'Failed to analyze trade')
+        setInlineTradeError(readPlanRefusal(res.status, rawResponse)?.message ?? (rawResponse.error || 'Failed to analyze trade'))
         return
       }
       
@@ -2157,25 +2078,6 @@ function AFLegacyContent() {
     } finally {
       setInlineTradeLoading(false)
     }
-  }
-
-  // Analyze team needs based on roster composition
-  const analyzeTeamNeeds = (manager: any) => {
-    const posCount: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 }
-    manager.players?.forEach((p: any) => {
-      if (posCount[p.pos] !== undefined) posCount[p.pos]++
-    })
-    
-    const needs: string[] = []
-    if (posCount.QB < 2) needs.push('QB')
-    if (posCount.RB < 4) needs.push('RB')
-    if (posCount.WR < 4) needs.push('WR')
-    if (posCount.TE < 2) needs.push('TE')
-    
-    const isContending = manager.record.wins > manager.record.losses
-    const status = isContending ? 'contending' : 'rebuilding'
-    
-    return { needs, status, record: manager.record, posCount }
   }
 
   const triggerHighlight = (id: string) => {
@@ -3064,7 +2966,7 @@ function AFLegacyContent() {
   }
 
   const handlePreview = async () => {
-    const { data, error } = await callLegacyAI('/api/legacy/ai-report', {}, {
+    const { data } = await callLegacyAI('/api/legacy/ai-report', {}, {
       successMessage: 'Legacy snapshot generated!',
     })
     if (data?.report) {
@@ -3342,33 +3244,6 @@ function AFLegacyContent() {
       console.error('Failed to check trades:', String(e))
     } finally {
       setTradeNotifLoading(false)
-    }
-  }
-
-  const signUpForTradeAlerts = async () => {
-    if (!emailForAlerts || !username) return
-    setEmailSignupLoading(true)
-    setEmailSignupError('')
-    try {
-      const res = await fetch('/api/legacy/email-preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailForAlerts,
-          sleeper_username: username,
-          trade_alerts: true,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setEmailSignupSuccess(true)
-      } else {
-        setEmailSignupError(data.error || 'Failed to sign up')
-      }
-    } catch (e) {
-      setEmailSignupError('Network error - please try again')
-    } finally {
-      setEmailSignupLoading(false)
     }
   }
 
@@ -4258,8 +4133,6 @@ function AFLegacyContent() {
   ]
 
   const isShareLocked = shareCooldownMs > 0
-  const isRankLocked = rankCooldownMs > 0
-  const isCoachLocked = aiCoachCooldownMs > 0
 
   const mainTabGroups: Record<MainTab, Tab[]> = {
     home: ['overview'],
@@ -4390,7 +4263,7 @@ function AFLegacyContent() {
                 </h2>
 
                 <p className="mt-2 sm:mt-3 text-sm sm:text-base text-white/65">
-                  Import your fantasy history from Sleeper today. Yahoo, MFL, and Fantrax tools are still limited and do not yet support full historical imports.
+                  Import your fantasy history from Sleeper today. Other platforms do not yet support full historical imports, and Yahoo is coming soon.
                 </p>
 
                 {/* Trust line */}
@@ -4740,12 +4613,12 @@ function AFLegacyContent() {
                             MFL leagues import with your MFL API key — we never ask for your MFL password.
                           </p>
                         </div>
-                        <a
+                        <Link
                           href="/import?provider=mfl"
                           className="block w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-center hover:from-amber-400 hover:to-orange-400 transition"
                         >
                           Import MFL leagues
-                        </a>
+                        </Link>
                       </div>
                     )}
 
@@ -5807,7 +5680,7 @@ function AFLegacyContent() {
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
                 <h3 className="text-lg font-semibold text-white mb-3">Chimmy isn't perfect — and that's the point.</h3>
                 <p className="text-sm text-white/60 mb-3">
-                  AF Legacy is a live preview of Chimmy, the AI powering the AllFantasy app launching in 2026.
+                  AF Legacy is a live preview of Chimmy, Chimmy powering the AllFantasy app launching in 2026.
                   Some insights are marked "learning" as Chimmy ingests more league data and improves.
                 </p>
               </div>
@@ -5835,12 +5708,12 @@ function AFLegacyContent() {
                 >
                   Submit League Idea
                 </a>
-                <a
+                <Link
                   href="/"
                   className="text-sm text-white/50 hover:text-white/70 transition"
                 >
                   Join Early Access
-                </a>
+                </Link>
               </div>
             </div>
           </div>
@@ -5960,7 +5833,7 @@ function AFLegacyContent() {
                         { icon: '🤖', label: 'Chimmy Insights' },
                         { icon: '🏆', label: 'Power Rankings' },
                         { icon: '🔄', label: 'Trade Evaluator' },
-                        { icon: '📈', label: 'Waiver AI' },
+                        { icon: '📈', label: 'Waiver Chimmy' },
                         { icon: '💬', label: 'Chimmy Coaching' },
                       ].map((item, idx) => (
                         <div key={idx} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
@@ -6019,15 +5892,6 @@ function AFLegacyContent() {
               null
 
             const letterGrade = toLetterGrade(gradeVal)
-
-            const letterTone =
-              letterGrade?.startsWith('A')
-                ? 'text-green-300 border-green-400/30'
-                : letterGrade?.startsWith('B')
-                ? 'text-cyan-300 border-cyan-400/30'
-                : letterGrade?.startsWith('C')
-                ? 'text-yellow-300 border-yellow-400/30'
-                : 'text-red-300 border-red-400/30'
 
             return (
               <>
@@ -6155,7 +6019,6 @@ function AFLegacyContent() {
                     </div>
                   </div>
                 </div>
-
 
                 {/* Connected Platforms - Compact Chips */}
                 <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -6361,7 +6224,7 @@ function AFLegacyContent() {
                     const tabLabels: Record<string, string> = {
                       'overview': 'Overview',
                       'trade': 'Chimmy Trade Hub',
-                      'waiver': 'Waiver AI',
+                      'waiver': 'Waiver Chimmy',
                       'chat': 'Chimmy Chat',
                       'transfer': 'Transfer',
                     }
@@ -7070,6 +6933,14 @@ function AFLegacyContent() {
                       )
                     })()}
 
+                    {/* AF Legacy (`legacy_ai_report`, 2026-11-17): without a report there is nothing to show but the
+                        lock — /api/legacy/ai/run refuses a caller without the plan. A plan holder sees nothing here
+                        while the report loads (the gate renders its empty children). */}
+                    {!aiReport && (
+                      <FeatureGate featureId="legacy_ai_report" featureNameOverride="Chimmy Analysis">
+                        {null}
+                      </FeatureGate>
+                    )}
                     {aiReport && (
                       <div className="relative rounded-3xl bg-gradient-to-br from-slate-900/80 to-slate-950/80 border border-purple-500/20 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden">
                         <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-purple-500 to-cyan-400" />
@@ -7364,7 +7235,6 @@ function AFLegacyContent() {
                       username={username}
                       leagueId={tradeSelectedLeague || leagues[0]?.league_id || ""}
                     />
-
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
                         TRADE REPORT CARD - Premium Header (Dynasty Dealmaker Style)
@@ -8564,7 +8434,6 @@ function AFLegacyContent() {
                                       const partnerMap: Record<string, { name: string; trades: number; netValue: number; grades: string[] }> = {}
                                       
                                       allTrades.forEach((trade: any) => {
-                                        const userParty = trade.parties?.find((p: any) => p.rosterId === trade.userRosterId)
                                         const otherParties = trade.parties?.filter((p: any) => p.rosterId !== trade.userRosterId) || []
                                         
                                         otherParties.forEach((partner: any) => {
@@ -10367,6 +10236,7 @@ function AFLegacyContent() {
                         {/* Generate Trade Button */}
                         {tradeHubManagers.length > 0 && !tradeHubLoading && (
                           <div className="mt-6 space-y-3">
+                            <FeatureGate featureId="legacy_trade_hub" featureNameOverride="Trade Hub report">
                             <button
                               onClick={generateTradeHubReport}
                               disabled={inlineTradeLoading || !tradeHubTeamB || (tradeHubPlayersA.length === 0 && tradeHubPicksA.length === 0 && tradeHubFaabA === 0 && tradeHubPlayersB.length === 0 && tradeHubPicksB.length === 0 && tradeHubFaabB === 0)}
@@ -10384,6 +10254,7 @@ function AFLegacyContent() {
                                 </>
                               )}
                             </button>
+                            </FeatureGate>
 
                             {/* Trade Ideas Link - Lights up when available */}
                             {showTradeHubIdeas && (
@@ -10650,6 +10521,7 @@ function AFLegacyContent() {
                         />
 
                         {/* Generate Button */}
+                        <FeatureGate featureId="legacy_trade_proposals" featureNameOverride="Trade Ideas">
                         <button
                           onClick={generateTradeIdeas}
                           disabled={tradeIdeasLoading || !tradeSelectedLeague}
@@ -10667,6 +10539,7 @@ function AFLegacyContent() {
                             </>
                           )}
                         </button>
+                        </FeatureGate>
 
                         {tradeIdeasError && (
                           <div className="mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-400 text-center">
@@ -10901,7 +10774,7 @@ function AFLegacyContent() {
                     </div>
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
-                        GOAL-DRIVEN AI TRADE PROPOSAL GENERATOR
+                        GOAL-DRIVEN CHIMMY TRADE PROPOSAL GENERATOR
                     ═══════════════════════════════════════════════════════════════════════════════ */}
                     {tradeHubLeague && (
                     <div className="rounded-2xl bg-black/30 border border-white/10 overflow-hidden">
@@ -10946,6 +10819,7 @@ function AFLegacyContent() {
                           </div>
                         </div>
 
+                        <FeatureGate featureId="legacy_trade_proposals" featureNameOverride="Goal Proposals">
                         <button
                           onClick={generateGoalProposals}
                           disabled={goalProposalLoading || !goalProposalGoal}
@@ -10959,6 +10833,7 @@ function AFLegacyContent() {
                             <><span>🧠</span> Find Trade Partners</>
                           )}
                         </button>
+                        </FeatureGate>
 
                         {goalProposalError && (
                           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-400 text-center">
@@ -11131,7 +11006,7 @@ function AFLegacyContent() {
                     )}
 
                     {/* ═══════════════════════════════════════════════════════════════════════════════
-                        AI TRADE PROPOSAL GENERATOR
+                        CHIMMY TRADE PROPOSAL GENERATOR
                     ═══════════════════════════════════════════════════════════════════════════════ */}
                     {tradeHubManagers.length > 0 && tradeHubTeamA && (
                     <div className="rounded-2xl bg-black/30 border border-white/10 overflow-hidden">
@@ -11617,7 +11492,7 @@ function AFLegacyContent() {
                       whyBullets={waiverAnalysis.one_move.top_drivers?.filter((d: any) => d.direction === 'positive').map((d: any) => d.detail) || []}
                     />
                   ) : (
-                    <HeroMetric value="--" label="Waiver AI" helper="Select a league to find your best pickups" accent="emerald" />
+                    <HeroMetric value="--" label="Waiver Chimmy" helper="Select a league to find your best pickups" accent="emerald" />
                   )}
                   <LegacyWaiverTabIntro />
 
@@ -11649,7 +11524,7 @@ function AFLegacyContent() {
                           </div>
                         </div>
 
-                        <FeatureGate featureId="legacy_waiver_analysis" featureNameOverride="Waiver AI">
+                        <FeatureGate featureId="legacy_waiver_analysis" featureNameOverride="Waiver Chimmy">
                         <button
                           onClick={runWaiverAnalysis}
                           disabled={waiverLoading || !waiverSelectedLeague}
@@ -12761,7 +12636,7 @@ function AFLegacyContent() {
                                     onClick={() => handleActiveTabChange('waiver')}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-medium hover:bg-emerald-500/30 transition"
                                   >
-                                    <span>📈</span> Waiver AI
+                                    <span>📈</span> Waiver Chimmy
                                   </button>
                                 </div>
                               </div>
@@ -13790,7 +13665,6 @@ function AFLegacyContent() {
                                               const positions = leagueFormatData.scatterData?.filter((p: any) => p.position === curve.position).slice(0, 20)
                                               if (!positions?.length) return null
                                               
-                                              const avgX = positions.reduce((sum: number, p: any) => sum + p.marketValue, 0) / positions.length
                                               const avgY = positions.reduce((sum: number, p: any) => sum + p.war, 0) / positions.length
                                               
                                               return (
@@ -14728,7 +14602,6 @@ function AFLegacyContent() {
                       </div>
                     )}
 
-
                     <div className="mb-4 p-4 rounded-xl bg-black/25 border border-cyan-500/20">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                         <p className="text-xs text-gray-300 font-semibold">How Chimmy prepares your social post</p>
@@ -15217,7 +15090,7 @@ function AFLegacyContent() {
                                         </div>
                                         <div className="flex flex-wrap gap-1">
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver Chimmy</span>
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>
@@ -15834,7 +15707,7 @@ function AFLegacyContent() {
                                         {[
                                           { name: 'Trade Analyzer', desc: 'Chimmy-powered trade evaluation with tier system', icon: '📊', color: 'cyan' },
                                           { name: 'Trade Finder', desc: 'Find optimal trades with other managers', icon: '🔍', color: 'purple' },
-                                          { name: 'Waiver AI', desc: 'Smart waiver recommendations & FAAB', icon: '🎯', color: 'emerald' },
+                                          { name: 'Waiver Chimmy', desc: 'Smart waiver recommendations & FAAB', icon: '🎯', color: 'emerald' },
                                           { name: 'Chimmy GM Assistant', desc: 'Personal GM with counter-offers & targeting', icon: '🧠', color: 'amber' },
                                           { name: 'League Rankings', desc: 'See where you rank in your league', icon: '🏆', color: 'pink' },
                                           { name: 'Chimmy Chat', desc: 'Personalized advice based on your data', icon: '💬', color: 'blue' },
@@ -16012,7 +15885,7 @@ function AFLegacyContent() {
                                         </div>
                                         <div className="flex flex-wrap gap-1">
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver Chimmy</span>
                                           <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>
@@ -16131,7 +16004,6 @@ function AFLegacyContent() {
                         </div>
                       </div>
                     )}
-
 
                     {/* Playoff Bracket Preview */}
                     <h4 className="text-base sm:text-lg font-bold text-white mt-8 mb-3 sm:mb-4 flex items-center gap-2">

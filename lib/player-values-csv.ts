@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-export interface CSVPlayerValue {
+interface CSVPlayerValue {
   player: string
   pos: string
   team: string
@@ -18,7 +18,7 @@ export interface CSVPlayerValue {
 
 let cachedPlayers: CSVPlayerValue[] | null = null
 
-export function parsePlayerValuesCSV(): CSVPlayerValue[] {
+function parsePlayerValuesCSV(): CSVPlayerValue[] {
   if (cachedPlayers) {
     return cachedPlayers
   }
@@ -111,14 +111,3 @@ export function getPlayerValue(player: CSVPlayerValue, is2QB: boolean = true): n
   return is2QB ? player.value2qb : player.value1qb
 }
 
-export function getPlayerECR(player: CSVPlayerValue, is2QB: boolean = true): number {
-  return is2QB ? player.ecr2qb : player.ecr1qb
-}
-
-export function getAllCSVPlayers(): CSVPlayerValue[] {
-  return parsePlayerValuesCSV()
-}
-
-export function clearCache(): void {
-  cachedPlayers = null
-}

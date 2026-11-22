@@ -31,10 +31,8 @@ describe('waiverSportPlan — a producer, or the reason there is none', () => {
     }
   })
 
-  it('gives Soccer, and any sport it does not know, a stated reason instead of a blank', () => {
-    const soccer = waiverSportPlan('SOCCER')
-    expect(soccer.kind).toBe('none')
-    expect(soccer.kind === 'none' && soccer.reason).toMatch(/serves no soccer player season stats/)
+  it('uses the league value board for soccer and gives unknown sports a stated reason', () => {
+    expect(waiverSportPlan('SOCCER')).toMatchObject({ kind: 'per_game', basis: 'league_value_board' })
     const other = waiverSportPlan('CRICKET')
     expect(other.kind === 'none' && other.reason).toMatch(/No projection engine produces CRICKET player values/)
   })
@@ -191,6 +189,20 @@ describe('seasonRatePool reads', () => {
     )
     const map = await resolveRosterIdsToKeys(db, 'NBA', 'rollingInsightsId', ['7', '8', '9'])
     expect([...map]).toEqual([['7', 'k1']])
+  })
+
+  it('uses a verified registry key while the linked football player has no CFBD projection', async () => {
+    const registryId = '4569c370-e63b-4ef1-81d2-cb16b74e813f'
+    const row = id({ id: registryId, sport: 'NCAAF', fantraxId: 'tracked', rollingInsightsId: 'ri-11' })
+    const db = dbWith([], [row])
+    expect(await resolveRosterIdsToKeys(db, 'NCAAF', 'fantraxId', ['tracked']))
+      .toEqual(new Map([['tracked', registryId]]))
+    expect(leagueIdOf((await loadIdentityForKeys(db, 'NCAAF', [registryId])).get(registryId), 'fantraxId')).toBe('tracked')
+    const linked = dbWith([], [{ ...row, cfbdId: 'cf11' }])
+    expect(await resolveRosterIdsToKeys(linked, 'NCAAF', 'fantraxId', ['tracked'], new Set([registryId])))
+      .toEqual(new Map([['tracked', registryId]]))
+    expect(await resolveRosterIdsToKeys(linked, 'NCAAF', 'fantraxId', ['tracked'], new Set([registryId, 'cf11'])))
+      .toEqual(new Map([['tracked', 'cf11']]))
   })
 
   it('keys NCAAF by CFBD id, and marks a key whose rows disagree on a column as unusable there', async () => {

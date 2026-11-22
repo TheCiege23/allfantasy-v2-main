@@ -55,7 +55,7 @@ export type ReactionJob = {
   idempotencyKey: string
 }
 
-export type ReactionPlan = {
+type ReactionPlan = {
   eventType: string
   /** Screens whose precomputed summary this event invalidates. */
   invalidateScreens: string[]
@@ -135,7 +135,7 @@ export function planReactions(event: DomainEvent): ReactionPlan {
 }
 
 export type ReactionEnqueue = (job: ReactionJob) => Promise<{ ok: boolean; error?: string }>
-export type ReactionInvalidate = (screen: string, event: DomainEvent) => void | Promise<void>
+type ReactionInvalidate = (screen: string, event: DomainEvent) => void | Promise<void>
 
 export type DispatchResult = {
   eventType: string

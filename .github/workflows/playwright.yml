@@ -177,13 +177,21 @@ jobs:
         key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || startsWith(matrix.lane, 'mobile-') && 'mobile' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
-      run: npx playwright install --with-deps
+      # scripts/ci/install-playwright.sh: browsers are required, apt packages are retried and
+      # tolerated, then each browser must launch. See the script header (2026-11-11 apt outage).
+      run: bash scripts/ci/install-playwright.sh
     - name: Install Playwright Chromium
       if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement' || matrix.lane == 'zombie-rehearsal'
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Install Playwright Chromium + WebKit
       if: startsWith(matrix.lane, 'mobile-')
-      run: npx playwright install --with-deps chromium webkit
+      env:
+        # 2026-11-20 (job 136336052767): on a ~57 KB/s mirror the 140 MB WebKit list ate 25 minutes of this 45-minute
+        # job and still never installed libevent, so WebKit could not start. The script now installs the libraries
+        # the browsers link against first; once both launch, this caps the wait on the rest (fonts, codecs).
+        # Safe here because no mobile spec compares screenshots — leave it off any lane that does.
+        PW_APT_OPTIONAL_WAIT_BUDGET: '120'
+      run: bash scripts/ci/install-playwright.sh chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).
     # Without these steps, the `core` lane hits 60-min `timeout-minutes`
@@ -395,10 +403,23 @@ jobs:
           exit 1
         fi
         rc=0
+        # 🛑 ONE FRESH SERVER PER BROWSER, WITH A 12 GB HEAP, FOR THIS GROUP ONLY (2026-11-21).
+        # next dev restarts when used heap passes 80% of its limit, and this group's routes
+        # (draft room, two league previews, two zombie pages, and the API routes they call,
+        # each 8-12k modules) fill an 8 GB heap in about one pass. Both browsers shared one
+        # server, so it restarted twice in every one of 16 runs (2026-11-20), and the zombie
+        # test running at that moment failed ("Connection terminated unexpectedly",
+        # ERR_CONNECTION_REFUSED, a half-rendered page) and passed on retry. Measured locally
+        # on a 4-CPU/15 GB box: two passes on one server at 8 GB peak 89% then cross the line;
+        # at 12 GB 56% then 83%, and the heap keeps climbing. One pass per fresh server at 12 GB
+        # peaks at 56%, with 9.5 GB used on the machine (vs 10.1 GB today).
         if (( ${#draft_specs[@]} )); then
-          E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
-          PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/mobile-draft \
-            npx playwright test "${draft_specs[@]}" --project="Mobile Chrome" --project="Mobile Safari" --grep-invert "@db" --reporter=line,html || rc=1
+          for project in "Mobile Chrome" "Mobile Safari"; do
+            E2E_WARM_ROUTES=/,/e2e/draft-room,/dev/league-mobile-preview,/zombie/e2e-zombie-phone-league,/zombie/e2e-zombie-phone-league/items \
+            PLAYWRIGHT_SERVER_NODE_OPTIONS=--max-old-space-size=12288 \
+            PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/mobile-draft-$(echo "${project#Mobile }" | tr '[:upper:]' '[:lower:]')" \
+              npx playwright test "${draft_specs[@]}" --project="$project" --grep-invert "@db" --reporter=line,html || rc=1
+          done
         fi
         if (( ${#layout_specs[@]} )); then
           E2E_WARM_ROUTES=/,/login,/dev/league-mobile-preview \
@@ -493,7 +514,7 @@ jobs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Chromium
-      run: npx playwright install --with-deps chromium
+      run: bash scripts/ci/install-playwright.sh chromium
     - name: Prepare DB schema for draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -538,7 +559,7 @@ jobs:
       run: |
         # Refuse if a tagged spec exists that neither run below lists -- it would silently not run.
         tagged=$(grep -rlE "@draft-room|@mock-draft-room" e2e | sort | tr '\n' ' ')
-        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
+        listed="e2e/draft-board-coverage.spec.ts e2e/draft-room-click-audit.spec.ts e2e/draft-room-commissioner-regression.spec.ts e2e/draft-roster-configuration-gate.spec.ts e2e/league-mock-room-chimmy.spec.ts e2e/mobile-draft-production.spec.ts e2e/mock-draft-chimmy-card.spec.ts e2e/mock-draft-room-click-audit.spec.ts "
         if [ "$tagged" != "$listed" ]; then
           echo "::error::@draft-room specs changed. Tagged: $tagged -- add new ones to a run in this step."
           exit 1
@@ -558,12 +579,14 @@ jobs:
         PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/click-audit \
           npx playwright test e2e/draft-room-click-audit.spec.ts \
             --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
-        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production,$OTHER_SPECS_API \
+        E2E_WARM_ROUTES=/,/e2e/draft-room,/e2e/draft-settings,/e2e/draft-queue,/e2e/mock-draft-room,/e2e/mock-draft-production,/e2e/league-mock-room,$OTHER_SPECS_API \
         PLAYWRIGHT_HTML_OUTPUT_DIR=playwright-report/other-specs \
           npx playwright test \
             e2e/draft-room-commissioner-regression.spec.ts \
             e2e/draft-roster-configuration-gate.spec.ts \
+            e2e/league-mock-room-chimmy.spec.ts \
             e2e/mobile-draft-production.spec.ts \
+            e2e/mock-draft-chimmy-card.spec.ts \
             e2e/mock-draft-room-click-audit.spec.ts \
             --grep "@draft-room|@mock-draft-room" --project=chromium || rc=1
         E2E_WARM_ROUTES=/,/e2e/draft-board-coverage \

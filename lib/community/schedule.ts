@@ -8,7 +8,7 @@
  * a second copy of the current week's thread.
  */
 
-export type WeeklyPrompt = { channel: string; title: string; body: string }
+type WeeklyPrompt = { channel: string; title: string; body: string }
 
 /**
  * Appending is free; reordering moves every future week to a different prompt (a past

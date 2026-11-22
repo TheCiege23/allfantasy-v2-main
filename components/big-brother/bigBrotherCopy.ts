@@ -23,7 +23,7 @@ const PHASE_LABELS: Record<string, string> = {
 }
 
 /** "voting_open" / "VOTING_OPEN" / "replace_inactive_hoh" → "Voting open" / "Replace inactive hoh". */
-export function humanizeCode(code: string): string {
+function humanizeCode(code: string): string {
   const s = code.replace(/[_-]+/g, ' ').trim().toLowerCase()
   return s ? s[0]!.toUpperCase() + s.slice(1) : ''
 }

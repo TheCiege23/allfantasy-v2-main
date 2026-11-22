@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
+import { CHIMMY_DEPTH, chimmyDepthPromptLine, toolSpecsForDepth, type ChimmyDepth } from '@/lib/chimmy/chimmyDepth'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 import { currentRequestFocus } from '@/lib/chimmy/currentRequestFocus'
@@ -173,8 +174,9 @@ export function isProviderUnavailable(status: number | undefined, toolsRun: numb
  * the Grok path sends; this is a mechanical rename (`parameters` → `input_schema`), not a second
  * list to keep in sync.
  */
-export function chimmyToolsForClaude(): Anthropic.Tool[] {
-  return CHIMMY_TOOL_SPECS.map((spec) => ({
+export function chimmyToolsForClaude(depth?: ChimmyDepth): Anthropic.Tool[] {
+  const specs = depth ? toolSpecsForDepth(CHIMMY_TOOL_SPECS, depth) : CHIMMY_TOOL_SPECS
+  return specs.map((spec) => ({
     name: spec.function.name,
     description: spec.function.description,
     // The specs are `as const` (readonly arrays); the SDK type wants mutable ones. Same JSON.
@@ -291,6 +293,11 @@ type ChimmyToolLoopArgs = {
   conversation?: Array<{ role: 'user' | 'assistant'; content: string }>
   context: ChimmyToolContext
   enabled: boolean
+  /**
+   * The user's plan depth (`lib/chimmy/chimmyDepth.ts`): research turns, answer length, which tools
+   * the model is offered. Absent = free — never Pro on a guess.
+   */
+  depth?: ChimmyDepth
   model?: string
   /**
    * Wall-clock budget for the whole loop (Claude). Absent: the panel's 75s. A chat reply holds the
@@ -301,6 +308,14 @@ type ChimmyToolLoopArgs = {
 
 export async function runChimmyToolLoop(args: ChimmyToolLoopArgs): Promise<ChimmyToolLoopResult | null> {
   if (!canRunChimmyToolLoop(args.enabled)) return null
+  /*
+   * One depth for the whole answer, and the executor sees the same one: the tool list the model is
+   * offered and the gate in executeChimmyTool can never disagree. The context object is the caller's
+   * own (it reads back what the tools collected), so it is tagged, not copied.
+   */
+  const depth = args.depth ?? CHIMMY_DEPTH.free
+  args.context.depth = depth.tier
+  args = { ...args, depth }
   const failedOver: ChimmyToolLoopProvider[] = []
   for (const provider of chimmyToolLoopProviders()) {
     const outcome = provider === 'claude' ? await runClaudeToolLoop(args) : await runOpenAiShapedToolLoop(args, provider)
@@ -331,13 +346,17 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
 
   const client = new Anthropic({ apiKey, maxRetries: 1 })
   const model = resolveChimmyClaudeModel(args.model)
-  const tools = chimmyToolsForClaude()
+  const depth = args.depth ?? CHIMMY_DEPTH.free
+  const maxTurns = depth.maxToolTurns
+  const tools = chimmyToolsForClaude(depth)
   const system: Anthropic.TextBlockParam[] = [
     // Tools render before system, so this one breakpoint caches tools + instructions together.
     { type: 'text', text: args.systemPrompt, cache_control: { type: 'ephemeral' } },
   ]
   if (args.clockLine?.trim()) system.push({ type: 'text', text: args.clockLine.trim() })
   if (args.styleLine?.trim()) system.push({ type: 'text', text: args.styleLine.trim() })
+  // Per-user, so after the cached block like the style line.
+  system.push({ type: 'text', text: chimmyDepthPromptLine(depth) })
   if (args.groundingLine?.trim()) system.push({ type: 'text', text: args.groundingLine.trim() })
   system.push({ type: 'text', text: currentRequestFocus(args.context.leagueId) })
 
@@ -402,9 +421,9 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
   }
 
   try {
-    for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
+    for (let turn = 1; turn <= maxTurns; turn += 1) {
       if (Date.now() >= deadline) return logGiveUp('claude', 'deadline', { turn, toolsUsed, startedAt })
-      const final = turn === MAX_TOOL_TURNS
+      const final = turn === maxTurns
 
       let response: Anthropic.Message
       try {
@@ -442,7 +461,7 @@ async function runClaudeToolLoop(args: ChimmyToolLoopArgs): Promise<ProviderLoop
       }
 
       // See the Grok loop: the last turn must not end on a tool call.
-      if (turn === MAX_TOOL_TURNS) return logGiveUp('claude', 'turn_ceiling', { turn, toolsUsed, startedAt })
+      if (turn === maxTurns) return logGiveUp('claude', 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       /*
        * Sequential on purpose: `find_league_by_name` rebinds `context.leagueId`, and the league
@@ -476,8 +495,11 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
   const model = provider === 'grok' ? args.model?.trim() || DEFAULT_MODEL
     : provider === 'deepseek' ? resolveDeepSeekModel('standard') : resolveOpenAIModel('standard')
 
+  const depth = args.depth ?? CHIMMY_DEPTH.free
+  const maxTurns = depth.maxToolTurns
+  const tools = toolSpecsForDepth(CHIMMY_TOOL_SPECS, depth)
   const messages: OpenAI.ChatCompletionMessageParam[] = [
-    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
+    { role: 'system', content: [args.clockLine, args.systemPrompt, args.styleLine, chimmyDepthPromptLine(depth), args.groundingLine, currentRequestFocus(args.context.leagueId)].filter((s) => s?.trim()).join('\n\n') },
     ...(args.conversation ?? []).map((t) => ({ role: t.role, content: t.content }) as const),
     { role: 'user', content: 'CURRENT USER REQUEST:\n' + args.question },
   ]
@@ -487,20 +509,20 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
   const startedAt = Date.now()
 
   try {
-    for (let turn = 1; turn <= MAX_TOOL_TURNS; turn += 1) {
+    for (let turn = 1; turn <= maxTurns; turn += 1) {
       const response = await client.chat.completions.create(
         {
           model,
           messages,
-          tools: CHIMMY_TOOL_SPECS as unknown as OpenAI.ChatCompletionTool[],
+          tools: tools as unknown as OpenAI.ChatCompletionTool[],
           /*
            * The model decides. Forcing a call would make it fetch on questions
            * that need nothing, and every forced call is a paid round trip. On the
            * LAST turn it must answer instead — see MAX_TOOL_TURNS.
            */
-          tool_choice: turn === MAX_TOOL_TURNS ? 'none' : 'auto',
+          tool_choice: turn === maxTurns ? 'none' : 'auto',
           temperature: 0.4,
-          max_tokens: 1200,
+          max_tokens: depth.maxAnswerTokens,
         },
         { signal: AbortSignal.timeout(TURN_TIMEOUT_MS) },
       )
@@ -513,12 +535,18 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
         userId: args.context.userId,
         leagueId: args.context.leagueId,
         usage: { inputTokens: response.usage?.prompt_tokens ?? null, outputTokens: response.usage?.completion_tokens ?? null },
-        maxTokens: 1200,
+        maxTokens: depth.maxAnswerTokens,
         ok: true,
       })
 
       const message = response.choices?.[0]?.message
       if (!message) return logGiveUp(provider, 'no_message', { turn, toolsUsed, startedAt })
+      /*
+       * ⚠ A CUT-OFF ANSWER WAS RETURNED AS A WHOLE ONE. The Claude loop has always given up on
+       * `max_tokens`; this path never read `finish_reason`, so a Grok/DeepSeek/OpenAI reply that hit
+       * its 1200-token cap reached the user ending mid-sentence. Same treatment as Claude now.
+       */
+      if (response.choices?.[0]?.finish_reason === 'length') return logGiveUp(provider, 'max_tokens', { turn, toolsUsed, startedAt })
 
       messages.push(message)
 
@@ -534,7 +562,7 @@ async function runOpenAiShapedToolLoop(args: ChimmyToolLoopArgs, provider: 'grok
        * would return nothing at all after paying for every call. Bail to the
        * push path instead of burning another request.
        */
-      if (turn === MAX_TOOL_TURNS) return logGiveUp(provider, 'turn_ceiling', { turn, toolsUsed, startedAt })
+      if (turn === maxTurns) return logGiveUp(provider, 'turn_ceiling', { turn, toolsUsed, startedAt })
 
       for (const call of calls) {
         const fn = (call as { function?: { name?: string; arguments?: string } }).function

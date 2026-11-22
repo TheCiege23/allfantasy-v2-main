@@ -1,4 +1,8 @@
-import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { draftQueueKeyForRoster } from '@/lib/league/teamScopedKey'
+import { rosterManagerKey } from '@/lib/league/rosterManager'
+import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGate'
+import { loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadSeasonDraftContext } from '@/lib/tournament/seasonDraftRuntime'
 import { prisma } from '@/lib/prisma'
 import { instantAutopickReason, shouldPickNow } from '@/lib/live-draft-engine/instantAutopick'
@@ -115,12 +119,11 @@ export async function tryQueueAutoPick(
 
   const onClockRoster = await prisma.roster.findUnique({
     where: { id: rosterId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
-  const queueUserId =
-    onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
-      ? String(onClockRoster.platformUserId)
-      : null
+  // Each team has its own queue (lib/league/rosterManager.ts `teamScopedKey`); an unowned team has none.
+  const onClockManagerId = onClockRoster ? rosterManagerKey(onClockRoster) : null
+  const queueUserId = onClockManagerId && !isSeatPlaceholderUserId(onClockManagerId) ? (await draftQueueKeyForRoster(rosterId)) ?? onClockManagerId : null
   if (!queueUserId) return { success: false }
 
   const queueRow = draftSession.queues.find((q) => q.userId === queueUserId)
@@ -140,7 +143,17 @@ export async function tryQueueAutoPick(
 
   const rosterRules = await getAllowedPositionsAndRosterSize(leagueId)
   const draftEligiblePositions = rosterRules?.draftEligiblePositions
-  const eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions, rosterRules?.sport)
+  let eligibleQueueCandidates = filterEntriesByDraftEligiblePositions(queueCandidates, draftEligiblePositions, rosterRules?.sport)
+  /*
+   * The starter guard (autopickStarterGuard.ts): once this team's remaining picks only just cover its
+   * open starting spots, a queued player who cannot start in one is skipped. If the queue holds nobody
+   * who can, the queue yields no pick and best available — which applies the same guard — makes it.
+   */
+  const ownPositions = draftSession.picks.filter((p) => p.rosterId === rosterId).map((p) => p.position)
+  const guard = await loadStarterGuard(leagueId, ownPositions, draftSession.rounds)
+  if (guard.mustFill) {
+    eligibleQueueCandidates = eligibleQueueCandidates.filter((entry) => guard.allows(String(entry.position ?? '')))
+  }
 
   // Commit Q — pass `expectedOverall` to each submitPick attempt so the
   // Commit-M stale-overall guard short-circuits the candidate loop the
@@ -161,6 +174,7 @@ export async function tryQueueAutoPick(
       rosterId,
       source: 'auto',
       expectedOverall,
+      pickMetadata: { autopick: { strategy: 'queue', reason: 'The next available player in your queue.' } },
     })
     if (attempt.success) {
       return { success: true, playerName: String(entry.playerName ?? '').trim(), queuePlayerUnavailable }

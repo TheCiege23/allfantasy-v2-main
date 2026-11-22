@@ -3237,3 +3237,51 @@
   .af-core .af-live-freshness[data-state='delayed'], .af-core .af-live-freshness[data-state='reconnecting'] { max-width: calc(100% - 12px); }
   .af-core .af-live-sports { padding: 8px 12px; }
 }
+
+/* ── Live scores, simplified (2026-11-15) ─────────────────────────────────────
+   Top level on purpose: appended after every @media block, so nothing here is
+   captured by an earlier query. */
+
+/* The box score behind one line under your starters (GameCard foldDetails). */
+.af-live-game-more {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.af-live-game-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 2px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+}
+.af-live-game-more-toggle::-webkit-details-marker { display: none; }
+.af-live-game-more-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.af-live-game-more[open] > .af-live-game-more-toggle .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+.af-live-game-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+/* A starter only in the held league: points, nothing to open. */
+.af-live-mine-toggle[data-static='true'] {
+  cursor: default;
+  grid-template-columns: auto;
+}
+
+/* The matchup line under the score headline: one sentence, no score row. */
+.af-live-matchup[data-compact='true'] .af-live-matchup-meta {
+  margin: 0;
+}

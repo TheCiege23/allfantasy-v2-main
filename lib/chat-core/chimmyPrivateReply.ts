@@ -16,6 +16,7 @@ import {
   takeChimmyPlanAllowance,
 } from '@/lib/chimmy/planAllowance'
 import { runChimmyToolLoop } from '@/lib/chimmy/tools/chimmyToolLoop'
+import { chimmyDepthForPlan } from '@/lib/chimmy/chimmyDepth'
 import { CHIMMY_TOOL_LOOP_SYSTEM_PROMPT } from '@/lib/chimmy/tools/toolLoopSystemPrompt'
 import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
 import { enforceTradeLetters, type ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
@@ -228,6 +229,8 @@ async function answerWithToolLoop(args: {
     context,
     enabled: true,
     budgetMs: CHAT_LOOP_BUDGET_MS,
+    // Only a plan holder reaches this loop, so this is AF Pro depth (lib/chimmy/chimmyDepth.ts).
+    depth: chimmyDepthForPlan(plan),
   }
   /*
    * The sender's own message is held until this reply exists (the chat routes return both together),

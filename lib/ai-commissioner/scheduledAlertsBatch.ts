@@ -19,7 +19,7 @@ import { leagueCommissionerAccountId } from '@/lib/commissioner/leagueCommission
 /** Phases where there is a league to govern. Setup, the offseason and archived leagues are skipped. */
 const ACTIVE_STATES = ['pre_draft', 'drafting', 'post_draft', 'in_season', 'playoffs'] as const
 
-export type ScheduledAiAlertsResult = { discovered: number; ran: number; skippedNoPlan: number; failed: number; created: number }
+type ScheduledAiAlertsResult = { discovered: number; ran: number; skippedNoPlan: number; failed: number; created: number }
 
 export async function runScheduledAiCommissionerAlerts(opts: { leagueId?: string; limit?: number; run?: typeof runAICommissionerCycle } = {}): Promise<ScheduledAiAlertsResult> {
   const run = opts.run ?? runAICommissionerCycle

@@ -24,7 +24,7 @@ function normalize(s: string | null | undefined): string {
   return (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
 }
 
-export interface ClaimCandidate {
+interface ClaimCandidate {
   appUserId: string
   displayName: string | null
   sleeperUsername: string | null
@@ -33,7 +33,7 @@ export interface ClaimCandidate {
   linkedSourceManagerId?: string | null
 }
 
-export interface PlaceholderClaimResult {
+interface PlaceholderClaimResult {
   claimed: boolean
   rosterId?: string
   matchedBy?: 'source_manager_id' | 'display_name' | 'team_name' | 'sleeper_username' | 'email_local' | 'native_open_slot'
@@ -78,15 +78,6 @@ function claimDisplayName(candidate: ClaimCandidate): string {
   if (explicit) return explicit
   const emailLocal = candidate.email?.split('@')[0]?.trim()
   return emailLocal || 'Manager'
-}
-
-function sourceManagerIdFromPlatformField(platformUserId: string): string | null {
-  if (platformUserId.startsWith('import:')) {
-    // "import:<provider>:<teamId>" — teamId is stable; prefer matching on
-    // source_manager_id via playerData.import.sourceManagerId instead.
-    return null
-  }
-  return platformUserId
 }
 
 /**

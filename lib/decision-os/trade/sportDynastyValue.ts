@@ -82,7 +82,7 @@ export const FUTURE_DISCOUNT = 0.85
 /** A full regular season, for every season after this one. */
 export const FULL_SEASON_GAMES: Record<DynastyGradedSport, number> = { NBA: 82, NHL: 82, MLB: 162, SOCCER: 38, NCAAF: 12, NCAAB: 31 }
 /** Players this age or younger make up the pool a draft pick is priced from. */
-export const YOUNG_POOL_MAX_AGE: Record<DynastyGradedSport, number> = { NBA: 22, NHL: 22, MLB: 24, SOCCER: 22, NCAAF: 22, NCAAB: 22 }
+const YOUNG_POOL_MAX_AGE: Record<DynastyGradedSport, number> = { NBA: 22, NHL: 22, MLB: 24, SOCCER: 22, NCAAF: 22, NCAAB: 22 }
 /** Seasons a new draftee usually waits before he scores: junior hockey, the minor leagues. */
 export const PROSPECT_WAIT_SEASONS: Record<DynastyGradedSport, number> = { NBA: 0, NHL: 2, MLB: 2, SOCCER: 0, NCAAF: 0, NCAAB: 0 }
 
@@ -112,7 +112,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 /** A player's dynasty value: seasons over replacement, this one first, each later one aged and discounted. */
 export function playerDynastyValue(args: {
   sport: DynastyGradedSport
-  player: Pick<BoardPlayer, 'position' | 'perGame'>
+  player: Pick<BoardPlayer, 'position' | 'perGame' | 'tradeMarket'>
   age?: number
   collegeSeasons?: number
   replacementPerGame: number
@@ -125,7 +125,7 @@ export function playerDynastyValue(args: {
     const perGame = age != null && now > 0 ? (player.perGame * ageMultiplierAtAge(sport, player.position, age + y)) / now : player.perGame
     total += Math.max(0, perGame - replacementPerGame) * FULL_SEASON_GAMES[sport] * FUTURE_DISCOUNT ** y
   }
-  return total
+  return total * (1 + (player.tradeMarket?.percent ?? 0) / 100)
 }
 
 /**
@@ -220,7 +220,7 @@ export function nbaProspectValue(rank: NbaProspectRank, args: {
   return estimate.ok ? estimate.value * FUTURE_DISCOUNT ** Math.max(0, rank.draftYear - season) : null
 }
 
-export function sportDynastyBasis(ctx: DynastyGradeContext): string {
+function sportDynastyBasis(ctx: DynastyGradeContext): string {
   const pointsBasis = ctx.sport === 'NCAAF'
     ? `Points over the best free agent at each position for the ${ctx.window.seasonLabel} college football season, using this league’s rules and its remaining weeks.`
     : sportPointsBasis({ ...ctx, sport: ctx.sport })

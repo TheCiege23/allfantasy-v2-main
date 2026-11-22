@@ -55,7 +55,7 @@ vi.mock('@/lib/league-import/espn/EspnConnectionTestService', () => ({
   testEspnLeagueConnection: connectionTestMock,
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock }))
+vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock }))
 
 vi.mock('@/lib/league-import/commissionerGate', () => ({
   assertImportCommissioner: assertImportCommissionerMock,

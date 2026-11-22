@@ -32,7 +32,7 @@ export const AD_OPT_OUT_TEST_JS =
 
 export type AdOptOutSource = "choices_page" | "settings" | "gpc"
 
-export type AdOptOutRecord = { optedOutAt: string; source: AdOptOutSource }
+type AdOptOutRecord = { optedOutAt: string; source: AdOptOutSource }
 
 function cookieValue(cookieHeader: string | null | undefined, name: string): string | null {
   for (const part of (cookieHeader ?? "").split(";")) {

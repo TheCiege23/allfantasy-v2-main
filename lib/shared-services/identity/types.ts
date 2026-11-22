@@ -11,54 +11,9 @@
 
 import type { ImportProvider } from '@/lib/league-import/types'
 
-/** Canonical FantasyUser identifier. Equal to `AppUser.id` today — see FantasyUserResolver. */
-export type FantasyUserId = string
-
-export interface FantasyUser {
-  fantasyUserId: FantasyUserId
-  displayName: string | null
-  email: string
-  createdAt: Date
-}
-
-/**
- * How a PlatformIdentity was resolved. Never fabricated: a platform that only
- * stores a credential (not a durable provider-user-id) reports
- * `transient_credential_only`, not a fake `stored` identity.
- */
-export type IdentityResolutionMethod =
-  | 'stored'
-  | 'transient_credential_only'
-  | 'not_available'
-
-export interface SourceAttribution {
+interface SourceAttribution {
   sourceTable: 'UserProfile' | 'LeagueAuth' | 'FantraxUser' | 'PlayerIdentityMap' | 'derived'
   resolvedAt: Date
-}
-
-export interface PlatformIdentity {
-  fantasyUserId: FantasyUserId
-  platform: ImportProvider
-  /** Null whenever resolutionMethod !== 'stored' — never a guessed or fuzzy-matched value. */
-  providerUserId: string | null
-  displayName: string | null
-  linkedAt: Date | null
-  verifiedAt: Date | null
-  resolutionMethod: IdentityResolutionMethod
-  sourceAttribution: SourceAttribution
-}
-
-export interface PlatformIdentityLinkRequest {
-  fantasyUserId: FantasyUserId
-  platform: ImportProvider
-  /**
-   * Must be a value already obtained from a real provider verification step
-   * (e.g. an OAuth callback, or a confirmed username->id lookup against the
-   * provider's own API). Never a raw, unverified, user-typed value — the
-   * Identity Service performs no fuzzy or inferred matching.
-   */
-  verifiedProviderUserId: string
-  displayName?: string | null
 }
 
 /**
@@ -69,7 +24,7 @@ export interface PlatformIdentityLinkRequest {
  * caller that treats them the same is still correct, but one that reports them
  * separately can tell a coverage gap from a discriminator gap.
  */
-export type PlayerIdentityConfidence = 'direct' | 'name_match' | 'ambiguous' | 'miss'
+type PlayerIdentityConfidence = 'direct' | 'name_match' | 'ambiguous' | 'miss'
 
 export interface PlayerIdentityResult {
   canonicalPlayerId: string | null

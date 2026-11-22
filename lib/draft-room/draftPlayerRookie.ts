@@ -22,7 +22,7 @@ export type DraftRoomRookiePlayerLike = {
   [key: string]: unknown
 }
 
-export type DraftRoomRookieOptions = {
+type DraftRoomRookieOptions = {
   sport: string
   /** Primary season year for draft-class matching (e.g. 2026 NFL season / rookie class). */
   seasonYear?: number
@@ -32,13 +32,13 @@ export type DraftRoomRookieOptions = {
   c2cEnabled?: boolean
 }
 
-export type DraftRoomRookieDataReason =
+type DraftRoomRookieDataReason =
   | 'rookies_found'
   | 'no_rookie_metadata'
   | 'no_rookies_for_context'
   | 'empty_pool'
 
-export type DraftRoomRookieDataState = {
+type DraftRoomRookieDataState = {
   hasExplicitRookieData: boolean
   hasInferableRookies: boolean
   rookieCount: number
@@ -95,7 +95,7 @@ export function poolRowHasRookieSignals(player: DraftRoomRookiePlayerLike): bool
 /**
  * True when any classification field suggests "we know rookie status" from source (not inference).
  */
-export function hasExplicitRookieClassification(player: DraftRoomRookiePlayerLike): boolean {
+function hasExplicitRookieClassification(player: DraftRoomRookiePlayerLike): boolean {
   if (player.isRookie === true || player.rookie === true) return true
   if (readLoose(player, 'isRookie') === true || readLoose(player, 'rookie') === true) return true
   if (player.yearsExp != null && Number.isFinite(Number(player.yearsExp))) return true
@@ -108,7 +108,7 @@ export function hasExplicitRookieClassification(player: DraftRoomRookiePlayerLik
  * Whether draft-year matching can infer rookie without yearsExp (NFL/NCAAF only).
  */
 /** Operator-facing diagnostic label for where NFL rookie *signals* came from (not ISO timestamps). */
-export type NflRookieDiagnosticSource =
+type NflRookieDiagnosticSource =
   | 'rolling_insights_imported'
   | 'sleeper_years_exp'
   | 'sleeper_cache'

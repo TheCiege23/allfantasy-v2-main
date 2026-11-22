@@ -12,7 +12,6 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}))
   const entryId = String(body.entryId || "")
-  const leagueId = String(body.leagueId || "")
 
   if (!entryId) {
     return NextResponse.json({ error: "Missing entryId" }, { status: 400 })

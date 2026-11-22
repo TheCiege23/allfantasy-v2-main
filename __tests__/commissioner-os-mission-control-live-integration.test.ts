@@ -40,6 +40,8 @@ const callDecisionOSMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: callDecisionOSMock }))
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
+const readManagerHighlightsMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/commissioner-mission-control/managerHighlightReads", () => ({ readManagerHighlights: readManagerHighlightsMock }))
 vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 /*
  * ⚠ MOCKED BECAUSE THE MODULE UNDER TEST CHANGED DEPENDENCY, NOT BECAUSE THESE TESTS CARE ABOUT
@@ -287,97 +289,40 @@ describe("getMissionControlKpis — full real success path", () => {
   })
 })
 
-describe("getManagerHighlights — full real success path", () => {
+/*
+ * 🛑 THE CARD READ A RETIRED ROUTE (re-score 2026-11-17). `/api/v1/intelligence/league/managers` is one of the retired
+ * profile paths and answers 410, so the four tests that stood here specified a source that no longer exists. The
+ * highlights now come from the member-activity facts the Commissioner page shows (managerHighlightReads.ts, which
+ * has its own suite); this pins the wiring.
+ */
+describe("getManagerHighlights — member-activity facts, not the retired managers route", () => {
   beforeEach(() => {
     isLiveReadyMock.mockResolvedValue(true)
     withActiveLeague()
   })
 
-  it("maps ManagerSummaryV1[] to ManagerHighlight[], resolving display names via a single batched appUser query (no N+1)", async () => {
-    mockByPath({
-      [MANAGERS_URL]: {
-        data: {
-          data: [
-            { managerId: "u-1", retentionRisk: "low", retentionRiskReasons: ["Consistent lineup sets"], isInactive: false, inactivityWarning: null },
-            { managerId: "u-2", retentionRisk: "high", retentionRiskReasons: [], isInactive: true, inactivityWarning: "Inactive for 20 days" },
-          ],
-        },
-        error: null,
-      },
-    })
-    prismaMock.appUser.findMany.mockResolvedValue([
-      { id: "u-1", displayName: "Priya N.", username: "priya" },
-      { id: "u-2", displayName: null, username: "sam_r" },
-    ])
-
+  it("passes the league's highlights through and never calls the retired managers route", async () => {
+    const highlights = [{ id: "risk:Pine Bears", managerName: "Pine Bears", callout: "Activity has slowed", tone: "risk" as const }]
+    readManagerHighlightsMock.mockResolvedValue({ ok: true, highlights })
     const result = await liveDecisionOSClient.getManagerHighlights()
-
-    expect(prismaMock.appUser.findMany).toHaveBeenCalledTimes(1)
-    expect(prismaMock.appUser.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ["u-1", "u-2"] } } }))
-    expect(result.data).toEqual([
-      { id: "u-1", managerName: "Priya N.", callout: "Consistent lineup sets", tone: "positive" },
-      { id: "u-2", managerName: "sam_r", callout: "Inactive for 20 days", tone: "risk" },
-    ])
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual(highlights)
+    expect(readManagerHighlightsMock).toHaveBeenCalledWith("lg-1")
+    expect(callDecisionOSMock.mock.calls.map((c) => c[1])).not.toContain(MANAGERS_URL)
   })
 
-/*
- * 🛑 THIS ASSERTED THAT AN UNRESOLVED MANAGER RENDERS AS ITS OWN ID, AND CALLED THAT
- * "a real, honest label". In production those ids are shaped `sleeper:1267977501351628801`, so
- * what it actually specified was printing an internal provider identifier into a card the
- * commissioner shows their league. Honest and unreadable are not the same thing.
- *
- * Both id spaces are covered here, because the resolver now reads two tables and a test that
- * exercised only one would go green with the other half deleted.
- */
-  it("names managers from both id spaces, and labels only the genuinely unresolvable ones", async () => {
-    mockByPath({
-      [MANAGERS_URL]: {
-        data: {
-          data: [
-            { managerId: "u-af", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
-            { managerId: "sleeper:12345", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
-            { managerId: "sleeper:99999", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
-          ],
-        },
-        error: null,
-      },
-    })
-    // An AllFantasy account resolves by uuid...
-    prismaMock.appUser.findMany.mockResolvedValue([{ id: "u-af", displayName: "Claimed Manager", username: "claimed" }])
-    // ...and an imported Sleeper manager resolves through their league_teams row.
-    prismaMock.leagueTeam.findMany.mockResolvedValue([
-      { platformUserId: "12345", ownerName: "Hoovi", teamName: "Team Hoovi" },
-    ])
-
-    const result = await liveDecisionOSClient.getManagerHighlights()
-    const names = Object.fromEntries((result.data ?? []).map((m) => [m.id, m.managerName]))
-
-    expect(names["u-af"]).toBe("Claimed Manager")
-    expect(names["sleeper:12345"]).toBe("Hoovi")
-    // Only the manager with no row in either table falls back — and never to the raw id.
-    expect(names["sleeper:99999"]).toBe("Unknown manager")
-    expect(names["sleeper:99999"]).not.toContain("sleeper:")
-
-    // The provider lookup is scoped to one league; an unscoped query would name a manager from
-    // whichever other league happened to sort first.
-    expect(prismaMock.leagueTeam.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ leagueId: expect.any(String) }) }),
-    )
-  })
-
-  it("returns an empty list, not an error, when the league has zero surfaced managers", async () => {
-    mockByPath({ [MANAGERS_URL]: { data: { data: [] }, error: null } })
+  it("an empty league is an empty list, not an error", async () => {
+    readManagerHighlightsMock.mockResolvedValue({ ok: true, highlights: [] })
     const result = await liveDecisionOSClient.getManagerHighlights()
     expect(result.error).toBeNull()
     expect(result.data).toEqual([])
-    expect(prismaMock.appUser.findMany).not.toHaveBeenCalled()
   })
 
-  it("a real transport failure is passed straight through, not masked", async () => {
-    const transportError = { category: "forbidden" as const, message: "No scope.", moduleId: "mission-control" as const, retryable: false, timestamp: new Date().toISOString() }
-    mockByPath({ [MANAGERS_URL]: { data: null, error: transportError } })
+  it("activity that cannot be judged is an error carrying the reason, never an empty 'all clear'", async () => {
+    readManagerHighlightsMock.mockResolvedValue({ ok: false, reason: "No moves have been imported for this league yet." })
     const result = await liveDecisionOSClient.getManagerHighlights()
-    expect(result.error).toEqual(transportError)
+    expect(result.data).toBeNull()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control", message: "No moves have been imported for this league yet." })
   })
 })
 

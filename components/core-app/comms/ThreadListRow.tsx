@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { initialsFor, safeAvatarUrl } from './chatLayout'
+import { avatarToneFor, initialsFor, safeAvatarUrl } from './chatLayout'
 
 /**
  * One row in the DM or huddle list: who it is with (their avatar, or up to three stacked for a
@@ -116,7 +116,7 @@ function Avatar({ person }: { person: ThreadRowPerson }) {
   const safe = safeAvatarUrl(person.avatarUrl)
   const [failed, setFailed] = useState(false)
   return (
-    <span className="af-cm-dmrow-av" title={person.name}>
+    <span className="af-cm-dmrow-av" title={person.name} data-tone={avatarToneFor(person.name)}>
       {safe && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={safe} alt="" loading="lazy" onError={() => setFailed(true)} />

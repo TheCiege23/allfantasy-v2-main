@@ -1,3 +1,4 @@
+import { inferGamesPerWeek, readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
 import { loadSeasonRosterDivisions } from '@/lib/league/divisions/loadLeagueDivisions'
 import { loadFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 import { applyWeeklyWaiverPriorityReset } from '@/lib/waiver-wire/weekly-priority-reset'
@@ -22,6 +23,7 @@ import { runsStandardWeeklySeason } from '@/lib/season-week/standardSeasonScope'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { lastWeekOfPlayoffRound } from '@/lib/playoff-runtime/playoffRoundWeeks'
 import { logAction } from '@/server/services/auditService'
+import { applyCustomWeeks, inOrder, readCustomWeeks } from './customWeeks'
 import {
   SCHEDULE_REGEN_CONFIRMATION_CODE,
   SCHEDULE_REGEN_CONFIRMATION_MESSAGE,
@@ -80,6 +82,12 @@ export type PersistedScheduleGenerationResult =
       warnings: string[]
       state: CanonicalScheduleRuntimeState
       events: ReturnType<typeof buildScheduleGeneratedEvents>
+      /** Custom weeks (./customWeeks.ts) kept in place of what the generator drew. */
+      customWeeksKept?: number[]
+      /** Custom weeks skipped because the league's teams changed since they were set. */
+      staleCustomWeeks?: number[]
+      /** One per `previewOrders` entry: the first written week as that order would have drawn it. */
+      draws?: ScheduleDraw[]
     }
   | {
       ok: false
@@ -268,6 +276,8 @@ export async function resolveNflRedraftScheduleRuntime(input: {
     medianGame: !imported && Boolean(season.league?.medianGame ?? season.medianGame),
     medianInPlayoffs: readMedianGameInPlayoffs(season.league?.settings),
     divisionRivalsTwice,
+    // An imported schedule states its own shape; a native one follows the league's setting.
+    gamesPerWeek: imported ? inferGamesPerWeek(imported.matchups) : Math.max(readGamesPerWeek(season.league?.settings), inferGamesPerWeek(season.schedule.map(toScheduleMatchupInput))),
   })
 
   return {
@@ -331,9 +341,19 @@ function championshipWindowWarning(input: {
  *   - once a week has started it needs `confirmMidSeasonChange` (the scoring/roster editors' flag);
  *   - a regeneration writes a `schedule_regenerated` audit row and a league announcement.
  */
+/** One randomization draw, for the league chat: the first week it changes, by team name. */
+export type ScheduleDraw = { week: number; pairs: Array<{ home: string; away: string | null }> }
+
 export async function generateNflRedraftScheduleForSeason(input: {
   seasonId: string
   regenerate?: boolean
+  /**
+   * Team order for the generator, by roster id (./customWeeks.ts `shuffledOrders`). The generator has no
+   * randomness of its own; absent, rosters go in id order and an unchanged league regenerates the same.
+   */
+  teamOrder?: readonly string[]
+  /** Orders to draw in memory only (never written), each reported in `draws` — the randomizer's earlier draws. */
+  previewOrders?: ReadonlyArray<readonly string[]>
   /** Legacy name for the mid-season confirmation. It no longer unlocks started weeks. */
   commissionerOverride?: boolean
   confirmMidSeasonChange?: boolean
@@ -365,8 +385,8 @@ export async function generateNflRedraftScheduleForSeason(input: {
     return { ok: false, code: 'SCHEDULE_ALREADY_EXISTS', message: 'Schedule already exists. Use regenerate to rebuild the weeks that have not started.' }
   }
 
+  const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { lifecycleState: true, settings: true } })
   if (replacing) {
-    const league = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { lifecycleState: true } })
     const refusal = scheduleRegenerationLifecycleRefusal({
       lifecycleState: league?.lifecycleState ?? null,
       liveDraft: await hasLiveDraftSession(season.leagueId),
@@ -375,13 +395,17 @@ export async function generateNflRedraftScheduleForSeason(input: {
   }
 
   const { teams, divisionRivalsTwice } = await buildTeamsForRedraftRosters(season.leagueId, season.rosters as RedraftRosterRow[])
-  const generated = generateCanonicalRegularSeasonSchedule({
-    rules,
-    teams,
-    divisionRivalsTwice,
-    totalWeeks: season.totalWeeks,
-    playoffStartWeek: season.playoffStartWeek,
-  })
+  const scheduleLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { settings: true } })
+  const draw = (order: readonly string[] | undefined) =>
+    generateCanonicalRegularSeasonSchedule({
+      rules,
+      teams: order ? inOrder(teams, (t) => t.rosterId, order) : teams,
+      divisionRivalsTwice,
+      gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings),
+      totalWeeks: season.totalWeeks,
+      playoffStartWeek: season.playoffStartWeek,
+    })
+  const generated = draw(input.teamOrder)
   if (generated.validationIssues.some((issue) => issue.severity === 'blocking')) {
     return {
       ok: false,
@@ -412,7 +436,24 @@ export async function generateNflRedraftScheduleForSeason(input: {
     return { ok: false, code: SCHEDULE_REGEN_CONFIRMATION_CODE, message: SCHEDULE_REGEN_CONFIRMATION_MESSAGE }
   }
 
-  const regularMatchups = generated.matchups
+  // Custom weeks keep their pairings through every regeneration (./customWeeks.ts).
+  const customWeeks = readCustomWeeks(league?.settings, season.season)
+  const rosterIds = teams.map((t) => t.rosterId)
+  const withCustom = (matchups: typeof generated.matchups) =>
+    applyCustomWeeks(matchups, customWeeks, { fromWeek, regularSeasonWeeks: generated.regularSeasonWeeks, rosterIds, gamesPerWeek: readGamesPerWeek(scheduleLeague?.settings) })
+  const kept = withCustom(generated.matchups)
+  const nameOf = new Map(teams.map((t) => [t.rosterId, t.displayName]))
+  // A draw is shown by the first week it can change: a custom week reads the same in every draw.
+  let previewWeek = fromWeek
+  while (kept.applied.includes(previewWeek) && previewWeek < generated.regularSeasonWeeks) previewWeek += 1
+  const draws: ScheduleDraw[] | undefined = input.previewOrders?.map((order) => ({
+    week: previewWeek,
+    pairs: draw(order).matchups
+      .filter((m) => m.week === previewWeek)
+      .map((m) => ({ home: nameOf.get(m.homeRosterId) ?? 'Team', away: m.awayRosterId ? nameOf.get(m.awayRosterId) ?? 'Team' : null })),
+  }))
+
+  const regularMatchups = kept.matchups
     .filter((matchup) => matchup.week >= fromWeek)
     .map((matchup) => ({
       seasonId: season.id,
@@ -472,6 +513,9 @@ export async function generateNflRedraftScheduleForSeason(input: {
       regenerated: replacing,
       actorUserId: input.actorUserId,
     }),
+    customWeeksKept: kept.applied,
+    staleCustomWeeks: kept.stale,
+    ...(draws ? { draws } : {}),
   }
 }
 

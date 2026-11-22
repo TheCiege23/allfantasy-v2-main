@@ -23,7 +23,8 @@ vi.mock('@/lib/ai/openai-route-client', () => ({
   getOpenAIRouteClient: () => ({ chat: { completions: { create: mocks.create } } }),
 }))
 vi.mock('@/lib/api-auth', () => ({
-  requireAuthOrOrigin: () => ({ authenticated: true }),
+  // CSRF origin check only; identity comes from requireLegacySleeperIdentity (mocked below).
+  validateRequestOrigin: () => true,
   forbiddenResponse: () => new Response('forbidden', { status: 403 }),
 }))
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
@@ -116,6 +117,45 @@ describe('legacy chat — a saved league analysis still reaches the model', () =
     expect(RUN_A_TOOL.test(`say: "I don't have OTB package data for that player. Please run OTB Packages analysis first."`)).toBe(true)
     expect(RUN_A_TOOL.test('User has not run Trade Finder yet for this league (or any league).')).toBe(true)
     expect(RUN_A_TOOL.test('Snapshot not found. Run league-analyze / otb-packages first.')).toBe(true)
+  })
+})
+
+describe("legacy chat — the Sleeper handle is the caller's own, never the body's", () => {
+  it('a handle the identity gate refuses never reaches the model', async () => {
+    const { requireLegacySleeperIdentity } = await import('@/lib/legacy/requireLegacySleeperIdentity')
+    vi.mocked(requireLegacySleeperIdentity).mockResolvedValueOnce({
+      ok: false,
+      response: new Response(JSON.stringify({ code: 'SLEEPER_USERNAME_MISMATCH' }), { status: 403 }),
+    } as never)
+    const res = await call(chatPOST, 'http://localhost/api/legacy/chat', {
+      messages: [{ role: 'user', content: 'Summarize my leagues' }],
+      sleeperUsername: 'victim',
+    })
+    expect(res.status).toBe(403)
+    expect(requireLegacySleeperIdentity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ requestedUsername: 'victim' }),
+    )
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.readSnapshotsForUser).not.toHaveBeenCalled()
+  })
+
+  it('snapshots are read for the VERIFIED username, not the one in the body', async () => {
+    const { requireLegacySleeperIdentity } = await import('@/lib/legacy/requireLegacySleeperIdentity')
+    vi.mocked(requireLegacySleeperIdentity).mockResolvedValueOnce({
+      ok: true,
+      identity: { sleeperUsername: 'verifiedowner', actorId: 'u1', source: 'session' },
+    } as never)
+    mocks.readSnapshotsForUser.mockResolvedValue([])
+    const res = await call(chatPOST, 'http://localhost/api/legacy/chat', {
+      messages: [{ role: 'user', content: 'What trades should I make?' }],
+      sleeperUsername: 'VerifiedOwner',
+    })
+    expect(res.status).toBe(200)
+    for (const [arg] of mocks.readSnapshotsForUser.mock.calls) {
+      expect((arg as { sleeperUsername: string }).sleeperUsername).toBe('verifiedowner')
+    }
+    expect(mocks.readSnapshotsForUser).toHaveBeenCalled()
   })
 })
 
