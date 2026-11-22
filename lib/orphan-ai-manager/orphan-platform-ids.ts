@@ -32,3 +32,22 @@ export function isSeatPlaceholderUserId(userId: string | null | undefined): bool
 export function isAiManagerPlatformUserId(platformUserId: string): boolean {
   return typeof platformUserId === 'string' && platformUserId.startsWith(AI_MANAGER_PREFIX)
 }
+
+/** The prefixes `isSeatPlaceholderUserId` recognises, for a query that has to filter in the database. */
+export const SEAT_PLACEHOLDER_PREFIXES: readonly string[] = [ORPHAN_PREFIX, AI_MANAGER_PREFIX, OPEN_SLOT_PREFIX]
+
+/**
+ * A Prisma `OR` matching every seat placeholder in a `userId` column. The Chimmy castaway readers
+ * filtered on `orphan-` alone, so a hosted league's open seats Chimmy runs never reached them.
+ */
+export function seatPlaceholderUserIdOr(): Array<{ userId: { startsWith: string } }> {
+  return SEAT_PLACEHOLDER_PREFIXES.map((prefix) => ({ userId: { startsWith: prefix } }))
+}
+
+/**
+ * The roster id an `orphan-<rosterId>` seat carries in its own name, for rows with no roster id
+ * recorded. Other placeholders (`open-slot-<leagueId>-<n>`) carry none, and get null.
+ */
+export function rosterIdFromOrphanSeat(userId: string): string | null {
+  return userId.startsWith(ORPHAN_PREFIX) ? userId.slice(ORPHAN_PREFIX.length) : null
+}
