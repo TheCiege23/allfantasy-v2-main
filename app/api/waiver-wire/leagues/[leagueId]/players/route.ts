@@ -226,7 +226,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
 
     // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
-    // NFL, NBA, NHL and MLB points leagues; null elsewhere, and the screen then shows no such figure.
+    // Every sport's points leagues; null for a categories league, and the screen then shows no such figure.
     const lastWeek = await loadLastWeekPoints(
       prisma as never,
       { sport: String(league.sport), season: league.season ?? null, settings: league.settings },

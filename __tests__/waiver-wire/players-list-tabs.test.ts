@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { PLAYERS_TABS, leagueScopeRows, rosteredByLabel, tabUsesLeagueScope } from '@/lib/waiver-wire/playersListTabs'
-import { lastCompletedWeek, rosterOwnership, scoreWeekLines } from '@/lib/waiver-wire/lastWeekPoints'
+import { lastCompletedWeek, lastEndedWeek, rosterOwnership, scoreWeekLines } from '@/lib/waiver-wire/lastWeekPoints'
 
 const rows = [
   { id: 'a', name: 'Free Agent', team: 'DAL', projectedPoints: 9, lastWeekPoints: 4, rosteredBy: null },
@@ -95,5 +95,32 @@ describe('scoreWeekLines', () => {
   it('leaves out a player with no line, and a line the scorer cannot price', () => {
     const out = scoreWeekLines(new Map([['a', { points: 1 }]]), new Map(), () => Number.NaN)
     expect(out.size).toBe(0)
+  })
+})
+
+describe('lastEndedWeek', () => {
+  const day = (d: string) => new Date(`${d}T00:00:00.000Z`)
+  // Three gameweeks with a two-week break after the second, the shape of a soccer calendar.
+  const starts = ['2026-08-21', '2026-08-28', '2026-09-18']
+  const windowFor = (week: number) => {
+    const start = starts[week - 1]
+    return start ? { start: day(start), end: new Date(day(start).getTime() + 7 * 86_400_000) } : null
+  }
+
+  it('is the latest gameweek that has ended, during a break between gameweeks', () => {
+    expect(lastEndedWeek(windowFor, day('2026-09-10'))).toBe(2)
+  })
+
+  it('does not count the gameweek in progress', () => {
+    expect(lastEndedWeek(windowFor, day('2026-08-30'))).toBe(1)
+  })
+
+  it('is nothing before the first gameweek has ended', () => {
+    expect(lastEndedWeek(windowFor, day('2026-08-22'))).toBeNull()
+    expect(lastEndedWeek(windowFor, day('2026-08-01'))).toBeNull()
+  })
+
+  it('is the final gameweek once the calendar has run out', () => {
+    expect(lastEndedWeek(windowFor, day('2027-01-01'))).toBe(3)
   })
 })

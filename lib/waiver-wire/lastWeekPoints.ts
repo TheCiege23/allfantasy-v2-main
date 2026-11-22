@@ -3,11 +3,13 @@ import type { PrismaClient } from '@prisma/client'
 import { loadActualWeeklyPoints } from '@/lib/idp-projections/actualWeeklyPoints'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
-import { dailySportWeekForInstant } from '@/lib/season-week/dailySportSeasonStarts'
+import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { ensureDailySportSeasonStart } from '@/lib/season-week/deriveDailySportSeasonStart'
 import { loadDailyWeekStats } from '@/lib/stat-corrections/dailyWeekStats'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
-import { isDailyFormSport } from '@/lib/projections/dailySportForm'
+import { isDailyStatSport } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
+import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { readScoringType } from '@/lib/category-scoring/leagueScoringType'
 
 /**
@@ -32,12 +34,16 @@ export type LastWeekRow = { id: string; position?: string | null; name?: string 
  *
  *  - NFL: `player_game_stats` holds a line per week under the id a roster carries (the Sleeper id).
  *    Scored by `loadActualWeeklyPoints`, the same arithmetic the projection uses.
- *  - NBA, NHL, MLB: a line per GAME, week 0, under an identity id. `loadDailyWeekStats` is the weekly
- *    score sync's own reader (week window, roster-id bridge, preseason filter, weekly sum), and the
- *    league's scorer prices the sum, so the figure is the one the matchup would have credited.
+ *  - NBA, NHL, MLB, college basketball, soccer: a line per GAME, week 0, under an identity id.
+ *    `loadDailyWeekStats` is the weekly score sync's own reader (week window, roster-id bridge,
+ *    preseason filter, weekly sum), and the league's scorer prices the sum, so the figure is the one
+ *    the matchup would have credited. Soccer's weeks are gameweeks with gaps between them, so its
+ *    last week is the latest gameweek that has ended, not "this week minus one".
+ *  - College football: a line per game under a CFBD athlete id, with a real week number. Read the
+ *    way the weekly sync reads it (the CFBD bridge, then `aggregateNcaafWeek`). A roster id the
+ *    bridge cannot place, or places on two athletes, gets no figure.
  *
- * A sport with neither (college, soccer) and a categories league get no figure rather than a wrong
- * one. A player with no line that week (bye, inactive, no game, not yet ingested) is absent from the
+ * A categories league gets no figure rather than a wrong one. A player with no line that week (bye, inactive, no game, not yet ingested) is absent from the
  * map: the screen shows a dash, never 0.0. Any failure returns null and the list is served without it.
  */
 export async function loadLastWeekPoints(
@@ -63,14 +69,44 @@ export async function loadLastWeekPoints(
       for (const [id, outcome] of outcomes) if (outcome.scored) points.set(id, outcome.points)
       return { week, points }
     }
-    if (!isDailyFormSport(sport) || readScoringType(league.settings).mode !== 'points') return null
+    if (readScoringType(league.settings).mode !== 'points') return null
     const scorer = buildLeagueStatScorer({ sport, settings: league.settings })
     if (!scorer) return null
+    const positionById = new Map(rows.map((row) => [row.id, row.position ?? null]))
+    if (isNcaafSport(sport)) {
+      const resolution = await resolveSportWeek('NCAAF', league.season, { now })
+      if (!resolution.ok || resolution.seasonType !== 'regular') return null
+      const week = lastCompletedWeek(resolution.state === 'played' ? resolution.nextSportWeek : resolution.sportWeek)
+      if (week == null) return null
+      // The list's ids are pool ids, whatever platform the league came from.
+      const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, ids, 'pool')
+      if (bridge.cfbdIds.length === 0) return { week, points: new Map() }
+      const gameRows = await prisma.playerGameStat.findMany({
+        where: { playerId: { in: bridge.cfbdIds }, sportType: { in: ['NCAAF', 'ncaaf'] }, season: league.season, weekOrRound: week },
+        select: { playerId: true, normalizedStatMap: true },
+      })
+      const linesByRosterId = new Map<string, unknown[]>()
+      for (const row of gameRows) {
+        const rosterId = bridge.rosterIdFor(row.playerId)
+        if (!rosterId) continue
+        linesByRosterId.set(rosterId, [...(linesByRosterId.get(rosterId) ?? []), row.normalizedStatMap])
+      }
+      const stats = new Map<string, Record<string, number>>()
+      for (const [rosterId, lines] of linesByRosterId) {
+        const aggregate = aggregateNcaafWeek(lines)
+        if (aggregate.gamesCounted > 0) stats.set(rosterId, aggregate.stats)
+      }
+      return { week, points: scoreWeekLines(stats, positionById, scorer) }
+    }
+    if (!isDailyStatSport(sport)) return null
     await ensureDailySportSeasonStart(sport, league.season, { db: prisma as never })
     // The week in progress is the one a manager is setting a lineup for; the one before it is whole.
-    const week = lastCompletedWeek(dailySportWeekForInstant(sport, league.season, now))
+    // Between soccer gameweeks there is no week in progress, so the last one that ended is found directly.
+    const season = league.season
+    const week =
+      lastCompletedWeek(dailySportWeekForInstant(sport, season, now)) ??
+      lastEndedWeek((w) => resolveDailySportWeekWindow(sport, season, w), now)
     if (week == null) return null
-    const positionById = new Map(rows.map((row) => [row.id, row.position ?? null]))
     const stats = await loadDailyWeekStats({
       sport,
       season: league.season,
@@ -81,6 +117,21 @@ export async function loadLastWeekPoints(
   } catch {
     return null
   }
+}
+
+/**
+ * The latest week whose window has fully ended by `now`, or null when none has. For a calendar with
+ * gaps (soccer gameweeks), where "the week in progress, minus one" has no answer during a gap.
+ * Stops at the first week that has not started, or that the calendar does not define.
+ */
+export function lastEndedWeek(windowFor: (week: number) => { start: Date; end: Date } | null, now: Date, maxWeeks = 80): number | null {
+  let last: number | null = null
+  for (let week = 1; week <= maxWeeks; week++) {
+    const window = windowFor(week)
+    if (!window || window.start.getTime() > now.getTime()) break
+    if (window.end.getTime() <= now.getTime()) last = week
+  }
+  return last
 }
 
 /** A week's summed stat lines, priced by the league's scorer and rounded as scores are shown. */
