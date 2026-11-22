@@ -52,6 +52,13 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...r.attempts.filter((a) => a.refused.length > 0).map((a) => `${a.sinceSeason}: not centred — ${a.refused.join(', ')}`),
           ...(r.lineup ? [`lineup factors: ${r.lineup.published} of ${r.lineup.measured} published (since ${r.lineup.sinceSeason})`] : []),
           ...(r.tradesStamped ? [`trades given a league format: ${r.tradesStamped}`] : []),
+          // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
+          ...(r.datedShadow ?? []).map(
+            (d) =>
+              `dated market ${d.concept} (${d.learner === 'dated' ? 'LIVE' : 'shadow'}, since ${d.sinceSeason}): ${d.published} published from ${d.tradesUsed} trades; ` +
+              `${d.bothPublished} also in the current market, median gap ${d.medianGapPercent ?? '—'} pts; ${d.onlyCurrent} only current, ${d.onlyDated} only dated; ` +
+              `not measured: ${Object.entries(d.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`,
+          ),
         ],
       }),
     )
