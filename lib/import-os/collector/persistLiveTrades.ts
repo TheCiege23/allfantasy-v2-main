@@ -29,7 +29,10 @@
  * the same table through the same upsert, keyed on `historyId_transactionId`, so an overlap is a
  * no-op rather than a duplicate.
  */
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historical'
+import { buildTradeContextSnapshot } from '@/lib/trade-market/tradeContextSnapshot'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { isCompletedTrade } from '@/lib/league-import/transactionFinality'
 import type { NormalizedImportResult, NormalizedTransaction } from '@/lib/league-import/types'
@@ -106,6 +109,8 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
 interface PersistLiveTradesResult {
   /** Completed trades present in this sync's payload. */
   tradesSeen: number
+  /** Trade rows given their context snapshot on this pass (first capture only — see `attachTradeContextSnapshots`). */
+  contextsSaved?: number
   /** Rows upserted — one PER SIDE of each trade, which is how LeagueTrade is keyed. */
   rowsWritten: number
   /** Trades skipped because no roster on either side mapped to a known owner. */
@@ -170,5 +175,48 @@ export async function persistLiveTrades(input: {
     normalized.league?.sport || undefined,
   )
 
-  return { tradesSeen: trades.length, rowsWritten, skippedNoOwner }
+  const contextsSaved = await attachTradeContextSnapshots({ platformLeagueId, normalized, trades }).catch(() => 0)
+
+  return { tradesSeen: trades.length, rowsWritten, skippedNoOwner, contextsSaved }
+}
+
+/** `TRADE_CONTEXT_SNAPSHOT=off` stops the capture; the trades themselves are still written. */
+export const TRADE_CONTEXT_SNAPSHOT_ENV = 'TRADE_CONTEXT_SNAPSHOT'
+
+/**
+ * Save each trade's context (`lib/trade-market/tradeContextSnapshot.ts`) beside its `LeagueTrade` rows — the
+ * learner's record of why a manager paid what they paid, which the rosters will not remember next week.
+ *
+ * ⚠ FIRST CAPTURE WINS. The live window shows the same trade on every sync for days; only a row whose snapshot is
+ * still empty is written, so the earliest capture — the one closest to the trade — is the one kept.
+ * ⚠ BEST EFFORT. A snapshot is an accelerator for learning, never a reason a sync fails: every error is swallowed and
+ * counted as not saved. The trade rows were already written above.
+ */
+export async function attachTradeContextSnapshots(
+  input: { platformLeagueId: string; normalized: NormalizedImportResult; trades: NormalizedTransaction[] },
+  deps: { db?: Pick<typeof prisma, 'leagueTrade'>; now?: Date; env?: NodeJS.ProcessEnv } = {},
+): Promise<number> {
+  const env = deps.env ?? process.env
+  if (String(env[TRADE_CONTEXT_SNAPSHOT_ENV] ?? '').trim().toLowerCase() === 'off') return 0
+  const db = deps.db ?? prisma
+  const now = deps.now ?? new Date()
+  let saved = 0
+  for (const trade of input.trades) {
+    const snapshot = buildTradeContextSnapshot(input.normalized, trade, now)
+    if (!snapshot) continue
+    try {
+      const r = await db.leagueTrade.updateMany({
+        where: {
+          transactionId: trade.source_transaction_id,
+          history: { sleeperLeagueId: input.platformLeagueId },
+          contextSnapshot: { equals: Prisma.DbNull },
+        },
+        data: { contextSnapshot: snapshot as unknown as Prisma.InputJsonValue },
+      })
+      saved += r.count
+    } catch {
+      // Not saved this pass; the next sync inside the capture window tries again.
+    }
+  }
+  return saved
 }
