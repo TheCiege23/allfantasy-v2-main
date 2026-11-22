@@ -196,14 +196,40 @@ export type SeasonTickSummary = {
   slateSource: ResolvedSlate['source'] | 'not-live-scored'
 }
 
-function asNumberStats(value: unknown): Record<string, number> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const out: Record<string, number> = {}
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    const n = Number(v)
-    if (Number.isFinite(n)) out[k] = n
+/*
+ * 🛑 "WHAT CHANGED" MUST BE MEASURED PER SEASON, NOT AGAINST THE SHARED STAT TABLE.
+ *
+ * The diff used to read its "previous" stats from `playerWeeklyScore`, which is ONE row per player-week
+ * shared by every league — and written by every season's tick and by the separate Sleeper points sync.
+ * So the first writer to see a stat move "used it up": every other league rostering that player read
+ * the already-updated row, diffed to zero, and returned `no_change` without rescoring. Measured
+ * 2026-11-22 on a 4-team league during the 1pm slate: polled every two minutes, matchups unchanged until
+ * the five-minute reconcile cron rescored them. Whether a league updated live depended on whether some
+ * other league or job happened to see the play first.
+ *
+ * Each season-week now keeps the stat lines IT last scored on. In memory on purpose: the worst a lost
+ * baseline costs (a restart, the other replica) is one extra rescore, which is idempotent — while the
+ * shared-row baseline cost the rescore itself.
+ */
+const seasonStatBaselines = new Map<string, Map<string, Record<string, number>>>()
+/** Bounds memory across a long-running worker: oldest season-weeks are dropped first. */
+const MAX_SEASON_BASELINES = 2000
+
+function rememberSeasonBaseline(key: string, seen: ReadonlyMap<string, Record<string, number>>): void {
+  const next = new Map(seasonStatBaselines.get(key) ?? [])
+  for (const [playerId, stats] of seen) next.set(playerId, stats)
+  seasonStatBaselines.delete(key) // re-insert so Map order is least-recently-updated first
+  seasonStatBaselines.set(key, next)
+  while (seasonStatBaselines.size > MAX_SEASON_BASELINES) {
+    const oldest = seasonStatBaselines.keys().next().value
+    if (oldest === undefined) break
+    seasonStatBaselines.delete(oldest)
   }
-  return out
+}
+
+/** Tests only: start from a cold process. */
+export function resetLiveSeasonBaselinesForTests(): void {
+  seasonStatBaselines.clear()
 }
 
 /** Default broadcaster: publish each affected-entity event to the league SSE stream. */
@@ -263,6 +289,10 @@ export async function runLiveScoringTickForSeason(
   const games = await provider.fetchActiveGames(query)
   const snapshots = gamesToSnapshots(games)
 
+  // This season-week's own baseline (see `seasonStatBaselines`), and what this tick fetched.
+  const baselineKey = `${season.id}:${season.season}:${seasonType}:${week}`
+  let fetchedThisTick: ReadonlyMap<string, Record<string, number>> | null = null
+
   const result = await runLiveScoringTick(snapshots, {
     fetchActiveStats: async () => {
       // Only rostered starters are worth fetching (matchup-affecting players).
@@ -314,15 +344,12 @@ export async function runLiveScoringTickForSeason(
         const key = canonicalTeamDefenseId(id, 'DEF')
         for (const rosterId of (key ? rosterIdsByDefenceKey.get(key) : undefined) ?? [id]) merged.set(rosterId, st)
       }
+      fetchedThisTick = merged
       return merged
     },
-    loadPreviousStats: async () => {
-      const rows = await prisma.playerWeeklyScore.findMany({
-        where: { week, season: season.season, sport: season.sport },
-        select: { playerId: true, stats: true },
-      })
-      return new Map(rows.map((r: { playerId: string; stats: unknown }) => [r.playerId, asNumberStats(r.stats)]))
-    },
+    // What THIS season last scored on — never the shared table (see `seasonStatBaselines`). A season-week
+    // this process has not seen yet diffs against nothing, so its first tick rescores it once.
+    loadPreviousStats: async () => seasonStatBaselines.get(baselineKey) ?? new Map(),
     loadTopology: async () => {
       const rosters = await prisma.redraftRoster.findMany({
         where: { seasonId: season.id },
@@ -388,6 +415,10 @@ export async function runLiveScoringTickForSeason(
    * actually polled. "0 changed players" during preseason is correct on a quiet
    * night and a bug if the week was wrong — and without this they look identical.
    */
+  // Only after the tick finished: a rescore that threw leaves the baseline where it was, so the same
+  // change is seen — and retried — on the next tick rather than silently counted as applied.
+  if (fetchedThisTick) rememberSeasonBaseline(baselineKey, fetchedThisTick)
+
   return { ...result, slate: { ...slate, seasonType, weekUsed: week } }
 }
 

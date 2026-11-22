@@ -49,6 +49,8 @@ import { RedraftScreen, RedraftWaiverHeader, useRedraftScreen } from './RedraftS
  */
 type Settings = {
   sport?: string | null
+  /** Write Authority (lib/league/write-authority.ts): `shadow` on an imported league, where claims stay inside AllFantasy. */
+  writeAuthority?: { shadow?: boolean; sourceLabel?: string | null } | null
   waiverType?: string
   processingDayOfWeek?: number | null
   faabBudget?: number | null
@@ -451,6 +453,15 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
       {phaseReason ? (
         <p className="nls-muted" role="status" data-testid="native-waivers-phase-reason">{phaseReason}</p>
+      ) : null}
+      {/*
+        An imported league (2026-11-22: it opens this screen too). A claim here never reaches the host, so say so before
+        anyone files one, in the classic waiver page's own words (WaiverWirePage `shadow-league-waiver-notice`).
+      */}
+      {settings?.writeAuthority?.shadow === true ? (
+        <p className="nls-muted" data-testid="shadow-league-waiver-notice">
+          Claims here are recommendations held inside AllFantasy — nothing is submitted to {settings.writeAuthority.sourceLabel || 'your host platform'}. Enter the move there before your league&apos;s waiver deadline for it to count.
+        </p>
       ) : null}
       {listHasProspects ? (
         <p className="nls-muted" data-testid="native-waivers-prospect-sort-note">{tr('waiverWire.prospects.sortNote')}</p>

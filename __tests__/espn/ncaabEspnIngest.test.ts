@@ -11,7 +11,7 @@ const db = vi.hoisted(() => ({
   playerProviderIdentity: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   sportsTeam: { findMany: vi.fn(), updateMany: vi.fn() },
   sportsPlayer: { findMany: vi.fn(), update: vi.fn() },
-  playerIdentityMap: { updateMany: vi.fn() },
+  playerIdentityMap: { updateMany: vi.fn(), findFirst: vi.fn() },
   sportsDataCache: { upsert: vi.fn() },
 }))
 const served = vi.hoisted(() => ({ isServedImage: vi.fn() }))
@@ -37,6 +37,7 @@ beforeEach(() => {
   db.sportsTeam.updateMany.mockResolvedValue({ count: 1 })
   db.sportsPlayer.update.mockResolvedValue({})
   db.playerIdentityMap.updateMany.mockResolvedValue({ count: 1 })
+  db.playerIdentityMap.findFirst.mockResolvedValue(null)
   db.sportsDataCache.upsert.mockResolvedValue({})
   served.isServedImage.mockReset().mockResolvedValue(true)
   canonical.writeCanonicalHeadshot.mockReset().mockResolvedValue(undefined)
@@ -187,10 +188,35 @@ describe('syncEspnNcaabRosters', () => {
       .mockResolvedValueOnce([{ id: 'ppi-x', providerPlayerId: '5241333', playerId: 'ncaab-someone-else' }])
     const r = await run(vi.fn(async () => roster([dillon])))
     expect(r.identityConflicts).toBe(1)
+    expect(db.playerIdentityMap.updateMany).not.toHaveBeenCalled()
     expect(db.playerProviderIdentity.update).not.toHaveBeenCalled()
     expect(db.playerProviderIdentity.create).not.toHaveBeenCalled()
     expect(db.sportsPlayer.update).not.toHaveBeenCalled()
     expect(canonical.writeCanonicalHeadshot).not.toHaveBeenCalled()
+  })
+
+  it('records the ESPN id even when the RI row has no canonical identity — the gap that held coverage at ~36%', async () => {
+    seedSchool({ imageUrl: null })
+    db.playerProviderIdentity.findMany.mockReset()
+      .mockResolvedValueOnce([]) // the RI row has NO canonical identity
+      .mockResolvedValueOnce([]) // no existing ESPN identity
+    const r = await run(vi.fn(async () => roster([dillon])))
+    expect(db.playerIdentityMap.updateMany).toHaveBeenCalledWith({
+      where: { sport: 'NCAAB', rollingInsightsId: '13049', espnId: null },
+      data: { espnId: '5241333' },
+    })
+    expect(r).toMatchObject({ espnIdsLinked: 1, matched: 0 })
+    // Without a canonical player there is still no provider identity and no canonical photo.
+    expect(db.playerProviderIdentity.create).not.toHaveBeenCalled()
+    expect(canonical.writeCanonicalHeadshot).not.toHaveBeenCalled()
+  })
+
+  it('never gives one ESPN id to a second identity row', async () => {
+    seedSchool({ imageUrl: null })
+    db.playerIdentityMap.findFirst.mockResolvedValue({ rollingInsightsId: '99999' })
+    const r = await run(vi.fn(async () => roster([dillon])))
+    expect(db.playerIdentityMap.updateMany).not.toHaveBeenCalled()
+    expect(r).toMatchObject({ espnIdHeldElsewhere: 1, espnIdsLinked: 0 })
   })
 
   it('does not link a name under a different jersey', async () => {

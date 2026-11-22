@@ -3950,6 +3950,8 @@ export const translationsEsParity: Record<string, string> = {
   "lsHub.po.medianGameHelp": "Cada semana de temporada regular cada equipo también juega contra la puntuación mediana de la liga: por encima suma una victoria extra, por debajo una derrota extra. Solo se puede cambiar hasta que la primera semana de la temporada tenga resultados finales.",
   "lsHub.po.medianPlayoffs": "Mediana de la liga en playoffs",
   "lsHub.po.medianPlayoffsHelp": "Desactivada: las semanas de playoffs son solo ganar o quedar fuera. Activada: los resultados contra la mediana siguen contando en playoffs, solo en el récord de temporada; el bracket se decide solo con los puntos de playoffs.",
+  "lsHub.po.preLeague": "Contar las semanas antes del draft",
+  "lsHub.po.preLeagueHelp": "Las semanas 1–{{weeks}} se jugaron antes del draft de esta liga. Cada equipo sumó puntos en ellas con los jugadores que eligió. Desactivada: esos puntajes son solo para ver. Activada: cuentan en el récord de cada equipo, incluida la mediana de la liga.",
   "lsHub.po.thirdPlace": "Partido por el tercer lugar",
   "lsHub.po.thirdPlaceHelp": "Los dos perdedores de semifinales juegan por el tercer lugar durante la(s) semana(s) del campeonato. Se define antes de que empiecen los playoffs.",
   "lsHub.po.playsFor": "El torneo de consolación se juega por",
