@@ -22,6 +22,7 @@ import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { applyDailySportOutlook, loadDailySportOutlook } from "@/lib/projections/dailySportOutlook"
 import { identityNameKey } from "@/lib/redraft/rosterGameLogIdBridge"
 import { addableNflPoolRows, rosterIdForPoolRow } from "@/lib/waiver-wire/nflRosterIdForPoolRow"
+import { loadLastWeekPoints, rosterOwnership } from "@/lib/waiver-wire/lastWeekPoints"
 import {
   linkedRosteredProspectIds,
   loadNhlProspectFreeAgents,
@@ -46,6 +47,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const teamId = searchParams.get("teamId") ?? undefined
   // NHL dynasty: `prospectsOnly=1&q=<name>` searches the Fantrax prospects beyond the listed cap.
   const prospectsOnly = searchParams.get("prospectsOnly") === "1"
+  // `scope=league` lists rostered players too, each marked with the team that holds him (the
+  // Players screen's Leaders and Trade tabs). Anything else is free agents only, as before.
+  const leagueScope = searchParams.get("scope") === "league"
   const prospectQuery = searchParams.get("q")?.trim() ?? ""
 
   const [league, rosterAsMember] = await Promise.all([
@@ -74,12 +78,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   try {
     const allRosters = await (prisma as any).roster.findMany({
       where: { leagueId },
-      select: { playerData: true },
+      select: { id: true, platformUserId: true, playerData: true },
     })
 
     const rosteredIds = new Set<string>()
+    const rosterRows: Array<{ id: string; platformUserId: string | null; playerIds: string[] }> = []
     for (const roster of allRosters) {
-      for (const id of getRosterPlayerIds(roster.playerData)) {
+      const playerIds = getRosterPlayerIds(roster.playerData)
+      rosterRows.push({ id: String(roster.id ?? ""), platformUserId: roster.platformUserId ?? null, playerIds })
+      for (const id of playerIds) {
         rosteredIds.add(id)
       }
     }
@@ -111,6 +118,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
 
     // NFL: a row with no roster id cannot be scored once added, so it is not offered (addableNflPoolRows).
     const available = addableNflPoolRows(String(league.sport), pool as any[]).filter((p: any) => {
+      if (leagueScope) return true
       const playerId = p.player_id == null ? null : String(p.player_id)
       const externalSourceId = p.external_source_id == null ? null : String(p.external_source_id)
       return !(
@@ -139,6 +147,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       })
       .catch(() => new Map<string, DroppedPlayerHold>())
 
+    // League scope only: who holds each rostered player. A failed team read names nobody.
+    const ownership = leagueScope
+      ? rosterOwnership(
+          rosterRows,
+          await (prisma as any).leagueTeam
+            .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
+            .catch(() => []),
+          rosterAsMember?.id ?? null,
+        )
+      : null
+
     const players = available.map((p: any) => {
       const extra = p.player_id == null ? undefined : enrichment.get(String(p.player_id))
       const row = extra ? { ...p, metadata: { ...(p.metadata ?? {}), ...extra.metadata } } : p
@@ -155,7 +174,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       const row2 = hold ? { ...dto, onWaiversUntil: hold.until.toISOString() } : dto
       // The id a drafted player carries on a roster, in every sport (lib/waiver-wire/nflRosterIdForPoolRow.ts).
       const rosterId = rosterIdForPoolRow(String(league.sport), p)
-      return rosterId ? { ...row2, id: rosterId } : row2
+      const row3 = rosterId ? { ...row2, id: rosterId } : row2
+      if (!ownership) return row3
+      const rosteredBy =
+        ownership.get(row3.id) ??
+        (p.player_id != null ? ownership.get(String(p.player_id)) : undefined) ??
+        (p.external_source_id != null ? ownership.get(String(p.external_source_id)) : undefined) ??
+        null
+      return { ...row3, rosteredBy }
     })
 
     // NBA / NHL / MLB: AF projection for this period + position rank, under this league's scoring.
@@ -199,6 +225,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     }))
     priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
 
+    // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
+    // Every sport's points leagues; null for a categories league, and the screen then shows no such figure.
+    const lastWeek = await loadLastWeekPoints(
+      prisma as never,
+      { sport: String(league.sport), season: league.season ?? null, settings: league.settings },
+      priced.map((row: any) => ({ id: String(row.id), position: row.position ?? null, name: row.name ?? null })),
+    )
+    if (lastWeek) priced = priced.map((row: any) => ({ ...row, lastWeekPoints: lastWeek.points.get(String(row.id)) ?? null }))
+    const lastWeekNumber = lastWeek?.week ?? null
+
     // Prospects go AFTER every pool player: no projection, ADP or rank exists for them. A failed
     // universe read leaves the list as it was. Position / team filters apply to them as to the pool.
     if (offerProspects) {
@@ -224,6 +260,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         return NextResponse.json({
           players: [...priced, ...rows],
           rosteredCount: rosteredIds.size,
+          lastWeek: lastWeekNumber,
           nhlProspects: { total: loaded.total, listed: loaded.prospects.length },
         })
       }
@@ -232,7 +269,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     const rows = isFantraxNbaCampusLeague(String(league.sport), league)
       ? priced.map((row, i) => ({ ...row, afProjectionPlayerId: canonical[i] }))
       : priced
-    return NextResponse.json({ players: rows, rosteredCount: rosteredIds.size })
+    return NextResponse.json({ players: rows, rosteredCount: rosteredIds.size, lastWeek: lastWeekNumber })
   } catch (error) {
     console.error("Failed to fetch waiver wire players:", error)
     return NextResponse.json({ error: "Failed to fetch players" }, { status: 500 })

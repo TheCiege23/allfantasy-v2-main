@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Star, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -31,6 +31,8 @@ import {
 import type { WaiverPhasePolicy } from '@/lib/waiver-wire/season-phase-policy'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { positionIsRosterable, rosterablePositions } from '@/lib/waiver-wire/rosterablePositions'
+import { PLAYERS_TABS, leagueScopeRows, rosteredByLabel, tabUsesLeagueScope, type PlayersTab } from '@/lib/waiver-wire/playersListTabs'
+import { ProposeTradeModal } from '@/app/league/[leagueId]/tabs/ProposeTradeModal'
 import { invalidateIntelligence } from '@/lib/dashboard/intelligence-events'
 import { fmt1, signed, waiverTrendByPlayer } from '@/lib/league/native/nativeScreenModels'
 import { Card, InjuryFlag, PlayerNameButton, PosPill, ScreenHead, Segmented, useNativePlayerCard } from './NativeScreenParts'
@@ -57,7 +59,9 @@ type Settings = {
 }
 type Claim = { id: string; addPlayerId: string; dropPlayerId: string | null; faabBid: number | null; priorityOrder: number; status: string }
 type Tx = { id: string; addPlayerId: string; dropPlayerId: string | null; faabSpent: number | null; processedAt: string; roster?: { id: string } | null }
-type Tab = 'available' | 'watchlist' | 'trending' | 'claims'
+type Tab = PlayersTab
+/** What the players route adds to a row: last week's points, and (league scope) who holds him. */
+type WireRow = UnifiedPlayerWireDto & { lastWeekPoints?: number | null; rosteredBy?: { mine: boolean; team: string | null; rosterId?: string | null } | null }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SPORT_POSITIONS: Record<string, string[]> = {
@@ -111,6 +115,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const [players, setPlayers] = useState<UnifiedPlayerWireDto[]>([])
   // NHL dynasty only: Fantrax prospects that exist vs. those the list carries (null elsewhere).
   const [prospectMeta, setProspectMeta] = useState<NhlProspectListMeta | null>(null)
+  // Rostered players too, for Search / Leaders / Trade. Read the first time one of those tabs opens.
+  const [leaguePlayers, setLeaguePlayers] = useState<WireRow[] | null>(null)
+  const [leagueLoading, setLeagueLoading] = useState(false)
+  // The last completed week the server scored (NFL), or null when the list carries no such figure.
+  const [lastWeek, setLastWeek] = useState<number | null>(null)
+  const searchRef = useRef<HTMLInputElement | null>(null)
+  // The trade builder, opened on the rostered player whose Trade button was tapped.
+  const [tradeFor, setTradeFor] = useState<{ playerId: string; rosterId: string | null } | null>(null)
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<Tx[]>([])
   const [roster, setRoster] = useState<{ id: string | null; ids: string[]; names: Array<{ id: string; name: string | null }>; faab: number | null; priority: number | null; capacity: number | null; starterPositions: string[] | null }>({ id: null, ids: [], names: [], faab: null, priority: null, capacity: null, starterPositions: null })
@@ -180,6 +192,8 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       setSettings(s.ok ? sj : null)
       setPlayers(p.ok && Array.isArray(pj?.players) ? pj.players : [])
       setProspectMeta(p.ok ? parseNhlProspectListMeta(pj?.nhlProspects) : null)
+      setLastWeek(p.ok && typeof pj?.lastWeek === 'number' ? pj.lastWeek : null)
+      setLeaguePlayers(null)
       if (!p.ok) setError('We could not load the player pool.')
       const nr = stj?.state?.nextRunAt
       setNextRunAt(typeof nr === 'string' ? nr : null)
@@ -195,6 +209,30 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Search, Leaders and Trade list rostered players too: one extra read, the first time one opens.
+  useEffect(() => {
+    if (!tabUsesLeagueScope(tab) || leaguePlayers || leagueLoading) return
+    let cancelled = false
+    setLeagueLoading(true)
+    fetch(`/api/waiver-wire/leagues/${id}/players?limit=200&scope=league`, { cache: 'no-store' })
+      .then((x) => (x.ok ? x.json() : null))
+      .catch(() => null)
+      .then((j) => {
+        if (cancelled) return
+        // A failed read falls back to the free agents already on screen, never an empty tab.
+        setLeaguePlayers(Array.isArray(j?.players) ? (j.players as WireRow[]) : (players as WireRow[]))
+        setLeagueLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, id, leaguePlayers])
+
+  useEffect(() => {
+    if (tab === 'search') searchRef.current?.focus()
+  }, [tab])
 
   const faabMode = String(settings?.waiverType ?? '').toLowerCase() === 'faab'
   // Redraft (lib/league-media/redraftIdentity.ts): claim type + FAAB budget header and claim states.
@@ -230,6 +268,10 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   )
 
   const list = useMemo(() => {
+    if (tabUsesLeagueScope(tab)) {
+      const source = (leaguePlayers ?? (allPlayers as WireRow[])).filter((p) => pos === 'ALL' || waiverPositionMatches(p.position, pos))
+      return leagueScopeRows(tab, source, q, lastWeek != null).slice(0, 120)
+    }
     let rows = allPlayers
     if (tab === 'watchlist') rows = rows.filter((p) => watch.includes(p.id))
     if (tab === 'claims') rows = rows.filter((p) => claimedIds.has(p.id))
@@ -247,7 +289,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
     // Prospects have no projection: after every real player (lib/waiver-wire/prospectFreeAgentDisplay.ts).
     return (tab === 'trending' ? rows : placeProspectsAfterPlayers(rows, 'projection')).slice(0, 120)
-  }, [allPlayers, tab, watch, claimedIds, pos, q, trend, rosterable])
+  }, [allPlayers, leaguePlayers, lastWeek, tab, watch, claimedIds, pos, q, trend, rosterable])
   const listHasProspects = list.some((p) => isNhlProspectWireRow(p))
   // The waiver wire's own display adapter: canonical photo / crest, and the season stat line.
   const shown = useMemo(() => list.map((p) => ({ p, a: adaptWaiverWirePlayer(p) })), [list])
@@ -401,9 +443,9 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
       ) : null}
 
       <div className="nls-toolbar">
-        <Segmented label="Player list" value={tab} onChange={setTab} options={[{ id: 'available', label: 'Available' }, { id: 'watchlist', label: 'Watchlist' }, { id: 'trending', label: 'Trending' }, { id: 'claims', label: 'My claims' }]} />
+        <Segmented label="Player list" value={tab} onChange={setTab} options={[...PLAYERS_TABS]} />
         <Segmented label="Position" value={pos} onChange={setPos} options={[{ id: 'ALL', label: 'ALL' }, ...positions.map((p) => ({ id: p, label: p }))]} />
-        <input className="nls-search" type="search" placeholder="Search players" aria-label="Search players" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input ref={searchRef} className="nls-search" type="search" placeholder="Search players" aria-label="Search players" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
       {error ? <p className="nls-error" role="alert">{error}</p> : null}
@@ -421,7 +463,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
 
       <div className="nls-cols">
         <section className="nls-card nls-card-flush" aria-label="Players" aria-busy={loading}>
-          {loading && !players.length ? (
+          {(loading && !players.length) || (tabUsesLeagueScope(tab) && leagueLoading && !leaguePlayers) ? (
             <p className="nls-empty" role="status">Loading players…</p>
           ) : list.length ? (
             <table className="nls-table nls-table-players">
@@ -454,6 +496,10 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                     a.displayKickoffTime,
                   )
                   const strip = a.seasonStatsSummary.map(splitStatLine)
+                  const row = p as WireRow
+                  const heldBy = rosteredByLabel(row.rosteredBy)
+                  // Last week's points lead the strip where the league has them; a dash means he had no game.
+                  const lastWeekStat = lastWeek != null ? { label: `Wk ${lastWeek} pts`, value: row.lastWeekPoints == null ? '—' : fmt1(row.lastWeekPoints) } : null
                   return (
                     <tr key={p.id}>
                       <td data-align="left">
@@ -480,6 +526,7 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                               ) : null}
                             </small>
                             {gameLine ? <small data-game data-testid={`native-waivers-game-${p.id}`}>{gameLine}</small> : null}
+                            {heldBy ? <small data-held data-testid={`native-waivers-held-${p.id}`}>{heldBy}</small> : null}
                             {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
                         </div>
@@ -489,8 +536,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                         </div>
                         {/* The season's figures, each under its own label. On a phone the strip takes the row's full
                             width under the player; the rostered share joins it there, where its column is hidden. */}
-                        {strip.length || pct != null ? (
+                        {strip.length || pct != null || lastWeekStat ? (
                           <span className="nls-pstats-wide" data-stats data-testid={`native-waivers-stats-${p.id}`}>
+                            {lastWeekStat ? (
+                              <span className="nls-pstat" data-last-week data-testid={`native-waivers-lastweek-${p.id}`}>
+                                <em>{lastWeekStat.label}</em>
+                                <b>{lastWeekStat.value}</b>
+                              </span>
+                            ) : null}
                             {strip.map((stat, i) => (
                               <span key={`${stat.label}-${i}`} className="nls-pstat">
                                 {stat.label ? <em>{stat.label}</em> : null}
@@ -510,10 +563,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                       <td data-proj>{fmt1(p.projectedPoints)}</td>
                       <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
-                        {rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
+                        {heldBy ? <span className="nls-chip">{heldBy}</span> : rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
                       <td data-action>
-                        {claimed ? (
+                        {row.rosteredBy?.mine ? (
+                          <span className="nls-chip">Yours</span>
+                        ) : row.rosteredBy ? (
+                          <button type="button" className="nls-btn" data-size="sm" aria-label={`Trade for ${p.name}`} onClick={() => setTradeFor({ playerId: p.id, rosterId: row.rosteredBy?.rosterId ?? null })} data-testid={`native-waivers-trade-${p.id}`}>Trade</button>
+                        ) : claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
                           <button type="button" className="nls-btn" data-size="sm" data-variant="primary" disabled={busy === p.id || movesClosed} title={movesClosed ? phaseReason ?? undefined : undefined} onClick={() => onAdd(p)}>
@@ -527,9 +584,27 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
               </tbody>
             </table>
           ) : (
-            <p className="nls-empty">{tab === 'watchlist' ? 'Star a player to keep him on your watchlist.' : tab === 'claims' ? 'You have no pending claims.' : 'No available players match these filters.'}</p>
+            <p className="nls-empty">{tab === 'watchlist' ? 'Star a player to keep him on your watchlist.' : tab === 'claims' ? 'You have no pending claims.' : tab === 'search' ? (q.trim() ? 'No player in this league matches that name.' : 'Type a name to search every player in this league.') : tab === 'trade' ? 'No players on other teams match these filters.' : 'No available players match these filters.'}</p>
           )}
         </section>
+
+        {/* Mounted only while open: the builder reads the session and loads every roster. */}
+        {tradeFor ? (
+        <ProposeTradeModal
+          open
+          onClose={() => setTradeFor(null)}
+          leagueId={league.id}
+          teams={[]}
+          platform={league.platform}
+          sport={league.sport}
+          initialPartnerRosterId={tradeFor?.rosterId ?? null}
+          initialGetPlayerId={tradeFor?.playerId ?? null}
+          onSubmitted={() => {
+            setTradeFor(null)
+            toast.success('Trade offer sent')
+          }}
+        />
+        ) : null}
 
         <aside className="nls-aside" aria-label="Your claims">
           <Card label="Your claims" right={faabMode && totalBid > 0 ? <span className="nls-mono">${totalBid} bid</span> : undefined}>
