@@ -492,6 +492,16 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     console.warn('[ledgerGrading] autopick grading failed', err instanceof Error ? err.message : err)
     return {} as Record<string, DraftTipLedger>
   })
+  /*
+   * Every other sport and league type's trade letters (`tradeOutcomesAll.ts`) — dynasty on the market, the rest on their
+   * own league's scoring. Contained like the draft parts: a failure costs only these buckets.
+   */
+  const tradeOutcomes = await import('./tradeOutcomesAll')
+    .then(({ gradeAllTradeOutcomes }) => gradeAllTradeOutcomes({ now, db, nflCal: cal, nflSeason: season }))
+    .catch((err: unknown) => {
+      console.warn('[ledgerGrading] trade outcome grading failed', err instanceof Error ? err.message : err)
+      return {}
+    })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
   return foldLedger({
     season,
@@ -506,6 +516,7 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     commissionerTradeLetters: commissionerGraded.letters,
     draftTips,
     autopicks,
+    tradeOutcomes,
   })
 }
 
