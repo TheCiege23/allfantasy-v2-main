@@ -56,12 +56,14 @@ export async function GET(req: NextRequest) {
     if (leagueId) {
       const access = await authorizeLeagueRead(leagueId, session.user.id)
       if (!access.authorized) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+      const playerPool = sport === 'NBA' && sp.get('view') === 'weekly-player-pool'
       const result = await loadLeaguePlayerMetrics({
         leagueId,
         week: intParam(sp.get('week')),
         position: sp.get('position'),
         playerName: sp.get('player'),
-        limit: intParam(sp.get('limit')) ?? 100,
+        limit: intParam(sp.get('limit')) ?? (playerPool ? undefined : 100),
+        ...(playerPool ? { includePlayerPool: true, includeTradeValues: false } : {}),
       })
       if (!result) return NextResponse.json({ error: 'League metrics unavailable' }, { status: 404 })
       if (sp.has('sport') && result.sport !== sport) {
