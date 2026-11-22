@@ -4,7 +4,7 @@ import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-a
 import { buildFantraxLists, sumStarterPoints } from './buildSides'
 import { loadCollegePoints } from './collegePoints'
 import { combinedTotal } from './format'
-import { readTeamMap, suggestTeamMatches, type FantraxTeam, type SleeperTeam } from './teamMatch'
+import { confidentTeamMatches, effectiveTeamMap, readTeamMap, suggestTeamMatches, type FantraxTeam, type SleeperTeam } from './teamMatch'
 
 /**
  * Combined scoring, head to head: your NFL + college points against your Sleeper opponent's NFL +
@@ -82,7 +82,9 @@ export async function loadHeadToHead(args: {
 
   const base: HeadToHead = { me: args.myCombined, opponent: null, missing: null }
   if (!args.opponentRosterId) return { headToHead: { ...base, missing: 'No head-to-head opponent this week.' }, editor }
-  const oppTeamId = saved[args.opponentRosterId]
+  // What is scored: the commissioner's saved choices, then every unambiguous automatic match.
+  const teamMap = effectiveTeamMap(saved, confidentTeamMatches(args.sleeperTeams, fantraxTeams, known))
+  const oppTeamId = teamMap[args.opponentRosterId]
   if (!oppTeamId) {
     return { headToHead: { ...base, missing: 'Match each pro team to its college team to compare combined scores.' }, editor }
   }

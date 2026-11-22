@@ -51,13 +51,32 @@ describe('loadHeadToHead', () => {
     expect(r.editor).toBeNull()
   })
 
-  it('with no saved map, says what to do and never scores from a suggestion', async () => {
+  it('with no saved map, scores an unambiguous match on its own — nobody has to set it up', async () => {
     const r = await loadHeadToHead({ ...base, proSettings: {}, wantEditor: true })
-    expect(r.headToHead.opponent).toBeNull()
-    expect(r.headToHead.missing).toMatch(/Match each pro team/)
-    // The suggestion is there for the commissioner to confirm, including your own pair from the link.
+    // Connor0488 is Connor0488 on both platforms and nothing else competes: applied automatically.
+    expect(r.headToHead).toEqual({ me: 205.36, opponent: { name: 'Connor0488', total: 131.2 }, missing: null })
+    // The commissioner still sees it as a suggestion they can change; nothing was saved for them.
     expect(r.editor?.suggested).toEqual({ '8': 'ciege', '5': 'conn' })
     expect(r.editor?.saved).toEqual({})
+  })
+
+  it('with no saved map and an ambiguous opponent, says what to do and never scores from a guess', async () => {
+    const r = await loadHeadToHead({
+      ...base,
+      proSettings: {},
+      wantEditor: false,
+      // Two Sleeper teams fit "Connor0488" equally well, so neither is applied.
+      sleeperTeams: [...base.sleeperTeams, { rosterId: '6', teamName: null, ownerName: 'Connor0488' }],
+    })
+    expect(r.headToHead.opponent).toBeNull()
+    expect(r.headToHead.missing).toMatch(/Match each pro team/)
+  })
+
+  it("a commissioner's saved choice wins over the automatic match", async () => {
+    const r = await loadHeadToHead({ ...base, proSettings: { collegeProTeamMap: { '5': 'ciege' } }, wantEditor: false })
+    // Saved says the opponent's college team is Ciege82's, not Connor0488's.
+    expect(r.headToHead.opponent?.name).toBe('Connor0488')
+    expect(r.headToHead.opponent?.total).not.toBe(131.2)
   })
 
   it('a bye week has no opponent to compare', async () => {

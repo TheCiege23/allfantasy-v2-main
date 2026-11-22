@@ -10,7 +10,8 @@ import { currentFantraxPeriod, loadDailyPoints } from './dailyPoints'
 import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { findLinkCandidates, type LinkCandidate } from './linkHalves'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
-import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
+import type { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
+import { readLeaguePair, resolveCollegeProPair } from './leaguePair'
 import {
   buildFantraxLists,
   buildSleeperLists,
@@ -155,10 +156,22 @@ export async function loadCollegeProRoster(
   now = new Date(),
   opts: { viewedFrom?: 'pro' | 'college' } = {},
 ): Promise<CollegeProRosterPayload> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true },
-  })
+  const select = { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true } as const
+  /*
+   * A manager of EITHER half reaches the page: one league is one league. Someone who claimed only
+   * their Cream Bowl team still opens Peach Bowl's combined page through the league-wide pair.
+   */
+  const league =
+    (await prisma.league.findFirst({ where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] }, select })) ??
+    (await (async () => {
+      const row = await prisma.league.findUnique({ where: { id: leagueId }, select })
+      const pair = row ? readLeaguePair(row.settings) : null
+      if (!row || !pair) return null
+      const member = await prisma.league.count({
+        where: { id: pair.otherLeagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+      })
+      return member > 0 ? row : null
+    })())
   if (!league || !league.platformLeagueId) return { applies: false }
   const unlinked = async (): Promise<CollegeProRosterPayload> => {
     const link = await findLinkCandidates(leagueId, userId).catch(() => null)
@@ -166,8 +179,9 @@ export async function loadCollegeProRoster(
   }
 
   if (league.platform === 'fantrax') {
-    if (!collegeProFormatOf(league)) return { applies: false }
-    const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+    // Paired is enough: a league the commissioner linked is one league whatever its import typed it as.
+    if (!collegeProFormatOf(league) && !readLeaguePair(league.settings)) return { applies: false }
+    const paired = await resolveCollegeProPair(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
     if (!paired || paired.sides.length < 2) return unlinked()
     /*
      * OPENED FROM THE COLLEGE SIDE. Cream Bowl is the Fantrax half of the Peach Bowl franchise; the
@@ -185,7 +199,7 @@ export async function loadCollegeProRoster(
   }
   if (league.platform !== 'sleeper') return { applies: false }
 
-  const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+  const paired = await resolveCollegeProPair(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
   const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
   const typed = collegeProFormatOf(league)
   if (!typed && !collegeHalf) return { applies: false }
