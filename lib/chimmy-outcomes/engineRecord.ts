@@ -95,6 +95,48 @@ export function letterRecordApplies(input: { sport: string | null | undefined; l
   return String(input.sport ?? '').trim().toUpperCase() === 'NFL' && String(input.leagueType ?? '').toLowerCase().includes('redraft')
 }
 
+/**
+ * The record for a grade the NFL redraft ledger does NOT cover — another sport, or a dynasty / keeper / devy / C2C /
+ * salary-cap / best-ball / guillotine / survivor / zombie league (`tradeOutcomesAll.ts`, 2026-11-22). Its bucket is the
+ * sport plus how that league's trades are graded: `value` (NFL dynasty market) or `points` (league scoring). Null when
+ * `letterRecordApplies` (the NFL redraft record is the one to show) or when the letter has too few graded deals.
+ */
+export type TradeOutcomeRecord = {
+  letter: TradeLetter
+  sport: string
+  kind: 'points' | 'value'
+  n: number
+  /** Points: league-scored points a week, graded side minus what it gave. Value: share of the deal's value, in points. */
+  net: number
+  aheadPct: number | null
+  verdict: LetterVerdict
+  confidence: TradeLetterConfidence | null
+}
+
+export function tradeOutcomeRecordFor(
+  view: LedgerRecordView | null | undefined,
+  input: { sport: string | null | undefined; leagueType: string | null | undefined; letter: string | null | undefined },
+): TradeOutcomeRecord | null {
+  const sport = String(input.sport ?? '').trim().toUpperCase()
+  if (!sport || letterRecordApplies(input)) return null
+  const type = String(input.leagueType ?? '').toLowerCase()
+  const kind: 'points' | 'value' = sport === 'NFL' && /dynasty|keeper|devy|c2c|campus|salary_cap|salary-cap|contract/.test(type) ? 'value' : 'points'
+  const bucket = view?.tradeOutcomes?.[`${sport}:${kind}`]
+  const l = typeof input.letter === 'string' ? input.letter.trim().charAt(0).toUpperCase() : ''
+  const row = bucket?.letters.find((t) => t.letter === l)
+  if (!bucket || !row) return null
+  return {
+    letter: row.letter,
+    sport,
+    kind,
+    n: row.n,
+    net: row.net,
+    aheadPct: row.aheadPct,
+    verdict: letterVerdict(row.letter, row.net),
+    confidence: tradeLetterConfidence(row.letter, bucket.confidence),
+  }
+}
+
 /** The waiver panel's #1-pickup record across everyone, only once it carries a rate. */
 export function pickupRecord(view: LedgerRecordView | null | undefined): { ratePct: number; graded: number } | null {
   const e = view?.pickups?.everyone
