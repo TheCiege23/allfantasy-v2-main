@@ -78,6 +78,23 @@ export function isInactiveWirePlayer(p: { injuryStatus?: string | null }): boole
   return /^(ina|inactive|retired|ret|non[- ]?football injury list|suspended)$/i.test(String(p.injuryStatus ?? '').trim())
 }
 
+/** "RUSH YDS 766" as a labelled figure. A line with no space is shown as a figure with no label. */
+export function splitStatLine(line: string): { label: string; value: string } {
+  const text = line.trim()
+  const cut = text.lastIndexOf(' ')
+  return cut > 0 ? { label: text.slice(0, cut), value: text.slice(cut + 1) } : { label: '', value: text }
+}
+
+/** "@ DAL · Thu 4:30 PM", "Bye week", or null when the week's game is not on file. */
+export function wireGameLine(opponent: string | null, homeAway: string | null | undefined, kickoffIso: string | null): string | null {
+  if (!opponent) return null
+  if (opponent.toUpperCase() === 'BYE') return 'Bye week'
+  const versus = `${String(homeAway ?? '').toLowerCase() === 'away' ? '@' : 'vs'} ${opponent}`
+  const kickoff = kickoffIso ? new Date(kickoffIso) : null
+  if (!kickoff || !Number.isFinite(kickoff.getTime())) return versus
+  return `${versus} · ${kickoff.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+}
+
 function rosteredPct(p: UnifiedPlayerWireDto): number | null {
   const r = p as unknown as Record<string, unknown>
   const unified = (p.product?.unified ?? {}) as unknown as Record<string, unknown>
@@ -421,9 +438,14 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   const claimed = claimedIds.has(p.id)
                   const holdUntil = playerWaiverHoldUntil(p, settings)
                   const rowImmediate = immediate && !holdUntil
+                  const gameLine = wireGameLine(a.displayOpponent, p.nflRedraftGameContext?.homeAway, a.displayKickoffTime)
+                  const strip = a.seasonStatsSummary.map(splitStatLine)
                   return (
                     <tr key={p.id}>
                       <td data-align="left">
+                        {/* One line on a wide screen. On a phone its two children are separate grid items, so the
+                            star sits beside the stat strip and the name keeps the row's width. */}
+                        <div className="nls-prow">
                         <div className="nls-pcell">
                           <PlayerHeadshot playerId={p.id} playerName={p.name} headshotUrl={a.displayHeadshotUrl} position={p.position} team={p.team} sport={p.sport || league.sport} size={36} />
                           <PosPill label={p.position} />
@@ -443,22 +465,40 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                                 </span>
                               ) : null}
                             </small>
+                            {gameLine ? <small data-game data-testid={`native-waivers-game-${p.id}`}>{gameLine}</small> : null}
                             {holdUntil ? <small data-hold data-testid={`native-waivers-hold-${p.id}`}>{onWaiversUntilLabel(holdUntil, { tInterpolate, language })}</small> : null}
                           </div>
+                        </div>
                           <button type="button" className="nls-iconbtn" aria-pressed={watch.includes(p.id)} aria-label={watch.includes(p.id) ? `Remove ${p.name} from watchlist` : `Watch ${p.name}`} onClick={() => toggleWatch(p.id)} data-watch>
                             <Star size={16} aria-hidden fill={watch.includes(p.id) ? 'currentColor' : 'none'} />
                           </button>
                         </div>
-                        {/* Under the row, not inside the name column: on a phone it takes the row's full width. */}
-                        {a.seasonStatsSummary.length ? <small className="nls-pstats-wide" data-stats>{a.seasonStatsSummary.join(' · ')}</small> : null}
+                        {/* The season's figures, each under its own label. On a phone the strip takes the row's full
+                            width under the player; the rostered share joins it there, where its column is hidden. */}
+                        {strip.length || pct != null ? (
+                          <span className="nls-pstats-wide" data-stats data-testid={`native-waivers-stats-${p.id}`}>
+                            {strip.map((stat, i) => (
+                              <span key={`${stat.label}-${i}`} className="nls-pstat">
+                                {stat.label ? <em>{stat.label}</em> : null}
+                                <b>{stat.value}</b>
+                              </span>
+                            ))}
+                            {pct != null ? (
+                              <span className="nls-pstat" data-phone-only>
+                                <em>Rost %</em>
+                                <b>{Math.round(pct)}</b>
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </td>
                       <td data-hide="phone">{pct != null ? `${Math.round(pct)}%` : '—'}</td>
-                      <td>{fmt1(p.projectedPoints)}</td>
+                      <td data-proj>{fmt1(p.projectedPoints)}</td>
                       <td data-hide="phone" data-pts={t > 0 ? 'good' : t < 0 ? 'bad' : 'neutral'}>{signed(t)}</td>
                       <td data-align="left" data-hide="phone">
                         {rowImmediate ? <span className="nls-chip" data-tone="good">Free agent</span> : <span className="nls-chip" data-tone="warn">Waivers{waiverDay ? ` · ${waiverDay}` : ''}</span>}
                       </td>
-                      <td>
+                      <td data-action>
                         {claimed ? (
                           <button type="button" className="nls-btn" data-size="sm" onClick={() => setTab('claims')}>Claimed</button>
                         ) : (
