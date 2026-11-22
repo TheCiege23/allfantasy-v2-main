@@ -61,6 +61,22 @@ but the Trade columns. The one captured Claim/Drop export of an 11-week season s
 in week 10, for a reason not yet known, so a sync must not be read as the league's whole
 history (`contracts/fantrax/GAPS.md` F-19).
 
+## Team logos (0.3.0)
+
+**Sync team logos** reads each team's logo from Fantrax and shows it in AllFantasy.
+Fantrax's public API sends no picture, so every Fantrax team showed a letter.
+
+- One request, the one Fantrax's own pages make for the league's team list. Only each
+  team's id, name and logo address leave the extension.
+- AllFantasy accepts a logo only when it is an image on Fantrax's image server.
+- A logo is matched to a team by name. A team that cannot be matched is reported.
+- The logo is saved on the team and stays there; a scheduled refresh does not remove it.
+
+Known limits: the request was captured from Fantrax's own page and has not been sent
+from the extension. It carries the site's version number, which will change; if Fantrax
+refuses an old one, the sync fails with a message and saves nothing
+(`contracts/fantrax/GAPS.md` F-20). Managers' names are not imported.
+
 ## Transport evidence
 
 Captured 2026-10-07 in Chrome Network from a real actual-week export:

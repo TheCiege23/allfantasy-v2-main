@@ -28,6 +28,7 @@ import { deriveFantraxTransactions, type PeriodRoster } from './deriveFantraxTra
 const FANTRAX_DRAFT_KEY = 'fantraxDraft'
 const FANTRAX_DERIVED_KEY = 'fantraxDerived'
 const FANTRAX_FUTURE_PICKS_KEY = 'fantraxFuturePicks'
+const FANTRAX_TEAM_LOGOS_KEY = 'fantraxTeamLogos'
 /** Bound on stored inferred rows, so a long-lived dynasty snapshot cannot grow without limit. */
 const FANTRAX_DERIVED_CAP = 2000
 
@@ -359,5 +360,50 @@ export function mergeFantraxSnapshotHistory(
     moves: appendUnique(held.moves, update.moves),
     suspectedTrades: appendUnique(held.suspectedTrades, update.suspectedTrades),
   }
+  return base
+}
+
+/**
+ * A team's logo as Fantrax's own image server hosts it, or null for anything else.
+ *
+ * Fantrax's public API has no picture field (contracts/fantrax/GAPS.md F-14); the logged-in site lists
+ * one per team (F-20). The address is shown to every member of the league, so it is accepted only when
+ * it is exactly an image on `fantraximg.com`: an uploaded logo under `/logos/`, or one of Fantrax's stock
+ * team icons. No query, no fragment, no credentials, no other host.
+ */
+export function fantraxLogoUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 300) return null
+  let url: URL
+  try { url = new URL(value) } catch { return null }
+  if (url.protocol !== 'https:' || url.hostname !== 'fantraximg.com' || url.port || url.username || url.password || url.search || url.hash) return null
+  if (!/^\/(?:logos|assets\/images\/icons\/fantasyteams)\/[A-Za-z0-9_\-./]+\.(?:webp|png|jpe?g|gif)$/.test(url.pathname) || url.pathname.includes('..')) return null
+  return url.href
+}
+
+export type StoredFantraxTeamLogo = { teamId: string; teamName: string | null; logoUrl: string }
+
+/** The team logos on file, each already checked by `fantraxLogoUrl`. Empty when none were ever synced. */
+export function readStoredFantraxTeamLogos(json: unknown): StoredFantraxTeamLogo[] {
+  const held = rec(rec(json)[FANTRAX_TEAM_LOGOS_KEY])
+  if (!Array.isArray(held.logos)) return []
+  const out: StoredFantraxTeamLogo[] = []
+  for (const raw of held.logos) {
+    const logo = rec(raw)
+    const teamId = str(logo.teamId)
+    const logoUrl = fantraxLogoUrl(logo.logoUrl)
+    if (teamId && logoUrl) out.push({ teamId, teamName: strOrNull(logo.teamName), logoUrl })
+  }
+  return out
+}
+
+/**
+ * The snapshot's stored extras with the team logos replaced.
+ *
+ * Every other key is kept verbatim, and `mergeStoredFantraxHistory` keeps this one across refreshes: a
+ * refresh reads rosters and standings from the public API, which has no logo to overwrite it with.
+ */
+export function withStoredFantraxTeamLogos(existing: unknown, logos: readonly StoredFantraxTeamLogo[], observedAt: string): Record<string, unknown> {
+  const base: Rec = Array.isArray(existing) ? (existing.length > 0 ? { legacyEntries: existing } : {}) : { ...rec(existing) }
+  base[FANTRAX_TEAM_LOGOS_KEY] = { observedAt, logos: logos.map((l) => ({ teamId: l.teamId, teamName: l.teamName, logoUrl: l.logoUrl })) }
   return base
 }

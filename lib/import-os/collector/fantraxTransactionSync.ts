@@ -37,14 +37,14 @@ export function fantraxTransactionDownloadUrl(sourceLeagueId: string, view: Fant
   return `https://www.fantrax.com/fxpa/downloadTransactionHistory?${query}`
 }
 
-async function commissionersFantraxLeague(userId: string, leagueId: string) {
+export async function commissionersFantraxLeague(userId: string, leagueId: string) {
   // Commissioner only, as the trade-history upload is: these rows become the league's record for every member.
   if (!(await canCommissionerAct(leagueId, userId, 'league'))) throw new Error('League unavailable')
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, platform: true, platformLeagueId: true } })
   if (String(league?.platform ?? '').toLowerCase() !== 'fantrax' || !league?.platformLeagueId) throw new Error('League unavailable')
   const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: league.platformLeagueId }, select: { sourceLeagueId: true } })
   if (!snapshot?.sourceLeagueId) throw new Error('League unavailable')
-  return { leagueName: league.name ?? 'Fantrax league', sourceLeagueId: snapshot.sourceLeagueId }
+  return { leagueName: league.name ?? 'Fantrax league', sourceLeagueId: snapshot.sourceLeagueId, snapshotId: league.platformLeagueId }
 }
 
 /** What the connector needs to fetch: the league's name and one download address per tab. */
