@@ -21,22 +21,38 @@ import type { CommsTab } from './CommsDrawer'
 
 export const COMMS_TAB_COUNTS_POLL_MS = 30_000
 
-export type CommsTabCounts = Partial<Record<CommsTab, number>>
+export type CommsTabCounts = Partial<Record<CommsTab, number>> & {
+  /** `league` per league id — the expanded desktop view's league list. Zero-count leagues are absent. */
+  byLeague?: Record<string, number>
+}
 
 function count(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0
 }
 
-/** `/api/chat/unread`'s body → a count per tab. Null when it isn't that shape. */
+function readByLeague(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object') return {}
+  const out: Record<string, number> = {}
+  for (const [id, n] of Object.entries(v as Record<string, unknown>)) if (count(n) > 0) out[id] = count(n)
+  return out
+}
+
+/** `/api/chat/unread`'s body → a count per tab (and per league). Null when it isn't that shape. */
 export function readCommsTabCounts(body: unknown): CommsTabCounts | null {
   if (!body || typeof body !== 'object') return null
-  const b = body as { league?: unknown; chimmy?: unknown; byThreadType?: { dm?: unknown; group?: unknown } | null }
+  const b = body as {
+    league?: unknown
+    chimmy?: unknown
+    byThreadType?: { dm?: unknown; group?: unknown } | null
+    byLeague?: unknown
+  }
   if (typeof b.league !== 'number' && typeof b.chimmy !== 'number') return null
   return {
     league: count(b.league),
     chimmy: count(b.chimmy),
     dms: count(b.byThreadType?.dm),
     huddle: count(b.byThreadType?.group),
+    byLeague: readByLeague(b.byLeague),
   }
 }
 
