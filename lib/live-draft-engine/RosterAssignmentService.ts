@@ -6,6 +6,7 @@ import { isSeasonTournamentDraft } from '@/lib/tournament/seasonDraftMutationGat
  */
 
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { buildLineupSectionsFromPicks } from '@/lib/post-draft/buildStartersFromPicks'
@@ -154,25 +155,8 @@ export async function finalizeRosterAssignments(
     // Unknown: keep the long-standing behaviour (an existing lineup is kept).
   }
 
-  async function assignRoster(rosterId: string, players: AssignedPlayer[]) {
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId, id: rosterId },
-    })
-    if (!roster) {
-      missingRosterRows += 1
-      return
-    }
-    const data = (roster.playerData as Record<string, unknown>) ?? {}
-
-    if (followUp) {
-      await prisma.roster.update({
-        where: { id: rosterId },
-        data: { playerData: toPrismaJsonInput(addFollowUpDraftPlayers(data, players, rosterTemplate)) },
-      })
-      teamsSynced += 1
-      return
-    }
-
+  function nextRosterData(data: Record<string, unknown>, players: AssignedPlayer[]): Record<string, unknown> {
+    if (followUp) return addFollowUpDraftPlayers(data, players, rosterTemplate)
     const collegePlayers = players.filter(isNbaCollegePick)
     const proPlayers = players.filter((p) => !isNbaCollegePick(p))
     // Always refresh the flat draftPicks audit trail.
@@ -200,15 +184,55 @@ export async function finalizeRosterAssignments(
       }
     }
 
-    nextPlayerData = mergeNbaCollegeDraftPlayers(nextPlayerData, collegePlayers)
+    return mergeNbaCollegeDraftPlayers(nextPlayerData, collegePlayers)
+  }
+
+  async function assignRoster(rosterId: string, players: AssignedPlayer[]) {
+    const roster = await prisma.roster.findFirst({ where: { leagueId, id: rosterId } })
+    if (!roster) {
+      missingRosterRows += 1
+      return
+    }
+    const data = (roster.playerData as Record<string, unknown>) ?? {}
     await prisma.roster.update({
       where: { id: rosterId },
-      data: { playerData: toPrismaJsonInput(nextPlayerData) },
+      data: { playerData: toPrismaJsonInput(nextRosterData(data, players)) },
     })
     teamsSynced += 1
   }
 
-  const rosterEntries = [...byRoster]
+  let rosterEntries = [...byRoster]
+  if (rosterEntries.length >= 32 && !followUp && session.draftModeLabel !== 'imported_rosters') {
+    const updated = new Set<string>()
+    try {
+      const rosterRows = await prisma.roster.findMany({
+        where: { leagueId, id: { in: rosterEntries.map(([id]) => id) } },
+        select: { id: true, playerData: true, updatedAt: true },
+      })
+      for (let start = 0; start < rosterRows.length; start += 64) {
+        const batch = rosterRows.slice(start, start + 64).map(row => {
+          const json = JSON.stringify(nextRosterData((row.playerData as Record<string, unknown>) ?? {}, byRoster.get(row.id)!))
+          return Prisma.sql`(${row.id}, ${row.updatedAt}::timestamp, ${json}::jsonb)`
+        })
+        const rows = await prisma.$queryRaw<{ id: string }[]>`
+          UPDATE "rosters" AS roster
+          SET "playerData" = lineups.player_data, "updatedAt" = NOW()
+          FROM (VALUES ${Prisma.join(batch)}) AS lineups(id, version_time, player_data)
+          WHERE roster.id = lineups.id AND roster."leagueId" = ${leagueId}
+            AND roster."updatedAt" = lineups.version_time
+          RETURNING roster.id
+        `
+        for (const row of rows) updated.add(row.id)
+      }
+    } catch (error) {
+      console.warn('[finalizeRosterAssignments] batch write incomplete', {
+        leagueId, error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    // A concurrent lineup edit gets recomputed from that roster's newest copy.
+    teamsSynced += updated.size
+    rosterEntries = rosterEntries.filter(([id]) => !updated.has(id))
+  }
   const batchSize = rosterEntries.length >= 32 ? 8 : 1
   for (let start = 0; start < rosterEntries.length; start += batchSize) {
     await Promise.all(rosterEntries.slice(start, start + batchSize).map(([rosterId, players]) => assignRoster(rosterId, players)))

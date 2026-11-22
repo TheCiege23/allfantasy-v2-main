@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { resolveMissingNflPickPlayerId } from '@/lib/draft/resolveMissingPickPlayerId'
 import { placeDraftedRookiesOnTaxi, type DraftedRookieRow } from '@/lib/redraft/offseason/placeDraftedRookiesOnTaxi'
 import { readGamesPerWeek } from '@/lib/schedule-runtime/gamesPerWeek'
@@ -236,6 +236,40 @@ export async function ensureRedraftSeason(leagueId: string) {
   return { season, created: true }
 }
 
+const seasonGenericRosterFields = {
+  id: true,
+  redraftRosterId: true,
+  platformUserId: true,
+  managerUserId: true,
+  playerData: true,
+  faabRemaining: true,
+  waiverPriority: true,
+} as const
+
+const seasonTeamFields = { ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, platformUserId: true } as const
+type SeasonGenericRoster = Prisma.RosterGetPayload<{ select: typeof seasonGenericRosterFields }>
+type SeasonTeam = Prisma.LeagueTeamGetPayload<{ select: typeof seasonTeamFields }>
+
+function newSeasonRosterData(
+  leagueId: string, seasonId: string, roster: SeasonGenericRoster, team: SeasonTeam | null,
+): Prisma.RedraftRosterCreateManyInput {
+  const extraTeam = isExtraTeamOwnerKey(roster.platformUserId)
+  const ownerId = extraTeam
+    ? roster.platformUserId
+    : String(team?.claimedByUserId ?? team?.platformUserId ?? roster.platformUserId ?? '').trim() || `roster:${roster.id}`
+  return {
+    leagueId,
+    seasonId,
+    ownerId,
+    managerUserId: extraTeam ? roster.managerUserId ?? team?.claimedByUserId ?? null : null,
+    ownerName: team?.ownerName ?? `Team ${roster.id.slice(0, 6)}`,
+    teamName: team?.teamName ?? team?.ownerName ?? `Team ${roster.id.slice(0, 6)}`,
+    avatarUrl: team?.avatarUrl ?? null,
+    faabBalance: roster.faabRemaining ?? 100,
+    waiverPriority: roster.waiverPriority ?? 0,
+  }
+}
+
 async function ensureRedraftRosterForGenericRoster(params: {
   seasonId: string
   leagueId: string
@@ -243,26 +277,17 @@ async function ensureRedraftRosterForGenericRoster(params: {
 }) {
   const genericRoster = await prisma.roster.findFirst({
     where: { id: params.genericRosterId, leagueId: params.leagueId },
-    select: {
-      id: true,
-      redraftRosterId: true,
-      platformUserId: true,
-      managerUserId: true,
-      playerData: true,
-      faabRemaining: true,
-      waiverPriority: true,
-    },
+    select: seasonGenericRosterFields,
   })
 
   if (!genericRoster) return { redraftRoster: null, created: false, genericRoster: null }
 
-  const teamSelect = { ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, platformUserId: true } as const
   // The team that IS this roster first: a manager who runs two teams has claimed both, so a match on
   // who claimed it could hand this roster the other team's name and face.
   const team =
     (await prisma.leagueTeam.findFirst({
       where: { leagueId: params.leagueId, externalId: genericRoster.id },
-      select: teamSelect,
+      select: seasonTeamFields,
     })) ??
     (await prisma.leagueTeam.findFirst({
       where: {
@@ -272,7 +297,7 @@ async function ensureRedraftRosterForGenericRoster(params: {
           { claimedByUserId: genericRoster.platformUserId },
         ],
       },
-      select: teamSelect,
+      select: seasonTeamFields,
     }))
 
   /*
@@ -284,11 +309,8 @@ async function ensureRedraftRosterForGenericRoster(params: {
    * the season owner and names its manager beside it, exactly as `assignLeagueSeat` writes it.
    */
   const extraTeam = isExtraTeamOwnerKey(genericRoster.platformUserId)
-  const ownerId = extraTeam
-    ? genericRoster.platformUserId
-    : String(team?.claimedByUserId ?? team?.platformUserId ?? genericRoster.platformUserId ?? '').trim() ||
-      `roster:${genericRoster.id}`
-  const managerUserId = extraTeam ? genericRoster.managerUserId ?? team?.claimedByUserId ?? null : null
+  const data = newSeasonRosterData(params.leagueId, params.seasonId, genericRoster, team)
+  const { ownerId } = data
 
   const ownerIdCandidates = extraTeam
     ? [ownerId]
@@ -347,21 +369,58 @@ async function ensureRedraftRosterForGenericRoster(params: {
     return { redraftRoster: refreshed, created: false, genericRoster }
   }
 
-  const redraftRoster = await prisma.redraftRoster.create({
-    data: {
-      seasonId: params.seasonId,
-      leagueId: params.leagueId,
-      ownerId,
-      ...(managerUserId ? { managerUserId } : {}),
-      ownerName: team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
-      teamName: team?.teamName ?? team?.ownerName ?? `Team ${genericRoster.id.slice(0, 6)}`,
-      avatarUrl: team?.avatarUrl ?? null,
-      faabBalance: genericRoster.faabRemaining ?? 100,
-      waiverPriority: genericRoster.waiverPriority ?? 0,
-    },
-  })
+  const redraftRoster = await prisma.redraftRoster.create({ data })
 
   return { redraftRoster, created: true, genericRoster }
+}
+
+type DraftSeasonRosterMapping = Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>
+
+/** A new native season has one unambiguous team row for every generic roster. */
+async function createFreshNativeSeasonRosters(leagueId: string, seasonId: string, rosterIds: string[]) {
+  const [existing, rosters, teams] = await Promise.all([
+    prisma.redraftRoster.findFirst({ where: { seasonId }, select: { id: true } }),
+    prisma.roster.findMany({ where: { leagueId, id: { in: rosterIds } }, select: seasonGenericRosterFields }),
+    prisma.leagueTeam.findMany({
+      where: { leagueId, externalId: { in: rosterIds } }, select: { externalId: true, ...seasonTeamFields },
+    }),
+  ])
+  if (existing || rosters.length !== rosterIds.length || teams.length !== rosterIds.length) return null
+  const teamByRosterId = new Map(teams.map(team => [team.externalId, team]))
+  const data = rosters.map(roster => newSeasonRosterData(leagueId, seasonId, roster, teamByRosterId.get(roster.id) ?? null))
+  if (new Set(data.map(row => row.ownerId)).size !== data.length) return null
+
+  const created = await prisma.redraftRoster.createManyAndReturn({ data, skipDuplicates: true })
+  const seasonRosters = created.length === rosterIds.length ? created : await prisma.redraftRoster.findMany({
+    where: { seasonId, ownerId: { in: data.map(row => row.ownerId) } },
+  })
+  if (seasonRosters.length !== rosterIds.length) return null
+  const createdIds = new Set(created.map(row => row.id))
+  const byOwner = new Map(seasonRosters.map(row => [row.ownerId, row]))
+  const mapped = new Map<string, DraftSeasonRosterMapping>()
+  for (const [i, genericRoster] of rosters.entries()) {
+    const redraftRoster = byOwner.get(data[i].ownerId)!
+    mapped.set(genericRoster.id, { redraftRoster, genericRoster, created: createdIds.has(redraftRoster.id) })
+  }
+  return mapped
+}
+
+async function linkFreshNativeSeasonRosters(leagueId: string, mappings: Map<string, DraftSeasonRosterMapping>) {
+  const pairs = [...mappings].flatMap(([rosterId, mapping]) =>
+    mapping.redraftRoster && !mapping.genericRoster?.redraftRosterId
+      ? [Prisma.sql`(${rosterId}, ${mapping.redraftRoster.id})`]
+      : [],
+  )
+  if (pairs.length === 0) return
+  await prisma.$executeRaw`
+    UPDATE "rosters" AS roster
+    SET "redraftRosterId" = links.season_roster_id, "updatedAt" = NOW()
+    FROM (VALUES ${Prisma.join(pairs)}) AS links(roster_id, season_roster_id)
+    WHERE roster.id = links.roster_id AND roster."leagueId" = ${leagueId} AND roster."redraftRosterId" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "rosters" AS linked WHERE linked."redraftRosterId" = links.season_roster_id
+      )
+  `
 }
 
 /**
@@ -573,7 +632,7 @@ export async function syncCompletedDraftToRedraftSeason(
   // Rows this run created on the bench, in pick order: a rookie draft's go to the taxi squad below.
   const draftedBenchRows: DraftedRookieRow[] = []
 
-  const redraftRosterByGenericRosterId = new Map<string, Awaited<ReturnType<typeof ensureRedraftRosterForGenericRoster>>>()
+  const redraftRosterByGenericRosterId = new Map<string, DraftSeasonRosterMapping>()
 
   const importedSnapshot = session.draftModeLabel === 'imported_rosters'
   const batchNativePlayers = !importedSnapshot && !league.survivorMode &&
@@ -594,15 +653,25 @@ export async function syncCompletedDraftToRedraftSeason(
       })).map(row => nativeKey(row.rosterId, row.playerId)))
     : null
   const batchedPlayers: Prisma.RedraftRosterPlayerCreateManyInput[] = []
+  let freshNativeRosters: Map<string, DraftSeasonRosterMapping> | null = null
   if (nativePlayerIds) {
     const rosterIds = [...new Set(session.picks.filter(pick => !isDraftPickSkipped(pick) && !isDraftPickRowEmpty(pick)).map(pick => pick.rosterId))]
-    // Limit concurrent writes so a 250-team season leaves connections available for the draft room.
-    for (let start = 0; start < rosterIds.length; start += 8) {
-      await Promise.all(rosterIds.slice(start, start + 8).map(async genericRosterId => {
-        const mapping = await ensureRedraftRosterForGenericRoster({ seasonId: season.id, leagueId, genericRosterId })
-        redraftRosterByGenericRosterId.set(genericRosterId, mapping)
+    if (rosterIds.length >= 32) {
+      freshNativeRosters = await createFreshNativeSeasonRosters(leagueId, season.id, rosterIds)
+    }
+    if (freshNativeRosters) {
+      for (const [rosterId, mapping] of freshNativeRosters) {
+        redraftRosterByGenericRosterId.set(rosterId, mapping)
         if (mapping.created) redraftRostersCreated += 1
-      }))
+      }
+    } else {
+      for (let start = 0; start < rosterIds.length; start += 8) {
+        await Promise.all(rosterIds.slice(start, start + 8).map(async genericRosterId => {
+          const mapping = await ensureRedraftRosterForGenericRoster({ seasonId: season.id, leagueId, genericRosterId })
+          redraftRosterByGenericRosterId.set(genericRosterId, mapping)
+          if (mapping.created) redraftRostersCreated += 1
+        }))
+      }
     }
   }
 
@@ -739,6 +808,15 @@ export async function syncCompletedDraftToRedraftSeason(
    * reconciler's own doc names — where the correspondence first becomes knowable. Idempotent, fills
    * only NULL links, and must not fail draft completion.
    */
+  try {
+    if (freshNativeRosters) await linkFreshNativeSeasonRosters(leagueId, freshNativeRosters)
+  } catch (error) {
+    console.warn('[syncCompletedDraftToRedraftSeason] batch roster linkage failed', {
+      leagueId,
+      seasonId: season.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
   await reconcileRosterRedraftLinks(leagueId).catch((err) => {
     console.warn('[syncCompletedDraftToRedraftSeason] roster season links not reconciled', {
       leagueId,
