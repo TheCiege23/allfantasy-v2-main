@@ -31,6 +31,7 @@ import { listLeagueDrafts } from '@/lib/draft-intel/sleeperDraftIntelService'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { getNflInjuries, injuryForName } from '@/lib/sports-data/playerAssetsService'
 import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 const CACHE_PREFIX = 'command-center:v3:'
@@ -173,6 +174,8 @@ type LeagueRow = {
    */
   draftDate: Date | null
   isCommissioner: boolean
+  /** Best ball sets its own lineup, so an empty starter slot is not a call anybody can make. */
+  bestBall: boolean
   teams: {
     id: string
     teamName: string | null
@@ -234,6 +237,10 @@ async function buildCommandCenter(userId: string): Promise<CommandCenterPayload>
       status: true,
       lifecycleState: true,
       userId: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
+      settings: true,
       teams: {
         select: {
           id: true,
@@ -282,6 +289,7 @@ async function buildCommandCenter(userId: string): Promise<CommandCenterPayload>
       // the field is honestly empty rather than undefined-by-omission.
       draftDate: null,
       isCommissioner: l.userId === userId,
+      bestBall: isBestBallLeagueRow(l),
     }))
 
   const feed: FeedItem[] = []
@@ -407,7 +415,7 @@ async function buildCommandCenter(userId: string): Promise<CommandCenterPayload>
     const myRoster = sleeperUserId
       ? (rosters ?? []).find((r) => r.owner_id === sleeperUserId) ?? null
       : null
-    if (myRoster) {
+    if (myRoster && !league.bestBall) {
       const empty = (myRoster.starters ?? []).filter((s) => !s || s === '0').length
       const inSeason = ['in_season', 'active', 'playoffs'].includes(
         String(league.lifecycleState ?? league.status ?? '').toLowerCase(),
