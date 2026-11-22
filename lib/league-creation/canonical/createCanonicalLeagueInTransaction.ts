@@ -48,6 +48,7 @@ import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashP
 import { defaultProcessingDaysList } from '@/lib/waiver-wire/free-agent-unlock'
 import { defaultTradeDeadlineWeek } from '@/lib/trade-deadline/tradeDeadlineDefaults'
 import { maxPlayoffStartWeekFor } from '@/lib/redraft/regularSeasonCap'
+import { planStartupDrafts, STARTUP_COLLEGE_DRAFT_SETTINGS_KEY, supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { dailyLineupTablesExist, defaultsToDailyLineups, withLineupMode } from '@/lib/redraft/lineupModeSwitch'
 
 type Tx = Prisma.TransactionClient
@@ -949,13 +950,17 @@ export async function createCanonicalLeagueInTransaction(
 
   if (formatId === 'c2c') {
     const setup = (body.conceptSetup ?? {}) as Record<string, unknown>
+    const c2cSeparateDrafts =
+      supportsSeparateStartupDrafts('c2c', sport) && !(setup.mergedCollegeDraft === true || setup.startupFormat === 'merged')
     await tx.c2CLeagueConfig.upsert({
       where: { leagueId: league.id },
       create: {
         leagueId: league.id,
-        startupFormat: readString(setup, 'startupFormat', 'merged'),
-        mergedStartupDraft: setup.startupFormat !== 'separate',
-        separateStartupCollegeDraft: setup.startupFormat === 'separate',
+        // Two drafts unless the commissioner chose one merged draft, where the pool can keep them apart
+        // (lib/draft-defaults/startupCollegeDraft.ts); a college-sport league keeps its one draft.
+        startupFormat: c2cSeparateDrafts ? 'separate' : 'merged',
+        mergedStartupDraft: !c2cSeparateDrafts,
+        separateStartupCollegeDraft: c2cSeparateDrafts,
         collegeRosterSize: readNumber(setup, 'collegeRosterSize', readNumber(foundationDefaults.rosterSettings, 'collegeRosterSlots', 20)),
         collegeSports: [sport] as Prisma.InputJsonValue,
         collegeScoringSystem: readString(setup, 'collegeScoringSystem', sport === 'NBA' || sport === 'NCAAB' ? 'points' : 'ppr'),
@@ -1310,12 +1315,49 @@ export async function createCanonicalLeagueInTransaction(
       : null
   const sessionDevyConfig =
     (draftSettings.devyConfig as Record<string, unknown> | null | undefined) ?? dynastyDevyConfig
+  /*
+   * Devy and C2C: a pro draft, then a college draft, unless the commissioner chose one merged draft
+   * (lib/draft-defaults/startupCollegeDraft.ts). Only where the pool keeps pro and college apart (NFL,
+   * NBA); a college-sport league keeps one draft, as before.
+   */
+  const startupPlan =
+    (formatId === 'devy' || formatId === 'c2c') && supportsSeparateStartupDrafts(formatId, sport)
+      ? planStartupDrafts({
+          format: formatId,
+          rounds: draftRounds,
+          devyConfig: sessionDevyConfig ?? null,
+          c2cConfig: (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null,
+          collegeDraftRounds:
+            formatId === 'devy'
+              ? readNumber((foundationDefaults.devyConfig ?? {}) as Record<string, unknown>, 'devySlotCount', 4)
+              : readNumber(
+                  ((foundationDefaults as unknown as Record<string, unknown>).c2cSettings ?? {}) as Record<string, unknown>,
+                  'collegeDraftRounds',
+                  6,
+                ),
+          merged:
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).mergedCollegeDraft === true ||
+            ((body.conceptSetup ?? {}) as Record<string, unknown>).startupFormat === 'merged',
+        })
+      : null
+  if (startupPlan) {
+    // The row this transaction just created carries the settings to extend.
+    const created = (league as { settings?: unknown }).settings ?? mergedSettings
+    const settings = created && typeof created === 'object' ? (created as Record<string, unknown>) : {}
+    await tx.league.update({
+      where: { id: league.id },
+      data: { settings: { ...settings, [STARTUP_COLLEGE_DRAFT_SETTINGS_KEY]: startupPlan.state } as Prisma.InputJsonValue },
+    })
+  }
+  const firstDraftDevyConfig = startupPlan ? startupPlan.first.devyConfig : sessionDevyConfig
+  const firstDraftC2cConfig = startupPlan ? startupPlan.first.c2cConfig : (draftSettings.c2cConfig as Record<string, unknown> | null | undefined) ?? null
   await tx.draftSession.create({
     data: {
       leagueId: league.id,
       status: 'pre_draft',
       draftType: coreDraft,
-      rounds: draftRounds,
+      rounds: startupPlan ? startupPlan.first.rounds : draftRounds,
+      ...(startupPlan?.first.draftModeLabel ? { draftModeLabel: startupPlan.first.draftModeLabel } : {}),
       teamCount: managerCount,
       timerSeconds,
       slotOrder: draftSlotOrder as Prisma.InputJsonValue,
@@ -1325,8 +1367,8 @@ export async function createCanonicalLeagueInTransaction(
       thirdRoundReversal,
       cpuAutoPick: true,
       aiAutoPick: isAuto,
-      ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),
-      ...(draftSettings.c2cConfig ? { c2cConfig: draftSettings.c2cConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftDevyConfig ? { devyConfig: firstDraftDevyConfig as Prisma.InputJsonValue } : {}),
+      ...(firstDraftC2cConfig ? { c2cConfig: firstDraftC2cConfig as Prisma.InputJsonValue } : {}),
       ...(keeperBootstrap
         ? {
             keeperConfig: keeperBootstrap.draftKeeperConfig as unknown as Prisma.InputJsonValue,

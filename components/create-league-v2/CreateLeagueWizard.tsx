@@ -1,6 +1,7 @@
 'use client'
 
 import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
+import { supportsSeparateStartupDrafts } from '@/lib/draft-defaults/startupCollegeDraft'
 import { upgradePathForPlan } from '@/lib/monetization/upgradeDestination'
 
 import { GUILLOTINE_SINGLE_ELIMINATION_MAX_TEAMS, guillotineNeedsDoubleElimination } from '@/lib/guillotine/teamCountLimits'
@@ -1582,6 +1583,28 @@ export function DraftStep({
               </select>
             </label>
           ) : null}
+        </div>
+      ) : null}
+
+      {(leagueType === 'devy' || leagueType === 'c2c') && supportsSeparateStartupDrafts(leagueType, state.sport) ? (
+        <div
+          className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-4"
+          data-testid="g30-startup-drafts-panel"
+        >
+          <p className="text-sm font-bold">{tx(t, 'createLeague.g30.startupDrafts.title', 'Startup drafts')}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]" data-testid="g30-startup-drafts-body">
+            {state.dynasty?.mergedCollegeDraft === true
+              ? tx(t, 'createLeague.g30.startupDrafts.merged', 'One draft: pro and college players are drafted together.')
+              : tx(t, 'createLeague.g30.startupDrafts.separate', 'Two drafts: the pro draft first, then the college draft. The season starts after both.')}
+          </p>
+          <label className="mt-2 flex min-h-12 cursor-pointer touch-manipulation items-center gap-3 text-sm font-bold">
+            <CheckBox
+              checked={state.dynasty?.mergedCollegeDraft === true}
+              onChange={(checked) => onChange({ dynasty: { ...state.dynasty, mergedCollegeDraft: checked } })}
+              testId="g30-merged-college-draft-toggle"
+            />
+            <span>{tx(t, 'createLeague.g30.startupDrafts.mergeToggle', 'Merge them into one draft')}</span>
+          </label>
         </div>
       ) : null}
 
