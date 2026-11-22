@@ -1,3 +1,4 @@
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 /**
  * Create League v2 — rules engine.
@@ -141,6 +142,19 @@ function survivorCastSizesThatFitNow(sport: SupportedSport, sizes: readonly numb
 }
 
 export function getTeamCountOptions(
+  sport: SupportedSport,
+  leagueType: LeagueTypeId,
+  soccerPipeline?: 'mls' | 'euro' | null
+): number[] {
+  const sizes = listedTeamCountOptions(sport, leagueType, soccerPipeline)
+  // A pro-sport Redraft or Dynasty league is offered only the sizes its players can fill
+  // (lib/league-creation/playerSupply.ts), so the form never offers a size the server refuses.
+  if (leagueType !== 'redraft' && leagueType !== 'dynasty') return sizes
+  const supply = checkNewLeaguePlayerSupply({ sport, leagueType, teamCount: sizes[0] ?? 2 })
+  return supply.verified ? sizes.filter((n) => n <= supply.maxTeams) : sizes
+}
+
+function listedTeamCountOptions(
   sport: SupportedSport,
   leagueType: LeagueTypeId,
   soccerPipeline?: 'mls' | 'euro' | null

@@ -35,6 +35,8 @@ const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = [...REDRAFT_TEAM_COUNTS]
 const DYNASTY_CREATE_TEAM_COUNTS = [...DYNASTY_TEAM_COUNTS]
+/** Even sizes from 8 (as before) up to the NFL's 32 teams, for formats that draft NFL players beside college ones. */
+const NFL_PRO_BOUND_EVEN_TEAM_COUNTS = Array.from({ length: 13 }, (_, i) => 8 + i * 2)
 
 const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
@@ -361,14 +363,20 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: [8, 10, 12, 14, 16],
       SOCCER: [8, 10, 12, 14, 16],
     },
+    /*
+     * Owner's decision, 2026-11-22: an NFL-based Devy or C2C league goes up to 32 teams (the size of
+     * the real league: past it the pro player supply runs out), and a college-sport C2C league goes
+     * up to the native limit, like Dynasty. The owner's own college leagues run 140 and 180 teams.
+     * College Devy stays at 8 to 16: its prospect pool does not cover a bigger league yet.
+     */
     devy: {
-      NFL: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
       NCAAF: [8, 10, 12, 14, 16],
     },
     c2c: {
-      NFL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
-      NCAAB: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
     },
     // Guilly: 4–27 teams single elimination, up to 35 with double-elimination weeks — the
     // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short

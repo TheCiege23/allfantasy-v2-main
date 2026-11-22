@@ -8,7 +8,7 @@ import { SurvivorSeasonPreview } from './SurvivorSeasonPreview'
 import { ZombieCreationOptions } from './ZombieCreationOptions'
 import { BestBallRulesSummary, BestBallSetupPanel } from './BestBallSetupPanel'
 import { fitBestBallToTeamCount } from '@/lib/create-league-v2/bestBallWizard'
-import { bestBallPoolCheckForWizard } from '@/lib/create-league-v2/form-completion'
+import { bestBallPoolCheckForWizard, playerSupplyCheckForWizard } from '@/lib/create-league-v2/form-completion'
 import { isSurvivorDefaultFormatSport } from '@/lib/survivor/survivorCreationAvailability'
 import { SG_CREATE_TRIBE_COUNTS } from '@/lib/survivor-guillotine/createFit'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -386,6 +386,7 @@ const ISSUE_STEP: Record<string, WizardStep> = {
   tournament_pool_invalid: 'basics',
   tournament_pool_mismatch: 'basics',
   best_ball_pool: 'basics',
+  player_supply: 'basics',
 }
 
 export function stepForIssue(code: string): WizardStep {
@@ -1360,7 +1361,20 @@ export function LeagueBasicsStep({
       ) : null}
 
       <BestBallPoolNote state={state} t={t} />
+      <PlayerSupplyNote state={state} t={t} importCarryover={importCarryover} />
     </section>
+  )
+}
+
+/** Why a pro-sport league this size cannot be created, with the largest size that can (playerSupply.ts). */
+function PlayerSupplyNote({ state, t, importCarryover }: { state: CreateLeagueV2State; t: (key: string) => string; importCarryover?: boolean }) {
+  const check = playerSupplyCheckForWizard(state, importCarryover === true)
+  if (!check || check.ok || !check.message) return null
+  return (
+    <div role="alert" className="space-y-1 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200" data-testid="g30-player-supply-refused">
+      <p className="font-bold">{tx(t, 'createLeague.g30.playerSupply.refusedTitle', 'Too many teams for this sport')}</p>
+      <p>{check.message}</p>
+    </div>
   )
 }
 
