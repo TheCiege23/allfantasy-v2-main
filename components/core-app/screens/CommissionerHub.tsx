@@ -77,6 +77,7 @@ import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 import { HubFold } from '@/components/core-app/commissioner/HubFold'
 import { HubFoldOpener } from '@/components/core-app/commissioner/HubFoldOpener'
 import { isAfcPilotLeague } from '@/lib/afc-championships/staging'
+import { Hardwood32Results } from '@/components/core-app/commissioner/Hardwood32Results'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -310,6 +311,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       ) : null}
 
       {league.platform === 'fantrax' ? <FantraxResults leagueId={league.id} report={league.fantraxResults ?? null} /> : null}
+      {data.role === 'commissioner' && isAfcPilotLeague(league.id) ? <Hardwood32Results leagueId={league.id} /> : null}
 
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
