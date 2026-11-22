@@ -346,11 +346,28 @@ async function handle(req: NextRequest, signal?: AbortSignal) {
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
                 )
 
+          /*
+           * The NBA draft, linked to our college basketball players by ESPN id (contracts/cbbd B-01),
+           * for the C2C / Devy "Moving up" section. About 25 calls a draft against the shared CFBD
+           * quota, refreshed through the late-June window and then never again for that year, so on
+           * almost every tick this is one stored-row read.
+           */
+          const { refreshCbbdDraftPicks } = await import('@/lib/devy/cbbdDraftPicksStore')
+          const NBA_DRAFT_PICKS_MIN_MS = 30_000
+          const nbaDraftPicks =
+            !cfbdGate.allowed
+              ? cfbdReserved()
+              : budget.remainingMs() < NBA_DRAFT_PICKS_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await refreshCbbdDraftPicks({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
           const devyHeadshots = await refreshDevyHeadshots(budget)
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, nbaDraftPicks, devyHeadshots, collegeHeadshots }
         },
       )
 
