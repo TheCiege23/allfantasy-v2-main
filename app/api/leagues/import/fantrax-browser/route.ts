@@ -4,6 +4,7 @@ import {getServedOrigin} from '@/lib/http/served-origin'
 import {fantraxBrowserContext} from '@/lib/import-os/collector/fantraxBrowserContext'
 import {importFantraxBrowserActuals} from '@/lib/import-os/collector/fantraxBrowserActuals'
 import {fantraxTransactionContext,importFantraxTransactionExports} from '@/lib/import-os/collector/fantraxTransactionSync'
+import {fantraxTeamLogoContext,importFantraxTeamLogos} from '@/lib/import-os/collector/fantraxTeamLogoSync'
 export const dynamic='force-dynamic'
 export const maxDuration=120
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
@@ -15,6 +16,10 @@ export async function GET(req:NextRequest){
  if(req.nextUrl.searchParams.get('kind')==='transactions'){
   try{return NextResponse.json(await fantraxTransactionContext(auth.userId,leagueId),{headers:{'Cache-Control':'no-store'}})}catch{return NextResponse.json({error:'Fantrax league not found, or you are not its commissioner'},{status:400})}
  }
+ // `kind=teams`: the one address the league's team list (names and logos) comes from. Any sport; commissioner only.
+ if(req.nextUrl.searchParams.get('kind')==='teams'){
+  try{return NextResponse.json(await fantraxTeamLogoContext(auth.userId,leagueId),{headers:{'Cache-Control':'no-store'}})}catch{return NextResponse.json({error:'Fantrax league not found, or you are not its commissioner'},{status:400})}
+ }
  try{return NextResponse.json(await fantraxBrowserContext(auth.userId,leagueId),{headers:{'Cache-Control':'no-store'}})}catch{return NextResponse.json({error:'Owned Fantrax college league or verified download contract unavailable'},{status:400})}
 }
 export async function POST(req:NextRequest){
@@ -24,6 +29,11 @@ export async function POST(req:NextRequest){
  try{
   const text=await req.text();if(Buffer.byteLength(text)>8_000_000)return NextResponse.json({error:'Batch exceeds limit'},{status:413})
   const body=JSON.parse(text)
+  if(body?.kind==='teams'){
+   if(!uuid.test(body.leagueId??'') || !Array.isArray(body.teams) || !body.teams.length || body.teams.length>100)return NextResponse.json({error:'Invalid team list'},{status:400})
+   const teams=body.teams.map((t:any)=>({id:t?.id,name:t?.name,logoUrl:t?.logoUrl}))
+   try{return NextResponse.json(await importFantraxTeamLogos(auth.userId,{leagueId:body.leagueId,teams}),{headers:{'Cache-Control':'no-store'}})}catch{return NextResponse.json({error:'Fantrax league not found, or you are not its commissioner; nothing saved'},{status:400})}
+  }
   if(body?.kind==='transactions'){
    const csv=(value:unknown)=>typeof value==='string'&&value.length>0?value:null
    const trades=csv(body.trades),claimDrops=csv(body.claimDrops)
