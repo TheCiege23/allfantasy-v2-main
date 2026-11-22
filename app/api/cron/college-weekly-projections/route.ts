@@ -3,26 +3,9 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runCollegeProjectionRecheck } from '@/lib/af-projections/collegeRosterRecheck.cjs'
-import { runNbaFantraxProjectionRecheck } from '@/lib/af-projections/nbaFantraxRecheck'
-import { redactAndCap } from '@/lib/security/redactSecrets'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-
-type RecheckRun = {
-  sport: string
-  week?: number
-  checked?: number
-  projected?: number
-  weeklyWindow?: boolean
-  error?: string
-  warnings?: string[]
-  writer?: Array<{ written: number; boxesWritten?: number; seasonLinesWritten?: number }>
-}
-
-function recheckError(error: unknown) {
-  return redactAndCap(error instanceof Error ? error.message : 'Projection recheck failed', 500)
-}
 
 export async function GET(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) {
@@ -41,19 +24,10 @@ export async function GET(req: NextRequest) {
   try {
     const runs = await withSyncJobRun(
       { jobName: 'cron-college-weekly-projections', trigger: 'cron' },
-      async (): Promise<RecheckRun[]> => {
-        const [college, nba] = await Promise.all([
-          runCollegeProjectionRecheck().catch(error => [{ sport: 'college', error: recheckError(error) }]),
-          runNbaFantraxProjectionRecheck().catch(error => ({
-            sport: 'NBA', error: recheckError(error),
-          })),
-        ])
-        return [...college, nba]
-      },
+      runCollegeProjectionRecheck,
       runs => ({
         rowsRead: runs.reduce((n, r) => n + (r.checked ?? 0), 0),
-        rowsWritten: runs.flatMap(r => r.writer ?? []).reduce((total, write) =>
-          total + write.written + (write.boxesWritten ?? 0) + (write.seasonLinesWritten ?? 0), 0),
+        rowsWritten: runs.flatMap(r => r.writer ?? []).reduce((n, r) => n + r.written + (r.boxesWritten ?? 0), 0),
         errors: runs.flatMap(r => r.error ? [r.error] : []),
         warnings: runs.flatMap(r => r.warnings ?? []),
         metadata: { runs },

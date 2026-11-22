@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/nba-fantrax-weekly-projections",
+      "schedule": "45 * * * *"
+    },
+    {
       "path": "/api/cron/college-weekly-projections",
       "schedule": "45 * * * *"
     },

@@ -592,6 +592,7 @@ export const PROBES = {
    * keeps the strong claim in season and self-suppresses out of it.
    */
   '/api/cron/college-weekly-projections': { heartbeat: 'cron-college-weekly-projections' },
+  '/api/cron/nba-fantrax-weekly-projections': { heartbeat: 'cron-nba-fantrax-weekly-projections' },
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 
   /*
