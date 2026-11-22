@@ -202,9 +202,24 @@ export function renderEngineRecordPromptLine(view: LedgerRecordView | null): str
     lines.push('- Trade grades: no letter has enough graded deals yet.')
   }
 
+  // Every other sport and league type (2026-11-22): its own measure, named so the model never mixes them up.
+  const outcomeParts = Object.values(view?.tradeOutcomes ?? {}).flatMap((b) =>
+    b.letters.map((t) => {
+      const v = letterVerdict(t.letter, t.net)
+      const c = tradeLetterConfidence(t.letter, b.confidence)
+      const measure = b.kind === 'value' ? `${signed(t.net)} points of the deal's dynasty value a month or more later` : `${signed(t.net)} league-scored points a week`
+      return `${b.kind === 'value' ? 'dynasty-style leagues' : `${b.sport} leagues`} ${t.letter}: ${measure} (${t.n} deals${t.aheadPct != null ? `, ahead in ${t.aheadPct}%` : ''})` +
+        (v === 'held_up' ? ' — has held up' : v === 'not_held_up' ? ' — has NOT held up' : '') +
+        (c ? `; how sure: ${c.level} (about ${c.heldPct}% held up, ${c.decided} decided)` : '')
+    }),
+  )
+  if (outcomeParts.length) {
+    lines.push(`- Trade grades in other sports and league types (dynasty, keeper, devy and C2C on the dynasty market; everything else on each league's own scoring): ${outcomeParts.join('; ')}.`)
+  }
+
   lines.push(
     'When you give a trade grade, a waiver pickup or a bench call, you may say how that kind of call has held up — quote these numbers exactly, and say plainly when a letter has not held up. Never state or imply any other record, hit rate or win percentage for AllFantasy.',
-    'Where a letter above carries "how sure", that is how sure a redraft NFL grade of that letter is: say it beside the grade (a low one means the deal is closer than the letter suggests). It never changes the letter — the grade is the trade engine\'s.',
+    'Where a letter above carries "how sure", that is how sure a grade of that letter is in that kind of league: say it beside the grade (a low one means the deal is closer than the letter suggests). Use the line for the league in question — NFL redraft, or that sport and league type — never another one. It never changes the letter — the grade is the trade engine\'s.',
   )
   return lines.join('\n')
 }
