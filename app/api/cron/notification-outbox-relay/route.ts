@@ -10,6 +10,7 @@
  * Query params:
  *   limit   — rows per pass (default 100, max 500)
  *   dryRun  — count what is due without dispatching or recording a heartbeat
+ *   only=awards — run just the award ballot DM relay
  */
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
@@ -29,9 +30,24 @@ export const maxDuration = 120
 const JOB = "cron-notification-outbox-relay"
 const DISCORD_JOB = "cron-discord-inbound"
 
+async function runAwardDms() {
+  try {
+    const { relayAwardBallotDms } = await import("@/lib/league-chat/awardBallotService")
+    return await relayAwardBallotDms()
+  } catch {
+    console.warn("[cron/award-ballot-dms] pass failed")
+    return { error: "Award DM pass failed" }
+  }
+}
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const dryRun = url.searchParams.get("dryRun") === "1"
+  if (url.searchParams.get("only") === "awards") {
+    const awardDms = dryRun ? null : await runAwardDms()
+    const ok = !awardDms || !("error" in awardDms)
+    return NextResponse.json({ ok, dryRun, awardDms }, { status: ok ? 200 : 500 })
+  }
   const limitRaw = url.searchParams.get("limit")
   const limit = limitRaw && /^\d{1,3}$/.test(limitRaw) ? Number(limitRaw) : undefined
 
@@ -69,12 +85,7 @@ async function handle(req: NextRequest) {
         return { error: e instanceof Error ? e.message.slice(0, 200) : "failed" }
       }
     })()
-    const awardsPromise = dryRun ? Promise.resolve(null) : import('@/lib/league-chat/awardBallotService')
-      .then(({ relayAwardBallotDms }) => relayAwardBallotDms())
-      .catch(() => {
-        console.warn('[cron/award-ballot-dms] pass failed')
-        return { error: 'Award DM pass failed' }
-      })
+    const awardsPromise = dryRun ? Promise.resolve(null) : runAwardDms()
     const run = () => relayNotificationOutbox({ limit, dryRun })
 
     /*

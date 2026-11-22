@@ -34,7 +34,7 @@ describe('authenticated minute Discord inbound host',()=>{
  })
  it('never starts either pass without cron auth',async()=>{
   h.auth.mockReturnValue(false)
-  expect((await GET(req())).status).toBe(401)
+  expect((await GET(req('?only=awards'))).status).toBe(401)
   expect(h.inbound).not.toHaveBeenCalled();expect(h.relay).not.toHaveBeenCalled()
   expect(h.awards).not.toHaveBeenCalled()
  })
@@ -53,4 +53,30 @@ it('returns a structured failure if the relay fails while Discord completes',asy
  const result=await GET(req())
  expect(result.status).toBe(500)
  expect(await result.json()).toMatchObject({ok:false,error:'Outbox unavailable',discordInbound:{imported:1}})
+})
+
+it('can relay only award DMs without draining unrelated notifications', async () => {
+  const result = await GET(req('?only=awards'))
+  expect(result.status).toBe(200)
+  expect(await result.json()).toEqual({ ok: true, dryRun: false, awardDms: { processed: 2, done: 2 } })
+  expect(h.awards).toHaveBeenCalledTimes(1)
+  expect(h.relay).not.toHaveBeenCalled()
+  expect(h.inbound).not.toHaveBeenCalled()
+  expect(h.engagement).not.toHaveBeenCalled()
+  expect(h.job).not.toHaveBeenCalled()
+})
+
+it('does not deliver award DMs during an awards-only dry run', async () => {
+  const result = await GET(req('?only=awards&dryRun=1'))
+  expect(result.status).toBe(200)
+  expect(await result.json()).toEqual({ ok: true, dryRun: true, awardDms: null })
+  expect(h.awards).not.toHaveBeenCalled()
+  expect(h.relay).not.toHaveBeenCalled()
+})
+
+it('reports a failure of an awards-only pass', async () => {
+  h.awards.mockRejectedValue(new Error('Database unavailable'))
+  const result = await GET(req('?only=awards'))
+  expect(result.status).toBe(500)
+  expect(await result.json()).toEqual({ ok: false, dryRun: false, awardDms: { error: 'Award DM pass failed' } })
 })
