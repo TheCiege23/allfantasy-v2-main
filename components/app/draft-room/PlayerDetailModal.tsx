@@ -54,6 +54,8 @@ interface LeagueContext {
   rosteredByTeamName?: string | null
   /** 'draft' | 'trade' | 'waiver' | 'import' */
   acquiredVia?: string | null
+  /** Why Chimmy auto-picked this player for that team, when it did. */
+  autoPickReason?: string | null
 }
 
 /** Live digest from `/draft/assistant-context` mapped to this player / league. */
@@ -754,6 +756,12 @@ export function PlayerDetailModal(props: PlayerDetailModalProps) {
                   </span>
                 )}
               </div>
+              {leagueContext.autoPickReason ? (
+                <p className="mt-2 text-white/70" data-testid="player-card-auto-pick-reason">
+                  <span className="font-bold text-cyan-200">Why Chimmy picked this player: </span>
+                  {leagueContext.autoPickReason}
+                </p>
+              ) : null}
             </div>
           )}
         </div>

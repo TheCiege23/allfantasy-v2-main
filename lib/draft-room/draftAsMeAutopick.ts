@@ -3,7 +3,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
-import { buildDraftStyle, pickLikeManager, type DraftStyle } from './draftAsMe'
+import { buildDraftStyle, MIN_STYLE_SAMPLE, pickLikeManager, type DraftStyle } from './draftAsMe'
 import { loadManagerPastPicks } from './managerHistoryReads'
 import { loadDraftPlayerAges } from './draftPlayerAges'
 import { isAutopilotRoster } from '@/lib/live-draft-engine/instantAutopick'
@@ -26,6 +26,40 @@ export const DRAFT_AS_ME_FEATURE = 'commissioner_draft_as_me' as const
 export const DRAFT_AS_ME_SETTING = 'draft_as_me'
 
 export type DraftAsMePick = AutopickFallbackPoolEntry & { reason: string }
+
+/** Where a style was learned: the manager's own past picks and the drafts they came from. */
+export type DraftStyleReference = { ownPicks: number; drafts: string[] }
+
+/** Pure: "from 14 of your own picks in 2 drafts (latest: Alpha League)". */
+export function describeStyleReference(ref: DraftStyleReference): string {
+  const drafts = ref.drafts.length
+  const latest = ref.drafts[0] ? ` (latest: ${ref.drafts[0]})` : ''
+  return `Learned from ${ref.ownPicks} of your own pick${ref.ownPicks === 1 ? '' : 's'} in ${drafts} past draft${drafts === 1 ? '' : 's'}${latest}.`
+}
+
+/** Pure: the same, when there is not enough to learn from yet. */
+export function describeNotEnoughHistory(ownPicks: number): string {
+  return `Draft like me needs ${MIN_STYLE_SAMPLE} of your own picks from past drafts and has ${ownPicks}, so Chimmy took the best player for your roster instead. Auto-picks and commissioner picks do not count.`
+}
+
+/** Pure: the reference behind a manager's past picks, newest draft first. */
+export function styleReferenceOf(picks: ReadonlyArray<{ leagueName?: string | null }>): DraftStyleReference {
+  const drafts: string[] = []
+  for (const p of picks) {
+    const name = String(p.leagueName ?? '').trim() || 'Unnamed league'
+    if (!drafts.includes(name)) drafts.push(name)
+  }
+  return { ownPicks: picks.length, drafts }
+}
+
+/** What the draft room says about this manager's "Draft like me" before any pick is made. */
+export async function draftAsMeStatus(leagueId: string, rosterId: string): Promise<{ ready: boolean; ownPicks: number; needed: number; summary: string }> {
+  const past = await loadManagerPastPicks(leagueId, rosterId)
+  const style = buildDraftStyle(past)
+  const ref = styleReferenceOf(past)
+  if (!style) return { ready: false, ownPicks: ref.ownPicks, needed: MIN_STYLE_SAMPLE, summary: describeNotEnoughHistory(ref.ownPicks) }
+  return { ready: true, ownPicks: ref.ownPicks, needed: MIN_STYLE_SAMPLE, summary: `${describeDraftStyle(style)} ${describeStyleReference(ref)}` }
+}
 
 export function describeDraftStyle(style: DraftStyle): string {
   const lean = Object.entries(style.positionShare).sort((a, b) => b[1] - a[1])[0]
@@ -86,13 +120,19 @@ export async function tryDraftAsMePick(args: {
   aiAdpByKey?: Record<string, number>
   /** The draft's sport, for player ages. */
   sport?: string | null
+  /** Called with the explanation when draft as me is on but has too little history to judge. */
+  onNotEnoughHistory?: (reason: string) => void
 }): Promise<DraftAsMePick | null> {
   const on =
     (args.draftSessionId ? await personalDraftAsMeOn(args.draftSessionId, args.rosterId).catch(() => false) : false) ||
     (await draftAsMeEnabledForLeague(args.leagueId, args.rosterId))
   if (!on) return null
-  const style = buildDraftStyle(await loadManagerPastPicks(args.leagueId, args.rosterId))
-  if (!style) return null
+  const past = await loadManagerPastPicks(args.leagueId, args.rosterId)
+  const style = buildDraftStyle(past)
+  if (!style) {
+    args.onNotEnoughHistory?.(describeNotEnoughHistory(past.length))
+    return null
+  }
   const key = (e: AutopickFallbackPoolEntry) => `${e.playerName.trim().toLowerCase()}|${(e.position || '').toLowerCase()}|${(e.team || '').toLowerCase()}`
   // Ages only matter when this manager has a youth lean; otherwise the board is not read for them.
   const ages = style.youthLean != null ? await loadDraftPlayerAges(args.sport, args.board.map((e) => e.playerId)).catch(() => new Map<string, number>()) : new Map<string, number>()
@@ -100,5 +140,5 @@ export async function tryDraftAsMePick(args: {
   const chosen = pickLikeManager({ style, overall: args.overall, board, ownPositions: args.ownPositions, eligible: args.eligible })
   if (!chosen) return null
   const original = args.board.find((e) => key(e) === key(chosen.player))
-  return original ? { ...original, reason: describeDraftStyle(style) } : null
+  return original ? { ...original, reason: `${describeDraftStyle(style)} ${describeStyleReference(styleReferenceOf(past))}` } : null
 }
