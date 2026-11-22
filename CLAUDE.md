@@ -2465,7 +2465,11 @@ git ls-remote origin refs/heads/worker-release   # what the crons are actually r
 ```
 
 ⚠ Expect it to be behind `main` by up to a day. That is the design. If a cron fix is
-urgent, dispatch the workflow by hand rather than repointing the service. There is also
+urgent, dispatch the workflow by hand rather than repointing the service — **but a hand dispatch
+within 6 hours of the last advance is refused unless it passes `force=true` and a `reason`.**
+On 2026-11-22 the workflow ran 12 times in a day, 11 by hand from sessions each wanting its own
+fix live, so the "daily" worker redeployed about every two hours and two overlapping builds hung.
+Most cron fixes can wait for 21:20 UTC; say why yours cannot. There is also
 `/api/af-debug/sha` on either service, which answers `{branch, sha}` for the container
 actually serving you.
 
