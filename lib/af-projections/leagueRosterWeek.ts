@@ -119,7 +119,12 @@ const CACHED_BOARD_MS = 5
 const BOARD_TIMING_THRESHOLD_MS = 1500
 
 /** Portfolio views can span dozens of leagues. Bound board reads and share availability for each sport-week. */
-export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[]) {
+/**
+ * `afIntelligence: false` — the viewer's plan does not include AF Intelligence: each player's week is the number
+ * BEFORE AF's learned factors (`afFactors.unadjusted`, kept on the same cached board), so every total, rank and win
+ * probability built from these is the plain one. The board itself stays shared; nothing is read twice.
+ */
+export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[], opts: { afIntelligence?: boolean } = {}) {
   const result = new Map<string, Map<string, RosterWeekPlayer>>()
   const cohorts = new Map<string, { sport: string; season: number; week: number; players: Map<string, RosterWeekPlayer[]> }>()
   /*
@@ -151,7 +156,8 @@ export async function loadLeagueRosterWeeks(requests: RosterWeekRequest[]) {
       if (!cohort) cohorts.set(key, cohort = { sport: board.sport, season, week, players: new Map() })
       for (const row of board.rows) {
         if (!row.rosterPlayerId) continue
-        const player = { points: row.weekly, team: row.team ?? null, unavailable: false }
+        const plain = opts.afIntelligence === false && row.afFactors?.unadjusted && 'weekly' in row.afFactors.unadjusted
+        const player = { points: plain ? row.afFactors!.unadjusted!.weekly ?? null : row.weekly, team: row.team ?? null, unavailable: false }
         players.set(row.rosterPlayerId, player)
         if (row.availabilityId && row.weeklyUnavailableReason !== 'no_nba_roster') {
           const matches = cohort.players.get(row.availabilityId) ?? []
