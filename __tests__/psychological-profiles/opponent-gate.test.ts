@@ -45,12 +45,13 @@ describe('the opponent psychology gate discriminates', () => {
     ).toBe(true)
   })
 
-  it('locks a Commissioner-only subscriber', () => {
-    // Commissioner is a real paid plan that this capability is not sold on, so
-    // it must be locked — otherwise the tiering is decorative.
+  it('allows a Commissioner subscriber', () => {
+    // Owner, 2026-11-22: every high-level Chimmy/OS function — manager psychology included — is covered by AF Pro,
+    // Supreme OR Commissioner (lib/monetization/entitlements.ts). The gate still discriminates: anonymous, no-plan
+    // and lapsed callers are locked above and below.
     expect(
       canAccess(FEATURE, { isAuthenticated: true, plans: ['commissioner'], status: 'active' }).allowed
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('locks a lapsed subscriber', () => {
