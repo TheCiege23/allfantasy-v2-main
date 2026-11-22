@@ -2,6 +2,8 @@ import type { PrismaClient } from '@prisma/client'
 
 import { describeFactorTable, learnFactors, type LearnedFactorTable } from './factorLearner'
 import { buildFactorObservations, opponentRatios, usageOf, type GameLine } from './factorObservations'
+import { contextKey, loadNflGameContext, type GameContextLevels } from './gameContext'
+import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 
 /**
  * The scheduled half of AF's projection factors (`factorLearner.ts`): read a sport's stored game lines, learn, store.
@@ -36,7 +38,7 @@ const SPORT_KEYS: Record<string, string[]> = {
 const keysFor = (sport: string) => SPORT_KEYS[sport] ?? [sport, sport.toLowerCase()]
 const USAGE_SPORTS = new Set(['NBA', 'NCAAB', 'NHL', 'NFL'])
 
-type Db = Pick<PrismaClient, 'playerGameStat' | 'sportsDataCache'>
+type Db = Pick<PrismaClient, 'playerGameStat' | 'sportsDataCache'> & Partial<Pick<PrismaClient, 'sportsGame' | 'weatherCache' | 'coachStint'>>
 
 /** Read one sport's game lines as `GameLine`s. */
 export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sport: string, now: Date): Promise<GameLine[]> {
@@ -69,7 +71,18 @@ export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sp
       opponent: r.opponent,
       points: Number(r.fantasyPoints ?? 0),
       usage: withUsage ? usageOf(sport, r.normalizedStatMap) : null,
+      ...(sport === 'NFL' ? { season: r.season, week: r.weekOrRound } : {}),
     })
+  }
+  if (sport === 'NFL' && 'sportsGame' in db) {
+    // The game's own context — Vegas, weather, coaching — as stored before kickoff (`gameContext.ts`).
+    const weeks = [...new Map(out.filter((l) => l.season != null && l.week != null).map((l) => [`${l.season}:${l.week}`, { season: l.season!, week: l.week! }])).values()]
+    const ctx = await loadNflGameContext(db as never, weeks).catch(() => new Map<string, GameContextLevels>())
+    for (const l of out) {
+      const code = projectionTeamKey('NFL', l.team)
+      const c = code && l.season != null && l.week != null ? ctx.get(contextKey(l.season, l.week, code)) : undefined
+      if (c) l.context = c
+    }
   }
   return out
 }
