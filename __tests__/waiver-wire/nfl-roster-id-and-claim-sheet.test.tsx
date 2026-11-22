@@ -10,7 +10,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('@/lib/core-app/unsavedWork', () => ({ useHoldUnsavedWork: () => {} }))
 
-import { rosterIdForPoolRow } from '@/lib/waiver-wire/nflRosterIdForPoolRow'
+import { addableNflPoolRows, rosterIdForPoolRow } from '@/lib/waiver-wire/nflRosterIdForPoolRow'
 
 const nflRosterIdForPoolRow = rosterIdForPoolRow
 import WaiverClaimDrawer from '@/components/waiver-wire/WaiverClaimDrawer'
@@ -92,5 +92,24 @@ describe('WaiverClaimDrawer', () => {
   it('sits above the league tab bar', () => {
     render(<WaiverClaimDrawer {...base} onSubmit={() => {}} />)
     expect(screen.getByTestId('waiver-claim-drawer').className).toContain('z-[1200]')
+  })
+})
+
+describe('addableNflPoolRows', () => {
+  const sleeper = { player_id: 'u1', sleeper_id: '96', external_source_id: '96' }
+  const defense = { player_id: 'nfl:def:PHI', sleeper_id: null, external_source_id: null }
+  const vendorOnly = { player_id: 'u2', sleeper_id: null, external_source_id: '19' }
+
+  it('leaves out an NFL row that has no roster id, and keeps Sleeper rows and team defenses', () => {
+    expect(addableNflPoolRows('NFL', [sleeper, vendorOnly, defense])).toEqual([sleeper, defense])
+  })
+
+  it('returns the pool whole when no row has a Sleeper id at all', () => {
+    expect(addableNflPoolRows('NFL', [vendorOnly, defense])).toEqual([vendorOnly, defense])
+  })
+
+  it('changes nothing in another sport', () => {
+    const rows = [{ player_id: 'u3', sleeper_id: null, external_source_id: null }]
+    expect(addableNflPoolRows('NHL', rows)).toEqual(rows)
   })
 })
