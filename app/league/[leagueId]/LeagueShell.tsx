@@ -2591,12 +2591,13 @@ function LeagueTabRouter({
 
   /*
    * Native league screens (handoff 2026-10-11 §3): AF-hosted leagues get the rebuilt Matchup, Lineup,
-   * Waivers, Trades and Standings. Since 2026-11-22 an imported league in the workspace gets Matchup, Team,
-   * Trades and Standings too (owner: one look for every league). The routes behind them already serve
+   * Waivers, Trades and Standings. Since 2026-11-22 an imported league in the workspace gets all of them too
+   * (owner: one look for every league). The routes behind them already serve
    * imports: trades-panel and the trade actions are the Trades tab's own, the lineup save carries the
    * imported Write Authority, standings keep the platform's records, matchup-center reads the provider's
-   * week. An import keeps the classic Waivers, and the classic Team tab when it has a college roster
-   * (C2C / devy: the two-lineup roster lives there). An embedded import keeps every classic screen.
+   * week, and the waiver routes are the classic waiver page's own (the screen says a claim on an import stays in
+   * AllFantasy). An import keeps the classic Team tab when it has a college roster (C2C / devy: the two-lineup
+   * roster lives there). An embedded import keeps every classic screen.
    * The variants whose tab renders something else entirely (Big Brother standings, IDP / Best Ball /
    * college team views) keep the components below.
    */
