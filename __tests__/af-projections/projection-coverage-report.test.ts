@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { assessProjectionCoverage, parseChimmyProjection } from '@/lib/production-health/projectionCoverageCore'
 
 const input = { id: 'p1', name: 'Example Player', hasWeek: true, lineupAvailable: true, matchup: null }
-const linked = { identity: 'linked' as const, name: input.name, games: 0, hasSnapshot: false }
+const linked = { identity: 'linked' as const, name: input.name, games: 0, hasSnapshot: false, hasPriorSnapshot: false }
 
 describe('projection coverage report', () => {
   it('keeps a true zero distinct from a missing projection', () => {
@@ -31,6 +31,9 @@ describe('projection coverage report', () => {
       needsProjectionReview: false, reason: 'one_verified_game',
     })
     expect(assessProjectionCoverage({ ...input, evidence: { ...linked, identity: 'ambiguous' } }).reason).toBe('identity_ambiguous')
+    expect(assessProjectionCoverage({ ...input, evidence: { ...linked, hasPriorSnapshot: true } })).toMatchObject({
+      needsProjectionReview: false, reason: 'prior_baseline_without_current_sample',
+    })
   })
 
   it('distinguishes a missing fixture from an offseason weekly check', () => {

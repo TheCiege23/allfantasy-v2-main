@@ -53,6 +53,7 @@ export function assessProjectionCoverage(input: PlayerInput) {
   else if (!evidence || evidence.identity === 'missing') reason = 'identity_missing'
   else if (evidence.identity === 'ambiguous') reason = 'identity_ambiguous'
   else if (evidence.identity === 'unsupported') reason = 'roster_id_space_unsupported'
+  else if (evidence.hasPriorSnapshot) reason = 'prior_baseline_without_current_sample'
   else if (evidence.games === 1) reason = 'one_verified_game'
   else reason = 'no_verified_scoring_sample'
 

@@ -8,7 +8,7 @@ import { normalizeSoccerGameStats } from '@/lib/scoring-runtime/soccerStatNormal
 import { hasCollegeBoxParticipation } from '@/lib/workers/providers/collegeFinalBoxes'
 
 type Identity = 'linked' | 'ambiguous' | 'missing' | 'unsupported'
-export type ProjectionEvidence = { name: string | null; identity: Identity; games: number; hasSnapshot: boolean }
+export type ProjectionEvidence = { name: string | null; identity: Identity; games: number; hasSnapshot: boolean; hasPriorSnapshot: boolean }
 
 const SEASON_SOURCES = ['rolling_insights', 'cfbd', 'af_verified_college_boxes']
 const FINAL_STATUSES = ['final', 'completed', 'ft', 'finished', 'closed', 'aet', 'pen']
@@ -52,11 +52,17 @@ export async function loadProjectionEvidence(args: {
     }),
     prisma.aFProjectionSnapshot.findMany({
       where: { sport, season, week: null, eventId: null, playerId: { in: keys } },
-      select: { playerId: true },
+      select: { playerId: true, adjustmentFactors: true },
     }),
   ]) : [[], []]
   const games = new Map<string, number>()
-  const projected = new Set(snapshots.map(row => row.playerId))
+  const projected = new Set<string>()
+  const priorProjected = new Set<string>()
+  for (const row of snapshots) {
+    const basis = object(row.adjustmentFactors).sourceSeason
+    const keys = typeof basis === 'number' && basis < season ? priorProjected : projected
+    keys.add(row.playerId)
+  }
   for (const { playerId, stats } of lines) {
     const aggregate = extractSeasonAggregate(stats)
     if (!aggregate || !Object.keys(aggregate.components).some(key => key !== 'games_played')) continue
@@ -104,6 +110,7 @@ export async function loadProjectionEvidence(args: {
       identity, name: new Set(linked.map(row => row.canonicalName)).size === 1 ? linked[0]?.canonicalName ?? null : null,
       games: identity === 'linked' ? Math.max(0, ...keys.map(key => games.get(key) ?? 0)) : 0,
       hasSnapshot: identity === 'linked' && keys.some(key => projected.has(key)),
+      hasPriorSnapshot: identity === 'linked' && keys.some(key => priorProjected.has(key)),
     }]
   }))
 }

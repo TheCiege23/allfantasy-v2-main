@@ -18,6 +18,7 @@ const labels: Record<string, string> = {
   identity_ambiguous: 'Roster identity ambiguous',
   roster_id_space_unsupported: 'Roster ID space unavailable for this check',
   one_verified_game: 'One verified scoring appearance',
+  prior_baseline_without_current_sample: 'Prior-season baseline with insufficient current evidence',
   no_verified_scoring_sample: 'No verified scoring sample found',
 }
 
