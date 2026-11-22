@@ -4,6 +4,8 @@ import { COMPONENT_RULE_KEYS, type IdpComponent } from './idpScoring'
 import { prisma } from '@/lib/prisma'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
+import { loadNflSpecialistRates } from './nflSpecialistRates'
+import type { SpecialistRate } from './nflSpecialistRatesModel'
 
 /** AF's seasonal component rates, scaled to the opportunities in the requested NFL week.
  * Keep both identity spaces so league projections, roster tools and the wire share one line. */
@@ -29,12 +31,14 @@ export function nflComponentRates(factors: Record<string, unknown>, games = 1): 
 }
 
 async function readWeek(season: number, week: number): Promise<Map<string, NflWeekLine>> {
-  const [rows, schedule] = await Promise.all([
+  const [rows, schedule, specialists] = await Promise.all([
     prisma.aFProjectionSnapshot.findMany({
       where: { sport: 'NFL', season, week: null, eventId: null },
       select: { playerId: true, playerName: true, position: true, afProjection: true, adjustmentFactors: true },
     }),
     loadProjectionSchedule({ sport: 'NFL', season, week, now: new Date() }),
+    // A failed read leaves kickers as they were (no distance buckets) and never fails the week.
+    loadNflSpecialistRates(season).catch(() => new Map<string, SpecialistRate>()),
   ])
   const ids = rows.map((row) => row.playerId)
   const [links, statTeams] = await Promise.all([
@@ -54,6 +58,10 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
     const factors = row.adjustmentFactors
     if (games == null || !factors || typeof factors !== 'object' || Array.isArray(factors)) continue
     const components = nflComponentRates(factors, games)
+    // A kicker's season snapshot has his field goals with no distance, which no league rule can
+    // price. His own makes by distance, from this season's game logs, are what the rules read.
+    const kicking = row.position === 'K' ? specialists.get(linked.sleeperId) : undefined
+    if (kicking?.kind === 'K') for (const [stat, perGame] of Object.entries(kicking.perGame)) components[stat] = perGame * games
     if (!Object.keys(components).length) continue
     result.set(linked.sleeperId, { key: row.playerId, playerId: linked.sleeperId, name: row.playerName, position: row.position, team: team ?? null,
       weekGames: games, componentStats: components, projectedPoints: row.afProjection * games, source: 'allfantasy' })
