@@ -428,6 +428,8 @@ export async function resolveBestAvailableAutopickCandidate(
       board,
       ownPositions,
       eligible: draftEligiblePositions,
+      // The same open starting slots the starter guard computed from the league template.
+      openStarters: guard.open,
       aiAdpByKey,
       sport,
       onNotEnoughHistory: (reason) => {
