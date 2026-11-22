@@ -10,6 +10,9 @@ import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridg
 import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { aggregateNcaafWeek } from '@/lib/scoring-runtime/ncaafStatNormalization'
 import { rosterFormatFromSettings } from '@/lib/adp/draftContextKey'
+import { accumulateTeamTotals, resolveCategoryMatchup } from '@/lib/category-scoring/CategoryMatchupResolver'
+import { nativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
+import type { CategoryDefinition } from '@/lib/category-scoring/types'
 import { completedThrough, firstWeekNotKickedOff, type WeekCalendar } from './ledgerRecord'
 
 /**
@@ -35,16 +38,18 @@ import { completedThrough, firstWeekNotKickedOff, type WeekCalendar } from './le
  *
  * ⚠ WHAT IS LEFT OUT, AND COUNTED:
  *   - NFL plain redraft: the existing ledger owns it (`ledgerGrading`), and two NFL redraft records would disagree.
- *   - category and roto leagues: they have no points, so a points outcome would grade a number their managers do not
- *     play for (`category_league`).
- *   - a dynasty deal that moved draft picks: no dated pick price exists yet (`picks_not_valued`). Players-only dynasty
+ *   - category and roto leagues whose category set is not stored (`category_league`). The rest are graded on CATEGORIES
+ *     WON over the same window (2026-11-22) — a points outcome would grade a number their managers do not play for.
+ *   - a dynasty deal that moved FAAB, or a pick its grade's lines do not place on a side (`picks_not_valued`). Picks the
+ *     lines do place are priced on the same dynasty book's pick rows a month on (2026-11-22). Players-only dynasty
  *     deals are graded; the skip is reported so its size is visible.
  *   - a player the game logs or the market cannot place: the side is unscored, never scored as zero.
  *
  * Counts only — no league, player, user or trade id leaves this module.
  */
 
-export type TradeOutcomeKind = 'points' | 'value'
+/** points: league-scored points a week. value: dynasty market share. categories: categories won minus lost (2026-11-22). */
+export type TradeOutcomeKind = 'points' | 'value' | 'categories'
 export type TradeOutcomeTally = { n: number; net: number; ahead: number; behind: number }
 export type TradeOutcomeBucket = {
   sport: string
@@ -121,6 +126,35 @@ export function foldOutcomeBucket(sport: string, kind: TradeOutcomeKind, calls: 
  * Points a list of players scored, by game day, from `fromMs` (inclusive) to `throughMs` (inclusive). Null when any of
  * them cannot be placed in the game logs — a side is never scored as zero for a player we cannot see. PURE.
  */
+/**
+ * A category league's outcome: over the window, each side's players' stat lines summed, then the league's own
+ * categories compared the way a weekly matchup compares them (`resolveCategoryMatchup`). Net = categories the
+ * received side won minus those it lost. Null when any player cannot be placed in the game logs. PURE.
+ */
+export function categoriesNet(
+  getIds: readonly string[],
+  giveIds: readonly string[],
+  byPlayer: ReadonlyMap<string, ReadonlyArray<{ dayMs: number; stats: Record<string, number> }>>,
+  fromMs: number,
+  throughMs: number,
+  categories: readonly CategoryDefinition[],
+): number | null {
+  const totals = (ids: readonly string[]) => {
+    const lines: Record<string, number>[] = []
+    for (const id of ids) {
+      const games = byPlayer.get(id)
+      if (!games) return null
+      for (const g of games) if (g.dayMs >= fromMs && g.dayMs <= throughMs) lines.push(g.stats)
+    }
+    return accumulateTeamTotals(lines)
+  }
+  const get = totals(getIds)
+  const give = totals(giveIds)
+  if (!get || !give || categories.length === 0) return null
+  const r = resolveCategoryMatchup(get, give, categories)
+  return r.aWins - r.bWins
+}
+
 export function pointsOver(ids: readonly string[], byPlayer: ReadonlyMap<string, ReadonlyArray<{ dayMs: number; points: number }>>, fromMs: number, throughMs: number): number | null {
   let total = 0
   for (const id of ids) {
@@ -131,21 +165,68 @@ export function pointsOver(ids: readonly string[], byPlayer: ReadonlyMap<string,
   return total
 }
 
-/** A dynasty deal's outcome: get minus give as a share of both, in percentage points. Null when anyone is unpriced. PURE. */
-export function valueShareNet(getIds: readonly string[], giveIds: readonly string[], valueOf: (id: string) => number | null): number | null {
-  const sum = (ids: readonly string[]) => {
+/** A draft pick as a grade line names it: "2027 1st", "2027 1st (Early)", "2026 Pick 1.04", "2027 Round 2". PURE. */
+export function parseTradedPick(name: string): { season: string; round: number } | null {
+  const t = String(name ?? '').trim()
+  const m = /^(\d{4})\s+(?:pick\s+(\d+)\.\d+|(\d+)(?:st|nd|rd|th)\b|round\s+(\d+)\b|r(\d+)\b)/i.exec(t)
+  if (!m) return null
+  const round = Number(m[2] ?? m[3] ?? m[4] ?? m[5])
+  return Number.isFinite(round) && round >= 1 ? { season: m[1]!, round } : null
+}
+
+export type TradedPick = { season: string; round: number }
+
+/**
+ * A dynasty deal's outcome: get minus give as a share of both, in percentage points. Null when anything is unpriced —
+ * a player OR a pick (2026-11-22: picks are priced on the same dynasty book's pick rows a month on). PURE.
+ */
+export function valueShareNet(
+  getIds: readonly string[],
+  giveIds: readonly string[],
+  valueOf: (id: string) => number | null,
+  picks?: { get: readonly TradedPick[]; give: readonly TradedPick[]; valueOf: (p: TradedPick) => number | null },
+): number | null {
+  const sum = (ids: readonly string[], ps: readonly TradedPick[] = []) => {
     let s = 0
     for (const id of ids) {
       const v = valueOf(id)
       if (v == null) return null
       s += v
     }
+    for (const p of ps) {
+      const v = picks?.valueOf(p) ?? null
+      if (v == null) return null
+      s += v
+    }
     return s
   }
-  const get = sum(getIds)
-  const give = sum(giveIds)
+  const get = sum(getIds, picks?.get)
+  const give = sum(giveIds, picks?.give)
   if (get == null || give == null || get + give <= 0) return null
   return Math.round(((get - give) / (get + give)) * 1000) / 10
+}
+
+/**
+ * The picks each way in a graded deal, from the grade's own LINES (each names its side): null when the deal also moved
+ * FAAB, or when the lines do not account for every pick the receipt holds — a pick we cannot place is never guessed
+ * onto a side. PURE.
+ */
+export function picksFromReceipt(receipt: unknown): { getPicks: TradedPick[]; givePicks: TradedPick[] } | null {
+  const r = (receipt && typeof receipt === 'object' ? receipt : {}) as { assets?: unknown; grade?: { lines?: unknown } }
+  const assets = Array.isArray(r.assets) ? (r.assets as Array<{ kind?: unknown }>) : []
+  if (assets.some((a) => a?.kind === 'faab')) return null
+  const pickAssets = assets.filter((a) => a?.kind === 'pick').length
+  const lines = Array.isArray(r.grade?.lines) ? (r.grade!.lines as Array<{ side?: unknown; name?: unknown }>) : []
+  const getPicks: TradedPick[] = []
+  const givePicks: TradedPick[] = []
+  for (const l of lines) {
+    const p = typeof l?.name === 'string' ? parseTradedPick(l.name) : null
+    if (!p) continue
+    if (l.side === 'get') getPicks.push(p)
+    else if (l.side === 'give') givePicks.push(p)
+  }
+  if (getPicks.length + givePicks.length === 0 || getPicks.length + givePicks.length !== pickAssets) return null
+  return { getPicks, givePicks }
 }
 
 // ───────────────────────── the database half ─────────────────────────
@@ -153,6 +234,11 @@ export function valueShareNet(getIds: readonly string[], giveIds: readonly strin
 type Db = typeof prisma
 type Snap = { is_trade: boolean; surface: string | null; captured_at: Date; receipt: unknown; sport: string; league_type: string | null; league_variant: string | null; is_dynasty: boolean; settings: unknown }
 type Row = NonNullable<Exclude<ReturnType<typeof tradeLedgerRow>, { skip: unknown }>> & {
+  /** Draft picks each way, read off the grade's own lines (NFL dynasty value deals only). */
+  getPicks?: TradedPick[]
+  givePicks?: TradedPick[]
+  /** A category league's own categories (kind `categories`). */
+  categories?: readonly CategoryDefinition[]
   capturedAtMs: number
   sport: string
   kind: TradeOutcomeKind
@@ -220,15 +306,29 @@ export async function gradeAllTradeOutcomes(opts: {
     if (kind === 'points' || sport !== 'NFL') {
       const format = weeklyFormat({ leagueType: s.league_type, settings: s.settings })
       if (format === 'categories' || format === 'roto') {
-        skip(key, 'category_league')
+        /*
+         * 2026-11-22: graded on CATEGORIES WON, never on points. Only when the league's own category set is stored and
+         * validated (`nativeCategoryScoringContext`); a category league we cannot read the categories of is still skipped.
+         */
+        const ctx = nativeCategoryScoringContext(s.settings, sport)
+        if (!ctx) {
+          skip(outcomeBucketKey(sport, 'categories'), 'category_league')
+          continue
+        }
+        rows.push({ ...r, capturedAtMs: new Date(s.captured_at).getTime(), sport, kind: 'categories', categories: ctx.categories as readonly CategoryDefinition[], settings: s.settings, typeText })
         continue
       }
     }
+    let picks: { getPicks: TradedPick[]; givePicks: TradedPick[] } | null = null
     if (kind === 'value' && sport === 'NFL' && r.nonPlayerAssets) {
-      skip(key, 'picks_not_valued')
-      continue
+      picks = picksFromReceipt(s.receipt)
+      if (!picks) {
+        // FAAB in a dynasty deal, or a pick the grade's lines do not name: still not valued, still counted.
+        skip(key, 'picks_not_valued')
+        continue
+      }
     }
-    rows.push({ ...r, capturedAtMs: new Date(s.captured_at).getTime(), sport, kind, settings: s.settings, typeText })
+    rows.push({ ...r, ...(picks ?? {}), capturedAtMs: new Date(s.captured_at).getTime(), sport, kind, settings: s.settings, typeText })
   }
 
   const callsBy = new Map<string, OutcomeCall[]>()
@@ -251,17 +351,31 @@ export async function gradeAllTradeOutcomes(opts: {
         : []
       valueBy.set(qb, new Map(rowsQ.map((x) => [x.sleeper_id, Number(x.value)])))
     }
+    // The same dynasty book's PICK rows, newest capture (stored daily since 2026-09-20) — only when a deal moved picks.
+    const pickPrice = new Map<string, (p: TradedPick) => number | null>()
+    if (nflValue.some((r) => (r.getPicks?.length ?? 0) + (r.givePicks?.length ?? 0) > 0)) {
+      const { loadLatestPickValueSnapshots } = await import('@/lib/player-values/latestPickValueSnapshots')
+      const { pickPricerFrom } = await import('@/lib/core-app/tradePicks')
+      for (const qb of ['ONE_QB', 'SUPERFLEX'] as const) {
+        const rowsP = await loadLatestPickValueSnapshots({ source: 'FANTASYCALC', format: 'DYNASTY', qbFormat: qb, client: db as never }).catch(() => [])
+        const price = pickPricerFrom(rowsP)
+        // The book's mean VALUE for the round (the scale the players' values are on); a drafted-and-gone season has no row.
+        pickPrice.set(qb, (p) => price(p.season, p.round)?.value || null)
+      }
+    }
     for (const r of nflValue) {
       const key = outcomeBucketKey('NFL', 'value')
       if (now.getTime() - r.capturedAtMs < VALUE_MIN_DAYS * DAY) {
         push(key, { status: 'pending', letter: r.letter })
         continue
       }
-      const book = valueBy.get(rosterFormatFromSettings(r.settings) === 'superflex' ? 'SUPERFLEX' : 'ONE_QB')!
+      const qb = rosterFormatFromSettings(r.settings) === 'superflex' ? 'SUPERFLEX' : 'ONE_QB'
+      const book = valueBy.get(qb)!
+      const hasPicks = (r.getPicks?.length ?? 0) + (r.givePicks?.length ?? 0) > 0
       const net = valueShareNet(r.getPlayerIds, r.givePlayerIds, (id) => {
         const sid = toSleeper.get(id)
         return sid != null ? book.get(sid) ?? null : null
-      })
+      }, hasPicks ? { get: r.getPicks ?? [], give: r.givePicks ?? [], valueOf: pickPrice.get(qb) ?? (() => null) } : undefined)
       push(key, net == null ? { status: 'unscored', letter: r.letter } : { status: 'graded', letter: r.letter, net, capturedAtMs: r.capturedAtMs })
     }
   }
@@ -360,6 +474,23 @@ export async function gradeAllTradeOutcomes(opts: {
       sport === 'NCAAF' ? aggregateNcaafWeek(rowsOfGame).stats : normalizer ? aggregateWeeklyStats(rowsOfGame, normalizer).stats : {}
     const positions = await positionsByRosterId(db, ids, sport)
     for (const r of list) {
+      if (r.kind === 'categories') {
+        const catKey = outcomeBucketKey(sport, 'categories')
+        const from = Math.floor(r.capturedAtMs / DAY) * DAY + DAY
+        const through = Math.min(now.getTime(), r.capturedAtMs + POINTS_HORIZON_DAYS * DAY)
+        if (Math.floor((through - from) / DAY) + 1 < POINTS_MIN_DAYS) {
+          push(catKey, { status: 'pending', letter: r.letter })
+          continue
+        }
+        const byPlayer = new Map<string, Array<{ dayMs: number; stats: Record<string, number> }>>()
+        for (const id of [...r.getPlayerIds, ...r.givePlayerIds]) {
+          const g = games.get(id)
+          if (g) byPlayer.set(id, [...g.values()].map((e) => ({ dayMs: e.dayMs, stats: canonical(e.rows) })))
+        }
+        const net = categoriesNet(r.getPlayerIds, r.givePlayerIds, byPlayer, from, through, r.categories ?? [])
+        push(catKey, net == null ? { status: 'unscored', letter: r.letter } : { status: 'graded', letter: r.letter, net, capturedAtMs: r.capturedAtMs })
+        continue
+      }
       const scorer = buildLeagueStatScorer({ sport, settings: r.settings as never })
       if (!scorer) {
         skip(key, 'no_scoring_rules')

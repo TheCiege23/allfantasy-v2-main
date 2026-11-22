@@ -352,7 +352,7 @@ export type LedgerRecordView = {
 
 export type TradeOutcomeView = {
   sport: string
-  kind: 'points' | 'value'
+  kind: 'points' | 'value' | 'categories'
   letters: Array<{ letter: TradeLetter; n: number; net: number; aheadPct: number | null }>
   confidence: TradeLetterCalibration | null
 }
@@ -434,7 +434,7 @@ function tradeOutcomeViews(ledger: TradeOutcomeLedger | undefined): Record<strin
   if (!ledger || typeof ledger !== 'object') return null
   const out: Record<string, TradeOutcomeView> = {}
   for (const [key, b] of Object.entries(ledger)) {
-    if (!b || typeof b !== 'object' || (b.kind !== 'points' && b.kind !== 'value')) continue
+    if (!b || typeof b !== 'object' || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories')) continue
     const letters = TRADE_LETTERS.flatMap((letter) => {
       const t = b.byLetter?.[letter]
       if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.net !== 'number' || !Number.isFinite(t.net)) return []
@@ -507,7 +507,7 @@ function readTradeOutcomeViews(value: unknown): Record<string, TradeOutcomeView>
   const out: Record<string, TradeOutcomeView> = {}
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
     const b = raw as Partial<TradeOutcomeView> | null
-    if (!b || (b.kind !== 'points' && b.kind !== 'value') || typeof b.sport !== 'string' || !Array.isArray(b.letters)) continue
+    if (!b || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories') || typeof b.sport !== 'string' || !Array.isArray(b.letters)) continue
     const letters = b.letters.filter((t) => t && TRADE_LETTERS.includes(t.letter) && typeof t.n === 'number' && typeof t.net === 'number')
     out[key] = { sport: b.sport, kind: b.kind, letters, confidence: readTradeLetterCalibration(b.confidence) }
   }

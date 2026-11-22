@@ -89,7 +89,7 @@ export type PartnerRecord = {
    * Trade letters given in these leagues, checked against what happened (2026-11-22): per sport and measure, each
    * letter's graded deals and net. Only letters with enough deals (MIN_TRADES_PER_LETTER); empty when none has.
    */
-  trades: Array<{ key: string; sport: string; kind: 'points' | 'value'; letters: Array<{ letter: string; n: number; net: number; aheadPct: number | null }> }>
+  trades: Array<{ key: string; sport: string; kind: 'points' | 'value' | 'categories'; letters: Array<{ letter: string; n: number; net: number; aheadPct: number | null }> }>
 }
 
 /** Pure: the scoped ledger → what the portal shows. Null when nothing has been given or graded at all. */

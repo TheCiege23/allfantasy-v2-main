@@ -268,11 +268,11 @@ export function RecommendationRecord({ record, unavailable }: { record: PartnerR
                 <li key={`${b.key}-${t.letter}`} className="flex flex-wrap justify-between gap-x-3">
                   <span>
                     {b.sport} · graded {t.letter}
-                    {b.kind === 'value' ? ' (dynasty value)' : ''}
+                    {b.kind === 'value' ? ' (dynasty value)' : b.kind === 'categories' ? ' (categories)' : ''}
                   </span>
                   <span className="tabular-nums text-white">
                     {t.net >= 0 ? '+' : '−'}
-                    {Math.abs(t.net).toFixed(1)} {b.kind === 'value' ? 'value' : 'pts/wk'} · {t.n} trades{t.aheadPct != null ? ` · ahead ${t.aheadPct}%` : ''}
+                    {Math.abs(t.net).toFixed(1)} {b.kind === 'value' ? 'value' : b.kind === 'categories' ? 'cats' : 'pts/wk'} · {t.n} trades{t.aheadPct != null ? ` · ahead ${t.aheadPct}%` : ''}
                   </span>
                 </li>
               )),
