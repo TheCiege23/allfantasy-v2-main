@@ -60,7 +60,7 @@ describe('publicTrackRecord', () => {
     const r = publicTrackRecord(view({ bench: { you: null, everyone: { right: 40, wrong: 60, same: 0, ratePct: 40, gainPerCall: -1 } } }))
     expect(r.lines.find((l) => l.key === 'bench')!.tone).toBe('not_held')
     expect(publicTrackRecord(null).lines).toEqual([])
-    expect(publicTrackRecord(null).measured).toMatch(/not about your league/)
+    expect(publicTrackRecord(null).measured).toMatch(/each league’s own scoring/)
   })
 })
 

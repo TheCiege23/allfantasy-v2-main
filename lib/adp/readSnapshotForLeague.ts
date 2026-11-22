@@ -141,7 +141,7 @@ export async function readAllFantasyAdpForLeague(
       draftSessions: {
         orderBy: CURRENT_DRAFT_SESSION_ORDER,
         take: 1,
-        select: { draftType: true, teamCount: true },
+        select: { draftType: true, teamCount: true, playerPool: true },
       },
     },
   })

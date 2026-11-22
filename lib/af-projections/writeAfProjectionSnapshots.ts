@@ -32,7 +32,7 @@ import { extractSeasonAggregate, perGameRatesFor, toWeeklyObservation } from './
 import { BLEND_GAMES, BLEND_SPORTS, blendSeasonStats, readSeasonBlend } from './seasonBlend'
 import { soccerSeasonLines } from './soccerSeasonLines'
 import { pickCollegeFootballSeasonLines } from './collegeBoxSeasonLines'
-import { pickNbaVerifiedSeasonLines, readVerifiedNbaInactiveSince } from './nbaVerifiedSeasonLines'
+import { pickNbaVerifiedSeasonLines, readVerifiedNbaInactiveSince, readVerifiedNbaTeam } from './nbaVerifiedSeasonLines'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
@@ -517,13 +517,15 @@ export async function writeAfProjectionSnapshotsForSeason(
     string,
     { stats: Record<string, number>; position: string | null; opponent?: string | null }
   > | null = null
-  try {
-    const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
-    const board = await getWeekBoard(String(targetSeason), targetWeek)
-    weekBoard = board?.players ?? null
-    if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
-  } catch (err) {
-    errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+  if (sport === 'NFL') {
+    try {
+      const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
+      const board = await getWeekBoard(String(targetSeason), targetWeek)
+      weekBoard = board?.players ?? null
+      if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
+    } catch (err) {
+      errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   // Weekly snapshots only when a real regular-season week is being played (or the caller
@@ -694,6 +696,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     const lookupKey = snapshotKey(line.playerId, targetSeason, week, null)
 
     const verifiedNbaInactiveSince = sport === 'NBA' ? readVerifiedNbaInactiveSince(stats) : undefined
+    const verifiedNbaTeam = sport === 'NBA' ? readVerifiedNbaTeam(stats) : undefined
     const adjustmentFactors = {
       engine: 'af-projections/v1',
       basis: outcome.basis,
@@ -701,6 +704,7 @@ export async function writeAfProjectionSnapshotsForSeason(
       sourceSeason: lineSeason,
       ...(typeof stats.verifiedBoxVersion === 'string' ? { verifiedBoxVersion: stats.verifiedBoxVersion, verifiedGameIds: stats.verifiedGameIds } : {}),
       ...(verifiedNbaInactiveSince ? { verifiedNbaInactiveSince } : {}),
+      ...(verifiedNbaTeam ? { verifiedNbaTeam } : {}),
       idpPreset: outcome.idp ? idpPreset : null,
       weeklyWeeksUsed: outcome.weeklyWeeksUsed,
       confidenceScore: outcome.confidence.score,

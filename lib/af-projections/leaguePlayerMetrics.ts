@@ -2,6 +2,7 @@ import 'server-only'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 import { loadAfNflWeek, nflComponentRates } from './nflLeagueWeek'
+import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
 import { extractSeasonAggregate } from './core'
 import { prisma } from '@/lib/prisma'
 import { sharedRead } from './sharedReadCache'
@@ -45,6 +46,8 @@ export type LeaguePlayerMetric = LeaguePlayerMetricRate & {
   weekGames: number | null
   weekly: number | null
   weeklyUnavailableReason?: 'no_nba_roster'
+  /** The learned factors that moved `weekly` / `daily`, when any applied (`lib/af-projections/factors`). */
+  afFactors?: { multiplier: number; reasons: string[] }
   fullSeason: number | null
   fullSeasonBasis: 'stored_schedule' | 'standard_season' | null
   restOfSeason: number | null
@@ -369,10 +372,11 @@ export async function loadLeaguePlayerMetrics(args: {
     const linked = identity.get(row.playerId)
     const knownTeam = projectionTeamKey(sport, linked?.team ?? null)
     const statTeam = projectionTeamKey(sport, recordedTeams.get(row.playerId) ?? null)
-    const inactiveSince = nbaPeriodDay ? activeBoard?.byId.get(row.playerId)?.verifiedNbaInactiveSince : undefined
+    const nbaEvidence = sport === 'NBA' ? activeBoard?.byId.get(row.playerId) : undefined
+    const inactiveSince = nbaPeriodDay ? nbaEvidence?.verifiedNbaInactiveSince : undefined
     const noNbaRoster = Boolean(nbaPeriodDay && inactiveSince && nbaPeriodDay >= inactiveSince)
     const scheduledTeam = statTeam && schedule.has(statTeam) ? statTeam : knownTeam && schedule.has(knownTeam) ? knownTeam : statTeam ?? knownTeam
-    const team = noNbaRoster ? null : scheduledTeam
+    const team = noNbaRoster ? null : nbaEvidence?.verifiedNbaTeam ?? scheduledTeam
     const value = args.includeTradeValues !== false && activeBoard
       ? boardPlayerValue(activeBoard, { playerId: row.playerId, ...(activeBoard.ctx.requireProviderId ? { rosterPlayerId: activeBoard.byId.get(row.playerId)?.rosterAlias } : {}) })
       : null
@@ -415,7 +419,7 @@ export async function loadLeaguePlayerMetrics(args: {
         rosterPlayerId: leagueIdOf(linked, 'fantraxId') ?? undefined,
         availabilityId: leagueIdOf(linked, 'sleeperNbaId'),
         team: team ?? null,
-      } : args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId), team: recordedTeams.get(row.playerId) ?? linked?.team ?? null,
+      } : args.rosterIds ? { rosterPlayerId: rosterKeys.get(row.playerId), team: nbaEvidence?.verifiedNbaTeam ?? recordedTeams.get(row.playerId) ?? linked?.team ?? null,
         availabilityId: sport === 'NBA' || sport === 'NFL' ? leagueIdOf(linked, sport === 'NBA' ? 'sleeperNbaId' : 'sleeperId') : null } : args.searchName ? {
         rosterPlayerId: idColumn ? leagueIdOf(linked, sport === 'NFL' && idColumn === 'rollingInsightsId' ? 'sleeperId' : idColumn) ?? undefined : undefined,
       } : {}),
@@ -427,6 +431,29 @@ export async function loadLeaguePlayerMetrics(args: {
       dynastyTradeValue: value?.available ? value.data.dynastyValue : collegeDynasty,
     }
   })
+  /*
+   * The learned projection factors (`lib/af-projections/factors`) on the week / day ahead for the daily sports — the
+   * same adjustment the My Team daily outlook applies, so Chimmy and every screen reading these metrics quote one
+   * number. Game lines in these sports are keyed on the identity id, which is `row.playerId`. Season-long totals are
+   * left alone: a streak or a back-to-back is about the next games, not the season. NFL lines are adjusted in
+   * `loadAfNflWeek`, upstream of `weekly`.
+   */
+  if (sport !== 'NFL' && unit === 'fantasy points') {
+    const table = await loadFactorTable(prisma, sport, now).catch(() => null)
+    const adjustments = table
+      ? await liveFactorAdjustments(prisma, {
+          sport, table, now,
+          players: rows.filter((r) => r.weekly != null || r.daily != null).map((r) => ({ key: r.playerId, gameLogId: r.playerId, next: { atMs: now.getTime(), drop: ['rest', 'opponent'] as const } })),
+        }).catch(() => new Map())
+      : new Map()
+    for (const r of rows as Array<(typeof rows)[number] & { afFactors?: { multiplier: number; reasons: string[] } }>) {
+      const adj = adjustments.get(r.playerId)
+      if (!adj) continue
+      if (r.weekly != null) r.weekly = Math.round(r.weekly * adj.multiplier * 100) / 100
+      if (r.daily != null) r.daily = Math.round(r.daily * adj.multiplier * 100) / 100
+      r.afFactors = { multiplier: adj.multiplier, reasons: adj.reasons }
+    }
+  }
   const rosterTradeQuotes = independentQuotes ? Object.fromEntries([...nflRoster].map(([rosterId, id]) =>
     [rosterId, { value: nflValues?.get(id)?.marketValue ?? specialists?.bySleeperId?.get(id)?.value ?? null,
       reason: specialists?.unpricedReasonBySleeperId?.get(id) }])) : undefined

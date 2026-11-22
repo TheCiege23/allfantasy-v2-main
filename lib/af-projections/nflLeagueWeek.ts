@@ -2,6 +2,7 @@ import 'server-only'
 
 import { COMPONENT_RULE_KEYS, type IdpComponent } from './idpScoring'
 import { prisma } from '@/lib/prisma'
+import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
 import { loadNflSpecialistRates } from './nflSpecialistRates'
@@ -9,7 +10,12 @@ import type { SpecialistRate } from './nflSpecialistRatesModel'
 
 /** AF's seasonal component rates, scaled to the opportunities in the requested NFL week.
  * Keep both identity spaces so league projections, roster tools and the wire share one line. */
-export type NflWeekLine = PlayerProjection & { key: string; weekGames: number }
+export type NflWeekLine = PlayerProjection & {
+  key: string
+  weekGames: number
+  /** The learned factors that moved this line, when any applied (`lib/af-projections/factors`). */
+  afFactors?: { multiplier: number; reasons: string[] }
+}
 export function nflComponentRates(factors: Record<string, unknown>, games = 1): Record<string, number> {
   const rates = factors.perGameRates
 
@@ -66,7 +72,31 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
     result.set(linked.sleeperId, { key: row.playerId, playerId: linked.sleeperId, name: row.playerName, position: row.position, team: team ?? null,
       weekGames: games, componentStats: components, projectedPoints: row.afProjection * games, source: 'allfantasy' })
   }
+  await applyNflFactors(result).catch(() => undefined)
   return result
+}
+
+/**
+ * The learned factors (`lib/af-projections/factors`) on each NFL line: form, snaps trend, a new team — the ones about the
+ * player himself, which his recent game lines carry. Rest and opponent are left out here (this schedule carries no
+ * kickoff time or opponent). Component stats scale with the points, so league scoring prices the same move.
+ */
+async function applyNflFactors(result: Map<string, NflWeekLine>): Promise<void> {
+  const table = await loadFactorTable(prisma, 'NFL')
+  if (!table) return
+  const lines = [...result.values()].filter((l) => l.weekGames > 0)
+  const adjustments = await liveFactorAdjustments(prisma, {
+    sport: 'NFL',
+    table,
+    players: lines.map((l) => ({ key: l.playerId, gameLogId: l.playerId, next: { atMs: Date.now(), drop: ['rest', 'opponent', 'returning'] as const } })),
+  })
+  for (const [key, adj] of adjustments) {
+    const line = result.get(key)
+    if (!line) continue
+    const scaled: Record<string, number> = {}
+    for (const [stat, v] of Object.entries(line.componentStats ?? {})) scaled[stat] = typeof v === "number" ? v * adj.multiplier : (v as number)
+    result.set(key, { ...line, componentStats: scaled, projectedPoints: (line.projectedPoints ?? 0) * adj.multiplier, afFactors: { multiplier: adj.multiplier, reasons: adj.reasons } })
+  }
 }
 
 const cache = new Map<string, { at: number; rows: Promise<Map<string, NflWeekLine>> }>()

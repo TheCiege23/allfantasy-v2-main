@@ -2096,7 +2096,7 @@ async function buildResolvedDraftPoolForLeague(
           settings: league?.settings ?? null,
         },
         session: draftSession
-          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
+          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null, playerPool: draftSession.playerPool ?? null }
           : null,
       })
       const perfAiAdp = perfStart('10. loadAdpBoard')
