@@ -38,7 +38,7 @@ import {
   type ManagedLineup,
   type ManagedLineups,
 } from './inactiveManagerMode'
-import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { AUTO_HANDOVER_KEY, parseAutoHandover, readAutoHandover, teamsToHandOver, type AutoHandoverRule } from './autoHandover'
 import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
 
@@ -115,7 +115,7 @@ export async function readInactiveManagerView(
   const managed = readManagedLineups(league.settings)
   const health = await getLeagueManagerHealth(leagueId)
   const owners = await prisma.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } })
-  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isOrphanPlatformUserId(r.platformUserId) || isAiManagerPlatformUserId(r.platformUserId)).map((r) => r.id))
+  const emptySeats = new Set(owners.filter((r) => !r.platformUserId || isSeatPlaceholderUserId(r.platformUserId)).map((r) => r.id))
   const suggested = new Set(suggestInactiveTeams(health.rows, managed))
   return {
     native: true,
@@ -191,7 +191,7 @@ export async function setInactiveManagerMode(leagueId: string, userId: string, r
    * back (`endInactiveManagerModeOnOwnerSave`) — so the notice says exactly that.
    */
   const owner = roster.platformUserId
-  if (changed && on && owner && owner !== userId && !isOrphanPlatformUserId(owner) && !isAiManagerPlatformUserId(owner)) {
+  if (changed && on && owner && owner !== userId && !isSeatPlaceholderUserId(owner)) {
     await dispatchNotification({
       userIds: [owner],
       category: 'autocoach',

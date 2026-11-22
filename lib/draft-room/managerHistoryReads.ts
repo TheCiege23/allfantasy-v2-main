@@ -15,7 +15,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isAiManagerPlatformUserId, isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { buildAdpLookup, type AdpLookup } from './draftPulse'
 import { readLeaguePoolEntries } from './adpAtPick'
 import { CURRENT_DRAFT_SESSION_ORDER } from './currentDraftSession'
@@ -43,7 +43,7 @@ export type HistoryPickRow = {
  */
 export function managerIdentity(platformUserId: string | null | undefined): string | null {
   const id = String(platformUserId ?? '').trim()
-  if (!id || isOrphanPlatformUserId(id) || isAiManagerPlatformUserId(id)) return null
+  if (!id || isSeatPlaceholderUserId(id)) return null
   return id
 }
 

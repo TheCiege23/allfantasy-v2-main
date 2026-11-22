@@ -16,7 +16,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -223,7 +223,7 @@ export async function buildGuillotineWarRoomContext(
       rosterId: r.id,
       ownerId: r.platformUserId ?? r.id,
       // An orphan's key is a placeholder, not a name.
-      ownerName: meta?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
+      ownerName: meta?.ownerName ?? (isSeatPlaceholderUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
       teamName: meta?.teamName ?? null,
       isUserTeam: r.platformUserId === userId,
       eliminated: Boolean(st?.choppedAt),

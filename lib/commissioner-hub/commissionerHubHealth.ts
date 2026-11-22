@@ -1,6 +1,6 @@
 import type { UserLeague } from '@/app/dashboard/types'
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { readEliminatedTeamsByLeague } from '@/lib/guillotine/eliminatedTeams'
 import { monitorLeagueHealth, type OverallStatus } from '@/lib/league-health/league-health-engine'
 import { disputeHealthSignals, readDisputes } from '@/lib/disputes/disputeStore'
@@ -390,7 +390,7 @@ function isRosterInactive(roster: RosterHealthRow, now: Date): boolean {
   const settings = asRecord(roster.settings)
   if (settings.isOrphan === true || settings.orphan === true || settings.inactive === true) return true
   // An orphan has no manager to be active: imported orphans carry an 'orphan-' key, not ''.
-  if (!roster.platformUserId || isOrphanPlatformUserId(roster.platformUserId)) return true
+  if (!roster.platformUserId || isSeatPlaceholderUserId(roster.platformUserId)) return true
   if (!roster.updatedAt) return false
   const updatedAt = new Date(roster.updatedAt).getTime()
   if (!Number.isFinite(updatedAt)) return false

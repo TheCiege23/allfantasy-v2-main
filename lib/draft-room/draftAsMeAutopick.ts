@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { rosterManagerKey } from '@/lib/league/rosterManager'
 import 'server-only'
 
@@ -68,7 +69,7 @@ export async function draftAsMeEnabledForLeague(leagueId: string, rosterId?: str
 export async function personalDraftAsMeOn(draftSessionId: string, rosterId: string): Promise<boolean> {
   const roster = await prisma.roster.findUnique({ where: { id: rosterId }, select: { platformUserId: true, managerUserId: true } })
   const userId = (roster ? rosterManagerKey(roster) : null) ?? ''
-  if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) return false
+  if (!userId || isSeatPlaceholderUserId(userId)) return false
   const pref = await getViewerAutopickPreference(draftSessionId, userId)
   return pref.enabled && pref.mode === 'draft_as_me'
 }

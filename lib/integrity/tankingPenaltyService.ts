@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -75,7 +76,7 @@ export async function resolveTankingTeam(leagueId: string, flagRosterId: string)
 
 /** The person in a seat — never an abandoned team's `orphan-…` seat or an AI manager. */
 async function personAt(seat: string): Promise<string | null> {
-  if (!seat || seat.startsWith('orphan-') || seat.startsWith('ai-manager-')) return null
+  if (!seat || isSeatPlaceholderUserId(seat)) return null
   const user = await prisma.appUser.findUnique({ where: { id: seat }, select: { id: true } }).catch(() => null)
   return user?.id ?? null
 }

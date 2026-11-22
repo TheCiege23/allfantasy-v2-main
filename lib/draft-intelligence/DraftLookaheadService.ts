@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import type { LeagueSport } from '@prisma/client'
 
 import {
@@ -140,7 +141,7 @@ async function getAppUserIdForRosterId(rosterId: string): Promise<string | null>
     where: { id: rosterId },
     select: { platformUserId: true },
   })
-  if (!roster?.platformUserId || String(roster.platformUserId).startsWith('orphan-')) {
+  if (!roster?.platformUserId || isSeatPlaceholderUserId(String(roster.platformUserId))) {
     return null
   }
   // Unclaimed draft seats can carry placeholder/legacy owner IDs. Chimmy's platform DM

@@ -17,6 +17,7 @@
  *
  * Returns null when there is no other account's copy, so an ordinary first import is untouched.
  */
+import { platformLeagueIdWhere } from './samePlatformLeague'
 import { prisma } from '@/lib/prisma'
 import { IMPORT_VIEWERS_KEY, importViewerIds } from '@/lib/league/importViewers'
 import { readSourceTeamId } from '@/lib/leagues/rosterTeamIdentity'
@@ -36,7 +37,7 @@ export function coOwnedSourceTeamId(rosters: ReadonlyArray<CoOwnedRoster> | null
 /** Whether another account already holds a copy of this provider league. */
 export async function otherAccountsCopy(args: { userId: string; provider: string; platformLeagueId: string; seasonYear: number }) {
   return prisma.league.findFirst({
-    where: { userId: { not: args.userId }, platform: args.provider, platformLeagueId: args.platformLeagueId, season: args.seasonYear },
+    where: { userId: { not: args.userId }, platform: args.provider, platformLeagueId: await platformLeagueIdWhere(args.provider, args.platformLeagueId), season: args.seasonYear },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, sport: true, userId: true, settings: true },
   })
