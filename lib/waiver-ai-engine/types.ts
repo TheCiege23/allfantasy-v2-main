@@ -14,8 +14,6 @@ export type WaiverAIEngineInput = {
   sport?: SupportedSport | string
   roster?: WaiverRosterPlayer[] | null
   teamNeeds?: TeamNeedsMap | null
-  /** The trade market's sentence per position for a hole there (`tradeNeedEvidence`) — evidence only. */
-  tradeNeedEvidence?: Readonly<Record<string, string>>
   rosterPositions?: string[]
   allLeagueRosters?: { players: WaiverRosterPlayer[] }[]
   currentWeek?: number

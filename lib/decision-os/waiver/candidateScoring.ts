@@ -94,6 +94,11 @@ export type WaiverScoringContext = {
   tradeNeedEvidence?: Readonly<Record<string, string>>
 }
 
+/** The needs, optionally carrying the trade market's sentence per position (set in `waiverEngineInputFrom`). */
+export type TeamNeedsWithTradeEvidence = TeamNeedsMap & { tradeNeedEvidence?: Readonly<Record<string, string>> }
+const tradeEvidenceFor = (ctx: WaiverScoringContext, position: string): string | undefined =>
+  (ctx.tradeNeedEvidence ?? (ctx.teamNeeds as TeamNeedsWithTradeEvidence).tradeNeedEvidence)?.[position.toUpperCase()]
+
 export type ScoredWaiverTarget = {
   playerId: string
   playerName: string
@@ -478,8 +483,8 @@ function computeDrivers(
         ? `Fills ${candidate.position} need`
         : `${candidate.position} is adequate`) +
       // The trade market's price for the same hole, where one was measured — only when this pickup fills a need.
-      ((matchingSlot || ctx.needs.includes(candidate.position)) && ctx.tradeNeedEvidence?.[candidate.position.toUpperCase()]
-        ? `. ${ctx.tradeNeedEvidence[candidate.position.toUpperCase()]} — a pickup fills it without paying that`
+      ((matchingSlot || ctx.needs.includes(candidate.position)) && tradeEvidenceFor(ctx, candidate.position)
+        ? `. ${tradeEvidenceFor(ctx, candidate.position)} — a pickup fills it without paying that`
         : ''),
   })
 

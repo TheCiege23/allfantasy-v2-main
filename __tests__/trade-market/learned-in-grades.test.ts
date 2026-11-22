@@ -239,8 +239,31 @@ describe('trade need evidence, outside a trade', () => {
     expect(cited.compositeScore).toBe(plain.compositeScore)
     expect(JSON.stringify(cited)).toContain('teams short at TE paid +11%')
     expect(JSON.stringify(plain)).not.toContain('In trades')
+    // The evidence also arrives riding on the needs themselves — the path the engine input uses.
+    const viaNeeds = scoreWaiverCandidates([candidate as never], { ...ctx, teamNeeds: { ...ctx.teamNeeds, tradeNeedEvidence: { TE: 'In trades, teams short at TE paid +11% over normal-depth teams across 140 completed trades' } } } as never, { maxResults: 1 })[0]!
+    expect(JSON.stringify(viaNeeds)).toContain('teams short at TE paid +11%')
     // A pickup at a position that is not a need does not cite it.
     const wr = scoreWaiverCandidates([{ ...candidate, position: 'WR' } as never], { ...ctx, tradeNeedEvidence: { WR: 'x across 9 completed trades' } } as never, { maxResults: 1 })[0]!
     expect(JSON.stringify(wr)).not.toContain('x across 9')
+  })
+})
+
+describe('trade need evidence, end to end through the waiver engine input', () => {
+  it('waiverEngineInputFrom → the engine: the pickup that fills the need cites the trade market', async () => {
+    const { waiverEngineInputFrom } = await import('@/lib/decision-os/waiver/engineInput')
+    const { suggestWaiverPickups } = await import('@/lib/waiver-ai-engine/suggest')
+    const sentence = 'In trades, teams short at TE paid +11% over normal-depth teams across 140 completed trades'
+    const teamNeeds = { weakestSlots: [{ slot: 'TE', position: 'TE', currentValue: 500, leagueMedianValue: 2000, gap: 1500, gapPpg: 3.1 }], biggestNeed: null, byeWeekClusters: [], positionalDepth: [], dropCandidates: [] }
+    const pool = {
+      availablePlayers: [{ playerId: 'te9', playerName: 'Free Tight End', position: 'TE', team: 'KC', byeWeek: null, age: 25, value: 1500, assetValue: { impactValue: 600, marketValue: 1500, vorpValue: 300, volatility: 0.2 }, source: 't' }],
+      myRoster: [], leagueRosters: [], rosterPositions: ['QB', 'TE'], leagueTraits: { numTeams: 12, isSF: true, isTEP: false, isDynasty: true },
+      currentWeek: 9, teamNeeds, tradeNeedEvidence: { TE: sentence },
+    }
+    const facts = { sport: 'NFL', settings: { faabBudget: 100 }, faabRemaining: 60 }
+    const withIt = suggestWaiverPickups(waiverEngineInputFrom(facts as never, pool as never) as never)
+    expect(JSON.stringify(withIt.suggestions[0])).toContain(sentence)
+    const without = suggestWaiverPickups(waiverEngineInputFrom(facts as never, { ...pool, tradeNeedEvidence: undefined } as never) as never)
+    expect(JSON.stringify(without.suggestions[0])).not.toContain('In trades')
+    expect(withIt.suggestions[0]!.compositeScore).toBe(without.suggestions[0]!.compositeScore)
   })
 })

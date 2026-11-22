@@ -28,9 +28,10 @@ export function waiverEngineInputFrom(facts: WaiverWorldFacts, pool: WaiverPool)
     rosterPositions: pool.rosterPositions,
     allLeagueRosters: pool.leagueRosters,
     /* Precomputed in `loadWaiverPool`, so the season's bye slate is a server read. */
-    ...(pool.teamNeeds ? { teamNeeds: pool.teamNeeds } : {}),
+    // The trade market's evidence per position rides ON the needs it explains (`TeamNeedsWithTradeEvidence`), so it
+    // reaches the scorer through the field the engine already passes along untouched.
+    ...(pool.teamNeeds ? { teamNeeds: pool.tradeNeedEvidence ? { ...pool.teamNeeds, tradeNeedEvidence: pool.tradeNeedEvidence } : pool.teamNeeds } : {}),
     ...(pool.currentWeek != null ? { currentWeek: pool.currentWeek } : {}),
-    ...(pool.tradeNeedEvidence ? { tradeNeedEvidence: pool.tradeNeedEvidence } : {}),
     availablePlayers: pool.availablePlayers,
   }
 }
