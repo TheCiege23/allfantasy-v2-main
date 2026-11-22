@@ -5539,8 +5539,9 @@ export function DraftRoomPageClient({
       </div>
     )}
     {showCommissionerModal && isCommissioner && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="Commissioner control center" data-testid="draft-commissioner-overlay">
-        <div className="w-full max-w-2xl max-h-[90vh] overflow-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4" role="dialog" aria-label="Commissioner control center" data-testid="draft-commissioner-overlay">
+        {/* No overflow here: the modal's own body is the one scroll container. */}
+        <div className="w-full max-w-2xl">
           <CommissionerControlCenterModal
             leagueId={leagueId}
             draftStatus={session?.status ?? 'pre_draft'}
@@ -5580,6 +5581,7 @@ export function DraftRoomPageClient({
             )}
             leagueType={leagueType}
             teamCount={session?.teamCount ?? 0}
+            onTheClock={currentPick ? { teamName: currentPick.displayName, pickLabel: currentPick.pickLabel } : null}
             seats={(session?.slotOrder ?? []).map((entry) => ({
               slot: entry.slot,
               rosterId: entry.rosterId,
