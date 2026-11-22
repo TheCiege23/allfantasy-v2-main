@@ -66,11 +66,20 @@ export function BubbleResolutionModal({ tournamentId, open, onClose, onResolved 
     setResolving(true)
     setError(null)
     try {
-      const res = await fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resolveBubble: true }),
-      })
+      const send = (confirmEarly: boolean) =>
+        fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resolveBubble: true, ...(confirmEarly ? { confirmEarly: true } : {}) }),
+        })
+      let res = await send(false)
+      if (res.status === 409) {
+        const data = await res.json()
+        if (data?.canConfirm !== true || !confirm(`${data.error}\n\nCut the round now anyway?`)) {
+          throw new Error(data.error ?? 'Failed to resolve bubble')
+        }
+        res = await send(true)
+      }
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error ?? 'Failed to resolve bubble')

@@ -330,7 +330,11 @@
   .nls-mrow { grid-template-columns: minmax(0, 1fr) 48px 48px 48px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 14px; }
   .nls-mrow .nls-pts { font-size: 16px; }
   .nls-mrow .nls-pos { min-width: 44px; }
-  .nls-mrow .nls-mavatar { display: none; }
+  /* Photo and team crest stay on a phone, above the name: a 40px column is too narrow beside it. */
+  .nls-mrow .nls-pl[data-media=true] { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .nls-mrow .nls-player[data-side=right] .nls-pl[data-media=true] { flex-direction: column; align-items: flex-end; }
+  .nls-mrow .nls-mavatar .nls-pavatar { width: 34px; height: 34px; }
+  .nls-mrow .nls-mavatar .nls-pavatar-crest { width: 17px; height: 17px; }
   .nls-mrow .nls-pl-text > small:not(.nls-oprank) { white-space: normal; overflow: visible; line-height: 1.35; }
   .nls-player strong { font-size: 14px; }
   .nls-player small { font-size: 11px; }
@@ -359,6 +363,17 @@
   .nls-table th, .nls-table td { padding-left: 6px; padding-right: 6px; font-size: 14px; }
   .nls-pcell { gap: 10px; }
   .nls-pcell .nls-pos { min-width: 40px; }
+  /* Players list: the name column takes what is left and gives way, so the projection and the
+     Add / Claim button stay on screen. A long stat line used to widen the table to twice the
+     phone and push both off the right edge. (`max-width: 0` + `width: 100%` is what lets a cell in
+     an auto-layout table shrink below its content.) */
+  .nls-table-players td:first-child { width: 100%; max-width: 0; }
+  .nls-table-players th:not(:first-child), .nls-table-players td:not(:first-child) { width: 1%; white-space: nowrap; }
+  .nls-table-players .nls-player { flex: 1 1 0; }
+  .nls-table-players .nls-player small[data-stats] { white-space: normal; }
+  .nls-table-players .nls-pcell [data-watch] { flex: none; }
+  .nls-table-players .nls-pcell > .nls-pos { display: none; }
+  .nls-table-players .nls-pcell-pos { display: inline; }
   .nls-oddsbar > span:first-child { width: 56px; }
   .nls-team .nls-avatar { display: none; }
   .nls-team strong { font-size: 14px; }
@@ -430,3 +445,14 @@
 .nls-gl-pts { color: var(--text); font: 600 18px var(--nl-mono); font-variant-numeric: tabular-nums; }
 .nls-gl-cut { display: flex; align-items: center; gap: 10px; padding: 4px 20px; color: var(--bad); font: 700 11px var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
 .nls-gl-cut::before, .nls-gl-cut::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--bad) 60%, transparent); }
+
+.nls-pcell-pos { display: none; }
+/* A player's name as a button that opens his card: it keeps the look of the text it replaces. */
+.nls-namebtn { appearance: none; background: none; border: 0; padding: 0; margin: 0; max-width: 100%; overflow: hidden; color: inherit; font: inherit; text-align: inherit; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.nls-namebtn:hover, .nls-namebtn:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.nls-namebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* Lineup: the slot badge is the swap control (Sleeper's model). */
+.nls-slotbtn { appearance: none; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; cursor: pointer; }
+.nls-slotbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-slotbtn[aria-pressed=true] .nls-pos { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-slotbtn:disabled { cursor: default; }

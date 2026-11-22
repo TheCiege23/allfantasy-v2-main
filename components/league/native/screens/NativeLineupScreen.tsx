@@ -35,7 +35,7 @@ import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, optimalLineupListsRespectingLocks, ordinal, projectedTotal } from '@/lib/league/native/nativeScreenModels'
 import { slotCategory } from '@/lib/league-runtime/redraftSlotType'
 import type { DailyLineupDay, DailyLineupView } from '@/lib/redraft/dailyLineupView'
-import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { AutoBenchByeToggle } from './AutoBenchByeToggle'
 import { MyTeamAutomations } from './MyTeamAutomations'
 import { AutomaticChangesLog } from '@/components/league/AutomaticChangesLog'
@@ -142,7 +142,7 @@ function DragHandle({ id, name }: { id: string; name: string }) {
 }
 type Move = { kind: 'starter'; slotIndex: number } | { kind: 'bench'; playerId: string }
 
-const TAP_HELP = 'Tap a player, then tap where he goes or who he swaps with. You can also drag by the handle.'
+const TAP_HELP = 'Tap a position badge, then tap where that player goes or who he swaps with. Tap a name for the player card. You can also drag by the handle.'
 
 function sameTap(a: LineupTap, b: LineupTap): boolean {
   if (a.kind === 'slot' && b.kind === 'slot') return a.slotIndex === b.slotIndex
@@ -155,7 +155,19 @@ function tapLabel(o: { name?: string; empty: boolean; slot: string; picked: bool
   const who = o.empty ? `Empty ${o.slot} slot` : `${o.name ?? 'Player'}, ${o.slot}`
   if (o.picked) return `${who}. Selected. Tap again to cancel.`
   if (o.waiting) return o.target === 'ok' ? `${who}. Tap to move here.` : `${who}. Not a legal move.`
-  return `${who}. Tap to select.`
+  return o.empty ? `${who}. Tap to select.` : `${who}. Open player card.`
+}
+
+/**
+ * The slot badge is the swap control, as in Sleeper: tap it, then tap where the player goes. The
+ * name beside it opens the player card, so one row no longer has to mean both things.
+ */
+function SlotTapButton({ picked, label, disabled, onTap, children }: { picked: boolean; label: string; disabled: boolean; onTap: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="nls-slotbtn" aria-pressed={picked} aria-label={label} disabled={disabled} onClick={onTap} data-testid="lineup-slot-tap">
+      {children}
+    </button>
+  )
 }
 
 /** The player cell: a button while the lineup is editable, so a row is one tap target on a phone. */
@@ -245,6 +257,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [move, setMove] = useState<Move | null>(null)
+  const openCard = useNativePlayerCard(league.sport)
   /** Tap to swap: the first tap, waiting for the second. */
   const [picked, setPicked] = useState<LineupTap | null>(null)
   const [tab, setTab] = useState<'lineup' | 'roster'>('lineup')
@@ -738,13 +751,26 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
     const cells = (
       <>
         {editable ? <span className="nls-drag-cell">{id && !isLocked ? <DragHandle id={id} name={p?.name ?? 'player'} /> : null}</span> : null}
-        <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+        {editable ? (
+          <SlotTapButton
+            picked={isPicked}
+            label={isPicked ? `Cancel moving ${p?.name ?? `the empty ${pill} slot`}.` : `Move ${p?.name ?? `the empty ${pill} slot`}. Tap, then tap where he goes.`}
+            disabled={saving}
+            onTap={() => onTap(tap)}
+          >
+            <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+          </SlotTapButton>
+        ) : (
+          <PosPill label={rdPill ?? pill} tone={rdPill ?? (kind === 'starter' ? slot?.label : pill)} />
+        )}
         <PlayerCell
-          tappable={editable}
+          tappable={editable || Boolean(p)}
           picked={isPicked}
           label={tapLabel({ name: p?.name, empty: !id, slot: pill, picked: isPicked, target: tapTarget, waiting: Boolean(picked) })}
           disabled={saving}
-          onTap={() => onTap(tap)}
+          // While a badge is selected, a tap anywhere on a row finishes the move. Otherwise the
+          // name opens the player card (an empty slot has no card, so it is selected instead).
+          onTap={() => (editable && (picked || !p) ? onTap(tap) : openCard({ id: p?.id ?? id, name: p?.name, position: p?.position, team: p?.team, imageUrl: p?.headshotUrl ?? p?.imageUrl }))}
         >
           <span className="nls-pl" data-media={showMedia || undefined}>
             {showMedia ? <PlayerAvatar name={p?.name} headshotUrl={p?.headshotUrl ?? p?.imageUrl} teamLogoUrl={p?.teamLogoUrl} empty={!p} /> : null}
