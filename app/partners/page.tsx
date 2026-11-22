@@ -5,6 +5,7 @@ import {
   DEMO_DECISIONS,
   DEMO_LEAGUES,
   DEMO_PLATFORM,
+  DEMO_TRADE_MARKET,
   DEMO_WEEKS,
   PARTNER_API_ENDPOINTS,
   findDemoLeague,
@@ -14,6 +15,7 @@ import {
 import { ActivityChart } from '@/components/partners/ActivityChart'
 import { DecisionBars } from '@/components/partners/DecisionBars'
 import { PartnerInquiryForm } from '@/components/partners/PartnerInquiryForm'
+import { TradeMarketBars } from '@/components/partners/TradeMarketBars'
 import {
   Card,
   DataQualityTable,
@@ -115,6 +117,14 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             subtitle="Every recommendation is logged when it is shown, when a manager acts on it, and when its outcome is known."
           >
             <DecisionBars rows={DEMO_DECISIONS} />
+          </Card>
+
+          <Card
+            id="trade-market"
+            title="What your managers actually pay in trades"
+            subtitle="Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it."
+          >
+            <TradeMarketBars rows={DEMO_TRADE_MARKET} />
           </Card>
 
           <Card title="Data quality" subtitle="How fresh and complete the data is, per source — including where it falls short.">
