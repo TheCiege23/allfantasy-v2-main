@@ -684,6 +684,10 @@ export async function publishDraftIntelForUpcomingManagers(input: {
   if (!snapshot?.currentPick) return []
 
   const tradedPicks = Array.isArray(snapshot.tradedPicks) ? snapshot.tradedPicks : []
+  // A team on auto (Auto-pick me, Chimmy's autopilot, a timed-out empty seat) picks by itself within
+  // seconds of coming on the clock; "you're on the clock, draft X?" to its manager is a question nobody
+  // needs to answer (2026-11-21).
+  const autoRosters = new Set(Array.isArray(snapshot.autoDraftRosterIds) ? snapshot.autoDraftRosterIds : [])
   const uniqueUserIds = new Set<string>()
   for (
     let overall = snapshot.currentPick.overall;
@@ -698,7 +702,7 @@ export async function publishDraftIntelForUpcomingManagers(input: {
       thirdRoundReversal: snapshot.thirdRoundReversal,
     })
     const owner = resolvePickOwner(round, slot, snapshot.slotOrder, tradedPicks)
-    if (!owner?.rosterId) continue
+    if (!owner?.rosterId || autoRosters.has(owner.rosterId)) continue
     const userId = await getAppUserIdForRosterId(owner.rosterId)
     if (userId) uniqueUserIds.add(userId)
   }

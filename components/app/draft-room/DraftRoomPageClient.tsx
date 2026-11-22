@@ -4867,7 +4867,11 @@ export function DraftRoomPageClient({
           headshotUrl: boardCardPick.playerImageUrl ?? boardCardPool?.display?.assets?.headshotUrl ?? null,
           teamLogoUrl: boardCardPool?.display?.assets?.teamLogoUrl ?? null,
         }}
-        leagueContext={{ draftedPickLabel: boardCardPick.pickLabel, rosteredByTeamName: boardCardPick.displayName ?? null }}
+        leagueContext={{
+          draftedPickLabel: boardCardPick.pickLabel,
+          rosteredByTeamName: boardCardPick.displayName ?? null,
+          autoPickReason: boardCardPick.autoPickReason ?? null,
+        }}
         canDraft={false}
         draftUnavailableReason="already_drafted"
       />

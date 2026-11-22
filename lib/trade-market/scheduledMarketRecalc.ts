@@ -6,7 +6,9 @@ import {
   recalculateFormatMarkets,
   stampAllTradeFormats,
   writeLineupFactorTable,
+  writePickMarketTable,
   type BookResult,
+  type PickBookResult,
   type LineupFactorTable,
   type StampAllResult,
 } from './formatMarkets'
@@ -46,6 +48,10 @@ export type ScheduledMarketRecalcResult = {
   /** Every season's trades given a league type (`stampAllTradeFormats`); null when the pass failed. */
   formatBackfill: StampAllResult | null
   datedShadow: Array<{ concept: string; sinceSeason: number; learner: 'current' | 'dated' } & NonNullable<BookResult['dated']>>
+  /** Pick values learned from the widest window's dynasty trades, stored once per run (`pickMarketLearner.ts`, shadow). */
+  pickMarkets: Array<PickBookResult & { sinceSeason: number }>
+  /** False when the pick table could not be stored this run. */
+  pickMarketsWritten: boolean
 }
 
 export function marketWindows(now = new Date()): number[] {
@@ -56,7 +62,13 @@ export function marketWindows(now = new Date()): number[] {
 
 export async function runScheduledMarketRecalc(
   prisma: PrismaClient,
-  opts: { now?: Date; recalc?: typeof recalculateFormatMarkets; writeLineup?: typeof writeLineupFactorTable; stampAll?: typeof stampAllTradeFormats } = {},
+  opts: {
+    now?: Date
+    recalc?: typeof recalculateFormatMarkets
+    writeLineup?: typeof writeLineupFactorTable
+    stampAll?: typeof stampAllTradeFormats
+    writePicks?: typeof writePickMarketTable
+  } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
   const writeLineup = opts.writeLineup ?? writeLineupFactorTable
@@ -67,6 +79,7 @@ export async function runScheduledMarketRecalc(
   let tradesUsed = 0
   let tradesStamped = 0
   const datedShadow: ScheduledMarketRecalcResult['datedShadow'] = []
+  let pickMarkets: ScheduledMarketRecalcResult['pickMarkets'] = []
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -79,6 +92,8 @@ export async function runScheduledMarketRecalc(
     const r = await recalc(prisma, { sinceSeason, dryRun: false, requireCentred: true, skipBooks: done, writeLineupFactors: false, stampTrades, now: opts.now })
     tradesUsed = Math.max(tradesUsed, r.tradesUsed)
     tradesStamped += r.tradesStamped ?? 0
+    // Picks keep the WIDEST window: recency weights already favour fresh trades, and a pick class needs every trade it can get.
+    if (sinceSeason === windows[windows.length - 1]) pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason }))
     // The freshest window measures every book (nothing is skipped yet), so its comparison is the complete one.
     if (sinceSeason === windows[0]) {
       for (const b of r.books) if (b.dated) datedShadow.push({ concept: b.concept, sinceSeason, learner: b.learner ?? 'current', ...b.dated })
@@ -107,6 +122,7 @@ export async function runScheduledMarketRecalc(
     const r = await recalc(prisma, { sinceSeason: widest, dryRun: false, requireCentred: true, skipBooks: all, writeLineupFactors: false, stampTrades: true, now: opts.now })
     if (published(r.lineup) > published(lineupTable)) lineupTable = r.lineup
     tradesStamped += r.tradesStamped ?? 0
+    pickMarkets = (r.pickMarkets ?? []).map((m) => ({ ...m, sinceSeason: widest }))
   }
 
   let lineup: ScheduledMarketRecalcResult['lineup'] = null
@@ -118,6 +134,10 @@ export async function runScheduledMarketRecalc(
       measured: lineupTable.factors.length,
     }
   }
+  const now = opts.now ?? new Date()
+  const pickMarketsWritten = pickMarkets.length
+    ? await (opts.writePicks ?? writePickMarketTable)(prisma, pickMarkets, now).then(() => true, () => false)
+    : false
   // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
   const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
 
@@ -131,5 +151,7 @@ export async function runScheduledMarketRecalc(
     tradesStamped,
     formatBackfill,
     datedShadow,
+    pickMarkets,
+    pickMarketsWritten,
   }
 }

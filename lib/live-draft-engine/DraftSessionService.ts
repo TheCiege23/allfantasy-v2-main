@@ -66,6 +66,14 @@ function adpAtPickFromMetadata(meta: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
 }
 
+/** `pickMetadata.autopick.reason`: why the clock picked this player, when it did. */
+function autoPickReasonFromMetadata(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null
+  const auto = (meta as { autopick?: unknown }).autopick
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
+}
+
 /**
  * Same rules as session creation: LeagueSettings pick timer wins when present; else draft config + UI slow-draft mode.
  * Returns null for untimed drafts (`timerMode === 'none'`) or when no positive timer can be resolved.
@@ -577,6 +585,9 @@ export async function buildSessionSnapshot(
     amount: (p as any).amount ?? undefined,
     ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
       ? { adpAtPick: adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
+      : {}),
+    ...(autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata)
+      ? { autoPickReason: autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
       : {}),
     createdAt: p.createdAt.toISOString(),
     }

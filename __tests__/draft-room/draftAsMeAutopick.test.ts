@@ -90,3 +90,43 @@ describe('a team Chimmy runs on autopilot (phase 7, 2026-10-29)', () => {
     expect(await tryDraftAsMePick({ ...args, rosterId: 'r2' })).toBeNull()
   })
 })
+
+describe('Draft like me says where its style comes from (2026-11-21)', () => {
+  const named = history.map((p, i) => ({ ...p, leagueName: i < 8 ? 'Alpha League' : 'Beta League' }))
+
+  it('a pick\'s reason names how many of the manager\'s own picks, in how many drafts, and the latest', async () => {
+    m.pastPicks.mockResolvedValue(named)
+    const pick = await tryDraftAsMePick(args)
+    expect(pick?.reason).toMatch(/Learned from 12 of your own picks in 2 past drafts \(latest: Alpha League\)\./)
+  })
+
+  it('with too little history it returns no pick and says why, through onNotEnoughHistory', async () => {
+    m.pastPicks.mockResolvedValue(named.slice(0, 2))
+    const notes: string[] = []
+    expect(await tryDraftAsMePick({ ...args, onNotEnoughHistory: (r) => notes.push(r) })).toBeNull()
+    expect(notes).toEqual([expect.stringMatching(/needs 10 of your own picks from past drafts and has 2/)])
+  })
+})
+
+describe('reference helpers', async () => {
+  const { describeStyleReference, describeNotEnoughHistory, styleReferenceOf, draftAsMeStatus } = await import('@/lib/draft-room/draftAsMeAutopick')
+
+  it('styleReferenceOf keeps drafts newest first, once each', () => {
+    expect(styleReferenceOf([{ leagueName: 'B' }, { leagueName: 'A' }, { leagueName: 'B' }, { leagueName: null }])).toEqual({
+      ownPicks: 4,
+      drafts: ['B', 'A', 'Unnamed league'],
+    })
+  })
+
+  it('reads in plain words, singular and plural', () => {
+    expect(describeStyleReference({ ownPicks: 1, drafts: ['A'] })).toBe('Learned from 1 of your own pick in 1 past draft (latest: A).')
+    expect(describeNotEnoughHistory(2)).toMatch(/Auto-picks and commissioner picks do not count\./)
+  })
+
+  it('draftAsMeStatus: ready with a style, not ready without one', async () => {
+    m.pastPicks.mockResolvedValueOnce(history.map((p) => ({ ...p, leagueName: 'Alpha League' })))
+    expect(await draftAsMeStatus('L', 'r1')).toMatchObject({ ready: true, ownPicks: 12, needed: 10, summary: expect.stringContaining('Learned from 12') })
+    m.pastPicks.mockResolvedValueOnce([])
+    expect(await draftAsMeStatus('L', 'r1')).toMatchObject({ ready: false, ownPicks: 0, summary: expect.stringContaining('has 0') })
+  })
+})

@@ -13,7 +13,7 @@ const { db, live } = vi.hoisted(() => {
 })
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('@/lib/core-app/currentSleeperRoster', () => ({ currentSleeperRoster: live }))
-import { getDash34Data } from '@/lib/core-app/dash34'
+import { getDash34Data, mapWithConcurrency } from '@/lib/core-app/dash34'
 const league = (id: string) => ({ id, name: 'League', platform: 'sleeper', platformLeagueId: id,
   sport: 'NFL', status: 'in_season', hasUnifiedRecord: true, lastSyncedAt: null })
 const team = (id: string) => ({ leagueId: id, id: `team-${id}`, platformUserId: `owner-${id}`, externalId: '1' })
@@ -54,6 +54,26 @@ describe('Core summary critical path', () => {
       expect(finished).toBe(false); expect(peak).toBe(8)
     } finally { pending.resolve(null); await result }
     expect(live).toHaveBeenCalledTimes(18); expect(peak).toBe(8)
+  })
+  it('starts the ninth league as soon as one of the first eight finishes, not after all eight', async () => {
+    const leagues = Array.from({ length: 9 }, (_, i) => league(`L${i}`))
+    db.leagueTeam.findMany.mockResolvedValue(leagues.map(l => team(l.id)))
+    const first = gate<null>(); const rest = gate<null>()
+    live.mockImplementation(async (id: string) => (id === 'L0' ? first.promise : rest.promise))
+    const result = getDash34Data('user-fixture', leagues)
+    try {
+      await vi.waitFor(() => expect(live).toHaveBeenCalledTimes(8))
+      expect(live).not.toHaveBeenCalledWith('L8', expect.anything())
+      first.resolve(null)
+      // L1–L7 are still pending: the old lockstep batches would not start L8 here.
+      await vi.waitFor(() => expect(live).toHaveBeenCalledWith('L8', expect.anything()))
+    } finally { first.resolve(null); rest.resolve(null); await result }
+  })
+  it('mapWithConcurrency returns results in input order whatever order they finish in', async () => {
+    const delays = [30, 5, 20, 1, 10]
+    const out = await mapWithConcurrency(delays, 2, (ms) => new Promise<number>((r) => setTimeout(() => r(ms), ms)))
+    expect(out).toEqual(delays)
+    expect(await mapWithConcurrency([], 8, async () => 1)).toEqual([])
   })
   it('reports a failed shared feed without replacing unknown status with a stale designation', async () => {
     const error = new Error('fixture outage'); const report = vi.fn()

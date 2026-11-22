@@ -24,6 +24,7 @@ import {
   type DatedBookComparison,
   type DatedGather,
 } from './datedMarketLearner'
+import { computePickMarket, pickObservationFor, type PickMarket, type PickObservation } from './pickMarketLearner'
 
 /**
  * The AllFantasy trade market, SPLIT BY THE FORMAT EACH TRADE WAS MADE IN.
@@ -78,6 +79,8 @@ type ResolvedTradeLeague = {
   carried: boolean
   /** The league's FAAB budget, for pricing FAAB that moved in a trade. Null when the league states none. */
   faabBudget: number | null
+  /** Teams in the league, for reading a pick as the 12-team round it equals. Null when the settings do not say. */
+  teams: number | null
   /**
    * `LeagueTrade.leagueFormat` as `comprehensive-trade-learning` reads it ('dynasty' | 'keeper' ⇒ the
    * dynasty chart). Derived from the BOOK, so a keeper league that prices on the redraft chart (low keeper
@@ -94,6 +97,17 @@ export function faabBudgetFromSettings(settings: unknown): number | null {
   for (const key of ['waiver_budget', 'faab_budget', 'waiverBudget', 'faabBudget']) {
     const v = Number(s[key])
     if (Number.isFinite(v) && v > 0) return v
+  }
+  return null
+}
+
+/** Teams in a league, from its settings under any of the names importers use. */
+export function teamsFromSettings(settings: unknown): number | null {
+  const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
+  const nested = s.settings && typeof s.settings === 'object' ? (s.settings as Record<string, unknown>) : {}
+  for (const v of [s.num_teams, s.total_rosters, s.numTeams, s.teams, s.leagueSize, nested.num_teams]) {
+    const n = Number(v)
+    if (Number.isInteger(n) && n >= 2 && n <= 64) return n
   }
   return null
 }
@@ -116,6 +130,7 @@ export function resolveLeague(row: LeagueRow, carried: boolean): ResolvedTradeLe
     lineup,
     carried,
     faabBudget: faabBudgetFromSettings(row.settings),
+    teams: teamsFromSettings(row.settings),
     tradeFormat,
   }
 }
@@ -335,6 +350,8 @@ type FormatGather = {
   byBook: Map<string, CompletedTradeGather>
   /** The same trades measured on the chart of their own day (`datedMarketLearner.ts`), per book. */
   byBookDated: Map<string, DatedGather>
+  /** Dynasty books only: one pick equation per trade with a pick in it, measured on the trade's day (`pickMarketLearner.ts`). */
+  byBookPicks: Map<string, PickGather>
   lineupObservations: LineupObservation[]
   /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
   formatStamps: Array<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>
@@ -537,13 +554,16 @@ export async function gatherFormatObservations(
    */
   const byBookDated = new Map<string, DatedGather>()
   for (const b of MARKET_BOOKS) byBookDated.set(bookKey(b), emptyDatedGather())
+  const byBookPicks = new Map<string, PickGather>()
+  for (const b of MARKET_BOOKS) if (b.format === 'DYNASTY') byBookPicks.set(bookKey(b), { observations: [], skipped: {} })
   try {
-    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, now: opts.now ?? new Date() })
+    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, byBookPicks, now: opts.now ?? new Date() })
   } catch {
     for (const g of byBookDated.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
+    for (const g of byBookPicks.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
   }
 
-  return { byBook, byBookDated, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
+  return { byBook, byBookDated, byBookPicks, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -562,6 +582,7 @@ async function gatherDatedObservations(
     meta: Map<string, { name: string; position: string | null }>
     charts: Map<string, Map<string, number>>
     byBookDated: Map<string, DatedGather>
+    byBookPicks?: Map<string, PickGather>
     now: Date
   },
 ): Promise<void> {
@@ -620,6 +641,31 @@ async function gatherDatedObservations(
   for (const { t, key, day, league } of plan) {
     const g = ctx.byBookDated.get(key)!
     const faabMoved = faabForTradeRow(t, ctx.faab.get(t.transactionId))
+    const pickGather = ctx.byBookPicks?.get(key)
+    if (pickGather && t.tradeDate) {
+      // The same trade, read for what its picks were worth: its players on the same day's chart, FAAB the same way.
+      const chartOfDay = dated.get(`${key}|${day}`)!
+      const given = asIds(t.playersGiven)
+      const received = asIds(t.playersReceived)
+      const obs = [...given, ...received].every((id) => chartOfDay.has(id))
+        ? pickObservationFor({
+            transactionId: t.transactionId,
+            tradeDate: t.tradeDate,
+            teams: league.teams,
+            picksGiven: t.picksGiven,
+            picksReceived: t.picksReceived,
+            playersGivenValue: given.reduce((n, id) => n + (chartOfDay.get(id) ?? 0), 0),
+            playersReceivedValue: received.reduce((n, id) => n + (chartOfDay.get(id) ?? 0), 0),
+            faabGivenValue: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
+            faabReceivedValue: faabMoved ? normalizedFaabValue(faabMoved.received, league.faabBudget) : 0,
+            weight: recencyWeight(t.tradeDate, ctx.now),
+          })
+        : ('unpriced_player' as const)
+      if (typeof obs === 'object') {
+        pickGather.observations.push(obs)
+        if (league.teams == null) pickGather.skipped.teams_assumed_12 = (pickGather.skipped.teams_assumed_12 ?? 0) + 1
+      } else if (obs !== 'no_picks') pickGather.skipped[obs] = (pickGather.skipped[obs] ?? 0) + 1
+    }
     const attributed = attributeTrade(t, dated.get(`${key}|${day}`)!, {
       allowPicks: league.book.format === 'DYNASTY',
       extraGiven: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
@@ -789,6 +835,9 @@ export type BookResult = {
   dated?: DatedBookComparison
 }
 
+/** One dynasty book's learned pick values (shadow — stored, read by nothing yet). */
+export type PickBookResult = { book: MarketBook; concept: string } & PickMarket & { skipped: Record<string, number> }
+
 /** Per-book values from one gather. PURE. */
 function computeBookValues(gather: CompletedTradeGather): { values: CompletedTradeMarketValue[]; medianAdjustment: number | null } {
   const baselineFor = tierBaselines(gather)
@@ -892,7 +941,7 @@ export async function recalculateFormatMarkets(
     now?: Date
     env?: NodeJS.ProcessEnv
   },
-): Promise<{ books: BookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
+): Promise<{ books: BookResult[]; pickMarkets: PickBookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
   const dryRun = opts.dryRun !== false
   const generatedAt = opts.now ?? new Date()
   const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason, now: generatedAt })
@@ -917,6 +966,13 @@ export async function recalculateFormatMarkets(
     const written = !dryRun && refused === null ? await writeBook(prisma, concept, values, generatedAt, datedLive ? DATED_CALCULATION_VERSION : FORMAT_CALCULATION_VERSION) : 0
     books.push({ book, concept, evaluated: values.length, published, written, tradesUsed, medianAdjustment, refused, learner: datedLive ? 'dated' : 'current', dated: datedBook.comparison })
   }
+  // Every dynasty book, skipped or not: the pick market is its own measurement, and the caller decides which window to keep.
+  const pickMarkets: PickBookResult[] = pickLearnerOn(opts.env)
+    ? MARKET_BOOKS.flatMap((book) => {
+        const g = gathered.byBookPicks.get(bookKey(book))
+        return g ? [{ book, concept: bookConcept(book), ...computePickMarket(g.observations, generatedAt), skipped: g.skipped }] : []
+      })
+    : []
 
   const lineup = computeLineupFactors(
     gathered.lineupObservations,
@@ -930,7 +986,29 @@ export async function recalculateFormatMarkets(
   }
   // Best-effort and last: a stamping failure must never cost the markets this run already wrote.
   const tradesStamped = !dryRun && opts.stampTrades ? await stampTradeFormats(prisma, gathered.formatStamps).catch(() => 0) : 0
-  return { books, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
+  return { books, pickMarkets, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
+}
+
+/** One dynasty book's pick equations and why the rest were not used. */
+type PickGather = { observations: PickObservation[]; skipped: Record<string, number> }
+
+/** `TRADE_PICK_LEARNER=off` stops the pick market being computed or stored. */
+export const TRADE_PICK_LEARNER_ENV = 'TRADE_PICK_LEARNER'
+export function pickLearnerOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env[TRADE_PICK_LEARNER_ENV] ?? '').trim().toLowerCase() !== 'off'
+}
+
+export const PICK_MARKET_CACHE_KEY = 'af-trade-market:pick-values:NFL'
+
+/** Store the learned pick values, per dynasty book, for 21 days. Shadow: nothing reads this key yet. */
+export async function writePickMarketTable(prisma: PrismaClient, markets: readonly PickBookResult[], generatedAt: Date): Promise<void> {
+  const expiresAt = new Date(generatedAt.getTime() + 21 * 24 * 60 * 60 * 1000)
+  const data = { generatedAt: generatedAt.toISOString(), books: markets.map((m) => ({ ...m, book: bookKey(m.book) })) }
+  await prisma.sportsDataCache.upsert({
+    where: { cacheKey: PICK_MARKET_CACHE_KEY },
+    create: { cacheKey: PICK_MARKET_CACHE_KEY, expiresAt, data: data as unknown as object },
+    update: { expiresAt, data: data as unknown as object },
+  })
 }
 
 /** Store the lineup factor table for 21 days — the same horizon the per-player market is trusted for. */
