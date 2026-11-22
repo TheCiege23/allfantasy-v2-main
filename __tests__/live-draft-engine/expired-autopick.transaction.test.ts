@@ -178,6 +178,8 @@ const ctx = vi.hoisted(() => {
   }
 
   const prisma = {
+    // No season rosters yet, so the rostered-player guard (rosteredPlayerGuard.ts) has nothing to refuse.
+    redraftSeason: { findFirst: vi.fn(async () => null) },
     draftSession: {
       // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
       findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
@@ -294,8 +296,9 @@ vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({
   getSalaryCapConfig: vi.fn(async () => null),
 }))
 
+// submitPick signs through signRookieContractForPick (a mock without it threw inside a non-fatal try).
 vi.mock('@/lib/salary-cap/RookieContractService', () => ({
-  assignRookieContract: vi.fn(async () => {}),
+  signRookieContractForPick: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/draft-room/postDraftPickChatEvent', () => ({

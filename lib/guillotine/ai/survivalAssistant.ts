@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type SurvivalAnalysis = {
+type SurvivalAnalysis = {
   survivalProbability: number
   riskTier: 'SAFE' | 'MODERATE' | 'DANGER' | 'CRITICAL'
   projectedScore: number

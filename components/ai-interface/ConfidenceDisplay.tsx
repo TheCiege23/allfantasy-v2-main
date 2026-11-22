@@ -5,7 +5,7 @@ import { Info } from 'lucide-react'
 
 export type ConfidenceLabel = 'low' | 'medium' | 'high'
 
-export interface ConfidenceDisplayProps {
+interface ConfidenceDisplayProps {
   confidencePct?: number
   confidenceLabel?: ConfidenceLabel
   /** Optional reason (e.g. data quality); shown on expand */

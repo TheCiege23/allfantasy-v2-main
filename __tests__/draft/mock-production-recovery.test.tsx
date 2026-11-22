@@ -17,14 +17,19 @@ function checkpoint(overrides: Record<string, unknown> = {}) {
   }
 }
 function saved() { return JSON.parse(localStorage.getItem(key)!) }
-async function openPlayers() {
-  // The mobile tray is the same production component mounted alongside desktop content. It is a
-  // non-modal region (the board stays usable behind it), not a dialog.
-  fireEvent.click(screen.getByRole('button', { name: 'Players', exact: true }))
-  return within(screen.getByRole('region', { name: 'Players', exact: true }))
+/*
+ * The phone tray is the live room's (DraftRoomShell), mounted alongside the desktop layout. It is a
+ * non-modal region (the board stays usable behind it), not a dialog. Its tabs are reached by test
+ * id: jsdom applies no CSS, so the desktop dock-size control's own "Players" button is in the DOM too.
+ */
+async function openTray(tab: 'players' | 'queue', name: string) {
+  fireEvent.click(screen.getByTestId(`draft-mobile-tab-${tab}`))
+  return within(screen.getByRole('region', { name, exact: true }))
 }
+const openPlayers = () => openTray('players', 'Players')
 beforeEach(() => {
   localStorage.clear()
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ leagues: [] }), { status: 200 })))
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -71,7 +76,9 @@ describe('production mock mobile recovery and clocks', () => {
     fireEvent.click(drawer.getByTestId('mock-draft-player-row-Alpha'))
     fireEvent.click(screen.getByTestId('mock-draft-pause'))
     await waitFor(() => expect(saved().queue).toEqual(['Bravo', 'Charlie']))
-    fireEvent.click(within(drawer.getByTestId('mock-draft-queue-entry-Bravo')).getByRole('button', { name: 'Down', exact: true }))
+    // Room v2: the queue is its own tab, as in the live room.
+    const queueDrawer = await openTray('queue', 'Queue')
+    fireEvent.click(within(queueDrawer.getByTestId('mock-draft-queue-entry-Bravo')).getByRole('button', { name: 'Down', exact: true }))
     await waitFor(() => expect(saved().queue).toEqual(['Charlie', 'Bravo']))
   })
 
@@ -118,6 +125,8 @@ describe('production mock mobile recovery and clocks', () => {
   it('reset clears the checkpoint so reload starts at setup', async () => {
     localStorage.setItem(key, JSON.stringify(checkpoint()))
     const view = render(<MockDraftSleeperRoomClient viewerId="viewer" />)
+    // Room v2: Reset lives in the shared header's ⋯ menu.
+    fireEvent.click(await screen.findByTestId('draft-topbar-menu-toggle'))
     await screen.findByTestId('mock-draft-reset')
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(screen.getByTestId('mock-draft-reset'))
@@ -163,7 +172,8 @@ describe('native NBA league entry and checkpoint', () => {
       if (input.startsWith('/api/mock-draft?')) return new Response(JSON.stringify({ league }))
       throw new Error(`Unexpected request: ${input}`)
     })
-    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  vi.stubGlobal('fetch', fetchMock)
     const view = render(<MockDraftSleeperRoomClient viewerId="viewer" initialLeagueId="native-nba" initialSport="NBA" />)
     await screen.findByText(/16 teams.*9 rounds.*Points.*snake/)
     expect(screen.queryByTestId('mock-draft-league-card-imported-nfl')).toBeNull()

@@ -15,7 +15,7 @@ import { SHARE_CARD_SIZES, type ShareCardFormat, type ShareMomentListItem, type 
 
 type MomentsState = { status: 'loading' | 'ready' | 'error'; enabled: boolean; moments: ShareMomentListItem[] }
 
-export function useSurvivorShareMoments(leagueId: string, active = true) {
+function useSurvivorShareMoments(leagueId: string, active = true) {
   const [state, setState] = useState<MomentsState>({ status: 'loading', enabled: false, moments: [] })
   const load = useCallback(async () => {
     try {
@@ -227,14 +227,14 @@ function Toast({ text }: { text: string | null }) {
   )
 }
 
-export interface SurvivorShareDialogProps {
+interface SurvivorShareDialogProps {
   moments: ShareMomentListItem[]
   initialMomentId?: string | null
   onClose: () => void
   onMomentUpdate: (moment: ShareMomentListItem) => void
 }
 
-export function SurvivorShareDialog({ moments, initialMomentId, onClose, onMomentUpdate }: SurvivorShareDialogProps) {
+function SurvivorShareDialog({ moments, initialMomentId, onClose, onMomentUpdate }: SurvivorShareDialogProps) {
   const isPhone = useIsPhone()
   const [selectedId, setSelectedId] = useState<string | null>(initialMomentId ?? moments[0]?.id ?? null)
   const [desktopFormat, setDesktopFormat] = useState<ShareCardFormat>('post')

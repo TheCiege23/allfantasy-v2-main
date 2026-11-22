@@ -259,7 +259,7 @@ describe('opening field freeze', () => {
     await fill(); await freezeSeasonOpeningField('owner', 't1', 'pub1')
     const view = await loadSeasonEntry('u0', 't1')
     expect(view?.assignment).toMatchObject({ teams: 8, art: { sideId: 'gold', emblemId: 'basketball' } })
-    expect(Object.keys(view!.assignment!).sort()).toEqual(['art', 'division', 'draftSlot', 'key', 'name', 'startsAt', 'teams'])
+    expect(Object.keys(view!.assignment!).sort()).toEqual(['art', 'completeBy', 'division', 'draftSlot', 'key', 'name', 'startsAt', 'teams'])
     expect(JSON.stringify(view)).not.toContain('"members"')
     expect(await loadSeasonEntry('outsider', 't1')).toBeNull()
     state.logs.find(e => e.action === 'season_opening_field_frozen')!.data.leagues[0].members[0].draftSlot = 99

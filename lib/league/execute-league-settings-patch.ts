@@ -4,7 +4,10 @@
  * - PATCH /api/leagues/[leagueId]/settings (section + updates)
  */
 
+import { ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY, multiTeamManagersSupported } from '@/lib/league/multiTeamManagers'
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { NextResponse } from 'next/server'
+import { bestBallPoolRefusalBody, checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { hasAfCommissionerPlan } from '@/lib/entitlements/afCommissionerPlan'
@@ -66,6 +69,7 @@ import {
   type PriorWaiverProcessing,
 } from '@/lib/waivers/dailyWaiverSchedule'
 import { upsertLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
+import { syncTaxiSlotsToDynastyConfig } from '@/lib/taxi/taxiSlotsSync'
 import { parseWaiverEngineConfig } from '@/lib/waiver-wire/waiver-engine-config'
 import {
   HUB_WAIVER_OPTION_KEYS,
@@ -97,6 +101,9 @@ import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { playoffStartWeekCapRefusal, regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
+import { planSeasonPlayoffStartSync, type PlayoffStartSyncPlan } from '@/lib/schedule-runtime/seasonPlayoffStartSync'
+import { applySeasonPlayoffStartSync, loadCurrentSeasonForPlayoffSync } from '@/lib/schedule-runtime/seasonPlayoffStartSyncApply'
+import { MID_SEASON_CONFIRMATION_CODE, hasMidSeasonConfirmation } from '@/lib/league/midSeasonConfirmation'
 import { resizedPlayoffColumns } from '@/lib/league-defaults/redraftPlayoffFit'
 import { ODD_TEAM_MEDIAN_LEAGUE_TYPES, isOddTeamCount, oddTeamCountNeedsAfCommissioner } from '@/lib/league/oddTeamLeagues'
 import { EXTRA_MATCHUP_SETTINGS_KEY, parseExtraMatchupSettings, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
@@ -373,9 +380,19 @@ export async function executeLeagueSettingsPatch(
     const refusal = weeklyResetSurvivorRefusal(hubWaiver.options, league.survivorMode === true || (await isSurvivorLeague(leagueId)))
     if (refusal) return jsonError(refusal, 400)
   }
+  // Best ball pool warnings for a new team count that fits but leaves the pool tight; returned with the
+  // success body so the General tab can show them, as the roster editor does for its own saves.
+  let bestBallPoolWarnings: string[] = []
   if (body.leagueSize != null) {
     const size = Number(body.leagueSize)
-    if (!Number.isInteger(size) || size < 2 || size > 32) return jsonError('leagueSize must be 2–32', 400)
+    if (!Number.isInteger(size) || size < 2 || size > MAX_NATIVE_TEAMS) return jsonError(`leagueSize must be 2–${MAX_NATIVE_TEAMS}`, 400)
+    // Best ball: every team's starter seats are filled from what it drafted, so the new size must fit
+    // the sport's player pool with the league's current seats (lib/bestball/poolCapacity.ts).
+    if (size !== league.leagueSize) {
+      const poolCheck = checkLeagueBestBallPool(league, { teamCount: size })
+      if (poolCheck && poolCheck.refusals.length > 0) return NextResponse.json(bestBallPoolRefusalBody(poolCheck), { status: 400 })
+      bestBallPoolWarnings = poolCheck?.warnings.map((w) => w.message) ?? []
+    }
   }
 
   // The one shared AF Commissioner check (lib/entitlements/afCommissionerPlan.ts) — the same answer
@@ -539,8 +556,8 @@ export async function executeLeagueSettingsPatch(
     if (Number.isFinite(pt) && pt > Math.max(1, teamCount)) {
       return jsonError(`playoffTeams cannot exceed league size (${teamCount})`, 400)
     }
-    // The bracket engine runs at most four rounds (canonicalNflRedraftPlayoffRuntime warns past 16 and
-    // nothing reads the warning), and no sport's season has room for a fifth.
+    // The bracket engine runs at most five rounds (32 teams). Whether five rounds fit this league's
+    // season is checked separately, by the playoff fit rules below.
     if (Number.isFinite(pt) && pt > MAX_PLAYOFF_TEAMS) {
       return jsonError(`playoffTeams can be at most ${MAX_PLAYOFF_TEAMS}`, 400)
     }
@@ -565,6 +582,22 @@ export async function executeLeagueSettingsPatch(
     }
     const mergeRefusal = settingsMergeCapRefusal(body.settingsMerge, league.settings, capSport)
     if (mergeRefusal) return jsonError(mergeRefusal, 400)
+  }
+
+  // The current season follows a new playoff start week (lib/schedule-runtime/seasonPlayoffStartSync.ts): refused for
+  // a week that has begun, and mid-season only with the confirmation, since future matchups are rebuilt.
+  let playoffStartSyncPlan: PlayoffStartSyncPlan = { kind: 'none' }
+  if (body.playoffStartWeek != null && Number(body.playoffStartWeek) !== league.playoffStartWeek) {
+    playoffStartSyncPlan = planSeasonPlayoffStartSync(
+      await loadCurrentSeasonForPlayoffSync(leagueId).catch(() => null),
+      Number(body.playoffStartWeek),
+      hasMidSeasonConfirmation(body),
+    )
+    if (playoffStartSyncPlan.kind === 'refuse_past') return jsonError(playoffStartSyncPlan.message, 409)
+    if (playoffStartSyncPlan.kind === 'needs_confirmation') {
+      const message = 'The season has started. Moving the playoffs rebuilds the matchups for the weeks that have not started yet.'
+      return NextResponse.json({ error: message, message, code: MID_SEASON_CONFIRMATION_CODE }, { status: 409 })
+    }
   }
 
   // The extra matchup an odd-team league can play instead of the bye (lib/redraft/oddTeamExtraMatchupRules.ts)
@@ -603,6 +636,12 @@ export async function executeLeagueSettingsPatch(
    * League median in the playoffs (lib/redraft/medianGame.ts) — off unless stored true. A boolean only:
    * anything else is refused rather than read as off, so a bad client cannot silently flip it.
    */
+  if (body.allowMultiTeamManagers !== undefined && typeof body.allowMultiTeamManagers !== 'boolean') {
+    return jsonError('allowMultiTeamManagers must be true or false', 400)
+  }
+  if (body.allowMultiTeamManagers === true && !multiTeamManagersSupported(league)) {
+    return jsonError('Several teams for one manager is available in standard leagues only (redraft, dynasty, keeper, best ball).', 400)
+  }
   if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
     return jsonError('medianGameInPlayoffs must be true or false', 400)
   }
@@ -1249,6 +1288,15 @@ export async function executeLeagueSettingsPatch(
     })
   }
 
+  if (typeof body.allowMultiTeamManagers === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...prev, [ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY]: body.allowMultiTeamManagers } as Prisma.InputJsonValue },
+    })
+    updatedFieldNames.push(ALLOW_MULTI_TEAM_MANAGERS_SETTINGS_KEY)
+  }
+
   if (typeof body.medianGameInPlayoffs === 'boolean') {
     const prev = await readCurrentLeagueSettings(leagueId)
     await prisma.league.update({
@@ -1344,6 +1392,18 @@ export async function executeLeagueSettingsPatch(
     'waiverProcessTime',
     'waiverSchedule',
   ])
+  // One taxi squad size: roster legality reads the column just saved, taxi moves read the dynasty config.
+  if (leagueKeys.includes('taxiSlots')) await syncTaxiSlotsToDynastyConfig(leagueId, body.taxiSlots)
+
+  if (playoffStartSyncPlan.kind === 'apply') {
+    try {
+      const synced = await applySeasonPlayoffStartSync(playoffStartSyncPlan, userId)
+      updatedFieldNames.push(synced.rebuilt ? 'season_playoff_start_and_schedule' : 'season_playoff_start')
+    } catch (e) {
+      console.warn('[executeLeagueSettingsPatch] season playoff start sync', e)
+    }
+  }
+
   if (leagueKeys.some((k) => derivedSyncKeys.has(k))) {
     try {
       // Only the columns this save wrote: the playoffs and waivers panels write the derived copies
@@ -1580,6 +1640,7 @@ export async function executeLeagueSettingsPatch(
     // Commissioner edits on an imported league rewrite AllFantasy's twin only. The source
     // league's real settings on ESPN/Yahoo/Sleeper are unchanged, and the response says so.
     writeAuthority: buildWriteAuthorityEnvelope('settings', league.platform),
+    bestBallPoolWarnings,
     settings: lsOut
       ? {
           ...lsOut,

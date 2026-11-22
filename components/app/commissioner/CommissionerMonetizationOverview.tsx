@@ -8,18 +8,18 @@ const FREE_FEATURES = [
   'Basic league creation',
   'Basic league management',
   'Running free or paid leagues',
-  'General commissioner actions outside premium AI/advanced setup',
+  'General commissioner actions outside premium Chimmy/advanced setup',
 ]
 
 const PREMIUM_FEATURES = [
   'Advanced scoring features',
   'Advanced playoff setup',
-  'AI collusion detection',
-  'AI tanking detection',
+  'Chimmy collusion detection',
+  'Chimmy tanking detection',
   'Storyline creation',
   'League rankings',
   'Draft rankings',
-  'AI team managers',
+  'Chimmy team managers',
 ]
 
 export function CommissionerMonetizationOverview({
@@ -47,7 +47,7 @@ export function CommissionerMonetizationOverview({
       </div>
 
       <p className="mt-1 text-xs text-white/60">
-        Core commissioner controls stay free. Premium AI and advanced setup tools are clearly marked below.
+        Core commissioner controls stay free. Premium Chimmy and advanced setup tools are clearly marked below.
       </p>
 
       <div className={`mt-3 grid gap-3 ${compact ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>

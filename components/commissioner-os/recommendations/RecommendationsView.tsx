@@ -11,7 +11,7 @@ import { Lightbulb } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy, cosLoaderText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
-export interface RecommendationsViewProps {
+interface RecommendationsViewProps {
   recommendations: CommissionerRecommendationContract[]
   dataMode: CommissionerDataMode
 }

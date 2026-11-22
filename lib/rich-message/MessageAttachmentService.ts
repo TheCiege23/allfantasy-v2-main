@@ -2,18 +2,18 @@
  * MessageAttachmentService — validation and payload building for image/GIF/file attachments.
  */
 
-export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
-export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-export const ALLOWED_FILE_TYPES = [
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+const ALLOWED_FILE_TYPES = [
   "image/jpeg", "image/png", "image/gif", "image/webp",
   "application/pdf",
   "text/plain", "text/csv",
 ]
 
-export type ImagePreview = { type: "image"; file: File; url: string }
-export type GifPreview = { type: "gif"; url: string; source?: string }
-export type FilePreview = { type: "file"; file: File; url?: string }
+type ImagePreview = { type: "image"; file: File; url: string }
+type GifPreview = { type: "gif"; url: string; source?: string }
+type FilePreview = { type: "file"; file: File; url?: string }
 
 export type AttachmentPreview = ImagePreview | GifPreview | FilePreview
 

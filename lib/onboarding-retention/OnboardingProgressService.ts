@@ -24,7 +24,7 @@ const CHECKLIST_SPEC: Record<
   },
   choose_tools: {
     label: "Choose preferred tools",
-    description: "Try Trade Analyzer, Mock Draft, Brackets, or Chimmy AI.",
+    description: "Try Trade Analyzer, Mock Draft, Brackets, or Chimmy.",
     href: "/legacy?tab=trade",
     ctaLabel: "Explore tools",
   },
@@ -35,10 +35,10 @@ const CHECKLIST_SPEC: Record<
     ctaLabel: "Connect platforms",
   },
   visit_ai_tools: {
-    label: "Visit the AI Tools page",
-    description: "Explore all available AI tools to supercharge your league.",
+    label: "Visit Chimmy Tools page",
+    description: "Explore all available Chimmy tools to supercharge your league.",
     href: "/ai/tools",
-    ctaLabel: "AI Tools",
+    ctaLabel: "Chimmy Tools",
   },
   join_or_create_league: {
     label: "Join or create your first league",
@@ -47,8 +47,8 @@ const CHECKLIST_SPEC: Record<
     ctaLabel: "Leagues",
   },
   first_ai_action: {
-    label: "Try your first AI action",
-    description: "Use Chimmy or any AI feature once.",
+    label: "Try your first Chimmy action",
+    description: "Use Chimmy or any Chimmy feature once.",
     href: "/chimmy",
     ctaLabel: "Open Chimmy",
   },

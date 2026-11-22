@@ -22,7 +22,7 @@
  */
 
 /** Weeks between the deadline week and the first playoff week. */
-export const TRADE_DEADLINE_WEEKS_BEFORE_PLAYOFFS = 3
+const TRADE_DEADLINE_WEEKS_BEFORE_PLAYOFFS = 3
 
 export function defaultTradeDeadlineWeek(playoffStartWeek: number | null | undefined): number | null {
   if (typeof playoffStartWeek !== 'number' || !Number.isFinite(playoffStartWeek)) return null

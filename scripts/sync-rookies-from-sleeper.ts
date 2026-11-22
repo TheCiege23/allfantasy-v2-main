@@ -13,6 +13,7 @@
 
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
+import { isSleeperPlaceholderName } from '../lib/sleeper/placeholderPlayers'
 
 const prisma = new PrismaClient()
 
@@ -72,6 +73,8 @@ async function main() {
       const pos = normPos(p.position)
       if (pos === 'FLEX' && !p.fantasy_positions?.length) return false
       if (!p.full_name && !p.first_name) return false
+      // Sleeper's retired-duplicate and voided ids are not players.
+      if (isSleeperPlaceholderName((p.full_name ?? `${p.first_name ?? ''} ${p.last_name ?? ''}`).trim())) return false
       if (rookieOnly) {
         const ye = p.years_exp
         return typeof ye === 'number' && ye === 0

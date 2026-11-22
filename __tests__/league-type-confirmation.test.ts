@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/league/structuralSettingsLock', () => ({ structuralSettingsLockReason: vi.fn().mockResolvedValue(null) }))
 
-const h = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }))
+const h = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), upsertCap: vi.fn() }))
+vi.mock('@/lib/salary-cap/SalaryCapLeagueConfig', () => ({ upsertSalaryCapConfig: h.upsertCap }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { league: { findUnique: h.findUnique, update: h.update } },
 }))
@@ -20,7 +21,8 @@ const league = (over: Record<string, unknown> = {}) => ({
 })
 
 beforeEach(() => {
-  h.findUnique.mockReset(); h.update.mockReset()
+  h.findUnique.mockReset(); h.update.mockReset(); h.upsertCap.mockReset()
+  h.upsertCap.mockResolvedValue({})
   h.findUnique.mockResolvedValue(league())
   h.update.mockResolvedValue({})
 })
@@ -57,6 +59,32 @@ describe('rankableType is the only field a ranking may read', () => {
 })
 
 describe('confirming', () => {
+  // Imported leagues confirmed as Salary Cap had no cap config, so every cap feature was off.
+  it('a Salary Cap confirmation creates the league cap config, after the league is written', async () => {
+    const out = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    expect(out.ok).toBe(true)
+    // Empty input: sport defaults on create, and nothing a commissioner set is ever overwritten.
+    expect(h.upsertCap).toHaveBeenCalledWith('L1', {})
+    expect(h.upsertCap.mock.invocationCallOrder[0]).toBeGreaterThan(h.update.mock.invocationCallOrder[0])
+  })
+
+  it('no cap config for any other type, or when the confirmation itself fails', async () => {
+    await confirmLeagueType({ leagueId: 'L1', type: 'dynasty', userId: 'u1' })
+    expect(h.upsertCap).not.toHaveBeenCalled()
+    h.update.mockRejectedValueOnce(new Error('db down'))
+    const failed = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    expect(failed).toEqual({ ok: false, reason: 'write-failed' })
+    expect(h.upsertCap).not.toHaveBeenCalled()
+  })
+
+  it('a cap config failure does not undo the confirmation', async () => {
+    h.upsertCap.mockRejectedValueOnce(new Error('cap table down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = await confirmLeagueType({ leagueId: 'L1', type: 'salary_cap', userId: 'u1' })
+    warn.mockRestore()
+    expect(out.ok).toBe(true)
+  })
+
   it('records who decided and when', async () => {
     h.findUnique.mockResolvedValue(league())
     await confirmLeagueType({ leagueId: 'L1', type: 'tournament', userId: 'u1' })

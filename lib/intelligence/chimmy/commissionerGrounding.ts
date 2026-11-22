@@ -34,7 +34,7 @@ export function detectCommissionerIntelligenceIntent(question: string | null | u
   return INTENT_PATTERNS.some((re) => re.test(question))
 }
 
-export type CommissionerGroundingStatus = 'ok' | 'empty' | 'restricted'
+type CommissionerGroundingStatus = 'ok' | 'empty' | 'restricted'
 export interface CommissionerGroundingSummary {
   totalEvents: number
   lastActivityAt: string | null
@@ -44,7 +44,7 @@ export interface CommissionerGroundingSummary {
   actionItems: { kind: string; severity: string; message: string }[]
   recent: { type: string; summary: string; occurredAt: string }[]
 }
-export interface CommissionerGrounding {
+interface CommissionerGrounding {
   available: boolean
   status: CommissionerGroundingStatus
   /** Privacy-safe grounding text for the LLM. */

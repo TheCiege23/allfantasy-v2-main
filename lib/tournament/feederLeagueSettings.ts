@@ -1,6 +1,6 @@
 import type { RuleSnapshot } from '@/lib/league-rules-explainer/types'
 
-export type EditableFeederLeagueSettings = {
+type EditableFeederLeagueSettings = {
   scoring: string
   rosterSize: number
   benchSize: number
@@ -28,6 +28,23 @@ export function normalizeEditableLeagueSettings(raw: unknown): EditableFeederLea
     tradeDeadlineWeek: asNumber(settings.tradeDeadlineWeek, 12),
     tradeLockHours: asNumber(settings.tradeLockHours, 0),
   }
+}
+
+/**
+ * The keys the feeder editor may write into `League.settings` (2026-11-15): its own form fields, plus the league
+ * chat link (checked separately by leagueChatThreadLinkRefusalInPatch).
+ *
+ * 🛑 THE ROUTE MERGED WHATEVER IT WAS SENT. `changes` went into `League.settings` key by key, so a crafted request
+ * could overwrite anything there — the season's settings lock, the scoring panel stores, the league log
+ * visibility. Anything outside this list is refused.
+ */
+export const FEEDER_EDITABLE_KEYS: readonly string[] = [
+  'scoring', 'rosterSize', 'benchSize', 'waiverType', 'faabBudget', 'faabResetByRound', 'tradeDeadlineWeek', 'tradeLockHours',
+  'leagueChatThreadId',
+]
+
+export function unknownFeederSettingsKeys(changes: Record<string, unknown>): string[] {
+  return Object.keys(changes).filter((k) => !FEEDER_EDITABLE_KEYS.includes(k))
 }
 
 /** Kept separate from effective league rules because the feeder editor writes its own JSON. */

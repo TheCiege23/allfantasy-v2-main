@@ -42,10 +42,11 @@ describe('WaiverLineupBoard — a season-rate league', () => {
     render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByTestId('waiver-lineup-board')).toBeTruthy())
     const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
-    expect(text).toContain('your best lineup 61.4 per game')
+    // The lineup total left the header (2026-11-13 guide); each row still says per game.
+    expect(text).not.toContain('your best lineup')
     expect(text).not.toMatch(/wk /)
     expect(text).toContain('per game · season')
-    expect(text).toContain('over Bench Winger')
+    expect(text).toContain('replaces Bench Winger')
     expect(text).toContain("AllFantasy's default NHL scoring")
   })
 
@@ -75,5 +76,43 @@ describe('WaiverLineupBoard — a season-rate league', () => {
     render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByText(/nothing projects this sport’s players yet/)).toBeTruthy())
     expect(screen.getByText(/No projection exists for soccer players/)).toBeTruthy()
+  })
+
+  it('a league-value-board add shows the games behind it, and calls under 20 thin (2026-11-16)', async () => {
+    const add = NHL_PAYLOAD.candidates[0]!
+    mockFetch({
+      ...NHL_PAYLOAD,
+      sport: 'NBA',
+      basis: 'league_value_board',
+      candidates: [
+        { ...add, name: 'Steady Vet', sample: { kind: 'games', count: 41, thin: false } },
+        { ...add, playerKey: 'pim-3', name: 'New Guy', sample: { kind: 'games', count: 12, thin: true } },
+      ],
+    })
+    render(<WaiverLineupBoard leagueId="lg1" />)
+    await waitFor(() => expect(screen.getByText('Steady Vet')).toBeTruthy())
+    const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
+    expect(text).toContain('41 games')
+    expect(text).toContain('12 games · thin sample')
+    expect(text).not.toContain('41 games · thin')
+  })
+
+  it('MLB: the sample is at-bats or innings, never games — ten games of baseball is a hot weekend', async () => {
+    const add = NHL_PAYLOAD.candidates[0]!
+    mockFetch({
+      ...NHL_PAYLOAD,
+      sport: 'MLB',
+      basis: 'league_value_board',
+      candidates: [
+        { ...add, name: 'Everyday Bat', position: 'OF', sample: { kind: 'at_bats', count: 512, thin: false } },
+        { ...add, playerKey: 'pim-4', name: 'Call-up Arm', position: 'SP', sample: { kind: 'innings', count: 41.2, thin: true } },
+      ],
+    })
+    render(<WaiverLineupBoard leagueId="lg1" />)
+    await waitFor(() => expect(screen.getByText('Everyday Bat')).toBeTruthy())
+    const text = screen.getByTestId('waiver-lineup-board').textContent ?? ''
+    expect(text).toContain('512 at-bats')
+    expect(text).toContain('41.2 innings · thin sample')
+    expect(text).not.toMatch(/\d+ games/)
   })
 })

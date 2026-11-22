@@ -6,7 +6,7 @@
 
 import { cn } from '@/lib/utils'
 
-export type C2CBadgeType =
+type C2CBadgeType =
   | 'COLLEGE'
   | 'DECLARED'
   | 'DRAFTED'

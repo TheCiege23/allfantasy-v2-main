@@ -157,17 +157,19 @@ describe('SeasonOutlookLeague', () => {
   it('leads with the forecast: odds with ranges, the next action and the top three drivers', () => {
     render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
     const text = document.body.textContent ?? ''
-    expect(text).toContain('63%')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Likely in: 63% to make the playoffs')
     expect(text).toContain('range 40–61%')
     expect(text).toContain('First-round bye')
-    expect(text).toContain('Miss the playoffs')
+    // 2026-11-14: no "Miss the playoffs" tile — it was 100 minus the playoffs tile.
+    expect(text).not.toContain('Miss the playoffs')
     expect(text).toContain('Set your best lineup for week 4')
-    expect(text).toContain('+2.4 playoff pts')
+    expect(text).toContain('+2.4% playoff odds')
     // Top three by size: swing ±12, schedule −6, strength +3. Byes (−1.4) is not in the hero.
     const hero = document.querySelector('.af-olk-hero')!.textContent ?? ''
-    expect(hero).toContain('±12 pts')
-    expect(hero).toContain('−6 pts')
-    expect(hero).toContain('+3 pts')
+    expect(hero).toContain('±12%')
+    expect(hero).toContain('−6%')
+    expect(hero).toContain('+3%')
+    expect(hero).not.toContain(' pts')
     expect(hero).not.toContain('Bye weeks')
   })
 
@@ -175,23 +177,28 @@ describe('SeasonOutlookLeague', () => {
     const { unmount } = render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
     const icons = () =>
       Array.from(document.querySelectorAll('.af-olk-hero .af-olk-odds')).map((el) => el.getAttribute('data-icon'))
-    expect(icons()).toEqual(['playoffs', 'bye', 'title', 'miss'])
-    expect(document.querySelectorAll('.af-olk-hero .af-olk-odds-ic svg path')).toHaveLength(4)
+    expect(icons()).toEqual(['playoffs', 'bye', 'title'])
+    expect(document.querySelectorAll('.af-olk-hero .af-olk-odds-ic svg path')).toHaveLength(3)
     unmount()
     render(<SeasonOutlookLeague league={league({ byeTeams: 0 })} swing={swing} basis="10,000 simulations" />)
-    expect(icons()).toEqual(['playoffs', 'title', 'miss'])
+    expect(icons()).toEqual(['playoffs', 'title'])
   })
 
   it('shows the milestones first and switches tabs, keeping every tab pointed at a real panel', () => {
     render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
     expect(screen.getByRole('tabpanel').textContent).toContain('6–2')
-    fireEvent.click(screen.getByRole('tab', { name: 'Assumptions' }))
-    const panel = screen.getByRole('tabpanel')
-    expect(panel.textContent).toContain('10 re-fits')
-    expect(panel.textContent).toContain('standard bracket')
-    expect(panel.textContent).toContain('reused')
+    // 2026-11-14: four tabs; the assumptions are a fold under the panel, whatever tab is open.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Path to playoffs', 'What-if', 'Moves', 'All teams'])
+    const fold = screen.getByTestId('olk-how-worked-out')
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.textContent).toContain('10 re-fits')
+    expect(fold.textContent).toContain('standard bracket')
+    expect(fold.textContent).toContain('reused')
     for (const tab of screen.getAllByRole('tab')) expect(tab.getAttribute('aria-controls')).toBe('so-panel')
-    fireEvent.click(screen.getByRole('tab', { name: 'Standings' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Moves' }))
+    expect(screen.getByTestId('olk-roster-risk')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'All teams' }))
+    expect(screen.getByTestId('olk-schedule-strength')).toBeTruthy()
     // An unmodelled team shows a dash, never 0%.
     expect(screen.getByRole('tabpanel').textContent).toContain('Too few completed weeks to model')
   })
@@ -203,14 +210,14 @@ describe('SeasonOutlookLeague', () => {
       rows: [{ rosterId: '3', name: 'Mine', isYou: true, af: 120.5, afFrom: 7, api: 118.9, apiFrom: 9, starterCount: 9 }],
     }
     const { unmount } = render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" lineups={lineups} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Standings' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'All teams' }))
     const section = document.querySelector('.af-st-lineups')!
     expect(section.textContent).toContain('week 4')
     expect(section.textContent).toContain('simulated without AF')
     expect(section.querySelector('tbody tr')!.textContent).toBe('Mine · you120.5 7/9118.9')
     unmount()
     render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Standings' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'All teams' }))
     expect(document.querySelector('.af-st-lineups')).toBeNull()
   })
 
@@ -220,7 +227,7 @@ describe('SeasonOutlookLeague', () => {
     fireEvent.change(screen.getByLabelText('Game'), { target: { value: '4|3|1' } })
     fireEvent.click(screen.getByRole('button', { name: 'You win' }))
     expect(await screen.findByText(/Wk 4: You beat Team 1/)).toBeTruthy()
-    const delta = await screen.findAllByText(/^\+[0-9.]+ pts$/, {}, { timeout: 3000 })
+    const delta = await screen.findAllByText(/^\+[0-9.]+%$/, {}, { timeout: 3000 })
     expect(delta.length).toBeGreaterThan(0)
   })
 
@@ -273,11 +280,61 @@ describe('SeasonOutlook (cross-league)', () => {
     expect(text).toContain('on pace for a bye')
     expect(text).toContain('On the bubble at 63%.')
     expect(text).toContain('Test League · week 4')
-    expect(text).toContain('±18 pts')
+    expect(text).toContain('±18%')
     expect(text).toContain('40–61%')
     expect(text).toContain('4th hardest schedule left')
     expect(text).toContain('1 of 1 league runs were reused')
     expect(text).toContain('Old League')
+  })
+
+  it('puts elimination and not-started leagues IN the table, with a survival pill — only unread data stays in the footer', () => {
+    const withRows: Board = {
+      ...board,
+      withheld: [
+        ...board.withheld,
+        {
+          leagueName: 'Chop Shop',
+          leagueId: 'G1',
+          kind: 'elimination',
+          format: 'guillotine',
+          survival: { status: 'alive', remaining: 9, field: 18 },
+          reason: 'Guillotine — you are still alive, 9 of 18 teams left.',
+        },
+        {
+          leagueName: 'Axed',
+          leagueId: 'G2',
+          kind: 'elimination',
+          format: 'survivor',
+          survival: { status: 'eliminated', remaining: 9, field: 20 },
+          reason: 'Survivor — you have been eliminated (9 of 20 teams left).',
+        },
+        { leagueName: 'Draft Day', leagueId: 'P1', kind: 'not-started', reason: 'Pre-draft — odds start once the draft is done and the schedule is set.' },
+      ],
+    }
+    render(<SeasonOutlook data={slimOutlookForBoard(withRows)} />)
+    const rows = [...document.querySelectorAll('.af-so-table tbody tr.af-so-statusrow')]
+    expect(rows.map((r) => r.querySelector('.af-so-league')?.textContent)).toEqual(['Chop Shop', 'Axed', 'Draft Day'])
+    expect(rows.map((r) => r.querySelector('.af-olk-pill')?.getAttribute('data-status'))).toEqual(['alive', 'eliminated', 'waiting'])
+    expect(rows[0]!.textContent).toContain('you are still alive, 9 of 18 teams left')
+    expect(screen.getByRole('link', { name: 'Chop Shop' }).getAttribute('href')).toBe('/core?league=G1')
+    // The footer keeps only the league whose data could not be read.
+    const footer = document.querySelector('.af-so-withheld')!
+    expect(footer.textContent).toContain('1 league is not on this page')
+    expect(footer.textContent).toContain('Old League')
+    expect(footer.textContent).not.toContain('Chop Shop')
+  })
+
+  it('still draws the table when every league is a status row and none simulates', () => {
+    const onlyRows: Board = {
+      ...board,
+      leagues: [],
+      swingByLeague: {},
+      priorities: [],
+      withheld: [{ leagueName: 'Draft Day', leagueId: 'P1', kind: 'not-started', reason: 'Draft in progress — odds start once the schedule is set.' }],
+    }
+    render(<SeasonOutlook data={slimOutlookForBoard(onlyRows)} />)
+    expect(document.querySelectorAll('.af-so-statusrow')).toHaveLength(1)
+    expect(document.querySelector('.af-so-empty')).toBeNull()
   })
 
   it('keeps its odds tiles glyph-free: the icons belong to the league screen only', () => {
@@ -297,5 +354,80 @@ describe('SeasonOutlook (cross-league)', () => {
     expect(slim.leagues[0].focus).toBeNull()
     expect(slim.leagues[0].you).toEqual(board.leagues[0].you)
     expect(JSON.stringify(slim).length).toBeLessThan(JSON.stringify(board).length / 2)
+  })
+})
+
+/* ── 2026-11-14: the answer first, each number once ───────────────────────────────────────────────── */
+import { seasonOutlookLeagueMessages } from '@/lib/core-app/messages/seasonOutlookLeague'
+
+describe('Season Outlook — simpler (2026-11-14)', () => {
+  const longShot = () =>
+    league({
+      you: { ...you, playoffPct: 0.3, titlePct: 0, byePct: 0, missPct: 99.7, range: { playoff: { lo: 0.1, hi: 0.4 }, bye: { lo: 0, hi: 0 }, title: { lo: 0, hi: 0 } } },
+      whatDecidesIt: 'A long-shot forecast; a nonzero probability is not mathematical elimination.',
+      milestones: { ...league().milestones!, winsForSafe: null, winsForLikely: null },
+    })
+
+  it('says the answer in the headline, in words a person would use', () => {
+    const h = seasonOutlookLeagueMessages.en.headline
+    expect(h('clinched', 100)).toBe('You’re in the playoffs')
+    expect(h('eliminated', 0)).toBe('You’re out of the playoff race')
+    expect(h(null, 99.8)).toBe('Very likely in: over 99% to make the playoffs')
+    expect(h(null, 72)).toBe('Likely in: 72% to make the playoffs')
+    expect(h(null, 52)).toBe('A coin flip: 52% to make the playoffs')
+    expect(h(null, 18)).toBe('An outside chance: 18% to make the playoffs')
+    expect(h(null, 0.3)).toBe('A long shot: under 1% to make the playoffs')
+    const es = seasonOutlookLeagueMessages.es!.headline!
+    expect(es(null, 0.3)).toBe('Muy difícil: menos del 1% de llegar a los playoffs')
+    expect(es(null, 52)).toBe('A cara o cruz: un 52% de llegar a los playoffs')
+  })
+
+  it('a long shot: the headline says it once — no jargon sentence, no repeated range, no bare dashes, no swing tile', () => {
+    render(<SeasonOutlookLeague league={longShot()} swing={{ ...swing, ifWin: 1, ifLose: 0, swing: 1 }} basis="x" />)
+    // ⚠ The tab lives in the URL and an earlier test may have left one there: open Path explicitly.
+    fireEvent.click(screen.getByRole('tab', { name: 'Path to playoffs' }))
+    const text = document.body.textContent ?? ''
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('A long shot: under 1% to make the playoffs')
+    expect(text).not.toContain('nonzero probability')
+    // <1% with a range that rounds to <1% too: the range is not drawn.
+    expect(text).not.toContain('range <1%')
+    expect(text).not.toContain('range 0%')
+    expect(screen.queryByTestId('olk-mile-safe')).toBeNull()
+    expect(screen.queryByTestId('olk-mile-likely')).toBeNull()
+    // Two branches — win and lose — and no third "Swing" tile restating their difference.
+    expect([...document.querySelectorAll('.af-sol-branch')].map((b) => b.getAttribute('data-tone'))).toEqual(['good', 'bad'])
+    expect(text).toContain('If you win')
+  })
+
+  it('keeps the "what decides it" sentence and the goal tiles where they say something', () => {
+    render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Path to playoffs' }))
+    expect(document.querySelector('.af-olk-decides')?.textContent).toBe('Get to 6 wins — 4 of your last 5 — and you are in nine times in ten.')
+    expect(screen.getByTestId('olk-mile-safe').textContent).toContain('6–2')
+    expect(screen.getByTestId('olk-mile-likely').textContent).toContain('5–3')
+    // The seed's win range reads "4 to 6", never "4–6", which beside "6–2" reads as a record.
+    const panel = screen.getByRole('tabpanel').textContent ?? ''
+    expect(panel).toContain('4 to 6wins for the 4th seed')
+    expect(panel).not.toContain('4–6')
+  })
+
+  it('draws the odds chart only once the odds have moved', () => {
+    const flat = [
+      { week: 9, playoffPct: 0.4, titlePct: 0 },
+      { week: 10, playoffPct: 0.3, titlePct: 0 },
+    ]
+    render(<SeasonOutlookLeague league={longShot()} swing={swing} basis="x" history={flat} />)
+    expect(document.querySelector('[data-testid="outlook-odds-history"]')).toBeNull()
+  })
+
+  it('a link saved to an old tab lands on the tab that now holds it', () => {
+    const before = window.location.href
+    window.history.replaceState(null, '', '/core/season-outlook?league=L1&so_tab=roster')
+    try {
+      render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" />)
+      expect(screen.getByRole('tab', { name: 'Moves' }).getAttribute('aria-selected')).toBe('true')
+    } finally {
+      window.history.replaceState(null, '', before)
+    }
   })
 })

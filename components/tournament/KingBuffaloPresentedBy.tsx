@@ -36,15 +36,3 @@ export function KingBuffaloPresentedBy({ variant = 'strip', className = '' }: Pr
   )
 }
 
-export function KingBuffaloPresentedByText({ className = '' }: { className?: string }) {
-  return (
-    <div
-      className={`rounded-xl border border-cyan-500/15 bg-cyan-950/20 px-3 py-2 text-center ${className}`}
-      data-testid="kingbuffalo-presented-by-fallback"
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">
-        Presented by <span className="text-cyan-100">KingBuffalo</span>
-      </p>
-    </div>
-  )
-}

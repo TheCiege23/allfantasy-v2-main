@@ -156,6 +156,22 @@ describe('autopick fills the starting lineup before it runs out of picks', () =>
     expect(await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')).toMatchObject({ ok: true, pick: { playerName: 'Ace 1' } })
   })
 
+  it('"draft as me" is offered only starters once the team must fill its open spots, and its pick must start', async () => {
+    hm.draftSessionFindFirst.mockResolvedValue(session(['P', 'P', 'P']))
+    // The manager's style would take another pitcher; the guard refuses it.
+    hm.tryDraftAsMePick.mockResolvedValueOnce({ playerName: 'Ace 4', position: 'P', team: 'BOS', playerId: 'id-Ace 4', byeWeek: null, reason: 'like you' })
+    const result = await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')
+    expect(result).toMatchObject({ ok: true, pick: { playerName: 'Best Catcher' } })
+    const board = hm.tryDraftAsMePick.mock.calls[0]![0].board as Array<{ position: string }>
+    expect(new Set(board.map((e) => e.position))).toEqual(new Set(['C', '1B', 'SS']))
+  })
+
+  it('"draft as me" is untouched while the starters can still be filled later', async () => {
+    hm.draftSessionFindFirst.mockResolvedValue(session(['P', 'P']))
+    hm.tryDraftAsMePick.mockResolvedValueOnce({ playerName: 'Ace 4', position: 'P', team: 'BOS', playerId: 'id-Ace 4', byeWeek: null, reason: 'like you' })
+    expect(await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')).toMatchObject({ ok: true, pick: { playerName: 'Ace 4', strategy: 'draft-as-me' } })
+  })
+
   it('a league without a template keeps best available', async () => {
     hm.draftSessionFindFirst.mockResolvedValue(session(['P', 'P', 'P']))
     hm.getLeagueDraftTemplatePayload.mockRejectedValue(new Error('no template'))

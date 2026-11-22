@@ -47,7 +47,7 @@ export type ClosedSlate = {
   weekComplete: boolean
 }
 
-export const SLATE_SETTLE_MS = 3.5 * 3_600_000
+const SLATE_SETTLE_MS = 3.5 * 3_600_000
 /** No NFL game, overtime included, runs this long; a status that never turned final cannot hold the slate. */
 const GAME_SURELY_OVER_MS = 5 * 3_600_000
 /** Longest gap inside an NFL week is Monday night → Thursday night (~68h); between weeks it is longer. */
@@ -233,7 +233,7 @@ export function digestLineFor(input: {
 
 // ── The pass ───────────────────────────────────────────────────────────────────────────────
 
-export function slateDigestIdempotencyKey(slate: ClosedSlate): string {
+function slateDigestIdempotencyKey(slate: ClosedSlate): string {
   return `slate-digest:${slate.key}`
 }
 
@@ -256,7 +256,7 @@ export type DigestLeague = {
   teams: Array<{ externalId: string | null; claimedByUserId: string | null }>
 }
 
-export type SlateDigestDeps = {
+type SlateDigestDeps = {
   loadGames: (now: Date) => Promise<SlateGame[]>
   loadLeagues: (season: number) => Promise<DigestLeague[]>
   currentWeek: (platformLeagueId: string, season: number) => Promise<number | null>

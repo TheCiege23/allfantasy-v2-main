@@ -18,9 +18,13 @@ export type AddDropErrorCode =
   | 'LEAGUE_NOT_ACTIVE'
   | 'UNAUTHORIZED'
   | 'VALIDATION_FAILED'
+  /** A waiver run (or another add) holds the league's lock (leagueWaiverLock.ts): nothing changed, try again. */
+  | 'WAIVERS_PROCESSING'
 
 export function mapAddDropErrorCode(message: string, opts: { hasDrop: boolean }): AddDropErrorCode {
   const m = message.toLowerCase()
+
+  if (m.includes('waivers are processing')) return 'WAIVERS_PROCESSING'
 
   if (m.includes('unauthorized') || m.includes('not authorized') || m.includes('roster not found')) return 'UNAUTHORIZED'
   if (m.includes('season is complete') || m.includes('all roster moves are locked') || m.includes('league is not active') || m.includes('not active')) {
@@ -59,6 +63,8 @@ export function addDropErrorStatus(code: AddDropErrorCode): number {
       return 409
     case 'PLAYER_ALREADY_ROSTERED':
       return 409
+    case 'WAIVERS_PROCESSING':
+      return 409
     case 'LEAGUE_NOT_ACTIVE':
       return 403
     default:
@@ -79,4 +85,5 @@ export const ADD_DROP_ERROR_COPY: Record<AddDropErrorCode, string> = {
   LEAGUE_NOT_ACTIVE: 'Roster moves are not open for this league right now.',
   UNAUTHORIZED: 'You are not allowed to make this move.',
   VALIDATION_FAILED: 'That move could not be completed.',
+  WAIVERS_PROCESSING: 'Waivers are processing for this league right now. Try the add again in a moment.',
 }

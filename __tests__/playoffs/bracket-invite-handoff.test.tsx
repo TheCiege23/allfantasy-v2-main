@@ -21,7 +21,7 @@ describe('bracket invite handoff', () => {
     const callback = '/brackets/leagues/cup123?code=CUP12345'
     state.query = new URLSearchParams({ callbackUrl: callback })
     const { unmount } = render(<AuthV4 mode="signin" />)
-    expect(await screen.findByRole('link', { name: 'Create account' })).toHaveAttribute('href', `/signup?callbackUrl=${encodeURIComponent(callback)}`)
+    expect(await screen.findByRole('link', { name: 'Sign up' })).toHaveAttribute('href', `/signup?callbackUrl=${encodeURIComponent(callback)}`)
     unmount()
     render(<AuthV4 mode="signup" />)
     expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent(callback)}`)
@@ -30,7 +30,7 @@ describe('bracket invite handoff', () => {
   it('does not carry an external callback through the auth switch', async () => {
     state.query = new URLSearchParams({ callbackUrl: 'https://example.org' })
     render(<AuthV4 mode="signin" />)
-    expect(await screen.findByRole('link', { name: 'Create account' })).not.toHaveAttribute('href', expect.stringContaining('example.org'))
+    expect(await screen.findByRole('link', { name: 'Sign up' })).not.toHaveAttribute('href', expect.stringContaining('example.org'))
   })
 
   it('offers Google Play and website sign-in on Android bracket invitations', async () => {

@@ -6,7 +6,7 @@
  */
 import type { PersistedLeagueEvidence, PersistedPortfolio } from './evidenceStore'
 
-export type IntegrityCode =
+type IntegrityCode =
   | 'duplicate-league'
   | 'orphan-league'
   | 'broken-league-chain'
@@ -16,14 +16,14 @@ export type IntegrityCode =
   | 'impossible-roster-reference'
 
 /** Severity taxonomy (Part 5) — a provider limitation is NOT an application defect. */
-export type IntegritySeverity =
+type IntegritySeverity =
   | 'informational-coverage-gap'
   | 'partial-import'
   | 'recoverable-sync-defect'
   | 'corrupt-persisted-evidence'
   | 'provider-limitation'
 
-export type IntegrityFinding = {
+type IntegrityFinding = {
   code: IntegrityCode
   severity: IntegritySeverity
   leagueReference?: string

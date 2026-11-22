@@ -38,9 +38,9 @@ describe('wizard league types for an imported team count', () => {
   })
 
   it('a native create still offers only the listed sizes', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 16, sport: 'NFL' as const }
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 250, sport: 'NFL' as const }
     render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
-    // 16 is the top of the native dynasty list, so there is nothing larger to step to.
+    // 250 is the largest dynasty size.
     expect(screen.getByTestId('g30-team-count-increase')).toBeDisabled()
   })
 })
@@ -56,7 +56,8 @@ describe('import template and completion for an off-list team count', () => {
   })
 
   it('does not flag the imported count, and still flags it for a native create', () => {
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'dynasty' as const, teamCount: 9, sport: 'NFL' as const }
+    // Best ball is still list-bound (even sizes 4–16); dynasty now takes every size from 4 to 250.
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'best_ball' as const, teamCount: 9, sport: 'NFL' as const }
     const codes = (issues: { code: string }[]) => issues.map((issue) => issue.code)
     expect(codes(analyzeCreateLeagueCompletion(state))).toContain('team_count_invalid')
     expect(codes(analyzeCreateLeagueCompletion(state, { importedTeamCount: 9 }))).not.toContain('team_count_invalid')

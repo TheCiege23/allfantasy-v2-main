@@ -22,7 +22,7 @@ function mulberry32(seed: number) {
 const STEMS = ['Blitz', 'Bootleg', 'Fourth', 'BigPlay', 'StiffArm', 'Wildcat', 'Redshirt', 'Nickel', 'Sack', 'Dime', 'Pylon', 'QB', 'Triple', 'Spiral', 'DeepPost', 'Screen', 'Fumble', 'HailMary', 'RPO', 'Mossed', 'Touchback', 'Punt', 'Audible', 'Onside', 'Coffee']
 const TAILS = ['Capital', 'Raiders', 'Society', 'Crew', 'Gang', 'Wolves', 'Bandits', 'Nation', 'Club', 'Squad', 'Empire', 'Mafia', 'Dynasty', 'Legends', 'Theory', 'Hustle']
 
-export type SampleTeam = DivisionTeamInput & { divisionIndex: 0 | 1; conferenceIndex: number }
+type SampleTeam = DivisionTeamInput & { divisionIndex: 0 | 1; conferenceIndex: number }
 
 export function sampleDivisionsField(seed = 2026, weeksPlayed = 9, conferences = 10, teamsPerConference = 12) {
   const rand = mulberry32(seed)

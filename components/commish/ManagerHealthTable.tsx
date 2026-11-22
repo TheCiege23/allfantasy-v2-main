@@ -16,6 +16,7 @@
  */
 
 import type { ManagerHealthRow, ManagerHealthStatus } from '@/lib/commissioner-hub/managerHealth'
+import { useInactiveFlagRecord } from '@/components/core-app/useAdviceRecord'
 
 const STATUS_LABEL: Record<ManagerHealthStatus, string> = {
   active: 'Active',
@@ -55,13 +56,21 @@ function initials(row: ManagerHealthRow): string {
   return trimmed ? trimmed.slice(0, 1).toUpperCase() : '·'
 }
 
-export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
+/**
+ * `flagRecord` — a native league only: the "inactive" flag reads the manager's own actions there, and that is
+ * the flag the record grades (`lib/commissioner-hub/inactiveFlagLedger.ts`). An imported league's flag reads a
+ * synced timestamp, so the record says nothing about it and is not shown.
+ */
+function ManagerHealthTable({ rows, flagRecord = false }: { rows: ManagerHealthRow[]; flagRecord?: boolean }) {
+  const record = useInactiveFlagRecord(flagRecord && rows.length > 0)
   if (rows.length === 0) {
     return <p className="af-cm-empty">No rosters found for this league yet.</p>
   }
 
   const inactive = rows.filter((r) => r.status === 'inactive').length
   const atRisk = rows.filter((r) => r.status === 'at_risk').length
+  // Only a league where some team has a FAAB balance gets the column.
+  const showFaab = rows.some((r) => typeof r.faabRemaining === 'number')
 
   return (
     <div className="af-card" style={{ padding: 18 }} data-testid="manager-health-table">
@@ -83,6 +92,7 @@ export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
               <th scope="col">Lineups</th>
               <th scope="col">Moves</th>
               <th scope="col">Trades</th>
+              {showFaab ? <th scope="col">FAAB</th> : null}
               <th scope="col">Last action</th>
               <th scope="col">Status</th>
             </tr>
@@ -128,6 +138,11 @@ export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
                   </td>
                   <td className="af-num">{row.moves}</td>
                   <td className="af-num">{row.trades}</td>
+                  {showFaab ? (
+                    <td className="af-num" data-testid="manager-faab">
+                      {row.faabRemaining == null ? '—' : `$${row.faabRemaining}`}
+                    </td>
+                  ) : null}
                   <td style={{ color: 'var(--muted)' }}>{ago(row.lastActionAt)}</td>
                   <td>
                     <span className="af-cm-mstatus af-num" data-tone={tone === 'none' ? undefined : tone}>
@@ -140,6 +155,12 @@ export function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
           </tbody>
         </table>
       </div>
+      {record?.ratePct != null ? (
+        <p className="af-cm-empty" style={{ marginTop: 10 }} data-testid="manager-health-flag-record">
+          How the inactive flag has held up: of {record.graded} managers AllFantasy flagged inactive in the past year,{' '}
+          {record.stayedAway} ({record.ratePct}%) still had done nothing of their own two weeks later.
+        </p>
+      ) : null}
     </div>
   )
 }

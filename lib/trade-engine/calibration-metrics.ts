@@ -210,17 +210,6 @@ function computeBrierScore(data: PairedRecord[]): number {
   return sum / N
 }
 
-function computePredictionDistribution(data: PairedRecord[]): Array<{ bucket: string; count: number }> {
-  const dist: Array<{ bucket: string; count: number }> = []
-  for (let i = 0; i < 10; i++) {
-    const min = i * 0.1
-    const max = (i + 1) * 0.1
-    const count = data.filter((d) => d.acceptProb >= min && (i === 9 ? d.acceptProb <= max : d.acceptProb < max)).length
-    dist.push({ bucket: `${Math.round(min * 100)}–${Math.round(max * 100)}%`, count })
-  }
-  return dist
-}
-
 function computePredictionDistributionFromOffers(offers: Array<{ acceptProb: number | null }>): Array<{ bucket: string; count: number }> {
   const valid = offers.filter((o) => o.acceptProb != null).map((o) => o.acceptProb!)
   const dist: Array<{ bucket: string; count: number }> = []

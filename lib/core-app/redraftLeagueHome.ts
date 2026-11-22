@@ -38,7 +38,7 @@ export type RedraftDeckSide = {
   isYou: boolean
 }
 
-export type RedraftScoreBug = {
+type RedraftScoreBug = {
   week: number
   /** `final`: a week before the current one. `scored`: the current week has points. `upcoming`: none yet. */
   state: 'final' | 'scored' | 'upcoming'
@@ -48,7 +48,7 @@ export type RedraftScoreBug = {
   winPct: number | null
 }
 
-export type RedraftRaceRow = {
+type RedraftRaceRow = {
   rank: number
   teamName: string
   record: string
@@ -57,9 +57,9 @@ export type RedraftRaceRow = {
   inLine: boolean
 }
 
-export type RedraftPlayoffRace = { spots: number; rows: RedraftRaceRow[] }
+type RedraftPlayoffRace = { spots: number; rows: RedraftRaceRow[] }
 
-export type RedraftRecap = {
+type RedraftRecap = {
   week: number
   topScore: { team: string; points: number }
   closest: { winner: string; loser: string; margin: number } | null
@@ -77,7 +77,7 @@ export type RedraftHomeDeck = RedraftIdentity & {
   recap: RedraftRecap | null
 }
 
-export type RedraftStandingInput = {
+type RedraftStandingInput = {
   teamName: string
   wins: number
   losses: number

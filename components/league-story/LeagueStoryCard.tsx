@@ -12,7 +12,7 @@ const ACCENT = '#a855f7'
 
 export const LEAGUE_STORY_CARD_ID = 'league-story-card-capture'
 
-export interface LeagueStoryCardProps {
+interface LeagueStoryCardProps {
   payload: LeagueStoryPayload
   captureId?: string
   dataTestId?: string

@@ -1,9 +1,9 @@
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { UserLeague } from '@/app/dashboard/types'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
@@ -32,8 +32,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await ctx.params
 
-  const role = await getLeagueRole(leagueId, userId)
-  if (!isCommissionerRole(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, userId, 'view')
+  if (refused) return refused
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },

@@ -14,7 +14,7 @@
  * reader may skip the database.
  */
 
-export type FreshnessTier = 'static' | 'slow' | 'daily' | 'gameday' | 'live'
+type FreshnessTier = 'static' | 'slow' | 'daily' | 'gameday' | 'live'
 
 export type DataClass =
   | 'fantasy_league'
@@ -32,7 +32,7 @@ export type DataClass =
   | 'live_scores'
   | 'play_by_play'
 
-export type FreshnessRule = {
+type FreshnessRule = {
   tier: FreshnessTier
   /** How old a row may be before a reader should treat it as stale. */
   maxAgeSeconds: number
@@ -45,7 +45,7 @@ const MIN = 60
 const HOUR = 60 * MIN
 const DAY = 24 * HOUR
 
-export const FRESHNESS: Record<DataClass, FreshnessRule> = {
+const FRESHNESS: Record<DataClass, FreshnessRule> = {
   fantasy_league: { tier: 'gameday', maxAgeSeconds: HOUR, provider: 'none',
     why: 'Mutable fantasy rosters and transactions must be collected within one hour; the active lane refreshes them every five minutes.' },
   // ── Static: ingest once, refresh occasionally to pick up corrections ──
@@ -137,15 +137,6 @@ export const FRESHNESS: Record<DataClass, FreshnessRule> = {
   },
 }
 
-/** Polling cadence for a tier, in seconds, when its sport has games in progress. */
-export const GAMEDAY_POLL_SECONDS: Record<FreshnessTier, number | null> = {
-  static: null,
-  slow: null,
-  daily: null,
-  gameday: 15 * MIN,
-  live: 60,
-}
-
 export function isStale(dataClass: DataClass, fetchedAt: Date | null | undefined, now = new Date()): boolean {
   if (!fetchedAt) return true
   const ageSeconds = (now.getTime() - fetchedAt.getTime()) / 1000
@@ -174,26 +165,3 @@ export function describeAge(
   return { label: `${Math.floor(seconds / DAY)}d ago`, stale }
 }
 
-/** Data classes a given sport can actually serve, so nothing promises what is absent. */
-export function availableFor(sport: string): Record<DataClass, boolean> {
-  const isSoccer = sport.toUpperCase() === 'SOCCER'
-  const isCollege = sport.toUpperCase() === 'NCAAF' || sport.toUpperCase() === 'NCAAB'
-  return {
-    fantasy_league: true,
-    leagues: true,
-    venues: true,
-    team_identity: true,
-    season_list: true,
-    historical_schedule: true,
-    // College returns coaches and the odd alumnus — 20 players across 231 NCAAF
-    // teams — so it is present but must never be presented as a depth chart.
-    roster: !isCollege,
-    player_bio: !isCollege,
-    player_season_stats: !isCollege,
-    current_schedule: true,
-    standings: isSoccer,
-    injuries: sport.toUpperCase() === 'NFL' || sport.toUpperCase() === 'NCAAF',
-    live_scores: true,
-    play_by_play: isSoccer,
-  }
-}

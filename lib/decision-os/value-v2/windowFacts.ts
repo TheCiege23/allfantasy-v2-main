@@ -193,7 +193,7 @@ export interface WindowEvidence {
  */
 export const MIN_ROS_COVERAGE = 0.75
 
-export interface WindowFactsResult {
+interface WindowFactsResult {
   facts: TeamWindowFacts | null
   evidence: WindowEvidence
   gaps: string[]

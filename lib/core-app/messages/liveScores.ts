@@ -42,8 +42,9 @@ export const liveScoresMessages = defineMessages({
     finalCount: (n: number) => `Final · ${n} ${plural(n, 'game', 'games')}`,
     starterCount: (n: number) => `${n} ${plural(n, 'starter', 'starters')}`,
     topPrefix: ' · top ',
+    /** `leagues` 0 drops the league count (one league held: the count is always 1). */
     yourStartersHead: (players: number, leagues: number) =>
-      `Your starters · ${players} ${plural(players, 'player', 'players')} · ${leagues} ${plural(leagues, 'league', 'leagues')}`,
+      `Your starters · ${players} ${plural(players, 'player', 'players')}${leagues > 0 ? ` · ${leagues} ${plural(leagues, 'league', 'leagues')}` : ''}`,
     showAllStarters: (n: number) => `Show all ${n} starters`,
     leagueCount: (n: number) => `${n} ${plural(n, 'league', 'leagues')}`,
     projectionTitle: (leagueName: string | null) =>
@@ -113,7 +114,7 @@ export const liveScoresMessages = defineMessages({
     starterCount: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
     topPrefix: ' · mejor ',
     yourStartersHead: (players, leagues) =>
-      `Tus titulares · ${players} ${plural(players, 'jugador', 'jugadores')} · ${leagues} ${plural(leagues, 'liga', 'ligas')}`,
+      `Tus titulares · ${players} ${plural(players, 'jugador', 'jugadores')}${leagues > 0 ? ` · ${leagues} ${plural(leagues, 'liga', 'ligas')}` : ''}`,
     showAllStarters: (n) => `Mostrar los ${n} titulares`,
     leagueCount: (n) => `${n} ${plural(n, 'liga', 'ligas')}`,
     projectionTitle: (leagueName) =>

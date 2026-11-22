@@ -84,13 +84,13 @@ describe('DraftTeamPanel wires the team-needs surface', () => {
 
   it('imports the computeTeamNeeds + detectByeWeekClusters helpers', () => {
     expect(src).toMatch(
-      /import \{ computeTeamNeeds, detectByeWeekClusters \} from '@\/lib\/draft-room\/teamNeeds'/,
+      /import \{ computeStarterNeedsForDisplay, detectByeWeekClusters \} from '@\/lib\/draft-room\/teamNeeds'/,
     )
   })
 
   it('computes teamNeeds from { picks: myPicks, starterSlots }', () => {
     expect(src).toMatch(
-      /const teamNeeds = computeTeamNeeds\(\{ picks: myPicks, starterSlots \}\)/,
+      /const teamNeeds = computeStarterNeedsForDisplay\(\{ picks: myPicks, starterSlots \}\)/,
     )
   })
 
@@ -158,10 +158,11 @@ describe('DraftRoomPageClient still flows byeWeek into draftedPicks', () => {
     )
   })
 
-  it('still mounts the WarRoomPopup with DraftTeamPanel as its content', () => {
-    expect(src).toMatch(
-      /<WarRoomPopup[\s\S]+?<DraftTeamPanel \{\.\.\.draftTeamPanelProps\}/,
-    )
+  // Phase 5 (2026-11-19): the floating War Room popup is gone; DraftTeamPanel stays for the
+  // phone roster of devy / C2C / IDP leagues.
+  it('no longer mounts the WarRoomPopup, and still renders DraftTeamPanel with its props', () => {
+    expect(src).not.toMatch(/<WarRoomPopup\b/)
+    expect(src).toMatch(/<DraftTeamPanel \{\.\.\.draftTeamPanelProps\}/)
   })
 })
 

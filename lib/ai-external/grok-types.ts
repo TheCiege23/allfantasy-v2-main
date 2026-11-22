@@ -1,8 +1,8 @@
 // lib/ai-external/grok-types.ts
 
-export type GrokRole = "system" | "user" | "assistant";
+type GrokRole = "system" | "user" | "assistant";
 
-export type GrokMessage = {
+type GrokMessage = {
   role: GrokRole;
   content: string;
 };

@@ -1,5 +1,5 @@
 export type ReferralAudience = "user" | "creator"
-export type ReferralStatus = "clicked" | "signed_up" | "engaged" | "onboarded" | "rewarded" | "blocked"
+type ReferralStatus = "clicked" | "signed_up" | "engaged" | "onboarded" | "rewarded" | "blocked"
 export type ReferralRewardStatus = "pending" | "claimable" | "redeemed" | "expired" | "blocked"
 export type ReferralRewardKind = "xp" | "badge" | "perk" | "bundle"
 export type ReferralRewardTriggerType = "signup" | "onboarding_completed"
@@ -38,7 +38,7 @@ export interface ReferralStats {
   conversionRate: number
 }
 
-export interface ReferralMilestone {
+interface ReferralMilestone {
   signups: number
   label: string
   achieved: boolean
@@ -99,7 +99,7 @@ export interface ReferredUserView {
   onboardingStep: string | null
 }
 
-export interface ReferralCTAView {
+interface ReferralCTAView {
   id: string
   title: string
   description: string

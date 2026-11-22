@@ -35,7 +35,7 @@ function useAccordionPersistence(storageKey: string | undefined, fallback: boole
   return { open, toggle }
 }
 
-export type DraftRoomAccordionProps = {
+type DraftRoomAccordionProps = {
   title: string
   summary?: string | null
   icon?: ReactNode

@@ -1,5 +1,5 @@
 /** Default FanCred destination for league dues & payouts (override with `NEXT_PUBLIC_FANCRED_URL`). */
-export const DEFAULT_FANCRED_APP_URL = "https://fancred.app"
+const DEFAULT_FANCRED_APP_URL = "https://fancred.app"
 
 export function getFanCredPublicUrl(): string {
   const env =

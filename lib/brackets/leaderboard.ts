@@ -7,7 +7,7 @@ export type LeaderboardRowInput = {
   score: number
 }
 
-export type LeaderboardRowRanked = LeaderboardRowInput & {
+type LeaderboardRowRanked = LeaderboardRowInput & {
   rank: number
   tieGroup: number
   previousRank: number | null

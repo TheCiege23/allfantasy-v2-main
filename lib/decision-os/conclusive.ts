@@ -22,7 +22,7 @@
 
 import type { ImportAssertions } from './import/assertions'
 
-export type ConclusivenessAssertion = 'freshness' | 'parity' | 'coverage' | 'identity'
+type ConclusivenessAssertion = 'freshness' | 'parity' | 'coverage' | 'identity'
 
 export interface ConclusivenessBlocker {
   assertion: ConclusivenessAssertion
@@ -173,7 +173,7 @@ function scopeList(scopes: readonly string[]): string {
   return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
-export interface CertifiedFreshness {
+interface CertifiedFreshness {
   lastSuccessfulSyncAt: string | null
   staleMs: number | null
   /** Which certified clock this came from. */

@@ -1,17 +1,6 @@
 import { prisma } from "@/lib/prisma"
 
-export type MatchupData = {
-  nodeId: string
-  round: number
-  region: string | null
-  teamA: string | null
-  teamB: string | null
-  seedA: number | null
-  seedB: number | null
-  sportsGameId: string | null
-}
-
-export type WinProbability = {
+type WinProbability = {
   teamA: number
   teamB: number
 }
@@ -24,7 +13,7 @@ export type PickDistribution = {
   publicPctB: number
 }
 
-export type SleeperScore = {
+type SleeperScore = {
   team: string
   score: number
   label: "high_upset" | "moderate_upset" | "slight_edge" | "none"
@@ -35,14 +24,14 @@ export type SleeperScore = {
   }
 }
 
-export type LeverageScore = {
+type LeverageScore = {
   nodeId: string
   score: number
   teamA: { name: string; leverage: number }
   teamB: { name: string; leverage: number }
 }
 
-export type UniquenessScore = {
+type UniquenessScore = {
   score: number
   percentile: number
   pickContributions: Array<{
@@ -230,9 +219,6 @@ export async function computeHealthScore(
     }),
     prisma.bracketNode.findMany({
       where: { tournamentId },
-      include: {
-        picks: { select: { points: true, isCorrect: true, entryId: true } },
-      },
     }),
     prisma.bracketEntry.findMany({
       where: { league: { tournamentId } },
@@ -258,17 +244,18 @@ export async function computeHealthScore(
   }
 
   const pickedTeams = new Set(entry.picks.map(p => p.pickedTeamName).filter(Boolean))
-  const eliminatedTeams = new Set<string>()
-
-  for (const node of allNodes) {
-    const finalPicks = node.picks.filter(p => p.isCorrect === false)
-    for (const fp of finalPicks) {
-      const matchingPick = entry.picks.find(ep => ep.nodeId === node.id)
-      if (matchingPick?.pickedTeamName) {
-        eliminatedTeams.add(matchingPick.pickedTeamName)
-      }
-    }
-  }
+  /*
+   * A team this entry picked is out once one of the entry's OWN picks of it is graded wrong. Grading marks
+   * every pick that named a game's loser, and a team that went out early was picked — and graded — in the
+   * game it lost, so the entry's own wrong picks name exactly its eliminated teams.
+   *
+   * 🛑 This used to read every entry's picks on a node: if ANYONE got the game wrong, this entry's pick there
+   * counted as eliminated — so the winners it had picked counted too, since someone nearly always picks the
+   * loser. Teams-alive, alive %, champion-alive and Final Four alive all read low.
+   */
+  const eliminatedTeams = new Set(
+    entry.picks.flatMap((p) => (p.isCorrect === false && p.pickedTeamName ? [p.pickedTeamName] : [])),
+  )
 
   const teamsTotal = pickedTeams.size
   const teamsAlive = teamsTotal - eliminatedTeams.size
@@ -276,7 +263,6 @@ export async function computeHealthScore(
 
   const currentPoints = entry.picks.reduce((s, p) => s + p.points, 0)
 
-  const maxRound = Math.max(...allNodes.map(n => n.round))
   const roundPoints: Record<number, number> = { 1: 1, 2: 2, 3: 5, 4: 10, 5: 18, 6: 30 }
   let maxPossiblePoints = currentPoints
   for (const pick of entry.picks) {
@@ -296,7 +282,6 @@ export async function computeHealthScore(
   const leaderScore = entryScores[0] ?? 0
   const upside = maxPossiblePoints - leaderScore
 
-  const undecidedPicks = entry.picks.filter(p => p.isCorrect === null).length
   const totalPicks = entry.picks.length
   const riskExposure = totalPicks > 0 ? Math.round(((teamsTotal - teamsAlive) / Math.max(teamsTotal, 1)) * 100) / 100 : 0
 
@@ -339,7 +324,7 @@ export async function computeHealthScore(
   }
 }
 
-export type MonteCarloResult = {
+type MonteCarloResult = {
   userId: string
   entryId: string
   winRate: number

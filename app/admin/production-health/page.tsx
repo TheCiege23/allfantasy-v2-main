@@ -84,6 +84,9 @@ export default async function ProductionHealthPage() {
               ← Admin
             </Link>
           </div>
+          <Link href="/api/admin/production-health?view=projection-coverage&format=text" prefetch={false} className="rounded-lg border border-white/15 px-3 py-2 text-sm text-white/80 hover:text-white">
+            Projection coverage report
+          </Link>
         </header>
 
         <p className="text-[11px] text-white/30">Generated {new Date(health.generatedAt).toLocaleString()}</p>
@@ -147,8 +150,10 @@ export default async function ProductionHealthPage() {
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2"
               >
                 <div className="min-w-0">
+                  {entry.subJobOf && <span aria-hidden className="mr-1 text-white/30">↳</span>}
                   <span aria-hidden className="mr-2">{TRAFFIC_LIGHT_EMOJI[entry.trafficLight]}</span>
-                  <span className="text-[12px] font-semibold text-white/80">{entry.pathname}</span>
+                  <span className="text-[12px] font-semibold text-white/80">{entry.label ?? entry.pathname}</span>
+                  {entry.subJobOf && <span className="ml-2 text-[11px] text-white/35">in {entry.pathname}</span>}
                   <span className="ml-2 rounded border border-white/10 px-1 text-[11px] uppercase text-white/40">
                     {CRON_STATE_LABEL[entry.state] ?? entry.state}
                   </span>

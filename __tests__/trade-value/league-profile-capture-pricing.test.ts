@@ -16,12 +16,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  today: [] as unknown[],
+  today: [] as ReturnType<typeof fantasyCalcPlayerFromSnapshot>[],
   captures: new Map<string, unknown[]>(),
   cache: new Map<string, { data: unknown; createdAt: Date }>(),
   profileReads: [] as string[],
 }))
 
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ sleeperId }: { sleeperId: string }) => {
+    const row = h.today.find(entry => entry.player.sleeperId === sleeperId)
+    return row ? { marketValue: row.value, position: row.player.position, generatedAt: new Date('2026-10-04T09:00:00.000Z') } : null
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {

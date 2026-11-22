@@ -19,7 +19,6 @@ type Player = {
 }
 
 type SportFilter = 'NFL' | 'NBA' | 'MLB' | 'NHL'
-type TimeFilter = '7d' | '30d'
 type FormatFilter = 'dynasty' | 'redraft'
 type Section = 'risers' | 'fallers' | 'buyLow' | 'sellHigh'
 
@@ -36,7 +35,6 @@ function tierLabel(value: number): string {
 export function MarketMoversClient() {
   const [sport, setSport] = useState<SportFilter>('NFL')
   const [format, setFormat] = useState<FormatFilter>('dynasty')
-  const [timeframe, setTimeframe] = useState<TimeFilter>('30d')
   const [search, setSearch] = useState('')
   const [section, setSection] = useState<Section>('risers')
   const [players, setPlayers] = useState<Player[]>([])

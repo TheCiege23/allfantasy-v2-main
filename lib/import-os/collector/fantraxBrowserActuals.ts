@@ -4,7 +4,7 @@ import { getFantraxLeagueInfo, getFantraxMatchupScores, getFantraxTeamRosters } 
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
 import { verifyFantraxWeeklyActuals, fantraxActualWriteDecision, type FantraxZeroEvidence } from '@/lib/league-import/fantrax/fantraxWeeklyActuals'
 
-export type BrowserActualManifest={leagueId:string;season:number;exports:Array<{period:number;sourceTeamId:string;csv:string}>;apply?:boolean}
+type BrowserActualManifest={leagueId:string;season:number;exports:Array<{period:number;sourceTeamId:string;csv:string}>;apply?:boolean}
 export async function importFantraxBrowserActuals(userId:string,manifest:BrowserActualManifest) {
   if (!Number.isInteger(manifest.season) || !Array.isArray(manifest.exports) || !manifest.exports.length || manifest.exports.length > 24 || new Set(manifest.exports.map(e=>e.period)).size!==1) throw new Error('Invalid manifest')
   const league = await prisma.league.findUnique({ where: { id: manifest.leagueId }, select: { platform:true, platformLeagueId:true, season:true, userId:true, sport:true } })

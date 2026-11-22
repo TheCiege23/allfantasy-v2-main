@@ -6,7 +6,7 @@
 import { getStrategyMetaReports } from '@/lib/strategy-meta'
 import { resolveSportForMetaUI } from './SportMetaUIResolver'
 
-export interface StrategyMetaPanelPayload {
+interface StrategyMetaPanelPayload {
   sport: string
   leagueFormat?: string
   data: Array<{

@@ -1,10 +1,10 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { finalizeAfLeagueTradeProcessing } from '@/lib/league-trade-engine/tradeService'
-import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { evaluateTradeSettlementGuard } from '@/lib/sports-evidence/tradeSettlementGuard'
 import {
   evaluateGenericTradeReversalReadiness,
@@ -26,7 +26,7 @@ export async function POST(
   const { leagueId, tradeId } = await ctx.params
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
-  const elevated = await isElevatedCommissioner(leagueId, userId)
+  const elevated = await canCommissionerAct(leagueId, userId, 'trades')
   if (!elevated) return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
 
   /*

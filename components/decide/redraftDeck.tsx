@@ -13,7 +13,7 @@ import './redraft-deck.css'
  * `data-format=redraft][data-sport]` as well, so the two gates agree: redraft-only markup appears only
  * where its styles apply, and /core (which mounts `.bdx` embeds without those attributes) is untouched.
  */
-export type RedraftDeckLeague = Pick<
+type RedraftDeckLeague = Pick<
   UserLeague,
   'platform' | 'sport' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'bestBallMode' | 'guillotineMode' | 'keeperPhaseActive'
 >

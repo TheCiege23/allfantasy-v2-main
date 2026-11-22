@@ -53,19 +53,26 @@ export async function findLiveStripePlanFamiliesForUser(
   return families
 }
 
+/** Plan families AF Supreme includes — `SUPREME_INCLUDED_PLAN_IDS` (pro, commissioner). AF Legacy is NOT one. */
+const SUPREME_INCLUDES: ReadonlySet<SubscriptionPlanFamily> = new Set(["af_pro", "af_commissioner"])
+
 /**
  * Why buying `planFamily` would double-bill, or null when it would not.
  *
- * Only an exact repeat, or anything bought on top of Supreme (which already unlocks
- * every feature), is refused. Buying a DIFFERENT plan stays allowed: with plan
- * switching off in the billing portal, buying Supreme and then cancelling Pro is the
- * only upgrade path a Pro subscriber has.
+ * An exact repeat is refused, and so is Pro or Commissioner on top of Supreme, which includes them.
+ *
+ * 🛑 AF LEGACY IS NOT IN SUPREME (owner's decision, 2026-10-25 — `SUPREME_INCLUDED_PLAN_IDS`), so a
+ * Supreme member can buy it. This used to refuse ANY plan on top of Supreme with "AF Supreme already
+ * includes this plan", which was false for Legacy and locked Supreme members out of buying it.
+ *
+ * Supreme on top of Pro or Commissioner is not a duplicate: it is a switch, done in place by
+ * `lib/monetization/supremeSwitch.ts` — one subscription, prorated — never a second checkout.
  */
 export function duplicatePlanReason(
   livePlanFamilies: Set<SubscriptionPlanFamily>,
   planFamily: SubscriptionPlanFamily
 ): "same_plan" | "has_supreme" | null {
   if (livePlanFamilies.has(planFamily)) return "same_plan"
-  if (livePlanFamilies.has("af_supreme")) return "has_supreme"
+  if (livePlanFamilies.has("af_supreme") && SUPREME_INCLUDES.has(planFamily)) return "has_supreme"
   return null
 }

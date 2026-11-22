@@ -272,9 +272,14 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                 <h3 id="af-lh-dy-taxi">{m.taxiTitle}</h3>
                 <Link href={`/core/my-team${q}`}>{m.myTeam}</Link>
               </header>
+              {/* The count once: "4 of 4 slots used — full", not "4", "4 of 4 slots used" and "Taxi squad is full." (2026-11-14). */}
               <p className="af-lh-dy-big">
-                <strong>{taxi.count}</strong>
-                <span>{taxi.slots > 0 ? m.taxiUsed(taxi.count, taxi.slots) : m.taxiCount(taxi.count)}</span>
+                <strong>{taxi.slots > 0 ? m.taxiOf(taxi.count, taxi.slots) : taxi.count}</strong>
+                <span>
+                  {taxi.slots > 0
+                    ? taxi.count >= taxi.slots ? m.taxiSlotsFull : m.taxiSlotsOpen(taxi.slots - taxi.count)
+                    : m.taxiStashed(taxi.count)}
+                </span>
               </p>
               {taxi.slots > 0 && taxi.slots <= MAX_SLOT_DOTS ? (
                 <ol className="af-lh-dy-slots">
@@ -283,7 +288,6 @@ export function DynastyHomeDeck({ deck, leagueId }: { deck: Deck; leagueId: stri
                   ))}
                 </ol>
               ) : null}
-              {taxi.slots > 0 ? <p className="af-lh-dy-note">{taxi.count >= taxi.slots ? m.taxiFull : m.taxiOpen}</p> : null}
             </section>
           ) : null}
         </div>

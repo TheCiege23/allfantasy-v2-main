@@ -6,7 +6,8 @@ const finalize = vi.hoisted(() => vi.fn())
 
 vi.mock('next-auth', () => ({ getServerSession: session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: commissioner }))
+// The route asks the one commissioner rule (lib/league/commissionerAccess.ts) for the 'league' scope.
+vi.mock('@/lib/league/commissionerAccess', () => ({ assertCommissionerAccess: commissioner }))
 vi.mock('@/lib/league-creation/canonical/finalizeImportedCarryover', () => ({ finalizeImportedCarryover: finalize }))
 
 import { POST } from '@/app/api/leagues/[leagueId]/import-carryover/finalize/route'
@@ -40,7 +41,7 @@ describe('imported roster finalization route', () => {
     finalize.mockResolvedValue({ complete: true, expectedPlayers: 2, materializedPlayers: 2 })
     const response = await POST(request, context)
     expect(response.status).toBe(200)
-    expect(commissioner).toHaveBeenCalledWith('native', 'commissioner')
+    expect(commissioner).toHaveBeenCalledWith('native', 'commissioner', 'league')
     expect(await response.json()).toMatchObject({ complete: true })
   })
 })

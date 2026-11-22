@@ -15,12 +15,6 @@ export type EngagementEventType =
   | "draft_completed"
   | "daily_checkin"
 
-export type EngagementNotificationType =
-  | "daily_digest"
-  | "league_reminder"
-  | "ai_insight"
-  | "weekly_recap"
-
 export interface EngagementEventMeta {
   leagueId?: string
   bracketLeagueId?: string

@@ -36,6 +36,28 @@ const nextConfig = {
   poweredByHeader: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 
+  // ONE BUILD ID ACROSS DEPLOYS, so an open tab keeps updating instead of reloading.
+  //
+  // Next compares the build id in every RSC response with the one the tab booted with and, on a
+  // mismatch, turns the navigation or `router.refresh()` into a full page load. With a random id
+  // per build and dozens of deploys a day, that was a full reload for every open tab after every
+  // deploy — or, once lib/core-app/deployGuard stopped the reload, a tab whose data froze until
+  // the user left it. A constant id removes the mismatch: refreshes and in-app navigation stay
+  // soft across a deploy, and whatever is playing or half-typed survives it.
+  //
+  // What that trades away: a tab can now run OLD JavaScript against a NEW server for a while.
+  // New screens load their new chunks from the RSC payload, so that mostly just works; where it
+  // does not, CoreScreenErrorBoundary reloads once, and NewVersionReload still moves a tab onto
+  // the new build as soon as it is in the background.
+  //
+  // deployGuard does not take this on trust — /api/af-debug/sha reports the built BUILD_ID and
+  // the guard only refreshes across a deploy when it really is unchanged.
+  //
+  // To go back to a random id per build without a code change, set AF_RANDOM_BUILD_ID=1
+  // (returning null tells Next to generate one). Bump the suffix to force every open tab onto a
+  // new build after a change old tabs must not run against.
+  generateBuildId: async () => (process.env.AF_RANDOM_BUILD_ID === '1' ? null : 'af-stable-1'),
+
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
   // on this codebase size. TypeScript errors are caught in local pre-deploy checks.
   typescript: {
@@ -328,6 +350,20 @@ const nextConfig = {
       'recharts',
       'framer-motion',
     ],
+    // ⚠ A TAB YOU OPENED IN THE LAST 30s COMES BACK INSTANTLY (2026-11-14). Next 15 defaults
+    // `dynamic` to 0, so every click back to a /core tab you just left re-ran its whole server
+    // render (seconds of reads) — the "lag between tabs" a Sleeper user does not feel, because
+    // Sleeper shows what it already has. With 30 the client keeps the last render of each tab for
+    // 30s and shows it at once on a revisit.
+    //
+    // What keeps it from showing stale data: any `router.refresh()` empties this cache, and every
+    // /core save path, plus the shell's own 20s game-day / 2-min idle refresh, already calls it. So
+    // the worst case is a tab revisited within 30s of a change made OUTSIDE the app, and it is
+    // exactly as old as it was when you left it. Kept short on purpose; raise it only with that
+    // trade in view.
+    staleTimes: {
+      dynamic: 30,
+    },
   },
 
   images: {
@@ -408,6 +444,8 @@ const nextConfig = {
 
   async redirects() {
     return [
+      // Moves folded into Trades (2026-11-14). The query string — ?league= — is passed through.
+      { source: '/core/moves', destination: '/core/trades', permanent: false },
       // Alias pages removed from build to stay under Vercel's 2048-route cap.
       { source: '/march-madness', destination: '/brackets', permanent: false },
       { source: '/march-madness/join', destination: '/brackets/join', permanent: false },
@@ -423,6 +461,31 @@ const nextConfig = {
       // /app/tournament/* → /tournament/* (5 pages collapsed to 2 redirects)
       { source: '/app/tournament', destination: '/tournament', permanent: true },
       { source: '/app/tournament/:path*', destination: '/tournament/:path*', permanent: true },
+      // Duplicate sport landers (2026-11-14). /fantasy-football and /sports/fantasy-football
+      // served the same title, each claiming to be canonical, so they split one sport's
+      // ranking between two URLs. /sports/* wins: it is the one in the sitemap, it carries
+      // ~3x the copy, and it is the only tree with the NCAA pages. EXACT paths only —
+      // /fantasy-football/leagues and the other discovery pages are separate and stay.
+      { source: '/fantasy-football', destination: '/sports/fantasy-football', permanent: true },
+      { source: '/fantasy-basketball', destination: '/sports/fantasy-basketball', permanent: true },
+      { source: '/fantasy-baseball', destination: '/sports/fantasy-baseball', permanent: true },
+      { source: '/fantasy-hockey', destination: '/sports/fantasy-hockey', permanent: true },
+      { source: '/fantasy-soccer', destination: '/sports/fantasy-soccer', permanent: true },
+      // Bare format paths 404'd: each tree only has /<format>/[leagueId] (and similar) under it.
+      // Send them to the public format lander. EXACT paths only, so every league route under
+      // them is untouched. TEMPORARY on purpose: if a signed-in hub ever lands at one of these
+      // paths, a 308 cached in browsers would keep sending people here.
+      { source: '/bestball', destination: '/league-types/best-ball', permanent: false },
+      { source: '/survivor', destination: '/league-types/survivor', permanent: false },
+      { source: '/survivor-guillotine', destination: '/league-types/survivor-guillotine', permanent: false },
+      { source: '/zombie', destination: '/league-types/zombie', permanent: false },
+      { source: '/big-brother', destination: '/league-types/big-brother', permanent: false },
+      { source: '/devy', destination: '/league-types/devy', permanent: false },
+      { source: '/c2c', destination: '/league-types/c2c', permanent: false },
+      { source: '/idp', destination: '/league-types/idp', permanent: false },
+      // The Pirate "coming soon" preview, retired once Pirate shipped (#2852). PERMANENT: the old
+      // page is gone for good and its replacement is the indexable lander.
+      { source: '/formats/pirate', destination: '/league-types/pirate', permanent: true },
     ]
   },
 

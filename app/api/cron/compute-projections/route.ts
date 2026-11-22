@@ -221,6 +221,7 @@ async function runOneSport(
               // being played was blended player by player — a 2025-based row is a different claim.
               basisSeasonCounts: result.basisSeasonCounts,
               priorSeasonBasis: result.priorSeasonBasis,
+              seasonBlend: result.seasonBlend,
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
               noSourceSeasonYet: v.noSourceSeasonYet,
@@ -256,6 +257,7 @@ async function runOneSport(
         targetSeasonClamp: r.targetSeasonClamp,
         basisSeasonCounts: r.basisSeasonCounts,
         priorSeasonBasis: r.priorSeasonBasis,
+        seasonBlend: r.seasonBlend,
         scoringFormat: r.scoringFormat,
         idpPreset: r.idpPreset,
         statLinesRead: r.statLinesRead,

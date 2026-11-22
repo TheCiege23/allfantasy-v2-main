@@ -42,7 +42,7 @@ describe('league switcher rows carry your record', () => {
     open([
       { id: 'a', name: '33 1/3% Active', platform: 'sleeper', sport: 'NFL', record: { wins: 6, losses: 3, ties: 0, rank: 2, teams: 12 } },
     ])
-    expect(metaOf('33 1/3% Active')).toMatch(/^NFL · Sleeper6-3 · 2nd$/)
+    expect(metaOf('33 1/3% Active')).toBe('🏈NFLSleeper6-3 · 2nd')
     expect(screen.getByTestId('scope-league-record').textContent).toBe('6-3 · 2nd')
   })
 
@@ -59,6 +59,25 @@ describe('league switcher rows carry your record', () => {
       { id: 'd', name: 'No Record', platform: 'sleeper', sport: 'NFL' },
     ])
     expect(screen.queryByTestId('scope-league-record')).toBeNull()
-    expect(metaOf('2026 BB Guilly League!')).toBe('NFL · Sleeper')
+    expect(metaOf('2026 BB Guilly League!')).toBe('🏈NFLSleeper')
+  })
+})
+
+describe('a field race says where you stand instead of a W-L', () => {
+  it('shows your place among the survivors', () => {
+    open([{ id: 'g', name: 'Guillotine League 26', platform: 'sleeper', sport: 'NFL', record: null, field: { state: 'alive', rank: 3, outOf: 10 } }])
+    expect(screen.getByTestId('scope-league-field').textContent).toBe('3rd of 10 alive')
+    expect(screen.queryByTestId('scope-league-record')).toBeNull()
+  })
+
+  it('shows the week you were chopped', () => {
+    open([{ id: 'g', name: 'Guillotine League 26', platform: 'sleeper', sport: 'NFL', record: null, field: { state: 'chopped', week: 5 } }])
+    expect(screen.getByTestId('scope-league-field').textContent).toBe('Chopped wk 5')
+  })
+
+  it('CONTROL: a W-L record wins over a field line when both are given', () => {
+    open([{ id: 'r', name: 'Redraft', platform: 'sleeper', sport: 'NFL', record: { wins: 6, losses: 3, ties: 0, rank: 2, teams: 12 }, field: { state: 'alive', rank: 1, outOf: 12 } }])
+    expect(screen.getByTestId('scope-league-record').textContent).toBe('6-3 · 2nd')
+    expect(screen.queryByTestId('scope-league-field')).toBeNull()
   })
 })

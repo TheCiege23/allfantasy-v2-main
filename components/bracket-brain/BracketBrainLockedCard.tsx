@@ -20,7 +20,7 @@ export default function BracketBrainLockedCard({
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300/90" aria-hidden />
         <div className="min-w-0 space-y-0.5">
           <p className="text-[11px] font-bold uppercase tracking-wide text-white/55">
-            Bracket Brain AI
+            Bracket Brain Chimmy
           </p>
           <p className="text-[11px] leading-snug text-white/45">
             Upgrade to AF Pro to ask Chimmy for deep matchup explanations. Basic matchup stats above remain

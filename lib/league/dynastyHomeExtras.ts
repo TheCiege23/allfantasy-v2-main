@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------- championship rafters
 
 /** One stored champion row from `league_seasons` (imported history and native rollover). */
-export type SeasonChampionRow = {
+type SeasonChampionRow = {
   season: number
   championName: string | null
   /** The champion LeagueTeam's owner ids, when `championTeamId` resolved to a team. */
@@ -19,13 +19,13 @@ export type SeasonChampionRow = {
 }
 
 /** One stored row from `league_championships` (native playoff runtime, Guilly, Survivor). */
-export type ChampionshipRow = {
+type ChampionshipRow = {
   season: number
   championUserId: string
   teamName: string | null
 }
 
-export type ChampionPennant = {
+type ChampionPennant = {
   season: number
   /** Manager or team name as stored; null only when the row names nobody. */
   label: string | null
@@ -99,7 +99,7 @@ export type HubPick = {
   type: 'own' | 'traded_away' | 'incoming'
 }
 
-export type PickCapitalSummary = {
+type PickCapitalSummary = {
   total: number
   /** Distinct draft years the picks span. */
   years: number
@@ -120,7 +120,7 @@ export function summarizePickCapital(picks: HubPick[], maxChips = 5): PickCapita
 
 // ---------------------------------------------------------------- pipeline
 
-export type PipelinePlayer = {
+type PipelinePlayer = {
   playerId: string
   lineupSection?: 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 }

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { setCouncilPaused } from '@/lib/survivor/survivorCouncilPause'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { survivorFinaleControlGuard, survivorHostGuard } from '@/lib/survivor/survivorHostGuard'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { advancePhase } from '@/lib/survivor/gameStateMachine'
@@ -13,7 +14,6 @@ import { getSurvivorConfig } from '@/lib/survivor/SurvivorLeagueConfig'
 import { enqueueNotification } from '@/lib/survivor/notificationEngine'
 import { SURVIVOR_IDOL_CATALOG, type SurvivorIdolPowerType } from '@/lib/survivor/survivorIdolSeedingEngine'
 import { readSurvivorLateSeasonSettings, validateSurvivorLateSeasonPatch } from '@/lib/survivor/lateSeasonSettings'
-import { maybeTriggerSurvivorTribeShuffleRecommendation } from '@/lib/survivor/SurvivorSitOutEngine'
 import {
   applySurvivorReward,
   chooseSurvivorRewardTarget,
@@ -95,6 +95,7 @@ async function finaleControlGuard(leagueId: string, userId: string, scope?: 'lea
 }
 
 const FINALE_CONTROL_ACTIONS = new Set(['finale_settings', 'finale_windows'])
+const SURVIVOR_RULES_ACTIONS = new Set(['late_season_settings', 'finale_settings', 'governance_settings', 'side_games_settings'])
 
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -210,6 +211,15 @@ export async function POST(req: NextRequest) {
 
   const guard2 = FINALE_CONTROL_ACTIONS.has(action) ? (await finaleControlGuard(leagueId, userId, 'league')).error : await commissionerGuard(leagueId, userId, 'league')
   if (guard2) return guard2
+  // The four actions that rewrite the league's Survivor rules honour the commissioner's "Format rules" lock and write
+  // the league log (lib/league/formatRulesGuard.ts), like the settings screen. Game actions (strikes, swaps, rewards,
+  // overrides) are not rules changes and keep their own season locks.
+  if (SURVIVOR_RULES_ACTIONS.has(action)) {
+    const formatLocked = await formatRulesLockedResponse(leagueId)
+    if (formatLocked) return formatLocked
+  }
+  const logRules = (patch: unknown) =>
+    logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: patch && typeof patch === 'object' ? Object.keys(patch) : [] })
 
   const log = async (
     actionType: string,
@@ -244,6 +254,7 @@ export async function POST(req: NextRequest) {
     }
     await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, ...parsed.patch } as object } })
     await log('late_season_settings', 'Updated late-season Survivor settings', { newState: parsed.patch })
+    await logRules(parsed.patch)
     return NextResponse.json({ ok: true, settings: readSurvivorLateSeasonSettings({ ...current, ...parsed.patch }) })
   }
 
@@ -270,6 +281,7 @@ export async function POST(req: NextRequest) {
     }
     await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...current, ...parsed.patch } as object } })
     await log('finale_settings', 'Updated jury, finale and reunion rules', { newState: parsed.patch })
+    await logRules(parsed.patch)
     return NextResponse.json({ ok: true, settings: readSurvivorFinaleSettings({ ...current, ...parsed.patch }) })
   }
 
@@ -590,6 +602,7 @@ export async function POST(req: NextRequest) {
     const result = await saveSurvivorGovernanceSettings(leagueId, body.settings)
     if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
     await log('governance_settings', 'Updated Survivor governance settings', { newState: result.patch as object })
+    await logRules(result.patch)
     return NextResponse.json({ ok: true, settings: result.settings })
   }
 
@@ -633,6 +646,7 @@ export async function POST(req: NextRequest) {
     const result = await saveSurvivorSideGameSettings(leagueId, body.settings)
     if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: result.status })
     await log('side_games_settings', 'Updated Exile and side-game settings', { newState: result.patch as object })
+    await logRules(result.patch)
     return NextResponse.json({ ok: true, settings: result.settings, locked: result.locked })
   }
 

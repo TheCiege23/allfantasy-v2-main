@@ -34,7 +34,7 @@ import { WEEKLY_CALL_TYPE } from '@/lib/survivor/survivorWeeklyCall'
  * read, so a locked tile costs nothing and returns nothing. Every query selects public columns:
  * no votes relation, no voter, no idol, no chat content.
  */
-export type SurvivorPremiumTileResult =
+type SurvivorPremiumTileResult =
   | { ok: true; payload: SurvivorPremiumTilePayload }
   | { ok: false; status: 403 | 404; access?: Exclude<SurvivorPremiumTileAccess, { ok: true }>; error: string }
 
@@ -46,7 +46,7 @@ async function resolveViewerPlan(leagueId: string, userId: string, email: string
   return { plan: resolveAfPlanFromEntitlement(entitlement.plans, entitlement.status), isCommissioner: role === 'commissioner' || role === 'co_commissioner' }
 }
 
-export type SurvivorPremiumIndex = {
+type SurvivorPremiumIndex = {
   plan: AfPlanId | null
   tiles: Array<{ tileId: string; access: SurvivorPremiumTileAccess }>
 }
@@ -81,7 +81,7 @@ async function authorizeSurvivorPremiumTile(input: { leagueId: string; userId: s
   return { ok: true, access }
 }
 
-export type SurvivorStoryModeSaveResult =
+type SurvivorStoryModeSaveResult =
   | { ok: true; settings: SurvivorStoryModeSettings }
   | { ok: false; status: 400 | 403 | 404; access?: Exclude<SurvivorPremiumTileAccess, { ok: true }>; error: string }
 

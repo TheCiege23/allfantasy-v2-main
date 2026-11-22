@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 import Link from "next/link"
 
 export const metadata: Metadata = {
@@ -6,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Use Zen Lab by AllFantasy for gentle guided meditation, breathing exercises, and daily reflection sessions you can start in a few taps.",
   alternates: {
-    canonical: "https://allfantasy.ai/meditation",
+    canonical: `${getPublicSiteOrigin()}/meditation`,
   },
   openGraph: {
     title: "Guided Meditation & Calm Sessions \u2014 Zen Lab",
     description:
       "Settle into guided meditation and breathing sessions with Zen Lab. Build a simple daily calm ritual you can actually keep.",
-    url: "https://allfantasy.ai/meditation",
+    url: `${getPublicSiteOrigin()}/meditation`,
     type: "website",
   },
 }
@@ -27,14 +28,14 @@ export default function MeditationPage() {
             "@context": "https://schema.org",
             "@type": "WebPage",
             name: "Guided Meditation & Calm Sessions — Zen Lab by AllFantasy",
-            url: "https://allfantasy.ai/meditation",
+            url: `${getPublicSiteOrigin()}/meditation`,
             inLanguage: ["en", "es"],
             description:
               "Guided meditation, calm sessions, and daily reflection using Zen Lab by AllFantasy, with short online meditations and gentle breathing exercises.",
             isPartOf: {
               "@type": "WebSite",
               name: "AllFantasy",
-              url: "https://allfantasy.ai/",
+              url: `${getPublicSiteOrigin()}/`,
             },
           }),
         }}

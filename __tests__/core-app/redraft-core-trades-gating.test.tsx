@@ -76,14 +76,20 @@ describe('Trades deadline — redraft /core shell', () => {
 
 describe('Trades deadline — every other league is unchanged', () => {
   it.each([['no stamp', PLAIN], ['another format', GUILLOTINE]])('%s: the original row, no bar', (_, wrapper) => {
-    for (const hidePending of [false, true]) {
-      const { container, unmount } = render(<Trades data={data()} hidePending={hidePending} />, { wrapper })
-      expect(bar(container)).toBeNull()
-      expect(row(container)?.textContent).toContain('Week')
-      expect(row(container)?.textContent).toContain('12')
-      unmount()
-    }
+    const { container } = render(<Trades data={data()} />, { wrapper })
+    expect(bar(container)).toBeNull()
+    expect(row(container)?.textContent).toContain('Week')
+    expect(row(container)?.textContent).toContain('12')
   })
+
+  it.each([['no stamp', PLAIN], ['another format', GUILLOTINE]])(
+    '%s under the Trade Center: no row — the deadline is the page headline (2026-11-13)',
+    (_, wrapper) => {
+      const { container } = render(<Trades data={data()} hidePending />, { wrapper })
+      expect(bar(container)).toBeNull()
+      expect(row(container)).toBeNull()
+    },
+  )
 })
 
 describe('Trades grade tones', () => {

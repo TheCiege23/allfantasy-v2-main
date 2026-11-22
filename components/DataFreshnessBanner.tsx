@@ -156,7 +156,7 @@ export default function DataFreshnessBanner({ dataQuality }: { dataQuality: Data
               <div>
                 <span className="text-[11px] font-bold text-amber-400/80">Confidence Adjusted</span>
                 <p className="text-[11px] text-amber-400/50 leading-relaxed mt-0.5">
-                  AI confidence scores reduced by {dataQuality.confidencePenalty}% due to incomplete data coverage.
+                  Chimmy confidence scores reduced by {dataQuality.confidencePenalty}% due to incomplete data coverage.
                 </p>
               </div>
             </div>

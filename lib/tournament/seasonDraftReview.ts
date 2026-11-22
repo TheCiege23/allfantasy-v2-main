@@ -9,7 +9,7 @@ import { hasSeasonDraftRelease } from './seasonDraftReleaseGate'
 type Database = Pick<typeof prisma, 'league' | 'leagueWaiverState' | 'roster' | 'draftSession' | 'draftPick' | 'tournamentAuditLog'>
 export type SeasonDraftReviewState = 'not_started' | 'drafting' | 'paused' | 'checkpoint_pending' | 'completed' | 'review_required'
 /** DB-only assessment shared by completion and owner review; never repairs or writes. */
-export async function assessSeasonDraftCompletion(leagueId: string, db: Database = prisma) {
+export async function assessSeasonDraftCompletion(leagueId: string, db: Database = prisma, allowLive = false) {
   const context = await loadSeasonDraftContext(leagueId, db)
   if (!context) return null
   const session = await db.draftSession.findFirst({ where: { leagueId }, orderBy: CURRENT_DRAFT_SESSION_ORDER })
@@ -24,9 +24,10 @@ export async function assessSeasonDraftCompletion(leagueId: string, db: Database
     db.leagueWaiverState.findUnique({ where: { leagueId }, select: { processingLocked: true } }),
     db.roster.findMany({ where: { leagueId }, select: { id: true, platformUserId: true } }),
   ])
-  if (!league?.locked || !waivers?.processingLocked) return result('review_required', ['Tournament season locks need review.'])
+  const live = allowLive && league?.lifecycleState === 'in_season' && session.status === 'completed'
+  if (!league || (!live && (!league.locked || !waivers?.processingLocked))) return result('review_required', ['Tournament season locks need review.'])
   const released = await hasSeasonDraftRelease(leagueId, league.settings, db)
-  if (released ? !['pre_draft', 'drafting'].includes(league.lifecycleState) : league.lifecycleState !== 'setup') return result('review_required', ['Tournament draft lifecycle needs review.'])
+  if (released ? !live && !['pre_draft', 'drafting'].includes(league.lifecycleState) : league.lifecycleState !== 'setup') return result('review_required', ['Tournament draft lifecycle needs review.'])
   if (rosters.length !== context.rosterIds.length || context.pool.members.some(m => !rosters.some(r => r.id === seasonResourceId(context.freezeId, context.pool.key + ':roster:' + m.id) && r.platformUserId === m.userId))) return result('review_required', ['Team ownership differs from the frozen assignment.'])
   if (session.status === 'tournament_setup_blocked') return result(picks.length || released ? 'review_required' : 'not_started', picks.length ? ['A blocked draft contains picks.'] : released ? ['A released draft is still blocked.'] : [])
   if (session.status === 'pre_draft') return result(released && !picks.length ? 'not_started' : 'review_required', released && !picks.length ? [] : ['An unreleased draft changed status or contains picks.'])

@@ -1,5 +1,4 @@
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
-import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { normalizeOptionalSportForRelationship } from './SportRelationshipResolver'
 import type { BehaviorDramaManagerContext } from './types'
 
@@ -15,52 +14,29 @@ function uniq(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((v) => String(v ?? '').trim()).filter(Boolean))]
 }
 
-function calculateBehaviorHeat(profile: {
-  aggressionScore: number
-  activityScore: number
-  tradeFrequencyScore: number
-  waiverFocusScore: number
-  riskToleranceScore: number
-} | null): number {
-  if (!profile) return 0
-  return (
-    0.22 * profile.aggressionScore +
-    0.28 * profile.activityScore +
-    0.2 * profile.tradeFrequencyScore +
-    0.1 * profile.waiverFocusScore +
-    0.2 * profile.riskToleranceScore
-  )
-}
-
 export async function buildBehaviorDramaContext(
   input: BehaviorDramaBridgeInput
 ): Promise<BehaviorDramaManagerContext[]> {
   const sport = normalizeOptionalSportForRelationship(input.sport)
-  const profiles = await listProfilesByLeague(input.leagueId, {
-    sport: sport ?? undefined,
-    season: input.season ?? undefined,
-    limit: 300,
-  })
-  const profileByManager = new Map(profiles.map((p) => [p.managerId, p]))
-  const managers = uniq(input.managerIds?.length ? input.managerIds : profiles.map((p) => p.managerId))
+  /*
+   * Which drama involves each manager — facts only. Until 2026-11-19 this also read every manager's
+   * personality profile and ranked them by a "behaviour heat" built from its trait scores; both went with the
+   * profile engine (re-score build item 10). Without a list the profiles used to supply one; now the caller does.
+   */
+  const managers = uniq(input.managerIds ?? [])
 
   const rows = await Promise.all(
     managers.map(async (managerId) => {
-      const profile = profileByManager.get(managerId) ?? null
       const dramaEvents = await listDramaEvents(input.leagueId, {
         sport: sport ?? undefined,
         season: input.season ?? undefined,
         relatedManagerId: managerId,
         limit: input.limitPerManager ?? 5,
       }).catch(() => [])
-      return {
-        managerId,
-        profile,
-        dramaEvents,
-        behaviorHeat: calculateBehaviorHeat(profile),
-      }
+      return { managerId, dramaEvents }
     })
   )
 
-  return rows.sort((a, b) => b.behaviorHeat - a.behaviorHeat)
+  // Most drama first: the order the profile ranking used to impose, now from what happened.
+  return rows.sort((a, b) => b.dramaEvents.length - a.dramaEvents.length)
 }

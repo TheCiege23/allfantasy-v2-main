@@ -20,7 +20,7 @@ function jsonBlock(obj: unknown): string {
   return JSON.stringify(obj, null, 2)
 }
 
-export function buildDevyScoutPrompt(ctx: DevyScoutContext): { system: string; user: string } {
+function buildDevyScoutPrompt(ctx: DevyScoutContext): { system: string; user: string } {
   const system = `You are the Devy Scout Assistant for AllFantasy. Your role is to explain prospect profiles and fit.
 
 ${AI_RULE}
@@ -47,7 +47,7 @@ Provide a scout-style explanation: strengths, weaknesses, development arc, conte
   return { system, user }
 }
 
-export function buildDevyPromotionAdvisorPrompt(ctx: DevyPromotionAdvisorContext): { system: string; user: string } {
+function buildDevyPromotionAdvisorPrompt(ctx: DevyPromotionAdvisorContext): { system: string; user: string } {
   const system = `You are the Promotion Advisor for Devy Dynasty. You advise which devy players to promote now vs hold rights when league setting allows timing choices.
 
 ${AI_RULE}
@@ -73,7 +73,7 @@ Advise: which to promote now vs hold? Explain roster impact and compare to rooki
   return { system, user }
 }
 
-export function buildDevyDraftAssistantPrompt(ctx: DevyDraftAssistantContext): { system: string; user: string } {
+function buildDevyDraftAssistantPrompt(ctx: DevyDraftAssistantContext): { system: string; user: string } {
   const system = `You are the Devy Draft Assistant. You give on-the-clock devy/rookie/startup pick advice.
 
 ${AI_RULE}
@@ -100,7 +100,7 @@ League: ${ctx.leagueId}, Sport: ${ctx.sport}. Provide on-the-clock advice: posit
   return { system, user }
 }
 
-export function buildDevyClassStorytellingPrompt(ctx: DevyClassStorytellingContext): { system: string; user: string } {
+function buildDevyClassStorytellingPrompt(ctx: DevyClassStorytellingContext): { system: string; user: string } {
   const system = `You are the Future Class Storyteller for Devy Dynasty. You explain why a class is strong or weak and position cluster narratives.
 
 ${AI_RULE}
@@ -115,7 +115,7 @@ Sport: ${ctx.sport}. Explain why this class looks strong or weak; position clust
   return { system, user }
 }
 
-export function buildDevyTradeContextPrompt(ctx: DevyTradeContext): { system: string; user: string } {
+function buildDevyTradeContextPrompt(ctx: DevyTradeContext): { system: string; user: string } {
   const system = `You are the Devy Trade Context layer. You provide AI explanation for long-horizon devy trades.
 
 ${AI_RULE}
@@ -136,7 +136,7 @@ League: ${ctx.leagueId}. Provide narrative: promotion timeline, volatility, pros
   return { system, user }
 }
 
-export function buildDevyRookieVsDevyPrompt(ctx: DevyRookieVsDevyContext): { system: string; user: string } {
+function buildDevyRookieVsDevyPrompt(ctx: DevyRookieVsDevyContext): { system: string; user: string } {
   const system = `You are the Rookie-vs-Devy Decision Assistant for Devy Dynasty. You compare future devy capital, immediate rookie capital, and vet trade-down/trade-up options.
 
 ${AI_RULE}

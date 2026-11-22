@@ -31,7 +31,7 @@ const WALKTHROUGH_CARDS = [
   {
     icon: DraftingCompass,
     title: "Draft & tools",
-    description: "Mock drafts, war room, trade analyzer, and waiver AI.",
+    description: "Mock drafts, war room, trade analyzer, and waiver Chimmy.",
   },
   {
     icon: Bot,
@@ -44,19 +44,19 @@ const AI_FEATURE_CARDS = [
   {
     icon: BarChart3,
     title: "Trade Analyzer",
-    description: "AI fairness grades and counter-offers for any trade.",
+    description: "Chimmy fairness grades and counter-offers for any trade.",
     href: "/trade-analyzer",
   },
   {
     icon: ClipboardList,
-    title: "Waiver AI",
+    title: "Waiver Chimmy",
     description: "Pickup priorities and lineup suggestions for your league.",
     href: "/waiver-ai",
   },
   {
     icon: Target,
     title: "AF Legacy Draft",
-    description: "Mock drafts and AI pick suggestions in real time.",
+    description: "Mock drafts and Chimmy pick suggestions in real time.",
     href: "/mock-draft",
   },
   {
@@ -186,7 +186,7 @@ export default function OnboardingFunnelClient({
         <div data-testid="onboarding-step-welcome" className="space-y-6">
           <h2 className="text-xl font-semibold text-white">Welcome to AllFantasy</h2>
           <p className="text-white/80">
-            We&apos;ll walk you through the app, your favorite sports, AI features, and how to find or create a league. Takes about a minute—or skip and explore on your own.
+            We&apos;ll walk you through the app, your favorite sports, Chimmy features, and how to find or create a league. Takes about a minute—or skip and explore on your own.
           </p>
           <div className="flex flex-wrap gap-3">
             <button
@@ -309,7 +309,7 @@ export default function OnboardingFunnelClient({
         <div data-testid="onboarding-step-tool-suggestions" className="space-y-6">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-cyan-400" />
-            AI features to try
+            Chimmy features to try
           </h2>
           <p className="text-white/80">
             Trade grades, waiver priorities, draft help, and Chimmy—your fantasy assistant. Click any card to try it.

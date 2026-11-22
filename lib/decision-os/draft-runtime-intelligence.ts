@@ -5,7 +5,7 @@ import type {
   DraftFlowSignal,
 } from '@/lib/draft-runtime/canonicalDraftRuntime'
 
-export type DraftRuntimeIntelligenceCard = {
+type DraftRuntimeIntelligenceCard = {
   id: string
   title: string
   audience: 'commissioner' | 'manager'
@@ -28,7 +28,7 @@ export type DraftRuntimeIntelligenceCard = {
   sourceEventTypes: string[]
 }
 
-export type DraftRuntimeIntelligenceResult = {
+type DraftRuntimeIntelligenceResult = {
   leagueId: string
   generatedAtIso: string
   commissioner: DraftRuntimeIntelligenceCard[]

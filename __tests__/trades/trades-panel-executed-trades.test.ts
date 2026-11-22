@@ -47,6 +47,8 @@ vi.mock('@/server/services/permissionService', () => ({
 vi.mock('@/lib/league-trade-engine/tradeLearningCapture', () => ({
   priceTradesAtCurrentMarket: (...a: unknown[]) => priceTradesAtCurrentMarket(...a),
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromBoolean(() => async (l: string, u: string) => Boolean(await isElevatedCommissioner(l, u))))
 
 import { NextRequest } from 'next/server'
 import { GET } from '@/app/api/league/trades-panel/route'

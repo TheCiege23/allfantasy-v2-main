@@ -14,7 +14,7 @@
 
 export const GROUNDING_STALE_MS = 3 * 60 * 60_000
 
-export type GroundingFreshness = {
+type GroundingFreshness = {
   /** "synced just now", "synced 12 min ago", "synced 3 hr ago", "synced 2 days ago", or "never synced". */
   label: string
   stale: boolean

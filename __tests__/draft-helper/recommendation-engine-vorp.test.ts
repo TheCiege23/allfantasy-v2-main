@@ -98,9 +98,11 @@ describe("vorpMode contract", () => {
     // vorp 70 × 0.3 = 21 → clamped ceiling is 30, so +21.
     expect(actAlpha.vorpScore).toBe(21)
     expect(actAlpha.totalScore).toBeCloseTo(obsAlpha.totalScore + 21, 6)
-    // Fallback tier signal also joins in active mode: (13 − 4) × 0.6 = 5.4.
+    // The tier cliff is evidence text only since 2026-11-14 (it failed the simulation check):
+    // still computed, never scored.
     const actEcho = rowFor(active, "WR Echo")
-    expect(actEcho.tierDropoffScore).toBeCloseTo(5.4, 6)
+    expect(actEcho.tierDropoff).toBe(13)
+    expect(actEcho.tierDropoffScore).toBe(0)
   })
 
   it("negative VORP is clamped at −8 in active mode", () => {
@@ -126,5 +128,42 @@ describe("vorpMode contract", () => {
     const india = rowFor(result, "TE India")
     expect(india.replacementProjection).toBeNull()
     expect(india.valueSignal).toBe("adp_gap")
+  })
+})
+
+describe("replacement value is on by default and only where a starter is needed (2026-11-14)", () => {
+  it("defaults to active: totalScore includes VORP with no explicit mode", () => {
+    const prev = process.env.DRAFT_VORP_MODE
+    delete process.env.DRAFT_VORP_MODE
+    try {
+      const implicit = computeDraftPlayerRankings(baseInput({ available: [...qbPool, ...wrPool] }))!
+      const active = computeDraftPlayerRankings(baseInput({ available: [...qbPool, ...wrPool], vorpMode: "active" }))!
+      expect(implicit.scored.map((r) => [r.player.name, r.totalScore])).toEqual(active.scored.map((r) => [r.player.name, r.totalScore]))
+      expect(rowFor(implicit, "QB Alpha").vorpScore).toBe(21)
+    } finally {
+      if (prev === undefined) delete process.env.DRAFT_VORP_MODE
+      else process.env.DRAFT_VORP_MODE = prev
+    }
+  })
+
+  it("DRAFT_VORP_MODE=observe rolls it back", () => {
+    const prev = process.env.DRAFT_VORP_MODE
+    process.env.DRAFT_VORP_MODE = "observe"
+    try {
+      const r = computeDraftPlayerRankings(baseInput({ available: [...qbPool, ...wrPool] }))!
+      expect(rowFor(r, "QB Alpha").vorpScore).toBe(0)
+      expect(rowFor(r, "QB Alpha").vorp).toBe(70)
+    } finally {
+      if (prev === undefined) delete process.env.DRAFT_VORP_MODE
+      else process.env.DRAFT_VORP_MODE = prev
+    }
+  })
+
+  it("a positive edge at a position already filled does not lift the player", () => {
+    const filled = computeDraftPlayerRankings(
+      baseInput({ available: [...qbPool, ...wrPool], vorpMode: "active", teamRoster: [{ position: "QB" }, { position: "QB" }] }),
+    )!
+    expect(rowFor(filled, "QB Alpha").vorp).toBe(70)
+    expect(rowFor(filled, "QB Alpha").vorpScore).toBe(0)
   })
 })

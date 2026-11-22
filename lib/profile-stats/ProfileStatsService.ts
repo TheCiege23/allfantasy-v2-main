@@ -36,7 +36,6 @@ async function batchGetMyRosterOrTeamIdsByLeague(
     where: { id: { in: leagueIds } },
     select: { id: true, legacyLeagueId: true },
   })
-  const leagueMap = new Map(leagues.map((l) => [l.id, l]))
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId: { in: leagueIds }, platformUserId: sleeperUserId },

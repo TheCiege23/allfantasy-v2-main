@@ -5,7 +5,7 @@
  */
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 const m = vi.hoisted(() => ({
   taxi: vi.fn(),
@@ -149,6 +149,16 @@ describe('the commissioner’s setting', () => {
     expect(await saveTaxiRules('L', 'boss', { maxYears: 2 })).toEqual({ ok: true })
     expect(m.patch).not.toHaveBeenCalled() // already the default
   })
+  it('rookie taxi placement: on by default, any commissioner switches it, and only a change is saved', async () => {
+    expect(await readTaxiRulesView('L', { userId: 'boss', isCommissioner: true })).toMatchObject({ autoPlaceRookies: true })
+    expect(await saveTaxiRules('L', 'boss', { autoPlaceRookies: true })).toEqual({ ok: true })
+    expect(m.patch).not.toHaveBeenCalled() // already on
+    expect(await saveTaxiRules('L', 'boss', { autoPlaceRookies: false })).toEqual({ ok: true })
+    expect(m.patch).toHaveBeenLastCalledWith('boss', { leagueId: 'L', settingsMerge: { taxi_auto_place_rookies: false } })
+    expect(await saveTaxiRules('L', 'boss', { autoPlaceRookies: 'no' })).toMatchObject({ ok: false, status: 400 })
+    m.prisma.league.findUnique.mockResolvedValue({ ...LEAGUE, settings: { taxi_auto_place_rookies: false } })
+    expect(await readTaxiRulesView('L', { userId: 'boss', isCommissioner: true })).toMatchObject({ autoPlaceRookies: false })
+  })
   it('refuses a choice that is not one, and the move rules still need the plan', async () => {
     expect(await saveTaxiRules('L', 'boss', { maxYears: 9 })).toMatchObject({ ok: false, status: 400 })
     expect(await saveTaxiRules('L', 'boss', { maxYears: 3, enforced: true })).toMatchObject({ ok: false, status: 402 })
@@ -180,7 +190,18 @@ describe('the panel', () => {
     fireEvent.change(select, { target: { value: 'none' } })
     fireEvent.click(screen.getByTestId('taxi-rules-save'))
     await waitFor(() => expect(f.mock.calls.some((c) => c[1]?.method === 'PUT')).toBe(true))
-    expect(JSON.parse((f.mock.calls.find((c) => c[1]?.method === 'PUT')![1] as { body: string }).body)).toEqual({ maxYears: null })
+    expect(JSON.parse((f.mock.calls.find((c) => c[1]?.method === 'PUT')![1] as { body: string }).body)).toEqual({ maxYears: null, autoPlaceRookies: true })
+  })
+  it('any commissioner switches rookie taxi placement off; it reads on when the league never saved it', async () => {
+    const f = stub(VIEW)
+    render(<TaxiRulesPanel leagueId="L" />)
+    const toggle = within(await screen.findByTestId('taxi-rules-autoPlace')).getByRole('switch') as HTMLButtonElement
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(toggle.disabled).toBe(false)
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByTestId('taxi-rules-save'))
+    await waitFor(() => expect(f.mock.calls.some((c) => c[1]?.method === 'PUT')).toBe(true))
+    expect(JSON.parse((f.mock.calls.find((c) => c[1]?.method === 'PUT')![1] as { body: string }).body)).toEqual({ maxYears: 2, autoPlaceRookies: false })
   })
   it('a member reads it; in Spanish', async () => {
     lang.language = 'es'

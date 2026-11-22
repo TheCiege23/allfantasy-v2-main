@@ -3,8 +3,10 @@
 import { useMemo } from 'react'
 import { DraftBoard } from './DraftBoard'
 import type { DraftPickSnapshot, DraftType, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
+import type { SlotSalary } from '@/lib/draft-room/leagueNote'
+import type { TileSignatureChip } from '@/lib/draft-room/leagueSignature'
 
-export type DraftBoardPreviewTeam = {
+type DraftBoardPreviewTeam = {
   id: string
   slot: number
   name: string
@@ -40,12 +42,17 @@ type Props = {
   thirdRoundReversal?: boolean
   currentOverall?: number | null
   orderSourceLabel?: string | null
+  /** League mock of a snake salary-cap league: what each slot signs for (same terms as the live room). */
+  slotSalaryByOverall?: Record<number, SlotSalary> | null
+  /** League mock: each made pick's signature chip (age or class year), as the live board draws it. */
+  signatureByOverall?: Record<number, TileSignatureChip> | null
 }
 
 /** Display adapter for the mock engines. Pick ownership and turn timing remain with the caller. */
 export function DraftBoardPreview({
   teams, picks, teamCount, rounds, sport, draftType = 'snake',
-  thirdRoundReversal = false, currentOverall = null, orderSourceLabel,
+  thirdRoundReversal = false, currentOverall = null, orderSourceLabel, slotSalaryByOverall = null,
+  signatureByOverall = null,
 }: Props) {
   const slotOrder = useMemo<SlotOrderEntry[]>(() => teams.map((team) => ({
     slot: team.slot, rosterId: team.id, displayName: team.name,
@@ -82,5 +89,7 @@ export function DraftBoardPreview({
     currentUserRosterId={teams.find((team) => team.isUser)?.id ?? null}
     aiManagedRosterIds={teams.filter((team) => team.isCpu).map((team) => team.id)}
     teamMetaByRoster={teamMetaByRoster} orderSourceLabel={orderSourceLabel}
+    slotSalaryByOverall={slotSalaryByOverall ?? undefined}
+    signatureByOverall={signatureByOverall ?? undefined}
   />
 }

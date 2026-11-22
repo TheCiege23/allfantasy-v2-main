@@ -23,7 +23,6 @@ import {
 /** Where each surface's instrumentation must live. */
 const SURFACE_CALL_SITES: Record<TradeSurface, string> = {
   console: "app/api/trade-value/analyze/route.ts",
-  dynasty: "app/api/dynasty-trade-analyzer/route.ts",
   keeper: "app/api/keeper/ai/trade-analysis/route.ts",
   draftpick: "app/api/leagues/[leagueId]/draft/trade-builder/analyze/route.ts",
   legacy: "server/api-route-modules/legacy/trade/analyze/route.ts",

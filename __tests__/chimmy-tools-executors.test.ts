@@ -63,6 +63,12 @@ describe('tool specs', () => {
       'get_draft_analysis',
       'get_league_trade_activity',
       /*
+       * A leaguemate's record as FACTS (lib/chimmy/managerRecordGrounding.ts, 2026-11-16): the same
+       * Competitive Edge record the manager card and the commissioner's screen read. SELECT-only over the
+       * membership-proven league; without the plan it returns a lock note and no history at all.
+       */
+      'get_manager_record',
+      /*
        * ⚠ ADDED WHEN THE TOOL WAS. This list is hardcoded and ordered, so
        * shipping `find_league_by_name` turned it red — the assertion's job is to
        * make a new tool a deliberate edit, and that worked exactly as intended.
@@ -131,6 +137,13 @@ describe('tool specs', () => {
        */
       'get_league_trade_history',
       'get_current_draft_board',
+      // AF Pro: reads the board and the room's rankings; writes nothing.
+      'get_draft_pick_outlook',
+      /*
+       * 🛑 ON THIS LIST ONLY BECAUSE IT WRITES NOTHING, like the other propose tools: it returns prose and
+       * a confirm card; the queue is saved only by /api/chimmy/actions/confirm after the user's tap.
+       */
+      'propose_draft_queue_change',
       'get_selected_league_rules',
       'get_real_game_results',
       'get_upcoming_games',
@@ -170,6 +183,12 @@ describe('tool specs', () => {
       'compare_start_options',
       'evaluate_trade',
       /*
+       * Counters for ONE offer already waiting on the user (lib/chimmy-trade/pendingCounterOffers.ts): the
+       * Trade Center's own counter engine, AF Pro depth. Returns prose; sends nothing — the user counters
+       * themselves in the Trade Center or on Sleeper.
+       */
+      'suggest_counter_offer',
+      /*
        * Trade IDEAS across the league in scope (lib/chimmy/tradeFinderGrounding.ts): every roster
        * priced as the player card prices it, partners and packages from the deterministic finder.
        * Proposes nothing to anyone — it returns prose, like evaluate_trade.
@@ -199,6 +218,12 @@ describe('tool specs', () => {
       'propose_lineup_change',
       'propose_trade',
       'propose_automation_change',
+      // Writes nothing: a settings confirm card; the save is the confirm route's, behind the commissioner's tap.
+      'propose_league_rule_change',
+      // Writes nothing: a music card; the user's browser plays it only when they tap.
+      'play_music',
+      // AF Pro: reads the user's OWN earlier Chimmy messages; writes nothing.
+      'recall_past_chats',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
   })

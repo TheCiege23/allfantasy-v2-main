@@ -79,7 +79,7 @@ export function buildClaudeReviewRequest(input: {
   }
 }
 
-export type ClaudeReviewValidation = {
+type ClaudeReviewValidation = {
   evaluation: ClaudeReviewEvaluation
   droppedUnknownEvidence: number
   droppedUnsupported: number

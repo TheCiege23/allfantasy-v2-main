@@ -7,16 +7,16 @@ import type { NflRedraftCanonicalPlayer, NflRedraftDataState } from '@/lib/playe
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { normalizePosition, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
-export const NFL_REDRAFT_PLAYER_METADATA_MODEL_VERSION = 'nfl-redraft-player-metadata-v1' as const
+const NFL_REDRAFT_PLAYER_METADATA_MODEL_VERSION = 'nfl-redraft-player-metadata-v1' as const
 
-export type NflRedraftPlayerMediaFallbackKind =
+type NflRedraftPlayerMediaFallbackKind =
   | 'none'
   | 'player-initials'
   | 'team-badge'
   | 'team-text-badge'
   | 'generic-player'
 
-export type NflRedraftPlayerMediaMetadata = {
+type NflRedraftPlayerMediaMetadata = {
   url: string | null
   safeToRenderImage: boolean
   fallbackUrl: string | null

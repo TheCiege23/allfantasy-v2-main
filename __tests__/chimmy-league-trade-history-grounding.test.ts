@@ -146,15 +146,17 @@ describe('buildLeagueTradeHistoryContext', () => {
     expect(out).toContain('Trades on file in the window read: 1')
   })
 
-  it('returns null for a league that is not Sleeper-backed', async () => {
+  it('returns null for a non-Sleeper league with no synced history', async () => {
     mocks.leagueFindUnique.mockResolvedValue({
       platform: 'espn',
       platformLeagueId: '99',
       sport: 'nfl',
       season: 2026,
     })
+    // ESPN, Yahoo, MFL and Fleaflicker trades are synced to the same table since 2026-11-16 — read, and empty here.
+    mocks.historyFindMany.mockResolvedValue([])
     expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toBeNull()
-    expect(mocks.historyFindMany).not.toHaveBeenCalled()
+    expect(mocks.historyFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { sleeperLeagueId: '99' } }))
   })
 
   it('returns null when the league has no ingested history', async () => {
@@ -229,6 +231,7 @@ describe('buildLeagueTradeHistoryOutcome — why there is no block', () => {
       sport: 'nfl',
       season: 2026,
     })
+    mocks.historyFindMany.mockResolvedValue([])
     const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
     expect(out.kind).toBe('not-sleeper')
     if (out.kind === 'not-sleeper') expect(out.platform).toBe('espn')

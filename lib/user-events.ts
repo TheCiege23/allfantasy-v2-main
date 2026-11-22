@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
-export type UserEventType =
+type UserEventType =
   | "trade_analysis_completed"
   | "trade_analysis_started"
   | "ai_report_generated"

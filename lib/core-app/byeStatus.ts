@@ -33,10 +33,10 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  * of full club names. Client-safe.
  */
 
-export const NFL_CLUBS = 32
+const NFL_CLUBS = 32
 export const BYE_WEEKS: readonly [number, number] = [5, 14]
 
-export type ByeStatus = 'playing' | 'bye' | 'no-game' | 'unknown'
+type ByeStatus = 'playing' | 'bye' | 'no-game' | 'unknown'
 
 export function byeStatus(
   team: string | null | undefined,

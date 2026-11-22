@@ -22,13 +22,13 @@ import { requireAdmin as defaultRequireAdmin } from '@/lib/adminAuth'
 
 export type RequireAdminFn = typeof defaultRequireAdmin
 
-export interface PlatformOsAuthorizationDeps {
+interface PlatformOsAuthorizationDeps {
   requireAdmin: RequireAdminFn
 }
 
 const defaultDeps: PlatformOsAuthorizationDeps = { requireAdmin: defaultRequireAdmin }
 
-export type PlatformOsAuthorizationResult =
+type PlatformOsAuthorizationResult =
   | { authorized: true; adminUserId: string }
   | { authorized: false; status: 401 | 403 }
 

@@ -1,0 +1,265 @@
+{
+  "get": "injuries",
+  "parameters": {
+    "team": "2"
+  },
+  "errors": [],
+  "results": 17,
+  "response": [
+    {
+      "player": {
+        "id": 11793,
+        "name": "Danny Striggow",
+        "image": "https://media.api-sports.io/american-football/players/11793.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Questionable",
+      "description": "Concussion - Questionable for Week 11 at N.Y. Giants"
+    },
+    {
+      "player": {
+        "id": 872,
+        "name": "Jordan Davis",
+        "image": "https://media.api-sports.io/american-football/players/872.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Sidelined",
+      "description": "Coach&apos;s Decision - Inactive for Week 10 at Tennessee"
+    },
+    {
+      "player": {
+        "id": 17170,
+        "name": "Caleb Ransaw",
+        "image": "https://media.api-sports.io/american-football/players/17170.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "I.L.",
+      "description": "I.L. - Knee"
+    },
+    {
+      "player": {
+        "id": 318,
+        "name": "Patrick Mekari",
+        "image": "https://media.api-sports.io/american-football/players/318.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "I.L.",
+      "description": "I.L. - Back"
+    },
+    {
+      "player": {
+        "id": 13339,
+        "name": "Wesley Williams",
+        "image": "https://media.api-sports.io/american-football/players/13339.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Sidelined",
+      "description": "Coach&apos;s Decision - Inactive for Week 10 at Tennessee"
+    },
+    {
+      "player": {
+        "id": 41774,
+        "name": "Zach Durfee",
+        "image": "https://media.api-sports.io/american-football/players/41774.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "I.L.",
+      "description": "I.L. - Upper Body"
+    },
+    {
+      "player": {
+        "id": 741,
+        "name": "Jessie Bates III",
+        "image": "https://media.api-sports.io/american-football/players/741.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Sidelined",
+      "description": "Coach&apos;s Decision - Inactive for Week 10 at Tennessee"
+    },
+    {
+      "player": {
+        "id": 14798,
+        "name": "Albert Regis",
+        "image": "https://media.api-sports.io/american-football/players/14798.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Sidelined",
+      "description": "Coach&apos;s Decision - Inactive for Week 10 at Tennessee"
+    },
+    {
+      "player": {
+        "id": 1737,
+        "name": "Robert Hainsey",
+        "image": "https://media.api-sports.io/american-football/players/1737.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Questionable",
+      "description": "Knee - Questionable for Week 11 at N.Y. Giants"
+    },
+    {
+      "player": {
+        "id": 15935,
+        "name": "CJ Williams",
+        "image": "https://media.api-sports.io/american-football/players/15935.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-15",
+      "status": "Sidelined",
+      "description": "Coach&apos;s Decision - Inactive for Week 10 at Tennessee"
+    },
+    {
+      "player": {
+        "id": 1916,
+        "name": "Eric Murray",
+        "image": "https://media.api-sports.io/american-football/players/1916.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-03",
+      "status": "I.L.",
+      "description": "I.L. - Elbow"
+    },
+    {
+      "player": {
+        "id": 111,
+        "name": "DaVon Hamilton",
+        "image": "https://media.api-sports.io/american-football/players/111.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-11-03",
+      "status": "I.L.",
+      "description": "I.L. - Knee"
+    },
+    {
+      "player": {
+        "id": 15382,
+        "name": "Anton Harrison",
+        "image": "https://media.api-sports.io/american-football/players/15382.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-10-23",
+      "status": "I.L.",
+      "description": "I.L. - Knee"
+    },
+    {
+      "player": {
+        "id": 36374,
+        "name": "Parker Hughes",
+        "image": "https://media.api-sports.io/american-football/players/36374.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-10-02",
+      "status": "I.L.",
+      "description": "I.L. - Undisclosed"
+    },
+    {
+      "player": {
+        "id": 9360,
+        "name": "Jared Bartlett",
+        "image": "https://media.api-sports.io/american-football/players/9360.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-10-02",
+      "status": "I.L.",
+      "description": "I.L. - Leg"
+    },
+    {
+      "player": {
+        "id": 1143,
+        "name": "Sam Mustipher",
+        "image": "https://media.api-sports.io/american-football/players/1143.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-10-02",
+      "status": "I.L.",
+      "description": "I.L. - Undisclosed"
+    },
+    {
+      "player": {
+        "id": 19563,
+        "name": "Garrett DiGiorgio",
+        "image": "https://media.api-sports.io/american-football/players/19563.png"
+      },
+      "team": {
+        "id": 2,
+        "name": "Jacksonville Jaguars",
+        "logo": "https://media.api-sports.io/american-football/teams/2.png"
+      },
+      "date": "2026-10-02",
+      "status": "I.L.",
+      "description": "I.L. - Undisclosed"
+    }
+  ]
+}

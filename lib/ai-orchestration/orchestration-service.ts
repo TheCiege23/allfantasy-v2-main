@@ -293,7 +293,7 @@ function toConfidenceLabel(score: number): 'low' | 'medium' | 'high' {
  * says so plainly; the "Deterministic guidance from" marker is kept after it because that string
  * is what the runbook tells people to look for.
  */
-const AI_UNAVAILABLE_LEAD = "Chimmy's AI models are unavailable right now, so this is not an answer."
+const AI_UNAVAILABLE_LEAD = "Chimmy's models are unavailable right now, so this is not an answer."
 
 /** `projectedPoints` / `roster_slots` → "projected points" / "roster slots". Names, never values. */
 function readableContextName(key: string): string {
@@ -312,14 +312,14 @@ function readableContextName(key: string): string {
 function buildDeterministicFallbackText(envelope: AIContextEnvelope): string {
   const payload = envelope.deterministicPayload
   if (!payload || typeof payload !== 'object') {
-    return `${AI_UNAVAILABLE_LEAD} AI explanation is temporarily unavailable. Please try again in a few minutes.`
+    return `${AI_UNAVAILABLE_LEAD} Chimmy explanation is temporarily unavailable. Please try again in a few minutes.`
   }
   const names = Object.keys(payload).slice(0, 4).map(readableContextName).filter(Boolean)
   const onHand = names.length > 0 ? `I have your ${names.join(', ')}` : 'I have your league context'
   const missing = envelope.dataQualityMetadata?.missing?.length
     ? ` Still missing: ${envelope.dataQualityMetadata.missing.slice(0, 4).map(readableContextName).join(', ')}.`
     : ''
-  return `${AI_UNAVAILABLE_LEAD} Deterministic guidance from ${envelope.sport} context only: ${onHand}, but no model could turn it into advice.${missing} AI explanation is temporarily unavailable. Please try again in a few minutes.`
+  return `${AI_UNAVAILABLE_LEAD} Deterministic guidance from ${envelope.sport} context only: ${onHand}, but no model could turn it into advice.${missing} Chimmy explanation is temporarily unavailable. Please try again in a few minutes.`
 }
 
 const FALLBACK_MAX_CONFIDENCE_PCT = 35
@@ -635,7 +635,7 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
   const registration = getToolRegistration(envelope.featureType)
   if (registration?.deterministicRequired && !envelope.deterministicPayload) {
     const error = toUnifiedAIError('envelope_validation_failed', {
-      message: `Tool "${registration.toolName}" requires deterministic context before AI orchestration.`,
+      message: `Tool "${registration.toolName}" requires deterministic context before Chimmy orchestration.`,
       traceId,
     })
     return { ok: false, error, status: toHttpStatus(error.code) }
@@ -818,7 +818,7 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
     }
 
     const error = toUnifiedAIError('provider_unavailable', {
-      message: 'No AI providers are configured or available.',
+      message: 'No Chimmy providers are configured or available.',
       traceId,
       details: {
         requestedProviders: modelsToCall,

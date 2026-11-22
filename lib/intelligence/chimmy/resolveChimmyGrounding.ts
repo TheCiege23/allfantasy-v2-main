@@ -40,7 +40,7 @@ const defaultDeps: Required<ChimmyGroundingDeps> = {
     return session?.user?.id ?? null
   },
   assertCommissioner: async (leagueId, userId) => {
-    const r = await assertLeagueCommissioner(leagueId, userId)
+    const r = await assertLeagueCommissioner(leagueId, userId, 'view')
     return r.ok
   },
   buildGrounding: async (leagueId, userId) => {

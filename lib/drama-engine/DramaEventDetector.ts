@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma'
 import type { DramaType } from './types'
 import type { DramaDetectionSignal } from './types'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
-import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { getDramaCentralTeams } from '@/lib/league-intelligence-graph/GraphQueryService'
 import { getDramaCadenceConfig, normalizeSportForDrama } from './SportDramaResolver'
 import { realTeamName, teamDisplayName } from '@/lib/core-app/commissioner/activity'
@@ -71,12 +70,6 @@ export function rivalSideNamer(teams: ReadonlyArray<TeamRef>): (id: string) => {
 
 function canonicalPair(a: string, b: string): string {
   return a <= b ? `${a}::${b}` : `${b}::${a}`
-}
-
-function parseNum(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string') return Number(value) || 0
-  return 0
 }
 
 function toManagerIds(values: Array<string | null | undefined>): string[] {
@@ -155,7 +148,6 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     matchups,
     rivalries,
     seasonResults,
-    psychProfiles,
     simulationRows,
     dynastyProjections,
     graphDramaTeams,
@@ -171,7 +163,6 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       where: { leagueId, season: String(seasonNum) },
       select: { rosterId: true, wins: true, losses: true, champion: true },
     }),
-    listProfilesByLeague(leagueId, { sport: sportNorm, season: seasonNum, limit: 200 }),
     prisma.seasonSimulationResult.findMany({
       where: { leagueId, season: seasonNum, sport: sportNorm },
       orderBy: [{ weekOrPeriod: 'desc' }, { createdAt: 'desc' }],
@@ -212,7 +203,12 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     winsByTeam.set(String(row.rosterId), row.wins ?? 0)
   }
 
-  const psychByManager = new Map(psychProfiles.map((p) => [p.managerId, p]))
+  /*
+   * No manager "behavior heat" (2026-11-19, re-score build item 10): it was each manager's personality-profile
+   * activity score, a label about a person the owner's facts-not-labels rule retired. Drama is scored on what
+   * happened — rivalry, results, trades, playoff swings, the league graph — exactly as it already was for any
+   * manager without a profile.
+   */
   const graphHeatByEntity = new Map(graphDramaTeams.map((t) => [t.entityId, t.dramaScore]))
 
   const simByWeek = new Map<number, typeof simulationRows>()
@@ -238,10 +234,6 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
 
   for (const r of rivalries.slice(0, 4)) {
     const managers = [r.managerAId, r.managerBId]
-    const behaviorHeat =
-      managers
-        .map((m) => psychByManager.get(m)?.activityScore ?? 0)
-        .reduce((sum, n) => sum + n, 0) / Math.max(1, managers.length)
     const graphHeat =
       managers
         .map((m) => graphHeatByEntity.get(m) ?? 0)
@@ -255,7 +247,6 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       signal: {
         intensityFactor: r.rivalryScore / 100,
         rivalryScore: r.rivalryScore,
-        managerBehaviorHeat: behaviorHeat,
         leagueGraphHeat: graphHeat,
         recencyWeight: 1.06,
       },
@@ -462,9 +453,6 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       relatedTeamIds: toManagerIds([partnerId]),
       signal: {
         intensityFactor: Math.min(1.2, tc.volatility / 60),
-        managerBehaviorHeat:
-          relatedManagers.reduce((sum, m) => sum + (psychByManager.get(m)?.activityScore ?? 0), 0) /
-          Math.max(1, relatedManagers.length),
         recencyWeight: 1.03,
       },
       intensityFactor: Math.min(1.2, tc.volatility / 60),

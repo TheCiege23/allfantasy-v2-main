@@ -43,3 +43,33 @@ it('retains explicitly stored Best Ball permissions', async () => {
     waiversEnabled: true, tradesEnabled: false, substitutionsEnabled: true,
   })
 })
+
+/*
+ * The lineup-period LABEL Chimmy, start/sit and waiver advice read (2026-11-07). It used to be
+ * `League.bbScoringPeriod`, which says "daily" for every NBA/NHL/MLB/NCAAB best ball league created
+ * before daily scoring existed — all of them scored weekly. Daily needs the `dailyBestBall` marker.
+ */
+function bbLeague(sport: string, bbScoringPeriod: string, best_ball_settings: Record<string, unknown> | null, bestBallMode = true) {
+  return { ...league(best_ball_settings ? { best_ball_settings } : {}), sport, bbScoringPeriod, bestBallMode }
+}
+
+it('🛑 a legacy NBA league whose column says "daily" without the marker is labelled weekly', async () => {
+  reads.findFirst.mockResolvedValue(bbLeague('NBA', 'daily', { scoringPeriod: 'daily' }))
+  const result = await resolveNormalizedLeagueContext({ leagueId: 'selected-league', userId: 'viewer' })
+  expect(result.ok && result.context.lineupBehavior.scoringPeriod).toBe('weekly')
+})
+
+it('an NHL league that chose daily (marker set) is labelled daily', async () => {
+  reads.findFirst.mockResolvedValue(bbLeague('NHL', 'daily', { scoringPeriod: 'daily', dailyBestBall: true }))
+  const result = await resolveNormalizedLeagueContext({ leagueId: 'selected-league', userId: 'viewer' })
+  expect(result.ok && result.context.lineupBehavior.scoringPeriod).toBe('daily')
+})
+
+it('daily is never claimed for a sport without per-day stats, or a league that is not best ball', async () => {
+  reads.findFirst.mockResolvedValue(bbLeague('NFL', 'daily', { scoringPeriod: 'daily', dailyBestBall: true }))
+  let result = await resolveNormalizedLeagueContext({ leagueId: 'selected-league', userId: 'viewer' })
+  expect(result.ok && result.context.lineupBehavior.scoringPeriod).toBe('weekly')
+  reads.findFirst.mockResolvedValue(bbLeague('MLB', 'daily', { scoringPeriod: 'daily', dailyBestBall: true }, false))
+  result = await resolveNormalizedLeagueContext({ leagueId: 'selected-league', userId: 'viewer' })
+  expect(result.ok && result.context.lineupBehavior.scoringPeriod).toBe('weekly')
+})

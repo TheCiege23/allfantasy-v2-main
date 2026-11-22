@@ -87,7 +87,7 @@ function getDefaultInsightType(source: ToolSource): AIChatContext["insightType"]
   }
 }
 
-export function buildToolToAIContext(source: ToolSource, payload: ToolBridgePayload = {}): AIChatContext {
+function buildToolToAIContext(source: ToolSource, payload: ToolBridgePayload = {}): AIChatContext {
   return {
     prompt: payload.prompt?.trim() || getDefaultPromptForTool(source, payload),
     leagueId: payload.leagueId,

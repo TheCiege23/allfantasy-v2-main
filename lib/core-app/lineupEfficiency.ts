@@ -28,7 +28,7 @@ import { lineupSeatsFromSettings } from './slotEligibility'
  * is left out of its best lineup. Membership that changed since that week is not reconstructed.
  */
 
-export type TeamLineupEfficiency = {
+type TeamLineupEfficiency = {
   /** Points your starters scored, over the weeks counted. */
   actual: number
   /** Points the best possible lineup would have scored, over the same weeks. */

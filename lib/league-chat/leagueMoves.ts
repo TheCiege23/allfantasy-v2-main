@@ -15,7 +15,7 @@
  * Pure: shared by the route, the conversation and the tests.
  */
 
-export type LeagueMoveKind = 'trade' | 'waiver' | 'roster_move'
+type LeagueMoveKind = 'trade' | 'waiver' | 'roster_move'
 
 export type LeagueMovePlayer = {
   id: string
@@ -132,7 +132,7 @@ export function movesForChannel(channel: string | null | undefined): (move: Leag
 }
 
 /** The minimum a chat row needs, so this module does not depend on the list component. */
-export type MoveMergeable = { id: string; createdAt: string; pending?: boolean }
+type MoveMergeable = { id: string; createdAt: string; pending?: boolean }
 
 /**
  * The moves that belong in the loaded conversation, slotted in by time.

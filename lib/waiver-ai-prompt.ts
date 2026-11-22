@@ -4,10 +4,10 @@ import { getUniversalAIContext } from '@/lib/ai-player-context';
 import { legacyPromptSeason } from '@/lib/legacy/promptSeason';
 import { resolveSeasonState } from '@/lib/import-os/season';
 
-export const WaiverTypeSchema = z.enum(['FAAB', 'ROLLING', 'PRIORITY'])
-export const LeagueFormatSchema = z.enum(['redraft', 'dynasty', 'keeper'])
+const WaiverTypeSchema = z.enum(['FAAB', 'ROLLING', 'PRIORITY'])
+const LeagueFormatSchema = z.enum(['redraft', 'dynasty', 'keeper'])
 
-export const PlayerSchema = z.object({
+const PlayerSchema = z.object({
   name: z.string(),
   position: z.string(),
   team: z.string().nullable().optional(),
@@ -17,7 +17,7 @@ export const PlayerSchema = z.object({
   ownership_percentage: z.number().optional(),
 })
 
-export const LeagueDataSchema = z.object({
+const LeagueDataSchema = z.object({
   league_id: z.string(),
   format: LeagueFormatSchema,
   sport: z.string(),
@@ -28,7 +28,7 @@ export const LeagueDataSchema = z.object({
   average_faab_remaining: z.number().optional(),
 })
 
-export const TeamDataSchema = z.object({
+const TeamDataSchema = z.object({
   team_id: z.string(),
   roster: z.array(PlayerSchema),
   bench: z.array(PlayerSchema).optional(),
@@ -44,7 +44,7 @@ export const WaiverRequestSchema = z.object({
   waiver_pool: z.array(PlayerSchema),
 })
 
-export const TopAddSchema = z.object({
+const TopAddSchema = z.object({
   player_name: z.string(),
   position: z.string(),
   team: z.string().nullable(),
@@ -54,7 +54,7 @@ export const TopAddSchema = z.object({
   reasoning: z.string(),
 })
 
-export const StrategyNotesSchema = z.object({
+const StrategyNotesSchema = z.object({
   faab_strategy: z.string().nullable(),
   priority_strategy: z.string().nullable(),
   timing_notes: z.string(),

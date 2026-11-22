@@ -4,8 +4,9 @@ import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { AFCrestButton } from '@/components/weather/AFCrestButton'
 import type { AFCrestButtonProps } from '@/components/weather/afCrestTypes'
 
-export type ProjectionDisplayProps = {
+type ProjectionDisplayProps = {
   projection: number | null | undefined
+  precision?: number
   suffix?: string
   showAFCrest?: boolean
   afCrestProps?: Omit<AFCrestButtonProps, 'baselineProjection'>
@@ -15,6 +16,7 @@ export type ProjectionDisplayProps = {
 
 export function ProjectionDisplay({
   projection,
+  precision = 1,
   suffix = 'proj',
   showAFCrest = true,
   afCrestProps,
@@ -22,6 +24,7 @@ export function ProjectionDisplay({
   pointsClassName,
 }: ProjectionDisplayProps) {
   if (projection == null) return null
+  const points = projection.toFixed(precision)
 
   const shouldShowCrest =
     showAFCrest &&
@@ -32,7 +35,7 @@ export function ProjectionDisplay({
   return (
     <span className={`inline-flex items-center gap-1 ${className ?? ''}`}>
       <span className={pointsClassName ?? 'text-xs text-white/55'}>
-        {suffix ? `${projection.toFixed(1)} ${suffix}` : projection.toFixed(1)}
+        {points}{suffix ? ' ' + suffix : null}
       </span>
       {shouldShowCrest && (
         <AFCrestButton {...afCrestProps} baselineProjection={projection} size={afCrestProps.size ?? 'xs'} />

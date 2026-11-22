@@ -160,4 +160,3 @@ export function ExposureRowItem({ row }: { row: ExposureRow }) {
   )
 }
 
-export default ExposureRowItem

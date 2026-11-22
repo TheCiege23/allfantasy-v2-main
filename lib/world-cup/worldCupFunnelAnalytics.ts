@@ -5,7 +5,7 @@ import { trackMetaEventAndMirror } from "@/lib/meta-client"
 
 // ── Funnel event names ────────────────────────────────────────────────────────
 
-export type WcFunnelEvent =
+type WcFunnelEvent =
   | "WorldCupLandingViewed"
   | "WorldCupCreatePoolClicked"
   | "WorldCupGuestPoolStarted"
@@ -86,11 +86,6 @@ export function trackWcPoolCreated(challengeId: string, poolName: string): void 
   gtagEvent("WorldCupPoolCreated", { challenge_id: challengeId, pool_name: poolName })
 }
 
-/** Track invite link copied. */
-export function trackWcInviteCopied(challengeId: string): void {
-  gtagEvent("WorldCupInviteCopied", { challenge_id: challengeId })
-}
-
 /** Track share button/link clicked. */
 export function trackWcShareClicked(source: string, challengeId?: string): void {
   gtagEvent("WorldCupShareClicked", { source, challenge_id: challengeId ?? null })
@@ -140,12 +135,3 @@ export function trackWcMediaCtaClicked(source: string): void {
 
 // ── Mobile invite overlay ─────────────────────────────────────────────────────
 
-/** Track when the welcome=invite overlay is shown. */
-export function trackWcInviteOverlayViewed(challengeId?: string): void {
-  gtagEvent("WorldCupInviteOverlayViewed", { challenge_id: challengeId ?? null })
-}
-
-/** Track native share sheet trigger from the invite panel. */
-export function trackWcNativeShareClicked(surface: string): void {
-  gtagEvent("WorldCupNativeShareClicked", { surface })
-}

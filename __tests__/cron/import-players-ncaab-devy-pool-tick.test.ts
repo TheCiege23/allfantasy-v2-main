@@ -8,14 +8,14 @@
  * What is pinned, behaviourally:
  *   - admitted with runway, and handed a deadline that leaves the devy intel sweep its 150s;
  *   - declined below the runway floor, without calling the seed, and still recorded;
- *   - a seed that throws does not stop the intel sweep or the psych rotation behind it.
+ *   - a seed that throws does not stop the intel sweep or the Sleeper trade-fact rotation behind it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const h = vi.hoisted(() => ({
   ingest: vi.fn(),
-  refresh: vi.fn(async () => ({ leaguesProfiled: 0, managersProfiled: 0, leagueIds: [], stoppedEarly: false, deferred: 0 })),
+  refresh: vi.fn(async () => ({ sleeperLeagues: 0, picked: 0, slot: 1, historyFactsWritten: null, ingest: null, errors: [] })),
   intel: vi.fn(async () => ({ feeds: 'inside cadence' })),
   heartbeats: [] as Array<{ jobName: string; outcome: Record<string, unknown> | null; threw: boolean }>,
   remainingMs: null as number | null,
@@ -28,7 +28,7 @@ vi.mock('@/lib/workers/sports-data-importer', () => ({
     throw new Error('the main run must not be reached by an intel tick')
   }),
 }))
-vi.mock('@/lib/psychological-profiles/ProfileRefreshService', () => ({ refreshStaleLeagueProfiles: h.refresh }))
+vi.mock('@/lib/league-import/sleeper/sleeperTradeFactRotation', () => ({ rotateSleeperTradeFacts: h.refresh }))
 vi.mock('@/lib/devy/devyIntelRefresh', () => ({ refreshDevyIntelSources: h.intel }))
 vi.mock('@/lib/devy/ingestFantraxDevyAdp', () => ({
   ingestFantraxDevyAdp: vi.fn(async () => ({ priced: 0, withSchool: 0, updated: 0, unmatched: 0, ambiguous: 0, teamEntries: 0 })),
@@ -154,7 +154,7 @@ describe('declines when the budget is short — and still leaves a record', () =
 })
 
 describe('an error in the seed does not stop the tick', () => {
-  it('records the failure, and the intel sweep and psych rotation still run', async () => {
+  it('records the failure, and the intel sweep and trade-fact rotation still run', async () => {
     h.ingest.mockRejectedValue(new Error('NCAAB players: provider chain returned no rows'))
 
     const res = await intelTick()

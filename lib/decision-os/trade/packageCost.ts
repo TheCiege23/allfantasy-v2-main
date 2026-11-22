@@ -24,6 +24,6 @@ export function reviewPackageCost(args: {roster:readonly ImpactPlayer[];sent:rea
       const without = fillLineup(after.filter(other=>other.playerId!==p.playerId),args.slots)
       return {playerId:p.playerId,name:p.playerId,singleDropLineupCost:complete && !without.unfilledSlots.length && !without.unknownSlots.length ? Math.max(0,a.points-without.points) : null}
     }).sort((x,y)=>(x.singleDropLineupCost??Infinity)-(y.singleDropLineupCost??Infinity)||x.playerId.localeCompare(y.playerId)):[],
-    note:'Incoming players are assumed to use active roster slots. IR and taxi occupants are excluded; eligibility for moving new players there is not verified. Each drop scenario removes one retained player independently. Costs cannot be added for multiple drops; zero weekly starter cost does not mean a player has no future or depth value. League position limits and execution rules still need review.',
+    note:'We assume new players take active roster spots (IR and taxi spots aren’t counted). Each row drops one player on its own, so don’t add rows together. A zero only means no lineup points this week — that player may still have value. Check your league’s position limits too.',
   }
 }

@@ -17,12 +17,3 @@ export interface ClipPayload {
   meta?: Record<string, unknown>;
 }
 
-export interface SocialClipRecord {
-  id: string;
-  userId: string;
-  clipType: string;
-  title: string;
-  subtitle: string | null;
-  meta: Record<string, unknown> | null;
-  createdAt: Date;
-}

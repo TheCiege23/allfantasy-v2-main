@@ -1,12 +1,5 @@
 import { prisma } from "@/lib/prisma"
 
-type FeedEventType =
-  | "UPSET_BUSTED"
-  | "CHAMP_ELIMINATED"
-  | "PERFECT_TRACKER"
-  | "LEAD_CHANGE"
-  | "BIG_UPSET"
-
 const COOLDOWN_MS = 5 * 60 * 1000
 
 async function hasCooldown(
@@ -178,21 +171,3 @@ export async function checkPerfectBrackets(tournamentId: string) {
   }
 }
 
-export async function generateLeagueFeedEvents(
-  tournamentId: string,
-  leagueId: string,
-  previousLeader?: string,
-  currentLeader?: string
-) {
-  if (!previousLeader || !currentLeader || previousLeader === currentLeader) return
-  if (await hasCooldown(tournamentId, "LEAD_CHANGE", leagueId)) return
-
-  await createEvent({
-    tournamentId,
-    leagueId,
-    eventType: "LEAD_CHANGE",
-    headline: `${currentLeader} takes the lead from ${previousLeader}!`,
-    detail: `Leaderboard shakeup in this pool. ${currentLeader} moves to #1.`,
-    metadata: { previousLeader, currentLeader },
-  })
-}

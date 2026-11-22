@@ -19,6 +19,8 @@
  *   maxWeeks — cap weeks per run (default 6)
  *   limit    — cap player rows per week (smoke tests; such weeks stay `partial` by design)
  *   dryRun   — "true" to fetch/count without writing
+ *   gameDay  — "1" re-imports the week with a game in play, and does nothing when none is. See the
+ *              block that reads it.
  *
  *   multiSport — "1" switches to the Rolling Insights date sweep for MLB / NBA / NHL / NCAAB /
  *                SOCCER and skips the whole NFL path above. See the block that reads it.
@@ -34,6 +36,7 @@ import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { findNflWeekInPlay } from "@/lib/player-game-stats/nflWeekInPlay"
 import {
   dateRange,
   ingestRollingInsightsGameLogs,
@@ -41,6 +44,7 @@ import {
 } from "@/lib/sports-data/rollingInsightsGameLogs"
 import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
 import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
+import { pendingStatCorrectionDates } from "@/lib/sports-data/statCoverage"
 import { currentScheduleSeason, syncRiSeasonSchedule } from "@/lib/sports-data/riSeasonSchedule"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
@@ -71,6 +75,12 @@ const RUN_BUDGET_MS = 240_000
  * freshness monitor report CONFIG ("no rows for job_name") forever.
  */
 const JOB_MULTI_SPORT = "cron-import-player-game-stats-multisport"
+/**
+ * Heartbeat identity for the `?gameDay=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. One row per fire, including the fires that find no game in play
+ * and call nobody: outside game windows that is every fire, and it is the healthy state.
+ */
+const JOB_GAME_DAY = "cron-import-player-game-stats-game-day"
 const DEFAULT_MAX_WEEKS = 6
 
 /**
@@ -85,7 +95,14 @@ const DEFAULT_MAX_WEEKS = 6
  * all — measured `fetched: 0`". It does: NCAAFB is on the SECOND RI account (`RSC_TOKEN2`), and a
  * probe with only the first token reads as "no college". See the two-account warning in CLAUDE.md.
  */
-const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "SOCCER"] as const
+/*
+ * NCAAF joined 2026-11-21: CFBD stopped answering on 2026-11-10 (monthly quota), and the C2C roster
+ * page needs college lines the same day. Rolling Insights rows (`source: rolling_insights_live`) sit
+ * BESIDE the CFBD rows rather than replacing them: they are keyed on the identity id, not the CFBD
+ * athlete id, so the CFBD-keyed NCAAF readers never see them. This nightly pass reconciles what the
+ * live tick wrote during the games.
+ */
+const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "NCAAF", "SOCCER"] as const
 
 type WeekOutcome = ImportWeekReport | {
   season: number
@@ -190,10 +207,13 @@ async function handle(req: NextRequest) {
       const dates =
         fromDate && toDate ? dateRange(fromDate, toDate) : recentDates(days)
       try {
+        const correctionDates = s === "NBA" && !fromDate && !toDate && !dryRun
+          ? await pendingStatCorrectionDates(prisma, s)
+          : []
         perSport[s] = await ingestRollingInsightsGameLogs({
           sport: s,
-          dates,
-          persistSchedule: s === "NHL",
+          dates: [...new Set([...dates, ...correctionDates])],
+          persistSchedule: s === "NHL" || s === "NBA",
           shouldStop: () => budget.exhausted(),
         })
       } catch (err) {
@@ -356,6 +376,37 @@ async function handle(req: NextRequest) {
     })
   }
 
+  /*
+   * GAME-DAY MODE — `?gameDay=1`, every 15 minutes (cron-schedule.json).
+   *
+   * The daily run above imports a week once, at 06:40 UTC, so a Sunday starter's stat line reached
+   * the database on Monday morning — and with it the matchup board's box score and AllFantasy's own
+   * points estimate for a league whose platform sends no player scores (lib/core-app/matchupOwnPoints.ts).
+   *
+   * This mode re-imports the week that has a game in play, and ONLY while one does. The gate reads
+   * the stored schedule; with no game in play it records its heartbeat and returns without the lock,
+   * the season probe or any provider call. With one in play it becomes an explicit-week run of the
+   * ordinary path below: one Sleeper request for the week, the same upsert, the same ledger.
+   */
+  const gameDay = url.searchParams.get("gameDay") === "1"
+  const weekInPlay = gameDay ? await findNflWeekInPlay() : null
+  if (gameDay) {
+    await recordSyncJobRun(
+      { jobName: JOB_GAME_DAY, jobScope: "NFL", trigger: "cron" },
+      { rowsWritten: 0, rowsSkipped: 0, errors: [], metadata: { weekInPlay } },
+      Date.now() - startedAt,
+    )
+    if (!weekInPlay) {
+      return NextResponse.json({
+        ok: true,
+        mode: "gameDay",
+        skipped: true,
+        reason: "no NFL game in play",
+        durationMs: Date.now() - startedAt,
+      })
+    }
+  }
+
   // Stale-state sweep BEFORE lock acquisition: a function killed mid-run must not block the
   // next scheduled run beyond the stale threshold, and its telemetry row is truthfully
   // closed as timed_out rather than lingering as 'running' forever.
@@ -372,9 +423,11 @@ async function handle(req: NextRequest) {
 
   try {
     const fetcher = new SleeperWeeklyStatsFetcher()
-    const requestedSeason = Number.isFinite(seasonParam) && seasonParam > 2000
-      ? seasonParam
-      : new Date().getUTCFullYear()
+    const requestedSeason = weekInPlay
+      ? weekInPlay.season
+      : Number.isFinite(seasonParam) && seasonParam > 2000
+        ? seasonParam
+        : new Date().getUTCFullYear()
 
     const resolved = await resolveIngestableSeason(requestedSeason, fetcher)
     if (!resolved) {
@@ -385,7 +438,9 @@ async function handle(req: NextRequest) {
       ? Math.floor(maxWeeksParam)
       : DEFAULT_MAX_WEEKS
 
-    const explicitWeek = Number.isFinite(weekParam) && weekParam >= 1 ? Math.floor(weekParam) : null
+    const explicitWeek = weekInPlay
+      ? weekInPlay.week
+      : Number.isFinite(weekParam) && weekParam >= 1 ? Math.floor(weekParam) : null
     const plan = explicitWeek
       ? { missing: [explicitWeek], partial: [] as number[], completed: [] as number[] }
       : await findWeeksNeedingWork(resolved.season)

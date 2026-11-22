@@ -7,14 +7,6 @@ import type { LeagueSport } from '@prisma/client'
 export type SalaryCapMode = 'dynasty' | 'bestball'
 export type StartupDraftType = 'auction' | 'snake'
 export type FutureDraftType = 'auction' | 'snake' | 'weighted_lottery'
-export type ContractStatus = 'active' | 'expired' | 'cut' | 'traded' | 'tagged' | 'option_exercised'
-export type ContractSource =
-  | 'startup_auction'
-  | 'rookie_draft'
-  | 'waiver_bid'
-  | 'extension'
-  | 'franchise_tag'
-  | 'trade'
 
 /** Config loaded from DB (SalaryCapLeagueConfig + sport). */
 export interface SalaryCapConfig {
@@ -59,22 +51,6 @@ export interface TeamLedgerRow {
   deadMoneyHit: number
   rolloverUsed: number
   capSpace: number
-}
-
-/** Player contract (active or historical). */
-export interface PlayerContractRow {
-  id: string
-  rosterId: string
-  playerId: string
-  playerName: string | null
-  position: string | null
-  salary: number
-  yearsTotal: number
-  yearSigned: number
-  contractYear: number
-  status: ContractStatus
-  source: ContractSource
-  deadMoneyRemaining: Record<number, number> | null
 }
 
 /** Cap legality result. */

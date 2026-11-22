@@ -64,7 +64,8 @@ describe('sidebar', () => {
     expect(cap?.title).toBe('Salary cap')
     expect(cap?.items.map(i => i.id)).toEqual(SALARY_CAP_TABS.map(t => t.id))
     expect(cap?.items.some(i => i.icon === 'more')).toBe(false)
-    expect(groups.find(g => g.id === 'more')?.items.some(i => SALARY_CAP_TABS.some(t => t.id === i.id))).toBe(false)
+    // Only in its own group: no top tab carries a cap view as a sub-tab too.
+    expect(groups[0].items.flatMap(i => i.children).some(c => SALARY_CAP_TABS.some(t => t.id === c.id))).toBe(false)
   })
 })
 

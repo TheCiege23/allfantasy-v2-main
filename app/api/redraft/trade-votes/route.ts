@@ -33,6 +33,7 @@ import {
   type ProposalWithAssets,
 } from '@/lib/redraft/finalizeRedraftTrade'
 import { reviewWindowEndsAt, reviewWindowEnded, tradeReviewWindowHours } from '@/lib/redraft/tradeReviewWindow'
+import { assertSeasonTradeSettlement, readSeasonTradePolicy, SeasonTradeError } from '@/lib/tournament/seasonTradePolicy'
 import { shouldHoldAcceptedTrade } from '@/lib/integrity/holdFlaggedTrades'
 import {
   isMultiTeamTrade,
@@ -542,11 +543,25 @@ export async function POST(req: NextRequest) {
        * review's end. When it passes with no veto the sweep executes the trade (lib/redraft/tradeReviewWindowSweep.ts).
        */
       const acceptedAt = new Date()
-      const windowLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { tradeReviewHours: true } })
-      const claimedAccept = await prisma.redraftTradeProposal.updateMany({
-        where: { id: proposal.id, status: 'pending', acceptedAt: null },
-        data: { acceptedAt, expiresAt: reviewWindowEndsAt(acceptedAt, tradeReviewWindowHours(windowLeague?.tradeReviewHours)) },
-      })
+      const windowLeague = await prisma.league.findUnique({ where: { id: proposal.leagueId }, select: { tradeReviewHours: true, leagueVariant: true } })
+      const claim = { id: proposal.id, status: 'pending', acceptedAt: null }
+      const claimedAccept = windowLeague?.leagueVariant === 'season_tournament'
+        ? await prisma.$transaction(async tx => {
+          const policy = await readSeasonTradePolicy(tx, proposal.leagueId, true)
+          if (!policy) throw new SeasonTradeError('Tournament trades are unavailable.')
+          const decisionAt = new Date()
+          assertSeasonTradeSettlement(policy, proposal, decisionAt)
+          return tx.redraftTradeProposal.updateMany({ where: claim, data: {
+            acceptedAt: decisionAt, expiresAt: new Date(Math.min(policy.cutAt, decisionAt.getTime() + policy.reviewMs)),
+          } })
+        }).catch(error => {
+          if (error instanceof SeasonTradeError) return { error: error.message }
+          throw error
+        })
+        : await prisma.redraftTradeProposal.updateMany({ where: claim,
+          data: { acceptedAt, expiresAt: reviewWindowEndsAt(acceptedAt, tradeReviewWindowHours(windowLeague?.tradeReviewHours)) },
+        })
+      if ('error' in claimedAccept) return NextResponse.json({ error: claimedAccept.error }, { status: 409 })
       if (claimedAccept.count === 0) {
         return NextResponse.json({ error: 'This trade is no longer awaiting your acceptance.' }, { status: 409 })
       }

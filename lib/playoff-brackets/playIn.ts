@@ -20,10 +20,10 @@
  */
 import { MAX_PLAYOFF_TEAMS, checkByePlan, naturalByePlan } from './byePlan'
 
-export const PLAY_IN_SPOT_OPTIONS = [1, 2] as const
-export type PlayInSpots = (typeof PLAY_IN_SPOT_OPTIONS)[number]
+const PLAY_IN_SPOT_OPTIONS = [1, 2] as const
+type PlayInSpots = (typeof PLAY_IN_SPOT_OPTIONS)[number]
 
-export type PlayIn = {
+type PlayIn = {
   /** Teams in the playoffs proper. */
   qualifiers: number
   /** Playoff spots decided in the play-in. */

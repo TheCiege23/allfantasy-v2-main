@@ -150,6 +150,11 @@ export function createInMemoryPrisma(): InMemoryPrisma {
       const operand = Array.isArray(raw) ? raw.map((r) => coerceForField(field, r)) : coerceForField(field, raw)
       switch (op) {
         case 'equals':
+          // Prisma.AnyNull / DbNull / JsonNull — the JSON-null filters — match a null JSON column.
+          if (raw && typeof raw === 'object' && /AnyNull|DbNull|JsonNull/.test(String((raw as object).constructor?.name ?? ''))) {
+            if (value != null) return false
+            break
+          }
           if (operand === null ? value != null : !scalarEquals(norm(value), norm(operand))) return false
           break
         case 'in':

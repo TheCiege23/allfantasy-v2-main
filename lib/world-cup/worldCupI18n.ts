@@ -142,11 +142,11 @@ const EN: WorldCupDictionary = {
   "wc.publicHub.feature.ncaaScoring":
     "NCAA-style scoring — more points for later rounds.",
   "wc.publicHub.feature.guidedPicker":
-    "Guided pick builder with AI matchup previews.",
+    "Guided pick builder with Chimmy matchup previews.",
   "wc.publicHub.feature.liveTracking":
     "Live score and match-minute tracking.",
   "wc.publicHub.feature.aiBracketBuilder":
-    "AI bracket builder fills unpicked matches automatically.",
+    "Chimmy bracket builder fills unpicked matches automatically.",
   "wc.publicHub.feature.perBracketLeaderboard":
     "Per-bracket leaderboard — every entry ranked individually.",
   "wc.publicHub.feature.lockOnKickoff":
@@ -185,12 +185,12 @@ const EN: WorldCupDictionary = {
   "wc.publicHub.how.step4Title": "Finalize and climb",
   "wc.publicHub.how.step4Body":
     "Lock your bracket before kickoff, then watch live standings update and share your results.",
-  "wc.publicHub.ai.title": "AI-Powered Bracket Tools",
+  "wc.publicHub.ai.title": "Chimmy-powered Bracket Tools",
   "wc.publicHub.ai.subtitle":
-    "Chimmy and AllFantasy AI help you understand risk, surface bracket insights, and guide commissioners.",
+    "Chimmy and AllFantasy Chimmy help you understand risk, surface bracket insights, and guide commissioners.",
   "wc.publicHub.ai.explain.title": "Explain My Bracket",
   "wc.publicHub.ai.explain.desc":
-    "AI reads your picks and explains what makes your bracket unique.",
+    "Chimmy reads your picks and explains what makes your bracket unique.",
   "wc.publicHub.ai.danger.title": "Knockout Danger Zones",
   "wc.publicHub.ai.danger.desc":
     "See which knockout picks are most vulnerable to upsets.",
@@ -199,9 +199,9 @@ const EN: WorldCupDictionary = {
     "Ask @Chimmy for pick advice right in your pool chat.",
   "wc.publicHub.ai.commissioner.title": "Commissioner Insights",
   "wc.publicHub.ai.commissioner.desc":
-    "AI summaries for pool health, bracket diversity, and member activity.",
+    "Chimmy summaries for pool health, bracket diversity, and member activity.",
   "wc.publicHub.ai.gating":
-    "Available on eligible AI plans or token-powered tools.",
+    "Available on eligible Chimmy plans or token-powered tools.",
   "wc.publicHub.social.title": "Bring your crew.",
   "wc.publicHub.social.desc":
     "Share your pool link, challenge your friends, and let the leaderboard settle the debate.",
@@ -290,14 +290,14 @@ const EN: WorldCupDictionary = {
   "wc.entryList.noBracketsTitle": "No brackets created yet",
   "wc.entryList.noBracketsBody": "Create your personal bracket first, then you can make picks once fixtures are ready.",
   // ── Pool dashboard: AI features teaser ───────────────────────────────
-  "wc.home.ai.title": "AI Features",
+  "wc.home.ai.title": "Chimmy Features",
   "wc.home.ai.chimmyHint": "Type @chimmy in pool chat for personalized bracket advice.",
-  "wc.home.ai.explainHint": "Go to the Review tab to get an AI explanation of your bracket strategy.",
+  "wc.home.ai.explainHint": "Go to the Review tab to get a Chimmy explanation of your bracket strategy.",
   "wc.home.ai.unlockHint": "Upgrade to AF Pro to unlock Chimmy and Explain My Bracket.",
 
   // ── AI Insights CTA panel ──────────────────────────────────────────────────
-  "wc.cta.panelTitle": "AI Insights",
-  "wc.cta.aiRowLabel": "AI / Pro",
+  "wc.cta.panelTitle": "Chimmy Insights",
+  "wc.cta.aiRowLabel": "Chimmy / Pro",
   "wc.cta.commissionerRowLabel": "Commissioner",
   // AI tier CTAs
   "wc.cta.askChimmy": "Ask Chimmy",
@@ -308,7 +308,7 @@ const EN: WorldCupDictionary = {
   "wc.cta.pathToFirstPrompt": "What does my bracket {{name}} need to climb to first place in this pool?",
   "wc.cta.pathToFirstPromptGeneric": "What does my bracket need to climb to first place in this pool?",
   "wc.cta.explainBracket": "Explain My Bracket",
-  "wc.cta.explainBracketDesc": "Get an AI explanation of your bracket strategy",
+  "wc.cta.explainBracketDesc": "Get a Chimmy explanation of your bracket strategy",
   // Commissioner tier CTAs
   "wc.cta.rootingGuide": "Rooting Guide",
   "wc.cta.rootingGuideDesc": "Generate a rooting guide for this entry",
@@ -317,7 +317,7 @@ const EN: WorldCupDictionary = {
   "wc.cta.championRisk": "Champion Risk",
   "wc.cta.championRiskDesc": "Analyze champion pick risk across the pool",
   "wc.cta.commissionerRecap": "Commissioner Recap",
-  "wc.cta.commissionerRecapDesc": "Generate an AI pool recap (preview before posting)",
+  "wc.cta.commissionerRecapDesc": "Generate a Chimmy pool recap (preview before posting)",
   "wc.cta.postHype": "Post Hype",
   "wc.cta.postHypeDesc": "Post a hype message to pool chat",
   "wc.cta.findIncomplete": "Incomplete Picks",
@@ -398,7 +398,7 @@ const EN: WorldCupDictionary = {
   "wc.chat.aiHint.unlocked":
     "@chimmy replies are private. Only you will see your prompt and Chimmy’s answer in this pool.",
   "wc.chat.aiHint.locked":
-    "@chimmy private replies require AI/Pro. Upgrade to ask Chimmy from this pool chat.",
+    "@chimmy private replies require Chimmy/Pro. Upgrade to ask Chimmy from this pool chat.",
   "wc.chat.trustNote": "Keep it competitive. Keep it clean.",
   "wc.chat.loading": "Loading pool chat…",
   "wc.chat.refresh": "Refresh",
@@ -410,7 +410,7 @@ const EN: WorldCupDictionary = {
   "wc.chat.drawer.aiTitle": "Chat with Chimmy",
   "wc.chat.drawer.poolTitle": "Pool Messages",
   "wc.chat.drawer.dmTitle": "Direct Messages",
-  "wc.chat.drawer.aiTrust": "Messages in this mode are sent to @Chimmy and may return a private AI reply.",
+  "wc.chat.drawer.aiTrust": "Messages in this mode are sent to @Chimmy and may return a private Chimmy reply.",
   "wc.chat.dm.comingSoonTitle": "Start a private chat",
   "wc.chat.dm.comingSoon": "Pick one or more pool members to start a private conversation. Messages stay inside that private thread.",
   "wc.chat.mention.title": "Mention pool members",
@@ -511,13 +511,13 @@ const EN: WorldCupDictionary = {
   // ── AI upgrade / cap messages ────────────────────────────────────────
   "wc.ai.upgrade.chimmy.free": "You've used today's 3 Chimmy questions. Upgrade to AF Pro for 30 per day.",
   "wc.ai.upgrade.chimmy.pro": "You've used today's 30 Chimmy questions. They reset at midnight UTC.",
-  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily AI bracket breakdowns.",
+  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily Chimmy bracket breakdowns.",
   "wc.ai.upgrade.explain.pro": "You've used today's bracket explanation. It resets at midnight UTC.",
-  "wc.ai.upgrade.matchup.free": "AI Matchup Intelligence requires AF Pro.",
-  "wc.ai.upgrade.matchup.pro": "You've used today's 25 AI matchup analyses. They reset at midnight UTC.",
+  "wc.ai.upgrade.matchup.free": "Chimmy Matchup Intelligence requires AF Pro.",
+  "wc.ai.upgrade.matchup.pro": "You've used today's 25 Chimmy matchup analyses. They reset at midnight UTC.",
   "wc.ai.upgrade.brain.free": "Commissioner Brain requires AF Commissioner or higher.",
   "wc.ai.upgrade.brain.pro": "You've used today's Commissioner Brain calls. They reset at midnight UTC.",
-  "wc.ai.upgrade.resetHint": "Daily AI limits reset at midnight UTC.",
+  "wc.ai.upgrade.resetHint": "Daily Chimmy limits reset at midnight UTC.",
   "wc.ai.upgrade.cta": "Upgrade Plan",
 
   // ── Knockouts tab ────────────────────────────────────────────────────
@@ -563,13 +563,13 @@ const EN: WorldCupDictionary = {
   "wc.danger.severityLow": "Low",
   "wc.danger.severitySuffix": "danger",
   "wc.danger.footer":
-    "Counts only your own picks vs the public schedule. No AI call. No other users' picks.",
+    "Counts only your own picks vs the public schedule. No Chimmy call. No other users' picks.",
 
   // ── AI Report (Review tab) ───────────────────────────────────────────
   "wc.aiReport.eyebrow": "Report",
-  "wc.aiReport.title": "Your Bracket AI Report",
+  "wc.aiReport.title": "Your Bracket Chimmy Report",
   "wc.aiReport.subtitle":
-    "Six AI signals computed from your own picks. Everything below is private to you.",
+    "Six Chimmy signals computed from your own picks. Everything below is private to you.",
   "wc.aiReport.tierActive": "AF Pro active",
   "wc.aiReport.tierPreview": "AF Pro preview",
 
@@ -661,7 +661,7 @@ const EN: WorldCupDictionary = {
     "10 pts Round of 32 · 20 pts Round of 16 · 40 pts QF · 80 pts SF · 160 pts Final · 320 pts Champion bonus",
   "wc.create.monetization.title": "Make Chimmy visible when users are ready",
   "wc.create.monetization.body":
-    "Pools are free to create. AF Pro unlocks deeper AI bracket analysis, and tokens cover one-off premium AI actions.",
+    "Pools are free to create. AF Pro unlocks deeper Chimmy bracket analysis, and tokens cover one-off premium Chimmy actions.",
   "wc.create.monetization.proCta": "AF Pro",
   "wc.create.monetization.tokensCta": "Tokens",
   "wc.create.helper.entriesOne":
@@ -752,7 +752,7 @@ const EN: WorldCupDictionary = {
     "Submitted {{at}}. You can still edit until pool lock — invite friends now before the field fills up.",
   "wc.finalize.copyShare": "Copy share text",
   "wc.finalize.copyShareCopied": "Share Copied!",
-  "wc.finalize.shareReport": "Share My AI Bracket Report",
+  "wc.finalize.shareReport": "Share My Chimmy Bracket Report",
   "wc.finalize.inviteFriends": "Invite Friends To Beat My Bracket",
   "wc.finalize.previewShare": "Preview share text",
 
@@ -800,7 +800,7 @@ const EN: WorldCupDictionary = {
   "wc.lb.noChampionPick": "No champion pick",
   "wc.lb.alive": "Alive",
   "wc.lb.busted": "Busted",
-  "wc.lb.aiProUnlocks": "AF Pro unlocks AI Win %, Bracket Health, and champion-path pressure.",
+  "wc.lb.aiProUnlocks": "AF Pro unlocks Chimmy Win %, Bracket Health, and champion-path pressure.",
   "wc.lb.ptsLabel": "Pts",
   "wc.lb.trustNote": "Free to play. Just strategy, predictions, and bragging rights.",
   // ── Share card UI chrome ──────────────────────────────────────────────
@@ -808,7 +808,7 @@ const EN: WorldCupDictionary = {
   "wc.share.titleInvite": "Pool Invite",
   "wc.share.titleLeaderboard": "Leaderboard Snapshot",
   "wc.share.titleBracket": "My Bracket Summary",
-  "wc.share.titleRecap": "AI Recap",
+  "wc.share.titleRecap": "Chimmy Recap",
   "wc.share.description": "Copy-ready social text for sharing your bracket or pool standings.",
   "wc.share.publicSafe": "Public-safe",
   "wc.share.copy": "Copy share text",
@@ -929,7 +929,7 @@ const EN: WorldCupDictionary = {
   // ── AI Report card chrome (extended) ─────────────────────────────────
   "wc.aiShareCard.eyebrow": "Share Graphic",
   "wc.aiShareCard.subtitle":
-    "All 6 AI signals in one copy-ready card. Deterministic — no AI call to share.",
+    "All 6 Chimmy signals in one copy-ready card. Deterministic — no Chimmy call to share.",
   "wc.aiShareCard.tierPro": "AF Pro",
   "wc.aiShareCard.tierPreview": "Basic preview",
   "wc.aiShareCard.emptyNoEntry":
@@ -939,14 +939,14 @@ const EN: WorldCupDictionary = {
   "wc.aiShareCard.share": "Share",
   "wc.aiShareCard.privacyNote":
     "Private to you until you share it. Uses only your own bracket data and aggregated pool counts.",
-  "wc.explain.eyebrow": "Private AI",
+  "wc.explain.eyebrow": "Private Chimmy",
   "wc.explain.title": "Explain My Bracket",
   "wc.explain.subtitle":
     "A private narrative analysis of your bracket strategy. Only you can see it.",
   "wc.explain.tierPro": "AF Pro",
   "wc.explain.tierLocked": "Locked",
   "wc.explain.locked":
-    "AF Pro unlocks private AI explanation of your bracket strategy. Token users can also confirm a one-off spend before generation; failed AI calls never deduct tokens.",
+    "AF Pro unlocks private Chimmy explanation of your bracket strategy. Token users can also confirm a one-off spend before generation; failed Chimmy calls never deduct tokens.",
   "wc.explain.upgradeCta": "Upgrade to AF Pro →",
   "wc.explain.generate": "Generate explanation",
   "wc.explain.generating": "Generating...",
@@ -979,7 +979,7 @@ const EN: WorldCupDictionary = {
   "wc.uniqueness.rarity.common": "Common",
   "wc.uniqueness.percentShare": "{{percent}}% share",
   "wc.uniqueness.privacyNote":
-    "Deterministic — counts only finalized brackets. No AI call, no other users' raw picks shown.",
+    "Deterministic — counts only finalized brackets. No Chimmy call, no other users' raw picks shown.",
   "wc.grade.eyebrow": "Bracket Grade",
   "wc.grade.completionLabel": "{{percent}}% complete",
   "wc.grade.tierProDetail": "AF Pro detail",
@@ -996,7 +996,7 @@ const EN: WorldCupDictionary = {
   "wc.grade.recommendation": "Recommendation:",
   "wc.grade.lockedBody":
     "AF Pro unlocks risk, upset meter, champion confidence, biggest risk, and recommendation details.",
-  "wc.confidence.title": "AI Confidence Check",
+  "wc.confidence.title": "Chimmy Confidence Check",
   "wc.confidence.tierOpen": "Open",
   "wc.confidence.tierLocked": "Locked",
   "wc.confidence.missingPicks": "Missing picks:",
@@ -1018,7 +1018,7 @@ const EN: WorldCupDictionary = {
   "wc.confidence.privacyNote":
     "Deterministic prediction and scoring complexity only. Bracket guidance stays limited to pool picks and scoring mechanics.",
   "wc.confidence.lockedBody":
-    "Upgrade to AI/Pro to open the confidence check. Locked users do not trigger AI calls.",
+    "Upgrade to Chimmy/Pro to open the confidence check. Locked users do not trigger Chimmy calls.",
   "wc.path.title": "What needs to happen for me to win?",
   "wc.path.subtitle":
     "Private current-entry read. Other users' unfinalized picks stay hidden.",
@@ -1054,7 +1054,7 @@ const EN: WorldCupDictionary = {
   "wc.groupStage.saved": "Saved",
   "wc.groupStage.retrySave": "Retry Save",
   "wc.groupStage.failedSave": "Failed to save group ranking",
-  "wc.groupStage.aiTitle": "AI Insights",
+  "wc.groupStage.aiTitle": "Chimmy Insights",
   "wc.groupStage.aiTierOpen": "Open",
   "wc.groupStage.aiTierLocked": "Locked",
   "wc.groupStage.aiPrivacyNote":
@@ -1117,7 +1117,7 @@ const EN: WorldCupDictionary = {
     "Select {{name}} as a third-place advancer",
   "wc.thirdPlace.aiTitle": "Ask Chimmy",
   "wc.thirdPlace.aiLockedBody":
-    "AI/Pro unlocks third-place selection insights. Locked users only see this CTA and no AI request is made.",
+    "Chimmy/Pro unlocks third-place selection insights. Locked users only see this CTA and no Chimmy request is made.",
 
   // ── Matchup card (gameplay) ──────────────────────────────────────────
   "wc.matchup.matchLabel": "Match {{number}}",
@@ -1151,7 +1151,7 @@ const EN: WorldCupDictionary = {
     "Higher confidence means more bonus points if correct.",
   "wc.matchup.confidencePointSingle": "{{value}} point",
   "wc.matchup.confidencePointPlural": "{{value}} points",
-  "wc.matchup.aiInsightsLabel": "AI Insights",
+  "wc.matchup.aiInsightsLabel": "Chimmy Insights",
   "wc.matchup.aiTierOpen": "Open",
   "wc.matchup.aiTierLocked": "Locked",
   "wc.matchup.aiSaferPick": "Safer pick:",
@@ -1263,7 +1263,7 @@ const EN: WorldCupDictionary = {
   "wc.review.resultPendingNote": "Result pending means your pick is saved, but the official match result has not posted or been scored yet.",
   // ── Review tab: AF Pro upgrade banner ────────────────────────────────
   "wc.review.afProUnlocks": "AF Pro unlocks",
-  "wc.review.afProUnlocksDetails": "the full report — Champion Confidence, Path to Win, the AI Explain narrative, your Uniqueness insight, and the full Share card.",
+  "wc.review.afProUnlocksDetails": "the full report — Champion Confidence, Path to Win, Chimmy Explain narrative, your Uniqueness insight, and the full Share card.",
   // ── Review tab: saved picks section ──────────────────────────────────
   "wc.review.savedGroupTitle": "Saved Group Stage Picks",
   "wc.review.savedGroupNote": "Your predictions · official results shown separately",
@@ -1363,7 +1363,7 @@ const EN: WorldCupDictionary = {
   "wc.insights.notClose": "Not close",
   "wc.insights.gapPts": "{{n}} pts",
   "wc.insights.mostCorrectValue": "{{name}} ({{count}})",
-  "wc.insights.aiSummaryTitle": "AI Pool Summary",
+  "wc.insights.aiSummaryTitle": "Chimmy Pool Summary",
   "wc.insights.aiBadgeUnlocked": "Finalized only",
   "wc.insights.aiBadgeLocked": "Locked",
   "wc.insights.aiNotAvailable": "Not available yet",
@@ -1377,13 +1377,13 @@ const EN: WorldCupDictionary = {
   "wc.insights.aiRaceClose":
     "The top two entries are within 5 points.",
   "wc.insights.aiRaceNotClose": "No close top-two race yet.",
-  "wc.insights.aiWinReadLabel": "AI win read:",
+  "wc.insights.aiWinReadLabel": "Chimmy win read:",
   "wc.insights.aiWinReadBody":
     "{{name}} projects at {{pct}}% with {{health}} bracket health.",
   "wc.insights.aiPrivacyNote":
     "Uses finalized/public leaderboard data only. No private unfinalized picks are included. Bracket guidance stays limited to pool picks and scoring mechanics.",
   "wc.insights.aiUpgradeNote":
-    "Upgrade to AI/Pro for finalized-only pool summaries. Locked users do not trigger AI calls.",
+    "Upgrade to Chimmy/Pro for finalized-only pool summaries. Locked users do not trigger Chimmy calls.",
 
   // ── Settings panel chrome (Phase 6) ──────────────────────────────────
   "wc.settings.title": "Pool settings",
@@ -1400,7 +1400,7 @@ const EN: WorldCupDictionary = {
   // ── Commissioner Brain panel chrome (Phase 6) ────────────────────────
   "wc.brain.title": "Commissioner Brain",
   "wc.brain.subtitle":
-    "Snapshot, alerts, and AI helpers — manage your pool from one place.",
+    "Snapshot, alerts, and Chimmy helpers — manage your pool from one place.",
   "wc.brain.loading": "Loading commissioner tools…",
   "wc.brain.loadError": "Could not load commissioner tools.",
 
@@ -1431,7 +1431,7 @@ const EN: WorldCupDictionary = {
   "wc.pickHelp.officialRequiredBody":
     "This pool uses official knockout fixtures. Picks open after the Round of 32 teams are synced by an admin or commissioner workflow.",
   "wc.pickHelp.title": "Guided Pick Help",
-  "wc.pickHelp.body": "Use the sticky Start Making Picks button on mobile to move through matchups one at a time. AI bracket builder tools stay gated for a later pass.",
+  "wc.pickHelp.body": "Use the sticky Start Making Picks button on mobile to move through matchups one at a time. Chimmy bracket builder tools stay gated for a later pass.",
   "wc.pickHelp.knockoutLocked": "Knockout Locked",
   "wc.pickHelp.continueGuided": "Continue Guided Picks",
   "wc.pickHelp.reviewGuided": "Review Guided Picks",
@@ -1439,10 +1439,10 @@ const EN: WorldCupDictionary = {
 
   // ── AI Simulation lock panel ─────────────────────────────────────────
   "wc.aiLock.badge": "Locked Preview",
-  "wc.aiLock.title": "AI Simulation Locked",
-  "wc.aiLock.body": "AI Simulation unlocks projected winners, bracket busters, and champion paths.",
+  "wc.aiLock.title": "Chimmy Simulation Locked",
+  "wc.aiLock.body": "Chimmy Simulation unlocks projected winners, bracket busters, and champion paths.",
   "wc.aiLock.tier": "Requires AF Pro or AF Supreme",
-  "wc.aiLock.commissionerNote": "Commissioner AI tools require AF Commissioner or AF Supreme.",
+  "wc.aiLock.commissionerNote": "Commissioner Chimmy tools require AF Commissioner or AF Supreme.",
 
   // ── Premium access panel ─────────────────────────────────────────────
   "wc.premium.eyebrow": "World Cup Access",
@@ -1452,7 +1452,7 @@ const EN: WorldCupDictionary = {
   "wc.premium.freeLimitSingle": "Free users can create one bracket entry in this pool.",
   "wc.premium.freeLimitPlural": "This pool allows up to {{n}} entries. Free users can still create a valid first bracket; AF Commissioner controls manage multi-entry pool rules.",
   "wc.premium.commissionerSection": "AF Commissioner",
-  "wc.premium.aiSection": "AI/Pro",
+  "wc.premium.aiSection": "Chimmy/Pro",
   "wc.premium.unlocked": "Unlocked",
   "wc.premium.card.commissioner.title": "AF Commissioner Tools",
   "wc.premium.card.commissioner.descOwner": "Readiness, sync, simulation, settings, invites, and admin QA tools are available for all-access users.",
@@ -1463,13 +1463,13 @@ const EN: WorldCupDictionary = {
   "wc.premium.card.export.desc": "Export standings and bracket summaries for commissioner review.",
   "wc.premium.card.multiEntry.title": "Multiple Entries",
   "wc.premium.card.multiEntry.desc": "Pool-level multi-entry controls beyond the default free first-entry experience.",
-  "wc.premium.card.bracketBuilder.title": "AI Bracket Builder",
+  "wc.premium.card.bracketBuilder.title": "Chimmy Bracket Builder",
   "wc.premium.card.bracketBuilder.desc": "Placeholder for guided bracket construction and deterministic context-aware suggestions.",
-  "wc.premium.card.matchupPreview.title": "AI Matchup Preview",
+  "wc.premium.card.matchupPreview.title": "Chimmy Matchup Preview",
   "wc.premium.card.matchupPreview.desc": "Preview matchup lean, risks, and upset paths when official fixtures are available.",
-  "wc.premium.card.whatIf.title": "AI What-If Scenarios",
+  "wc.premium.card.whatIf.title": "Chimmy What-If Scenarios",
   "wc.premium.card.whatIf.desc": "Leaderboard scenarios for what needs to happen next.",
-  "wc.premium.card.alerts.title": "AI Alerts",
+  "wc.premium.card.alerts.title": "Chimmy Alerts",
   "wc.premium.card.alerts.desc": "Future alerts for bracket swings, group-stage optimizer notes, and upset finder signals.",
 
   // ── Match Impact Center ───────────────────────────────────────────────
@@ -1534,11 +1534,11 @@ const ES: WorldCupDictionary = {
   "wc.publicHub.feature.ncaaScoring":
     "Puntuación estilo NCAA — más puntos en rondas avanzadas.",
   "wc.publicHub.feature.guidedPicker":
-    "Asistente de picks guiado con vistas previas de IA.",
+    "Asistente de picks guiado con vistas previas de Chimmy.",
   "wc.publicHub.feature.liveTracking":
     "Seguimiento de marcadores y minutos en vivo.",
   "wc.publicHub.feature.aiBracketBuilder":
-    "El generador de brackets con IA rellena los partidos sin elegir automáticamente.",
+    "El generador de brackets con Chimmy rellena los partidos sin elegir automáticamente.",
   "wc.publicHub.feature.perBracketLeaderboard":
     "Leaderboard por bracket — cada entrada se clasifica de manera individual.",
   "wc.publicHub.feature.lockOnKickoff":
@@ -1577,12 +1577,12 @@ const ES: WorldCupDictionary = {
   "wc.publicHub.how.step4Title": "Finaliza y escala",
   "wc.publicHub.how.step4Body":
     "Bloquea tu bracket antes del partido inicial y sigue las clasificaciones en vivo.",
-  "wc.publicHub.ai.title": "Herramientas de bracket con IA",
+  "wc.publicHub.ai.title": "Herramientas de bracket con Chimmy",
   "wc.publicHub.ai.subtitle":
-    "Chimmy y AllFantasy IA te ayudan a entender el riesgo, detectar insights y guiar a los comisionados.",
+    "Chimmy y AllFantasy Chimmy te ayudan a entender el riesgo, detectar insights y guiar a los comisionados.",
   "wc.publicHub.ai.explain.title": "Explica mi bracket",
   "wc.publicHub.ai.explain.desc":
-    "La IA analiza tus picks y explica qué hace único tu bracket.",
+    "Chimmy analiza tus picks y explica qué hace único tu bracket.",
   "wc.publicHub.ai.danger.title": "Zonas de peligro en eliminatorias",
   "wc.publicHub.ai.danger.desc":
     "Descubre cuáles de tus picks son más vulnerables ante sorpresas.",
@@ -1591,9 +1591,9 @@ const ES: WorldCupDictionary = {
     "Pregúntale a @Chimmy sobre tus picks directamente en el chat del grupo.",
   "wc.publicHub.ai.commissioner.title": "Perspectivas del comisionado",
   "wc.publicHub.ai.commissioner.desc":
-    "Resúmenes IA sobre salud del grupo, diversidad de brackets y actividad de miembros.",
+    "Resúmenes Chimmy sobre salud del grupo, diversidad de brackets y actividad de miembros.",
   "wc.publicHub.ai.gating":
-    "Disponible en planes de IA elegibles o herramientas con tokens.",
+    "Disponible en planes de Chimmy elegibles o herramientas con tokens.",
   "wc.publicHub.social.title": "Trae a tu equipo.",
   "wc.publicHub.social.desc":
     "Comparte el enlace de tu grupo, reta a tus amigos y deja que el leaderboard resuelva el debate.",
@@ -1682,13 +1682,13 @@ const ES: WorldCupDictionary = {
   "wc.entryList.noBracketsTitle": "Aún no hay brackets creados",
   "wc.entryList.noBracketsBody": "Crea tu bracket personal primero; podrás hacer picks cuando los encuentros estén listos.",
   // ── Pool dashboard: AI features teaser ───────────────────────────────
-  "wc.home.ai.title": "Funciones de IA",
+  "wc.home.ai.title": "Funciones de Chimmy",
   "wc.home.ai.chimmyHint": "Escribe @chimmy en el chat del pool para recibir consejos personalizados de bracket.",
-  "wc.home.ai.explainHint": "Ve a la pestaña Revisar para obtener una explicación de IA de tu estrategia de bracket.",
+  "wc.home.ai.explainHint": "Ve a la pestaña Revisar para obtener una explicación de Chimmy de tu estrategia de bracket.",
   "wc.home.ai.unlockHint": "Actualiza a AF Pro para desbloquear Chimmy y Explain My Bracket.",
 
   // ── AI CTA panel ──────────────────────────────────────────────────────
-  "wc.cta.panelTitle": "Información de IA",
+  "wc.cta.panelTitle": "Información de Chimmy",
   "wc.cta.aiRowLabel": "IA / Pro",
   "wc.cta.commissionerRowLabel": "Comisionado",
   "wc.cta.askChimmy": "Pregunta a Chimmy",
@@ -1696,7 +1696,7 @@ const ES: WorldCupDictionary = {
   "wc.cta.pathToFirst": "Camino al Primero",
   "wc.cta.pathToFirstDesc": "Pregunta a Chimmy qué necesita tu bracket para subir al primer lugar",
   "wc.cta.explainBracket": "Explica Mi Bracket",
-  "wc.cta.explainBracketDesc": "Obtén una explicación de IA de tu estrategia de bracket",
+  "wc.cta.explainBracketDesc": "Obtén una explicación de Chimmy de tu estrategia de bracket",
   "wc.cta.rootingGuide": "Guía de Apoyo",
   "wc.cta.rootingGuideDesc": "Genera una guía de apoyo para esta entrada",
   "wc.cta.poolSwing": "Cambio en el Pool",
@@ -1704,7 +1704,7 @@ const ES: WorldCupDictionary = {
   "wc.cta.championRisk": "Riesgo de Campeón",
   "wc.cta.championRiskDesc": "Analiza el riesgo del pick de campeón en el pool",
   "wc.cta.commissionerRecap": "Resumen del Comisionado",
-  "wc.cta.commissionerRecapDesc": "Genera un resumen de IA del pool (vista previa antes de publicar)",
+  "wc.cta.commissionerRecapDesc": "Genera un resumen de Chimmy del pool (vista previa antes de publicar)",
   "wc.cta.postHype": "Publicar Hype",
   "wc.cta.postHypeDesc": "Publica un mensaje de ánimo en el chat del pool",
   "wc.cta.findIncomplete": "Picks Incompletos",
@@ -1728,7 +1728,7 @@ const ES: WorldCupDictionary = {
   "wc.chat.aiHint.unlocked":
     "Las respuestas de @chimmy son privadas. Solo tú verás tu pregunta y la respuesta de Chimmy en este pool.",
   "wc.chat.aiHint.locked":
-    "Las respuestas privadas de @chimmy requieren AI/Pro. Actualiza para preguntarle a Chimmy desde el chat del pool.",
+    "Las respuestas privadas de @chimmy requieren Chimmy/Pro. Actualiza para preguntarle a Chimmy desde el chat del pool.",
   "wc.chat.trustNote": "Sé competitivo. Sé respetuoso.",
   "wc.chat.loading": "Cargando chat del pool…",
   "wc.chat.refresh": "Actualizar",
@@ -1740,7 +1740,7 @@ const ES: WorldCupDictionary = {
   "wc.chat.drawer.aiTitle": "Chat con Chimmy",
   "wc.chat.drawer.poolTitle": "Mensajes del Pool",
   "wc.chat.drawer.dmTitle": "Mensajes Directos",
-  "wc.chat.drawer.aiTrust": "Los mensajes en este modo se envian a @Chimmy y pueden devolver una respuesta privada de IA.",
+  "wc.chat.drawer.aiTrust": "Los mensajes en este modo se envian a @Chimmy y pueden devolver una respuesta privada de Chimmy.",
   "wc.chat.dm.comingSoonTitle": "Inicia un chat privado",
   "wc.chat.dm.comingSoon": "Elige uno o mas miembros del pool para iniciar una conversacion privada. Los mensajes se quedan dentro de ese hilo privado.",
   "wc.chat.mention.title": "Mencionar miembros del pool",
@@ -1843,11 +1843,11 @@ const ES: WorldCupDictionary = {
   "wc.ai.upgrade.chimmy.pro": "Has usado las 30 preguntas de Chimmy de hoy. Se reinician a medianoche UTC.",
   "wc.ai.upgrade.explain.free": "Las explicaciones de bracket requieren AF Pro.",
   "wc.ai.upgrade.explain.pro": "Has usado la explicación de bracket de hoy. Se reinicia a medianoche UTC.",
-  "wc.ai.upgrade.matchup.free": "El análisis de emparejamiento con IA requiere AF Pro.",
+  "wc.ai.upgrade.matchup.free": "El análisis de emparejamiento con Chimmy requiere AF Pro.",
   "wc.ai.upgrade.matchup.pro": "Has usado los 25 análisis de emparejamiento de hoy. Se reinician a medianoche UTC.",
   "wc.ai.upgrade.brain.free": "Commissioner Brain requiere AF Commissioner o superior.",
   "wc.ai.upgrade.brain.pro": "Has usado las llamadas del Commissioner Brain de hoy. Se reinician a medianoche UTC.",
-  "wc.ai.upgrade.resetHint": "Los límites diarios de IA se reinician a medianoche UTC.",
+  "wc.ai.upgrade.resetHint": "Los límites diarios de Chimmy se reinician a medianoche UTC.",
   "wc.ai.upgrade.cta": "Mejorar Plan",
 
   // ── Knockouts tab ────────────────────────────────────────────────────
@@ -1888,13 +1888,13 @@ const ES: WorldCupDictionary = {
   "wc.danger.severityLow": "Bajo",
   "wc.danger.severitySuffix": "peligro",
   "wc.danger.footer":
-    "Cuenta solo tus propios picks vs el calendario público. Sin llamadas de IA. Sin picks de otros usuarios.",
+    "Cuenta solo tus propios picks vs el calendario público. Sin llamadas de Chimmy. Sin picks de otros usuarios.",
 
   // ── AI Report (Review tab) ───────────────────────────────────────────
   "wc.aiReport.eyebrow": "Informe",
-  "wc.aiReport.title": "Tu Informe de IA del Bracket",
+  "wc.aiReport.title": "Tu Informe de Chimmy del Bracket",
   "wc.aiReport.subtitle":
-    "Seis señales de IA calculadas a partir de tus propios picks. Todo lo de abajo es privado tuyo.",
+    "Seis señales de Chimmy calculadas a partir de tus propios picks. Todo lo de abajo es privado tuyo.",
   "wc.aiReport.tierActive": "AF Pro activo",
   "wc.aiReport.tierPreview": "Vista previa AF Pro",
 
@@ -1978,7 +1978,7 @@ const ES: WorldCupDictionary = {
     "10 pts Ronda de 32 · 20 pts Ronda de 16 · 40 pts QF · 80 pts SF · 160 pts Final · 320 pts bonus de campeón",
   "wc.create.monetization.title": "Haz visible a Chimmy cuando tus usuarios estén listos",
   "wc.create.monetization.body":
-    "Crear grupos es gratis. AF Pro desbloquea análisis de bracket más profundos, y los tokens cubren acciones premium de IA de una sola vez.",
+    "Crear grupos es gratis. AF Pro desbloquea análisis de bracket más profundos, y los tokens cubren acciones premium de Chimmy de una sola vez.",
   "wc.create.monetization.proCta": "AF Pro",
   "wc.create.monetization.tokensCta": "Tokens",
   "wc.create.helper.entriesOne":
@@ -2071,7 +2071,7 @@ const ES: WorldCupDictionary = {
     "Enviado {{at}}. Aún puedes editar hasta el cierre del grupo — invita amigos antes de que se llene.",
   "wc.finalize.copyShare": "Copiar texto para compartir",
   "wc.finalize.copyShareCopied": "¡Copiado!",
-  "wc.finalize.shareReport": "Compartir Mi Informe IA de Bracket",
+  "wc.finalize.shareReport": "Compartir Mi Informe Chimmy de Bracket",
   "wc.finalize.inviteFriends": "Invita Amigos A Vencer Mi Bracket",
   "wc.finalize.previewShare": "Vista previa del texto",
 
@@ -2119,7 +2119,7 @@ const ES: WorldCupDictionary = {
   "wc.lb.noChampionPick": "Sin pick de campeón",
   "wc.lb.alive": "Vivo",
   "wc.lb.busted": "Eliminado",
-  "wc.lb.aiProUnlocks": "AF Pro desbloquea % de victorias IA, salud del bracket y presión en el camino al campeón.",
+  "wc.lb.aiProUnlocks": "AF Pro desbloquea % de victorias Chimmy, salud del bracket y presión en el camino al campeón.",
   "wc.lb.ptsLabel": "Pts",
   "wc.lb.trustNote": "Sin costo alguno. Solo estrategia, predicciones y el derecho a presumir.",
   // ── Share card UI chrome ──────────────────────────────────────────────
@@ -2256,7 +2256,7 @@ const ES: WorldCupDictionary = {
   // ── AI Report card chrome (extended) ─────────────────────────────────
   "wc.aiShareCard.eyebrow": "Gráfico para compartir",
   "wc.aiShareCard.subtitle":
-    "Las 6 señales de IA en una tarjeta lista para copiar. Determinista — sin llamadas a IA al compartir.",
+    "Las 6 señales de Chimmy en una tarjeta lista para copiar. Determinista — sin llamadas a Chimmy al compartir.",
   "wc.aiShareCard.tierPro": "AF Pro",
   "wc.aiShareCard.tierPreview": "Vista previa básica",
   "wc.aiShareCard.emptyNoEntry":
@@ -2273,7 +2273,7 @@ const ES: WorldCupDictionary = {
   "wc.explain.tierPro": "AF Pro",
   "wc.explain.tierLocked": "Bloqueado",
   "wc.explain.locked":
-    "AF Pro abre una explicación privada de IA sobre tu estrategia. Los usuarios con tokens también pueden confirmar un uso único antes de generarla; las llamadas fallidas no descuentan tokens.",
+    "AF Pro abre una explicación privada de Chimmy sobre tu estrategia. Los usuarios con tokens también pueden confirmar un uso único antes de generarla; las llamadas fallidas no descuentan tokens.",
   "wc.explain.upgradeCta": "Actualizar a AF Pro →",
   "wc.explain.generate": "Generar explicación",
   "wc.explain.generating": "Generando...",
@@ -2307,7 +2307,7 @@ const ES: WorldCupDictionary = {
   "wc.uniqueness.rarity.common": "Común",
   "wc.uniqueness.percentShare": "Cuota {{percent}}%",
   "wc.uniqueness.privacyNote":
-    "Determinista — cuenta solo brackets finalizados. Sin IA, sin picks de otros usuarios.",
+    "Determinista — cuenta solo brackets finalizados. Sin Chimmy, sin picks de otros usuarios.",
   "wc.grade.eyebrow": "Calificación del bracket",
   "wc.grade.completionLabel": "{{percent}}% completo",
   "wc.grade.tierProDetail": "Detalle AF Pro",
@@ -2324,7 +2324,7 @@ const ES: WorldCupDictionary = {
   "wc.grade.recommendation": "Recomendación:",
   "wc.grade.lockedBody":
     "AF Pro desbloquea el riesgo, medidor de sorpresas, confianza del campeón, mayor riesgo y recomendación.",
-  "wc.confidence.title": "Verificación de confianza IA",
+  "wc.confidence.title": "Verificación de confianza Chimmy",
   "wc.confidence.tierOpen": "Abierto",
   "wc.confidence.tierLocked": "Bloqueado",
   "wc.confidence.missingPicks": "Picks faltantes:",
@@ -2347,7 +2347,7 @@ const ES: WorldCupDictionary = {
   "wc.confidence.privacyNote":
     "Solo predicción determinista y complejidad de puntuación. La orientación se limita a picks y mecánica de scoring.",
   "wc.confidence.lockedBody":
-    "Actualiza a IA/Pro para abrir la verificación de confianza. Usuarios bloqueados no generan llamadas de IA.",
+    "Actualiza a Chimmy/Pro para abrir la verificación de confianza. Usuarios bloqueados no generan llamadas de Chimmy.",
   "wc.path.title": "¿Qué necesita pasar para que yo gane?",
   "wc.path.subtitle":
     "Lectura privada de tu entrada actual. Los picks no finalizados de otros usuarios siguen ocultos.",
@@ -2383,13 +2383,13 @@ const ES: WorldCupDictionary = {
   "wc.groupStage.retrySave": "Reintentar guardar",
   "wc.groupStage.failedSave":
     "No se pudo guardar el orden del grupo",
-  "wc.groupStage.aiTitle": "Análisis IA",
+  "wc.groupStage.aiTitle": "Análisis Chimmy",
   "wc.groupStage.aiTierOpen": "Abierto",
   "wc.groupStage.aiTierLocked": "Bloqueado",
   "wc.groupStage.aiPrivacyNote":
     "Solo predicción y complejidad de puntuación. La orientación se limita a picks y mecánica.",
   "wc.groupStage.aiLockedBody":
-    "Actualiza a IA/Pro para abrir análisis deterministas. No se llama a IA mientras está bloqueado.",
+    "Actualiza a Chimmy/Pro para abrir análisis deterministas. No se llama a Chimmy mientras está bloqueado.",
   "wc.groupStage.resultCorrect": "Correcto +{{points}}",
   "wc.groupStage.resultWrong": "Incorrecto +0",
   "wc.groupStage.resultPending": "Resultado pendiente",
@@ -2426,7 +2426,7 @@ const ES: WorldCupDictionary = {
     "Elegir a {{name}} como avance por tercer puesto",
   "wc.thirdPlace.aiTitle": "Pregúntale a Chimmy",
   "wc.thirdPlace.aiLockedBody":
-    "IA/Pro abre los análisis de selección de tercer puesto. Los usuarios bloqueados solo ven el CTA y no se hace ninguna llamada de IA.",
+    "Chimmy/Pro abre los análisis de selección de tercer puesto. Los usuarios bloqueados solo ven el CTA y no se hace ninguna llamada de Chimmy.",
 
   // ── Matchup card (gameplay) ──────────────────────────────────────────
   "wc.matchup.matchLabel": "Partido {{number}}",
@@ -2460,7 +2460,7 @@ const ES: WorldCupDictionary = {
     "Más confianza = más puntos extra si aciertas.",
   "wc.matchup.confidencePointSingle": "{{value}} punto",
   "wc.matchup.confidencePointPlural": "{{value}} puntos",
-  "wc.matchup.aiInsightsLabel": "Análisis IA",
+  "wc.matchup.aiInsightsLabel": "Análisis Chimmy",
   "wc.matchup.aiTierOpen": "Abierto",
   "wc.matchup.aiTierLocked": "Bloqueado",
   "wc.matchup.aiSaferPick": "Pick más seguro:",
@@ -2478,7 +2478,7 @@ const ES: WorldCupDictionary = {
   "wc.matchup.aiPrivacyNote":
     "Solo predicción y complejidad de puntuación. La orientación se limita a picks y mecánica.",
   "wc.matchup.aiLockedBody":
-    "Actualiza a IA/Pro para abrir el análisis. Los usuarios bloqueados no activan llamadas de IA.",
+    "Actualiza a Chimmy/Pro para abrir el análisis. Los usuarios bloqueados no activan llamadas de Chimmy.",
   "wc.matchup.pickAriaPicked": "Elegir a {{name}} para ganar",
   "wc.matchup.pickAriaSelected": "Elegido: {{name}} para ganar",
   "wc.matchup.disabledLocked":
@@ -2564,7 +2564,7 @@ const ES: WorldCupDictionary = {
   "wc.review.scoringNoteBody": "Finalizado = enviado para clasificación. Bloqueado = plazo vencido, los picks no se pueden editar.",
   "wc.review.resultPendingNote": "Resultado pendiente significa que tu pick esta guardado, pero el resultado oficial del partido aun no se publico ni se puntuo.",
   "wc.review.afProUnlocks": "AF Pro desbloquea",
-  "wc.review.afProUnlocksDetails": "el informe completo — Confianza del campeón, Camino a la victoria, la narrativa de IA, tu perspectiva de singularidad y la tarjeta de compartir completa.",
+  "wc.review.afProUnlocksDetails": "el informe completo — Confianza del campeón, Camino a la victoria, la narrativa de Chimmy, tu perspectiva de singularidad y la tarjeta de compartir completa.",
   "wc.review.savedGroupTitle": "Picks de Fase de Grupos Guardados",
   "wc.review.savedGroupNote": "Tus predicciones · resultados oficiales mostrados por separado",
   "wc.review.groupPicksSaved": "{{n}}/4 guardados",
@@ -2664,7 +2664,7 @@ const ES: WorldCupDictionary = {
   "wc.insights.notClose": "Sin pelea cerrada",
   "wc.insights.gapPts": "{{n}} pts",
   "wc.insights.mostCorrectValue": "{{name}} ({{count}})",
-  "wc.insights.aiSummaryTitle": "Resumen IA del grupo",
+  "wc.insights.aiSummaryTitle": "Resumen Chimmy del grupo",
   "wc.insights.aiBadgeUnlocked": "Solo finalizadas",
   "wc.insights.aiBadgeLocked": "Bloqueado",
   "wc.insights.aiNotAvailable": "Aún no disponible",
@@ -2685,7 +2685,7 @@ const ES: WorldCupDictionary = {
   "wc.insights.aiPrivacyNote":
     "Usa solo datos públicos de la tabla finalizada. No incluye picks privados sin finalizar. La guía del bracket se limita a picks del grupo y mecánica de puntos.",
   "wc.insights.aiUpgradeNote":
-    "Actualiza a IA/Pro para resúmenes solo de entradas finalizadas. Las cuentas bloqueadas no disparan llamadas de IA.",
+    "Actualiza a Chimmy/Pro para resúmenes solo de entradas finalizadas. Las cuentas bloqueadas no disparan llamadas de Chimmy.",
 
   // ── Settings panel chrome (Phase 6) ──────────────────────────────────
   "wc.settings.title": "Ajustes del grupo",
@@ -2702,7 +2702,7 @@ const ES: WorldCupDictionary = {
   // ── Commissioner Brain panel chrome (Phase 6) ────────────────────────
   "wc.brain.title": "Cerebro del comisionado",
   "wc.brain.subtitle":
-    "Resumen, alertas y ayudas IA — controla tu grupo desde un solo lugar.",
+    "Resumen, alertas y ayudas Chimmy — controla tu grupo desde un solo lugar.",
   "wc.brain.loading": "Cargando herramientas del comisionado…",
   "wc.brain.loadError":
     "No se pudieron cargar las herramientas del comisionado.",
@@ -2730,7 +2730,7 @@ const ES: WorldCupDictionary = {
   "wc.pickHelp.seeding": "Cargando...",
   "wc.pickHelp.knockoutFromGroups": "Tus emparejamientos de eliminatorias se generan desde tus predicciones de Fase de Grupos. Clasifica todos los grupos y elige avanzados de tercer lugar para desbloquear más ranuras.",
   "wc.pickHelp.title": "Ayuda para Picks Guiados",
-  "wc.pickHelp.body": "Usa el botón fijo Comenzar Picks en móvil para avanzar por los emparejamientos de uno en uno. Las herramientas de IA se habilitarán más adelante.",
+  "wc.pickHelp.body": "Usa el botón fijo Comenzar Picks en móvil para avanzar por los emparejamientos de uno en uno. Las herramientas de Chimmy se habilitarán más adelante.",
   "wc.pickHelp.knockoutLocked": "Eliminatorias Bloqueadas",
   "wc.pickHelp.continueGuided": "Continuar Picks Guiados",
   "wc.pickHelp.reviewGuided": "Revisar Picks Guiados",
@@ -2738,10 +2738,10 @@ const ES: WorldCupDictionary = {
 
   // ── AI Simulation lock panel ─────────────────────────────────────────
   "wc.aiLock.badge": "Vista Previa Bloqueada",
-  "wc.aiLock.title": "Simulación de IA Bloqueada",
-  "wc.aiLock.body": "La Simulación de IA desbloquea ganadores proyectados, sorpresas de bracket y rutas al campeonato.",
+  "wc.aiLock.title": "Simulación de Chimmy Bloqueada",
+  "wc.aiLock.body": "La Simulación de Chimmy desbloquea ganadores proyectados, sorpresas de bracket y rutas al campeonato.",
   "wc.aiLock.tier": "Requiere AF Pro o AF Supreme",
-  "wc.aiLock.commissionerNote": "Las herramientas de IA del comisionado requieren AF Comisionado o AF Supreme.",
+  "wc.aiLock.commissionerNote": "Las herramientas de Chimmy del comisionado requieren AF Comisionado o AF Supreme.",
 
   // ── Premium access panel ─────────────────────────────────────────────
   "wc.premium.eyebrow": "Acceso Copa del Mundo",
@@ -2762,11 +2762,11 @@ const ES: WorldCupDictionary = {
   "wc.premium.card.export.desc": "Exporta clasificaciones y resúmenes de brackets para revisión del comisionado.",
   "wc.premium.card.multiEntry.title": "Múltiples Entradas",
   "wc.premium.card.multiEntry.desc": "Controles de múltiples entradas a nivel de pool más allá de la primera entrada gratuita.",
-  "wc.premium.card.bracketBuilder.title": "Constructor de Brackets IA",
+  "wc.premium.card.bracketBuilder.title": "Constructor de Brackets Chimmy",
   "wc.premium.card.bracketBuilder.desc": "Construcción guiada de brackets con sugerencias deterministas contextuales.",
-  "wc.premium.card.matchupPreview.title": "Vista Previa de Emparejamientos IA",
+  "wc.premium.card.matchupPreview.title": "Vista Previa de Emparejamientos Chimmy",
   "wc.premium.card.matchupPreview.desc": "Vista previa de tendencias, riesgos y rutas de sorpresa cuando los encuentros oficiales estén disponibles.",
-  "wc.premium.card.whatIf.title": "Escenarios ¿Qué Pasaría Si? IA",
+  "wc.premium.card.whatIf.title": "Escenarios ¿Qué Pasaría Si? Chimmy",
   "wc.premium.card.whatIf.desc": "Escenarios del leaderboard para saber qué necesita pasar a continuación.",
   "wc.premium.card.alerts.title": "Alertas IA",
   "wc.premium.card.alerts.desc": "Alertas futuras para cambios en el bracket, notas del optimizador de grupos y señales del buscador de sorpresas.",
@@ -2855,11 +2855,11 @@ const ZH: WorldCupDictionary = {
   "wc.publicHub.feature.ncaaScoring":
     "NCAA 風格計分 — 越後面的回合分數越高。",
   "wc.publicHub.feature.guidedPicker":
-    "AI 對戰預覽輔助的引導式選擇工具。",
+    "Chimmy 對戰預覽輔助的引導式選擇工具。",
   "wc.publicHub.feature.liveTracking":
     "即時比分與分鐘級追蹤。",
   "wc.publicHub.feature.aiBracketBuilder":
-    "AI 對戰表生成器自動填入尚未選擇的比賽。",
+    "Chimmy 對戰表生成器自動填入尚未選擇的比賽。",
   "wc.publicHub.feature.perBracketLeaderboard":
     "每個對戰表都有獨立排行榜,個別排名。",
   "wc.publicHub.feature.lockOnKickoff":
@@ -2895,20 +2895,20 @@ const ZH: WorldCupDictionary = {
   "wc.publicHub.how.step4Title": "定稿並衝上排行榜",
   "wc.publicHub.how.step4Body":
     "在第一場比賽開踢前鎖定對戰表，然後即時追蹤排名並分享結果。",
-  "wc.publicHub.ai.title": "AI 驅動的對戰表工具",
+  "wc.publicHub.ai.title": "Chimmy 驅動的對戰表工具",
   "wc.publicHub.ai.subtitle":
-    "Chimmy 和 AllFantasy AI 幫助你理解風險、發掘洞察，並指導管理員。",
+    "Chimmy 和 AllFantasy Chimmy 幫助你理解風險、發掘洞察，並指導管理員。",
   "wc.publicHub.ai.explain.title": "解析我的對戰表",
   "wc.publicHub.ai.explain.desc":
-    "AI 讀取你的選擇並解釋你的對戰表有何獨特之處。",
+    "Chimmy 讀取你的選擇並解釋你的對戰表有何獨特之處。",
   "wc.publicHub.ai.danger.title": "淘汰賽風險區",
   "wc.publicHub.ai.danger.desc": "查看你的哪些淘汰賽選擇最容易受到冷門影響。",
   "wc.publicHub.ai.chat.title": "群組聊天 + 策略",
   "wc.publicHub.ai.chat.desc": "在群組聊天中直接問 @Chimmy 選人建議。",
   "wc.publicHub.ai.commissioner.title": "管理員洞察",
   "wc.publicHub.ai.commissioner.desc":
-    "AI 摘要涵蓋群組健康度、對戰表多樣性和成員活躍度。",
-  "wc.publicHub.ai.gating": "適用於符合資格的 AI 方案或代幣工具。",
+    "Chimmy 摘要涵蓋群組健康度、對戰表多樣性和成員活躍度。",
+  "wc.publicHub.ai.gating": "適用於符合資格的 Chimmy 方案或代幣工具。",
   "wc.publicHub.social.title": "呼朋引伴一起玩。",
   "wc.publicHub.social.desc":
     "分享你的群組連結、向朋友發起挑戰，讓排行榜決出勝負。",
@@ -2997,21 +2997,21 @@ const ZH: WorldCupDictionary = {
   "wc.entryList.noBracketsTitle": "尚未建立對戰表",
   "wc.entryList.noBracketsBody": "請先建立個人對戰表，賽程確定後即可進行選擇。",
   // ── Pool dashboard: AI features teaser ───────────────────────────────
-  "wc.home.ai.title": "AI 功能",
+  "wc.home.ai.title": "Chimmy 功能",
   "wc.home.ai.chimmyHint": "在水池聊天中輸入 @chimmy 以獲得個性化的對戰表建議。",
-  "wc.home.ai.explainHint": "前往「檢閱」標籤頁，獲取 AI 對你的對戰表策略的解釋。",
+  "wc.home.ai.explainHint": "前往「檢閱」標籤頁，獲取 Chimmy 對你的對戰表策略的解釋。",
   "wc.home.ai.unlockHint": "升級至 AF Pro 以解鎖 Chimmy 和「解釋我的對戰表」功能。",
 
   // ── AI CTA panel ──────────────────────────────────────────────────────
-  "wc.cta.panelTitle": "AI 洞察",
-  "wc.cta.aiRowLabel": "AI / Pro",
+  "wc.cta.panelTitle": "Chimmy 洞察",
+  "wc.cta.aiRowLabel": "Chimmy / Pro",
   "wc.cta.commissionerRowLabel": "管理員",
   "wc.cta.askChimmy": "詢問 Chimmy",
   "wc.cta.askChimmyDesc": "以對戰表問題開啟 Chimmy",
   "wc.cta.pathToFirst": "通往第一的路",
   "wc.cta.pathToFirstDesc": "詢問 Chimmy 你的對戰表需要什麼才能爬到第一名",
   "wc.cta.explainBracket": "解釋我的對戰表",
-  "wc.cta.explainBracketDesc": "獲取 AI 對你對戰表策略的解釋",
+  "wc.cta.explainBracketDesc": "獲取 Chimmy 對你對戰表策略的解釋",
   "wc.cta.rootingGuide": "應援指南",
   "wc.cta.rootingGuideDesc": "為此參賽作品生成應援指南",
   "wc.cta.poolSwing": "排名波動",
@@ -3019,7 +3019,7 @@ const ZH: WorldCupDictionary = {
   "wc.cta.championRisk": "冠軍風險",
   "wc.cta.championRiskDesc": "分析整個群組中冠軍選擇的風險",
   "wc.cta.commissionerRecap": "管理員摘要",
-  "wc.cta.commissionerRecapDesc": "生成 AI 群組摘要（發布前預覽）",
+  "wc.cta.commissionerRecapDesc": "生成 Chimmy 群組摘要（發布前預覽）",
   "wc.cta.postHype": "發布炒作",
   "wc.cta.postHypeDesc": "在群組聊天中發布炒作訊息",
   "wc.cta.findIncomplete": "未完成的選擇",
@@ -3043,7 +3043,7 @@ const ZH: WorldCupDictionary = {
   "wc.chat.aiHint.unlocked":
     "@chimmy 的回覆是私密的。只有你能在此群組中看到你的提問和 Chimmy 的回答。",
   "wc.chat.aiHint.locked":
-    "@chimmy 私人回覆需要 AI/Pro 方案。升級後即可在群組聊天中向 Chimmy 提問。",
+    "@chimmy 私人回覆需要 Chimmy/Pro 方案。升級後即可在群組聊天中向 Chimmy 提問。",
   "wc.chat.trustNote": "保持競爭。保持禮貌。",
   "wc.chat.loading": "載入群組聊天中…",
   "wc.chat.refresh": "重新整理",
@@ -3112,13 +3112,13 @@ const ZH: WorldCupDictionary = {
   // ── AI upgrade / cap messages ────────────────────────────────────────
   "wc.ai.upgrade.chimmy.free": "You've used today's 3 Chimmy questions. Upgrade to AF Pro for 30 per day.",
   "wc.ai.upgrade.chimmy.pro": "You've used today's 30 Chimmy questions. They reset at midnight UTC.",
-  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily AI bracket breakdowns.",
+  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily Chimmy bracket breakdowns.",
   "wc.ai.upgrade.explain.pro": "You've used today's bracket explanation. It resets at midnight UTC.",
-  "wc.ai.upgrade.matchup.free": "AI Matchup Intelligence requires AF Pro.",
-  "wc.ai.upgrade.matchup.pro": "You've used today's 25 AI matchup analyses. They reset at midnight UTC.",
+  "wc.ai.upgrade.matchup.free": "Chimmy Matchup Intelligence requires AF Pro.",
+  "wc.ai.upgrade.matchup.pro": "You've used today's 25 Chimmy matchup analyses. They reset at midnight UTC.",
   "wc.ai.upgrade.brain.free": "Commissioner Brain requires AF Commissioner or higher.",
   "wc.ai.upgrade.brain.pro": "You've used today's Commissioner Brain calls. They reset at midnight UTC.",
-  "wc.ai.upgrade.resetHint": "Daily AI limits reset at midnight UTC.",
+  "wc.ai.upgrade.resetHint": "Daily Chimmy limits reset at midnight UTC.",
   "wc.ai.upgrade.cta": "Upgrade Plan",
 
   // ── Knockouts tab ────────────────────────────────────────────────────
@@ -3156,13 +3156,13 @@ const ZH: WorldCupDictionary = {
   "wc.danger.severityLow": "低",
   "wc.danger.severitySuffix": "風險",
   "wc.danger.footer":
-    "僅統計你自己的選擇與公開賽程。不呼叫 AI。不使用其他使用者的選擇。",
+    "僅統計你自己的選擇與公開賽程。不呼叫 Chimmy。不使用其他使用者的選擇。",
 
   // ── AI Report (Review tab) ───────────────────────────────────────────
   "wc.aiReport.eyebrow": "報告",
-  "wc.aiReport.title": "你的對戰表 AI 報告",
+  "wc.aiReport.title": "你的對戰表 Chimmy 報告",
   "wc.aiReport.subtitle":
-    "六項 AI 訊號全部來自你自己的選擇。以下內容僅你可見。",
+    "六項 Chimmy 訊號全部來自你自己的選擇。以下內容僅你可見。",
   "wc.aiReport.tierActive": "AF Pro 已啟用",
   "wc.aiReport.tierPreview": "AF Pro 預覽",
 
@@ -3326,7 +3326,7 @@ const ZH: WorldCupDictionary = {
     "於 {{at}} 送出。在群組鎖定前你仍可編輯 — 趁名額還沒滿,趕快邀請朋友。",
   "wc.finalize.copyShare": "複製分享文字",
   "wc.finalize.copyShareCopied": "已複製!",
-  "wc.finalize.shareReport": "分享我的 AI 對戰表報告",
+  "wc.finalize.shareReport": "分享我的 Chimmy 對戰表報告",
   "wc.finalize.inviteFriends": "邀請朋友來挑戰我的對戰表",
   "wc.finalize.previewShare": "預覽分享文字",
 
@@ -3374,7 +3374,7 @@ const ZH: WorldCupDictionary = {
   "wc.lb.noChampionPick": "未選擇冠軍",
   "wc.lb.alive": "仍在",
   "wc.lb.busted": "已淘汰",
-  "wc.lb.aiProUnlocks": "AF Pro 可解鎖 AI 勝率、對戰表健康度及冠軍路徑壓力。",
+  "wc.lb.aiProUnlocks": "AF Pro 可解鎖 Chimmy 勝率、對戰表健康度及冠軍路徑壓力。",
   "wc.lb.ptsLabel": "分",
   "wc.lb.trustNote": "無賭注。無博彩平台。只有策略、預測和炫耀的權利。",
   // ── Share card UI chrome ──────────────────────────────────────────────
@@ -3382,7 +3382,7 @@ const ZH: WorldCupDictionary = {
   "wc.share.titleInvite": "群組邀請",
   "wc.share.titleLeaderboard": "排行榜截圖",
   "wc.share.titleBracket": "我的對戰表摘要",
-  "wc.share.titleRecap": "AI 回顧",
+  "wc.share.titleRecap": "Chimmy 回顧",
   "wc.share.description": "可直接分享到社群媒體的對戰表或群組排行榜文字。",
   "wc.share.publicSafe": "公開安全",
   "wc.share.copy": "複製",
@@ -3505,7 +3505,7 @@ const ZH: WorldCupDictionary = {
   // ── AI Report card chrome (extended) ─────────────────────────────────
   "wc.aiShareCard.eyebrow": "分享圖卡",
   "wc.aiShareCard.subtitle":
-    "六項 AI 訊號集中在一張可複製的圖卡。確定性 — 分享不會呼叫 AI。",
+    "六項 Chimmy 訊號集中在一張可複製的圖卡。確定性 — 分享不會呼叫 Chimmy。",
   "wc.aiShareCard.tierPro": "AF Pro",
   "wc.aiShareCard.tierPreview": "基本版預覽",
   "wc.aiShareCard.emptyNoEntry": "選擇對戰表項目即可產生分享圖卡。",
@@ -3514,14 +3514,14 @@ const ZH: WorldCupDictionary = {
   "wc.aiShareCard.share": "分享",
   "wc.aiShareCard.privacyNote":
     "在你分享前完全私人保留。只用你自己的對戰表資料以及群組的彙總統計。",
-  "wc.explain.eyebrow": "私人 AI",
+  "wc.explain.eyebrow": "私人 Chimmy",
   "wc.explain.title": "解析我的對戰表",
   "wc.explain.subtitle":
     "你的對戰表策略私人敘事分析。只有你看得到。",
   "wc.explain.tierPro": "AF Pro",
   "wc.explain.tierLocked": "已鎖定",
   "wc.explain.locked":
-    "AF Pro 可解鎖 AI 私人解析:風格、最安全的選擇、風險最高的選擇、冠軍路徑與一個具體建議。",
+    "AF Pro 可解鎖 Chimmy 私人解析:風格、最安全的選擇、風險最高的選擇、冠軍路徑與一個具體建議。",
   "wc.explain.upgradeCta": "升級至 AF Pro →",
   "wc.explain.generate": "產生解析",
   "wc.explain.generating": "產生中...",
@@ -3554,7 +3554,7 @@ const ZH: WorldCupDictionary = {
   "wc.uniqueness.rarity.common": "常見",
   "wc.uniqueness.percentShare": "佔比 {{percent}}%",
   "wc.uniqueness.privacyNote":
-    "確定性 — 只計算已送出的對戰表。不呼叫 AI,不顯示其他使用者的原始選擇。",
+    "確定性 — 只計算已送出的對戰表。不呼叫 Chimmy,不顯示其他使用者的原始選擇。",
   "wc.grade.eyebrow": "對戰表評分",
   "wc.grade.completionLabel": "完成度 {{percent}}%",
   "wc.grade.tierProDetail": "AF Pro 詳細",
@@ -3571,7 +3571,7 @@ const ZH: WorldCupDictionary = {
   "wc.grade.recommendation": "建議:",
   "wc.grade.lockedBody":
     "AF Pro 解鎖風險、爆冷指數、冠軍信心度、最大風險與建議細節。",
-  "wc.confidence.title": "AI 信心檢查",
+  "wc.confidence.title": "Chimmy 信心檢查",
   "wc.confidence.tierOpen": "已開啟",
   "wc.confidence.tierLocked": "已鎖定",
   "wc.confidence.missingPicks": "缺少的選擇:",
@@ -3593,7 +3593,7 @@ const ZH: WorldCupDictionary = {
   "wc.confidence.privacyNote":
     "僅為確定性預測與計分複雜度。對戰表指引僅限於選擇與計分機制。",
   "wc.confidence.lockedBody":
-    "升級到 AI/Pro 即可開啟信心檢查。未升級的使用者不會觸發 AI 呼叫。",
+    "升級到 Chimmy/Pro 即可開啟信心檢查。未升級的使用者不會觸發 Chimmy 呼叫。",
   "wc.path.title": "我需要什麼條件才能贏?",
   "wc.path.subtitle":
     "私人當前項目分析。其他使用者尚未送出的選擇仍然保密。",
@@ -3626,13 +3626,13 @@ const ZH: WorldCupDictionary = {
   "wc.groupStage.saved": "已儲存",
   "wc.groupStage.retrySave": "重試儲存",
   "wc.groupStage.failedSave": "無法儲存小組排名",
-  "wc.groupStage.aiTitle": "AI 解析",
+  "wc.groupStage.aiTitle": "Chimmy 解析",
   "wc.groupStage.aiTierOpen": "已開啟",
   "wc.groupStage.aiTierLocked": "已鎖定",
   "wc.groupStage.aiPrivacyNote":
     "僅為預測與計分複雜度。指引僅限於選擇與計分機制。",
   "wc.groupStage.aiLockedBody":
-    "升級到 AI/Pro 開啟確定性 World Cup 解析。鎖定期間不會呼叫 AI。",
+    "升級到 Chimmy/Pro 開啟確定性 World Cup 解析。鎖定期間不會呼叫 Chimmy。",
   "wc.groupStage.resultCorrect": "正確 +{{points}}",
   "wc.groupStage.resultWrong": "錯誤 +0",
   "wc.groupStage.resultPending": "待定",
@@ -3666,7 +3666,7 @@ const ZH: WorldCupDictionary = {
     "將 {{name}} 選為第三名晉級",
   "wc.thirdPlace.aiTitle": "詢問 Chimmy",
   "wc.thirdPlace.aiLockedBody":
-    "AI/Pro 可解鎖第三名選擇解析。未升級的使用者只看到此 CTA,不會發出 AI 請求。",
+    "Chimmy/Pro 可解鎖第三名選擇解析。未升級的使用者只看到此 CTA,不會發出 Chimmy 請求。",
 
   // ── Matchup card (gameplay) ──────────────────────────────────────────
   "wc.matchup.matchLabel": "第 {{number}} 場",
@@ -3700,7 +3700,7 @@ const ZH: WorldCupDictionary = {
     "信心越高,猜中可獲得越多加分。",
   "wc.matchup.confidencePointSingle": "{{value}} 分",
   "wc.matchup.confidencePointPlural": "{{value}} 分",
-  "wc.matchup.aiInsightsLabel": "AI 解析",
+  "wc.matchup.aiInsightsLabel": "Chimmy 解析",
   "wc.matchup.aiTierOpen": "已開啟",
   "wc.matchup.aiTierLocked": "已鎖定",
   "wc.matchup.aiSaferPick": "較安全的選擇:",
@@ -3718,7 +3718,7 @@ const ZH: WorldCupDictionary = {
   "wc.matchup.aiPrivacyNote":
     "僅為預測與計分複雜度。指引僅限於選擇與計分機制。",
   "wc.matchup.aiLockedBody":
-    "升級到 AI/Pro 開啟對戰解析。未升級者不會觸發 AI 呼叫。",
+    "升級到 Chimmy/Pro 開啟對戰解析。未升級者不會觸發 Chimmy 呼叫。",
   "wc.matchup.pickAriaPicked": "選 {{name}} 為贏家",
   "wc.matchup.pickAriaSelected": "已選:{{name}} 為贏家",
   "wc.matchup.disabledLocked": "此比賽的選擇已鎖定",
@@ -3798,7 +3798,7 @@ const ZH: WorldCupDictionary = {
   "wc.review.scoringNoteTitle": "計分說明",
   "wc.review.scoringNoteBody": "已確認 = 已提交至排行榜。已鎖定 = 截止日期已過，選擇無法再編輯。",
   "wc.review.afProUnlocks": "AF Pro 解鎖",
-  "wc.review.afProUnlocksDetails": "完整報告——冠軍信心、勝利路徑、AI 解說敘事、你的獨特洞察以及完整分享卡。",
+  "wc.review.afProUnlocksDetails": "完整報告——冠軍信心、勝利路徑、Chimmy 解說敘事、你的獨特洞察以及完整分享卡。",
   "wc.review.savedGroupTitle": "已儲存的小組賽選擇",
   "wc.review.savedGroupNote": "你的預測 · 官方結果另行顯示",
   "wc.review.groupPicksSaved": "{{n}}/4 已儲存",
@@ -3897,7 +3897,7 @@ const ZH: WorldCupDictionary = {
   "wc.insights.notClose": "差距不近",
   "wc.insights.gapPts": "{{n}} 分",
   "wc.insights.mostCorrectValue": "{{name}}({{count}})",
-  "wc.insights.aiSummaryTitle": "AI 群組摘要",
+  "wc.insights.aiSummaryTitle": "Chimmy 群組摘要",
   "wc.insights.aiBadgeUnlocked": "僅限已完成",
   "wc.insights.aiBadgeLocked": "已鎖定",
   "wc.insights.aiNotAvailable": "尚不可用",
@@ -3912,13 +3912,13 @@ const ZH: WorldCupDictionary = {
     "前兩名差距在 5 分以內。",
   "wc.insights.aiRaceNotClose":
     "目前前兩名差距還不算近。",
-  "wc.insights.aiWinReadLabel": "AI 勝率解讀:",
+  "wc.insights.aiWinReadLabel": "Chimmy 勝率解讀:",
   "wc.insights.aiWinReadBody":
     "{{name}} 預測 {{pct}}%,對戰表健康度 {{health}}。",
   "wc.insights.aiPrivacyNote":
     "僅使用已完成/公開的排行榜資料。不包含未完成的私人選擇。對戰指引僅限於群組選擇與計分機制。",
   "wc.insights.aiUpgradeNote":
-    "升級 AI/Pro 即可獲得僅限已完成的群組摘要。鎖定的使用者不會觸發 AI 呼叫。",
+    "升級 Chimmy/Pro 即可獲得僅限已完成的群組摘要。鎖定的使用者不會觸發 Chimmy 呼叫。",
 
   // ── Settings panel chrome (Phase 6) ──────────────────────────────────
   "wc.settings.title": "群組設定",
@@ -3935,7 +3935,7 @@ const ZH: WorldCupDictionary = {
   // ── Commissioner Brain panel chrome (Phase 6) ────────────────────────
   "wc.brain.title": "管理員智慧助手",
   "wc.brain.subtitle":
-    "概況、警示與 AI 助手 — 一處管理整個群組。",
+    "概況、警示與 Chimmy 助手 — 一處管理整個群組。",
   "wc.brain.loading": "正在載入管理員工具…",
   "wc.brain.loadError": "無法載入管理員工具。",
 
@@ -3962,7 +3962,7 @@ const ZH: WorldCupDictionary = {
   "wc.pickHelp.seeding": "載入中...",
   "wc.pickHelp.knockoutFromGroups": "您的淘汰賽對陣由您的小組賽預測生成。排列所有小組並選擇第三名晉級者以解鎖更多槽位。",
   "wc.pickHelp.title": "引導選擇說明",
-  "wc.pickHelp.body": "在行動裝置上使用固定的「開始選擇」按鈕，逐一瀏覽對陣。AI 對戰表工具將在後續版本中開放。",
+  "wc.pickHelp.body": "在行動裝置上使用固定的「開始選擇」按鈕，逐一瀏覽對陣。Chimmy 對戰表工具將在後續版本中開放。",
   "wc.pickHelp.knockoutLocked": "淘汰賽已鎖定",
   "wc.pickHelp.continueGuided": "繼續引導選擇",
   "wc.pickHelp.reviewGuided": "檢視引導選擇",
@@ -3970,10 +3970,10 @@ const ZH: WorldCupDictionary = {
 
   // ── AI Simulation lock panel ─────────────────────────────────────────
   "wc.aiLock.badge": "鎖定預覽",
-  "wc.aiLock.title": "AI 模擬已鎖定",
-  "wc.aiLock.body": "AI 模擬解鎖後可查看預測勝者、冷門對陣及冠軍路徑。",
+  "wc.aiLock.title": "Chimmy 模擬已鎖定",
+  "wc.aiLock.body": "Chimmy 模擬解鎖後可查看預測勝者、冷門對陣及冠軍路徑。",
   "wc.aiLock.tier": "需要 AF Pro 或 AF Supreme",
-  "wc.aiLock.commissionerNote": "管理員 AI 工具需要 AF 管理員或 AF Supreme。",
+  "wc.aiLock.commissionerNote": "管理員 Chimmy 工具需要 AF 管理員或 AF Supreme。",
 
   // ── Premium access panel ─────────────────────────────────────────────
   "wc.premium.eyebrow": "世界盃存取權",
@@ -3983,7 +3983,7 @@ const ZH: WorldCupDictionary = {
   "wc.premium.freeLimitSingle": "免費用戶可在此池建立一個對戰表參賽。",
   "wc.premium.freeLimitPlural": "此池最多允許 {{n}} 個參賽。免費用戶仍可建立第一個對戰表；AF 管理員控制項管理多參賽規則。",
   "wc.premium.commissionerSection": "AF 管理員",
-  "wc.premium.aiSection": "AI/Pro",
+  "wc.premium.aiSection": "Chimmy/Pro",
   "wc.premium.unlocked": "已解鎖",
   "wc.premium.card.commissioner.title": "AF 管理員工具",
   "wc.premium.card.commissioner.descOwner": "全存取用戶可使用準備狀態、同步、模擬、設定、邀請及管理員 QA 工具。",
@@ -3994,13 +3994,13 @@ const ZH: WorldCupDictionary = {
   "wc.premium.card.export.desc": "匯出排名和對戰表摘要供管理員審核。",
   "wc.premium.card.multiEntry.title": "多重參賽",
   "wc.premium.card.multiEntry.desc": "超越預設免費首次參賽體驗的池級多重參賽控制。",
-  "wc.premium.card.bracketBuilder.title": "AI 對戰表建構器",
+  "wc.premium.card.bracketBuilder.title": "Chimmy 對戰表建構器",
   "wc.premium.card.bracketBuilder.desc": "引導式對戰表建構及確定性情境感知建議的佔位功能。",
-  "wc.premium.card.matchupPreview.title": "AI 對陣預覽",
+  "wc.premium.card.matchupPreview.title": "Chimmy 對陣預覽",
   "wc.premium.card.matchupPreview.desc": "官方賽程發布後預覽對陣趨向、風險及冷門路徑。",
-  "wc.premium.card.whatIf.title": "AI 假設情境",
+  "wc.premium.card.whatIf.title": "Chimmy 假設情境",
   "wc.premium.card.whatIf.desc": "排行榜情境，顯示接下來需要發生什麼。",
-  "wc.premium.card.alerts.title": "AI 警報",
+  "wc.premium.card.alerts.title": "Chimmy 警報",
   "wc.premium.card.alerts.desc": "對戰表變化、小組賽優化器注記及冷門發現信號的未來警報。",
 
   // ── Daily Edge Report ─────────────────────────────────────────────────
@@ -4088,11 +4088,11 @@ const FIL: WorldCupDictionary = {
   "wc.publicHub.feature.ncaaScoring":
     "NCAA-style scoring — mas mataas na puntos sa mga huling round.",
   "wc.publicHub.feature.guidedPicker":
-    "Gabay sa pag-pick gamit ang AI matchup previews.",
+    "Gabay sa pag-pick gamit ang Chimmy matchup previews.",
   "wc.publicHub.feature.liveTracking":
     "Live na iskor at minute-by-minute na tracking.",
   "wc.publicHub.feature.aiBracketBuilder":
-    "Awtomatikong pupunan ng AI bracket builder ang mga hindi napiling laban.",
+    "Awtomatikong pupunan ng Chimmy bracket builder ang mga hindi napiling laban.",
   "wc.publicHub.feature.perBracketLeaderboard":
     "Per-bracket leaderboard — bawat entry ay may sariling ranggo.",
   "wc.publicHub.feature.lockOnKickoff":
@@ -4130,12 +4130,12 @@ const FIL: WorldCupDictionary = {
   "wc.publicHub.how.step4Title": "I-finalize at umakyat",
   "wc.publicHub.how.step4Body":
     "I-lock ang bracket bago magsimula ang laro, tapos panoorin ang live standings at ibahagi ang resulta.",
-  "wc.publicHub.ai.title": "AI-Powered na Bracket Tools",
+  "wc.publicHub.ai.title": "Chimmy-powered na Bracket Tools",
   "wc.publicHub.ai.subtitle":
-    "Tinutulungan ka ng Chimmy at AllFantasy AI na maunawaan ang panganib, malaman ang mga insight, at gabayan ang mga commissioner.",
+    "Tinutulungan ka ng Chimmy at AllFantasy Chimmy na maunawaan ang panganib, malaman ang mga insight, at gabayan ang mga commissioner.",
   "wc.publicHub.ai.explain.title": "Ipaliwanag ang aking bracket",
   "wc.publicHub.ai.explain.desc":
-    "Binabasa ng AI ang iyong mga pick at inilalahad kung ano ang kakaiba ng iyong bracket.",
+    "Binabasa ng Chimmy ang iyong mga pick at inilalahad kung ano ang kakaiba ng iyong bracket.",
   "wc.publicHub.ai.danger.title": "Knockout Danger Zones",
   "wc.publicHub.ai.danger.desc":
     "Tingnan kung aling knockout picks ang pinaka-vulnerable sa mga upset.",
@@ -4143,9 +4143,9 @@ const FIL: WorldCupDictionary = {
   "wc.publicHub.ai.chat.desc": "Tanungin si @Chimmy para sa pick advice sa pool chat.",
   "wc.publicHub.ai.commissioner.title": "Commissioner Insights",
   "wc.publicHub.ai.commissioner.desc":
-    "Mga AI summary para sa pool health, bracket diversity, at aktibidad ng miyembro.",
+    "Mga Chimmy summary para sa pool health, bracket diversity, at aktibidad ng miyembro.",
   "wc.publicHub.ai.gating":
-    "Available sa mga eligible na AI plan o token-powered na tools.",
+    "Available sa mga eligible na Chimmy plan o token-powered na tools.",
   "wc.publicHub.social.title": "Isama ang iyong grupo.",
   "wc.publicHub.social.desc":
     "Ibahagi ang pool link, hamunin ang mga kaibigan, at hayaan ang leaderboard ang magpasya.",
@@ -4234,21 +4234,21 @@ const FIL: WorldCupDictionary = {
   "wc.entryList.noBracketsTitle": "Wala pang bracket na nagawa",
   "wc.entryList.noBracketsBody": "Gumawa muna ng iyong personal na bracket, pagkatapos ay maaari kang gumawa ng mga pick kapag handa na ang mga fixture.",
   // ── Pool dashboard: AI features teaser ───────────────────────────────
-  "wc.home.ai.title": "Mga AI Feature",
+  "wc.home.ai.title": "Mga Chimmy Feature",
   "wc.home.ai.chimmyHint": "I-type ang @chimmy sa pool chat para sa personalized na bracket advice.",
-  "wc.home.ai.explainHint": "Pumunta sa Review tab para makakuha ng AI na paliwanag ng iyong bracket strategy.",
+  "wc.home.ai.explainHint": "Pumunta sa Review tab para makakuha ng Chimmy na paliwanag ng iyong bracket strategy.",
   "wc.home.ai.unlockHint": "Mag-upgrade sa AF Pro para i-unlock ang Chimmy at Explain My Bracket.",
 
   // ── AI CTA panel ──────────────────────────────────────────────────────
-  "wc.cta.panelTitle": "Mga AI Insight",
-  "wc.cta.aiRowLabel": "AI / Pro",
+  "wc.cta.panelTitle": "Mga Chimmy Insight",
+  "wc.cta.aiRowLabel": "Chimmy / Pro",
   "wc.cta.commissionerRowLabel": "Commissioner",
   "wc.cta.askChimmy": "Tanungin si Chimmy",
   "wc.cta.askChimmyDesc": "Buksan si Chimmy na may tanong tungkol sa bracket",
   "wc.cta.pathToFirst": "Landas Patungo sa Una",
   "wc.cta.pathToFirstDesc": "Tanungin si Chimmy kung ano ang kailangan ng iyong bracket para maabot ang unang lugar",
   "wc.cta.explainBracket": "Ipaliwanag ang Aking Bracket",
-  "wc.cta.explainBracketDesc": "Makakuha ng AI na paliwanag ng iyong bracket strategy",
+  "wc.cta.explainBracketDesc": "Makakuha ng Chimmy na paliwanag ng iyong bracket strategy",
   "wc.cta.rootingGuide": "Gabay sa Pagtangkilik",
   "wc.cta.rootingGuideDesc": "Gumawa ng gabay sa pagtangkilik para sa entry na ito",
   "wc.cta.poolSwing": "Pool Swing",
@@ -4256,7 +4256,7 @@ const FIL: WorldCupDictionary = {
   "wc.cta.championRisk": "Panganib ng Kampeon",
   "wc.cta.championRiskDesc": "Suriin ang panganib ng champion pick sa buong pool",
   "wc.cta.commissionerRecap": "Commissioner Recap",
-  "wc.cta.commissionerRecapDesc": "Gumawa ng AI pool recap (preview bago i-post)",
+  "wc.cta.commissionerRecapDesc": "Gumawa ng Chimmy pool recap (preview bago i-post)",
   "wc.cta.postHype": "Mag-post ng Hype",
   "wc.cta.postHypeDesc": "Mag-post ng hype message sa pool chat",
   "wc.cta.findIncomplete": "Mga Hindi Kumpletong Pick",
@@ -4281,7 +4281,7 @@ const FIL: WorldCupDictionary = {
   "wc.chat.aiHint.unlocked":
     "Ang mga tugon ng @chimmy ay pribado. Ikaw lang ang makakakita ng iyong prompt at sagot ni Chimmy sa pool na ito.",
   "wc.chat.aiHint.locked":
-    "Ang mga pribadong tugon ng @chimmy ay nangangailangan ng AI/Pro. Mag-upgrade para magtanong kay Chimmy mula sa pool chat.",
+    "Ang mga pribadong tugon ng @chimmy ay nangangailangan ng Chimmy/Pro. Mag-upgrade para magtanong kay Chimmy mula sa pool chat.",
   "wc.chat.trustNote": "Maging mapagkumpitensya. Maging malinis.",
   "wc.chat.loading": "Naglo-load ng pool chat…",
   "wc.chat.refresh": "I-refresh",
@@ -4354,13 +4354,13 @@ const FIL: WorldCupDictionary = {
   // ── AI upgrade / cap messages ────────────────────────────────────────
   "wc.ai.upgrade.chimmy.free": "You've used today's 3 Chimmy questions. Upgrade to AF Pro for 30 per day.",
   "wc.ai.upgrade.chimmy.pro": "You've used today's 30 Chimmy questions. They reset at midnight UTC.",
-  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily AI bracket breakdowns.",
+  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily Chimmy bracket breakdowns.",
   "wc.ai.upgrade.explain.pro": "You've used today's bracket explanation. It resets at midnight UTC.",
-  "wc.ai.upgrade.matchup.free": "AI Matchup Intelligence requires AF Pro.",
-  "wc.ai.upgrade.matchup.pro": "You've used today's 25 AI matchup analyses. They reset at midnight UTC.",
+  "wc.ai.upgrade.matchup.free": "Chimmy Matchup Intelligence requires AF Pro.",
+  "wc.ai.upgrade.matchup.pro": "You've used today's 25 Chimmy matchup analyses. They reset at midnight UTC.",
   "wc.ai.upgrade.brain.free": "Commissioner Brain requires AF Commissioner or higher.",
   "wc.ai.upgrade.brain.pro": "You've used today's Commissioner Brain calls. They reset at midnight UTC.",
-  "wc.ai.upgrade.resetHint": "Daily AI limits reset at midnight UTC.",
+  "wc.ai.upgrade.resetHint": "Daily Chimmy limits reset at midnight UTC.",
   "wc.ai.upgrade.cta": "Upgrade Plan",
 
   // ── Knockouts tab ────────────────────────────────────────────────────
@@ -4401,13 +4401,13 @@ const FIL: WorldCupDictionary = {
   "wc.danger.severityLow": "Mababa",
   "wc.danger.severitySuffix": "na panganib",
   "wc.danger.footer":
-    "Tinitignan lang ang iyong sariling picks vs public schedule. Walang AI call. Walang ibang user's picks.",
+    "Tinitignan lang ang iyong sariling picks vs public schedule. Walang Chimmy call. Walang ibang user's picks.",
 
   // ── AI Report (Review tab) ───────────────────────────────────────────
   "wc.aiReport.eyebrow": "Report",
-  "wc.aiReport.title": "Iyong Bracket AI Report",
+  "wc.aiReport.title": "Iyong Bracket Chimmy Report",
   "wc.aiReport.subtitle":
-    "Anim na AI signals na galing sa iyong sariling picks. Lahat ng nasa ibaba ay para sa iyo lang.",
+    "Anim na Chimmy signals na galing sa iyong sariling picks. Lahat ng nasa ibaba ay para sa iyo lang.",
   "wc.aiReport.tierActive": "AF Pro active",
   "wc.aiReport.tierPreview": "AF Pro preview",
 
@@ -4581,7 +4581,7 @@ const FIL: WorldCupDictionary = {
     "Na-submit noong {{at}}. Pwede mo pa ring i-edit hangga't hindi naka-lock ang pool — mag-invite ng kaibigan habang may slots pa.",
   "wc.finalize.copyShare": "Kopyahin ang share text",
   "wc.finalize.copyShareCopied": "Na-copy!",
-  "wc.finalize.shareReport": "I-share ang AI Bracket Report ko",
+  "wc.finalize.shareReport": "I-share ang Chimmy Bracket Report ko",
   "wc.finalize.inviteFriends": "Mag-invite ng kaibigan para talunin ang bracket ko",
   "wc.finalize.previewShare": "I-preview ang share text",
 
@@ -4629,7 +4629,7 @@ const FIL: WorldCupDictionary = {
   "wc.lb.noChampionPick": "Walang napiling kampeon",
   "wc.lb.alive": "Buhay pa",
   "wc.lb.busted": "Tapos na",
-  "wc.lb.aiProUnlocks": "Ina-unlock ng AF Pro ang AI Win %, Bracket Health, at champion-path pressure.",
+  "wc.lb.aiProUnlocks": "Ina-unlock ng AF Pro ang Chimmy Win %, Bracket Health, at champion-path pressure.",
   "wc.lb.ptsLabel": "Pts",
   "wc.lb.trustNote": "Libreng laruin. Strategy, hula, at karapatang magyabang lang.",
   // ── Share card UI chrome ──────────────────────────────────────────────
@@ -4637,7 +4637,7 @@ const FIL: WorldCupDictionary = {
   "wc.share.titleInvite": "Pool Invite",
   "wc.share.titleLeaderboard": "Leaderboard Snapshot",
   "wc.share.titleBracket": "Ang Aking Bracket Summary",
-  "wc.share.titleRecap": "AI Recap",
+  "wc.share.titleRecap": "Chimmy Recap",
   "wc.share.description": "Teksto para sa social media na handa nang i-share tungkol sa iyong bracket o pool standings.",
   "wc.share.publicSafe": "Ligtas para sa publiko",
   "wc.share.copy": "Kopyahin",
@@ -4766,7 +4766,7 @@ const FIL: WorldCupDictionary = {
   // ── AI Report card chrome (extended) ─────────────────────────────────
   "wc.aiShareCard.eyebrow": "Share graphic",
   "wc.aiShareCard.subtitle":
-    "Anim na AI signals sa isang copy-ready card. Deterministic — walang AI call sa pag-share.",
+    "Anim na Chimmy signals sa isang copy-ready card. Deterministic — walang Chimmy call sa pag-share.",
   "wc.aiShareCard.tierPro": "AF Pro",
   "wc.aiShareCard.tierPreview": "Basic preview",
   "wc.aiShareCard.emptyNoEntry":
@@ -4776,14 +4776,14 @@ const FIL: WorldCupDictionary = {
   "wc.aiShareCard.share": "I-share",
   "wc.aiShareCard.privacyNote":
     "Private sa iyo hangga't hindi mo i-share. Ginagamit lang ang sarili mong bracket data at aggregated counts ng pool.",
-  "wc.explain.eyebrow": "Private AI",
+  "wc.explain.eyebrow": "Private Chimmy",
   "wc.explain.title": "Explain ang aking bracket",
   "wc.explain.subtitle":
     "Private narrative analysis ng iyong bracket strategy. Ikaw lang ang makakakita.",
   "wc.explain.tierPro": "AF Pro",
   "wc.explain.tierLocked": "Nakasara",
   "wc.explain.locked":
-    "Bubuksan ng AF Pro ang private AI explanation ng iyong bracket strategy — kasama ang istilo, pinakaligtas, pinaka-risky, champion path, at isang specific na recommendation.",
+    "Bubuksan ng AF Pro ang private Chimmy explanation ng iyong bracket strategy — kasama ang istilo, pinakaligtas, pinaka-risky, champion path, at isang specific na recommendation.",
   "wc.explain.upgradeCta": "I-upgrade sa AF Pro →",
   "wc.explain.generate": "Gumawa ng explanation",
   "wc.explain.generating": "Ginagawa...",
@@ -4817,7 +4817,7 @@ const FIL: WorldCupDictionary = {
   "wc.uniqueness.rarity.common": "Karaniwan",
   "wc.uniqueness.percentShare": "{{percent}}% share",
   "wc.uniqueness.privacyNote":
-    "Deterministic — bilang lang ng finalized brackets. Walang AI call, walang raw picks ng ibang user na ipinapakita.",
+    "Deterministic — bilang lang ng finalized brackets. Walang Chimmy call, walang raw picks ng ibang user na ipinapakita.",
   "wc.grade.eyebrow": "Bracket Grade",
   "wc.grade.completionLabel": "{{percent}}% kumpleto",
   "wc.grade.tierProDetail": "AF Pro detail",
@@ -4834,7 +4834,7 @@ const FIL: WorldCupDictionary = {
   "wc.grade.recommendation": "Rekomendasyon:",
   "wc.grade.lockedBody":
     "Bubuksan ng AF Pro ang risk, upset meter, champion confidence, biggest risk, at rekomendasyon details.",
-  "wc.confidence.title": "AI Confidence Check",
+  "wc.confidence.title": "Chimmy Confidence Check",
   "wc.confidence.tierOpen": "Bukas",
   "wc.confidence.tierLocked": "Nakasara",
   "wc.confidence.missingPicks": "Kulang na picks:",
@@ -4857,7 +4857,7 @@ const FIL: WorldCupDictionary = {
   "wc.confidence.privacyNote":
     "Deterministic prediction at scoring complexity lang. Pansin lang sa picks at scoring mechanics.",
   "wc.confidence.lockedBody":
-    "Mag-upgrade sa AI/Pro para buksan ang confidence check. Hindi tumatawag ng AI ang locked users.",
+    "Mag-upgrade sa Chimmy/Pro para buksan ang confidence check. Hindi tumatawag ng Chimmy ang locked users.",
   "wc.path.title": "Ano ang dapat mangyari para manalo ako?",
   "wc.path.subtitle":
     "Private na pagbasa ng current entry. Nakatago pa rin ang unfinalized picks ng ibang users.",
@@ -4893,13 +4893,13 @@ const FIL: WorldCupDictionary = {
   "wc.groupStage.retrySave": "Subukan ulit",
   "wc.groupStage.failedSave":
     "Hindi na-save ang group ranking",
-  "wc.groupStage.aiTitle": "AI Insights",
+  "wc.groupStage.aiTitle": "Chimmy Insights",
   "wc.groupStage.aiTierOpen": "Bukas",
   "wc.groupStage.aiTierLocked": "Nakasara",
   "wc.groupStage.aiPrivacyNote":
     "Prediction at scoring complexity lang. Ang gabay ay nakatuon sa picks at scoring mechanics.",
   "wc.groupStage.aiLockedBody":
-    "Mag-upgrade sa AI/Pro para buksan ang deterministic na World Cup insights. Hindi tumatawag ng AI habang nakasara.",
+    "Mag-upgrade sa Chimmy/Pro para buksan ang deterministic na World Cup insights. Hindi tumatawag ng Chimmy habang nakasara.",
   "wc.groupStage.resultCorrect": "Tama +{{points}}",
   "wc.groupStage.resultWrong": "Mali +0",
   "wc.groupStage.resultPending": "Naghihintay",
@@ -4936,7 +4936,7 @@ const FIL: WorldCupDictionary = {
     "Piliin si {{name}} bilang third-place advancer",
   "wc.thirdPlace.aiTitle": "Tanungin si Chimmy",
   "wc.thirdPlace.aiLockedBody":
-    "Bubuksan ng AI/Pro ang third-place selection insights. Walang AI request kapag nakasara.",
+    "Bubuksan ng Chimmy/Pro ang third-place selection insights. Walang Chimmy request kapag nakasara.",
 
   // ── Matchup card (gameplay) ──────────────────────────────────────────
   "wc.matchup.matchLabel": "Match {{number}}",
@@ -4970,7 +4970,7 @@ const FIL: WorldCupDictionary = {
     "Mas mataas na confidence = mas maraming bonus pag tama.",
   "wc.matchup.confidencePointSingle": "{{value}} puntos",
   "wc.matchup.confidencePointPlural": "{{value}} na puntos",
-  "wc.matchup.aiInsightsLabel": "AI Insights",
+  "wc.matchup.aiInsightsLabel": "Chimmy Insights",
   "wc.matchup.aiTierOpen": "Bukas",
   "wc.matchup.aiTierLocked": "Nakasara",
   "wc.matchup.aiSaferPick": "Mas ligtas na pick:",
@@ -4988,7 +4988,7 @@ const FIL: WorldCupDictionary = {
   "wc.matchup.aiPrivacyNote":
     "Prediction at scoring complexity lang. Ang gabay ay nakatuon sa picks at scoring mechanics.",
   "wc.matchup.aiLockedBody":
-    "Mag-upgrade sa AI/Pro para buksan ang matchup insights. Hindi tumatawag ng AI ang locked users.",
+    "Mag-upgrade sa Chimmy/Pro para buksan ang matchup insights. Hindi tumatawag ng Chimmy ang locked users.",
   "wc.matchup.pickAriaPicked": "Piliin si {{name}} para manalo",
   "wc.matchup.pickAriaSelected": "Napili: {{name}} para manalo",
   "wc.matchup.disabledLocked": "Naka-lock ang pick sa labang ito",
@@ -5073,7 +5073,7 @@ const FIL: WorldCupDictionary = {
   "wc.review.scoringNoteTitle": "Tala sa scoring",
   "wc.review.scoringNoteBody": "Finalized = naisumite sa leaderboard. Naka-lock = nakalipas na ang deadline, hindi na maaaring i-edit ang mga pick.",
   "wc.review.afProUnlocks": "I-unlock ng AF Pro",
-  "wc.review.afProUnlocksDetails": "ang buong ulat — Champion Confidence, Path to Win, AI Explain narrative, Uniqueness insight, at buong Share card.",
+  "wc.review.afProUnlocksDetails": "ang buong ulat — Champion Confidence, Path to Win, Chimmy Explain narrative, Uniqueness insight, at buong Share card.",
   "wc.review.savedGroupTitle": "Mga Naka-save na Group Stage Pick",
   "wc.review.savedGroupNote": "Ang iyong mga hula · mga opisyal na resulta ay ipinapakita nang hiwalay",
   "wc.review.groupPicksSaved": "{{n}}/4 naka-save",
@@ -5178,7 +5178,7 @@ const FIL: WorldCupDictionary = {
   "wc.insights.notClose": "Hindi malapit",
   "wc.insights.gapPts": "{{n}} pts",
   "wc.insights.mostCorrectValue": "{{name}} ({{count}})",
-  "wc.insights.aiSummaryTitle": "AI Pool Summary",
+  "wc.insights.aiSummaryTitle": "Chimmy Pool Summary",
   "wc.insights.aiBadgeUnlocked": "Finalized lang",
   "wc.insights.aiBadgeLocked": "Naka-lock",
   "wc.insights.aiNotAvailable": "Wala pa",
@@ -5194,13 +5194,13 @@ const FIL: WorldCupDictionary = {
     "Ang top two entries ay nasa loob ng 5 points.",
   "wc.insights.aiRaceNotClose":
     "Wala pang masyadong malapit na race sa top two.",
-  "wc.insights.aiWinReadLabel": "AI win read:",
+  "wc.insights.aiWinReadLabel": "Chimmy win read:",
   "wc.insights.aiWinReadBody":
     "Nasa {{pct}}% si {{name}} na may {{health}} bracket health.",
   "wc.insights.aiPrivacyNote":
     "Gumagamit lang ng finalized/public leaderboard data. Walang kasama na private unfinalized picks. Limitado ang guidance sa pool picks at scoring mechanics.",
   "wc.insights.aiUpgradeNote":
-    "Mag-upgrade sa AI/Pro para sa finalized-only pool summaries. Hindi nagti-trigger ng AI calls ang locked users.",
+    "Mag-upgrade sa Chimmy/Pro para sa finalized-only pool summaries. Hindi nagti-trigger ng Chimmy calls ang locked users.",
 
   // ── Settings panel chrome (Phase 6) ──────────────────────────────────
   "wc.settings.title": "Mga setting ng pool",
@@ -5217,7 +5217,7 @@ const FIL: WorldCupDictionary = {
   // ── Commissioner Brain panel chrome (Phase 6) ────────────────────────
   "wc.brain.title": "Commissioner Brain",
   "wc.brain.subtitle":
-    "Snapshot, alerts, at AI helpers — pamahalaan ang pool mo sa isang lugar.",
+    "Snapshot, alerts, at Chimmy helpers — pamahalaan ang pool mo sa isang lugar.",
   "wc.brain.loading": "Naglo-load ng commissioner tools…",
   "wc.brain.loadError": "Hindi ma-load ang commissioner tools.",
 
@@ -5244,7 +5244,7 @@ const FIL: WorldCupDictionary = {
   "wc.pickHelp.seeding": "Nagi-seed...",
   "wc.pickHelp.knockoutFromGroups": "Ang iyong mga knockout matchup ay nabubuo mula sa iyong mga Group Stage prediction. I-rank ang lahat ng grupo at pumili ng mga third-place advancer upang mag-unlock ng mas maraming slot.",
   "wc.pickHelp.title": "Tulong sa Guided Pick",
-  "wc.pickHelp.body": "Gamitin ang sticky na Start Making Picks button sa mobile para lumipat sa mga matchup nang isa-isa. Ang mga AI bracket builder tool ay magagamit sa susunod na update.",
+  "wc.pickHelp.body": "Gamitin ang sticky na Start Making Picks button sa mobile para lumipat sa mga matchup nang isa-isa. Ang mga Chimmy bracket builder tool ay magagamit sa susunod na update.",
   "wc.pickHelp.knockoutLocked": "Naka-lock ang Knockout",
   "wc.pickHelp.continueGuided": "Ituloy ang Guided Picks",
   "wc.pickHelp.reviewGuided": "Suriin ang Guided Picks",
@@ -5252,10 +5252,10 @@ const FIL: WorldCupDictionary = {
 
   // ── AI Simulation lock panel ─────────────────────────────────────────
   "wc.aiLock.badge": "Naka-lock na Preview",
-  "wc.aiLock.title": "Naka-lock ang AI Simulation",
-  "wc.aiLock.body": "Ini-unlock ng AI Simulation ang mga projected na panalo, bracket buster, at mga path ng kampeon.",
+  "wc.aiLock.title": "Naka-lock ang Chimmy Simulation",
+  "wc.aiLock.body": "Ini-unlock ng Chimmy Simulation ang mga projected na panalo, bracket buster, at mga path ng kampeon.",
   "wc.aiLock.tier": "Nangangailangan ng AF Pro o AF Supreme",
-  "wc.aiLock.commissionerNote": "Ang mga AI tool ng commissioner ay nangangailangan ng AF Commissioner o AF Supreme.",
+  "wc.aiLock.commissionerNote": "Ang mga Chimmy tool ng commissioner ay nangangailangan ng AF Commissioner o AF Supreme.",
 
   // ── Premium access panel ─────────────────────────────────────────────
   "wc.premium.eyebrow": "Access sa World Cup",
@@ -5265,7 +5265,7 @@ const FIL: WorldCupDictionary = {
   "wc.premium.freeLimitSingle": "Ang mga libreng user ay maaaring gumawa ng isang bracket entry sa pool na ito.",
   "wc.premium.freeLimitPlural": "Ang pool na ito ay nagpapahintulot ng hanggang {{n}} na entry. Maaari pa ring gumawa ang mga libreng user ng unang bracket; pinamamahalaan ng mga kontrol ng AF Commissioner ang mga multi-entry na panuntunan ng pool.",
   "wc.premium.commissionerSection": "AF Commissioner",
-  "wc.premium.aiSection": "AI/Pro",
+  "wc.premium.aiSection": "Chimmy/Pro",
   "wc.premium.unlocked": "Na-unlock",
   "wc.premium.card.commissioner.title": "Mga Tool ng AF Commissioner",
   "wc.premium.card.commissioner.descOwner": "Ang mga tool ng kahandaan, sync, simulation, mga setting, imbitasyon, at admin QA ay available para sa mga all-access na user.",
@@ -5276,13 +5276,13 @@ const FIL: WorldCupDictionary = {
   "wc.premium.card.export.desc": "I-export ang mga standing at buod ng bracket para sa pagsusuri ng commissioner.",
   "wc.premium.card.multiEntry.title": "Maraming Entry",
   "wc.premium.card.multiEntry.desc": "Mga kontrol ng multi-entry sa antas ng pool na lampas sa karanasan ng unang libreng entry.",
-  "wc.premium.card.bracketBuilder.title": "AI Bracket Builder",
+  "wc.premium.card.bracketBuilder.title": "Chimmy Bracket Builder",
   "wc.premium.card.bracketBuilder.desc": "Placeholder para sa guided na pagbuo ng bracket at deterministic na context-aware na mungkahi.",
-  "wc.premium.card.matchupPreview.title": "AI Matchup Preview",
+  "wc.premium.card.matchupPreview.title": "Chimmy Matchup Preview",
   "wc.premium.card.matchupPreview.desc": "I-preview ang lean ng matchup, mga panganib, at mga upset path kapag available na ang mga opisyal na fixture.",
-  "wc.premium.card.whatIf.title": "Mga AI What-If Scenario",
+  "wc.premium.card.whatIf.title": "Mga Chimmy What-If Scenario",
   "wc.premium.card.whatIf.desc": "Mga senaryo ng leaderboard para sa kung ano ang kailangang mangyari sa susunod.",
-  "wc.premium.card.alerts.title": "Mga AI Alert",
+  "wc.premium.card.alerts.title": "Mga Chimmy Alert",
   "wc.premium.card.alerts.desc": "Mga alert sa hinaharap para sa mga pagbabago sa bracket, mga tala ng group-stage optimizer, at mga signal ng upset finder.",
 
   // ── Daily Edge Report ─────────────────────────────────────────────────
@@ -5369,11 +5369,11 @@ const VI: WorldCupDictionary = {
   "wc.publicHub.feature.ncaaScoring":
     "Tính điểm kiểu NCAA — vòng càng sâu, điểm càng cao.",
   "wc.publicHub.feature.guidedPicker":
-    "Trình hướng dẫn chọn kèo với phân tích cặp đấu bằng AI.",
+    "Trình hướng dẫn chọn kèo với phân tích cặp đấu bằng Chimmy.",
   "wc.publicHub.feature.liveTracking":
     "Theo dõi tỉ số trực tiếp đến từng phút.",
   "wc.publicHub.feature.aiBracketBuilder":
-    "Trình tạo bracket bằng AI tự động điền các trận chưa chọn.",
+    "Trình tạo bracket bằng Chimmy tự động điền các trận chưa chọn.",
   "wc.publicHub.feature.perBracketLeaderboard":
     "Bảng xếp hạng riêng cho mỗi bracket — từng entry được xếp riêng.",
   "wc.publicHub.feature.lockOnKickoff":
@@ -5412,21 +5412,21 @@ const VI: WorldCupDictionary = {
   "wc.publicHub.how.step4Title": "Hoàn thiện và leo bảng",
   "wc.publicHub.how.step4Body":
     "Khoá bracket trước trận đầu tiên, rồi theo dõi bảng xếp hạng trực tiếp và chia sẻ kết quả.",
-  "wc.publicHub.ai.title": "Công cụ bracket AI",
+  "wc.publicHub.ai.title": "Công cụ bracket Chimmy",
   "wc.publicHub.ai.subtitle":
-    "Chimmy và AllFantasy AI giúp bạn hiểu rủi ro, khám phá insights và hỗ trợ các commissioner.",
+    "Chimmy và AllFantasy Chimmy giúp bạn hiểu rủi ro, khám phá insights và hỗ trợ các commissioner.",
   "wc.publicHub.ai.explain.title": "Giải thích bracket của tôi",
   "wc.publicHub.ai.explain.desc":
-    "AI đọc lựa chọn của bạn và giải thích điều gì làm bracket của bạn độc đáo.",
+    "Chimmy đọc lựa chọn của bạn và giải thích điều gì làm bracket của bạn độc đáo.",
   "wc.publicHub.ai.danger.title": "Vùng nguy hiểm vòng loại trực tiếp",
   "wc.publicHub.ai.danger.desc": "Xem lựa chọn vòng loại nào dễ bị lật nhất.",
   "wc.publicHub.ai.chat.title": "Chat pool + Chiến thuật",
   "wc.publicHub.ai.chat.desc": "Hỏi @Chimmy về lựa chọn ngay trong chat pool.",
   "wc.publicHub.ai.commissioner.title": "Phân tích dành cho commissioner",
   "wc.publicHub.ai.commissioner.desc":
-    "Tóm tắt AI về sức khoẻ pool, sự đa dạng bracket và hoạt động thành viên.",
+    "Tóm tắt Chimmy về sức khoẻ pool, sự đa dạng bracket và hoạt động thành viên.",
   "wc.publicHub.ai.gating":
-    "Có sẵn trong các gói AI đủ điều kiện hoặc công cụ hỗ trợ token.",
+    "Có sẵn trong các gói Chimmy đủ điều kiện hoặc công cụ hỗ trợ token.",
   "wc.publicHub.social.title": "Rủ cả nhóm cùng chơi.",
   "wc.publicHub.social.desc":
     "Chia sẻ link pool, thách thức bạn bè, và để bảng xếp hạng phân định thắng thua.",
@@ -5515,21 +5515,21 @@ const VI: WorldCupDictionary = {
   "wc.entryList.noBracketsTitle": "Chưa có bracket nào được tạo",
   "wc.entryList.noBracketsBody": "Trước tiên hãy tạo bracket cá nhân, sau đó bạn có thể chọn khi lịch thi đấu sẵn sàng.",
   // ── Pool dashboard: AI features teaser ───────────────────────────────
-  "wc.home.ai.title": "Tính năng AI",
+  "wc.home.ai.title": "Tính năng Chimmy",
   "wc.home.ai.chimmyHint": "Nhập @chimmy trong chat pool để nhận lời khuyên cá nhân về bracket.",
-  "wc.home.ai.explainHint": "Đi đến tab Xem lại để nhận giải thích AI về chiến lược bracket của bạn.",
+  "wc.home.ai.explainHint": "Đi đến tab Xem lại để nhận giải thích Chimmy về chiến lược bracket của bạn.",
   "wc.home.ai.unlockHint": "Nâng cấp lên AF Pro để mở khóa Chimmy và Giải thích bracket của tôi.",
 
   // ── AI CTA panel ──────────────────────────────────────────────────────
-  "wc.cta.panelTitle": "Thông tin AI",
-  "wc.cta.aiRowLabel": "AI / Pro",
+  "wc.cta.panelTitle": "Thông tin Chimmy",
+  "wc.cta.aiRowLabel": "Chimmy / Pro",
   "wc.cta.commissionerRowLabel": "Ủy viên",
   "wc.cta.askChimmy": "Hỏi Chimmy",
   "wc.cta.askChimmyDesc": "Mở Chimmy với câu hỏi về bracket",
   "wc.cta.pathToFirst": "Con đường lên Đầu",
   "wc.cta.pathToFirstDesc": "Hỏi Chimmy bracket của bạn cần gì để leo lên vị trí đầu",
   "wc.cta.explainBracket": "Giải thích Bracket của Tôi",
-  "wc.cta.explainBracketDesc": "Nhận giải thích AI về chiến lược bracket của bạn",
+  "wc.cta.explainBracketDesc": "Nhận giải thích Chimmy về chiến lược bracket của bạn",
   "wc.cta.rootingGuide": "Hướng dẫn Cổ vũ",
   "wc.cta.rootingGuideDesc": "Tạo hướng dẫn cổ vũ cho mục này",
   "wc.cta.poolSwing": "Biến động Pool",
@@ -5537,7 +5537,7 @@ const VI: WorldCupDictionary = {
   "wc.cta.championRisk": "Rủi ro Nhà vô địch",
   "wc.cta.championRiskDesc": "Phân tích rủi ro pick nhà vô địch trong toàn pool",
   "wc.cta.commissionerRecap": "Tóm tắt Ủy viên",
-  "wc.cta.commissionerRecapDesc": "Tạo tóm tắt AI của pool (xem trước trước khi đăng)",
+  "wc.cta.commissionerRecapDesc": "Tạo tóm tắt Chimmy của pool (xem trước trước khi đăng)",
   "wc.cta.postHype": "Đăng Hype",
   "wc.cta.postHypeDesc": "Đăng tin nhắn hype lên pool chat",
   "wc.cta.findIncomplete": "Picks Chưa hoàn chỉnh",
@@ -5561,7 +5561,7 @@ const VI: WorldCupDictionary = {
   "wc.chat.aiHint.unlocked":
     "Các trả lời của @chimmy là riêng tư. Chỉ bạn thấy câu hỏi và câu trả lời của Chimmy trong pool này.",
   "wc.chat.aiHint.locked":
-    "Trả lời riêng tư của @chimmy yêu cầu AI/Pro. Nâng cấp để hỏi Chimmy từ chat pool.",
+    "Trả lời riêng tư của @chimmy yêu cầu Chimmy/Pro. Nâng cấp để hỏi Chimmy từ chat pool.",
   "wc.chat.trustNote": "Hãy cạnh tranh. Hãy văn minh.",
   "wc.chat.loading": "Đang tải chat pool…",
   "wc.chat.refresh": "Làm mới",
@@ -5634,13 +5634,13 @@ const VI: WorldCupDictionary = {
   // ── AI upgrade / cap messages ────────────────────────────────────────
   "wc.ai.upgrade.chimmy.free": "You've used today's 3 Chimmy questions. Upgrade to AF Pro for 30 per day.",
   "wc.ai.upgrade.chimmy.pro": "You've used today's 30 Chimmy questions. They reset at midnight UTC.",
-  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily AI bracket breakdowns.",
+  "wc.ai.upgrade.explain.free": "Bracket explanations require AF Pro. Upgrade to get daily Chimmy bracket breakdowns.",
   "wc.ai.upgrade.explain.pro": "You've used today's bracket explanation. It resets at midnight UTC.",
-  "wc.ai.upgrade.matchup.free": "AI Matchup Intelligence requires AF Pro.",
-  "wc.ai.upgrade.matchup.pro": "You've used today's 25 AI matchup analyses. They reset at midnight UTC.",
+  "wc.ai.upgrade.matchup.free": "Chimmy Matchup Intelligence requires AF Pro.",
+  "wc.ai.upgrade.matchup.pro": "You've used today's 25 Chimmy matchup analyses. They reset at midnight UTC.",
   "wc.ai.upgrade.brain.free": "Commissioner Brain requires AF Commissioner or higher.",
   "wc.ai.upgrade.brain.pro": "You've used today's Commissioner Brain calls. They reset at midnight UTC.",
-  "wc.ai.upgrade.resetHint": "Daily AI limits reset at midnight UTC.",
+  "wc.ai.upgrade.resetHint": "Daily Chimmy limits reset at midnight UTC.",
   "wc.ai.upgrade.cta": "Upgrade Plan",
 
   // ── Knockouts tab ────────────────────────────────────────────────────
@@ -5681,13 +5681,13 @@ const VI: WorldCupDictionary = {
   "wc.danger.severityLow": "Thấp",
   "wc.danger.severitySuffix": "nguy hiểm",
   "wc.danger.footer":
-    "Chỉ đếm lựa chọn của chính bạn so với lịch thi đấu công khai. Không gọi AI. Không sử dụng lựa chọn của người khác.",
+    "Chỉ đếm lựa chọn của chính bạn so với lịch thi đấu công khai. Không gọi Chimmy. Không sử dụng lựa chọn của người khác.",
 
   // ── AI Report (Review tab) ───────────────────────────────────────────
   "wc.aiReport.eyebrow": "Báo cáo",
-  "wc.aiReport.title": "Báo Cáo AI Cho Bracket Của Bạn",
+  "wc.aiReport.title": "Báo Cáo Chimmy Cho Bracket Của Bạn",
   "wc.aiReport.subtitle":
-    "Sáu tín hiệu AI tính từ chính lựa chọn của bạn. Toàn bộ nội dung bên dưới chỉ riêng bạn xem được.",
+    "Sáu tín hiệu Chimmy tính từ chính lựa chọn của bạn. Toàn bộ nội dung bên dưới chỉ riêng bạn xem được.",
   "wc.aiReport.tierActive": "AF Pro đang bật",
   "wc.aiReport.tierPreview": "Xem trước AF Pro",
 
@@ -5867,7 +5867,7 @@ const VI: WorldCupDictionary = {
     "Đã gửi {{at}}. Bạn vẫn có thể chỉnh sửa cho đến khi pool khoá — mời bạn bè trước khi hết slot.",
   "wc.finalize.copyShare": "Sao chép văn bản chia sẻ",
   "wc.finalize.copyShareCopied": "Đã sao chép!",
-  "wc.finalize.shareReport": "Chia sẻ báo cáo AI bracket của tôi",
+  "wc.finalize.shareReport": "Chia sẻ báo cáo Chimmy bracket của tôi",
   "wc.finalize.inviteFriends":
     "Mời bạn bè đến đánh bại bracket của tôi",
   "wc.finalize.previewShare": "Xem trước văn bản chia sẻ",
@@ -5916,7 +5916,7 @@ const VI: WorldCupDictionary = {
   "wc.lb.noChampionPick": "Chưa chọn vô địch",
   "wc.lb.alive": "Còn sống",
   "wc.lb.busted": "Bị loại",
-  "wc.lb.aiProUnlocks": "AF Pro mở khoá % thắng AI, Sức khoẻ bracket và áp lực con đường đến nhà vô địch.",
+  "wc.lb.aiProUnlocks": "AF Pro mở khoá % thắng Chimmy, Sức khoẻ bracket và áp lực con đường đến nhà vô địch.",
   "wc.lb.ptsLabel": "Điểm",
   "wc.lb.trustNote": "Không cá cược. Không nhà cái. Chỉ là chiến thuật, dự đoán và quyền tự hào.",
   // ── Share card UI chrome ──────────────────────────────────────────────
@@ -5924,7 +5924,7 @@ const VI: WorldCupDictionary = {
   "wc.share.titleInvite": "Mời Vào Pool",
   "wc.share.titleLeaderboard": "Ảnh Chụp Bảng Xếp Hạng",
   "wc.share.titleBracket": "Tóm Tắt Bracket của Tôi",
-  "wc.share.titleRecap": "Tóm Tắt AI",
+  "wc.share.titleRecap": "Tóm Tắt Chimmy",
   "wc.share.description": "Văn bản sẵn sàng chia sẻ lên mạng xã hội về bracket hoặc bảng xếp hạng pool.",
   "wc.share.publicSafe": "An toàn công khai",
   "wc.share.copy": "Sao chép",
@@ -6056,7 +6056,7 @@ const VI: WorldCupDictionary = {
   // ── AI Report card chrome (extended) ─────────────────────────────────
   "wc.aiShareCard.eyebrow": "Hình chia sẻ",
   "wc.aiShareCard.subtitle":
-    "Sáu tín hiệu AI trong một thẻ sẵn sàng để sao chép. Xác định — không gọi AI khi chia sẻ.",
+    "Sáu tín hiệu Chimmy trong một thẻ sẵn sàng để sao chép. Xác định — không gọi Chimmy khi chia sẻ.",
   "wc.aiShareCard.tierPro": "AF Pro",
   "wc.aiShareCard.tierPreview": "Xem trước Cơ bản",
   "wc.aiShareCard.emptyNoEntry":
@@ -6066,14 +6066,14 @@ const VI: WorldCupDictionary = {
   "wc.aiShareCard.share": "Chia sẻ",
   "wc.aiShareCard.privacyNote":
     "Riêng tư cho đến khi bạn chia sẻ. Chỉ dùng dữ liệu bracket của bạn và số liệu tổng hợp của pool.",
-  "wc.explain.eyebrow": "AI riêng tư",
+  "wc.explain.eyebrow": "Chimmy riêng tư",
   "wc.explain.title": "Giải thích bracket của tôi",
   "wc.explain.subtitle":
     "Phân tích tường thuật riêng tư về chiến thuật của bạn. Chỉ bạn xem được.",
   "wc.explain.tierPro": "AF Pro",
   "wc.explain.tierLocked": "Đã khoá",
   "wc.explain.locked":
-    "AF Pro mở khoá phần giải thích AI riêng tư về chiến thuật bracket — phong cách, lựa chọn an toàn nhất, rủi ro cao nhất, đường đến nhà vô địch và một gợi ý cụ thể.",
+    "AF Pro mở khoá phần giải thích Chimmy riêng tư về chiến thuật bracket — phong cách, lựa chọn an toàn nhất, rủi ro cao nhất, đường đến nhà vô địch và một gợi ý cụ thể.",
   "wc.explain.upgradeCta": "Nâng cấp lên AF Pro →",
   "wc.explain.generate": "Tạo giải thích",
   "wc.explain.generating": "Đang tạo...",
@@ -6111,7 +6111,7 @@ const VI: WorldCupDictionary = {
   "wc.uniqueness.rarity.common": "Phổ biến",
   "wc.uniqueness.percentShare": "Tỉ lệ {{percent}}%",
   "wc.uniqueness.privacyNote":
-    "Xác định — chỉ đếm các bracket đã hoàn tất. Không gọi AI, không hiển thị lựa chọn gốc của người khác.",
+    "Xác định — chỉ đếm các bracket đã hoàn tất. Không gọi Chimmy, không hiển thị lựa chọn gốc của người khác.",
   "wc.grade.eyebrow": "Điểm bracket",
   "wc.grade.completionLabel": "Hoàn thành {{percent}}%",
   "wc.grade.tierProDetail": "Chi tiết AF Pro",
@@ -6128,7 +6128,7 @@ const VI: WorldCupDictionary = {
   "wc.grade.recommendation": "Gợi ý:",
   "wc.grade.lockedBody":
     "AF Pro mở khoá rủi ro, chỉ số cú sốc, niềm tin nhà vô địch, rủi ro lớn nhất và gợi ý chi tiết.",
-  "wc.confidence.title": "Kiểm tra niềm tin AI",
+  "wc.confidence.title": "Kiểm tra niềm tin Chimmy",
   "wc.confidence.tierOpen": "Đã mở",
   "wc.confidence.tierLocked": "Đã khoá",
   "wc.confidence.missingPicks": "Lựa chọn còn thiếu:",
@@ -6153,7 +6153,7 @@ const VI: WorldCupDictionary = {
   "wc.confidence.privacyNote":
     "Chỉ dự đoán xác định và độ phức tạp tính điểm. Hướng dẫn vẫn giới hạn ở lựa chọn pool và cơ chế tính điểm.",
   "wc.confidence.lockedBody":
-    "Nâng cấp lên AI/Pro để mở kiểm tra niềm tin. Người dùng bị khoá không kích hoạt cuộc gọi AI.",
+    "Nâng cấp lên Chimmy/Pro để mở kiểm tra niềm tin. Người dùng bị khoá không kích hoạt cuộc gọi Chimmy.",
   "wc.path.title": "Cần điều gì để tôi thắng?",
   "wc.path.subtitle":
     "Đọc riêng tư entry hiện tại. Lựa chọn chưa hoàn tất của người khác vẫn được ẩn.",
@@ -6189,13 +6189,13 @@ const VI: WorldCupDictionary = {
   "wc.groupStage.retrySave": "Thử lại",
   "wc.groupStage.failedSave":
     "Không lưu được xếp hạng bảng",
-  "wc.groupStage.aiTitle": "Phân tích AI",
+  "wc.groupStage.aiTitle": "Phân tích Chimmy",
   "wc.groupStage.aiTierOpen": "Mở",
   "wc.groupStage.aiTierLocked": "Đã khoá",
   "wc.groupStage.aiPrivacyNote":
     "Chỉ dự đoán và độ phức tạp tính điểm. Hướng dẫn giới hạn ở lựa chọn và cơ chế tính điểm.",
   "wc.groupStage.aiLockedBody":
-    "Nâng cấp AI/Pro để mở phân tích xác định. Không gọi AI khi đang khoá.",
+    "Nâng cấp Chimmy/Pro để mở phân tích xác định. Không gọi Chimmy khi đang khoá.",
   "wc.groupStage.resultCorrect": "Đúng +{{points}}",
   "wc.groupStage.resultWrong": "Sai +0",
   "wc.groupStage.resultPending": "Chờ",
@@ -6231,7 +6231,7 @@ const VI: WorldCupDictionary = {
     "Chọn {{name}} làm đội hạng ba đi tiếp",
   "wc.thirdPlace.aiTitle": "Hỏi Chimmy",
   "wc.thirdPlace.aiLockedBody":
-    "AI/Pro mở phân tích chọn hạng ba. Người dùng đã khoá chỉ thấy CTA, không gọi AI.",
+    "Chimmy/Pro mở phân tích chọn hạng ba. Người dùng đã khoá chỉ thấy CTA, không gọi Chimmy.",
 
   // ── Matchup card (gameplay) ──────────────────────────────────────────
   "wc.matchup.matchLabel": "Trận {{number}}",
@@ -6265,7 +6265,7 @@ const VI: WorldCupDictionary = {
     "Niềm tin càng cao, điểm thưởng càng nhiều nếu đoán đúng.",
   "wc.matchup.confidencePointSingle": "{{value}} điểm",
   "wc.matchup.confidencePointPlural": "{{value}} điểm",
-  "wc.matchup.aiInsightsLabel": "Phân tích AI",
+  "wc.matchup.aiInsightsLabel": "Phân tích Chimmy",
   "wc.matchup.aiTierOpen": "Mở",
   "wc.matchup.aiTierLocked": "Đã khoá",
   "wc.matchup.aiSaferPick": "Lựa chọn an toàn hơn:",
@@ -6283,7 +6283,7 @@ const VI: WorldCupDictionary = {
   "wc.matchup.aiPrivacyNote":
     "Chỉ dự đoán và độ phức tạp tính điểm. Hướng dẫn giới hạn ở lựa chọn và cơ chế tính điểm.",
   "wc.matchup.aiLockedBody":
-    "Nâng cấp AI/Pro để mở phân tích trận. Người dùng đã khoá không kích hoạt gọi AI.",
+    "Nâng cấp Chimmy/Pro để mở phân tích trận. Người dùng đã khoá không kích hoạt gọi Chimmy.",
   "wc.matchup.pickAriaPicked": "Chọn {{name}} để thắng",
   "wc.matchup.pickAriaSelected": "Đã chọn: {{name}} để thắng",
   "wc.matchup.disabledLocked":
@@ -6370,7 +6370,7 @@ const VI: WorldCupDictionary = {
   "wc.review.scoringNoteTitle": "Ghi chú tính điểm",
   "wc.review.scoringNoteBody": "Đã hoàn tất = đã gửi lên bảng xếp hạng. Đã khóa = quá hạn chót, không thể chỉnh sửa lượt chọn.",
   "wc.review.afProUnlocks": "AF Pro mở khóa",
-  "wc.review.afProUnlocksDetails": "toàn bộ báo cáo — Độ tin cậy nhà vô địch, Đường đến chiến thắng, câu chuyện giải thích AI, nhận định độc đáo của bạn và thẻ chia sẻ đầy đủ.",
+  "wc.review.afProUnlocksDetails": "toàn bộ báo cáo — Độ tin cậy nhà vô địch, Đường đến chiến thắng, câu chuyện giải thích Chimmy, nhận định độc đáo của bạn và thẻ chia sẻ đầy đủ.",
   "wc.review.savedGroupTitle": "Lượt chọn Vòng bảng đã lưu",
   "wc.review.savedGroupNote": "Dự đoán của bạn · kết quả chính thức hiển thị riêng",
   "wc.review.groupPicksSaved": "{{n}}/4 đã lưu",
@@ -6473,7 +6473,7 @@ const VI: WorldCupDictionary = {
   "wc.insights.notClose": "Không sát",
   "wc.insights.gapPts": "{{n}} điểm",
   "wc.insights.mostCorrectValue": "{{name}} ({{count}})",
-  "wc.insights.aiSummaryTitle": "Tóm tắt nhóm AI",
+  "wc.insights.aiSummaryTitle": "Tóm tắt nhóm Chimmy",
   "wc.insights.aiBadgeUnlocked": "Chỉ entry hoàn tất",
   "wc.insights.aiBadgeLocked": "Đã khoá",
   "wc.insights.aiNotAvailable": "Chưa khả dụng",
@@ -6488,13 +6488,13 @@ const VI: WorldCupDictionary = {
     "Hai entry dẫn đầu chỉ cách nhau 5 điểm.",
   "wc.insights.aiRaceNotClose":
     "Chưa có cuộc đua sát nhau ở top hai.",
-  "wc.insights.aiWinReadLabel": "Đánh giá thắng AI:",
+  "wc.insights.aiWinReadLabel": "Đánh giá thắng Chimmy:",
   "wc.insights.aiWinReadBody":
     "{{name}} dự kiến {{pct}}% với sức khoẻ bracket {{health}}.",
   "wc.insights.aiPrivacyNote":
     "Chỉ dùng dữ liệu bảng xếp hạng công khai/đã hoàn tất. Không bao gồm lựa chọn cá nhân chưa hoàn tất. Hướng dẫn bracket chỉ giới hạn ở lựa chọn pool và cơ chế điểm.",
   "wc.insights.aiUpgradeNote":
-    "Nâng cấp AI/Pro để có tóm tắt nhóm chỉ entry hoàn tất. Người dùng bị khoá không kích hoạt gọi AI.",
+    "Nâng cấp Chimmy/Pro để có tóm tắt nhóm chỉ entry hoàn tất. Người dùng bị khoá không kích hoạt gọi Chimmy.",
 
   // ── Settings panel chrome (Phase 6) ──────────────────────────────────
   "wc.settings.title": "Cài đặt pool",
@@ -6511,7 +6511,7 @@ const VI: WorldCupDictionary = {
   // ── Commissioner Brain panel chrome (Phase 6) ────────────────────────
   "wc.brain.title": "Bộ não chủ pool",
   "wc.brain.subtitle":
-    "Tổng quan, cảnh báo và trợ lý AI — quản lý pool của bạn từ một chỗ.",
+    "Tổng quan, cảnh báo và trợ lý Chimmy — quản lý pool của bạn từ một chỗ.",
   "wc.brain.loading": "Đang tải công cụ chủ pool…",
   "wc.brain.loadError": "Không tải được công cụ chủ pool.",
 
@@ -6538,7 +6538,7 @@ const VI: WorldCupDictionary = {
   "wc.pickHelp.seeding": "Đang tải...",
   "wc.pickHelp.knockoutFromGroups": "Các trận đấu loại trực tiếp được tạo từ dự đoán Vòng Bảng của bạn. Xếp hạng tất cả các bảng và chọn đội thứ ba vào vòng tiếp theo để mở khóa thêm vị trí.",
   "wc.pickHelp.title": "Hướng dẫn Chọn Pick",
-  "wc.pickHelp.body": "Sử dụng nút Bắt đầu Chọn cố định trên di động để duyệt qua từng trận đấu. Công cụ AI bracket builder sẽ được mở khóa trong phiên bản sau.",
+  "wc.pickHelp.body": "Sử dụng nút Bắt đầu Chọn cố định trên di động để duyệt qua từng trận đấu. Công cụ Chimmy bracket builder sẽ được mở khóa trong phiên bản sau.",
   "wc.pickHelp.knockoutLocked": "Vòng Loại Trực Tiếp Bị Khóa",
   "wc.pickHelp.continueGuided": "Tiếp tục Chọn Hướng dẫn",
   "wc.pickHelp.reviewGuided": "Xem lại Chọn Hướng dẫn",
@@ -6546,10 +6546,10 @@ const VI: WorldCupDictionary = {
 
   // ── AI Simulation lock panel ─────────────────────────────────────────
   "wc.aiLock.badge": "Xem trước Bị khóa",
-  "wc.aiLock.title": "AI Simulation Bị khóa",
-  "wc.aiLock.body": "AI Simulation mở khóa các người chiến thắng được dự đoán, những bất ngờ trong bracket, và các con đường đến chức vô địch.",
+  "wc.aiLock.title": "Chimmy Simulation Bị khóa",
+  "wc.aiLock.body": "Chimmy Simulation mở khóa các người chiến thắng được dự đoán, những bất ngờ trong bracket, và các con đường đến chức vô địch.",
   "wc.aiLock.tier": "Yêu cầu AF Pro hoặc AF Supreme",
-  "wc.aiLock.commissionerNote": "Công cụ AI của ủy viên yêu cầu AF Commissioner hoặc AF Supreme.",
+  "wc.aiLock.commissionerNote": "Công cụ Chimmy của ủy viên yêu cầu AF Commissioner hoặc AF Supreme.",
 
   // ── Premium access panel ─────────────────────────────────────────────
   "wc.premium.eyebrow": "Truy cập World Cup",
@@ -6559,7 +6559,7 @@ const VI: WorldCupDictionary = {
   "wc.premium.freeLimitSingle": "Người dùng miễn phí có thể tạo một mục bracket trong hồ bơi này.",
   "wc.premium.freeLimitPlural": "Hồ bơi này cho phép tối đa {{n}} mục. Người dùng miễn phí vẫn có thể tạo bracket đầu tiên; các kiểm soát AF Commissioner quản lý quy tắc đa mục của hồ bơi.",
   "wc.premium.commissionerSection": "AF Commissioner",
-  "wc.premium.aiSection": "AI/Pro",
+  "wc.premium.aiSection": "Chimmy/Pro",
   "wc.premium.unlocked": "Đã mở khóa",
   "wc.premium.card.commissioner.title": "Công cụ AF Commissioner",
   "wc.premium.card.commissioner.descOwner": "Công cụ kiểm tra sẵn sàng, đồng bộ, mô phỏng, cài đặt, mời và QA quản trị viên dành cho người dùng toàn quyền truy cập.",
@@ -6570,13 +6570,13 @@ const VI: WorldCupDictionary = {
   "wc.premium.card.export.desc": "Xuất bảng xếp hạng và tóm tắt bracket để ủy viên xem xét.",
   "wc.premium.card.multiEntry.title": "Nhiều Mục Tham Gia",
   "wc.premium.card.multiEntry.desc": "Kiểm soát đa mục ở cấp hồ bơi vượt ra ngoài trải nghiệm mục đầu tiên miễn phí mặc định.",
-  "wc.premium.card.bracketBuilder.title": "AI Bracket Builder",
+  "wc.premium.card.bracketBuilder.title": "Chimmy Bracket Builder",
   "wc.premium.card.bracketBuilder.desc": "Chỗ giữ chỗ cho xây dựng bracket có hướng dẫn và gợi ý theo ngữ cảnh xác định.",
-  "wc.premium.card.matchupPreview.title": "Xem trước Trận Đấu AI",
+  "wc.premium.card.matchupPreview.title": "Xem trước Trận Đấu Chimmy",
   "wc.premium.card.matchupPreview.desc": "Xem trước xu hướng trận đấu, rủi ro và con đường bất ngờ khi lịch thi đấu chính thức có sẵn.",
-  "wc.premium.card.whatIf.title": "Kịch bản AI Điều gì Nếu",
+  "wc.premium.card.whatIf.title": "Kịch bản Chimmy Điều gì Nếu",
   "wc.premium.card.whatIf.desc": "Các kịch bản bảng xếp hạng về những gì cần xảy ra tiếp theo.",
-  "wc.premium.card.alerts.title": "Cảnh báo AI",
+  "wc.premium.card.alerts.title": "Cảnh báo Chimmy",
   "wc.premium.card.alerts.desc": "Cảnh báo trong tương lai cho các thay đổi bracket, ghi chú tối ưu hóa vòng bảng và tín hiệu tìm kiếm bất ngờ.",
 
   // ── Daily Edge Report ─────────────────────────────────────────────────
@@ -6716,7 +6716,7 @@ const FR_CORE: WorldCupDictionary = {
   "wc.cta.pathToFirst": "Chemin vers la Premiere Place",
   "wc.cta.pathToFirstDesc": "Demande a Chimmy ce que ton bracket doit faire pour atteindre la premiere place",
   "wc.cta.explainBracket": "Expliquer Mon Bracket",
-  "wc.cta.explainBracketDesc": "Obtenir une explication IA de ta strategie de bracket",
+  "wc.cta.explainBracketDesc": "Obtenir une explication Chimmy de ta strategie de bracket",
   "wc.cta.rootingGuide": "Guide de Soutien",
   "wc.cta.rootingGuideDesc": "Generer un guide de soutien pour cette participation",
   "wc.cta.poolSwing": "Mouvement du Pool",
@@ -6815,7 +6815,7 @@ const AR_CORE: WorldCupDictionary = {
 
   // ── AI CTA panel ──────────────────────────────────────────────────────
   "wc.cta.panelTitle": "رؤى الذكاء الاصطناعي",
-  "wc.cta.aiRowLabel": "AI / Pro",
+  "wc.cta.aiRowLabel": "Chimmy / Pro",
   "wc.cta.commissionerRowLabel": "المفوض",
   "wc.cta.askChimmy": "اسأل Chimmy",
   "wc.cta.askChimmyDesc": "افتح Chimmy بسؤال عن القوس",

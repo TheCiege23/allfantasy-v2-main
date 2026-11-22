@@ -21,7 +21,7 @@
 
 export type SportKey = 'mlb' | 'nba' | 'nhl' | 'nfl' | 'world-cup' | 'ncaa'
 
-export type BracketRound = {
+type BracketRound = {
   id: string
   label: string
   /** Points for calling this round right. */
@@ -213,19 +213,19 @@ export function firstRoundPairs(shell: ClientSportShell): Array<[number, number]
 
 /* ── Scoring ─────────────────────────────────────────────────────────────── */
 
-export type BracketPick = {
+type BracketPick = {
   roundId: string
   /** The team the entrant called to advance. */
   teamId: string
 }
 
-export type BracketResult = {
+type BracketResult = {
   roundId: string
   /** The team that actually advanced, or null while the round is unresolved. */
   teamId: string | null
 }
 
-export type ScoreBreakdown = {
+type ScoreBreakdown = {
   earned: number
   /** Points still reachable — rounds not yet resolved. */
   remaining: number

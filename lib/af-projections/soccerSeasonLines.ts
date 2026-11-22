@@ -34,6 +34,7 @@ export type SoccerGameRow = {
   team: string | null
   gameDate: Date | null
   normalizedStatMap: unknown
+  ownGoals?: number
 }
 
 export type SoccerSeasonLine = {
@@ -69,6 +70,7 @@ export function soccerSeasonLines(
   for (const row of rows) {
     const { stats } = normalizeSoccerGameStats(row.normalizedStatMap)
     if (!stats.appearance) continue
+    if (row.ownGoals != null) stats.own_goal = row.ownGoals
     const acc: Acc = byPlayer.get(row.playerId) ?? { totals: {}, appearances: 0, positions: new Map(), team: null, latest: -Infinity }
     acc.appearances += 1
     for (const [k, v] of Object.entries(stats)) acc.totals[k] = (acc.totals[k] ?? 0) + v

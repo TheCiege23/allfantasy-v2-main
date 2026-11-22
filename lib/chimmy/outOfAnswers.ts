@@ -16,11 +16,11 @@ import { CHIMMY_PLAN_DAILY_INCLUDED } from './planAllowanceView'
 import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/freeChimmyQuestions'
 
 /** The token store. `from` says where the buyer came from; the page ignores what it does not use. */
-export const CHIMMY_BUY_TOKENS_HREF = '/tokens?from=chimmy-drawer'
+const CHIMMY_BUY_TOKENS_HREF = '/tokens?from=chimmy-drawer'
 /** AF Pro on the purchase surface — `/upgrade` focuses the plan named by `plan`. */
-export const CHIMMY_AF_PRO_HREF = '/upgrade?plan=af_pro&from=chimmy-drawer'
+const CHIMMY_AF_PRO_HREF = '/upgrade?plan=af_pro&from=chimmy-drawer'
 
-export type OutOfAnswersAction = { label: string; href: string; primary: boolean }
+type OutOfAnswersAction = { label: string; href: string; primary: boolean }
 
 export type OutOfAnswers = {
   title: string
@@ -46,9 +46,9 @@ export type OutOfAnswers = {
  * app (3.1.1) — so the app shows this instead, built from the same status fields.
  */
 export function inIosAppAccessLine(status: { hasSubscription: boolean; tokenBalance: number }): string {
-  if (status.hasSubscription) return 'Premium AI active.'
+  if (status.hasSubscription) return 'Premium Chimmy active.'
   if (status.tokenBalance > 0) {
-    return `${status.tokenBalance} AI token${status.tokenBalance === 1 ? '' : 's'} available.`
+    return `${status.tokenBalance} Chimmy token${status.tokenBalance === 1 ? '' : 's'} available.`
   }
   return `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day.`
 }

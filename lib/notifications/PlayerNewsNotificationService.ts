@@ -1,5 +1,6 @@
 import { planPlayerNews, markPlayerNewsTold, playerNewsDispatches, type PlayerNewsPlan, type PlayerNewsSubject } from './playerNewsGate'
 import { statusBucket } from './playerNewsStatus'
+import { finderPlayerHref } from '@/lib/core-app/finderGuide'
 import type { PlayerNewsRelation } from '@/lib/notification-settings/playerNewsLevel'
 import { createTeamInjuryNewsBatch } from './teamInjuryNewsBatch'
 import { resolveLineupImpacts } from './lineupImpact'
@@ -787,6 +788,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       const prior = subject.bucket === 'active' ? 'out' as const : null
       // Built here, sent with the team batch at the end of the run, so the scan never waits on a send.
       const lineupRequests: DispatchNotificationParams[] = []
+      const finderHref = finderPlayerHref({ sport: row.sport, sleeperId: binding.identity.sleeperId, name: row.playerName })
       for (const [uid, entry] of leaguesOf) {
         const impacts = await resolveLineupImpacts({ userId: uid, leagueIds: [...entry.all], startingLeagueIds: [...entry.starting], sport: row.sport,
           sleeperId: binding.identity.sleeperId, playerName: row.playerName, team: playerTeam, bucket: statusBucket(subject.bucket), prior }).catch(() => [])
@@ -799,17 +801,19 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
           category: 'injury_alerts',
           type: copy.kind === 'starter_out' ? 'injured_starter' : copy.kind,
           title: copy.title, body: copy.body + '\n' + row.headline.slice(0, 300),
-          actionHref: copy.fixHref ?? undefined, actionLabel: 'Review lineup', severity: 'high',
+          // Owner's rule (2026-11-13): the alert opens the Player Finder on him — every league and platform
+          // you have him in, each lineup one tap away. The single-league fix link rides in meta.
+          actionHref: finderHref, actionLabel: 'See his leagues', severity: 'high',
           dedupePrefix: deliveryKey + ':lineup', skipChannels: { sms: true },
           meta: { team: playerTeam ?? 'Players without a current team', sport: row.sport, newsCategory: category, injuryHeadline: row.headline,
-            lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id,
+            lineupImpact: copy.kind, lineupPlayerKey: binding.identity.id, ...(copy.fixHref ? { lineupFixHref: copy.fixHref } : {}),
             playerNews: { ...newsInfo, starter: starterUsers.has(uid), delivery: 'instant', digest: false } },
         })
         for (const [lid, ids] of byLeague) { ids.delete(uid); if (!ids.size) byLeague.delete(lid) }
       }
       const requests: DispatchNotificationParams[] = []
       const base = {type:'player_injury_update', title:row.playerName, body:row.playerName+': '+row.headline,
-        severity:'high' as const, dedupePrefix:deliveryKey,
+        severity:'high' as const, dedupePrefix:deliveryKey, actionHref:finderHref, actionLabel:'See his leagues',
         meta:{team:playerTeam??'Players without a current team',injuryHeadline:row.headline,sport:row.sport,newsCategory:category}}
       // Rostered, no lineup change: the bell only, and not in the digest.
       const bellOnly = { sms: true, email: true }

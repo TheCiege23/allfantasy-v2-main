@@ -13,16 +13,16 @@ import { resolveLivePlanFlags } from '@/lib/subscription/livePlanFlags'
 export const dynamic = 'force-dynamic'
 
 const QuerySchema = z.object({
-  leagueId: z.string().uuid().optional(),
+  leagueId: z.guid().optional(),
   surface: z.string().optional(),
   autoDeliver: z.union([z.literal('true'), z.literal('false')]).optional(),
 })
 
 const BodySchema = z.object({
-  leagueId: z.string().uuid().optional(),
+  leagueId: z.guid().optional(),
   surface: z.string().optional(),
-  signalBundle: z.record(z.unknown()).optional(),
-  userPreferences: z.record(z.unknown()).optional(),
+  signalBundle: z.record(z.string(), z.unknown()).optional(),
+  userPreferences: z.record(z.string(), z.unknown()).optional(),
   autoDeliver: z.boolean().optional(),
 })
 

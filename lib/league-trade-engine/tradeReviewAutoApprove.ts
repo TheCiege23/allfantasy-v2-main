@@ -28,7 +28,7 @@ export function tradeReviewAutoApproveOn(settings: unknown): boolean {
   return s[TRADE_REVIEW_AUTO_APPROVE_KEY] === true
 }
 
-export type AutoApproveDecision = 'approve' | 'warn' | 'wait' | 'flagged'
+type AutoApproveDecision = 'approve' | 'warn' | 'wait' | 'flagged'
 
 export function autoApproveDecision(args: { acceptedAt: Date | null; now: Date; flagged: boolean }): AutoApproveDecision {
   if (args.flagged) return 'flagged'

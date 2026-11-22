@@ -12,10 +12,10 @@
  * which is why this is a module rather than a helper pasted into each client.
  */
 
-export type BadgeColor = { bg: string; fg: string }
+type BadgeColor = { bg: string; fg: string }
 
 /** Six tiles that all clear AA against their own foreground on a dark page. */
-export const BADGE_COLORS: readonly BadgeColor[] = [
+const BADGE_COLORS: readonly BadgeColor[] = [
   { bg: '#123244', fg: '#7fd8d8' },
   { bg: '#3a1f0a', fg: '#ff9d4d' },
   { bg: '#0d2740', fg: '#7fc4ff' },

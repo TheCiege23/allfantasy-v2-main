@@ -72,6 +72,11 @@ export interface GovernanceAnalysis {
   leagueId: string
   sport: LeagueSport
   season: number
+  /**
+   * Lineups set themselves (`isBestBallLeagueRow`, lib/core-app/leagueBestBall.ts — the test Chimmy's lineup
+   * alerts skip by): a Best Ball league or a best ball Guilly league. No lineup reminder is generated.
+   */
+  bestBall?: boolean
   pendingWaiverClaims: number
   inactiveManagers: Array<{ managerId: string; daysSinceActivity: number }>
   tradeDisputes: Array<{ tradeId: string; severity: AICommissionerSeverity; summary: string; managerIds: string[] }>

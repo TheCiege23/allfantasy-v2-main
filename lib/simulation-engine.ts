@@ -1,7 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
-
-const openai = getOpenAIRouteClient()
 
 export interface SimulationScenario {
   type: 'trade' | 'roster_move' | 'draft_pick'
@@ -19,7 +16,7 @@ export interface SimulationScenario {
   weatherImpact?: string
 }
 
-export interface SimulationResult {
+interface SimulationResult {
   iterations: number
   winProbability: { before: number; after: number; change: number }
   playoffProbability: { before: number; after: number; change: number }
@@ -39,7 +36,7 @@ export interface SimulationResult {
   reportCard: ReportCard
 }
 
-export interface ReportCard {
+interface ReportCard {
   overallGrade: string
   categories: {
     name: string
@@ -108,7 +105,6 @@ export function runMonteCarloSimulation(
   const baseChampProb = 8
 
   const valueDelta = totalReceiving - totalGiving
-  const valueRatio = totalReceiving / Math.max(totalGiving, 1)
 
   const winChanges: number[] = []
   const playoffChanges: number[] = []

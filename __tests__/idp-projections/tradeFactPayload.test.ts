@@ -80,4 +80,16 @@ describe('buildTradeFactPayload', () => {
     expect(p.playersInIds).toEqual([])
     expect(p.playersOutIds).toEqual([])
   })
+
+  it('records FAAB each way from Sleeper’s waiver_budget, and a known zero when none moved', () => {
+    // "Player for $35 FAAB": roster 4 sends the player, roster 8 sends $35.
+    const faabTrade = { ...TRADE, adds: { '4034': 8 }, drops: { '4034': 4 }, draft_picks: [], waiver_budget: [{ sender: 8, receiver: 4, amount: 35 }] }
+    expect(buildTradeFactPayload(faabTrade, 4, 't', [4, 8])).toMatchObject({ faabIn: 35, faabOut: 0 })
+    expect(buildTradeFactPayload(faabTrade, 8, 't', [4, 8])).toMatchObject({ faabIn: 0, faabOut: 35 })
+    // No waiver_budget at all: the keys are still written, as zero — "known, none moved".
+    expect(buildTradeFactPayload(TRADE, 4, 't', [4, 8])).toMatchObject({ faabIn: 0, faabOut: 0 })
+    // A malformed or non-positive entry is ignored, not counted.
+    const junk = { ...TRADE, waiver_budget: [{ sender: 4, receiver: 8, amount: -5 }, { sender: 4, receiver: 8 }] }
+    expect(buildTradeFactPayload(junk, 8, 't', [4, 8])).toMatchObject({ faabIn: 0, faabOut: 0 })
+  })
 })

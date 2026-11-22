@@ -9,10 +9,7 @@ import {
   UnifiedLeagueSettingsService,
   LeagueSettingsPermissionsService,
 } from '@/lib/league-settings-engine';
-import type {
-  ResetLeagueSettingsRequest,
-  ResetLeagueSettingsResponse,
-} from '@/lib/league-settings-engine/LeagueSettingsEngineTypes';
+import type { ResetLeagueSettingsResponse } from '@/lib/league-settings-engine/LeagueSettingsEngineTypes';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }): Promise<NextResponse> {
   const params = await props.params;
@@ -25,7 +22,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
 
     const leagueId = params.leagueId;
     const userId = session.user.id;
-    const body: ResetLeagueSettingsRequest = await req.json();
 
     // Get user permissions
     const userPermissions = LeagueSettingsPermissionsService.checkUserPermissions(

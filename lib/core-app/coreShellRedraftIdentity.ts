@@ -29,7 +29,7 @@ import {
  * without this an imported league can never theme. Its format columns win over the list row's for
  * the same reason its platform does: it is the fresh read.
  */
-export type CoreShellFreshLeague = Pick<
+type CoreShellFreshLeague = Pick<
   RedraftIdentityLeague,
   'sport' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'bestBallMode' | 'guillotineMode' | 'settings'
 >

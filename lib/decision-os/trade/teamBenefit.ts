@@ -29,18 +29,18 @@ import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeSca
 export const TEAM_BENEFIT_MODEL = 'team-benefit-v1-uncalibrated'
 
 /** Design starting weights (to be tuned by replaying completed trades). */
-export const VORP_WEIGHT = 0.7
-export const MARKET_WEIGHT = 0.3
-export const DEPTH_DISCOUNT = 0.85
-export const PLAYOFF_MULTIPLIER = 1.5
-export const LINEUP_GRADE_WEIGHT = 0.6
-export const PACKAGE_GRADE_WEIGHT = 0.4
+const VORP_WEIGHT = 0.7
+const MARKET_WEIGHT = 0.3
+const DEPTH_DISCOUNT = 0.85
+const PLAYOFF_MULTIPLIER = 1.5
+const LINEUP_GRADE_WEIGHT = 0.6
+const PACKAGE_GRADE_WEIGHT = 0.4
 /** A 1% change in weekly starting points counts as a 5-point package gap. UNCALIBRATED — see header. */
-export const LINEUP_WEIGHTING_SCALE = 5
+const LINEUP_WEIGHTING_SCALE = 5
 /** NFL minimum stay on injured reserve: the earliest week a player on IR can return. */
-export const IR_MINIMUM_WEEKS = 4
+const IR_MINIMUM_WEEKS = 4
 
-export const FLAT_RATE_APPROXIMATION =
+const FLAT_RATE_APPROXIMATION =
   'Every remaining week uses this week’s league-scored per-game projection, adjusted per week for byes, injury availability and 1.5× playoff weeks. Future-week projections are not available.'
 
 export type BenefitPlayer = {
@@ -63,7 +63,7 @@ export type BenefitHorizon = {
   playoffStartWeek: number | null
 }
 
-export type BenefitSideInput = {
+type BenefitSideInput = {
   teamId: string
   /** Active roster before the trade (reserve and taxi excluded). */
   activeIds: readonly string[]
@@ -86,7 +86,7 @@ export type TeamBenefitInput = {
   sides: readonly [BenefitSideInput, BenefitSideInput]
 }
 
-export type BenefitAssetLine = {
+type BenefitAssetLine = {
   playerId: string
   name: string
   position: string
@@ -111,7 +111,7 @@ export type BenefitSide = {
   grade: GradeLetter | null
 }
 
-export type FairnessLabel = 'fair' | 'leans' | 'lopsided' | 'heavily_lopsided'
+type FairnessLabel = 'fair' | 'leans' | 'lopsided' | 'heavily_lopsided'
 
 export type TeamBenefit = {
   model: string
@@ -148,7 +148,7 @@ export function horizonWeeks(h: BenefitHorizon): { weeks: number[]; playoffWeeks
 }
 
 /** One player's projected points in one week: rate × availability × (not on bye). Null when unprojected. */
-export function weekPoints(p: BenefitPlayer, week: number, currentWeek: number): number | null {
+function weekPoints(p: BenefitPlayer, week: number, currentWeek: number): number | null {
   if (p.perGame == null) return null
   if (p.byeWeek != null && p.byeWeek === week) return 0
   return p.perGame * availability(p.injuryStatus, week - currentWeek)

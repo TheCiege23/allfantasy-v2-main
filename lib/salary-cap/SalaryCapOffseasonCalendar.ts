@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getSalaryCapConfig } from './SalaryCapLeagueConfig'
 import { processExpirations, decrementContractYears } from './ContractLifecycleService'
 
-export type OffseasonPhase =
+type OffseasonPhase =
   | 'lock'
   | 'expiration'
   | 'rollover'
@@ -16,16 +16,7 @@ export type OffseasonPhase =
   | 'fa_open'
   | 'in_season'
 
-export async function getCurrentPhase(leagueId: string): Promise<OffseasonPhase | null> {
-  const config = await getSalaryCapConfig(leagueId)
-  if (!config) return null
-  if (config.offseasonPhase && config.offseasonPhaseEndsAt && new Date() < config.offseasonPhaseEndsAt) {
-    return config.offseasonPhase as OffseasonPhase
-  }
-  return 'in_season'
-}
-
-export async function setPhase(
+async function setPhase(
   leagueId: string,
   phase: OffseasonPhase,
   endsAt?: Date | null

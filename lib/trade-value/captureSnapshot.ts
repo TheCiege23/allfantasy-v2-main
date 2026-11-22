@@ -109,7 +109,7 @@ export async function computeRedraftTradeValueSnapshot(
     .map((a) => a.playerId as string)
 
   const seasonRosterCount = await prisma.redraftRoster.count({ where: { seasonId: input.seasonId } })
-  const leagueSize = seasonRosterCount || 12
+  const leagueSize = seasonRosterCount >= 2 ? seasonRosterCount : 12
 
   /*
    * The league's REAL shape — team count, starting slots, PPR, TE premium.
@@ -118,9 +118,8 @@ export async function computeRedraftTradeValueSnapshot(
    * by hardcoding `scoring: season.sport === 'NCAAF' ? 'standard' : 'ppr'`. Superflex, 2QB, TE
    * premium and league size all reach the engine from here now.
    *
-   * `seasonRosterCount` is the truthful team count when it is non-zero; the `|| 12` fallback above
-   * is kept for `leagueSize` (existing behaviour) but deliberately NOT used for the shape, because
-   * `buildLeagueShape` refusing is better than a 12-team guess for a 4- or 32-team league.
+   * The season's roster count is the evidence for league shape. Team profiles use a 12-team fallback
+   * when the count cannot describe a league, and the snapshot records that assumption.
    */
   let scoring = null as ReturnType<typeof scoringContextFromWorld>
   /*
@@ -338,6 +337,9 @@ export async function computeRedraftTradeValueSnapshot(
     scoring,
   })
 
+  if (seasonRosterCount < 2) {
+    snapshot.grade.bullets.push(`This season has no verified team count. Team profiles use ${leagueSize} teams.`)
+  }
   return snapshot
 }
 

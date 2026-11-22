@@ -14,7 +14,7 @@
  * Only rows with a provider identity alias. AF-native leagues have no `platformLeagueId` and never
  * match anything.
  */
-export type LeagueProviderIdentity = {
+type LeagueProviderIdentity = {
   platform: string | null | undefined
   platformLeagueId: string | null | undefined
 }

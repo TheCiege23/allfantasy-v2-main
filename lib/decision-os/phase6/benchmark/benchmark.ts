@@ -326,8 +326,6 @@ export function assemblePlatformBenchmark(
   const topTradeLeagues  = topN(leagueSignals, TOP_BOTTOM_COUNT, (s) => s.tradeActivity.perManagerRate, archetypeById)
   const topWaiverLeagues = topN(leagueSignals, TOP_BOTTOM_COUNT, (s) => s.waiverActivity.perManagerRate, archetypeById)
 
-  // ── Platform stats ────────────────────────────────────────────────────────
-  const sortedEngagement = sortedAsc(allEngagement)
   const archetypeDistribution: Record<string, number> = {}
   for (const s of leagueSignals) {
     const label = archetypeById.get(s.leagueId) ?? 'unknown'

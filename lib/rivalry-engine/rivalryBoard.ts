@@ -30,9 +30,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 
-export type RivalryChipTone = 'neutral' | 'warn'
+type RivalryChipTone = 'neutral' | 'warn'
 
-export type RivalryChip = {
+type RivalryChip = {
   label: string
   /**
    * ⚠ ONLY GENUINELY RARE STATS ARE TINTED. Build rule 2. Eliminations and
@@ -54,7 +54,7 @@ export type RivalryBoardRow = {
   context: string | null
 }
 
-export type RivalryBoard = {
+type RivalryBoard = {
   leagueId: string
   rows: RivalryBoardRow[]
   /**

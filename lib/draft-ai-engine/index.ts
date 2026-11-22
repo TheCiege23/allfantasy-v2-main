@@ -29,6 +29,12 @@ export interface DraftAIAssistInput {
   draftEligiblePositions?: ReadonlySet<string>
   aiAdpByKey?: Record<string, number>
   byeByKey?: Record<string, number>
+  /**
+   * The room's one pick, already decided on the server (`sharedDraftPickForUser`, lib/shared-services/draft/
+   * pickDecision.ts). When given it is used as-is and the explanation is written about it, so this route cannot
+   * name a different player from the draft card. Absent, the engine runs on `available` as before.
+   */
+  precomputed?: RecommendationResult | null
 }
 
 export interface DraftAIAssistOptions {
@@ -102,7 +108,7 @@ export async function runDraftAIAssist(
   options: DraftAIAssistOptions
 ): Promise<DraftAIAssistResult> {
   const sport = normalizeToSupportedSport(options.sport ?? input.sport)
-  const deterministic = computeDraftRecommendation({
+  const deterministic = input.precomputed ?? computeDraftRecommendation({
     available: input.available,
     teamRoster: input.teamRoster,
     rosterSlots: input.rosterSlots,

@@ -35,13 +35,13 @@ export type PlayerNewsSubject = {
 /** Legacy classification retained for source metadata; all relevant news now uses instant delivery. */
 const INSTANT_NEWS = /^news:(trade|release|signing|suspension|roster_move|waiver|retirement)$/
 
-export function subjectIsInstantWorthy(subject: PlayerNewsSubject): boolean {
+function subjectIsInstantWorthy(subject: PlayerNewsSubject): boolean {
   return subject.bucket.startsWith('news:') ? INSTANT_NEWS.test(subject.bucket) : isInstantBucket(subject.bucket as StatusBucket)
 }
 
 export type PlayerNewsPlan = { instant: string[]; digest: string[]; suppressed: string[] }
 
-export function easternDay(now: Date): string {
+function easternDay(now: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 }
 
@@ -105,7 +105,7 @@ export async function markPlayerNewsTold(userIds: string[], subject: PlayerNewsS
 }
 
 /** What the daily digest needs to group a bell row by league, team and position. */
-export type PlayerNewsDigestInfo = { playerName: string; team?: string | null; position?: string | null; status?: string | null; starter?: boolean }
+type PlayerNewsDigestInfo = { playerName: string; team?: string | null; position?: string | null; status?: string | null; starter?: boolean }
 
 /**
  * The two dispatches a plan becomes. Instant: push + bell, never email. Digest: bell only.

@@ -1,5 +1,5 @@
 import { approvePaidToolQuote } from '@/lib/tokens/paidToolClient'
-export type WorldCupTokenConfirmationResponse = {
+type WorldCupTokenConfirmationResponse = {
   code?: string
   error?: string
   message?: string
@@ -23,7 +23,7 @@ export function isWorldCupTokenConfirmationResponse(
   )
 }
 
-export function formatWorldCupTokenConfirmationMessage(
+function formatWorldCupTokenConfirmationMessage(
   body: WorldCupTokenConfirmationResponse
 ): string {
   const cost =
@@ -37,8 +37,8 @@ export function formatWorldCupTokenConfirmationMessage(
 
   const costLine =
     cost != null
-      ? `This World Cup AI action costs ${cost} token${cost === 1 ? "" : "s"}.`
-      : "This World Cup AI action requires tokens."
+      ? `This World Cup Chimmy action costs ${cost} token${cost === 1 ? "" : "s"}.`
+      : "This World Cup Chimmy action requires tokens."
   const balanceLine =
     balanceAfter != null
       ? ` Your balance after this action will be ${balanceAfter}.`

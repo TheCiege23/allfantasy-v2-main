@@ -4,6 +4,10 @@
  */
 
 import { gtagEvent } from '@/lib/gtag'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { MONETIZATION } from '@/lib/analytics/eventNames'
+import { normalizeEntrySource } from '@/lib/monetization/upgradeEntrySource'
+import { isInIosAppWithoutIapClient } from '@/lib/platform/iosApp'
 
 const CONVERSION_CATEGORY = 'monetization'
 const MONETIZATION_EVENT_PREFIX = 'monetization'
@@ -24,7 +28,7 @@ function toPlanTier(input: string | null | undefined): MonetizationPlanTier {
   if (value.includes('supreme')) return 'supreme'
   // Retired All-Access tier — any legacy all_access value now maps to the surviving Supreme bundle.
   if (value.includes('all_access') || value.includes('all-access')) return 'supreme'
-  if (value.includes('war_room') || value.includes('war-room')) return 'war_room'
+  if (value.includes('war_room') || value.includes('war-room') || value.includes('legacy')) return 'war_room'
   if (value.includes('commissioner')) return 'commissioner'
   if (value.includes('pro')) return 'pro'
   if (value.includes('token')) return 'tokens'
@@ -147,12 +151,19 @@ export function trackUpgradePromptOpened(params: {
   })
 }
 
+function recordOfferInteraction(eventName: string, surface: string, featureId?: string | null) {
+  if (isInIosAppWithoutIapClient()) return
+  const source = normalizeEntrySource(surface.startsWith('lock_') ? surface : featureId ? `lock_${featureId}` : null)
+  if (source) sendProductAnalyticsBeacon(eventName, { entry_source: source })
+}
+
 export function trackLockedFeatureViewed(params: {
   surface: string
   featureId?: string | null
   requiredPlan?: string | null
   entitlementStatus?: SubscriptionLifecycleStatus | null
 }) {
+  recordOfferInteraction(MONETIZATION.OFFER_VIEWED, params.surface, params.featureId)
   event('locked_feature_viewed', {
     surface: params.surface,
     feature_id: params.featureId ?? null,
@@ -169,6 +180,9 @@ export function trackLockedFeatureConversionClick(params: {
   requiredPlan?: string | null
   ruleCode?: string | null
 }) {
+  if (params.ctaType === 'upgrade') {
+    recordOfferInteraction(MONETIZATION.OFFER_CLICKED, params.surface, params.featureId)
+  }
   event('locked_feature_conversion_click', {
     surface: params.surface,
     cta_type: params.ctaType,

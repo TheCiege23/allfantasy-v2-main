@@ -13,7 +13,7 @@ import { persistStandings, persistDynastySeason, persistTradesForSeason } from "
 import { isSeasonComplete } from "@/lib/league-import/seasonCompletion";
 import type { BackfillStatus, BackfillObservability, HistoricalSeasonRef } from "./types";
 
-export interface DynastyBackfillInput {
+interface DynastyBackfillInput {
   leagueId: string;
   /**
    * If true, run even when league is not marked dynasty.
@@ -30,7 +30,7 @@ export interface DynastyBackfillInput {
   skipExistingSeasons?: boolean;
 }
 
-export interface DynastyBackfillResult {
+interface DynastyBackfillResult {
   success: boolean;
   status: BackfillStatus;
   seasonsDiscovered: number;

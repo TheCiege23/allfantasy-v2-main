@@ -198,6 +198,23 @@ describe('AutopickMeToggle — draft like me (AF Pro)', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ enabled: true, mode: 'draft_as_me' })
   })
+
+  it('says where it learned the style, or that it has too little to go on (2026-11-21)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ style: { ready: false, summary: 'Draft like me needs 10 of your own picks from past drafts and has 2.' } }),
+    })
+    renderToggle({ ...enabledAutopick, mode: 'draft_as_me', isProEligible: true })
+    await waitFor(() => expect(screen.getByTestId('autopick-draft-like-me-summary').textContent).toMatch(/needs 10 of your own picks/))
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/leagues/league-1/draft/autopick/me/style')
+  })
+
+  it('asks nothing about style in the other modes', async () => {
+    renderToggle({ ...enabledAutopick, mode: 'standard', isProEligible: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('autopick-draft-like-me-summary')).toBeNull()
+  })
 })
 
 describe('AutopickMeToggle — success response', () => {

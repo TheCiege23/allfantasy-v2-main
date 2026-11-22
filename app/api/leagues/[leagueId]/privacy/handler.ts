@@ -3,11 +3,11 @@
  * PATCH: Update privacy and invite settings (commissioner only).
  */
 
+import { assertCommissionerAccess, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissions'
 import { getLeaguePrivacySettings, updateLeaguePrivacySettings } from '@/lib/league-privacy'
 import type { LeaguePrivacySettings } from '@/lib/league-privacy'
 
@@ -30,7 +30,7 @@ export async function GET(
   try {
     const [settings, commissioner] = await Promise.all([
       getLeaguePrivacySettings(leagueId),
-      isCommissioner(leagueId, userId),
+      canCommissionerAct(leagueId, userId, 'view'),
     ])
     const out: LeaguePrivacySettings & { isCommissioner: boolean } = {
       ...settings,
@@ -56,7 +56,7 @@ export async function PATCH(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

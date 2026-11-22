@@ -31,4 +31,3 @@ export function AppLinkHint({ platform, screen }: { platform: string | null | un
   )
 }
 
-export default AppLinkHint

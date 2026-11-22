@@ -8,7 +8,7 @@ interface SharedProfileBootstrapInput {
   profile: Omit<UserProfileForSettings, "settings">
 }
 
-export interface SharedProfileBootstrapResult {
+interface SharedProfileBootstrapResult {
   profile: Omit<UserProfileForSettings, "settings">
   patchPayload: ProfileUpdatePayload
 }

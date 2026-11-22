@@ -3,10 +3,21 @@
  * Tournament Mode — defaults, theme packs, naming sets.
  */
 
-import type { TournamentSettings, TournamentConferenceTheme } from './types'
-export { TOURNAMENT_PARTICIPANT_POOL_SIZES, TOURNAMENT_LEAGUE_SIZE_FIXED } from './types'
+import type { TournamentSettings } from './types'
+export { TOURNAMENT_PARTICIPANT_POOL_SIZES } from './types'
 
 export const TOURNAMENT_LEAGUE_VARIANT = 'tournament_mode' as const
+
+/**
+ * Every league a tournament builds has a draft ahead of it, so it starts before the draft.
+ * Without this the league took the column default (`in_season`), which refuses a draft start.
+ * Its draft-settings row is added after the league's defaults are in place
+ * (lib/draft-defaults/ensureLeagueSettingsRow.ts).
+ */
+export const TOURNAMENT_LEAGUE_DRAFT_READY = {
+  status: 'pre_draft',
+  lifecycleState: 'pre_draft',
+} as const
 
 export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   draftType: 'snake',
@@ -27,22 +38,6 @@ export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   forumAnnouncementsEnabled: true,
   eliminationAdvancementPerLeague: 6,
 }
-
-export const BLACK_THEME: TournamentConferenceTheme = {
-  primaryColor: '#1a1a1a',
-  secondaryColor: '#d4af37',
-  iconName: 'shield',
-  label: 'Black',
-}
-
-export const GOLD_THEME: TournamentConferenceTheme = {
-  primaryColor: '#d4af37',
-  secondaryColor: '#1a1a1a',
-  iconName: 'crown',
-  label: 'Gold',
-}
-
-export const BLACK_VS_GOLD_CONFERENCE_NAMES = ['Black', 'Gold'] as const
 
 /** Feeder round league name pool (Black vs Gold style). */
 export const FEEDER_LEAGUE_NAMES = [

@@ -47,17 +47,17 @@ function setCached<T>(map: Map<string, CacheEntry<T>>, key: string, data: T): vo
 }
 
 /** Cache key for bracket leagues: baseUrl + sport + query (query changes DB filter). */
-export function getBracketCacheKey(baseUrl: string, sport: string | null, query: string | null): string {
+function getBracketCacheKey(baseUrl: string, sport: string | null, query: string | null): string {
   return `bracket:${baseUrl}:${sport ?? "all"}:${(query ?? "").slice(0, 80)}`
 }
 
 /** Cache key for creator leagues: baseUrl + sport (query is applied in-memory after). */
-export function getCreatorCacheKey(baseUrl: string, sport: string | null): string {
+function getCreatorCacheKey(baseUrl: string, sport: string | null): string {
   return `creator:${baseUrl}:${sport ?? "all"}`
 }
 
 /** Cache key for public fantasy leagues: baseUrl + sport + query (query changes DB filter). */
-export function getFantasyCacheKey(baseUrl: string, sport: string | null, query: string | null): string {
+function getFantasyCacheKey(baseUrl: string, sport: string | null, query: string | null): string {
   return `fantasy:${baseUrl}:${sport ?? "all"}:${(query ?? "").slice(0, 80)}`
 }
 
@@ -105,6 +105,19 @@ export function setCachedFantasyCards(
   cards: DiscoveryCard[]
 ): void {
   setCached(fantasyCache, getFantasyCacheKey(baseUrl, sport, query), cards)
+}
+
+/** Private "ask to join" cards (privateLeagueRequests.ts): sport + query, kept apart from public ones. */
+function getPrivateFantasyCacheKey(sport: string | null, query: string | null): string {
+  return `private-fantasy:${sport ?? "all"}:${(query ?? "").slice(0, 80)}`
+}
+
+export function getCachedPrivateFantasyCards(sport: string | null, query: string | null): DiscoveryCard[] | null {
+  return getCached(fantasyCache, getPrivateFantasyCacheKey(sport, query))
+}
+
+export function setCachedPrivateFantasyCards(sport: string | null, query: string | null, cards: DiscoveryCard[]): void {
+  setCached(fantasyCache, getPrivateFantasyCacheKey(sport, query), cards)
 }
 
 /** Cache key for computed discovery lists (post-filter/sort, pre-pagination). */

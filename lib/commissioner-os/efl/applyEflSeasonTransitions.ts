@@ -20,12 +20,12 @@ import {
 } from '@/lib/commissioner-os/efl/seasonTransitionResolver'
 import type { EflSeasonTransitionPlan } from '@/lib/commissioner-os/efl/types'
 
-export type ApplyEflSeasonTransitionsInput = ResolveEflSeasonTransitionsInput & {
+type ApplyEflSeasonTransitionsInput = ResolveEflSeasonTransitionsInput & {
   /** Plan only, mutate nothing. Passed straight through to the canonical engine. */
   dryRun?: boolean
 }
 
-export type ApplyEflSeasonTransitionsResult = {
+type ApplyEflSeasonTransitionsResult = {
   plan: EflSeasonTransitionPlan
   /** Null when the plan was not settled, so nothing was handed to the engine. */
   applied: RunPromotionResult | null

@@ -18,15 +18,15 @@ import {
   type WorldCupKnockoutMode,
 } from "./worldCupKnockoutMode"
 
-export const WORLD_CUP_MAX_PARTICIPANTS_CAP = 100
-export const WORLD_CUP_MAX_ENTRIES_PER_USER_CAP = 5
+const WORLD_CUP_MAX_PARTICIPANTS_CAP = 100
+const WORLD_CUP_MAX_ENTRIES_PER_USER_CAP = 5
 
 /** Env gate: allow commissioners to show everyone's picks before lock (otherwise admin-only). */
 export function worldCupPublicPicksEarlyGloballyAllowed(): boolean {
   return process.env.WORLD_CUP_PUBLIC_PICKS_BEFORE_LOCK === "true"
 }
 
-export type WorldCupLeagueSettingsStored = {
+type WorldCupLeagueSettingsStored = {
   scoringStyle?: "standard" | "custom"
   tiebreakerFinalScore?: boolean
   /** When false, new users cannot join after the bracket lock boundary. */
@@ -40,7 +40,7 @@ export type WorldCupLeagueSettingsStored = {
   joinPasswordHash?: string | null
 }
 
-export type WorldCupLeagueSettingsUi = WorldCupLeagueSettingsStored & {
+type WorldCupLeagueSettingsUi = WorldCupLeagueSettingsStored & {
   inviteGateConfigured: boolean
 }
 
@@ -218,7 +218,7 @@ export async function applyWorldCupBracketSettingsPatch(input: {
   )
   if (advancedSettingTouched && !hasAdvancedCommissioner) {
     throw new Error(
-      "AF Commissioner is required for custom scoring, custom locks, advanced invite controls, advanced notifications, and commissioner AI settings."
+      "AF Commissioner is required for custom scoring, custom locks, advanced invite controls, advanced notifications, and commissioner Chimmy settings."
     )
   }
 
@@ -234,7 +234,7 @@ export async function applyWorldCupBracketSettingsPatch(input: {
     throw new Error("AF Pro is required to enable Bracket Brain for this pool.")
   }
   if (patch.commissioner?.enableAiSummaries === true && !userHasAfPro) {
-    throw new Error("AF Pro is required to enable AI summaries.")
+    throw new Error("AF Pro is required to enable Chimmy summaries.")
   }
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

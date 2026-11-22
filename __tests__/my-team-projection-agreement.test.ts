@@ -92,6 +92,12 @@ const RECEPTIONS: Record<string, number> = {
   o3: 8,
   oLive: 20, // in the opponent's live lineup only
 }
+vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({
+  loadLeaguePlayerMetrics: async ({ rosterIds }: { rosterIds: string[] }) => ({
+    season: 2026, week: 3, unit: 'fantasy points',
+    rows: rosterIds.filter(id => id in RECEPTIONS).map(id => ({ rosterPlayerId: id, weekly: RECEPTIONS[id], perGame: RECEPTIONS[id] })),
+  }),
+}))
 const OUT = new Set(['rb1', 'o2'])
 const nameOf = (id: string) => `Player ${id}`
 

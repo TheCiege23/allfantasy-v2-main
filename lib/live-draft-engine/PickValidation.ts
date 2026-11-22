@@ -21,7 +21,12 @@ export interface ValidatePickInput {
   position: string
   rosterId: string
   currentOnClockRosterId: string
-  existingPicks: { playerName: string; position: string }[]
+  existingPicks: { playerName: string; position: string; playerId?: string | null }[]
+  /**
+   * The pick's player id, when the room sent one. Two different players can share a name (common in a
+   * deep college or minor-league pool); with an id on both sides they are told apart by id, not name.
+   */
+  playerId?: string | null
   sessionStatus: string
   /**
    * Commit M — when true, the caller is a commissioner correction flow
@@ -65,8 +70,15 @@ export function validatePickSubmission(input: ValidatePickInput): PickValidation
     return { valid: true }
   }
   const cleanPicks = input.existingPicks.filter((p) => !isDraftPickRowEmpty(p))
+  const newId = String(input.playerId ?? '').trim()
+  if (newId && cleanPicks.some((p) => String(p.playerId ?? '').trim() === newId)) {
+    return { valid: false, error: `Duplicate draft violation: ${name} selected more than once`, code: DRAFT_PICK_DUPLICATE_PLAYER }
+  }
+  // A drafted player with a different id is a different person, whatever the name. A pick with no id
+  // on either side still falls back to the name.
+  const nameComparable = newId ? cleanPicks.filter((p) => !String(p.playerId ?? '').trim()) : cleanPicks
   const dupErrors = validateUniquePlayer([
-    ...cleanPicks.map((p) => ({
+    ...nameComparable.map((p) => ({
       overall: 0,
       round: 0,
       pick: 0,

@@ -61,10 +61,4 @@ describe('/messages uploads name their conversation', () => {
       /useEffect\(\(\) => \{\s*clearAttachmentState\(setAttachmentPreview, setUploadError\)\s*\}, \[selectedThreadId\]\)/,
     )
   })
-
-  it('the shared media hook sends it too', () => {
-    const blocks = uploadBlocks(stripComments(read('hooks/useMediaUpload.ts')))
-    expect(blocks).toHaveLength(1)
-    expect(blocks[0]).toMatch(/formData\.append\("threadId", threadId\)/)
-  })
 })

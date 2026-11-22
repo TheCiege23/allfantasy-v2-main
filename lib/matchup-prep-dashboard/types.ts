@@ -1,11 +1,11 @@
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 
-export type MatchupLinkToolId = 'startSit' | 'trade' | 'waiver' | 'trending' | 'power' | 'injury' | 'warRoom'
+type MatchupLinkToolId = 'startSit' | 'trade' | 'waiver' | 'trending' | 'power' | 'injury' | 'warRoom'
 
-export type MatchupTeamFocusId = 'my_team' | 'specific_team'
+type MatchupTeamFocusId = 'my_team' | 'specific_team'
 
-export type MatchupTimeHorizonId =
+type MatchupTimeHorizonId =
   | 'this_matchup'
   | 'next_matchup'
   | 'next_2_matchups'
@@ -22,17 +22,7 @@ export type MatchupStrategyModeId =
   | 'playoff_prep'
   | 'neutral'
 
-export type MatchupPrepViewTabId =
-  | 'overview'
-  | 'game_plan'
-  | 'lineup_edge'
-  | 'opponent_weaknesses'
-  | 'injuries'
-  | 'schedule'
-  | 'streaming'
-  | 'ai_insights'
-
-export type MatchupPrepToggles = {
+type MatchupPrepToggles = {
   includeLiveNews: boolean
   includeInjuries: boolean
   includeScheduleAdjustments: boolean
@@ -66,7 +56,7 @@ export type MatchupStreamingHint = {
   linkTool: MatchupLinkToolId
 }
 
-export type MatchupScoringSummary = {
+type MatchupScoringSummary = {
   scoringModel: string
   receptionFormat: string | null
   superflex: boolean | null
@@ -74,7 +64,7 @@ export type MatchupScoringSummary = {
 }
 
 /** Provider-health flags for UI chips — mirrors other AI tools. */
-export type MatchupPrepSourceFlags = {
+type MatchupPrepSourceFlags = {
   /** Opponent resolved via Sleeper matchups API or native team_performances row. */
   opponentResolved: boolean
   /** My-team Start/Sit projection batch produced at least one row. */
@@ -93,14 +83,14 @@ export type MatchupPrepSourceFlags = {
   aiEnvelopeReady: boolean
 }
 
-export type MatchupPeriodSnapshot = {
+type MatchupPeriodSnapshot = {
   season: number
   week: number
   weekLabel: string
   periodSource: string | null
 }
 
-export type WinProbabilityModelId = 'starter_spread_normal' | 'mean_edge_logistic'
+type WinProbabilityModelId = 'starter_spread_normal' | 'mean_edge_logistic'
 
 export type MatchupFloorVsUpside = {
   floorLeanPlayer: string | null
@@ -213,7 +203,7 @@ export type MatchupPrepDashboardResult = {
   computedAt: string
 }
 
-export type MatchupPrepDashboardError = {
+type MatchupPrepDashboardError = {
   ok: false
   error: string
   code?: LeagueToolAccessErrorCode | 'VALIDATION'

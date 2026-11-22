@@ -715,7 +715,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
       skipCache: true,
     })
     aiSummary = ai.ok ? ai.text : null
-    if (!ai.ok) dataGaps.push('AI summary unavailable (provider).')
+    if (!ai.ok) dataGaps.push('Chimmy summary unavailable (provider).')
   }
 
   const mpLce = lceFirst.ok ? lceFirst : await resolveNormalizedLeagueContext({

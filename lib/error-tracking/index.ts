@@ -6,4 +6,4 @@ export { captureException, setErrorReporter, type CaptureContext } from './captu
 export { initFrontendErrorTracking } from './frontend'
 export { logApiFailure, type ApiFailureContext } from './api'
 export { logAiFailure, type AiFailureContext } from './ai'
-export { initSentryClient, initSentryServer } from './sentry'
+export { initSentryServer } from './sentry'

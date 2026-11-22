@@ -9,6 +9,8 @@
  * alphabet, not a standing.
  */
 
+import { espnKnockoutWeek } from './espnKnockoutWeek'
+
 export type RailRecordTeam = {
   leagueId: string
   externalId: string
@@ -27,6 +29,12 @@ export type RailRecord = {
   rank: number | null
   /** Teams in the league. */
   teams: number
+  /**
+   * The week ESPN knocked you out of an all-play elimination league (`espnKnockoutWeek.ts`). Set, the
+   * row reads "Knocked out · Week N" and `rank` is null: ESPN ranks the knocked-out by how recently
+   * they went, which is not a place in anything.
+   */
+  knockedOutWeek?: number | null
 }
 
 const played = (t: RailRecordTeam) => t.wins + t.losses + t.ties
@@ -35,6 +43,8 @@ const winPct = (t: RailRecordTeam) => (played(t) === 0 ? 0 : (t.wins + t.ties / 
 export function railRecordsFrom(
   mine: ReadonlyArray<{ leagueId: string; externalId: string }>,
   teams: ReadonlyArray<RailRecordTeam>,
+  /** Per league: its size when ESPN's stored settings say all-play elimination (`espnAllPlayEliminationSize`). */
+  allPlayEliminationSize: ReadonlyMap<string, number> = new Map(),
 ): Record<string, RailRecord> {
   const byLeague = new Map<string, RailRecordTeam[]>()
   for (const t of teams) byLeague.set(t.leagueId, [...(byLeague.get(t.leagueId) ?? []), t])
@@ -50,6 +60,12 @@ export function railRecordsFrom(
       rank = 1 + league.filter((t) => winPct(t) > winPct(me) || (winPct(t) === winPct(me) && t.pointsFor > me.pointsFor)).length
     }
     if (rank > league.length) rank = null
+    const size = allPlayEliminationSize.get(claim.leagueId)
+    const knockedOutWeek = size != null ? espnKnockoutWeek({ size, me, league }) : null
+    if (knockedOutWeek != null) {
+      out[claim.leagueId] = { wins: me.wins, losses: me.losses, ties: me.ties, rank: null, teams: league.length, knockedOutWeek }
+      continue
+    }
     out[claim.leagueId] = { wins: me.wins, losses: me.losses, ties: me.ties, rank, teams: league.length }
   }
   return out

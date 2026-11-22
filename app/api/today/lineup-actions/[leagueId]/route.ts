@@ -1,3 +1,4 @@
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -23,7 +24,9 @@ export const dynamic = 'force-dynamic'
 async function buildSportsScheduleUrgency(leagueId: string, userId: string, now: Date) {
   const league = await prisma.league.findFirst({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
   if (!league || String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') return undefined
-  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { playerData: true } })
+  // Own teams only, as before; with several, the first (this is an informational read).
+  const viewing = await resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false })
+  const roster = viewing ? await prisma.roster.findFirst({ where: { leagueId, id: viewing.rosterId }, select: { playerData: true } }) : null
   const refs = extractPlayerRefs(roster?.playerData)
   const week = weekFromLeagueSettingsForLineup(league.settings)
   const season = league.season ?? now.getFullYear()

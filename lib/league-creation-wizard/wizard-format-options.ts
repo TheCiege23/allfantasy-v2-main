@@ -4,15 +4,14 @@ import { defaultTribeSlots, type SurvivorTribeSlot } from '@/lib/survivor/surviv
  * Deeper tuning stays in League settings after the league exists.
  */
 
-import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clampSurvivorCastSize } from '@/lib/league-creation-wizard/sport-team-limits'
 import type { ZombieUniverseTierId } from '@/lib/zombie/zombie-universe-tier'
 
-export type TournamentLeagueNamingMode = 'commissioner_custom' | 'app_generated' | 'ai_themed'
+type TournamentLeagueNamingMode = 'commissioner_custom' | 'app_generated' | 'ai_themed'
 
-export type SurvivorTribeNameMode = 'auto' | 'custom'
-export type SurvivorCommissionerRole = 'commissioner_only' | 'player_commissioner'
-export type SurvivorEntryFeeMode = 'free' | 'paid'
+type SurvivorTribeNameMode = 'auto' | 'custom'
+type SurvivorCommissionerRole = 'commissioner_only' | 'player_commissioner'
+type SurvivorEntryFeeMode = 'free' | 'paid'
 
 export interface WizardFormatOptions {
   /** Fantasy tournament (multi-league hub) — uses POST /api/tournament/create */
@@ -65,6 +64,11 @@ export interface WizardFormatOptions {
   bigBrotherFinaleFormat: string
   /** Big Brother — jury start mode */
   bigBrotherJuryMode: string
+  /**
+   * Big Brother — the number the jury mode needs: evictions before the jury (after_eliminations), houseguests left
+   * (when_remaining) or the week (fixed_week). Null = the game's default for that mode (lib/big-brother/bigBrotherSetupRules.ts).
+   */
+  bigBrotherJuryValue: number | null
   /** Big Brother — HOH challenge mode */
   bigBrotherChallengeMode: string
   /** Big Brother — eviction tie-break mode */
@@ -116,6 +120,7 @@ export const DEFAULT_WIZARD_FORMAT_OPTIONS: WizardFormatOptions = {
   bigBrotherSubtitle: '',
   bigBrotherFinaleFormat: 'final_2',
   bigBrotherJuryMode: 'after_eliminations',
+  bigBrotherJuryValue: null,
   bigBrotherChallengeMode: 'deterministic_score',
   bigBrotherTieBreak: 'hoh_vote',
   bigBrotherConsecutiveHoh: false,
@@ -130,17 +135,12 @@ export const DEFAULT_WIZARD_FORMAT_OPTIONS: WizardFormatOptions = {
   c2cCollegeSlots: 6,
 }
 
-/** Survivor cast: 16 / 20 / 24 only (all sports). */
-export function getSurvivorTeamBounds(_sport: string): { min: number; max: number } {
-  return { min: 16, max: 24 }
-}
-
 export function clampSurvivorTeamCount(_sport: string, n: number): number {
   return clampSurvivorCastSize(n)
 }
 
 /** Tribe count from team count: max 4 tribes, at least 2. */
-export function suggestedSurvivorTribeCount(teamCount: number): number {
+function suggestedSurvivorTribeCount(teamCount: number): number {
   if (teamCount <= 8) return 2
   if (teamCount <= 16) return 3
   return 4
@@ -223,6 +223,7 @@ export function formatOptionsApplyToLeagueType(
     }
     out.big_brother_finale_format = options.bigBrotherFinaleFormat || 'final_2'
     out.big_brother_jury_mode = options.bigBrotherJuryMode || 'after_eliminations'
+    if (options.bigBrotherJuryValue != null && options.bigBrotherJuryValue > 0) out.big_brother_jury_value = options.bigBrotherJuryValue
     out.big_brother_challenge_mode = options.bigBrotherChallengeMode || 'deterministic_score'
     out.big_brother_tie_break = options.bigBrotherTieBreak || 'hoh_vote'
     out.big_brother_consecutive_hoh = options.bigBrotherConsecutiveHoh ?? false

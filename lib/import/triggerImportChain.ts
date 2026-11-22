@@ -3,7 +3,7 @@
  * Each request processes one season; the next step is triggered via authenticated fetch.
  */
 /** Prefer VERCEL_URL so preview deployments chain to themselves, not production NEXTAUTH_URL. */
-export function getImportWorkerBaseUrl(): string {
+function getImportWorkerBaseUrl(): string {
   const vercel = process.env.VERCEL_URL?.trim()
   if (vercel) return vercel.startsWith("http") ? vercel.replace(/\/$/, "") : `https://${vercel}`
   const fromEnv = process.env.NEXTAUTH_URL?.trim().replace(/\/$/, "")
@@ -11,7 +11,7 @@ export function getImportWorkerBaseUrl(): string {
   return ""
 }
 
-export function getImportWorkerSecret(): string {
+function getImportWorkerSecret(): string {
   return (
     process.env.IMPORT_WORKER_SECRET?.trim() ||
     process.env.CRON_SECRET?.trim() ||

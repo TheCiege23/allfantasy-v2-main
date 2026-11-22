@@ -1,0 +1,67 @@
+/*
+ * My team — the head-to-head look (2026-11-09), the lineup's half of the Matchup board's
+ * af-matchup-h2h.css: round 44px headshots with the club crest, 15px names, a taller solid slot pill,
+ * and the league-scored projection set a step larger.
+ *
+ * ⚠ SIZES ONLY, INSIDE THE COLUMNS THAT EXIST. `.af-mt-row`'s grid tracks are left alone on purpose:
+ * af-my-team-dynasty.css re-declares them for dynasty leagues, and the phone passes in af-my-team.css
+ * re-declare them again. Restating them here would undo both. No colour is named either — the
+ * position tints, the redraft frame and the themes keep theirs.
+ *
+ * ⚠ WIDE PAGES ONLY. Below 861px the base sheet shrinks portraits to 30px and drops the crest
+ * (`@media (max-width: 860px)`), and the page's own container queries take over at ≤600px. This block
+ * is the complement of both, so no phone or tablet rule changes. Scoped to `[data-look='h2h']`, which
+ * MyTeam.tsx sets on its lists, so no other `.af-mt-row` is touched.
+ */
+@media (min-width: 861px) {
+  @container af-mt (min-width: 601px) {
+    .af-mt-list[data-look='h2h'] .af-mt-row {
+      min-height: 64px;
+    }
+
+    .af-mt-list[data-look='h2h'] .af-mt-slot {
+      padding: 8px 0;
+      border-radius: 9px;
+      font-size: 12px;
+    }
+
+    .af-mt-list[data-look='h2h'] .af-mt-player {
+      gap: 12px;
+    }
+    .af-mt-list[data-look='h2h'] .af-mt-portrait,
+    .af-mt-list[data-look='h2h'] .af-mt-portrait .af-mt-avatar {
+      width: 44px;
+      height: 44px;
+    }
+    .af-mt-list[data-look='h2h'] .af-mt-avatar {
+      border-radius: 50%;
+    }
+    /* No headshot: the initial, centred. `.af-mt-portrait .af-mt-avatar { display: block }` in the base
+       sheet outranks `.af-mt-avatar--none`'s grid, which left the letter in the top-left corner. */
+    .af-mt-list[data-look='h2h'] .af-mt-portrait .af-mt-avatar--none {
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+    }
+    .af-mt-list[data-look='h2h'] .af-mt-portrait .af-mt-teamlogo {
+      width: 18px;
+      height: 18px;
+      right: -4px;
+      bottom: -4px;
+    }
+
+    .af-mt-list[data-look='h2h'] .af-mt-player-name {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+    .af-mt-list[data-look='h2h'] .af-mt-player-meta {
+      margin-top: 3px;
+      font-size: 12px;
+    }
+
+    /* The league-scored number leads (see af-my-team.css): a step larger, so it reads across the row. */
+    .af-mt-list[data-look='h2h'] .af-mt-proj--af {
+      font-size: 17px;
+    }
+  }
+}

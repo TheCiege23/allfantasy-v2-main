@@ -14,7 +14,7 @@ export type RoomGridColumn = 'seed' | 'power' | 'pointsFor' | 'form'
 
 export type RoomGridCell = { column: RoomGridColumn; rank: number; tier: 1 | 2 | 3 | 4 | 5 }
 
-export type RoomGridRow = {
+type RoomGridRow = {
   managerId: string
   teamName: string
   isYou: boolean
@@ -32,7 +32,7 @@ export type RoomGrid = {
 }
 
 /** Fewer than this and a five-step shade says nothing a list does not. */
-export const ROOM_GRID_MIN_TEAMS = 3
+const ROOM_GRID_MIN_TEAMS = 3
 
 /** Competition ranking (1, 1, 3): a tie shares the better rank, and the next rank skips. */
 function competitionRanks<T>(items: T[], score: (t: T) => number): Map<T, number> {

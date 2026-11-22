@@ -43,7 +43,7 @@ export function playoffGamesFromSleeperBracket(
     })
 }
 
-export type RedraftPlayoffMatchupRow = {
+type RedraftPlayoffMatchupRow = {
   roundNumber: number
   homeRosterId: string | null
   awayRosterId: string | null

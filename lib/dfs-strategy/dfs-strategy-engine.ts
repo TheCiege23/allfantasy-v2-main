@@ -13,15 +13,15 @@ import { z } from 'zod'
 // Types
 // ---------------------------------------------------------------------------
 
-export const ContestTypeEnum = z.enum([
+const ContestTypeEnum = z.enum([
   'cash', 'tournament', 'single_entry', 'large_field', 'showdown', 'small_field', 'qualifier',
 ])
 
-export const StrategyModeEnum = z.enum([
+const StrategyModeEnum = z.enum([
   'balanced', 'safe_floor', 'max_ceiling', 'anti_chalk', 'stack_hunting', 'game_theory', 'late_swap_ready',
 ])
 
-export interface SlatePlayer {
+interface SlatePlayer {
   playerId: string
   playerName: string
   position: string
@@ -51,16 +51,16 @@ export const DfsStrategyInputSchema = z.object({
   })),
   salaryCap: z.number().default(50000),
 })
-export type DfsStrategyInput = z.infer<typeof DfsStrategyInputSchema>
+type DfsStrategyInput = z.infer<typeof DfsStrategyInputSchema>
 
-export interface StackIdea {
+interface StackIdea {
   label: string
   score: number
   players: string[]
   rationale: string
 }
 
-export interface DfsStrategyResult {
+interface DfsStrategyResult {
   slateId: string
   contestType: string
   strategyMode: string

@@ -10,7 +10,7 @@
 import type { NormalizedLeagueFacts, ArchetypeTag } from './types'
 
 /** Per-team activity thresholds (transactions / trades per team over the season). Documented + testable. */
-export const ACTIVITY_THRESHOLDS = {
+const ACTIVITY_THRESHOLDS = {
   // transactions per team across the season
   txPerTeamLow: 3,
   txPerTeamHigh: 10,

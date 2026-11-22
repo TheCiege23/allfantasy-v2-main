@@ -7,7 +7,7 @@ import { SimulationConfidenceIndicator } from './SimulationConfidenceIndicator'
 import type { TeamSeasonForecastDisplay } from './TeamForecastCard'
 import { getToolToAIChatHref } from '@/lib/chimmy-chat'
 
-export type LeagueForecastDashboardProps = {
+type LeagueForecastDashboardProps = {
   teamForecasts: TeamSeasonForecastDisplay[]
   playoffSpots?: number
   leagueId?: string
@@ -111,7 +111,7 @@ export function LeagueForecastDashboard({
       {aiSummary && (
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
           <h3 className="text-xs font-semibold text-cyan-400/90 uppercase tracking-wider mb-2">
-            AI summary
+            Chimmy summary
           </h3>
           <p className="text-sm text-white/80 whitespace-pre-wrap">{aiSummary}</p>
           <Link

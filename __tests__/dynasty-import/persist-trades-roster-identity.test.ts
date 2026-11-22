@@ -203,3 +203,32 @@ describe('persistTradesForSeason — sport label', () => {
     expect(updateFor('ownerA').sport).toBe('nba')
   })
 })
+
+describe('waiver budget (LeagueTrade.budgetGiven / budgetReceived)', () => {
+  const owners = new Map([['101', 'fx-a'], ['202', 'fx-b']])
+  const write = async (waiverBudget: NormalizedTradeFact['waiverBudget']) => {
+    upsertTrade.mockClear()
+    await persistTradesForSeason('lg', 2026, [{ ...trade('101', '202'), ...(waiverBudget !== undefined ? { waiverBudget } : {}) }], owners, 'fantrax', 'nfl')
+    const rows = upsertTrade.mock.calls.map(([args]) => args as { create: Record<string, unknown>; update: Record<string, unknown> })
+    const of = (owner: string) => rows.find((r) => r.create.historyId === `hist-${owner}`)!
+    return { a: of('fx-a'), b: of('fx-b') }
+  }
+
+  it('written each way, on create AND update, when the source read it', async () => {
+    const { a, b } = await write([{ sender: '101', receiver: '202', amount: 5000 }, { sender: '202', receiver: '101', amount: 25 }])
+    expect(a.create).toMatchObject({ budgetGiven: 5000, budgetReceived: 25 })
+    expect(b.create).toMatchObject({ budgetGiven: 25, budgetReceived: 5000 })
+    expect(a.update).toMatchObject({ budgetGiven: 5000, budgetReceived: 25 })
+  })
+
+  it('an empty list is a read zero, written as 0', async () => {
+    const { a } = await write([])
+    expect(a.create).toMatchObject({ budgetGiven: 0, budgetReceived: 0 })
+  })
+
+  it('absent leaves both columns untouched (NULL = never read), so a Sleeper backfill cannot zero them', async () => {
+    const { a } = await write(undefined)
+    expect('budgetGiven' in a.create).toBe(false)
+    expect('budgetGiven' in a.update).toBe(false)
+  })
+})

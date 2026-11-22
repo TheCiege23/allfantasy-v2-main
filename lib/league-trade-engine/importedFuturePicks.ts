@@ -3,9 +3,15 @@
  * and the league's own draft history. See `futurePickInventory.ts` for the rules; this module is
  * only the reads and the roster join.
  *
- * ⚠ SLEEPER AND MFL ONLY. Those are the providers whose traded picks are synced into the table.
- * Rebuilding every team's own picks for an ESPN, Yahoo or Fantrax league would list a pick with its
+ * ⚠ SLEEPER, MFL AND FANTRAX ONLY. Those are the providers whose picks are synced into the table.
+ * Rebuilding every team's own picks for an ESPN or Yahoo league would list a pick with its
  * original team even where it has been traded, because nothing records the trade.
+ *
+ * ⚠ FANTRAX IS STORED WHOLE, NOT REBUILT. Sleeper and MFL store only the picks that moved, so a
+ * team's own picks are rebuilt from the league's rookie-draft round count. Fantrax lists every
+ * future pick with its holder (`getDraftPicks.futureDraftPicks`), and the import stores all of
+ * them, so its inventory is the stored rows and nothing is inferred. A Fantrax league with no
+ * rows has not been imported since picks were read, or has no future picks: it lists nothing.
  *
  * ⚠ NOT FOR NATIVE LEAGUES. A native dynasty league's picks come from `nativeFuturePicks.ts`,
  * which the trade engine can settle; these are for display and valuation only.
@@ -22,7 +28,11 @@ import {
   type InventoryPick,
 } from './futurePickInventory'
 
-const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl'])
+const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl', 'fantrax'])
+/** Providers whose stored rows are the whole inventory (own picks included), so nothing is rebuilt. */
+const PROVIDERS_WITH_WHOLE_INVENTORY = new Set(['fantrax'])
+/** How many upcoming drafts are listed, matching `upcomingDraftSeasons`. */
+const WHOLE_INVENTORY_SEASONS = 3
 
 /** True when this league's picks are read from the provider-id-keyed table rather than `Roster.id`. */
 export function hasSyncedProviderPicks(platform: string | null | undefined): boolean {
@@ -72,8 +82,11 @@ type InventoryArgs = {
  */
 async function importedInventory(
   args: InventoryArgs,
-): Promise<{ inventory: InventoryPick[]; rounds: number | null } | 'none' | 'failed'> {
+): Promise<{ inventory: InventoryPick[]; rounds: number | null; complete: boolean } | 'none' | 'failed'> {
   if (!hasSyncedProviderPicks(args.platform) || !args.leagueSeason || args.teams.length === 0) return 'none'
+  if (PROVIDERS_WITH_WHOLE_INVENTORY.has(String(args.platform ?? '').trim().toLowerCase())) {
+    return wholeStoredInventory({ leagueId: args.leagueId, leagueSeason: args.leagueSeason })
+  }
   const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status: args.status })
   const teamIds = [...new Set(args.teams.map((t) => t.externalId).filter((x) => x.length > 0))]
   const [stored, history] = await Promise.all([
@@ -103,7 +116,29 @@ async function importedInventory(
       )
     : null
   if (rounds == null && stored.length === 0) return 'none'
-  return { inventory: futurePickInventory({ teamIds, seasons, rounds, stored }), rounds }
+  return { inventory: futurePickInventory({ teamIds, seasons, rounds, stored }), rounds, complete: rounds != null }
+}
+
+/**
+ * A league whose provider stores every pick: the next few drafts on file, exactly as stored.
+ *
+ * The seasons come from the rows rather than from the league's status, because the provider has
+ * already left out the drafts that are over: the current draft's picks are a separate list there.
+ */
+async function wholeStoredInventory(args: {
+  leagueId: string
+  leagueSeason: number
+}): Promise<{ inventory: InventoryPick[]; rounds: number | null; complete: boolean } | 'none' | 'failed'> {
+  const stored = await prisma.futureDraftPick
+    .findMany({
+      where: { leagueId: args.leagueId, status: 'active', pickSeason: { gte: args.leagueSeason } },
+      select: { pickSeason: true, round: true, originalRosterId: true, currentOwnerId: true },
+    })
+    .catch(() => null)
+  if (stored == null) return 'failed'
+  if (stored.length === 0) return 'none'
+  const seasons = [...new Set(stored.map((row) => row.pickSeason))].sort((a, b) => a - b).slice(0, WHOLE_INVENTORY_SEASONS)
+  return { inventory: futurePickInventory({ teamIds: [], seasons, rounds: null, stored }), rounds: null, complete: true }
 }
 
 /**
@@ -124,7 +159,7 @@ export async function loadTeamFuturePicks(
       ...p,
       fromTeamName: p.originalTeamId === p.ownerTeamId ? null : teamNameByExternal.get(p.originalTeamId) ?? null,
     }))
-  return { picks, coverage: inv.rounds != null ? 'complete' : 'traded_only', readFailed: false }
+  return { picks, coverage: inv.complete ? 'complete' : 'traded_only', readFailed: false }
 }
 
 export async function loadImportedFuturePicks(args: InventoryArgs & {
@@ -139,7 +174,7 @@ export async function loadImportedFuturePicks(args: InventoryArgs & {
   const inv = await importedInventory(args)
   if (inv === 'failed') return { ...empty, readFailed: true }
   if (inv === 'none') return empty
-  const { inventory, rounds } = inv
+  const { inventory, complete } = inv
   const teamNameByExternal = new Map(args.teams.map((t) => [t.externalId, t.teamName]))
   const teamById = new Map(args.teams.map((t) => [t.id, t]))
   const rosterIdByExternal = new Map<string, string>()
@@ -168,7 +203,7 @@ export async function loadImportedFuturePicks(args: InventoryArgs & {
   }
   return {
     picksByRosterId,
-    coverage: rounds != null ? 'complete' : 'traded_only',
+    coverage: complete ? 'complete' : 'traded_only',
     rosterIdByTeamId: rosterIdByExternal,
     readFailed: false,
   }

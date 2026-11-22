@@ -45,7 +45,7 @@ export function remainingSuffix(lang: LaunchLang = 'en'): string {
   return lang === 'es' ? 'restantes' : 'left'
 }
 
-export type LandingBannerCopy = {
+type LandingBannerCopy = {
   kicker: string
   title: string
   body: string
@@ -108,7 +108,7 @@ export function landingBannerCopy(args: {
 
 export type OfferStripSurface = 'pricing' | 'upgrade' | 'signup' | 'core'
 
-export type OfferStripCopy = {
+type OfferStripCopy = {
   /** Shown only before launch, beside the countdown. */
   title: string
   body: string | null

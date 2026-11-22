@@ -46,7 +46,7 @@ const easternFmt = new Intl.DateTimeFormat('en-US', {
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export type EasternClock = {
+type EasternClock = {
   /** `YYYY-MM-DD`, the Eastern calendar day. */
   day: string
   year: number
@@ -161,6 +161,8 @@ export function selectSportWaiverPicks(
     .filter(
       (r) =>
         allowedLeagueIds.has(r.leagueId) &&
+        // A category league's gain is a category score: the bar and every word here are points per game.
+        r.valueKind !== 'categories' &&
         r.drop != null &&
         Number.isFinite(r.netGain) &&
         r.netGain >= rule.minGainPerGame,
@@ -168,7 +170,7 @@ export function selectSportWaiverPicks(
     .sort((a, b) => b.netGain - a.netGain || (a.leagueId < b.leagueId ? -1 : 1))
     .map((r) => ({
       sport: section.sport,
-      basis,
+      basis: r.basis ?? basis,
       leagueId: r.leagueId,
       leagueName: r.leagueName,
       add: r.add,
@@ -229,7 +231,7 @@ export function recentSportWaiverClaimKeys(
   return out
 }
 
-export function sportWaiverCheckHref(p: SportWaiverPick, from: ProactiveFrom = 'waiver_check'): string {
+function sportWaiverCheckHref(p: SportWaiverPick, from: ProactiveFrom = 'waiver_check'): string {
   return chimmyChatHref({ prompt: waiverCheckPrompt(p), leagueId: p.leagueId, from, sport: p.sport })
 }
 
@@ -259,19 +261,20 @@ function joinAnd(items: string[]): string {
 }
 
 /** What the per-game figure was priced on, briefly. */
-export function sportBasisPhrase(p: Pick<SportWaiverPick, 'sport' | 'basis'>): string {
+function sportBasisPhrase(p: Pick<SportWaiverPick, 'sport' | 'basis'>): string {
+  if (p.basis === 'league_value_board') return "on this league's own value board"
   return p.basis === 'season_per_game_league'
     ? "under this league's scoring"
     : `on AllFantasy's default ${sportInSentence(p.sport)} scoring`
 }
 
 /** "add X (C, BOS), drop Y — +4.3 pts per game · $57 FAAB left." */
-export function describeSportPick(p: SportWaiverPick): string {
+function describeSportPick(p: SportWaiverPick): string {
   const faab = p.faabRemaining != null ? ` · $${p.faabRemaining} FAAB left` : ''
   return `add ${who(p.add)}, drop ${p.drop.name} — +${fmt(p.netGain)} pts per game${faab}.`
 }
 
-export type SportWaiverCheckMessage = {
+type SportWaiverCheckMessage = {
   title: string
   body: string
   actionHref: string

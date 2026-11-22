@@ -32,7 +32,7 @@ export type StandingsLeague = {
   participants: StandingsLeagueRow[]
 }
 
-export type StandingsRound = {
+type StandingsRound = {
   id: string
   roundNumber: number
   roundType: string

@@ -104,7 +104,7 @@ export function normalizeNflTeamDefenseWeeklyStats(raw: unknown): Record<string,
   setIfNumber(
     out,
     'def_points_allowed',
-    firstNumber(source, ['def_points_allowed', 'pts_allow', 'points_allowed', 'pa']),
+    firstNumber(source, ['def_points_allowed', 'pts_allow', 'points_allowed', 'pa']) ?? (source.pts_allow_0 === 1 ? 0 : undefined),
   )
   setIfNumber(
     out,

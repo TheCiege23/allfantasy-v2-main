@@ -156,10 +156,11 @@ import {
 
 const ROOT = process.cwd()
 const src = (p: string) => readFileSync(join(ROOT, p), 'utf8')
-const SETTINGS_READS = 'lib/commissioner-settings/leagueSettingsReads.ts'
+/** The label map `leagueSettingsReads.ts` reads — hoisted so the client settings hub shares it. */
+const STAT_LABELS_SRC = 'lib/commissioner-settings/scoringStatLabels.ts'
 
-/** Every stat key `STAT_LABELS` names, so the scoring list renders all of them. */
-const STAT_BLOCK = /const STAT_LABELS[^{]*\{([\s\S]*?)\n\}/.exec(src(SETTINGS_READS))![1]
+/** Every stat key `SCORING_STAT_LABELS` names, so the scoring list renders all of them. */
+const STAT_BLOCK = /const SCORING_STAT_LABELS[^{]*\{([\s\S]*?)\n\}/.exec(src(STAT_LABELS_SRC))![1]
 const STAT_KEYS = [...STAT_BLOCK.matchAll(/\b([a-z][a-z0-9_]*): '([^']+)'/g)].map((m) => m[1])
 
 /* ── The scan ─────────────────────────────────────────────────────────────────────────────────── */

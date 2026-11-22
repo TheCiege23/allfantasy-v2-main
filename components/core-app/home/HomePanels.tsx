@@ -1,5 +1,7 @@
 'use client'
 
+import type { ReactNode } from 'react'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
@@ -65,6 +67,19 @@ export function HomeReadFailure() {
         {m.readFailure}
       </p>
     </div>
+  )
+}
+
+/*
+ * The home's one "More detail" fold (2026-11-20). HomeCards is a server component and the language is
+ * client state, so the fold's `note` is said here, from the same catalog as the panels above.
+ */
+export function HomeMoreDetail({ children }: { children: ReactNode }) {
+  const m = useMessages(homePanelsMessages)
+  return (
+    <MoreDetail note={m.moreNote} testId="home-more">
+      {children}
+    </MoreDetail>
   )
 }
 

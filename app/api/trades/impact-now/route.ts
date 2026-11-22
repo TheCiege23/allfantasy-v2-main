@@ -42,7 +42,7 @@ export async function POST(req:Request) {
       if (!viewer.ok || !league?.platformLeagueId || league.platform?.toLowerCase()!=='sleeper') return NextResponse.json({error:'Claim your team in this imported league before reviewing its trades.'},{status:403})
       // Exact league + manager + transaction: never accepts a client-supplied list of historical assets.
       const transactionId=ref.transactionId.startsWith(`${league.platformLeagueId}:`) ? ref.transactionId.slice(league.platformLeagueId.length+1) : ref.transactionId
-      const row=await prisma.leagueTrade.findFirst({where:{transactionId,history:{sleeperLeagueId:league.platformLeagueId,sleeperUsername:viewer.team.platformUserId}},select:{transactionId:true,playersGiven:true,playersReceived:true,picksGiven:true,picksReceived:true,partnerRosterId:true}})
+      const row=await prisma.leagueTrade.findFirst({where:{transactionId,history:{sleeperLeagueId:league.platformLeagueId,sleeperUsername:viewer.team.platformUserId}},select:{transactionId:true,playersGiven:true,playersReceived:true,picksGiven:true,picksReceived:true,partnerRosterId:true,budgetGiven:true,budgetReceived:true}})
       if (!row) return NextResponse.json({error:'This completed trade was not found in your archived league history.'},{status:404})
       if (viewer.team.platformUserId) realized=await loadRealizedReceipt({leagueId:league.platformLeagueId,transactionId,ownerId:viewer.team.platformUserId}).catch(()=>null)
       sent=Array.isArray(row.playersGiven)?row.playersGiven.map(String):[]

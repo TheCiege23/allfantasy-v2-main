@@ -20,7 +20,7 @@ const DISCLOSURE_CHECKLIST = [
   "No prizes or gambling occur inside the AllFantasy app.",
 ] as const
 
-export type FanCredBoundaryDisclosure = {
+type FanCredBoundaryDisclosure = {
   version: string
   short: string
   long: string

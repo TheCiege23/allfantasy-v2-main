@@ -79,7 +79,7 @@ export function WeeklyStory({ story }: { story: WeeklyStoryData }) {
   )
 }
 
-export function StoryViewer({
+function StoryViewer({
   story,
   onClose,
   initialIndex = 0,

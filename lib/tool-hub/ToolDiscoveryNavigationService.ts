@@ -24,10 +24,6 @@ export function getOpenToolHref(slug: ToolSlug): string {
   return TOOL_CONFIG[slug]?.openToolHref ?? '/app'
 }
 
-export function getToolsHubPath(): string {
-  return ROUTES.toolsHub()
-}
-
 export function getToolLandingPath(slug: ToolSlug): string {
   return ROUTES.toolLanding(slug)
 }

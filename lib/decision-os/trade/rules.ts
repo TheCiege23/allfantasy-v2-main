@@ -11,7 +11,7 @@ import { compareValidatorParity, type ValidatorParity, type ValidatorParityConfi
 import type { TradeWorld } from './world'
 import type { TradeAssetSummary } from './dco'
 
-export type TradeRuleCategory =
+type TradeRuleCategory =
   | 'trade_deadline_passed'
   | 'player_locked'
   | 'faab_insufficient'
@@ -117,7 +117,7 @@ const TRADE_PARITY_CONFIG: ValidatorParityConfig = {
   sharedCategories: new Set<string>(['faab_insufficient', 'roster_legality', 'player_locked', 'trade_deadline_passed']),
 }
 
-export interface TradeRuleEvaluation {
+interface TradeRuleEvaluation {
   verdicts: RuleVerdict[]
   canonicalVerdicts: RuleVerdict[]
   parity: ValidatorParity

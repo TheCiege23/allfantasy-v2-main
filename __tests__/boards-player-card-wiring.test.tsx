@@ -24,10 +24,8 @@ vi.mock('next/navigation', () => ({
 }))
 
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
-import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
-import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import type { DraftHqAllRow, DraftHqAllData } from '@/lib/core-app/draftHqAll'
 
@@ -108,50 +106,6 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
   }
 }
 
-function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
-  return {
-    rows: [
-      {
-        leagueId: 'l1',
-        leagueName: 'Dynasty Dragons',
-        platform: 'sleeper',
-        logoUrl: null,
-        format: 'Dynasty · PPR',
-        netGain: 14.6,
-        add: {
-          playerId: 'p1',
-          name: 'Tank Bigsby',
-          position: 'RB',
-          team: 'JAX',
-          imageUrl: null,
-          projected: 15.8,
-          ownPct: 0.62,
-          startPct: 0.48,
-        },
-        drop: {
-          playerId: 'p2',
-          name: 'Roman Wilson',
-          position: 'WR',
-          team: 'PIT',
-          imageUrl: null,
-          projected: 1.2,
-          ownPct: null,
-          startPct: null,
-        },
-        faabRemaining: 42,
-        runsAt: 'Wednesday 09:00 UTC',
-        href: '/core/waivers?league=l1',
-        reasoning: 'Tank Bigsby (RB) projects 15.8 under this league’s own scoring.',
-      },
-    ],
-    considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
-    marketLeagues: 120,
-    at: { season: '2026', week: 3 },
-    ...over,
-  }
-}
-
 /** Every player-card trigger, as {name, wired}. */
 function triggers(container: HTMLElement) {
   return [...container.querySelectorAll('button.af-pc-trigger')].map((b) => b.textContent?.trim() ?? '')
@@ -163,13 +117,6 @@ describe('cross-league boards — player names open the card', () => {
     const t = triggers(container)
     expect(t).toContain('Perry Vance')
     expect(t).toContain('Dana Okoye')
-  })
-
-  it('makes the waiver add AND drop openable', () => {
-    const { container } = render(<WaiversBoard data={waiversData()} allHref="/core/waivers?all=1" totalLeagues={65} />)
-    const t = triggers(container)
-    expect(t).toContain('Tank Bigsby')
-    expect(t).toContain('Roman Wilson')
   })
 
   /*

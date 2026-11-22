@@ -53,12 +53,12 @@ export function PickAssistCard({ entryId }: { entryId: string }) {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data.error || "Failed to load AI assist")
+        setError(data.error || "Failed to load Chimmy assist")
         return
       }
       setRecs(data.recommendations || [])
     } catch {
-      setError("Failed to load AI assist")
+      setError("Failed to load Chimmy assist")
     } finally {
       setLoading(false)
     }

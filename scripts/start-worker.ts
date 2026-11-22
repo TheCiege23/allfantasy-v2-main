@@ -2,20 +2,18 @@ import { startSimulationWorker, stopSimulationWorker } from "../lib/workers/simu
 import { startNotificationWorker, stopNotificationWorker } from "../lib/workers/notification-worker"
 import { startAiWorker, stopAiWorker } from "../lib/workers/ai-worker"
 import { startDevyWorker, stopDevyWorker } from "../lib/workers/devy-worker"
-import { startPowerRankingsWorker, stopPowerRankingsWorker } from "../lib/workers/power-rankings-worker"
 import { startIntegrityWorker, stopIntegrityWorker } from "../lib/workers/integrity-worker"
 import { startAutoCoachStatusWorker, stopAutoCoachStatusWorker } from "../lib/workers/autocoach-status-worker"
 import { startLeagueEngineWorker, stopLeagueEngineWorker } from "../lib/workers/league-engine-worker"
 
 console.log(
-  "[Worker] Starting background job workers (simulations, notifications, ai, devy, power-rankings, integrity, autocoach-status, league-engine)...",
+  "[Worker] Starting background job workers (simulations, notifications, ai, devy, integrity, autocoach-status, league-engine)...",
 )
 
 startSimulationWorker()
 startNotificationWorker()
 startAiWorker()
 startDevyWorker()
-startPowerRankingsWorker()
 startIntegrityWorker()
 startAutoCoachStatusWorker()
 startLeagueEngineWorker()
@@ -27,7 +25,6 @@ async function shutdown() {
     stopNotificationWorker(),
     stopAiWorker(),
     stopDevyWorker(),
-    stopPowerRankingsWorker(),
     stopIntegrityWorker(),
     stopAutoCoachStatusWorker(),
     stopLeagueEngineWorker(),

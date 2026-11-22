@@ -40,7 +40,7 @@ export interface SurvivorFinaleSignalInputs {
 const isEs = (language: string | null | undefined) => String(language ?? '').toLowerCase().startsWith('es')
 
 /** The Spanish X in "cierra en X". */
-export function formatTimeLeftEs(ms: number): string {
+function formatTimeLeftEs(ms: number): string {
   if (ms <= 0) return 'ya'
   if (ms < HOUR_MS) return `${Math.max(1, Math.round(ms / 60_000))} min`
   if (ms < 48 * HOUR_MS) return `${Math.round(ms / HOUR_MS)} h`

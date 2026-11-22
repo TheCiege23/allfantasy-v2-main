@@ -11,14 +11,12 @@ import {
   getExperienceSignalsFromSportsPlayer,
   type ProviderExperienceSignal,
 } from '@/lib/player-data/providerExperienceFields'
-import { getCollegeClassBucket, normalizeCollegeClass } from '@/lib/draft-room/collegeClass'
+import { getCollegeClassBucket } from '@/lib/draft-room/collegeClass'
 import { resolveNflRookieSource } from '@/lib/providers/nflRookieSourcePolicy'
 
-export type ProSport = 'NFL' | 'NBA' | 'MLB' | 'NHL'
+type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'
 
-export type PlayerExperienceStatus = 'rookie' | 'veteran' | 'college' | 'devy' | 'unknown'
-
-export type PlayerExperienceSource =
+type PlayerExperienceSource =
   | 'rolling_insights_imported'
   | 'thesportsdb'
   | 'clearsports'
@@ -65,7 +63,7 @@ function mapSignalSource(s: ProviderExperienceSignal['source']): PlayerExperienc
   }
 }
 
-export function calculateProYearsFromDraftYear(
+function calculateProYearsFromDraftYear(
   draftYear: number | null | undefined,
   currentSeason: number,
 ): { proYears: number | null; source: PlayerExperienceSource; reason: string } {
@@ -83,14 +81,14 @@ export function calculateProYearsFromDraftYear(
   return { proYears, source: 'derived_from_draft_year', reason: 'currentSeason_minus_draftYear' }
 }
 
-export function calculateProYearsFromDebutYear(
+function calculateProYearsFromDebutYear(
   debutYear: number | null | undefined,
   currentSeason: number,
 ): { proYears: number | null; source: PlayerExperienceSource; reason: string } {
   return calculateProYearsFromDraftYear(debutYear, currentSeason)
 }
 
-export type ResolvePlayerExperienceInput = {
+type ResolvePlayerExperienceInput = {
   sport: LeagueSport | string
   /** Normalized draft/waiver row */
   entry?: NormalizedDraftEntry
@@ -300,29 +298,3 @@ export function resolvePlayerExperience(input: ResolvePlayerExperienceInput): Pl
   }
 }
 
-export function isProRookie(r: PlayerExperienceResult): boolean {
-  return r.rookie === true || r.status === 'rookie'
-}
-
-export function isVeteran(r: PlayerExperienceResult): boolean {
-  return r.veteran === true || r.status === 'veteran'
-}
-
-export function getProYears(r: PlayerExperienceResult): number | null {
-  return r.proYears
-}
-
-export function getExperienceBadge(r: PlayerExperienceResult): string {
-  if (r.status === 'college' && r.collegeClassBucket && r.collegeClassBucket !== 'unknown') {
-    return r.collegeClassBucket
-  }
-  if (r.status === 'rookie' || r.rookie === true) return 'Rookie'
-  if (r.proYears != null && r.proYears === 1) return '2nd Year'
-  if (r.proYears != null && r.proYears === 2) return '3rd Year'
-  if (r.status === 'veteran' || r.veteran === true) return 'Veteran'
-  return '—'
-}
-
-export function getTaxiEligibilityDefault(r: PlayerExperienceResult): boolean {
-  return r.taxiEligibleDefault
-}

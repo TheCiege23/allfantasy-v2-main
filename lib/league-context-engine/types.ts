@@ -47,7 +47,7 @@ export type NormalizedScoringRules = {
   }
 }
 
-export type NormalizedWaiverSettings = {
+type NormalizedWaiverSettings = {
   waiverType: string | null
   waiverBudget: number | null
   waiverMinBid: number | null
@@ -58,13 +58,13 @@ export type NormalizedWaiverSettings = {
   waiverSchedule: unknown
 }
 
-export type NormalizedTradeSettings = {
+type NormalizedTradeSettings = {
   tradeReviewHours: number | null
   tradeDeadlineWeek: number | null
   draftPickTrading: boolean | null
 }
 
-export type NormalizedPlayoffSettings = {
+type NormalizedPlayoffSettings = {
   playoffStartWeek: number | null
   playoffTeams: number | null
   playoffWeeksPerRound: number | null
@@ -72,17 +72,24 @@ export type NormalizedPlayoffSettings = {
   playoffLowerBracket: string | null
 }
 
-export type NormalizedSalaryCapSettings = {
+type NormalizedSalaryCapSettings = {
   enabled: boolean
   startupCap: number | null
   minimumSalary: number | null
   mode: string | null
 }
 
-export type NormalizedLineupBehavior = {
-  /** Best ball / weekly vs daily — from league bbScoringPeriod + platform hints */
+type NormalizedLineupBehavior = {
+  /** Best ball weekly vs daily — the period the league is actually scored with (lib/bestball/scoringPeriod.ts) */
   scoringPeriod: 'weekly' | 'daily' | 'unknown'
+  /** The Classic Best Ball column. FALSE for a best ball Guilly league — ask `lineupSetsItself` about lineups. */
   bestBallMode: boolean
+  /**
+   * The lineup sets itself — Classic Best Ball OR best ball Guilly (lib/bestball/bestBallLeagueState.ts).
+   * Every "is there a start/sit decision to make" reader asks this, never `bestBallMode`. Optional only so
+   * an older hand-built context reads as a manual lineup.
+   */
+  lineupSetsItself?: boolean
   bestBallSettings?: {
     mode: string | null
     matchupFormat: string | null
@@ -93,7 +100,7 @@ export type NormalizedLineupBehavior = {
   } | null
 }
 
-export type NormalizedUserTeamContext = {
+type NormalizedUserTeamContext = {
   teamId: string
   externalId: string
   teamName: string | null
@@ -103,7 +110,7 @@ export type NormalizedUserTeamContext = {
   isCoCommissioner: boolean
 }
 
-export type NormalizedCommissionerContext = {
+type NormalizedCommissionerContext = {
   userIsHeadCommissionerOnImport: boolean
   /** LeagueTeam flags for the resolved user team */
   userTeamCommissionerFlags: {

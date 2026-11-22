@@ -3,7 +3,7 @@
  * Supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, Soccer.
  */
 
-export const DRAFT_NOTIFICATION_EVENT_TYPES = [
+const DRAFT_NOTIFICATION_EVENT_TYPES = [
   'draft_on_the_clock',
   'draft_three_picks_away',
   'draft_two_picks_away',
@@ -46,6 +46,13 @@ export interface DraftNotificationPayload {
   /** Stable identity for this draft event, independent of the producing system. */
   eventKey?: string
   draftTime?: string
+  /**
+   * The IANA zone `draftTime` is written in for this recipient (their profile's zone). The draft-time
+   * notice used to say "ET" to everyone, wherever they lived.
+   */
+  timeZone?: string
+  /** draft_starting_soon from the scheduler: how long until the draft starts. */
+  minutesUntilStart?: number
   tradeProposalId?: string
   /** For auction_outbid: previous bid amount. */
   previousBid?: number

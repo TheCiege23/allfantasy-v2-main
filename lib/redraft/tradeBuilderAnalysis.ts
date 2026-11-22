@@ -15,7 +15,7 @@ export type RedraftTradeBuilderAsset = {
   label?: string | null
 }
 
-export type RedraftTradeBuilderAnalysis = {
+type RedraftTradeBuilderAnalysis = {
   fairnessScore: number
   riskScore: number
   positionalImpact: string

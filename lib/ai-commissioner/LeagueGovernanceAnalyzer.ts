@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { detectCollusionSignals } from './CollusionSignalDetector'
 import { getSportGovernanceCadence, toLeagueSport } from './SportCommissionerResolver'
 import type { GovernanceAnalysis } from './types'
+import { isBestBallLeagueRow } from '@/lib/core-app/leagueBestBall'
 
 export interface LeagueGovernanceAnalyzerInput {
   leagueId: string
@@ -36,6 +37,9 @@ export async function analyzeLeagueGovernance(
       season: true,
       platformLeagueId: true,
       settings: true,
+      bestBallMode: true,
+      leagueVariant: true,
+      leagueType: true,
       teams: {
         select: {
           externalId: true,
@@ -174,6 +178,7 @@ export async function analyzeLeagueGovernance(
     leagueId: input.leagueId,
     sport: sport as LeagueSport,
     season,
+    bestBall: isBestBallLeagueRow(league),
     pendingWaiverClaims,
     inactiveManagers,
     tradeDisputes,
