@@ -1,3 +1,5 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
+import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/tournament/seasonDraftMutationGate'
 /**
  * GET / PATCH /api/leagues/[leagueId]/settings/draft
@@ -111,7 +113,7 @@ export async function GET(
   return NextResponse.json({
     leagueId,
     leagueType: league.leagueType,
-    isCommissioner: league.userId === userId,
+    isCommissioner: (await canCommissionerAct(leagueId, userId, 'league')),
     current: {
       draftType: leagueSettings?.draftType ?? 'snake',
       executionMode,
@@ -140,7 +142,7 @@ export async function PATCH(
     select: { id: true, userId: true, leagueType: true, isDynasty: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
-  if (league.userId !== userId) {
+  if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 
@@ -218,10 +220,18 @@ export async function PATCH(
   const draftRulesBefore = draftRules ? await draftRules.loadDraftRulesSafe(leagueId) : null
 
   if (Object.keys(draftUpdates).length > 0) {
-    await prisma.leagueSettings.update({
-      where: { leagueId },
-      data: draftUpdates,
-    })
+    // A league built outside the create form (a tournament's own leagues were) can have no
+    // settings row yet. The update then failed the whole save with a server error, so that one
+    // case (P2025, record not found) creates the row instead.
+    try {
+      await prisma.leagueSettings.update({
+        where: { leagueId },
+        data: draftUpdates,
+      })
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code !== 'P2025') throw error
+      await ensureLeagueSettingsRow(leagueId, draftUpdates)
+    }
     // Mirror a draftType change onto an existing pre-draft DraftSession so
     // the engine picks it up without requiring a session reset.
     if ('draftType' in draftUpdates) {

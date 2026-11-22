@@ -1,13 +1,13 @@
 // lib/trade-engine/types.ts
 
-export type Sport = 'nfl' | 'nba'
+type Sport = 'nfl' | 'nba'
 
-export type AssetType = 'PLAYER' | 'PICK' | 'FAAB'
-export type PickProjected = 'early' | 'mid' | 'late' | 'unknown'
-export type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
+type AssetType = 'PLAYER' | 'PICK' | 'FAAB'
+type PickProjected = 'early' | 'mid' | 'late' | 'unknown'
+type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
 
 // NEW (non-breaking)
-export type SurplusGrade = 'core' | 'soft_surplus' | 'hard_surplus'
+type SurplusGrade = 'core' | 'soft_surplus' | 'hard_surplus'
 
 export type Asset = {
   id: string
@@ -71,7 +71,7 @@ export type Asset = {
   tags?: string[]
 }
 
-export type LeagueContext = {
+type LeagueContext = {
   leagueId?: string
   leagueName: string
   scoringType: 'PPR' | 'Half PPR' | 'Standard' | string
@@ -88,31 +88,10 @@ export type LeagueContext = {
   leagueVetoRatePct?: number
 }
 
-export type ManagerRoster = {
-  rosterId: number
-  userId: string
-  username: string
-  displayName: string
-  avatar?: string
-  record: string
-  pointsFor: number
-  players: Array<{
-    id: string
-    name: string
-    pos: string
-    team?: string
-    slot: RosterSlot
-    isIdp?: boolean
-    age?: number
-  }>
-  faab?: number
-  picks?: Array<{ season: string; displayName: string }>
-}
-
 export type ContenderTier = 'champion' | 'contender' | 'middle' | 'rebuild'
-export type TradeAggression = 'low' | 'medium' | 'high'
-export type RiskTolerance = 'low' | 'medium' | 'high'
-export type ReputationTag = 'Shark' | 'Gambler' | 'Fair Dealer' | 'Taco'
+type TradeAggression = 'low' | 'medium' | 'high'
+type RiskTolerance = 'low' | 'medium' | 'high'
+type ReputationTag = 'Shark' | 'Gambler' | 'Fair Dealer' | 'Taco'
 
 export type ManagerProfile = {
   rosterId: number
@@ -199,8 +178,8 @@ export const DEFAULT_CONSTRAINTS: Constraints = {
   banOneForOneCornerstoneForNon: true,
 }
 
-export type AcceptanceLabel = 'Strong' | 'Aggressive' | 'Speculative' | 'Long Shot'
-export type VetoLikelihood = 'Low' | 'Medium' | 'High'
+type AcceptanceLabel = 'Strong' | 'Aggressive' | 'Speculative' | 'Long Shot'
+type VetoLikelihood = 'Low' | 'Medium' | 'High'
 
 export type TradeCandidate = {
   id: string
@@ -246,24 +225,6 @@ export type TradeCandidate = {
   // UI
   displayEmoji?: string
   priorityPill?: string
-}
-
-export type LeagueIntelSnapshot = {
-  league: LeagueContext
-  constraints: Constraints
-  assetsByRosterId: Record<number, Asset[]>
-  profilesByRosterId: Record<number, ManagerProfile>
-  tradeBlockIndex: Set<string>
-  idpConfig: {
-    enabled: boolean
-    startersRequired: number
-    poolEstimate: number
-    scoringWeight: number
-  }
-  pickFutures: {
-    enabled: boolean
-    daysToDraft: number
-  }
 }
 
 // Legacy compatibility
@@ -350,7 +311,7 @@ export type HardRuleResult = {
 }
 
 export type NegotiationTheme = 'NEED_FIT' | 'MARKET' | 'MANAGER_BIAS' | 'LINEUP_UPGRADE' | 'RISK_SWAP'
-export type SweetenerType = 'PICK' | 'PLAYER' | 'FAAB'
+type SweetenerType = 'PICK' | 'PLAYER' | 'FAAB'
 export type SweetenerTarget = 'SMALL' | 'MEDIUM' | 'LARGE'
 
 export type NegotiationToolkit = {

@@ -780,3 +780,25 @@
     padding: 14px 12px;
   }
 }
+
+/* 2026-11-14: the Assumptions tab became a fold under the panel. Since 2026-11-20 it is the shared
+   "More detail" fold — its look comes from more-detail.css; only the spacing above it stays here. */
+.af-core .af-sol-basis-fold {
+  margin-top: 14px;
+}
+
+/*
+ * 2026-11-14: four tabs fit on a phone as a 2×2 grid, so none is hidden behind a sideways scroll (the
+ * strip cut "All teams" off at 375px), and each is a 44px tap target.
+ */
+@media (max-width: 560px) {
+  .af-core .af-sol .af-olk-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: visible;
+  }
+  .af-core .af-sol .af-olk-tab {
+    min-height: 44px;
+    white-space: normal;
+  }
+}

@@ -198,6 +198,7 @@ vi.mock('@/lib/prisma', () => ({
     draftPickAuditLog: { create: (...a: unknown[]) => draftPickAuditLogCreateMock(...a) },
   },
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromOwner(() => 'commissioner-1'))
 
 // ---------------------------------------------------------------------------
 // Import under test

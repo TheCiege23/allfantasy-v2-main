@@ -17,7 +17,7 @@
 import { prisma } from '@/lib/prisma'
 
 export const SYSTEM_LEAGUE_OWNER_ID = 'allfantasy-system-league-owner'
-export const SYSTEM_LEAGUE_OWNER_EMAIL = 'league-owner@allfantasy.invalid'
+const SYSTEM_LEAGUE_OWNER_EMAIL = 'league-owner@allfantasy.invalid'
 /** `allfantasy` is in RESERVED_USERNAMES, so no person can be handed it. */
 const USERNAMES = ['allfantasy', 'allfantasy_system_owner'] as const
 
@@ -66,7 +66,3 @@ async function createIfMissing(): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error('Could not create the system league owner.')
 }
 
-/** Test seam. */
-export function resetSystemLeagueOwnerCacheForTests(): void {
-  ensured = null
-}

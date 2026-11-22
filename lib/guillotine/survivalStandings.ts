@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 
-export type SurvivalStandings = {
+type SurvivalStandings = {
   active: {
     rosterId: string
     teamName: string | null
@@ -14,16 +14,6 @@ export type SurvivalStandings = {
   chopLine: { currentLastPlace: { rosterId: string; score: number } | null; projectedChopScore: number | null }
   eliminated: { rosterId: string; teamName: string | null; periodEliminated: number; finalScore: number }[]
   finalStage: null | { mode: string; periodsRemaining: number | null; standings: unknown[] }
-}
-
-export function computeChopLine(
-  scores: { rosterId: string; score: number }[],
-  elimCount: number,
-): number {
-  if (scores.length === 0 || elimCount <= 0) return Number.NEGATIVE_INFINITY
-  const sorted = [...scores].sort((a, b) => a.score - b.score)
-  const idx = Math.min(elimCount, sorted.length) - 1
-  return sorted[idx]?.score ?? Number.NEGATIVE_INFINITY
 }
 
 export async function getSurvivalStandings(

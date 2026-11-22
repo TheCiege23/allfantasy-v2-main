@@ -62,7 +62,7 @@ export interface WaiverOpportunity {
   position?: string;
   reason: string;
   priority?: 'high' | 'medium';
-  /** Opens player page (for example /player-comparison?player=...). */
+  /** Where the suggestion leads. Waiver targets are archetypes, so this opens the waiver tool on that slot (`/waiver-ai?focus=`). */
   playerHref: string;
 }
 

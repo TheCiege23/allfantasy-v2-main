@@ -20,7 +20,6 @@ export function ZombieUpdatesPanel({ leagueId, canEdit }: { leagueId: string; ca
   const [preview, setPreview] = useState('')
   const [week, setWeek] = useState('1')
   const [status, setStatus] = useState('')
-  const [pendingCount, setPendingCount] = useState(0)
   const [tab, setTab] = useState<'settings' | 'preview' | 'history'>('settings')
 
   useEffect(() => {

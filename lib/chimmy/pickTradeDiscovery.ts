@@ -3,7 +3,7 @@ import type { DiscoveryPlayer, DiscoveryRoster, FairnessBand } from '@/lib/trade
 
 export type OwnedTradePick = { season: number; round: number; originalTeamName: string | null; value: number }
 
-export type PickTradeCandidate = {
+type PickTradeCandidate = {
   partner: DiscoveryRoster
   outgoing: DiscoveryPlayer
   target: DiscoveryPlayer

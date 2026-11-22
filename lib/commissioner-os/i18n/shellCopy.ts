@@ -24,8 +24,6 @@ import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
  * PURE and client-safe.
  */
 
-export type ShellLang = 'en' | 'es'
-
 const isEs = (language: string | null | undefined) => language === 'es'
 
 /** Spanish plural for a counted noun: `n(3, 'informe', 'informes')` → "3 informes". */
@@ -193,6 +191,9 @@ const MISSION_CONTROL_ES: Record<string, string> = {
   Unavailable: 'No disponible',
   // the Mission Control loader's manager callout when nothing is flagged
   'Active and engaged': 'Activo y participativo',
+  // Manager highlights (lib/commissioner-mission-control/managerHighlightReads.ts), keyed by its fixed callouts.
+  'No trade, claim or roster move in 14 days': 'Ningún intercambio, reclamo ni cambio de plantilla en 14 días',
+  'Activity has slowed': 'Su actividad ha bajado',
 }
 
 /** One of Mission Control's own fixed strings. */

@@ -6,7 +6,7 @@ import { Users, Loader2 } from "lucide-react"
 import { LeagueDiscoveryCard } from "./LeagueDiscoveryCard"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface CreatorDiscoverySectionProps {
+interface CreatorDiscoverySectionProps {
   sport?: string | null
   limit?: number
 }

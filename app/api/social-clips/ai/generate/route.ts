@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       userId: session.user.id,
       sport,
       assetType: `ai_clip_${inputType}`,
-      title: result.headline || result.clipTitle || "AI Social Clip",
+      title: result.headline || result.clipTitle || "Chimmy Social Clip",
       contentBody,
       provider: "ai_multi",
       metadata: metadata as object,

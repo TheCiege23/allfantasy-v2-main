@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, DollarSign, ExternalLink, ChevronDown } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { LeagueSafeConnectCard } from '@/components/league-settings/LeagueSafeConnectCard'
 import {
   MAX_PAYMENT_LINKS,
   PAYMENT_LINK_KINDS,
@@ -62,6 +63,14 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
     setConfig(c)
     setLinks(c.paymentLinks.map((l) => ({ ...l })))
   }, [])
+
+  // A LeagueSafe match can mark teams paid on the server; read the tracker again so the list shows it.
+  const reloadTracker = useCallback(() => {
+    fetch(endpoint, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.config) adopt(data.config) })
+      .catch(() => {})
+  }, [endpoint, adopt])
 
   useEffect(() => {
     let active = true
@@ -394,6 +403,8 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
           </button>
         </div>
       )}
+
+      {isCommissioner ? <LeagueSafeConnectCard leagueId={leagueId} onTrackerChanged={reloadTracker} /> : null}
 
       {!isCommissioner && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">{t('dues.readOnlyBanner')}</div>

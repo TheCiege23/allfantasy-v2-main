@@ -13,7 +13,7 @@
  * window Commissioner OS's own route counts from — not new intelligence, just counted across a
  * different (broader) league set.
  */
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -71,11 +71,25 @@ async function countDraftsApproaching(leagueIds: string[], now: Date): Promise<n
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const tournamentId = request.nextUrl.searchParams.get('tournamentId')
+  if (tournamentId !== null) {
+    const headers = { 'Cache-Control': 'private, no-store' }
+    const leagueId = request.nextUrl.searchParams.get('leagueId')
+    if (!tournamentId.trim() || tournamentId.length > 200 || (leagueId !== null && (!leagueId.trim() || leagueId.length > 200))) {
+      return NextResponse.json({ error: 'Choose a tournament.' }, { status: 400, headers })
+    }
+    const { loadSeasonAssistantContext } = await import('@/lib/tournament/seasonAssistantContext')
+    const context = await loadSeasonAssistantContext(tournamentId.trim(), userId, leagueId?.trim())
+    return context
+      ? NextResponse.json({ tournament: context }, { headers })
+      : NextResponse.json({ error: 'Tournament context not found.' }, { status: 404, headers })
   }
 
   const now = new Date()

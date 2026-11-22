@@ -134,6 +134,24 @@ describe('draft as me in the autopick', () => {
     expect(await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')).toMatchObject({ ok: true, pick: { playerName: 'Top Center' } })
   })
 
+  it("the pick records why it was made, for the board's player card (2026-11-21)", async () => {
+    hm.tryDraftAsMePick.mockResolvedValue({ playerName: 'Guard 9', position: 'PG', team: 'BOS', playerId: 'id-Guard 9', byeWeek: null, adp: 9, reason: 'Picked the way you draft. Learned from 12 of your own picks in 2 past drafts.' })
+    await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')
+    expect(hm.submitPick).toHaveBeenCalledWith(expect.objectContaining({
+      pickMetadata: { autopick: { strategy: 'draft-as-me', reason: 'Picked the way you draft. Learned from 12 of your own picks in 2 past drafts.' } },
+    }))
+  })
+
+  it('Draft like me with too little history says so on the fallback pick', async () => {
+    hm.tryDraftAsMePick.mockImplementation(async (a: { onNotEnoughHistory?: (r: string) => void }) => {
+      a.onNotEnoughHistory?.('Draft like me needs 10 of your own picks from past drafts and has 2.')
+      return null
+    })
+    const r = await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')
+    expect(r).toMatchObject({ ok: true, pick: { playerName: 'Top Center', strategy: 'bpa', reason: expect.stringContaining('needs 10 of your own picks') } })
+    expect(hm.submitPick.mock.calls[0][0].pickMetadata.autopick.reason).toMatch(/has 2/)
+  })
+
   it('mock drafts are left alone', async () => {
     hm.draftSessionFindFirst.mockResolvedValue({ ...session(), sessionKind: 'mock' })
     hm.tryDraftAsMePick.mockResolvedValue({ playerName: 'Guard 9', position: 'PG', team: 'BOS', playerId: null, byeWeek: null, adp: 9, reason: 'x' })

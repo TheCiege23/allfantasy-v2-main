@@ -2,9 +2,13 @@ import 'server-only'
 
 import type { TradeValuationGap } from './tradeGrade'
 
+import { loadCompletedSportDeals, sportMarketAdjustments } from '@/lib/trade-market/sportCompletedMarket'
+import { leagueIdColumn, resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import { prisma } from '@/lib/prisma'
-import { latestNcaafProjectionSeason, lookupNcaafProjections } from '@/lib/core-app/ncaafProjections'
-import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
+import { collegePlayerIds } from '@/lib/c2c/campusLineup'
+import { latestNcaafProjectionSeason, lookupNcaafProjections, lookupNcaafProjectionsForCfbdLinks } from '@/lib/core-app/ncaafProjections'
+import { scoreNcaafProjection } from '@/lib/projections/ncaafLeagueScoring'
+import { extractScoringSettings, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { bridgeNcaafRosterIdsToCfbdIds, type NcaafRosterNamespace } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { resolveLeagueScoringRules } from '@/lib/redraft/leagueScoringRules'
@@ -51,8 +55,8 @@ const REPLACEMENT_SCAN = 250
 
 export { rosteredIdsOf } from './tradePlayers'
 
-function perGameFrom(componentStats: Record<string, unknown> | null | undefined, rules: Record<string, unknown>): number | null {
-  const scored = computeLeagueProjectedPoints(componentStats, rules)
+function perGameFrom(componentStats: Record<string, unknown> | null | undefined, rules: Record<string, unknown>, position: string | null | undefined): number | null {
+  const scored = scoreNcaafProjection(componentStats, rules, position)
   return scored && Number.isFinite(scored.points) ? scored.points : null
 }
 
@@ -142,10 +146,20 @@ export async function loadNcaafClassYears(
   platform: string | null | undefined,
   rosterIds: string[],
   season: number,
+  campusOnly = false,
 ): Promise<Map<string, number>> {
   const namespace = ncaafNamespace(platform)
   const years = new Map<string, number>()
   if (!namespace || !rosterIds.length) return years
+  if (campusOnly) {
+    const devy = await prisma.devyPlayer.findMany({
+      where: { id: { in: rosterIds }, sport: 'NCAAF', lastRosterYear: season, draftStatus: 'college', graduatedToNFL: false },
+      select: { id: true, classYear: true },
+    })
+    for (const row of devy) {
+      if (row.classYear != null && Number.isInteger(row.classYear) && row.classYear >= 1 && row.classYear <= 4) years.set(row.id, row.classYear)
+    }
+  }
   const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma, rosterIds, namespace)
   if (!bridge.cfbdIds.length) return years
   const rows = await prisma.devyPlayer.findMany({
@@ -167,6 +181,7 @@ export async function loadNcaafRedraftBase(league: {
   id: string
   platform: string | null | undefined
   settings: unknown
+  campusOnly?: boolean
 }): Promise<NcaafRedraftBaseResult> {
   const rules = ncaafTradeScoringRules(league)
   if (!rules) return { ok: false, reason: NO_LEAGUE_SCORING_REASON }
@@ -191,7 +206,7 @@ export async function loadNcaafRedraftBase(league: {
   if (!window) return { ok: false, reason: `The ${season} college schedule has no week on file, so the weeks left to play cannot be counted.`, valuationGap: 'missing_schedule' }
   if (!rosterRows) return { ok: false, reason: 'This league’s rosters could not be read just now.' }
 
-  const rosteredIds = [...new Set(rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
+  const rosteredIds = [...new Set(rosterRows.flatMap((r) => league.campusOnly ? [...collegePlayerIds(r.playerData)] : rosteredIdsOf(r.playerData)))]
   const rosteredSet = new Set(rosteredIds)
   const space = playerIdSpaceFor({ platform: league.platform ?? null, sport: 'NCAAF' })
 
@@ -200,6 +215,19 @@ export async function loadNcaafRedraftBase(league: {
     resolveTradePlayers(rosteredIds, { space, sport: 'NCAAF' }),
     namespace ? lookupNcaafProjections(rosteredIds, { season: String(season) }, namespace) : Promise.resolve(new Map()),
   ])
+
+  if (league.campusOnly) {
+    const missing = rosteredIds.filter((id) => !projections.has(id) && identities.get(id)?.ok !== true)
+    const players = missing.length ? await prisma.devyPlayer.findMany({
+      where: { id: { in: missing }, sport: 'NCAAF', graduatedToNFL: false, cfbdId: { not: null } },
+      select: { id: true, cfbdId: true },
+    }) : []
+    const counts = new Map<string, number>()
+    for (const p of players) if (p.cfbdId) counts.set(p.cfbdId, (counts.get(p.cfbdId) ?? 0) + 1)
+    const links = new Map(players.flatMap((p) => p.cfbdId && counts.get(p.cfbdId) === 1 ? [[p.id, p.cfbdId] as const] : []))
+    for (const [id, projection] of await lookupNcaafProjectionsForCfbdLinks(links, season)) projections.set(id, projection)
+    for (const cfbdId of links.values()) rosteredSet.add(cfbdId)
+  }
 
   // An id that names nobody, or two people, is left out: a deal naming him is refused, never guessed.
   const rostered: NcaafRosteredPlayer[] = []
@@ -214,8 +242,27 @@ export async function loadNcaafRedraftBase(league: {
   }
   const perGameByRosterId = new Map<string, NcaafPerGame>()
   for (const [id, proj] of projections) {
-    const perGame = perGameFrom(proj.componentStats, rules)
+    const perGame = perGameFrom(proj.componentStats, rules, proj.position)
     if (perGame != null) perGameByRosterId.set(id, { perGame, position: proj.position ?? null })
+  }
+
+  const format = await Promise.resolve().then(() => prisma.league.findUnique({ where: { id: league.id }, select: { leagueType: true, season: true } })).catch(() => null)
+  const deals = format?.season === season ? await loadCompletedSportDeals('NCAAF', season, format.leagueType).catch(() => []) : []
+  const column = leagueIdColumn(league.platform, 'NCAAF')
+  if (deals.length && column) {
+    const ids = [...new Set(deals.flatMap((t) => [...t.given, ...t.received]))]
+    const [rates, links] = await Promise.all([
+      prisma.aFProjectionSnapshot.findMany({ where: { sport: 'NCAAF', season, week: null, eventId: null, playerId: { in: ids } },
+        select: { playerId: true, position: true, adjustmentFactors: true } }),
+      resolveRosterIdsToKeys(prisma, 'NCAAF', column, rosteredIds),
+    ])
+    const chart = new Map<string, number>()
+    for (const row of rates) {
+      const value = perGameFrom(readComponentStats(row.adjustmentFactors), rules, row.position)
+      if (value != null) chart.set(row.playerId, value)
+    }
+    const adjustments = sportMarketAdjustments(deals, chart)
+    for (const [id, line] of perGameByRosterId) line.tradeMarket = adjustments.get(links.get(id) ?? '')
   }
 
   const bestFreeAgent = async (position: string): Promise<NcaafReplacement | null> => {
@@ -251,7 +298,7 @@ export async function loadNcaafRedraftBase(league: {
         : rosteredSet.has(row.playerId) ||
         ids.some((l) => [l.rollingInsightsId, l.espnId, l.fantraxId].some((id) => id != null && rosteredSet.has(id)))
       if (rosteredHere) continue
-      const perGame = perGameFrom(readComponentStats(row.adjustmentFactors), rules)
+      const perGame = perGameFrom(readComponentStats(row.adjustmentFactors), rules, position)
       if (perGame == null) continue
       if (!best || perGame > best.perGame) best = { name: row.playerName ?? 'A free agent', perGame }
     }

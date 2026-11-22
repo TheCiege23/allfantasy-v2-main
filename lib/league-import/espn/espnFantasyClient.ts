@@ -121,7 +121,7 @@ function fingerprint(cookieHeader: string | null): string {
 
 /* ── Cookie input validation (what users paste) ───────────────────────────────────────────── */
 
-export type EspnCookieValidation =
+type EspnCookieValidation =
   | { ok: true; swid: string; espnS2: string }
   | { ok: false; field: 'swid' | 'espnS2' | 'both'; message: string }
 
@@ -189,7 +189,7 @@ const MAX_CACHE_ENTRIES = 200
  * "send Accept: application/json and nothing that imitates a browser"), so its reads pass
  * `userAgent: null` and send exactly the captured headers.
  */
-export const ESPN_LEGACY_USER_AGENT = 'Mozilla/5.0 (compatible; AllFantasy/1.0)'
+const ESPN_LEGACY_USER_AGENT = 'Mozilla/5.0 (compatible; AllFantasy/1.0)'
 
 type CacheEntry = { expiresAt: number; value: Promise<unknown> }
 const responseCache = new Map<string, CacheEntry>()
@@ -447,7 +447,7 @@ export function assertEspnLeagueObject(raw: unknown): asserts raw is Record<stri
 
 /* ── Public / private detection ───────────────────────────────────────────────────────────── */
 
-export type EspnAccessProbe =
+type EspnAccessProbe =
   | { access: 'public'; raw: Record<string, unknown> }
   | { access: 'private_ok'; raw: Record<string, unknown> }
   | { access: 'private_needs_cookies' }

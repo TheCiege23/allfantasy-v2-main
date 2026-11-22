@@ -5,7 +5,7 @@
 
 import type { MatchupSimulationResult } from '@/components/simulation/MatchupSimulationCard'
 
-export type ViewState = 'empty' | 'loading' | 'error' | 'display'
+type ViewState = 'empty' | 'loading' | 'error' | 'display'
 
 export const MATCHUP_SIMULATOR_MESSAGES = {
   empty: 'Select teams and run a simulation to compare win probability and score ranges.',
@@ -13,7 +13,7 @@ export const MATCHUP_SIMULATOR_MESSAGES = {
   genericError: 'Simulation failed. Try rerunning after checking team projections.',
 } as const
 
-export type MatchupDisplayPayload = {
+type MatchupDisplayPayload = {
   projA: number
   projB: number
   rangeA: [number, number]

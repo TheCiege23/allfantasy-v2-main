@@ -20,14 +20,14 @@ export function isUnmannedSeat(platformUserId: string | null | undefined): boole
   return !platformUserId || /^(open-slot-|orphan-|roster:)/.test(platformUserId)
 }
 
-export type ZombieNameRoster = {
+type ZombieNameRoster = {
   id: string
   platformUserId: string | null
   playerData: unknown
   redraftRoster?: { teamName: string | null; ownerName: string | null } | null
 }
-export type ZombieNameTeam = TeamIdentityRow & { id: string; teamName: string | null; ownerName: string | null }
-export type ZombieNamePerson = { displayName: string | null; username: string | null }
+type ZombieNameTeam = TeamIdentityRow & { id: string; teamName: string | null; ownerName: string | null }
+type ZombieNamePerson = { displayName: string | null; username: string | null }
 
 const clean = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 

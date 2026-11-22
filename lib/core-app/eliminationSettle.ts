@@ -52,7 +52,7 @@ export type EliminationSettle =
       cutLinePending: number | null
     }
 
-export const teamFinished = (t: SettleTeam) => t.starters.length > 0 && t.starters.every((s) => s === 'final')
+const teamFinished = (t: SettleTeam) => t.starters.length > 0 && t.starters.every((s) => s === 'final')
 
 export function settleEliminationWeek(args: {
   /** Every roster carrying a score this week — the same field the cut line is drawn from. */

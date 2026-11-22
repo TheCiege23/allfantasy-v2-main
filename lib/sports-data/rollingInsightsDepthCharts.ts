@@ -54,7 +54,7 @@ const TEAM_META_KEYS = new Set([
   'bye',
 ])
 
-export interface DepthChartPlayer {
+interface DepthChartPlayer {
   id: string | null
   player: string
   position: string
@@ -64,7 +64,7 @@ export interface DepthChartPlayer {
   number: number | null
 }
 
-export interface DepthChartTeam {
+interface DepthChartTeam {
   team: string
   teamId: string | null
   positions: Record<string, DepthChartPlayer[]>
@@ -124,7 +124,7 @@ function normalizeBucket(position: string, bucket: unknown): DepthChartPlayer[] 
     .filter((p): p is DepthChartPlayer => p != null)
 }
 
-export interface NormalizedDepthCharts {
+interface NormalizedDepthCharts {
   teams: DepthChartTeam[]
   /**
    * Team-level keys that were neither recognised team metadata nor parseable as a position
@@ -249,7 +249,7 @@ export function describeDepthChartPayload(payload: unknown, sport: string): Reco
   }
 }
 
-export interface DepthChartSyncResult {
+interface DepthChartSyncResult {
   sport: string
   teams: number
   /** `depth_charts` rows upserted — one per (team, position). */

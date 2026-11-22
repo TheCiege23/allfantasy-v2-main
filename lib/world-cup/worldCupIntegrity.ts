@@ -49,7 +49,7 @@ type IntegrityPick = {
   selectedSlotKey?: string | null
 }
 
-export type WorldCupChallengeIntegrityInput = {
+type WorldCupChallengeIntegrityInput = {
   challenge: IntegrityChallenge
   matches: IntegrityMatch[]
   slots?: IntegritySlot[]
@@ -58,7 +58,7 @@ export type WorldCupChallengeIntegrityInput = {
   picks: IntegrityPick[]
 }
 
-export type WorldCupChallengeIntegrityReport = {
+type WorldCupChallengeIntegrityReport = {
   ok: boolean
   errors: string[]
   warnings: string[]
@@ -86,7 +86,7 @@ function isPlaceholderTeam(name?: string | null) {
   )
 }
 
-export function validateWorldCupChallengeIntegrity(input: WorldCupChallengeIntegrityInput): WorldCupChallengeIntegrityReport {
+function validateWorldCupChallengeIntegrity(input: WorldCupChallengeIntegrityInput): WorldCupChallengeIntegrityReport {
   const errors: string[] = []
   const warnings: string[] = []
   const matchById = new Map(input.matches.map((m) => [m.id, m]))

@@ -24,7 +24,7 @@
  * teams into one line.
  */
 
-export type FixtureRow = {
+type FixtureRow = {
   sport?: string | null
   awayTeam?: string | null
   homeTeam?: string | null

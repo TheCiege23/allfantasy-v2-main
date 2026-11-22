@@ -44,7 +44,8 @@ describe('Spanish league overview', () => {
     expect(screen.getByRole('heading', { name: 'Calendario de temporada · Liga Uno' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Esta semana en la liga' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Tabla de rendimiento' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Preguntar a Chimmy' })).toBeTruthy()
+    // The Ask Chimmy card left the Overview on 2026-11-14; the league bar and the chat button open Chimmy.
+    expect(screen.queryByRole('heading', { name: 'Preguntar a Chimmy' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Conectar una liga →' })).toHaveAttribute('href', '/core/connect-leagues?league=league-1')
     expect(screen.getAllByRole('link', { name: 'Volver al inicio →' })).toHaveLength(2)
   })

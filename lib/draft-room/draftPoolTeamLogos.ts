@@ -25,9 +25,6 @@ import { prisma } from '@/lib/prisma'
 import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import { collegeLogoNameCandidates, exactKey, looseTeamKey } from '@/lib/sports-data/collegeTeamNames'
 
-// Re-exported: callers imported it from here before the crosswalk moved to its own module.
-export { looseTeamKey }
-
 /** Sources whose logos are real crests, best first. */
 const LOGO_SOURCE_ORDER = ['thesportsdb', 'api_football', 'cfbd', 'api_sports', 'rolling_insights']
 

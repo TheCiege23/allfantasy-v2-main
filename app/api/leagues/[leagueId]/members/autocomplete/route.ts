@@ -1,3 +1,4 @@
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -30,7 +31,9 @@ export async function GET(
       ownerName: true,
       teamName: true,
     },
-    take: 48,
+    // Every claimed team: the name filter below runs after this read, so a short page here hid most of a big league.
+    orderBy: { id: 'asc' },
+    take: MAX_NATIVE_TEAMS * 2,
   })
 
   const uidList = [...new Set(teams.map((t) => t.claimedByUserId).filter(Boolean))] as string[]
@@ -48,7 +51,7 @@ export async function GET(
     const username = (u?.username ?? '').trim()
     const displayName = (u?.displayName ?? t.ownerName ?? t.teamName ?? 'Manager').trim()
     if (!username) continue
-    const hay = `${username} ${displayName}`.toLowerCase()
+    const hay = `${username} ${displayName} ${t.teamName ?? ''}`.toLowerCase()
     if (!hay.includes(q) && !username.toLowerCase().startsWith(q) && !displayName.toLowerCase().startsWith(q)) {
       continue
     }
@@ -64,5 +67,8 @@ export async function GET(
     if (!dedup.has(r.username.toLowerCase())) dedup.set(r.username.toLowerCase(), r)
   }
 
-  return NextResponse.json([...dedup.values()].slice(0, 8))
+  // Names that start with what was typed come first.
+  const starts = (r: (typeof rows)[0]) => (r.username.toLowerCase().startsWith(q) || r.displayName.toLowerCase().startsWith(q) ? 0 : 1)
+  const ranked = [...dedup.values()].sort((a, b) => starts(a) - starts(b) || a.username.localeCompare(b.username))
+  return NextResponse.json(ranked.slice(0, 8))
 }

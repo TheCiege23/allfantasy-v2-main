@@ -5,7 +5,7 @@
 import type { LeagueStoryContext, LeagueStoryPayload, LeagueStoryType } from './types'
 import { STORY_TITLES, STORY_TEMPLATES, fillTemplate } from './templates'
 
-export function selectStoryType(ctx: LeagueStoryContext): LeagueStoryType {
+function selectStoryType(ctx: LeagueStoryContext): LeagueStoryType {
   const { standings = [], matchups = [] } = ctx
 
   if (matchups.length > 0) {

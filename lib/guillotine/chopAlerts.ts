@@ -78,6 +78,8 @@ export type ChopResultAlertInput = {
   aliveRosterIds: readonly string[]
   displayNames: Record<string, string>
   rosterReleaseTiming: string | null | undefined
+  /** Weeks per elimination period (./eliminationPeriods.ts); `week` is the period's last week. Absent = 1. */
+  periodWeeks?: number
 }
 
 /** Tell this week's teams how the chop went. Best effort: the caller's chop stands whatever happens here. */
@@ -108,7 +110,7 @@ export async function sendChopResultAlerts(
     [false, survivors, 'guillotine_survived'],
   ] as const) {
     if (userIds.length === 0) continue
-    const alert = chopResultAlert({ leagueName: name, week: input.week, choppedNames, youWereChopped, rosterReleaseTiming: input.rosterReleaseTiming })
+    const alert = chopResultAlert({ leagueName: name, week: input.week, choppedNames, youWereChopped, rosterReleaseTiming: input.rosterReleaseTiming, periodWeeks: input.periodWeeks })
     // A survivor goes straight to the released players (the home's chop moment), where the bids are.
     const link = youWereChopped ? {} : { actionHref: `/league/${input.leagueId}#guillotine-chop`, actionLabel: 'See the players' }
     await dispatch({ ...common, ...link, userIds: [...userIds], type, title: alert.title, body: alert.body, severity: alert.severity, dedupePrefix: `${key}:${type}` })
@@ -263,7 +265,8 @@ export async function sendChopZoneWarnings(
   for (const { row, level, late } of targets) {
     const userId = owners.get(row.rosterId)
     if (!userId) continue
-    const alert = chopZoneWarning({ leagueName: name, week: input.week, status: level, margin: row.margin, late, bestBall })
+    // The preview names its own period (`periodWeeks`, two-week MLB leagues); the warning says the same span.
+    const alert = chopZoneWarning({ leagueName: name, week: input.week, status: level, margin: row.margin, late, bestBall, periodWeeks: preview.periodWeeks })
     try {
       await dispatch({
         userIds: [userId],

@@ -1,3 +1,4 @@
+import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
@@ -125,7 +126,11 @@ export async function POST(req: NextRequest) {
    * accounts — the two refusals POST /api/leagues/join makes. Same functions, not copies.
    */
   const priorClaim = await findExistingLeagueClaim({ userId, leagueId: invite.leagueId })
-  if (priorClaim?.viaOtherAccount) {
+  const multiTeamLeague = priorClaim?.viaOtherAccount
+    ? await prisma.league.findUnique({ where: { id: invite.leagueId }, select: { settings: true } })
+    : null
+  // The commissioner can allow one person to run several teams, each under its own account.
+  if (priorClaim?.viaOtherAccount && !readAllowMultiTeamManagers(multiTeamLeague?.settings)) {
     return NextResponse.json(
       {
         error:

@@ -1,3 +1,4 @@
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -31,11 +32,15 @@ export async function POST(req: NextRequest) {
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : ''
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
-  const gate = await assertLeagueCommissioner(leagueId, userId)
+  const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const hostDenied = await survivorHostGuard(leagueId, userId)
   if (hostDenied) return hostDenied
+  // 🛑 Survivor setup skipped the settings lock and the league log (2026-11-15): tribes could be redrawn in a
+  // locked league and nothing said so.
+  const locked = await formatRulesLockedResponse(leagueId)
+  if (locked) return locked
 
   await prisma.league.update({
     where: { id: leagueId },
@@ -77,6 +82,7 @@ export async function POST(req: NextRequest) {
     await seedIdolsAfterDraft(leagueId, 'random').catch(() => {})
   }
 
+  await logFormatRulesChange({ leagueId, userId, format: 'survivor', fields: Object.keys(body).filter((k) => k !== 'leagueId') })
   return NextResponse.json({ ok: true })
 }
 

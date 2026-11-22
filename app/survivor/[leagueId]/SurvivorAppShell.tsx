@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -155,6 +157,7 @@ function SurvivorAppShellInner({
           </p>
           <p className="truncate text-[13px] font-semibold text-white">Survivor · Season</p>
         </div>
+        <LeagueFormatFaqLink league={{ leagueType: 'survivor' }} className="text-white" />
         <NotificationBell leagueId={leagueId} season={ctx.season} />
         <div
           className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/30"

@@ -41,13 +41,13 @@ const HOUR_MS = 3_600_000
 /** Rows for the same two teams this close together are one fixture (provider kickoff drift). */
 const SAME_FIXTURE_MS = 3 * HOUR_MS
 /** A game starting sooner than this is not offered: nobody would have time to pick. */
-export const MIN_PICK_LEAD_MS = HOUR_MS
+const MIN_PICK_LEAD_MS = HOUR_MS
 /** One provider's final, uncontradicted this long after the start, is accepted on its own. */
 export const SINGLE_SOURCE_GRACE_MS = 12 * HOUR_MS
 /** A game still postponed (or suspended) this long after its start is void. */
-export const POSTPONED_VOID_MS = 24 * HOUR_MS
+const POSTPONED_VOID_MS = 24 * HOUR_MS
 /** No agreed final this long after the start: void, never a guess. */
-export const NO_RESULT_VOID_MS = 72 * HOUR_MS
+const NO_RESULT_VOID_MS = 72 * HOUR_MS
 
 export type RealGameLang = 'en' | 'es'
 export const realGameLang = (language: string | null | undefined): RealGameLang =>
@@ -66,7 +66,7 @@ export type RealGameRow = {
   fetchedAt?: Date | null
 }
 
-export type RealGameFixture = {
+type RealGameFixture = {
   key: string
   homeAbbr: string
   awayAbbr: string
@@ -169,9 +169,9 @@ export function classifyFixtureResult(
 }
 
 export type TribeSnapshot = { id: string; name: string; memberUserIds: string[] }
-export type RealGamePick = { userId: string; optionId: string }
+type RealGamePick = { userId: string; optionId: string }
 
-export type RealGameSettlement = {
+type RealGameSettlement = {
   correctUserIds: string[]
   winnerTribeIds: string[]
   /** Who is paid: active castaways only. */
@@ -231,14 +231,14 @@ export function settleRealGamePicks(input: {
 export const REAL_GAME_ALLOWED_PRIZES = ['faab', 'score_bonus', 'none'] as const
 export type RealGamePrizeType = (typeof REAL_GAME_ALLOWED_PRIZES)[number]
 export type RealGamePrize = { type: RealGamePrizeType; amount: number }
-export const REAL_GAME_DEFAULT_PRIZE: RealGamePrize = { type: 'faab', amount: 5 }
+const REAL_GAME_DEFAULT_PRIZE: RealGamePrize = { type: 'faab', amount: 5 }
 export const REAL_GAME_PRIZE_LIMITS = { faab: 25, score_bonus: 50 } as const
 const MAX_FAAB_PRIZE = REAL_GAME_PRIZE_LIMITS.faab
 /** Up to two featured games a week (today's behaviour); the commissioner can choose one. */
-export const REAL_GAME_DEFAULT_PER_WEEK = 2
+const REAL_GAME_DEFAULT_PER_WEEK = 2
 export const REAL_GAME_SETTINGS_KEY = 'survivorRealGameChallenges'
 
-export type RealGameSettings = { enabled: boolean; prize: RealGamePrize; perWeek: 1 | 2 }
+type RealGameSettings = { enabled: boolean; prize: RealGamePrize; perWeek: 1 | 2 }
 
 /**
  * The commissioner's choice, read from `League.settings.survivorRealGameChallenges`:

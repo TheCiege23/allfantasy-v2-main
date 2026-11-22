@@ -81,7 +81,7 @@ const baseCompletion = {
   submittedAt: null,
 }
 
-describe("World Cup AI subscription insights", () => {
+describe("World Cup Chimmy subscription insights", () => {
   it("returns a completion-focused basic bracket grade for incomplete entries", () => {
     const grade = calculateWorldCupBracketGrade({
       completionReview: baseCompletion,
@@ -132,7 +132,7 @@ describe("World Cup AI subscription insights", () => {
     expect(grade.biggestRisk).toMatch(/chalk|leverage|path/i)
   })
 
-  it("adds AI win probability and health to finalized leaderboard rows without unfinalized data", () => {
+  it("adds Chimmy win probability and health to finalized leaderboard rows without unfinalized data", () => {
     const insights = calculateWorldCupLeaderboardAiInsights([
       {
         rank: 1,
@@ -411,7 +411,7 @@ describe("buildWorldCupGroupStageThirdPlaceInsights — deterministic third-plac
   })
 })
 
-describe("Group Stage AI insights — no external AI dependencies", () => {
+describe("Group Stage Chimmy insights — no external Chimmy dependencies", () => {
   it("helpers do not import OpenAI/XAI providers", async () => {
     // Static import-graph check: re-import the helper module fresh and confirm
     // the module source does not reference any AI provider client.
@@ -932,7 +932,7 @@ describe("buildWorldCupBracketUniquenessInsights — deterministic pool comparis
   })
 })
 
-describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
+describe("buildWorldCupAiBracketShareCard — composes 6 Chimmy signals", () => {
   const sampleGrade = {
     grade: "B+",
     completionPercent: 88,
@@ -1003,14 +1003,14 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
     expect(text).toContain("Powered by AllFantasy.")
     // Pro-only signals NOT in the share text.
     expect(text).not.toContain("Champion Confidence")
-    expect(text).not.toContain("AI Win Probability")
+    expect(text).not.toContain("Chimmy Win Probability")
     expect(text).not.toContain("Today: Root for")
     expect(text).not.toContain("Uniqueness:")
     // Lock CTA present.
     expect(result.lockedLines?.[0]).toMatch(/AF Pro unlocks/i)
   })
 
-  it("Pro version includes all 6 AI signals when all inputs are provided", () => {
+  it("Pro version includes all 6 Chimmy signals when all inputs are provided", () => {
     const result = buildWorldCupAiBracketShareCard({
       poolName: "Office Cup",
       entryName: "Bracket 1",
@@ -1030,7 +1030,7 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
     expect(text).toContain("Champion: Argentina")
     expect(text).toContain("Style:")
     expect(text).toContain("Champion Confidence: 72%")
-    expect(text).toContain("AI Win Probability: 18%")
+    expect(text).toContain("Chimmy Win Probability: 18%")
     expect(text).toContain("Today: Root for Argentina")
     expect(text).toContain("Champion path")
     expect(text).toContain("High impact")
@@ -1056,7 +1056,7 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
     // No champion confidence line when championSelected=false.
     expect(result.shareText).not.toContain("Champion Confidence:")
     // No AI Win Probability line when null.
-    expect(result.shareText).not.toContain("AI Win Probability")
+    expect(result.shareText).not.toContain("Chimmy Win Probability")
     // No rooting/uniqueness lines when missing.
     expect(result.shareText).not.toContain("Today: Root for")
     expect(result.shareText).not.toContain("Uniqueness:")
@@ -1064,7 +1064,7 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
     expect(result.shareText).toContain("Powered by AllFantasy.")
   })
 
-  it("clamps AI Win Probability into 0–100 range", () => {
+  it("clamps Chimmy Win Probability into 0–100 range", () => {
     const lowProb = buildWorldCupAiBracketShareCard({
       poolName: "Office Cup",
       entryName: "Bracket 1",
@@ -1074,7 +1074,7 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
       aiWinProbabilityPct: -50,
       hasBracketBrainAi: true,
     })
-    expect(lowProb.shareText).toContain("AI Win Probability: 0%")
+    expect(lowProb.shareText).toContain("Chimmy Win Probability: 0%")
 
     const highProb = buildWorldCupAiBracketShareCard({
       poolName: "Office Cup",
@@ -1085,7 +1085,7 @@ describe("buildWorldCupAiBracketShareCard — composes 6 AI signals", () => {
       aiWinProbabilityPct: 500,
       hasBracketBrainAi: true,
     })
-    expect(highProb.shareText).toContain("AI Win Probability: 100%")
+    expect(highProb.shareText).toContain("Chimmy Win Probability: 100%")
   })
 
   it("sanitizes wagering/betting terms from every share line", () => {
@@ -1538,7 +1538,7 @@ describe("buildWorldCupInviteMessage — commissioner Copy Invite Message", () =
     expect(result.message).toContain("WC8F3KM67Y")
     expect(result.message).toContain("https://allfantasy.ai/join/bracket/WC8F3KM67Y")
     expect(result.message).toContain("June 11, 2026 3:00 PM ET")
-    expect(result.message).toContain("AI Bracket Report")
+    expect(result.message).toContain("Chimmy Bracket Report")
     expect(result.message).toContain("Powered by AllFantasy.")
   })
 
@@ -1581,14 +1581,14 @@ describe("buildWorldCupInviteMessage — commissioner Copy Invite Message", () =
 })
 
 describe("buildWorldCupBracketShareMessage — finalized bracket share", () => {
-  it("uses prebuilt AI Share Card text when provided", () => {
+  it("uses prebuilt Chimmy Share Card text when provided", () => {
     const result = buildWorldCupBracketShareMessage({
       poolName: "Office Cup",
-      prebuiltShareText: "My AI Share Card Output\nLine 2\nPowered by AllFantasy.",
+      prebuiltShareText: "My Chimmy Share Card Output\nLine 2\nPowered by AllFantasy.",
       isComplete: true,
     })
     expect(result.status).toBe("ready")
-    expect(result.message).toContain("My AI Share Card Output")
+    expect(result.message).toContain("My Chimmy Share Card Output")
     expect(result.message).toContain("Line 2")
   })
 

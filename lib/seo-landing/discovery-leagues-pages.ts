@@ -3,11 +3,14 @@
  * Routes: /fantasy-football/leagues, /fantasy-basketball/leagues, /fantasy-baseball/leagues
  */
 
-const BASE = 'https://allfantasy.ai'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
-export type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
+// www via the shared helper: the apex 301s to www, so an apex canonical names a redirect.
+const BASE = getPublicSiteOrigin()
 
-export interface DiscoveryLeaguesFaqItem {
+type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
+
+interface DiscoveryLeaguesFaqItem {
   question: string
   answer: string
 }
@@ -40,7 +43,7 @@ export const DISCOVERY_LEAGUES_PAGE_CONFIG: Record<DiscoveryLeaguesSlug, Discove
     headline: 'Fantasy Football Leagues',
     sportLabel: 'Fantasy Football',
     body:
-      'Find and join fantasy football leagues that fit your style. AllFantasy hosts public and creator-run NFL leagues you can browse by format and join before they fill. Every league comes with AI trade analysis, mock drafts, and waiver advice so you can compete with better tools.',
+      'Find and join fantasy football leagues that fit your style. AllFantasy hosts public and creator-run NFL leagues you can browse by format and join before they fill. Every league comes with Chimmy trade analysis, mock drafts, and waiver advice so you can compete with better tools.',
     discoverHref: '/discover/leagues/nfl',
     keywords: [
       'fantasy football leagues',
@@ -61,9 +64,9 @@ export const DISCOVERY_LEAGUES_PAGE_CONFIG: Record<DiscoveryLeaguesSlug, Discove
           'Yes. You can filter by free or paid leagues and choose the format that matches your draft and competition preferences.',
       },
       {
-        question: 'Does AllFantasy include AI tools for football leagues?',
+        question: 'Does AllFantasy include Chimmy tools for football leagues?',
         answer:
-          'Yes. Supported football leagues include optional AI features for draft help, trade analysis, and waiver guidance.',
+          'Yes. Supported football leagues include optional Chimmy features for draft help, trade analysis, and waiver guidance.',
       },
     ],
   },
@@ -75,7 +78,7 @@ export const DISCOVERY_LEAGUES_PAGE_CONFIG: Record<DiscoveryLeaguesSlug, Discove
     headline: 'Fantasy Basketball Leagues',
     sportLabel: 'Fantasy Basketball',
     body:
-      'Find and join fantasy basketball leagues that fit your style. AllFantasy hosts public and creator-run NBA leagues you can browse by format and join before they fill. Every league comes with AI trade analysis, waiver advice, and power rankings so you can compete with better tools.',
+      'Find and join fantasy basketball leagues that fit your style. AllFantasy hosts public and creator-run NBA leagues you can browse by format and join before they fill. Every league comes with Chimmy trade analysis, waiver advice, and power rankings so you can compete with better tools.',
     discoverHref: '/discover/leagues/nba',
     keywords: [
       'fantasy basketball leagues',
@@ -98,7 +101,7 @@ export const DISCOVERY_LEAGUES_PAGE_CONFIG: Record<DiscoveryLeaguesSlug, Discove
       {
         question: 'What tools are available for fantasy basketball managers?',
         answer:
-          'AllFantasy includes optional AI and deterministic tools for trade decisions, waiver moves, rankings, and draft preparation.',
+          'AllFantasy includes optional Chimmy and deterministic tools for trade decisions, waiver moves, rankings, and draft preparation.',
       },
     ],
   },
@@ -110,7 +113,7 @@ export const DISCOVERY_LEAGUES_PAGE_CONFIG: Record<DiscoveryLeaguesSlug, Discove
     headline: 'Fantasy Baseball Leagues',
     sportLabel: 'Fantasy Baseball',
     body:
-      'Find and join fantasy baseball leagues that fit your style. AllFantasy hosts public and creator-run MLB leagues you can browse by format and join before they fill. Every league comes with AI trade analysis, waiver advice, and Chimmy AI so you can compete with better tools.',
+      'Find and join fantasy baseball leagues that fit your style. AllFantasy hosts public and creator-run MLB leagues you can browse by format and join before they fill. Every league comes with Chimmy trade analysis, waiver advice, and Chimmy so you can compete with better tools.',
     discoverHref: '/discover/leagues/mlb',
     keywords: [
       'fantasy baseball leagues',

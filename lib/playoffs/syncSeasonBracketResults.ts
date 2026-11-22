@@ -24,7 +24,7 @@ async function fetchMappedEvent(sport: SingleGameSport, scheduledAt: string, eve
   return { events: [] }
 }
 
-export type BracketSyncRow = { seriesNumber: number; eventId: string | null; outcome: string; updatedPools?: number }
+type BracketSyncRow = { seriesNumber: number; eventId: string | null; outcome: string; updatedPools?: number }
 export async function syncSeasonBracketResults(input: {
   sport: SingleGameSport; season: number; apply: boolean
 }): Promise<{ sport: SingleGameSport; season: number; applied: boolean; rows: BracketSyncRow[] }> {

@@ -95,7 +95,7 @@ describe("WorldCupGroupStagePicks", () => {
     render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" aiInsightsUnlocked={false} />)
 
     const group = await screen.findByTestId("world-cup-group-A")
-    expect(within(group).getByText("AI Insights")).toBeInTheDocument()
+    expect(within(group).getByText("Chimmy Insights")).toBeInTheDocument()
     expect(within(group).getByText("Locked")).toBeInTheDocument()
     expect(within(group).getByText(/Basic deterministic signals are free/i)).toBeInTheDocument()
     expect(within(group).getByTestId("world-cup-group-ai-insight-line-0").textContent).toMatch(/Safest group winner/i)
@@ -103,7 +103,7 @@ describe("WorldCupGroupStagePicks", () => {
     fireEvent.click(within(group).getAllByText("Team info")[0])
     expect(within(group).getAllByText(/Seed model/i).length).toBeGreaterThan(0)
     expect(within(group).getAllByText(/AF Pro or tokens unlock deeper Chimmy analysis/i).length).toBeGreaterThan(0)
-    expect(within(group).getByText("AI Insights").compareDocumentPosition(within(group).getByRole("button", { name: /Saved/i }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(within(group).getByText("Chimmy Insights").compareDocumentPosition(within(group).getByRole("button", { name: /Saved/i }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
   it("renders drag handles while preserving tap-friendly up/down controls", async () => {
@@ -117,12 +117,12 @@ describe("WorldCupGroupStagePicks", () => {
     expect(within(group).getAllByRole("button", { name: /Move Down/i })).toHaveLength(4)
   })
 
-  it("opens deterministic group AI insights for AI/Pro users without betting copy", async () => {
+  it("opens deterministic group Chimmy insights for Chimmy/Pro users without betting copy", async () => {
     const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
     render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" aiInsightsUnlocked />)
 
     const group = await screen.findByTestId("world-cup-group-A")
-    fireEvent.click(within(group).getByText("AI Insights"))
+    fireEvent.click(within(group).getByText("Chimmy Insights"))
 
     // Seeded chalk: user picked seedOrder 1→1, 2→2, 3→3, 4→4 → produces "Safest group winner" and "pure chalk" lines.
     expect(within(group).getByText(/Safest group winner/i)).toBeInTheDocument()
@@ -355,7 +355,7 @@ describe("WorldCupGroupStagePicks", () => {
 
     await screen.findByTestId("world-cup-third-place-ai-insight")
     expect(screen.getByText("Ask Chimmy")).toBeInTheDocument()
-    expect(screen.getByText(/AI\/Pro unlocks third-place selection insights/i)).toBeInTheDocument()
+    expect(screen.getByText(/Chimmy\/Pro unlocks third-place selection insights/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Save Third-Place Advancers/i }).className).toContain("w-full")
   })
 })

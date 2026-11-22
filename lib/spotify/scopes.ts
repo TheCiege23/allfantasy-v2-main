@@ -38,7 +38,22 @@ const PLAYBACK_SCOPES = [
   "user-read-currently-playing",
 ] as const
 
-export const SPOTIFY_SCOPE_LIST: readonly string[] = [...IDENTITY_SCOPES, ...PLAYBACK_SCOPES]
+/**
+ * Library — lets the music widget list the listener's OWN playlists so they can start one.
+ * GET /v1/me/playlists answers without these, but returns only PUBLIC playlists, which
+ * reads as "half my playlists are missing" rather than as a permissions problem.
+ * `playlist-read-collaborative` adds playlists the user collaborates on.
+ */
+const LIBRARY_SCOPES = [
+  "playlist-read-private",
+  "playlist-read-collaborative",
+] as const
+
+export const SPOTIFY_SCOPE_LIST: readonly string[] = [
+  ...IDENTITY_SCOPES,
+  ...PLAYBACK_SCOPES,
+  ...LIBRARY_SCOPES,
+]
 
 /** Space-delimited, the encoding Spotify's `scope` parameter expects. */
 export const SPOTIFY_SCOPES: string = SPOTIFY_SCOPE_LIST.join(" ")

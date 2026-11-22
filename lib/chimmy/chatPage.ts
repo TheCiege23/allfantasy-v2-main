@@ -19,7 +19,7 @@ export const CHIMMY_PAGE_SOURCE = 'messages_ai'
 export const CHIMMY_PAGE_BACK_FALLBACK = '/core'
 
 /** A league as the panel's scope picker needs it — `CommsLeague`'s fields. */
-export type ChatPageLeague = {
+type ChatPageLeague = {
   id: string
   name: string
   platform: string

@@ -7,7 +7,7 @@
  */
 
 /** Capitals at the start of each part: "Smith-Njigba" scores 2, "Smith-njigba" 1. */
-export function casingScore(name: string): number {
+function casingScore(name: string): number {
   return name.split(/[\s\-'’]+/).filter((part) => /^[A-Z]/.test(part)).length
 }
 

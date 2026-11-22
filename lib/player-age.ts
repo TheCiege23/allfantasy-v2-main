@@ -56,7 +56,7 @@ export function __clearPlayerAgeCacheForTest(): void {
  * linebacker's 23 could price the receiver as a rising asset. Pass `sleeperId` when the caller
  * holds it, and `position` otherwise — a name alone binds only when every row agrees.
  */
-export interface AgeLookup {
+interface AgeLookup {
   name: string
   position?: string | null
   sleeperId?: string | null
@@ -103,7 +103,7 @@ function toLookup(input: string | AgeLookup): AgeLookup {
 }
 
 /** The key a resolved age is stored under. `ageOf` builds the same key from the same lookup. */
-export function ageLookupKey(input: string | AgeLookup): string {
+function ageLookupKey(input: string | AgeLookup): string {
   const l = toLookup(input)
   const name = normalizePlayerName(l.name)
   if (!name) return ''

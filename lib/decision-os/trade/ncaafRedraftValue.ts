@@ -39,7 +39,7 @@ export type NcaafRosteredPlayer = {
 }
 
 /** Per-game points under this league's rules, for one player. */
-export type NcaafPerGame = { perGame: number; position: string | null }
+export type NcaafPerGame = { perGame: number; position: string | null; tradeMarket?: { percent: number; trades: number } }
 
 /** The best free agent at one position: who, and his per-game points under this league's rules. */
 export type NcaafReplacement = { name: string; perGame: number }
@@ -65,12 +65,12 @@ export const NCAAF_FAAB_REASON =
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 /** "weeks 5–15 of the 2026 college season" — the unit every value here is in. */
-export function ncaafWindowText(w: NcaafSeasonWindow): string {
+function ncaafWindowText(w: NcaafSeasonWindow): string {
   const span = w.fromWeek === w.toWeek ? `week ${w.fromWeek}` : `weeks ${w.fromWeek}–${w.toWeek}`
   return `${span} of the ${w.season} college season`
 }
 
-export function ncaafRedraftBasis(w: NcaafSeasonWindow): string {
+function ncaafRedraftBasis(w: NcaafSeasonWindow): string {
   return `Points over the best free agent at each position for ${ncaafWindowText(w)}, scored under this league’s rules. College byes are not on file per player, so no bye is taken off anyone.`
 }
 
@@ -122,7 +122,7 @@ function priceSide(
     }
     // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
     const overPerGame = Math.max(0, line.perGame - replacement.perGame)
-    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks })
+    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks * (1 + (line.tradeMarket?.percent ?? 0) / 100) })
   }
   return { priced }
 }
@@ -186,11 +186,6 @@ export function gradeNcaafRedraftDeal(args: {
     lines,
     moves: [],
   })
-}
-
-/** Which sports and league types this module grades. */
-export function isNcaafRedraft(sport: string | null | undefined, leagueType: string | null | undefined): boolean {
-  return String(sport ?? '').trim().toUpperCase() === 'NCAAF' && String(leagueType ?? '').trim().toLowerCase() === 'redraft'
 }
 
 /** Why a deal in a non-redraft college league carrying a pick is not graded (Phase 9 prices them). */

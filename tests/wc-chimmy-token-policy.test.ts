@@ -450,7 +450,7 @@ describe("billingDecision.displayHint — correct label for each path", () => {
       context: makeContext(),
       entitlements: { plan: "pro" },
     })
-    expect(pro.billingDecision.displayHint).toBe("Included in your plan · AI answer")
+    expect(pro.billingDecision.displayHint).toBe("Included in your plan · Chimmy answer")
 
     // LLM required (free user, no commit — completes without charging)
     const free = await generateWorldCupChimmyPrivateReply({
@@ -460,7 +460,7 @@ describe("billingDecision.displayHint — correct label for each path", () => {
       context: makeContext(),
       entitlements: { plan: null },
     })
-    expect(free.billingDecision.displayHint).toBe("1 token used · AI coaching answer")
+    expect(free.billingDecision.displayHint).toBe("1 token used · Chimmy coaching answer")
   })
 })
 

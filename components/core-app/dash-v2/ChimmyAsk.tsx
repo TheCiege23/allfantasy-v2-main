@@ -31,4 +31,3 @@ export function ChimmyAsk({ label }: { label: string }) {
   )
 }
 
-export default ChimmyAsk

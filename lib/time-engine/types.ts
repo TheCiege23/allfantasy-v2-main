@@ -28,7 +28,7 @@ export type UserTimeContext = {
   warnings: string[]
 }
 
-export type FantasyDayWindowBlock = {
+type FantasyDayWindowBlock = {
   startUTC: string
   endUTC: string
   calendarDateUserTz: string
@@ -42,14 +42,14 @@ export type DataFreshnessTimestamps = {
   liveScoresLastUpdatedAt: string | null
 }
 
-export type RelativeCalendarHints = {
+type RelativeCalendarHints = {
   todayInUserTz: string
   tomorrowDateInUserTz: string
   tonightWindowLabel: string
   thisWeekLabel: string
 }
 
-export type SportWindowHint = {
+type SportWindowHint = {
   likelyActive: boolean
   note: string
   sportUsed: string
@@ -100,9 +100,3 @@ export type AiTimeContextPayload = {
   timeAuthorityNote: string
 }
 
-export type DeviceTimeReport = {
-  deviceTimezone: string
-  deviceLocalIso: string
-  /** Optional: IANA offset string if client sends it */
-  utcOffsetMinutes?: number | null
-}

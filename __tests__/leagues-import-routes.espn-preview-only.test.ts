@@ -17,7 +17,7 @@ const orchestrateImportPreviewMock = vi.fn()
 const getSleeperImportPreviewMock = vi.fn()
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
 vi.mock('@/lib/league-import/commissionerGate', async (importOriginal) => ({

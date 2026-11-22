@@ -30,9 +30,9 @@ export type LineupMoveContext = {
 }
 
 /** `noop` marks a drop back where the player already is: not an error, nothing to say. */
-export type LineupMoveResult = { ok: true; next: RosterLineupLists } | { ok: false; reason: string; noop?: true }
+type LineupMoveResult = { ok: true; next: RosterLineupLists } | { ok: false; reason: string; noop?: true }
 
-export function locatePlayer(lists: RosterLineupLists, playerId: string): LineupSpot | null {
+function locatePlayer(lists: RosterLineupLists, playerId: string): LineupSpot | null {
   if (!playerId) return null
   const si = lists.starters.indexOf(playerId)
   if (si >= 0) return { kind: 'starter', slotIndex: si }

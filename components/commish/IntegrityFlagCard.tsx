@@ -30,7 +30,7 @@ import { useEffect, useMemo, useState } from 'react'
 // ── Contract mirrors ────────────────────────────────────────────────────────
 type TradeAsset = { name: string; position: string; estimatedValue: number | null }
 
-export type CollusionEvidenceLike = {
+type CollusionEvidenceLike = {
   tradeTransactionId?: string
   team1?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
   team2?: { rosterId?: string; teamName?: string; managerName?: string; wins?: number; losses?: number }
@@ -51,7 +51,7 @@ export type CollusionEvidenceLike = {
   reviewModel?: string
 }
 
-export type TankingEvidenceLike = {
+type TankingEvidenceLike = {
   teamName?: string
   currentRecord?: { wins?: number; losses?: number }
   weekNumber?: number
@@ -76,7 +76,7 @@ export type TankingEvidenceLike = {
   lineupIntegrity?: LineupIntegrityLike
 }
 
-export type LineupIntegrityLike = {
+type LineupIntegrityLike = {
   weeks?: { week?: number; ratio?: number | null; startedTopCount?: number | null; starterCount?: number | null }[]
   pattern?: boolean
   below?: number
@@ -325,7 +325,7 @@ function PostLineupReport({ leagueId, rosterId }: { leagueId: string; rosterId: 
 
 // ── Card ────────────────────────────────────────────────────────────────────
 
-export function IntegrityFlagCard({
+function IntegrityFlagCard({
   flag,
   onDismiss,
   onEscalate,

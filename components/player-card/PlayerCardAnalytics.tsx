@@ -84,7 +84,7 @@ export default function PlayerCardAnalytics({
       {showSection && data && (
         <div className="mt-3 space-y-4">
           {data.aiInsights && (
-            <Section icon={<Sparkles className="h-4 w-4 text-amber-400" />} title="AI insights">
+            <Section icon={<Sparkles className="h-4 w-4 text-amber-400" />} title="Chimmy insights">
               <p className="text-sm text-zinc-300">{data.aiInsights}</p>
             </Section>
           )}

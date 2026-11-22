@@ -73,6 +73,15 @@ function buildClubIndex(games: readonly Game[]): Map<string, Game> {
   return byClub
 }
 
+/**
+ * Each club's game this week — the SAME row `starterGameStates` reads its state from — so a caller that
+ * also needs that game's other columns (its final score, for the Matchup board's result line) cannot
+ * disagree with the state. Shares `clubIndex`'s cache; the rows come back as passed, extra columns intact.
+ */
+export function clubGameIndex<G extends Game>(games: readonly G[]): Map<string, G> {
+  return clubIndex(games) as Map<string, G>
+}
+
 /** A kickoff alone never proves that a game has finished. Newest provider row wins. */
 export function starterGameStates(
   players: ReadonlyMap<string, { team: string | null }>,

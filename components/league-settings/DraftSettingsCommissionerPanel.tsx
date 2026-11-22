@@ -151,8 +151,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
   const [isDynastyLike, setIsDynastyLike] = useState(false)
   const [rookieMode, setRookieMode] = useState<'worst_to_first' | 'reverse_max_pf'>('worst_to_first')
   const [rookieEnabled, setRookieEnabled] = useState(false)
-  // What is saved, and whether the owner's plan lets it be switched on (the route's `canAutomate`).
-  const [rookieEnabledSaved, setRookieEnabledSaved] = useState(false)
+  // Whether the owner's plan lets lowest max PF be automated (the route's `canAutomate`).
   const [rookieCanAutomate, setRookieCanAutomate] = useState(false)
   const [rookieSlots, setRookieSlots] = useState<Array<{
     slot: number; teamName: string; ownerName: string; avatarUrl: string | null
@@ -226,7 +225,6 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
       setIsDynastyLike(true)
       setRookieMode(data.savedMode ?? data.mode ?? 'worst_to_first')
       setRookieEnabled(data.enabled ?? false)
-      setRookieEnabledSaved(data.enabled ?? false)
       setRookieCanAutomate(data.canAutomate === true)
       setRookieSlots(data.slots ?? [])
       setRookieNextSeason(data.season ?? 0)
@@ -236,7 +234,7 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
 
   useEffect(() => { loadRookieOrder() }, [loadRookieOrder])
 
-  // Save rookie draft order config. Switching auto-ordering on is AF Commissioner; off is free.
+  // Save rookie draft order config. Only automating lowest max PF is AF Commissioner.
   const saveRookieConfig = useCallback(async () => {
     setRookieSaving(true); setError(null)
     try {
@@ -359,7 +357,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         if (d.cpuAutoPick === true) setCpuAutoPickEnabled(true)
         setCustomOpen(false)
         await loadSettings().catch(() => {})
-        flash(t('lsEd.dr.saved'))
+        // Seats handed to Chimmy: say how many, and what is still empty, instead of a bare "Saved".
+        flash(typeof d.chimmyTeams === 'number' && typeof d.message === 'string' ? d.message : t('lsEd.dr.saved'))
       } else {
         setError(d.message ?? t('lsEd.dr.noAction'))
       }
@@ -723,10 +722,9 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
               <ToggleRow
                 id={ids.rookieAuto} label={t('draft.autoSetOrder')} description={t('draft.autoSetOrderDesc')}
                 enabled={rookieEnabled} onChange={setRookieEnabled}
-                // Off can always be saved; on needs the owner's plan.
-                disabled={!rookieCanAutomate && !rookieEnabledSaved}
               />
-              {!rookieCanAutomate ? (
+              {/* Worst record first is free; only lowest max PF needs the owner's plan. */}
+              {!rookieCanAutomate && rookieMode === 'reverse_max_pf' ? (
                 <p className="text-[11px] leading-snug text-white/45" data-testid="rookie-auto-plan">
                   {t('lsEd.dr.rookieAutoPlan')}{' '}
                   <a href="/upgrade?plan=commissioner" className="font-semibold text-violet-300 underline">{t('lsEd.dr.rookieAutoUpgrade')}</a>

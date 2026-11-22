@@ -21,8 +21,19 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import fs from 'node:fs'
 import os from 'node:os'
 import nodePath from 'node:path'
+import { withTradeAuditTable } from './tradeAuditTable'
 
-const holder = vi.hoisted(() => ({ db: null as any, session: null as any }))
+const holder = vi.hoisted(() => ({ db: null as any, session: null as any, scans: [] as Promise<void>[] }))
+vi.mock('@/lib/integrity/enqueueCollusionScan', async (load) => {
+  const { enqueueCollusionScan } = await load<typeof import('@/lib/integrity/enqueueCollusionScan')>()
+  return {
+    enqueueCollusionScan: (...args: Parameters<typeof enqueueCollusionScan>) => {
+      const scan = enqueueCollusionScan(...args)
+      holder.scans.push(scan)
+      return scan
+    },
+  }
+})
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   get prisma() {
@@ -138,7 +149,10 @@ const realFetch = globalThis.fetch
 
 beforeEach(async () => {
   sim ??= await loadSim()
-  holder.db = sim.createInMemoryPrisma()
+  holder.db = withTradeAuditTable(sim.createInMemoryPrisma())
+  holder.scans = []
+  const { resetTradeValueAuditsReadyCache } = await import('@/lib/integrity/tradeValueAudit')
+  resetTradeValueAuditsReadyCache()
   // Every test's in-memory ids restart, so each league is league_000001. The roster-template memo is
   // keyed by league id and would hand the previous test's sport to this one — bust it, as its doc says.
   const { clearEffectiveLeagueRosterTemplateCache } = await import('@/lib/league/getEffectiveLeagueRosterTemplate')
@@ -232,13 +246,20 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
   for (const c of matrix()) {
     it(`${c.sport} ${c.teamCount} teams, ${c.draft} draft`, { timeout: 1_800_000 }, async () => {
       const started = Date.now()
-      const env: SimEnv = { db: holder.db, signIn: (user) => (holder.session = user ? { user } : null) }
-      const run = await sim.createDynastyLeague(env, c)
+      const env: SimEnv = {
+        db: holder.db,
+        signIn: (user) => (holder.session = user ? { user } : null),
+        async finishTradeScans() {
+          await Promise.all(holder.scans.splice(0))
+        },
+      }
+      const run = await sim.createDynastyLeague(env, { ...c, leagueType: process.env.SIM_LEAGUE_TYPE === 'redraft' || process.env.SIM_LEAGUE_TYPE === 'keeper' ? process.env.SIM_LEAGUE_TYPE : 'dynasty' })
       const scale = c.teamCount === 150 && ['audit', 'scale'].includes(process.env.SIM_MATRIX ?? '')
       try {
         await sim.joinManagers(env, run)
         if (process.env.SIM_SCENARIOS === '1') await (await import('./dynastyScenarios')).preDraftSettings(env, run)
         const pool = await sim.seedPlayerPool(env, run)
+        await sim.checkDraftRoomNames(env, run)
         await sim.runStartupDraft(env, run, pool, scale ? 151 : undefined)
         if (scale) {
           await gradeScaleRookiePicks(env, run)
@@ -251,6 +272,10 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         run.findings.push({ code: 'AUDIT_CASE_THREW', stage: 'season', message: (error as Error).message })
       }
       results.push({ ...run, network: [...network], logged: [...logged], ms: Date.now() - started })
+      if (process.env.SIM_AUDIT_VALUES === '1' && process.env.SIM_SEASON === '1' && ['NBA', 'NHL', 'MLB'].includes(c.sport)) {
+        const grades = run.stats.tradeGrades as Array<{ label: string; grade: string | null }> | undefined
+        expect(grades?.find((row) => row.label === 'future-pick')?.grade, JSON.stringify(grades)).toMatch(/^[A-F]$/)
+      }
       if (scale) {
         expect(run.findings, JSON.stringify(run.findings)).toEqual([])
         expect(run.managerIds).toHaveLength(149)
@@ -270,6 +295,16 @@ describe.skipIf(process.env.SIM_DYNASTY !== '1')('dynasty simulation: create →
         expect(run.findings.some((finding) => finding.code === 'AUDIT_CASE_THREW'), JSON.stringify(run.findings)).toBe(false)
       } else {
         expect(run.leagueId === null || typeof run.leagueId === 'string').toBe(true)
+      }
+
+      // Year-2 carryover is a dynasty rule: a redraft or keeper league starts year 2 from empty rosters.
+      if (process.env.SIM_SEASON === '1' && run.leagueType === 'dynasty' && c.teamCount === 4 && c.draft === 'snake' && (c.sport === 'NHL' || c.sport === 'MLB')) {
+        const findings = JSON.stringify(run.findings)
+        expect(run.stats.seasonClose, findings).toMatchObject({ ok: true, champion: expect.any(String) })
+        expect(run.stats.lastScoredPlayoffWeeks).toEqual([expect.any(Number), expect.any(Number)])
+        expect(run.stats.history).toEqual({ leagueSeasons: 1, franchiseSeasons: 4, seasonResults: 4 })
+        expect(run.stats.nextSeasons).toEqual([{ season: expect.any(Number), status: 'setup' }])
+        expect(run.stats.carryover).toEqual({ owners: 4, lost: 0, gained: 0 })
       }
     })
   }

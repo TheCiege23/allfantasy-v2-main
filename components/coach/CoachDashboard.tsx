@@ -34,7 +34,7 @@ export type CoachEvaluationLoader = (
   input: CoachEvaluationLoaderInput
 ) => Promise<CoachEvaluationResult>;
 
-export interface CoachDashboardProps {
+interface CoachDashboardProps {
   leagueId?: string;
   leagueName?: string;
   initialSport?: string;

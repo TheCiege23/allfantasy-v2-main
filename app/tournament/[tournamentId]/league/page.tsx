@@ -81,7 +81,7 @@ export default function TournamentMyLeaguePage() {
           </div>
 
           <div className="tournament-panel overflow-x-auto">
-            <table className="w-full border-collapse sm:min-w-[560px]">
+            <table className="w-full border-collapse lg:min-w-[560px]">
               <thead>
                 <tr className="border-b border-[var(--tournament-border)] text-left text-[11px] uppercase text-[var(--tournament-text-dim)]">
                   <th className="py-2 pl-2">#</th>

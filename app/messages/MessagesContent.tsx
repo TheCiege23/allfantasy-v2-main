@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
-import Link from "next/link"
 import { useSession } from "next-auth/react"
 import {
   MessageCircle,
@@ -55,19 +54,7 @@ import {
 } from "@/lib/rich-message"
 import type { AttachmentPreview, GifSearchResult } from "@/lib/rich-message"
 import { fetchGifs, gifSearchPlaceholder, loadGifSearchProvider, type GifProvider } from "@/lib/rich-message/gifSearchClient"
-import {
-  parseMentions,
-  notifyMentions,
-  getMentionQueryFromInput,
-  getPinnedUrl,
-  getUnpinUrl,
-  getUnpinPayload,
-  getPinnedDisplayBody,
-  getReferencedMessageIdFromPin,
-  MessageInteractionRenderer,
-  getCreatePollPayload,
-  POLL_MAX_OPTIONS,
-} from "@/lib/social-chat"
+import { parseMentions, notifyMentions, getMentionQueryFromInput, getPinnedUrl, getUnpinUrl, getUnpinPayload, getReferencedMessageIdFromPin, MessageInteractionRenderer, getCreatePollPayload, POLL_MAX_OPTIONS } from "@/lib/social-chat"
 import PinnedSection from "@/components/chat/PinnedSection"
 import MessageActionsMenu from "@/components/chat/MessageActionsMenu"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"

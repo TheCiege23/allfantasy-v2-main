@@ -191,7 +191,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       if (SCENARIOS) {
         const sc = await import('./dynastyScenarios')
         await sc.collusionConsequences(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `collusion: ${e.message}` }))
-        await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
+        if (run.leagueType === 'dynasty') await sc.secondRoundPickTrade(env, run, scenarioCtx).catch((e: Error) => add({ code: 'SCENARIO_THREW', stage: 'season', message: `pick trade: ${e.message}` }))
       }
     }
   }
@@ -220,7 +220,8 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
     if (!(await writeWeek(week))) break
     try {
       await updateStandings(seasonId, week)
-      await scoreActivePlayoffRound({ seasonId, calendarWeek: week }, { finalizeWeek: (async () => ({ finalized: true, alreadyFinal: false })) as never })
+      const scored = await scoreActivePlayoffRound({ seasonId, calendarWeek: week }, { finalizeWeek: (async () => ({ finalized: true, alreadyFinal: false })) as never })
+      if (scored.outcome === 'scored') run.stats.lastScoredPlayoffWeeks = scored.weeks
       for (let guard = 0; guard < 4; guard += 1) {
         const adv = (await advanceNflRedraftPlayoffRuntimeRound({ seasonId, week, actorUserId: run.commissionerId })) as any
         advances.push(adv.ok ? adv.status : adv.code)
@@ -230,7 +231,7 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
       add({ code: 'PLAYOFF_WEEK_THREW', stage: 'playoffs', message: `Week ${week}: ${(e as Error).message}` })
       break
     }
-    clearStats()
+    // Keep earlier playoff stats so the runtime can rescore every week of a multi-week round.
     // The bracket is played out once the engine reports nothing left to advance.
     if (advances[advances.length - 1] === 'NO_ACTIVE_ROUND') break
   }
@@ -264,6 +265,16 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   if (history.franchiseSeasons !== run.teamCount) add({ code: 'FRANCHISE_HISTORY_INCOMPLETE', stage: 'offseason', message: `${history.franchiseSeasons} franchise-season rows for ${run.teamCount} teams — rankings read these.` })
   if (history.seasonResults !== run.teamCount) add({ code: 'SEASON_RESULTS_INCOMPLETE', stage: 'offseason', message: `${history.seasonResults} season results for ${run.teamCount} teams — legacy and hall of fame read these.` })
 
+  if (run.leagueType === 'keeper') {
+    await runRankings(env, run, championId, add)
+    await runKeeperOffseason(env, run, { seasonId, rosterIds, championId }, add)
+    return
+  }
+  if (run.leagueType === 'redraft') {
+    await runRankings(env, run, championId, add)
+    await runRedraftRenewal(env, run, { seasonId, rosterIds, ledger, championId }, add)
+    return
+  }
   const next = (rowsOf(db, 'RedraftSeason') as any[]).filter((s) => s.leagueId === leagueId && s.id !== seasonId)
   run.stats.nextSeasons = next.map((s) => ({ season: s.season, status: s.status }))
   if (!next.length) {
@@ -300,6 +311,251 @@ export async function runDynastySeason(env: SimEnv, run: LeagueRun): Promise<voi
   }
   run.stats.playoffStart = playoffStart
   await runRookieDraft(env, run, { ledger, championId, runnerUpId: (closed?.runnerUpRosterId ?? null) as string | null, year1RosterIds: rosterIds, year1, nextSeasonId: next[0].id }, add)
+}
+
+// ── Keeper offseason → year 2: each manager keeps up to N players at a round cost, the rest go back ──
+// Driven through the routes the Keepers tab and the commissioner dashboard call, with the ids they send
+// (KeeperSelectionTab: the open session's season and the viewer's roster in it).
+async function runKeeperOffseason(
+  env: SimEnv,
+  run: LeagueRun,
+  ctx: { seasonId: string; rosterIds: string[]; championId: string | null },
+  add: (f: SeasonFinding) => void,
+): Promise<void> {
+  const db = env.db
+  const leagueId = run.leagueId!
+  const { NextRequest } = await import('next/server')
+  const call = async (handler: (...a: any[]) => Promise<Response>, url: string, init?: { method: string; body: unknown }, params?: Record<string, string>) => {
+    const req = new NextRequest(`http://sim.allfantasy.test${url}`, init ? { method: init.method, body: JSON.stringify(init.body) } : undefined)
+    const res = await (params ? handler(req, { params: Promise.resolve(params) }) : handler(req))
+    return { status: res.status, body: (await res.json().catch(() => null)) as any }
+  }
+  const signInAs = (id: string) => env.signIn({ id, email: id === run.commissionerId ? 'commish@sim.allfantasy.test' : `${id}@sim.allfantasy.test`, name: id } as never)
+  const S: Record<string, any> = ((run.stats as any).keeper ??= {}) as Record<string, any>
+
+  const league = rowsOf(db, 'League').find((l: any) => l.id === leagueId) as any
+  const maxKeepers = Number(league?.keeperCount ?? 0)
+  const year1 = rowsOf(db, 'RedraftSeason').find((s: any) => s.id === ctx.seasonId) as any
+  S.policy = { maxKeepers, roundPenalty: league?.keeperRoundPenalty ?? null, maxYears: league?.keeperMaxYears ?? null, costSystem: league?.keeperCostSystem ?? null, leagueType: league?.leagueType ?? null }
+  if (maxKeepers < 1) add({ code: 'KEEPER_LEAGUE_HAS_NO_KEEPER_SLOTS', stage: 'offseason', message: `A keeper league was created with keeperCount ${league?.keeperCount}; the wizard asked for 3.` })
+
+  // Closing the season opens the keeper window on the incoming season (triggerKeeperOffseason).
+  const sessions = (rowsOf(db, 'KeeperSelectionSession') as any[]).filter((s) => s.leagueId === leagueId)
+  const open = sessions.find((s) => s.status === 'open')
+  const incoming = open ? (rowsOf(db, 'RedraftSeason') as any[]).find((s) => s.id === open.seasonId) : null
+  S.window = { sessions: sessions.length, open: Boolean(open), incomingSeason: incoming?.season ?? null, deadline: open?.deadline ?? null }
+  if (!open) {
+    add({ code: 'KEEPER_WINDOW_NOT_OPENED', stage: 'offseason', message: `Closing the season opened no keeper selection window (${sessions.length} session(s): ${sessions.map((s) => s.status).join(', ') || 'none'}).` })
+    return
+  }
+  if (!incoming || Number(incoming.season) !== Number(year1?.season) + 1) add({ code: 'KEEPER_WINDOW_WRONG_SEASON', stage: 'offseason', message: `The keeper window is on season ${incoming?.season ?? 'unknown'}; year 1 was ${year1?.season}.` })
+
+  // What each owner ended year 1 holding.
+  const ownerOf = new Map((rowsOf(db, 'RedraftRoster') as any[]).map((r) => [r.id, String(r.ownerId)]))
+  const year1Held = new Map<string, string[]>()
+  for (const p of (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => ctx.rosterIds.includes(p.rosterId) && !p.droppedAt)) {
+    const owner = ownerOf.get(p.rosterId)!
+    year1Held.set(owner, [...(year1Held.get(owner) ?? []), String(p.playerId)])
+  }
+
+  const contextRoute = await import('@/app/api/keeper/context/route')
+  const eligibilityRoute = await import('@/app/api/keeper/eligibility/route')
+  const selectionsRoute = await import('@/app/api/keeper/selections/route')
+  const rosterRoute = await import('@/app/api/redraft/roster/route')
+  // Current members only: the takeover scenario removes a manager mid-season, and a 403 for them is right.
+  const members = new Set((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => String(r.platformUserId)))
+  const owners = [run.commissionerId, ...run.managerIds].filter((o) => members.has(o))
+  const managers: Array<Record<string, unknown>> = []
+  const submitted = new Map<string, string[]>() // owner → player ids the route accepted
+  for (const owner of owners) {
+    signInAs(owner)
+    const c = await call(contextRoute.GET, `/api/keeper/context?leagueId=${leagueId}`)
+    const viewer = c.body?.viewerRoster as { id: string; seasonId: string } | null | undefined
+    const seasonId = String(c.body?.session?.seasonId ?? '')
+    const row: Record<string, unknown> = { owner, context: c.status, viewerRoster: viewer?.id ?? null, year1Players: year1Held.get(owner)?.length ?? 0 }
+    managers.push(row)
+    if (c.status !== 200 || !viewer || !seasonId) continue
+    const e = await call(eligibilityRoute.GET, `/api/keeper/eligibility?leagueId=${leagueId}&seasonId=${seasonId}&rosterId=${viewer.id}`)
+    const raw = (Array.isArray(e.body?.raw) ? e.body.raw : []) as Array<{ playerId: string; isEligible: boolean; ineligibleReason?: string | null; projectedCostRound?: number | null }>
+    // A manager keeps players who cost DIFFERENT rounds: two keepers in one round is a conflict the league's
+    // same-round rule settles (player_chooses refuses both), which is the rule working, not a failure.
+    const usedRounds = new Set<number>()
+    const eligible = raw.filter((r) => r.isEligible).filter((r) => {
+      if (r.projectedCostRound == null) return true
+      if (usedRounds.has(r.projectedCostRound)) return false
+      usedRounds.add(r.projectedCostRound)
+      return true
+    }).map((r) => String(r.playerId))
+    // What the tab lists: the viewer's team last season when the context names one, else the window's roster.
+    const listedFrom = String(c.body?.sourceRoster?.id ?? viewer.id)
+    const shown = await call(rosterRoute.GET, `/api/redraft/roster?rosterId=${listedFrom}&week=1`)
+    const shownPlayers = Array.isArray(shown.body?.players) ? shown.body.players.length : Array.isArray(shown.body?.roster?.players) ? shown.body.roster.players.length : 0
+    // Keep the players the screen offers; if it offers none, try the players this manager actually owned.
+    const choice = (eligible.length ? eligible : year1Held.get(owner) ?? []).slice(0, maxKeepers)
+    const s = await call(selectionsRoute.POST, '/api/keeper/selections', { method: 'POST', body: { leagueId, seasonId, rosterId: viewer.id, playerIds: choice } })
+    Object.assign(row, {
+      eligibility: e.status, eligible: eligible.length, ineligible: raw.length - eligible.length,
+      ineligibleReasons: [...new Set(raw.filter((r) => !r.isEligible).map((r) => r.ineligibleReason))].slice(0, 3),
+      screenRoster: shown.status, screenPlayers: shownPlayers, tried: choice.length, submit: s.status, submitError: s.body?.error ?? null,
+      accepted: Array.isArray(s.body?.valid) ? s.body.valid.length : 0,
+      refusedAs: [...new Set(((s.body?.conflicted ?? []) as Array<{ reason?: string }>).map((c) => c.reason))].slice(0, 3),
+      costs: s.body?.cost ?? null,
+    })
+    // 200 is not acceptance: the route answers 200 and lists each refused player under `conflicted`.
+    const accepted = (Array.isArray(s.body?.valid) ? s.body.valid : []).map((v: any) => String(v?.playerId ?? v))
+    if (s.status === 200 && accepted.length) submitted.set(owner, accepted)
+  }
+  S.managers = managers
+  const withPlayers = managers.filter((m) => Number(m.year1Players) > 0)
+  const noViewer = managers.filter((m) => !m.viewerRoster)
+  const blankScreen = withPlayers.filter((m) => m.viewerRoster && Number(m.screenPlayers) === 0)
+  const nothingEligible = withPlayers.filter((m) => m.viewerRoster && Number(m.eligible) === 0)
+  const refused = managers.filter((m) => m.submit != null && m.submit !== 200)
+  const turnedAway = managers.filter((m) => m.submit === 200 && Number(m.tried) > 0 && Number(m.accepted) === 0)
+  if (noViewer.length) add({ code: 'KEEPER_TAB_HAS_NO_TEAM', stage: 'offseason', message: `${noViewer.length} of ${owners.length} managers get no team on the Keepers tab while the window is open.` })
+  if (blankScreen.length) add({ code: 'KEEPER_TAB_LISTS_NO_PLAYERS', stage: 'offseason', message: `${blankScreen.length} of ${withPlayers.length} managers see an empty roster on the Keepers tab; each ended year 1 with players (first: ${blankScreen[0].year1Players}).` })
+  if (nothingEligible.length) add({ code: 'KEEPER_NOTHING_ELIGIBLE', stage: 'offseason', message: `${nothingEligible.length} of ${withPlayers.length} managers have no keeper-eligible player in the window the tab reads.` })
+  if (turnedAway.length) add({ code: 'KEEPERS_ALL_REFUSED', stage: 'offseason', message: `${turnedAway.length} of ${owners.length} managers tried to keep players they owned all year and every one was refused (${String((turnedAway[0].refusedAs as string[]).join(', '))}); the route still answered 200.` })
+  if (refused.length) add({ code: 'KEEPER_SUBMIT_REFUSED', stage: 'offseason', message: `${refused.length} of ${owners.length} keeper submissions refused; first: ${refused[0].submit} ${String(refused[0].submitError).slice(0, 160)}` })
+
+  // The commissioner locks the window: keepers carry onto year-2 rosters at their round cost.
+  signInAs(run.commissionerId)
+  const sessionRoute = await import('@/app/api/keeper/session/route')
+  const lock = await call(sessionRoute.POST, '/api/keeper/session', { method: 'POST', body: { leagueId, action: 'lock', sessionId: open.id } })
+  S.lock = { status: lock.status, error: lock.body?.error ?? null }
+  if (lock.status !== 200) add({ code: 'KEEPER_LOCK_REFUSED', stage: 'offseason', message: `Locking keepers returned ${lock.status}: ${JSON.stringify(lock.body).slice(0, 200)}` })
+
+  const records = (rowsOf(db, 'KeeperRecord') as any[]).filter((r) => r.leagueId === leagueId)
+  const locked = records.filter((r) => r.status === 'locked')
+  const incomingRosterIds = new Set((rowsOf(db, 'RedraftRoster') as any[]).filter((r) => r.seasonId === open.seasonId).map((r) => r.id))
+  const year2Rows = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => incomingRosterIds.has(p.rosterId) && !p.droppedAt)
+  const keptRows = year2Rows.filter((p) => p.isKept)
+  const adjustments = (rowsOf(db, 'KeeperPickAdjustment') as any[]).filter((a) => a.leagueId === leagueId)
+  const expected = [...submitted.values()].reduce((n, ids) => n + ids.length, 0)
+  const recordSeasons = [...new Set(records.map((r) => (r.seasonId === open.seasonId ? 'incoming' : r.seasonId === ctx.seasonId ? 'outgoing' : 'other')))]
+  S.carry = { submittedPlayers: expected, records: records.length, recordSeasons, locked: locked.length, year2Players: year2Rows.length, kept: keptRows.length, pickAdjustments: adjustments.length }
+  if (expected && locked.length !== expected) add({ code: 'KEEPERS_NOT_LOCKED', stage: 'offseason', message: `${expected} keeper(s) were accepted; ${locked.length} are locked after the commissioner locked the window (records: ${records.length}, on ${recordSeasons.join('/') || 'none'}).` })
+  if (expected && keptRows.length !== expected) add({ code: 'KEEPERS_NOT_CARRIED', stage: 'offseason', message: `${expected} keeper(s) were accepted; ${keptRows.length} are on year-2 rosters after the lock.` })
+  const strays = year2Rows.filter((p) => !p.isKept)
+  if (strays.length) add({ code: 'NON_KEEPERS_CARRIED', stage: 'offseason', message: `${strays.length} player(s) nobody kept are on year-2 rosters.` })
+  const misplaced = keptRows.find((p) => {
+    const owner = ownerOf.get(p.rosterId)
+    return owner && !(year1Held.get(owner) ?? []).includes(String(p.playerId))
+  })
+  if (misplaced) add({ code: 'KEEPER_ON_WRONG_TEAM', stage: 'offseason', message: `${misplaced.playerName ?? misplaced.playerId} was kept onto a year-2 roster whose owner did not hold him in year 1.` })
+  const roundCost = locked.filter((r) => r.costRound != null)
+  if (roundCost.length && adjustments.length !== roundCost.length) add({ code: 'KEEPER_ROUND_COST_NOT_RECORDED', stage: 'offseason', message: `${roundCost.length} keeper(s) cost a round; ${adjustments.length} pick adjustment(s) recorded.` })
+
+  // The commissioner renews into year 2.
+  const renewRoute = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+  const renew = await call(renewRoute.POST, `/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: { draftOrder: 'standings' } }, { leagueId })
+  const leagueAfter = rowsOf(db, 'League').find((l: any) => l.id === leagueId) as any
+  const keptAfterRenew = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => incomingRosterIds.has(p.rosterId) && !p.droppedAt && p.isKept).length
+  S.renewal = { status: renew.status, error: renew.body?.error ?? null, leagueSeason: leagueAfter?.season ?? null, year1Season: year1?.season ?? null, keptAfterRenew }
+  if (renew.status !== 200) add({ code: 'RENEWAL_REFUSED', stage: 'offseason', message: `Renew returned ${renew.status}: ${JSON.stringify(renew.body).slice(0, 240)}` })
+  else {
+    if (Number(leagueAfter?.season) !== Number(year1?.season) + 1) add({ code: 'KEEPER_RENEWAL_WRONG_SEASON', stage: 'offseason', message: `After renewal the league reads season ${leagueAfter?.season}; year 1 was ${year1?.season}, so year 2 is ${Number(year1?.season) + 1}.` })
+    if (keptAfterRenew !== keptRows.length) add({ code: 'RENEWAL_DROPPED_KEEPERS', stage: 'offseason', message: `${keptRows.length} keeper(s) before Renew, ${keptAfterRenew} after.` })
+  }
+
+  // Year 2's draft: each locked keeper is placed in the round he cost.
+  const controls = await import('@/app/api/leagues/[leagueId]/draft/controls/route')
+  const next = await call(controls.POST, `/api/leagues/${leagueId}/draft/controls`, { method: 'POST', body: { action: 'create_next_draft' } }, { leagueId })
+  const draft2 = (rowsOf(db, 'DraftSession') as any[]).filter((s) => s.leagueId === leagueId && s.status === 'pre_draft')
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
+  const placed = (Array.isArray(draft2?.keeperSelections) ? draft2.keeperSelections : []) as Array<{ playerId?: string; playerName?: string; roundCost?: number }>
+  S.nextDraft = { status: next.status, error: next.body?.error ?? null, draft: draft2 ? { rounds: draft2.rounds, slots: (draft2.slotOrder ?? []).length } : null, keeperSelections: placed.length, maxKeepers: draft2?.keeperConfig?.maxKeepers ?? null }
+  if (next.status !== 200) add({ code: 'NEXT_DRAFT_REFUSED', stage: 'offseason', message: `create_next_draft returned ${next.status}: ${JSON.stringify(next.body).slice(0, 200)}` })
+  else if (!draft2) add({ code: 'NO_DRAFT_FOR_NEXT_SEASON', stage: 'offseason', message: 'create_next_draft returned 200 with no pre-draft session.' })
+  else if (roundCost.length && placed.length !== roundCost.length) add({ code: 'KEEPERS_NOT_ON_NEXT_DRAFT_BOARD', stage: 'offseason', message: `${roundCost.length} locked keeper(s) with a round cost; year 2's draft places ${placed.length}.` })
+  else {
+    const byPlayer = new Map(roundCost.map((r) => [String(r.playerId), Number(r.costRound)]))
+    const wrong = placed.filter((k) => k.playerId && byPlayer.has(String(k.playerId)) && Number(k.roundCost) !== byPlayer.get(String(k.playerId)))
+    if (wrong.length) add({ code: 'KEEPER_PLACED_IN_WRONG_ROUND', stage: 'offseason', message: `${wrong.length} keeper(s) sit in a different round from the cost recorded for them.` })
+  }
+}
+
+// ── Redraft renewal → year 2: the commissioner's Renew, then a fresh season and a fresh draft ──
+async function runRedraftRenewal(
+  env: SimEnv,
+  run: LeagueRun,
+  ctx: { seasonId: string; rosterIds: string[]; ledger: Ledger; championId: string | null },
+  add: (f: SeasonFinding) => void,
+): Promise<void> {
+  const db = env.db
+  const leagueId = run.leagueId!
+  const year1 = rowsOf(db, 'RedraftSeason').find((s: any) => s.id === ctx.seasonId) as any
+  const ownerOf = new Map((rowsOf(db, 'RedraftRoster') as any[]).filter((r) => ctx.rosterIds.includes(r.id)).map((r) => [r.id, String(r.ownerId)]))
+  const year1Owners = new Set(ownerOf.values())
+
+  env.signIn({ id: run.commissionerId, email: 'commish@sim.allfantasy.test', name: 'Sim Commish' } as never)
+  const route = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+  const { NextRequest } = await import('next/server')
+  const view = await route.GET(new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`), { params: Promise.resolve({ leagueId }) } as never)
+  run.stats.renewView = { status: view.status }
+  if (view.status !== 200) add({ code: 'RENEW_SCREEN_NOT_READABLE', stage: 'offseason', message: `The renew screen returned ${view.status}.` })
+  const res = await route.POST(
+    new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: JSON.stringify({ draftOrder: 'standings' }) }),
+    { params: Promise.resolve({ leagueId }) } as never,
+  )
+  const body = (await res.json().catch(() => null)) as any
+  run.stats.renewal = { status: res.status, error: body?.error ?? null }
+  if (res.status !== 200) {
+    add({ code: 'RENEWAL_REFUSED', stage: 'offseason', message: `Renew returned ${res.status}: ${JSON.stringify(body).slice(0, 240)}` })
+    return
+  }
+
+  // A fresh season, one year on.
+  const next = (rowsOf(db, 'RedraftSeason') as any[]).filter((s) => s.leagueId === leagueId && s.id !== ctx.seasonId)
+  run.stats.nextSeasons = next.map((s) => ({ season: s.season, status: s.status }))
+  const season2 = next.find((s) => Number(s.season) === Number(year1?.season) + 1) ?? next[0]
+  if (!season2) {
+    add({ code: 'NO_NEXT_SEASON', stage: 'offseason', message: 'Renewal returned 200 but the league has no year-2 season.' })
+    return
+  }
+  if (Number(season2.season) !== Number(year1?.season) + 1) add({ code: 'NEXT_SEASON_WRONG_YEAR', stage: 'offseason', message: `Year 1 was ${year1?.season}; the renewed season is ${season2.season}.` })
+
+  // Every manager is still in the league, each with an EMPTY roster: a redraft league starts over.
+  const rosters2 = (rowsOf(db, 'RedraftRoster') as any[]).filter((r) => r.seasonId === season2.id)
+  const owners2 = new Set(rosters2.map((r) => String(r.ownerId)))
+  const missing = [...year1Owners].filter((o) => !owners2.has(o))
+  if (rosters2.length !== run.teamCount) add({ code: 'RENEWED_ROSTER_COUNT', stage: 'offseason', message: `${rosters2.length} season-2 rosters for a ${run.teamCount}-team league.` })
+  if (missing.length) add({ code: 'MANAGER_LOST_AT_RENEWAL', stage: 'offseason', message: `${missing.length} manager(s) have no season-2 team: ${missing.slice(0, 3).join(', ')}.` })
+  const ids2 = new Set(rosters2.map((r) => r.id))
+  const kept = (rowsOf(db, 'RedraftRosterPlayer') as any[]).filter((p) => ids2.has(p.rosterId) && !p.droppedAt)
+  run.stats.renewedRosters = { rosters: rosters2.length, players: kept.length, missingOwners: missing.length }
+  if (kept.length) add({ code: 'REDRAFT_ROSTERS_NOT_RESET', stage: 'offseason', message: `${kept.length} player(s) are still on season-2 rosters; a redraft league starts empty.` })
+  const genericLeft = (rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId)
+    .reduce((n, r) => n + ((r.playerData as any)?.players?.length ?? 0), 0)
+  if (genericLeft) add({ code: 'REDRAFT_LEAGUE_ROSTERS_NOT_RESET', stage: 'offseason', message: `${genericLeft} player(s) remain on the league rosters after renewal.` })
+
+  // A fresh draft, waiting to be run, in the order the commissioner chose: "standings" is worst to first,
+  // champion last (renewRedraftLeague: "reverse standings" is champion first).
+  const sessions = (rowsOf(db, 'DraftSession') as any[]).filter((s) => s.leagueId === leagueId)
+  const draft2 = sessions.filter((s) => s.status === 'pre_draft').sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
+  run.stats.renewedDraft = draft2 ? { status: draft2.status, rounds: draft2.rounds, draftType: draft2.draftType, slots: (draft2.slotOrder ?? []).length } : null
+  if (!draft2) {
+    add({ code: 'NO_DRAFT_FOR_NEXT_SEASON', stage: 'offseason', message: `Renewed with no pre-draft session (sessions: ${sessions.map((s) => s.status).join(', ')}).` })
+    return
+  }
+  const slots = ([...(draft2.slotOrder ?? [])] as Array<{ slot: number; rosterId: string }>).sort((a, b) => a.slot - b.slot)
+  if (slots.length !== run.teamCount) add({ code: 'NEXT_DRAFT_SLOT_COUNT', stage: 'offseason', message: `${slots.length} draft slots for ${run.teamCount} teams.` })
+  if (ctx.championId) {
+    const championOwner = ownerOf.get(ctx.championId)
+    const genericOfOwner = new Map((rowsOf(db, 'Roster') as any[]).filter((r) => r.leagueId === leagueId).map((r) => [String(r.platformUserId), String(r.id)]))
+    const championRoster = championOwner ? genericOfOwner.get(championOwner) : undefined
+    const last = slots.at(-1)?.rosterId
+    run.stats.renewedDraftLast = { champion: championRoster ?? null, last: last ?? null }
+    if (championRoster && last && last !== championRoster) add({ code: 'STANDINGS_ORDER_CHAMPION_NOT_LAST', stage: 'offseason', message: 'Renewed with "standings" (worst to first); the champion does not pick last.' })
+  }
+
+  // A second Renew into the same season is refused.
+  const again = await route.POST(
+    new NextRequest(`http://sim.allfantasy.test/api/commissioner/leagues/${leagueId}/renew`, { method: 'POST', body: JSON.stringify({ draftOrder: 'standings' }) }),
+    { params: Promise.resolve({ leagueId }) } as never,
+  )
+  run.stats.renewTwice = again.status
+  if (again.status === 200) add({ code: 'RENEWED_TWICE', stage: 'offseason', message: 'A second Renew into the same season was accepted.' })
 }
 
 // ── Rankings: the manager rank the career ledger produces from the season just closed ──
@@ -381,6 +637,22 @@ async function runRookieDraft(
     if (exp.detail.champion && ctx.championId && toGeneric(String(exp.detail.champion)) !== toGeneric(ctx.championId)) add({ code: 'ROOKIE_FACTS_WRONG_CHAMPION', stage: 'offseason', message: `The rookie order's facts name ${exp.detail.champion} champion; the season closed with ${ctx.championId}.` })
     const actual = slotOrder.map((s) => s.rosterId)
     run.stats.liveRookieOrderCheck = { orderSource: created.orderSource, matches: JSON.stringify(expected) === JSON.stringify(actual), expected, actual, detail: exp.detail }
+    // The commissioner's rookie order SCREEN: it loads, it is final once the season is over, and the
+    // order it shows is the order the rookie draft was seated in, team for team.
+    const view: any = run.stats.liveRookieView
+    if (!view || view.threw || view.status !== 200) {
+      add({ code: 'ROOKIE_ORDER_SCREEN_NOT_READABLE', stage: 'offseason', message: `The live rookie order screen returned ${view?.status ?? view?.threw ?? 'nothing'}.` })
+    } else {
+      if (view.phase !== 'final') add({ code: 'ROOKIE_ORDER_SCREEN_NOT_FINAL', stage: 'offseason', message: `After the season the screen says phase "${view.phase}"; it should be final.` })
+      const screen = [...(view.slots ?? [])].sort((a: any, b: any) => a.slot - b.slot).map((s: any) => toGeneric(String(s.team)))
+      if (JSON.stringify(screen) !== JSON.stringify(actual)) add({ code: 'ROOKIE_ORDER_SCREEN_DISAGREES_WITH_DRAFT', stage: 'offseason', message: 'The rookie order screen shows a different order from the one the rookie draft was seated in.', detail: { screen, draft: actual } })
+    }
+    const member = run.managerIds[0]
+    if (member) {
+      const preview = await sc.readRookiePreview(env, run, member).catch((e: Error) => ({ status: 0, slots: 0, error: e.message }))
+      run.stats.rookiePreviewForMember = preview
+      if (preview.status !== 200 || preview.slots !== run.teamCount) add({ code: 'ROOKIE_ORDER_PREVIEW_FAILED_FOR_MEMBER', stage: 'offseason', message: `A member opening the rookie order preview got ${preview.status} with ${preview.slots} of ${run.teamCount} slots${preview.error ? `: ${preview.error}` : ''}.` })
+    }
     if (JSON.stringify(expected) !== JSON.stringify(actual)) {
       add({ code: 'ROOKIE_ORDER_NOT_THE_COMMISSIONERS_RULE', stage: 'offseason', message: `Order source ${created.orderSource}; the order does not follow "non-playoff by reverse max PF, playoff by finish, runner-up 2nd-last, champion last".`, detail: { expected, actual, ...exp.detail } })
     }

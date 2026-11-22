@@ -9,7 +9,7 @@ const persistImportWithCanonicalAuditMock = vi.fn()
 class ImportedLeagueConflictErrorMock extends Error {}
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
 /*
@@ -44,6 +44,7 @@ vi.mock('@/lib/league-import/ImportedLeaguePreviewBuilder', () => ({
 
 vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
   ImportedLeagueConflictError: ImportedLeagueConflictErrorMock,
+  ImportedLeagueAlreadyHereError: class ImportedLeagueAlreadyHereErrorMock extends Error {},
 }))
 
 vi.mock('@/lib/league-import/importPersistenceService', () => ({
@@ -273,6 +274,8 @@ describe('Fantrax import API routes', () => {
          */
         incompleteSteps: [],
         joinedExisting: false,
+        // How a team-less league mate joined an existing copy; null for an ordinary import.
+        joinedAs: null,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({

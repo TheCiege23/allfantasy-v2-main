@@ -13,7 +13,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
 }
 
-export interface LeaderboardEntry {
+interface LeaderboardEntry {
   rank: number
   managerId: string
   displayName: string | null
@@ -21,7 +21,7 @@ export interface LeaderboardEntry {
   extra?: { count?: number; grade?: string }
 }
 
-export interface LeaderboardResult {
+interface LeaderboardResult {
   entries: LeaderboardEntry[]
   total: number
   generatedAt: string
@@ -67,14 +67,12 @@ async function batchResolveDraftGradeManagers(
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>()
   if (keys.length === 0) return result
-  const keySet = new Map(keys.map((k) => [`${k.leagueId}:${k.rosterId}`, k]))
   const leagueIds = [...new Set(keys.map((k) => k.leagueId))]
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: leagueIds } },
     select: { id: true, legacyLeagueId: true },
   })
-  const leagueMap = new Map(leagues.map((l) => [l.id, l]))
   const appLeagueIds = new Set(leagues.map((l) => l.id))
 
   const rosterPairs = keys.filter((k) => appLeagueIds.has(k.leagueId)).map((k) => ({ leagueId: k.leagueId, id: k.rosterId }))
@@ -417,47 +415,3 @@ export async function getMostActiveLeaderboard(options: {
   }
 }
 
-/**
- * Top users — overall leaderboard by GM prestige (championships + win % + activity).
- * Uses ManagerFranchiseProfile.gmPrestigeScore; falls back to championshipCount then careerWinPercentage.
- */
-export async function getTopUsersLeaderboard(options: {
-  limit?: number
-}): Promise<LeaderboardResult> {
-  const limit = clampLimit(options.limit)
-
-  const profiles = await prisma.managerFranchiseProfile.findMany({
-    orderBy: [
-      { gmPrestigeScore: 'desc' },
-      { championshipCount: 'desc' },
-      { careerWinPercentage: 'desc' },
-    ],
-    take: limit,
-    select: {
-      managerId: true,
-      gmPrestigeScore: true,
-      championshipCount: true,
-      careerWinPercentage: true,
-      totalLeaguesPlayed: true,
-    },
-  })
-
-  const displayNames = await getDisplayNames(profiles.map((p) => p.managerId))
-
-  const entries: LeaderboardEntry[] = profiles.map((p, i) => ({
-    rank: i + 1,
-    managerId: p.managerId,
-    displayName: displayNames.get(p.managerId) ?? null,
-    value: Math.round(Number(p.gmPrestigeScore) * 100) / 100,
-    extra: {
-      count: p.championshipCount ?? 0,
-      grade: p.totalLeaguesPlayed != null ? `${p.totalLeaguesPlayed} leagues` : undefined,
-    },
-  }))
-
-  return {
-    entries,
-    total: await prisma.managerFranchiseProfile.count(),
-    generatedAt: new Date().toISOString(),
-  }
-}

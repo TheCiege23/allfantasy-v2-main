@@ -7,7 +7,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getDevyConfig } from '../DevyLeagueConfig'
 import {
   getDevyHeldPromotedDevyPlayerIds,
   getPromotedProPlayerIdsExcludedFromRookiePool,
@@ -62,7 +61,6 @@ export async function buildDevyPool(
   seasonYear?: number
 ): Promise<PoolBuildResult<DevyPoolPlayer>> {
   const buildAt = new Date().toISOString()
-  const config = await getDevyConfig(leagueId)
 
   // Position filter: NFL = QB/RB/WR/TE, NBA = G/F/C
   const nflPositions = ['QB', 'RB', 'WR', 'TE']
@@ -201,7 +199,7 @@ export function getVetPoolExclusionRule(): {
 export async function assertNoPoolOverlap(
   leagueId: string
 ): Promise<{ valid: boolean; conflicts: string[] }> {
-  const [promotedDevyIds, promotedProIds] = await Promise.all([
+  const [promotedDevyIds] = await Promise.all([
     getDevyHeldPromotedDevyPlayerIds(leagueId),
     getPromotedProPlayerIdsExcludedFromRookiePool(leagueId),
   ])

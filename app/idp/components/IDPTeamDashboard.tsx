@@ -104,7 +104,7 @@ function OffensePlayerCard({
   )
 }
 
-export type IDPTeamDashboardProps = {
+type IDPTeamDashboardProps = {
   leagueId: string
   week: number
   sport: string

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mock = vi.hoisted(() => ({ info: vi.fn(), names: vi.fn() }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: vi.fn(async () => ({ ok: true, userId: 'tester' })) }))
+vi.mock('@/lib/auth-guard', () => ({ requireAgeConfirmedUser: vi.fn(async () => ({ ok: true, userId: 'tester' })) }))
 vi.mock('@/lib/rate-limit', () => ({ getClientIp: () => '127.0.0.1', rateLimit: () => ({ success: true }) }))
 vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({
   getFantraxLeagueInfo: mock.info,

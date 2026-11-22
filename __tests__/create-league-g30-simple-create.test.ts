@@ -29,21 +29,22 @@ function state(overrides: Partial<CreateLeagueV2State> = {}): CreateLeagueV2Stat
 }
 
 describe('G30 simple universal create helpers', () => {
-  it('accepts team counts from 2 through 32 only', () => {
+  it('accepts team counts from 2 through 250 only', () => {
     expect(UNIVERSAL_CREATE_TEAM_COUNTS[0]).toBe(2)
-    expect(UNIVERSAL_CREATE_TEAM_COUNTS[UNIVERSAL_CREATE_TEAM_COUNTS.length - 1]).toBe(32)
+    expect(UNIVERSAL_CREATE_TEAM_COUNTS[UNIVERSAL_CREATE_TEAM_COUNTS.length - 1]).toBe(250)
     expect(isUniversalTeamCount(2)).toBe(true)
     expect(isUniversalTeamCount(32)).toBe(true)
+    expect(isUniversalTeamCount(250)).toBe(true)
     expect(isUniversalTeamCount(1)).toBe(false)
-    expect(isUniversalTeamCount(33)).toBe(false)
+    expect(isUniversalTeamCount(251)).toBe(false)
   })
 
   it('validates the required simple create fields', () => {
     expect(validateSimpleCreateState(state())).toEqual([])
-    expect(validateSimpleCreateState(state({ teamCount: 33, draftDate: '', name: '' }))).toEqual(
+    expect(validateSimpleCreateState(state({ teamCount: 251, draftDate: '', name: '' }))).toEqual(
       expect.arrayContaining([
         'Enter a league name.',
-        'Team count must be from 2 through 32.',
+        'Team count must be from 2 through 250.',
         'Choose a draft date.',
       ]),
     )

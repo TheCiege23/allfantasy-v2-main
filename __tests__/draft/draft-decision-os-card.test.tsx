@@ -37,6 +37,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('DraftDecisionOsCard', () => {
+  it('says how sure it is on the shared measured line, verbatim', async () => {
+    fetchMock.mockReturnValue(respond(200, { decision: decision({ fourAnswers: { ...decision().fourAnswers, how_confident: 'High confidence. Round 2 tips have beaten the next pick 61% of the time (48 graded).' } }) }))
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="14:in_progress:13" />)
+    const line = await screen.findByTestId('draft-decision-os-how-confident')
+    expect(line.textContent).toBe('High confidence. Round 2 tips have beaten the next pick 61% of the time (48 graded).')
+    const block = line.closest('.af-evidence')!
+    expect(block.querySelector('.af-evidence-label')!.textContent).toBe('How sure this is')
+  })
+
   it('shows the decision: what to do, the verdict, the confidence and the alternatives', async () => {
     fetchMock.mockReturnValue(respond(200, { decision: decision() }))
     render(<DraftDecisionOsCard leagueId="lg1" refreshKey="14:in_progress:13" />)
@@ -79,5 +88,93 @@ describe('DraftDecisionOsCard', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     rerender(<DraftDecisionOsCard leagueId="lg1" refreshKey="15:in_progress:14" />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows this draft’s context lines (2026-11-14)', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: 'Scoring window: KBI round 2 (weeks 11–12). Atlas Runner’s bye (week 7) is already played.',
+            run: 'Run on WR (5 of the last 8 picks).',
+            teamsAhead: null,
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    const ctx = await screen.findByTestId('draft-decision-os-context')
+    expect(ctx.textContent).toContain('KBI round 2 (weeks 11–12)')
+    expect(ctx.textContent).toContain('Run on WR')
+  })
+
+  it('lists the managers before your next pick — facts, with past drafts only when the plan has them', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: null,
+            run: null,
+            teamsAhead: null,
+            managersAhead: {
+              managers: [
+                { name: 'Bea', slot: 2, thisDraft: 'This draft: RB, RB (2 picks) — no QB or WR or TE yet.', history: ['Their first-round pick was at RB in 2 of their 3 drafts.'] },
+                { name: 'Cal', slot: 3, thisDraft: "Hasn't picked yet in this draft.", history: [] },
+              ],
+              history: 'shown',
+            },
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    const box = await screen.findByTestId('draft-decision-os-managers-ahead')
+    expect(box.textContent).toContain('Before your next pick (2)')
+    expect(box.textContent).toContain('Bea — This draft: RB, RB (2 picks)')
+    expect(box.textContent).toContain('Past drafts: Their first-round pick was at RB')
+    expect(screen.queryByTestId('draft-decision-os-managers-ahead-locked')).toBeNull()
+  })
+
+  it('says what Competitive Edge would add when the plan lacks it, and shows no history', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        decision: decision({
+          context: {
+            scoringWindow: null,
+            run: null,
+            teamsAhead: null,
+            managersAhead: { managers: [{ name: 'Bea', slot: 2, thisDraft: 'This draft: RB (1 pick) — no QB or WR or TE yet.', history: [] }], history: 'locked' },
+          },
+        }),
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    await screen.findByTestId('draft-decision-os-managers-ahead')
+    expect(screen.getByTestId('draft-decision-os-managers-ahead-locked').textContent).toContain('Competitive Edge')
+    expect(screen.queryByText(/Past drafts:/)).toBeNull()
+  })
+
+  it('renders auction advice instead of hiding an auction (2026-11-14)', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, {
+        auction: {
+          maxLegalBid: 143,
+          budgetEdge: 0.9,
+          nominated: {
+            playerName: 'Atlas Runner', position: 'RB', team: 'NYJ', marketPrice: 41, yourPrice: 46, surplus: 5,
+            reason: 'fills an open RB starter', currentBid: 30, verdict: 'bid', bidUpTo: 46,
+          },
+          targets: [{ playerName: 'Blaze Catcher', position: 'WR', team: 'DAL', marketPrice: 20, yourPrice: 26, surplus: 6, reason: 'r' }],
+          nominate: null,
+          summary: 'Bid on Atlas Runner up to $46 (market ~$41).',
+          caveats: [],
+          scoringWindowInsight: null,
+        },
+      }),
+    )
+    render(<DraftDecisionOsCard leagueId="lg1" refreshKey="k" />)
+    expect((await screen.findByTestId('draft-decision-os-auction-summary')).textContent).toBe('Bid on Atlas Runner up to $46 (market ~$41).')
+    expect(screen.getByTestId('draft-decision-os-auction').textContent).toContain('Max legal bid $143')
+    expect(screen.getByTestId('draft-decision-os-auction-targets').textContent).toContain('Blaze Catcher')
   })
 })

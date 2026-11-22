@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { slotIndexForOverallPick } from '@/lib/draft/snake'
 import type {
   DraftMode,
@@ -11,7 +11,7 @@ import type {
 } from '../types'
 import { DraftBoard } from './DraftBoard'
 import { DraftChatPanel } from './DraftChatPanel'
-import { ChimmyDraftChat } from './ChimmyDraftChat'
+import { ChimmyDraftChat, type LeagueMockChimmy } from './ChimmyDraftChat'
 import { DraftHeader } from './DraftHeader'
 import { DraftPlayerModal } from './DraftPlayerModal'
 import { DraftResultsView } from './DraftResultsView'
@@ -140,21 +140,79 @@ export function DraftShell({
     return () => window.clearInterval(id)
   }, [load])
 
+  /*
+   * 🛑 THE QUEUE SAVES HERE, WHICHEVER TAB IS OPEN (2026-11-16). It used to save only from the Queue
+   * panel, so a player queued from the player list while another tab was open was never saved — the
+   * Queue panel was not mounted to save it. And it used to save the EMPTY starting list half a second
+   * after the room opened, which overwrote the saved queue whenever loading it took longer than that.
+   *
+   * So: nothing is saved until the saved queue has loaded (`queueLoaded`), and a save is skipped when the
+   * list is the one last loaded or saved (`lastSavedQueueRef`). If loading fails, nothing is saved —
+   * a queue we could not read is never overwritten.
+   */
+  const [queueLoaded, setQueueLoaded] = useState(false)
+  const [queueSaving, setQueueSaving] = useState(false)
+  const lastSavedQueueRef = useRef<string | null>(null)
+
   useEffect(() => {
+    let cancelled = false
+    setQueueLoaded(false)
+    lastSavedQueueRef.current = null
+    const finish = (loaded: DraftPlayerRow[]) => {
+      if (cancelled) return
+      lastSavedQueueRef.current = JSON.stringify(loaded.map((p) => p.id))
+      // Anything queued while the saved queue was loading goes after it, not instead of it.
+      setQueue((current) => [...loaded, ...current.filter((p) => !loaded.some((l) => l.id === p.id))])
+      setQueueLoaded(true)
+    }
     void fetch(`/api/draft/queue/get?sessionId=${encodeURIComponent(sessionId)}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`queue ${r.status}`)
+        return r.json()
+      })
       .then((j: { playerIds?: string[] }) => {
         const ids = j.playerIds ?? []
-        if (!ids.length) return
-        void fetch('/api/draft/players?sport=NFL')
-          .then((r) => r.json())
+        if (!ids.length) return finish([])
+        return fetch('/api/draft/players?sport=NFL')
+          .then((r) => {
+            if (!r.ok) throw new Error(`players ${r.status}`)
+            return r.json()
+          })
           .then((d: { players?: DraftPlayerRow[] }) => {
-            const all = d.players ?? []
-            const map = new Map(all.map((p) => [p.id, p]))
-            setQueue(ids.map((id) => map.get(id)).filter(Boolean) as DraftPlayerRow[])
+            const map = new Map((d.players ?? []).map((p) => [p.id, p]))
+            finish(ids.map((id) => map.get(id)).filter(Boolean) as DraftPlayerRow[])
           })
       })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [sessionId])
+
+  useEffect(() => {
+    if (!queueLoaded) return
+    const ids = queue.map((q) => q.id)
+    const key = JSON.stringify(ids)
+    if (key === lastSavedQueueRef.current) return
+    const timeoutId = window.setTimeout(() => {
+      lastSavedQueueRef.current = key
+      setQueueSaving(true)
+      void fetch('/api/draft/queue/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, playerIds: ids }),
+      })
+        .then((r) => {
+          // A failed save is retried by the next change rather than marked as saved.
+          if (!r.ok) lastSavedQueueRef.current = null
+        })
+        .catch(() => {
+          lastSavedQueueRef.current = null
+        })
+        .finally(() => setQueueSaving(false))
+    }, 500)
+    return () => window.clearTimeout(timeoutId)
+  }, [queue, queueLoaded, sessionId])
 
   const draftedIds = useMemo(() => new Set(picks.map((p) => p.playerId).filter(Boolean) as string[]), [picks])
 
@@ -237,6 +295,27 @@ export function DraftShell({
     if (queue.some((q) => q.id === p.id)) return
     setQueue((q) => [...q, p])
   }
+
+  /*
+   * Chimmy in a league mock room (stage 4 of drafts). A queue card applies on Confirm; the room's own
+   * queue save (above) stores it, whichever tab is open.
+   */
+  const leagueMockChimmy = useMemo<LeagueMockChimmy | undefined>(() => {
+    if (mode !== 'mock') return undefined
+    return {
+      queueIds: queue.map((q) => q.id),
+      isDrafted: (playerId) => draftedIds.has(playerId),
+      applyQueue: (ids, added) => {
+        const known = new Map(queue.map((q) => [q.id, q]))
+        for (const a of added) {
+          if (!known.has(a.id)) {
+            known.set(a.id, { id: a.id, name: a.name, position: a.position, team: a.team ?? '', adp: null, proj: null, bye: null, keyStat: '' })
+          }
+        }
+        setQueue(ids.map((id) => known.get(id)).filter((row): row is DraftPlayerRow => row != null))
+      },
+    }
+  }, [mode, queue, draftedIds])
 
   const toggleAutopick = async (v: boolean) => {
     setAutopick(v)
@@ -382,7 +461,7 @@ export function DraftShell({
               { key: 'queue', i18nKey: 'draftRoom.legacy.queueTab', label: 'Queue' },
               { key: 'roster', i18nKey: 'draftRoom.legacy.rosterTab', label: 'Roster' },
               { key: 'chat', i18nKey: 'draftRoom.legacy.draftChat', label: 'Draft Chat' },
-              { key: 'ai', i18nKey: 'draftRoom.legacy.aiTab', label: 'AI' },
+              { key: 'ai', i18nKey: 'draftRoom.legacy.aiTab', label: 'Chimmy' },
             ] as const).map((tab) => {
               const translated = t(tab.i18nKey)
               const resolvedLabel =
@@ -416,7 +495,7 @@ export function DraftShell({
           </div>
           <div className="min-h-0 flex-1 p-2" data-testid={`draft-right-tab-content-${rightTab}`}>
             {rightTab === 'queue' ? (
-              <QueuePanel sessionId={sessionId} queue={queue} onQueueChange={setQueue} />
+              <QueuePanel queue={queue} onQueueChange={setQueue} saving={queueSaving} />
             ) : rightTab === 'roster' ? (
               <RosterPanel myPicks={myPicks} />
             ) : rightTab === 'chat' ? (
@@ -430,6 +509,7 @@ export function DraftShell({
                   state,
                   picks,
                 }}
+                mock={leagueMockChimmy}
               />
             )}
           </div>

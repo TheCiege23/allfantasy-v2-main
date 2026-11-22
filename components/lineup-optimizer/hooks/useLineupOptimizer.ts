@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 import type { LineupDecisionMode } from '@/lib/lineup-decision-engine/types'
 import type { DecisionEngineJson, LineupRosterPlayer, OptimizeApiResponse } from '../types'
 
@@ -72,7 +73,8 @@ export function useLineupOptimizer() {
         })
         const data = (await res.json()) as OptimizeApiResponse & { error?: string }
         if (!res.ok) {
-          throw new Error(data.error || 'Optimize failed')
+          // A plan refusal reads as its sentence ("This is part of AF Pro."), not the bare "Premium feature".
+          throw new Error(readPlanRefusal(res.status, data)?.message ?? (data.error || 'Optimize failed'))
         }
         setResult(data.result ?? null)
         setDecisionEngine((data.decisionEngine as DecisionEngineJson) ?? null)

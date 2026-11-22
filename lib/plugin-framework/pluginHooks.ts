@@ -10,7 +10,7 @@ import type {
 } from './pluginContracts'
 import { LIFECYCLE_HOOK_NAMES } from './pluginLifecycle'
 
-export const DRAFT_HOOK_NAMES = [
+const DRAFT_HOOK_NAMES = [
   'draftRules',
   'pickValidation',
   'timerBehavior',
@@ -18,7 +18,7 @@ export const DRAFT_HOOK_NAMES = [
   'draftCompletion',
 ] as const satisfies readonly (keyof DraftPluginContract)[]
 
-export const SCHEDULE_HOOK_NAMES = [
+const SCHEDULE_HOOK_NAMES = [
   'scheduleGenerator',
   'matchupPolicy',
   'byePolicy',
@@ -27,7 +27,7 @@ export const SCHEDULE_HOOK_NAMES = [
   'rivalryRules',
 ] as const satisfies readonly (keyof SchedulePluginContract)[]
 
-export const PLAYOFF_HOOK_NAMES = [
+const PLAYOFF_HOOK_NAMES = [
   'qualificationRules',
   'bracketGenerator',
   'reseedingPolicy',
@@ -35,34 +35,34 @@ export const PLAYOFF_HOOK_NAMES = [
   'championPolicy',
 ] as const satisfies readonly (keyof PlayoffPluginContract)[]
 
-export const WAIVER_HOOK_NAMES = [
+const WAIVER_HOOK_NAMES = [
   'waiverRules',
   'FAABRules',
   'priorityRules',
   'processingPolicy',
 ] as const satisfies readonly (keyof WaiverPluginContract)[]
 
-export const TRADE_HOOK_NAMES = [
+const TRADE_HOOK_NAMES = [
   'tradeRules',
   'assetValidation',
   'pickTradingRules',
   'deadlineRules',
 ] as const satisfies readonly (keyof TradePluginContract)[]
 
-export const SCORING_HOOK_NAMES = [
+const SCORING_HOOK_NAMES = [
   'scoringRules',
   'scoringCategories',
   'liveScoringHooks',
   'statCorrectionHooks',
 ] as const satisfies readonly (keyof ScoringPluginContract)[]
 
-export const COMMISSIONER_HOOK_NAMES = [
+const COMMISSIONER_HOOK_NAMES = [
   'commissionerSettings',
   'automationHooks',
   'AIHooks',
 ] as const satisfies readonly (keyof CommissionerPluginContract)[]
 
-export const DECISION_OS_HOOK_NAMES = [
+const DECISION_OS_HOOK_NAMES = [
   'managerIntelligenceInputs',
   'leagueIntelligenceInputs',
   'platformIntelligenceInputs',

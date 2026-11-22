@@ -7,15 +7,6 @@
  */
 export type ScoringMode = 'points' | 'h2h_category' | 'roto'
 
-export const SCORING_MODES = ['points', 'h2h_category', 'roto'] as const
-
-export function isScoringMode(value: unknown): value is ScoringMode {
-  return (
-    typeof value === 'string' &&
-    (SCORING_MODES as readonly string[]).includes(value)
-  )
-}
-
 /**
  * Canonical category-preset id. Extend this union as MLB/NHL presets land.
  * The preset id lives on league settings as `settings.category_preset_id` and
@@ -53,10 +44,10 @@ export function isCategoryPresetId(value: unknown): value is CategoryPresetId {
  * - `higher`: team with the larger value wins (PTS, REB, AST…)
  * - `lower`:  team with the smaller value wins (TO, GAA, ERA, WHIP…)
  */
-export type CategoryDirection = 'higher' | 'lower'
+type CategoryDirection = 'higher' | 'lower'
 
 /** How a category's value is derived from the raw per-player stat map. */
-export type CategoryComputation =
+type CategoryComputation =
   | { kind: 'sum'; statKey: string }
   | {
       /**

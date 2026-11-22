@@ -4,6 +4,7 @@ import { buildEspnMemberDirectory, resolveEspnOwners, resolveEspnCommissionerTea
   resolveEspnViewerTeamId, parseEspnSettings, parseEspnScheduleForTest,
   EspnImportConnectionError, EspnImportLeagueNotFoundError, type EspnFetchOptions } from './EspnLeagueFetchService'
 import { parseEspnMlbSource } from './EspnMlbSource'
+import { resolveEspnViewerTeamWithCode } from './espnTeamCode'
 import { EspnApiResponseError, assertEspnLeagueObject, buildEspnCookieHeader, fetchEspnLeagueJson } from './espnFantasyClient'
 
 // Evidence: contracts/espn/ENDPOINTS.yaml and fantasy-league.MLB.2026 fixture.
@@ -85,6 +86,11 @@ export async function fetchEspnMlbLeagueForImport(userId: string, input: string,
     throw error
   }
   const payload=parseEspnMlbPayload(raw, input, auth?.espnSwid ?? null)
+  // Same order as NFL: the SWID cookie, then the phone-friendly team code (`espnTeamCode.ts`).
+  const viewer = resolveEspnViewerTeamWithCode({ raw, swidTeamId: payload.viewerTeamId ?? null, userId, espnLeagueId: leagueId })
+  payload.viewerTeamId = viewer.teamId
+  payload.viewerTeamProof = viewer.proof
+  payload.viewerEspnConnected = cookieHeader !== null
   payload.previousSeasons = _options.includePreviousSeasons === false ? [] : payload.previousSeasons.filter(p=>Number(p.season)>=(_options.minSeason ?? 2010)).sort((a,b)=>Number(b.season)-Number(a.season)).slice(0,_options.maxPreviousSeasons ?? 6)
   return payload
 }

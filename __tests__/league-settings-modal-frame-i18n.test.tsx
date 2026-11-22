@@ -142,8 +142,8 @@ describe('🛑 the frame reads Spanish in Spanish', () => {
     lang.language = 'es'
     const r = renderModal('manual')
     fireEvent.click(await r.findByText('CI'))
-    await r.findByText('Analizador de trades con IA')
-    expect(r.container.ownerDocument.body.textContent).toContain('Power Rankings con IA')
+    await r.findByText('Analizador de trades con Chimmy')
+    expect(r.container.ownerDocument.body.textContent).toContain('Power Rankings con Chimmy')
     expect(englishIn(r.container.ownerDocument.body)).toEqual([])
   })
 

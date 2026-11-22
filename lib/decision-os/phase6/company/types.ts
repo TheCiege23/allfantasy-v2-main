@@ -94,10 +94,10 @@ export type DriverStrength = 'strong' | 'moderate' | 'weak'
 export type ChurnRiskLevel = 'critical' | 'high' | 'medium' | 'low'
 export type AdoptionGap = 'large' | 'moderate' | 'small'
 export type CommissionerPrevalence = 'widespread' | 'common' | 'occasional' | 'rare'
-export type HealthCorrelation = 'positive' | 'negative' | 'neutral'
+type HealthCorrelation = 'positive' | 'negative' | 'neutral'
 export type EngagementSignal = 'high' | 'moderate' | 'low' | 'unknown'
 export type RetentionSignal = 'strong' | 'moderate' | 'at_risk' | 'unknown'
-export type CohortPriority = 'high' | 'medium' | 'low'
+type CohortPriority = 'high' | 'medium' | 'low'
 export type MonetizationPotential = 'high' | 'moderate' | 'low'
 export type HealthTier = 'excellent' | 'good' | 'moderate' | 'poor' | 'critical'
 
@@ -185,7 +185,7 @@ export interface MonetizationSignal {
   completeness: number
 }
 
-export interface DataQualityDimensionCompleteness {
+interface DataQualityDimensionCompleteness {
   benchmark: number          // 0–25
   archetypeDistribution: number  // 0–20
   recommendationAggregate: number  // 0–20

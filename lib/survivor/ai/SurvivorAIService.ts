@@ -31,12 +31,12 @@ function getOpenAIClient(): OpenAI | null {
   return openai
 }
 
-export interface SurvivorAIResult {
+interface SurvivorAIResult {
   narrative: string
   model?: string
 }
 
-export interface SurvivorAiCacheContextSummary {
+interface SurvivorAiCacheContextSummary {
   leagueId: string
   sport: string
   currentWeek: number

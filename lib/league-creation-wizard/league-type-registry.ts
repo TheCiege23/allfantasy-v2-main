@@ -20,6 +20,15 @@ import {
 } from '@/lib/league/format-engine'
 import type { LeagueTypeId, DraftTypeId } from './types'
 import { isSurvivorCreationSportAvailable, SURVIVOR_CREATION_SPORTS } from '@/lib/survivor/survivorCreationAvailability'
+import { isSGCreateSport, SG_CREATE_SPORTS } from '@/lib/survivor-guillotine/createFit'
+
+/**
+ * Survivor Guilly is created as a redraft league (lib/league-creation/canonical/normalizeConcept.ts), so
+ * its draft rules are redraft's. Every format-engine lookup below goes through this.
+ */
+function formatShellFor(leagueType: LeagueTypeId): LeagueTypeId {
+  return leagueType === 'survivor_guillotine' ? 'redraft' : leagueType
+}
 
 export const LEAGUE_TYPE_IDS: LeagueTypeId[] = listLeagueFormats().map((format) => format.id) as LeagueTypeId[]
 
@@ -28,7 +37,7 @@ export const LEAGUE_TYPE_LABELS: Record<LeagueTypeId, string> = listLeagueFormat
     acc[format.id as LeagueTypeId] = format.label
     return acc
   },
-  {} as Record<LeagueTypeId, string>
+  { survivor_guillotine: 'Survivor Guilly' } as Record<LeagueTypeId, string>
 )
 
 /** All canonical format draft ids (union across formats) — labels for wizard controls. */
@@ -49,56 +58,8 @@ export const DRAFT_TYPE_IDS: readonly string[] = listCreateLeagueWireDraftTypeId
 /** League types that imply dynasty (multi-year roster). */
 const DYNASTY_LEAGUE_TYPES: LeagueTypeId[] = ['dynasty', 'devy', 'c2c']
 
-/** League types that support keeper config. */
-const KEEPER_LEAGUE_TYPES: LeagueTypeId[] = ['keeper', 'dynasty']
-
-/** League types that support devy. */
-const DEVY_LEAGUE_TYPES: LeagueTypeId[] = ['devy', 'dynasty']
-
-/** League types that support C2C. */
-const C2C_LEAGUE_TYPES: LeagueTypeId[] = ['c2c']
-
-/** Draft types that are "live" league draft (not mock). Excludes mock_draft by design for this helper. */
-const LIVE_DRAFT_TYPES: DraftTypeId[] = [
-  'snake',
-  'linear',
-  'auction',
-  'slow_draft',
-  'devy_snake',
-  'devy_auction',
-  'c2c_snake',
-  'c2c_auction',
-]
-
 export function isDynastyLeagueType(leagueType: LeagueTypeId): boolean {
   return DYNASTY_LEAGUE_TYPES.includes(leagueType)
-}
-
-/** Standard redraft: seasonal league, no carryover rosters. */
-export function isRedraftLeagueType(leagueType: LeagueTypeId): boolean {
-  return leagueType === 'redraft'
-}
-
-/** Keeper or dynasty: supports keeper retention config (max keepers, round cost, etc.). */
-export function isKeeperLeagueType(leagueType: LeagueTypeId): boolean {
-  return KEEPER_LEAGUE_TYPES.includes(leagueType)
-}
-
-/** True when league type is exactly keeper (hybrid seasonal + retention), not dynasty. */
-export function isKeeperOnlyLeagueType(leagueType: LeagueTypeId): boolean {
-  return leagueType === 'keeper'
-}
-
-export function isDevyLeagueType(leagueType: LeagueTypeId): boolean {
-  return DEVY_LEAGUE_TYPES.includes(leagueType)
-}
-
-export function isC2CLeagueType(leagueType: LeagueTypeId): boolean {
-  return C2C_LEAGUE_TYPES.includes(leagueType)
-}
-
-export function isLiveDraftType(draftType: DraftTypeId): boolean {
-  return LIVE_DRAFT_TYPES.includes(draftType)
 }
 
 export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): LeagueTypeId[] {
@@ -110,6 +71,7 @@ export function getAllowedLeagueTypesForSport(sport: LeagueSport | string): Leag
 /** Reverse lookup: which sports does a given league type support? */
 export function getAllowedSportsForLeagueType(leagueType: LeagueTypeId): LeagueSport[] {
   if (leagueType === 'survivor') return [...SURVIVOR_CREATION_SPORTS] as LeagueSport[]
+  if (leagueType === 'survivor_guillotine') return [...SG_CREATE_SPORTS] as LeagueSport[]
   const format = listLeagueFormats().find((f) => f.id === leagueType)
   return format ? (format.supportedSports as LeagueSport[]) : [...SUPPORTED_SPORTS]
 }
@@ -122,13 +84,14 @@ export function getAllowedDraftTypesForLeagueType(
   leagueType: LeagueTypeId,
   sport: LeagueSport | string = 'NFL'
 ): DraftTypeId[] {
-  return getAllowedDraftTypesForFormat(sport, leagueType) as DraftTypeId[]
+  return getAllowedDraftTypesForFormat(sport, formatShellFor(leagueType)) as DraftTypeId[]
 }
 
 /**
  * Validate league type for sport.
  */
 export function isLeagueTypeAllowedForSport(leagueType: LeagueTypeId, sport: LeagueSport | string): boolean {
+  if (leagueType === 'survivor_guillotine') return isSGCreateSport(sport)
   return (leagueType !== 'survivor' || isSurvivorCreationSportAvailable(sport)) &&
     isLeagueFormatAllowedForSport(sport, leagueType)
 }
@@ -141,12 +104,6 @@ export function isDraftTypeAllowedForLeagueType(
   leagueType: LeagueTypeId,
   sport: LeagueSport | string = 'NFL'
 ): boolean {
-  return isDraftTypeAllowedForFormat(sport, leagueType, draftType)
+  return isDraftTypeAllowedForFormat(sport, formatShellFor(leagueType), draftType)
 }
 
-/**
- * All supported sports (from sport-scope).
- */
-export function getSupportedSports(): LeagueSport[] {
-  return [...SUPPORTED_SPORTS]
-}

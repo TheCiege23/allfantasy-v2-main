@@ -13,8 +13,6 @@ export type PickRow = {
   season?: number
 }
 
-type TeamColor = { id: string; color: string }
-
 const PALETTE = ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#ec4899', '#06b6d4', '#84cc16']
 
 export function PicksBoard({

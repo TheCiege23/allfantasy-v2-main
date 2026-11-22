@@ -7,7 +7,7 @@ export function OrphanTeamBadge({ active = true }: { active?: boolean }) {
           : 'border border-white/10 bg-white/5 text-white/50'
       }`}
     >
-      AI
+      Chimmy
     </span>
   )
 }

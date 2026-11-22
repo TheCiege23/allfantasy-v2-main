@@ -83,6 +83,6 @@ export function buildOrphanTeamEvaluationPreview(input: {
   const pickCapital =
     input.draftPicksOwned >= 4 ? "plus draft capital" : input.draftPicksOwned >= 2 ? "balanced draft capital" : "light draft capital"
 
-  return `AI preview: ${competitiveness} in ${input.leagueTypeLabel} (${input.scoringFormat}); ${rosterDepth}; ${pickCapital}.`
+  return `Chimmy preview: ${competitiveness} in ${input.leagueTypeLabel} (${input.scoringFormat}); ${rosterDepth}; ${pickCapital}.`
 }
 

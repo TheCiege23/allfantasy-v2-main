@@ -3,36 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ProjectionData } from '@/components/sports/ProjectionCard'
 
-type ProjectionApiRow = {
-  playerId?: string
-  playerName?: string
-  name?: string
-  position?: string
-  team?: string
-  fantasyPoints?: number
-  fantasyPointsPerGame?: number
-  expectedFantasyPoints?: number
-  expectedFantasyPointsPerGame?: number
-  projectedPoints?: number
-  ceiling?: number
-  floor?: number
-  restOfSeasonPoints?: number
-}
-
-function normalize(row: ProjectionApiRow): ProjectionData {
-  return {
-    playerName: row.playerName ?? row.name ?? 'Unknown',
-    position: row.position,
-    team: row.team,
-    projectedPoints: row.projectedPoints ?? row.expectedFantasyPoints ?? row.fantasyPoints ?? null,
-    projectedPointsPerGame: row.expectedFantasyPointsPerGame ?? row.fantasyPointsPerGame ?? null,
-    ceiling: row.ceiling ?? null,
-    floor: row.floor ?? null,
-    restOfSeasonPoints: row.restOfSeasonPoints ?? null,
-    delta: null,
-  }
-}
-
 /** Fetch projections for a single player by name. */
 export function usePlayerProjection(playerName: string, sport: string) {
   const [data, setData] = useState<ProjectionData | null>(null)

@@ -134,9 +134,9 @@ export type PlayoffRoundKey =
   | "cup_semifinals"
   | "cup_championship"
 
-export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
+type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
-export type PlayoffSeriesSlot = "home" | "away"
+type PlayoffSeriesSlot = "home" | "away"
 
 /**
  * The two halves of a draw, plus the cross-half final.
@@ -149,7 +149,7 @@ export type PlayoffSeriesSlot = "home" | "away"
  * conferences in its draw — seeds are national — so its halves are named by
  * position: the 1/4 side (`upper`) and the 2/3 side (`lower`).
  */
-export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "afc" | "nfc" | "finals"
+type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "afc" | "nfc" | "finals"
 
 export type BracketTeamProfile = {
   won: number | null
@@ -225,7 +225,7 @@ export type PlayoffChallengeView = {
   completion?: PlayoffCompletionView | null
 }
 
-export type PlayoffLockDiagnostics = {
+type PlayoffLockDiagnostics = {
   lockRule: string
   allowTestLatePicks: boolean
   viewerCanLatePick: boolean
@@ -234,7 +234,7 @@ export type PlayoffLockDiagnostics = {
   hasPoolAdminAccess: boolean
 }
 
-export type PlayoffCompletionView = {
+type PlayoffCompletionView = {
   mode: "full_bracket_required" | "available_picks_only"
   isSubmittable: boolean
   requiredPickCount: number

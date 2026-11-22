@@ -91,6 +91,26 @@ function isFinalStatus(raw: string | null): boolean {
 }
 
 /**
+ * How long after kickoff an "in progress" status is still believed.
+ *
+ * 🛑 A STALE "IN PROGRESS" ROW HELD THE WHOLE APP ON LAST WEEK. The labelled NFL schedule is rewritten once a
+ * week, Monday 03:00 UTC, which is the middle of Sunday Night Football. That run stores the game as in progress
+ * and nothing touches the row again for seven days. `resolveSportWeekFromSchedule` prefers a live week, so it
+ * answered week 10, "live", from Monday until the next Monday — production 2026-11-20: My Team said "Week 10"
+ * on the Friday of week 11, with the week-10 game's row last updated 2026-11-16 03:00.
+ *
+ * No game runs twelve hours. A live status older than that is a reading nobody refreshed, not a game in play,
+ * so it does not count as live. The row is not called final either: nothing here knows how it ended.
+ */
+const LIVE_STATUS_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+function isBelievablyLive(row: ScheduleRow, nowMs: number): boolean {
+  if (!isLiveStatus(row.status)) return false
+  const kickoff = row.startTime instanceof Date ? row.startTime.getTime() : Number.NaN
+  return Number.isFinite(kickoff) && nowMs - kickoff <= LIVE_STATUS_MAX_AGE_MS
+}
+
+/**
  * Group dated rows into per-week slates, deduplicating sources WITHIN each week.
  *
  * ⚠ THE DEDUP IS PER WEEK ON PURPOSE, AND RUNNING IT ACROSS THE SEASON LOSES
@@ -129,7 +149,7 @@ function buildSlates(rows: readonly ScheduleRow[], now: Date): SportWeekSlate[] 
       .map((d) => d.getTime())
     if (times.length === 0) continue
 
-    const liveCount = deduped.filter((r) => isLiveStatus(r.status)).length
+    const liveCount = deduped.filter((r) => isBelievablyLive(r, now.getTime())).length
     const finalCount = deduped.filter((r) => isFinalStatus(r.status)).length
 
     slates.push({

@@ -19,7 +19,7 @@ type MflApiContext = {
   apiKey: string
 }
 
-export interface MflFetchOptions {
+interface MflFetchOptions {
   includePreviousSeasons?: boolean
   maxPreviousSeasons?: number
   minSeason?: number
@@ -1098,7 +1098,7 @@ export function parseMflScoringRules(raw: unknown): MflScoringRuleRaw[] {
 }
 
 /** One future draft pick, as MFL states ownership of it. */
-export interface MflFutureDraftPickRaw {
+interface MflFutureDraftPickRaw {
   /** Franchise that HOLDS the pick now. */
   currentOwnerFranchiseId: string
   /** Franchise whose pick it originally is. */

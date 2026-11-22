@@ -3,6 +3,7 @@
  */
 
 import { getPrimaryChimmyEntry } from "@/lib/ai-product-layer"
+import { playerProfileHref } from "@/lib/player-links/playerProfileHref"
 
 export type SearchResultCategory = "page" | "tool" | "league" | "player" | "quick_action"
 
@@ -103,11 +104,11 @@ const STATIC_PAGES: SearchResultItem[] = [
   },
   {
     id: "legacy",
-    label: "Legacy AI",
+    label: "Legacy Chimmy",
     href: "/af-legacy",
     category: "page",
     keywords: ["legacy", "dynasty", "trade", "draft"],
-    description: "Legacy workflows and AI",
+    description: "Legacy workflows and Chimmy",
   },
   {
     id: "tools-hub",
@@ -123,7 +124,7 @@ const STATIC_PAGES: SearchResultItem[] = [
     href: "/chimmy",
     category: "page",
     keywords: ["chimmy", "ai", "chat"],
-    description: "AI landing and onboarding",
+    description: "Chimmy landing and onboarding",
   },
   {
     id: "messages",
@@ -172,7 +173,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   {
     id: "trade-finder",
     label: "Trade Finder",
-    href: "/trade-finder",
+    href: "/core/trades#trade-finder",
     category: "tool",
     keywords: ["trade", "finder", "partners"],
     description: "Find trade partners",
@@ -203,7 +204,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   },
   {
     id: "legacy-chat",
-    label: "AI Chat",
+    label: "Chimmy Chat",
     href: CHIMMY_HREF,
     category: "tool",
     keywords: ["chat", "chimmy", "ai"],
@@ -243,7 +244,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   },
 ]
 
-export function getStaticSearchItems(): SearchResultItem[] {
+function getStaticSearchItems(): SearchResultItem[] {
   return [...STATIC_PAGES, ...STATIC_TOOLS]
 }
 
@@ -309,6 +310,8 @@ export interface PlayerSearchApiHit {
   position?: string | null
   team?: string | null
   sport?: string | null
+  /** /api/players/search's public-page slug (lib/core-app/playerSlug.ts) — names exactly one person. */
+  slug?: string | null
 }
 
 export function mapLeagueSearchHitsToResults(hits: LeagueSearchApiHit[]): SearchResultItem[] {
@@ -332,11 +335,13 @@ export function mapLeagueSearchHitsToResults(hits: LeagueSearchApiHit[]): Search
 
 export function mapPlayerSearchHitsToResults(hits: PlayerSearchApiHit[]): SearchResultItem[] {
   return hits.map((hit) => {
-    const params = new URLSearchParams()
-    params.set("playerId", String(hit.id))
-    params.set("playerName", String(hit.name))
-    if (hit.sport) params.set("sport", String(hit.sport).toUpperCase())
-    const href = `/player-comparison?${params.toString()}`
+    // 2026-11-12: a player result opens that player's page. It opened /player-comparison — the
+    // comparison tool's search landing page — which ignores the player entirely. The search route's
+    // slug names one person; without it, the name page narrows by sport, position and team.
+    const href =
+      (hit.slug ? `/players/${hit.slug}` : null) ??
+      playerProfileHref({ name: String(hit.name), sport: hit.sport, position: hit.position, team: hit.team }) ??
+      "/players"
     const details = [hit.position, hit.team].filter(Boolean).join(" · ")
     return {
       id: `player-${hit.id}`,

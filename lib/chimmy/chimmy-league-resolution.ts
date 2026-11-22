@@ -176,7 +176,7 @@ async function listAccessibleLeagues(userId: string): Promise<AccessibleLeagueRo
             some: { claimedByUserId: userId },
           },
         },
-        { rosters: { some: { platformUserId: userId } } },
+        { rosters: { some: { OR: [{ platformUserId: userId }, { managerUserId: userId }] } } },
       ],
     },
     select: {

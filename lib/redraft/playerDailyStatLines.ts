@@ -26,7 +26,7 @@ export function addDatedGameRow(byDay: DatedGameRows, gameDate: Date, normalized
   byDay.set(key, entry)
 }
 
-export type PlayerDailyStatLine = { day: Date; stats: Record<string, number>; gamesPlayed: number }
+type PlayerDailyStatLine = { day: Date; stats: Record<string, number>; gamesPlayed: number }
 
 /**
  * Each day's summed stat line, by the sport's weekly normalizer. A day whose rows normalize to no game or

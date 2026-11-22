@@ -164,7 +164,7 @@ describe('one platform link per decision card (2026-11-06 phone pass)', () => {
     expect(decision.querySelector('.af-mt-decision-actions a[href="#af-mt-starters"]')).not.toBeNull()
   })
 
-  it('keeps the action-row link when the check has nothing certain to fix', () => {
+  it('keeps the action-row link when the check has nothing certain to fix and no team card can carry it', () => {
     const { container } = render(<MyTeam data={data([slot('WR', player('ok'))])} />)
     const actions = container.querySelector('.af-mt-decision-actions')!
     expect([...actions.querySelectorAll('a')].some((a) => a.getAttribute('href') === 'https://example.test/lineup')).toBe(true)
@@ -199,7 +199,8 @@ describe('lineup evidence gaps', () => {
     const starters = [slot('WR', player('one'), { benchCheck: { verdict: 'swap', benchName: 'Bench', benchProjected: 15, starterName: 'Starter', starterProjected: 10 } })]
     const card = render(<MyTeam data={data(starters)} />).container.querySelector('.af-mt-check')!
     expect(card.textContent).toContain('Compare Bench with Player one')
-    expect(card.textContent).toContain('Confirm eligibility, locks, and AutoSubs')
+    // Where official moves happen is said once, by the banner above every tab — not again in the card.
+    expect(card.textContent).not.toContain('Confirm eligibility, locks, and AutoSubs')
     expect(card.textContent).not.toContain('Start Bench over')
   })
 })

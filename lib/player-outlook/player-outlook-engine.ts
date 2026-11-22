@@ -40,7 +40,7 @@ function tierFromRank(rank: number): number {
 // Rest-of-Season Tier
 // ---------------------------------------------------------------------------
 
-export function computeRestOfSeasonTier(bundle: OutlookDataBundle): number {
+function computeRestOfSeasonTier(bundle: OutlookDataBundle): number {
   const fc = bundle.fantasyCalc
   if (!fc) return 5 // no data → below average
 
@@ -76,7 +76,7 @@ export function computeRestOfSeasonTier(bundle: OutlookDataBundle): number {
 // Weekly Tier
 // ---------------------------------------------------------------------------
 
-export function computeWeeklyTier(bundle: OutlookDataBundle): number {
+function computeWeeklyTier(bundle: OutlookDataBundle): number {
   const fpg = bundle.fantasyPointsPerGame
   if (fpg == null) {
     // Fallback to value-based estimate
@@ -114,7 +114,7 @@ export function computeWeeklyTier(bundle: OutlookDataBundle): number {
 // Dynasty Tier
 // ---------------------------------------------------------------------------
 
-export function computeDynastyTier(bundle: OutlookDataBundle): number {
+function computeDynastyTier(bundle: OutlookDataBundle): number {
   const fc = bundle.fantasyCalc
   if (!fc) return 5
 
@@ -139,7 +139,7 @@ export function computeDynastyTier(bundle: OutlookDataBundle): number {
 // Trend
 // ---------------------------------------------------------------------------
 
-export function computeTrend(bundle: OutlookDataBundle): { direction: TrendDirection; strength: number } {
+function computeTrend(bundle: OutlookDataBundle): { direction: TrendDirection; strength: number } {
   const trend30Day = bundle.trend30Day ?? 0
   const newsAdj = bundle.newsAdjustments?.[0]?.adjustmentPct ?? 0
 
@@ -166,7 +166,7 @@ export function computeTrend(bundle: OutlookDataBundle): { direction: TrendDirec
 // Risk Level
 // ---------------------------------------------------------------------------
 
-export function computeRiskLevel(bundle: OutlookDataBundle): RiskLevel {
+function computeRiskLevel(bundle: OutlookDataBundle): RiskLevel {
   let riskScore = 0
 
   // Injury
@@ -200,7 +200,7 @@ export function computeRiskLevel(bundle: OutlookDataBundle): RiskLevel {
 // Opportunity Score (0-100)
 // ---------------------------------------------------------------------------
 
-export function computeOpportunityScore(bundle: OutlookDataBundle): number {
+function computeOpportunityScore(bundle: OutlookDataBundle): number {
   let score = 40 // baseline
 
   // Value-based opportunity
@@ -233,7 +233,7 @@ export function computeOpportunityScore(bundle: OutlookDataBundle): number {
 // Role Security Score (0-100)
 // ---------------------------------------------------------------------------
 
-export function computeRoleSecurityScore(bundle: OutlookDataBundle): number {
+function computeRoleSecurityScore(bundle: OutlookDataBundle): number {
   const fc = bundle.fantasyCalc
   if (!fc) return 30
 

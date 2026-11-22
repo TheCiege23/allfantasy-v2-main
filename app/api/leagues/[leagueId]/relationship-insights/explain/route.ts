@@ -68,7 +68,7 @@ export async function POST(
       if (top?.headline) {
         return `${top.headline} currently leads the ${sportLabel} storyline board, and the relationship graph suggests this thread is likely to stay active over the next slate.`
       }
-      return `Relationship and storyline signals are synchronized for this ${sportLabel} league, with rivalry, behavior, graph, and drama data aligned for downstream AI explanation.`
+      return `Relationship and storyline signals are synchronized for this ${sportLabel} league, with rivalry, behavior, graph, and drama data aligned for downstream Chimmy explanation.`
     })()
     const payload = context.payload as Record<string, unknown>
 

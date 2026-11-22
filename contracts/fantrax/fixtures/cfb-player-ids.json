@@ -1,0 +1,877 @@
+{
+  "sport": "CFB",
+  "rows": 16749,
+  "teamCount": 140,
+  "positions": {
+    "DST": 138,
+    "ST": 138,
+    "Tm": 138,
+    "OL": 2565,
+    "TO": 138,
+    "WR": 2046,
+    "LB": 1604,
+    "DB": 1409,
+    "TmD": 138,
+    "P": 257,
+    "DL": 1577,
+    "CB": 749,
+    "TE": 1010,
+    "K": 420,
+    "RB": 1051,
+    "LS": 319,
+    "S": 814,
+    "DE": 544,
+    "QB": 747,
+    "DT": 372,
+    "OLB": 190,
+    "OT": 54,
+    "LOG": 28,
+    "FB": 14,
+    "TQB": 138,
+    "TK": 138,
+    "C": 12,
+    "Default": 1
+  },
+  "sampleByTeam": {
+    "(none)": {
+      "fantraxId": "50380#1090",
+      "name": "Defense/Special Teams",
+      "team": null,
+      "position": "DST"
+    },
+    "AF": {
+      "fantraxId": "06fgp",
+      "name": "Vonderhaar, Luke",
+      "team": "AF",
+      "position": "OT"
+    },
+    "Akr": {
+      "fantraxId": "06fxy",
+      "name": "Wondolowski, Austin",
+      "team": "Akr",
+      "position": "DB"
+    },
+    "App": {
+      "fantraxId": "06j2x",
+      "name": "Grimes, Greydon",
+      "team": "App",
+      "position": "OL"
+    },
+    "Ariz": {
+      "fantraxId": "06fuf",
+      "name": "Peat, Keona",
+      "team": "Ariz",
+      "position": "OL"
+    },
+    "Ark": {
+      "fantraxId": "0185d",
+      "name": "Harrison, Christian",
+      "team": "Ark",
+      "position": "S"
+    },
+    "ArkSt": {
+      "fantraxId": "06fkt",
+      "name": "Vuckovic, Danny",
+      "team": "ArkSt",
+      "position": "P"
+    },
+    "Army": {
+      "fantraxId": "06joz",
+      "name": "Banks, Bryson",
+      "team": "Army",
+      "position": "LB"
+    },
+    "Aub": {
+      "fantraxId": "06ijz",
+      "name": "Phillips, Joseph",
+      "team": "Aub",
+      "position": "LB"
+    },
+    "AzSt": {
+      "fantraxId": "06fq8",
+      "name": "Miller, Anthony",
+      "team": "AzSt",
+      "position": "TE"
+    },
+    "Ball": {
+      "fantraxId": "06fnq",
+      "name": "Fiene, Hudson",
+      "team": "Ball",
+      "position": "K"
+    },
+    "Bama": {
+      "fantraxId": "06foe",
+      "name": "Black, Leslie",
+      "team": "Bama",
+      "position": "DL"
+    },
+    "Bayl": {
+      "fantraxId": "06jbt",
+      "name": "Lagway, DJ",
+      "team": "Bayl",
+      "position": "QB"
+    },
+    "BC": {
+      "fantraxId": "06fy0",
+      "name": "Lombardo, Luca",
+      "team": "BC",
+      "position": "K"
+    },
+    "BGSU": {
+      "fantraxId": "06gx2",
+      "name": "Jimenez, Quillan",
+      "team": "BGSU",
+      "position": "LS"
+    },
+    "Boise": {
+      "fantraxId": "06fxh",
+      "name": "Freeney, Demetrius",
+      "team": "Boise",
+      "position": "CB"
+    },
+    "Buff": {
+      "fantraxId": "06j8b",
+      "name": "Francavilla, Nino",
+      "team": "Buff",
+      "position": "OL"
+    },
+    "BYU": {
+      "fantraxId": "06j5b",
+      "name": "Williams, Jayven",
+      "team": "BYU",
+      "position": "CB"
+    },
+    "C Mi": {
+      "fantraxId": "06jwq",
+      "name": "Townsend, Brock",
+      "team": "C Mi",
+      "position": "RB"
+    },
+    "Cal": {
+      "fantraxId": "06fwq",
+      "name": "Meyer, Chase",
+      "team": "Cal",
+      "position": "K"
+    },
+    "Cin": {
+      "fantraxId": "06fhh",
+      "name": "Milon, Judea",
+      "team": "Cin",
+      "position": "OL"
+    },
+    "Clem": {
+      "fantraxId": "06fvd",
+      "name": "Johnson, Chris",
+      "team": "Clem",
+      "position": "RB"
+    },
+    "CoCar": {
+      "fantraxId": "06fj6",
+      "name": "Avery, Cameron",
+      "team": "CoCar",
+      "position": "LB"
+    },
+    "Colo": {
+      "fantraxId": "06fmx",
+      "name": "DeCorte, Aiden",
+      "team": "Colo",
+      "position": "LS"
+    },
+    "ColSt": {
+      "fantraxId": "06fgw",
+      "name": "Ayers, Josh",
+      "team": "ColSt",
+      "position": "LB"
+    },
+    "Duke": {
+      "fantraxId": "06k1y",
+      "name": "Morris, Jon",
+      "team": "Duke",
+      "position": "LB"
+    },
+    "E Mi": {
+      "fantraxId": "06fnw",
+      "name": "Bell, Soloman",
+      "team": "E Mi",
+      "position": "DB"
+    },
+    "ECU": {
+      "fantraxId": "06j7c",
+      "name": "Mosby, Raemon",
+      "team": "ECU",
+      "position": "DB"
+    },
+    "Fla": {
+      "fantraxId": "06j70",
+      "name": "Moore, Harrison",
+      "team": "Fla",
+      "position": "OL"
+    },
+    "FlaSt": {
+      "fantraxId": "06j0u",
+      "name": "Boatwright, Jarvis",
+      "team": "FlaSt",
+      "position": "DB"
+    },
+    "FlAtl": {
+      "fantraxId": "06j99",
+      "name": "Reynolds, Amar",
+      "team": "FlAtl",
+      "position": "DB"
+    },
+    "FLInt": {
+      "fantraxId": "06in3",
+      "name": "Taylor, Josiah",
+      "team": "FLInt",
+      "position": "LB"
+    },
+    "Fres": {
+      "fantraxId": "06fkr",
+      "name": "Tierney, Ethan",
+      "team": "Fres",
+      "position": "DB"
+    },
+    "GaSo": {
+      "fantraxId": "06fj5",
+      "name": "Trice, Holden",
+      "team": "GaSo",
+      "position": "LB"
+    },
+    "GASt": {
+      "fantraxId": "06jbr",
+      "name": "Mascoll, Marcus",
+      "team": "GASt",
+      "position": "OL"
+    },
+    "GATec": {
+      "fantraxId": "06iiz",
+      "name": "Ionata, Joseph",
+      "team": "GATec",
+      "position": "OL"
+    },
+    "Hawaii": {
+      "fantraxId": "06ijc",
+      "name": "Harris, Audric",
+      "team": "Hawaii",
+      "position": "WR"
+    },
+    "Hou": {
+      "fantraxId": "06gwx",
+      "name": "Padgitt, Samuel",
+      "team": "Hou",
+      "position": "WR"
+    },
+    "IASt": {
+      "fantraxId": "06h8w",
+      "name": "Miller, Easton",
+      "team": "IASt",
+      "position": "RB"
+    },
+    "Ill": {
+      "fantraxId": "06ghe",
+      "name": "Resetich, Mac",
+      "team": "Ill",
+      "position": "DB"
+    },
+    "Ind": {
+      "fantraxId": "06fq3",
+      "name": "Chung, Anthony",
+      "team": "Ind",
+      "position": "DB"
+    },
+    "Iowa": {
+      "fantraxId": "06j9y",
+      "name": "Watson, Jaylen",
+      "team": "Iowa",
+      "position": "DB"
+    },
+    "JacSt": {
+      "fantraxId": "06j39",
+      "name": "Woods, Marc",
+      "team": "JacSt",
+      "position": "S"
+    },
+    "JMU": {
+      "fantraxId": "06fnt",
+      "name": "Dietzel, Mitchell",
+      "team": "JMU",
+      "position": "LS"
+    },
+    "K St": {
+      "fantraxId": "06fmm",
+      "name": "Morris, Delvin",
+      "team": "K St",
+      "position": "OL"
+    },
+    "Kan": {
+      "fantraxId": "06ili",
+      "name": "Gibbs, Syeed",
+      "team": "Kan",
+      "position": "CB"
+    },
+    "KennSt": {
+      "fantraxId": "06j3m",
+      "name": "Bryson, Davis",
+      "team": "KennSt",
+      "position": "WR"
+    },
+    "Kent": {
+      "fantraxId": "06ii3",
+      "name": "Hopperton, Hunter",
+      "team": "Kent",
+      "position": "TE"
+    },
+    "KY": {
+      "fantraxId": "06j0w",
+      "name": "Cowan, Lorenzo",
+      "team": "KY",
+      "position": "DE"
+    },
+    "Lib": {
+      "fantraxId": "06gh9",
+      "name": "Engbers, Joep",
+      "team": "Lib",
+      "position": "OL"
+    },
+    "Lou": {
+      "fantraxId": "06gh1",
+      "name": "Hughes, Kris",
+      "team": "Lou",
+      "position": "WR"
+    },
+    "LSU": {
+      "fantraxId": "06fyz",
+      "name": "Corbello, Aidan",
+      "team": "LSU",
+      "position": "K"
+    },
+    "LT": {
+      "fantraxId": "06gwz",
+      "name": "Snider, Sergio",
+      "team": "LT",
+      "position": "RB"
+    },
+    "Marsh": {
+      "fantraxId": "06fmz",
+      "name": "Norton, Adrian",
+      "team": "Marsh",
+      "position": "WR"
+    },
+    "MD": {
+      "fantraxId": "06fy1",
+      "name": "Wells, Chris",
+      "team": "MD",
+      "position": "LB"
+    },
+    "Mem": {
+      "fantraxId": "06fhe",
+      "name": "Simmons, Weston",
+      "team": "Mem",
+      "position": "LS"
+    },
+    "Merri": {
+      "fantraxId": "063my",
+      "name": "McElroy, DeMarcus",
+      "team": "Merri",
+      "position": "RB"
+    },
+    "MiaFL": {
+      "fantraxId": "06fxn",
+      "name": "Luna, Kolby",
+      "team": "MiaFL",
+      "position": "WR"
+    },
+    "MiaOH": {
+      "fantraxId": "06iof",
+      "name": "Witten, Damarion",
+      "team": "MiaOH",
+      "position": "WR"
+    },
+    "Mich": {
+      "fantraxId": "06l0b",
+      "name": "Reyes, Max",
+      "team": "Mich",
+      "position": "DB"
+    },
+    "MidTN": {
+      "fantraxId": "06ihw",
+      "name": "Smith, Brennan",
+      "team": "MidTN",
+      "position": "OL"
+    },
+    "MIN": {
+      "fantraxId": "06ik0",
+      "name": "Thompson, Perry",
+      "team": "MIN",
+      "position": "WR"
+    },
+    "Miss": {
+      "fantraxId": "06ikd",
+      "name": "Crawford, Jalyn",
+      "team": "Miss",
+      "position": "CB"
+    },
+    "MissSt": {
+      "fantraxId": "06iiq",
+      "name": "Grimsley, Jameer",
+      "team": "MissSt",
+      "position": "DB"
+    },
+    "Mizzou": {
+      "fantraxId": "06ikb",
+      "name": "Faustin, Kensley",
+      "team": "Mizzou",
+      "position": "S"
+    },
+    "MoSt": {
+      "fantraxId": "06ihg",
+      "name": "Locklear, Skyler",
+      "team": "MoSt",
+      "position": "QB"
+    },
+    "MSU": {
+      "fantraxId": "06ghm",
+      "name": "Williams, Kenneth",
+      "team": "MSU",
+      "position": "RB"
+    },
+    "Navy": {
+      "fantraxId": "06k1k",
+      "name": "Purcell, Dom",
+      "team": "Navy",
+      "position": "OLB"
+    },
+    "NCSt": {
+      "fantraxId": "06ij8",
+      "name": "Dixon, Sterling",
+      "team": "NCSt",
+      "position": "LB"
+    },
+    "ND": {
+      "fantraxId": "06iu3",
+      "name": "Gray, Tionne",
+      "team": "ND",
+      "position": "DL"
+    },
+    "NDSU": {
+      "fantraxId": "06j31",
+      "name": "Anene, Kene",
+      "team": "NDSU",
+      "position": "OL"
+    },
+    "Neb": {
+      "fantraxId": "06fom",
+      "name": "Bower, Jacob",
+      "team": "Neb",
+      "position": "LB"
+    },
+    "NEV": {
+      "fantraxId": "06fol",
+      "name": "Wilson, Cooper",
+      "team": "NEV",
+      "position": "DB"
+    },
+    "NIU": {
+      "fantraxId": "06fkq",
+      "name": "Thompson, Cam",
+      "team": "NIU",
+      "position": "WR"
+    },
+    "NM": {
+      "fantraxId": "06fkp",
+      "name": "Robinson, Ajahvea",
+      "team": "NM",
+      "position": "DT"
+    },
+    "NMS": {
+      "fantraxId": "06fj8",
+      "name": "Gillespie, Javon",
+      "team": "NMS",
+      "position": "CB"
+    },
+    "NorTx": {
+      "fantraxId": "06fpy",
+      "name": "Ratliff, Ian",
+      "team": "NorTx",
+      "position": "P"
+    },
+    "NW": {
+      "fantraxId": "06fp3",
+      "name": "Anugwom, Arkel",
+      "team": "NW",
+      "position": "OL"
+    },
+    "OD": {
+      "fantraxId": "06fs5",
+      "name": "Sawyers, Gage",
+      "team": "OD",
+      "position": "LB"
+    },
+    "Ohio": {
+      "fantraxId": "06jn2",
+      "name": "Parson, Bryce",
+      "team": "Ohio",
+      "position": "OL"
+    },
+    "Okla": {
+      "fantraxId": "06j4o",
+      "name": "Ulrich, Jacob",
+      "team": "Okla",
+      "position": "P"
+    },
+    "OkSt": {
+      "fantraxId": "06fjb",
+      "name": "Hanson, Joseph",
+      "team": "OkSt",
+      "position": "OL"
+    },
+    "Oreg": {
+      "fantraxId": "06iiw",
+      "name": "Woodyard, Peyton",
+      "team": "Oreg",
+      "position": "DB"
+    },
+    "OreSt": {
+      "fantraxId": "06fyj",
+      "name": "Ross Nickson, Ross Nickson",
+      "team": "OreSt",
+      "position": "WR"
+    },
+    "OSU": {
+      "fantraxId": "01711",
+      "name": "Padilla, Joshua",
+      "team": "OSU",
+      "position": "OL"
+    },
+    "Pitt": {
+      "fantraxId": "06j56",
+      "name": "Kent, Carson",
+      "team": "Pitt",
+      "position": "TE"
+    },
+    "PSU": {
+      "fantraxId": "06flp",
+      "name": "Mears, Bobby",
+      "team": "PSU",
+      "position": "DE"
+    },
+    "Pur": {
+      "fantraxId": "06flf",
+      "name": "Buckman, Nolan",
+      "team": "Pur",
+      "position": "WR"
+    },
+    "Rice": {
+      "fantraxId": "06j0d",
+      "name": "Benjamin, Jamir",
+      "team": "Rice",
+      "position": "DB"
+    },
+    "Rut": {
+      "fantraxId": "06flb",
+      "name": "Purcell, Shawn",
+      "team": "Rut",
+      "position": "DB"
+    },
+    "SacSt": {
+      "fantraxId": "06fky",
+      "name": "Howard, Jamel",
+      "team": "SacSt",
+      "position": "DL"
+    },
+    "SamHu": {
+      "fantraxId": "06ikc",
+      "name": "Nicolas, Dimitry",
+      "team": "SamHu",
+      "position": "DL"
+    },
+    "SCar": {
+      "fantraxId": "06iko",
+      "name": "Kilgore, Gerald",
+      "team": "SCar",
+      "position": "DB"
+    },
+    "SDSU": {
+      "fantraxId": "06il0",
+      "name": "Watkins, Michael",
+      "team": "SDSU",
+      "position": "OL"
+    },
+    "SJSU": {
+      "fantraxId": "06j8d",
+      "name": "Boultwood, Ryan",
+      "team": "SJSU",
+      "position": "TE"
+    },
+    "SMiss": {
+      "fantraxId": "06ik3",
+      "name": "Robinson, Laquan",
+      "team": "SMiss",
+      "position": "S"
+    },
+    "SMU": {
+      "fantraxId": "06fme",
+      "name": "Reed, Nick",
+      "team": "SMU",
+      "position": "K"
+    },
+    "SoAl": {
+      "fantraxId": "06gk6",
+      "name": "Camboia, Miguel",
+      "team": "SoAl",
+      "position": "WR"
+    },
+    "SoFL": {
+      "fantraxId": "06fvk",
+      "name": "Davis, Jayden",
+      "team": "SoFL",
+      "position": "WR"
+    },
+    "Stan": {
+      "fantraxId": "06fpv",
+      "name": "Kuo, Tyler",
+      "team": "Stan",
+      "position": "WR"
+    },
+    "Syr": {
+      "fantraxId": "06jlx",
+      "name": "Johnson, JuJuan",
+      "team": "Syr",
+      "position": "RB"
+    },
+    "TCU": {
+      "fantraxId": "06koh",
+      "name": "Camacho, Samir",
+      "team": "TCU",
+      "position": "OL"
+    },
+    "Tem": {
+      "fantraxId": "06j7f",
+      "name": "McDermott, Ransom",
+      "team": "Tem",
+      "position": "OL"
+    },
+    "Tenn": {
+      "fantraxId": "06iju",
+      "name": "Metcalf, Tevis",
+      "team": "Tenn",
+      "position": "DB"
+    },
+    "Tex": {
+      "fantraxId": "06gi8",
+      "name": "Andersen, Rett",
+      "team": "Tex",
+      "position": "WR"
+    },
+    "Toled": {
+      "fantraxId": "06fmc",
+      "name": "Hohler, Dylan",
+      "team": "Toled",
+      "position": "S"
+    },
+    "Troy": {
+      "fantraxId": "06hfh",
+      "name": "Mercer, Noah",
+      "team": "Troy",
+      "position": "OL"
+    },
+    "Tul": {
+      "fantraxId": "06fp4",
+      "name": "Courville, Jackson",
+      "team": "Tul",
+      "position": "K"
+    },
+    "Tuls": {
+      "fantraxId": "06itk",
+      "name": "Goodwyn, Willie",
+      "team": "Tuls",
+      "position": "CB"
+    },
+    "TxAM": {
+      "fantraxId": "06j95",
+      "name": "McCullom, Angelo",
+      "team": "TxAM",
+      "position": "DL"
+    },
+    "TxSt": {
+      "fantraxId": "06gh3",
+      "name": "Rhodes, Aidin",
+      "team": "TxSt",
+      "position": "OL"
+    },
+    "TxTch": {
+      "fantraxId": "06ijv",
+      "name": "Simmons, Malcolm",
+      "team": "TxTch",
+      "position": "WR"
+    },
+    "UAB": {
+      "fantraxId": "06fz0",
+      "name": "Hargett, Badger",
+      "team": "UAB",
+      "position": "P"
+    },
+    "UCF": {
+      "fantraxId": "06flu",
+      "name": "Henry, Rashad",
+      "team": "UCF",
+      "position": "LB"
+    },
+    "UCLA": {
+      "fantraxId": "06j0g",
+      "name": "Somerville, Jensen",
+      "team": "UCLA",
+      "position": "OL"
+    },
+    "UConn": {
+      "fantraxId": "06j7e",
+      "name": "Johnson, Fred",
+      "team": "UConn",
+      "position": "OL"
+    },
+    "UD": {
+      "fantraxId": "06jku",
+      "name": "Trujillo, Riley",
+      "team": "UD",
+      "position": "QB"
+    },
+    "UGA": {
+      "fantraxId": "06ggz",
+      "name": "Blanchard, Walter",
+      "team": "UGA",
+      "position": "WR"
+    },
+    "ULLaf": {
+      "fantraxId": "06fn9",
+      "name": "Baptiste, Landon",
+      "team": "ULLaf",
+      "position": "WR"
+    },
+    "ULMon": {
+      "fantraxId": "06fwa",
+      "name": "Gorski, Steven",
+      "team": "ULMon",
+      "position": "TE"
+    },
+    "UMass": {
+      "fantraxId": "06h8p",
+      "name": "Andrade, Payton",
+      "team": "UMass",
+      "position": "LB"
+    },
+    "UNC": {
+      "fantraxId": "06j0j",
+      "name": "Dunbar-Hawkins, Khristian",
+      "team": "UNC",
+      "position": "DB"
+    },
+    "UNCC": {
+      "fantraxId": "06jmr",
+      "name": "Startz, Parker",
+      "team": "UNCC",
+      "position": "LB"
+    },
+    "UNLV": {
+      "fantraxId": "06il9",
+      "name": "Nkuba, Tony-Louis",
+      "team": "UNLV",
+      "position": "DB"
+    },
+    "USC": {
+      "fantraxId": "06he5",
+      "name": "Moser, Caleb",
+      "team": "USC",
+      "position": "LS"
+    },
+    "Utah": {
+      "fantraxId": "06jah",
+      "name": "Parker, Wayshawn",
+      "team": "Utah",
+      "position": "RB"
+    },
+    "UTEP": {
+      "fantraxId": "06iig",
+      "name": "Smith, Jaden",
+      "team": "UTEP",
+      "position": "WR"
+    },
+    "UTSA": {
+      "fantraxId": "06jcw",
+      "name": "Anderson, Mekhi",
+      "team": "UTSA",
+      "position": "WR"
+    },
+    "UtSt": {
+      "fantraxId": "06ik1",
+      "name": "Wilfred, Seth",
+      "team": "UtSt",
+      "position": "OL"
+    },
+    "UVA": {
+      "fantraxId": "06gwm",
+      "name": "Chadwick, Kevin",
+      "team": "UVA",
+      "position": "S"
+    },
+    "Vand": {
+      "fantraxId": "06jmd",
+      "name": "Jackson, CJ",
+      "team": "Vand",
+      "position": "DE"
+    },
+    "VaTec": {
+      "fantraxId": "06fyc",
+      "name": "Taylor, Darius",
+      "team": "VaTec",
+      "position": "LB"
+    },
+    "W Ky": {
+      "fantraxId": "06fuc",
+      "name": "Arends, Coleson",
+      "team": "W Ky",
+      "position": "TE"
+    },
+    "Wake": {
+      "fantraxId": "06fm9",
+      "name": "Williams, Eric",
+      "team": "Wake",
+      "position": "S"
+    },
+    "Wash": {
+      "fantraxId": "06ikg",
+      "name": "Wright, Rahim",
+      "team": "Wash",
+      "position": "S"
+    },
+    "WaSt": {
+      "fantraxId": "06ikk",
+      "name": "Okundaye, Eduwa",
+      "team": "WaSt",
+      "position": "DL"
+    },
+    "WestMI": {
+      "fantraxId": "06j8y",
+      "name": "Petty, Trey",
+      "team": "WestMI",
+      "position": "QB"
+    },
+    "Wisc": {
+      "fantraxId": "06fkw",
+      "name": "McDonald, Will",
+      "team": "Wisc",
+      "position": "DL"
+    },
+    "WVU": {
+      "fantraxId": "06gi5",
+      "name": "Flower, Nate",
+      "team": "WVU",
+      "position": "K"
+    },
+    "Wyo": {
+      "fantraxId": "06fse",
+      "name": "Varelas, Nikos",
+      "team": "Wyo",
+      "position": "RB"
+    }
+  }
+}

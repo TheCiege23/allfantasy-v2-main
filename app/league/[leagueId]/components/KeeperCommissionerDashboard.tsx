@@ -38,6 +38,14 @@ type KeeperRecRow = {
   costLabel: string | null
 }
 
+/** What a keeper costs, in words. An unlisted system reads with its underscores as spaces. */
+const KEEPER_COST_LABELS: Record<string, string> = {
+  round_based: 'a draft pick, by round',
+  inflation: 'a draft pick, rising each year kept',
+  auction_value: 'auction dollars',
+  free: 'nothing',
+}
+
 export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const [loading, setLoading] = useState(true)
   const [ctx, setCtx] = useState<ContextPayload | null>(null)
@@ -232,7 +240,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
         {ctx.league.keeperCostSystem ? (
           <>
             {' '}
-            · Cost mode: <span className="text-white/70">{ctx.league.keeperCostSystem}</span>
+            · Keeper cost: <span className="text-white/70">{KEEPER_COST_LABELS[ctx.league.keeperCostSystem] ?? ctx.league.keeperCostSystem.replace(/_/g, ' ')}</span>
           </>
         ) : null}
       </p>
@@ -289,8 +297,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
             <div>
               <p className="text-[12px] font-semibold text-[#ffd7e5]/90">Active declaration session</p>
               <p className="text-[11px] text-white/45">
-                Status: <span className="text-white/75">{ctx.session.status}</span> · Session{' '}
-                <code className="rounded bg-black/30 px-1 text-[11px] text-white/60">{ctx.session.id}</code>
+                Status: <span className="text-white/75">{ctx.session.status === 'locked' ? 'Locked' : 'Open'}</span>
               </p>
               <p className="mt-1 text-[11px] text-white/55">
                 Deadline: {new Date(ctx.session.deadline).toLocaleString()}

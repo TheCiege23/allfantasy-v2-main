@@ -49,7 +49,7 @@ export type RuleEffectType =
  */
 export type RuleEffectExecutorStatus = 'engine' | 'planned' | 'none'
 
-export type RuleEffectDefinition = {
+type RuleEffectDefinition = {
   type: RuleEffectType
   /**
    * The `PlannedAction.actionType` string this effect emits.
@@ -212,6 +212,3 @@ export function getRuleEffect(type: RuleEffectType): RuleEffectDefinition {
   return RULE_EFFECTS[type]
 }
 
-export const RULE_EFFECT_TYPES: readonly RuleEffectType[] = Object.freeze(
-  (Object.keys(RULE_EFFECTS) as RuleEffectType[]).sort(),
-)

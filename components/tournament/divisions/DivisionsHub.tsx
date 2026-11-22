@@ -15,7 +15,7 @@ import { ConferenceIcon, DivisionBadge, DivisionCrest } from './DivisionArt'
 import { RosterLabel, ScoringLabel } from '@/components/league-labels'
 import { divisionsRulesLabels } from '@/lib/tournament/divisions/rules'
 
-export type HubScreen = 'standings' | 'wildcard' | 'bracket' | 'championship'
+type HubScreen = 'standings' | 'wildcard' | 'bracket' | 'championship'
 type View = HubScreen
 type StandingsTab = 'lines' | 'top16' | 'mine' | 'conferences'
 

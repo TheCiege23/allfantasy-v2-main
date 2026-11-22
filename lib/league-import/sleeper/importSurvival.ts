@@ -9,7 +9,7 @@ type OwnerSeason = {
   season: number
 }
 
-export async function saveSleeperSurvivalEvidence(owner: OwnerSeason, evidence: SleeperSurvivalEvidence): Promise<boolean> {
+async function saveSleeperSurvivalEvidence(owner: OwnerSeason, evidence: SleeperSurvivalEvidence): Promise<boolean> {
   const { userId, platformLeagueId, season } = owner
   if (await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId })) return false
   const key = { userId, platformLeagueId, season }

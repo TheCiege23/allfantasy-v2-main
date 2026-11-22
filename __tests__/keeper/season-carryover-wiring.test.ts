@@ -152,11 +152,14 @@ describe('ensureNextRedraftSeasonShell — team identity carries across seasons'
 
 describe('ensureNextRedraftSeasonShell', () => {
   it('returns an already-existing next season without creating anything', async () => {
+    // The completed season is read first, so "already exists" can mean a LATER season only.
+    mockRedraftSeasonFindUnique.mockResolvedValueOnce({ sport: 'nfl', season: 2024, totalWeeks: 17, playoffStartWeek: 15, medianGame: false })
     mockRedraftSeasonFindFirst.mockResolvedValueOnce({ id: 'season-2', season: 2025 })
 
     const result = await ensureNextRedraftSeasonShell('league-1', 'season-1')
 
     expect(result).toEqual({ id: 'season-2', season: 2025 })
+    expect(mockRedraftSeasonFindFirst.mock.calls[0]?.[0].where).toEqual({ leagueId: 'league-1', NOT: { id: 'season-1' }, season: { gt: 2024 } })
     expect(mockTransaction).not.toHaveBeenCalled()
   })
 
@@ -264,6 +267,11 @@ describe('lockKeeperSelections — missed-deadline rule', () => {
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledTimes(1)
     expect(mockApplyMissedDeadlineRule).toHaveBeenCalledWith('league-1', 'season-2', prisma)
     expect(mockApplyMissedDeadlineRule.mock.invocationCallOrder[0]).toBeLessThan(mockKeeperRecordUpdateMany.mock.invocationCallOrder[0])
+    // The lock promotes a pending keeper AND one the commissioner confirmed; never a rejected one.
+    expect(mockKeeperRecordUpdateMany.mock.calls[0][0]).toEqual({
+      where: { leagueId: 'league-1', seasonId: 'season-2', status: { in: ['pending', 'confirmed'] } },
+      data: { status: 'locked', lockedAt: expect.any(Date) },
+    })
   })
 
   it('never picks again on a repeat lock, and a failure never stops the lock', async () => {

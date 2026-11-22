@@ -20,7 +20,7 @@ import { isOfficialTeamName } from "./playoffBracketProjection"
  * played December 2026 – January 2027 and is season 2026.
  */
 
-export const CFP_FIELD_SIZE = 12
+const CFP_FIELD_SIZE = 12
 
 export function cfpSeedsCacheKey(season: number): string {
   return `NCAAF:cfp_seeds:${season}`
@@ -34,7 +34,7 @@ export type CfpSeedsRecord = {
   enteredAt: string
 }
 
-export type CfpSeedValidation =
+type CfpSeedValidation =
   | { ok: true; seeds: string[] }
   | { ok: false; errors: string[] }
 

@@ -2,7 +2,7 @@
  * Voice synthesis for podcast audio. Server-side placeholder; playback can use browser SpeechSynthesis with script.
  * Integrate with TTS API (e.g. ElevenLabs, Azure Speech) to set audioUrl.
  */
-export interface SynthesisResult {
+interface SynthesisResult {
   audioUrl: string | null
   durationSeconds: number | null
   error?: string

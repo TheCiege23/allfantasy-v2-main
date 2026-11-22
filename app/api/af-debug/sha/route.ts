@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { NextResponse } from "next/server"
 
 /**
@@ -15,6 +17,27 @@ import { NextResponse } from "next/server"
  */
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+/**
+ * The Next build id this server is ACTUALLY serving, read from the built `BUILD_ID` file.
+ *
+ * `lib/core-app/deployGuard` compares it across deployments: when it has not changed, a
+ * background `router.refresh()` stays a soft update instead of a full page reload. It is read
+ * from disk rather than repeated as a constant so the guard never trusts a pin that did not
+ * take effect. `undefined` = not read yet; `null` = no file (`next dev`), which the guard
+ * treats as "cannot say".
+ */
+let cachedBuildId: string | null | undefined
+function readBuildId(): string | null {
+  if (cachedBuildId !== undefined) return cachedBuildId
+  try {
+    const distDir = process.env.AF_NEXT_DIST_DIR || ".next"
+    cachedBuildId = readFileSync(path.join(process.cwd(), distDir, "BUILD_ID"), "utf8").trim() || null
+  } catch {
+    cachedBuildId = null
+  }
+  return cachedBuildId
+}
 
 export async function GET() {
   const sha =
@@ -38,6 +61,7 @@ export async function GET() {
         process.env.RAILWAY_DEPLOYMENT_ID ||
         process.env.VERCEL_DEPLOYMENT_ID ||
         null,
+      buildId: readBuildId(),
       nodeEnv: process.env.NODE_ENV || null,
       timestamp: new Date().toISOString(),
     },

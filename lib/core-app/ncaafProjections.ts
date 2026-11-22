@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { bridgeNcaafRosterIdsToCfbdIds, type NcaafRosterNamespace } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import type { PlayerProjection } from './playerProjections'
 
 /**
@@ -145,6 +146,22 @@ export async function lookupNcaafProjections(
         return out
       })
     : await resolveCfbdIds(ids)
+  const ordered = new Map(ids.flatMap((id) => {
+    const cfbdId = cfbdByRosterId.get(id)
+    return cfbdId ? [[id, cfbdId] as const] : []
+  }))
+  const out = await lookupNcaafProjectionsForCfbdLinks(ordered, season)
+  const missing = ids.filter(id => !out.has(id))
+  if (!missing.length || namespace === 'pool') return out
+  const linked = await resolveRosterIdsToKeys(prisma, 'NCAAF', namespace === 'fantrax' ? 'fantraxId' : 'espnId', missing, new Set())
+  for (const [id, projection] of await lookupNcaafProjectionsForCfbdLinks(linked, season)) out.set(id, projection)
+  return out
+}
+
+/** Read projections by an already-proven roster ID to CFBD athlete ID link. */
+export async function lookupNcaafProjectionsForCfbdLinks(
+  cfbdByRosterId: ReadonlyMap<string, string>, season: number,
+): Promise<Map<string, PlayerProjection>> {
   if (cfbdByRosterId.size === 0) return new Map()
 
   const rows = await prisma.aFProjectionSnapshot
@@ -162,9 +179,7 @@ export async function lookupNcaafProjections(
   const byCfbdId = new Map(rows.map((r) => [r.playerId, r]))
 
   const out = new Map<string, PlayerProjection>()
-  for (const rosterId of ids) {
-    const cfbdId = cfbdByRosterId.get(rosterId)
-    if (!cfbdId) continue
+  for (const [rosterId, cfbdId] of cfbdByRosterId) {
     const row = byCfbdId.get(cfbdId)
     if (!row) continue
     out.set(rosterId, {

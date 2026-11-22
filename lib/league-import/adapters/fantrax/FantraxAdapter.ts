@@ -58,6 +58,24 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
       scoring,
       schedule,
       draft_picks: history.draft_picks,
+      /*
+       * Fantrax reports every future pick with its original team and its holder, so the whole
+       * inventory is carried, each pick flagged with whether it has changed hands. That makes the
+       * stored rows complete for a Fantrax league (no round count has to be inferred), and a pick
+       * traded back to its original team is corrected on the next import rather than left stale.
+       * Absent when no inventory is on file, which leaves any rows already stored untouched.
+       */
+      ...(raw.futurePicks
+        ? {
+            traded_picks: raw.futurePicks.map((pick) => ({
+              season: pick.season,
+              round: pick.round,
+              original_roster_id: pick.originalTeamId,
+              current_owner_roster_id: pick.ownerTeamId,
+              traded: pick.originalTeamId !== pick.ownerTeamId,
+            })),
+          }
+        : {}),
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},

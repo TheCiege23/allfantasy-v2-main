@@ -17,9 +17,9 @@ export const metadata: Metadata = buildSeoMeta({
 })
 
 const AI_PAGE_SCHEMA = getWebPageSchema({
-  name: 'AllFantasy AI System Explainer',
+  name: 'AllFantasy Chimmy System Explainer',
   description:
-    'Explainer page for AllFantasy AI architecture: deterministic-first intelligence, provider roles, orchestration modes, and platform-wide AI surfaces.',
+    'Explainer page for AllFantasy Chimmy architecture: deterministic-first intelligence, provider roles, orchestration modes, and platform-wide Chimmy surfaces.',
   url: '/ai',
 })
 

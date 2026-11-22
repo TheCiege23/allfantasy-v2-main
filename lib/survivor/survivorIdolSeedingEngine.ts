@@ -8,7 +8,7 @@
 
 export type SurvivorIdolPowerType = 'vote_shield' | 'extra_vote' | 'skip_tribal' | 'vote_steal' | 'auto_waiver_pickup' | 'triple_steal' | 'island_raid'
 
-export interface SurvivorIdolPowerSpec {
+interface SurvivorIdolPowerSpec {
   powerType: SurvivorIdolPowerType
   label: string
   description: string
@@ -80,19 +80,19 @@ export const SURVIVOR_IDOL_CATALOG: Record<SurvivorIdolPowerType, SurvivorIdolPo
   },
 }
 
-export interface IdolSeedParticipant {
+interface IdolSeedParticipant {
   userId: string
   rosterId: string
 }
 
-export interface IdolSeedAssignment {
+interface IdolSeedAssignment {
   ownerUserId: string
   rosterId: string
   powerType: SurvivorIdolPowerType
   expiresAtRemainingPlayers: number
 }
 
-export type IdolSeedPlanResult =
+type IdolSeedPlanResult =
   | { ok: true; assignments: IdolSeedAssignment[]; voteShieldCount: number; seed: number }
   | { ok: false; code: 'no_participants' | 'invalid_count'; error: string }
 
@@ -107,7 +107,7 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-export interface ComputeIdolSeedInput {
+interface ComputeIdolSeedInput {
   participants: IdolSeedParticipant[]
   /** Number of roster spots in the league (e.g. 15). */
   rosterSpots: number
@@ -159,14 +159,14 @@ export function computeIdolSeedPlan(input: ComputeIdolSeedInput): IdolSeedPlanRe
   return { ok: true, assignments, voteShieldCount, seed }
 }
 
-export interface PlayerBoundIdolCandidate {
+interface PlayerBoundIdolCandidate {
   ownerUserId: string
   rosterId: string
   playerId: string
   playerName?: string
 }
 
-export interface PlayerBoundIdolAssignment extends Omit<IdolSeedAssignment, 'powerType'> {
+interface PlayerBoundIdolAssignment extends Omit<IdolSeedAssignment, 'powerType'> {
   /** An engine power (e.g. vote_shield) or an underscored catalog idol id (e.g. point_surge). */
   powerType: string
   playerId: string

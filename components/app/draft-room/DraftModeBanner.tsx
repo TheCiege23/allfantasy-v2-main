@@ -5,7 +5,7 @@ import './af-draft-room.css'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomRedesignMessages } from '@/lib/core-app/messages/draftRoomRedesign'
 
-export type DraftRoomMode = 'offline' | 'autopick' | 'mock'
+type DraftRoomMode = 'offline' | 'autopick' | 'mock'
 
 /**
  * Which explanation, if any, the room shows above the board. Offline outranks auto-pick: in an

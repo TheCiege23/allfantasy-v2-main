@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveSleeperPlayerIdentities } from '@/lib/players/sleeperPlayerCrosswalk'
+import { playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
 import type { FrozenCompletedGrade } from '@/lib/decision-os/trade/frozenCompletedGrade'
 import { gradeMoment, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
@@ -175,6 +176,35 @@ async function resolveNames(ids: string[], sport: string): Promise<Map<string, s
   return out
 }
 
+/**
+ * A PROVIDER league's stored ids (ESPN, Yahoo, MFL, Fleaflicker), named through the provider identity map — never
+ * read as Sleeper ids (an MFL "13604" is also somebody's Sleeper id). Also returns each id's frozen-row key: the
+ * Sleeper id the grader priced it by when linked, else its name — the keys `/core` Trades froze it under
+ * (`archivedTradeGrade.ts`, `sleeperIdOf`).
+ */
+async function resolveProviderNames(
+  ids: string[],
+  provider: string,
+  sport: string,
+): Promise<{ names: Map<string, string>; keyOf: (id: string) => string }> {
+  const names = new Map<string, string>()
+  const keys = new Map<string, string>()
+  if (ids.length > 0) {
+    const found = await resolveTradePlayers(ids, { space: { provider }, sport }).catch(() => new Map())
+    for (const [id, r] of found) {
+      if (!r.ok) continue
+      names.set(id, r.name)
+      keys.set(id, r.sleeperId ? `sleeper:${r.sleeperId}` : `name:${r.name.trim().toLowerCase()}`)
+    }
+  }
+  return { names, keyOf: (id) => keys.get(id) ?? `unresolved:${id}` }
+}
+
+const sleeperKey = (id: string) => `sleeper:${id}`
+
+const PLATFORM_NAMES: Record<string, string> = { espn: 'ESPN', yahoo: 'Yahoo', mfl: 'MFL', fleaflicker: 'Fleaflicker', fantrax: 'Fantrax' }
+const platformName = (p: string) => PLATFORM_NAMES[p] ?? p
+
 function describeSide(
   ids: string[],
   picks: string[],
@@ -193,7 +223,7 @@ function describeSide(
 }
 
 /** A frozen row's asset identities for one side of this trade row: `sleeper:<id>` and `pick:<year>:<round>`. */
-function frozenKeys(players: unknown, picks: unknown): { players: string[]; picks: string[] } {
+function frozenKeys(players: unknown, picks: unknown, keyOf: (id: string) => string = sleeperKey): { players: string[]; picks: string[] } {
   const pickKeys = (Array.isArray(picks) ? picks : []).flatMap((p) => {
     if (!p || typeof p !== 'object') return []
     const { round, season } = p as { round?: unknown; season?: unknown }
@@ -201,7 +231,7 @@ function frozenKeys(players: unknown, picks: unknown): { players: string[]; pick
     const r = Number(round)
     return Number.isFinite(year) && Number.isFinite(r) && r > 0 ? [`pick:${year}:${r}`] : []
   })
-  return { players: idList(players).map((id) => `sleeper:${id}`), picks: pickKeys }
+  return { players: idList(players).map(keyOf), picks: pickKeys }
 }
 
 /**
@@ -216,9 +246,13 @@ function frozenKeys(players: unknown, picks: unknown): { players: string[]; pick
  * stored side only as many assets beyond its players as the row has picks on that side. Anything else
  * lends no letter.
  */
-function frozenOrientation(r: TradeRow, frozen: { give: string[]; get: string[] }): 'same' | 'mirrored' | null {
-  const sent = frozenKeys(r.playersGiven, r.picksGiven)
-  const got = frozenKeys(r.playersReceived, r.picksReceived)
+function frozenOrientation(
+  r: TradeRow,
+  frozen: { give: string[]; get: string[] },
+  keyOf: (id: string) => string = sleeperKey,
+): 'same' | 'mirrored' | null {
+  const sent = frozenKeys(r.playersGiven, r.picksGiven, keyOf)
+  const got = frozenKeys(r.playersReceived, r.picksReceived, keyOf)
   const sorted = (k: { players: string[]; picks: string[] }) => [...k.players, ...k.picks].sort()
   const equal = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...b].sort().every((x, i) => x === a[i])
   if (equal(sorted(sent), frozen.give) && equal(sorted(got), frozen.get)) return 'same'
@@ -237,12 +271,13 @@ function frozenOrientation(r: TradeRow, frozen: { give: string[]; get: string[] 
 function frozenLettersFor(
   r: TradeRow,
   frozen: FrozenCompletedGrade | undefined,
+  keyOf: (id: string) => string = sleeperKey,
 ): { mine: string; theirs: string; moment: string } | null {
   if (!frozen) return null
   const rowTradeAt = r.tradeDate ? r.tradeDate.toISOString() : null
   // The v2 original first; its v1 predecessor only when the v2 row is a different deal (as `withFrozenOriginal`).
   for (const row of [frozen, ...(frozen.v === 2 && frozen.prior ? [frozen.prior] : [])]) {
-    const way = frozenOrientation(r, row)
+    const way = frozenOrientation(r, row, keyOf)
     if (!way) continue
     const moment: GradeMomentInput =
       row.v === 2
@@ -319,15 +354,34 @@ export async function buildLeagueTradeHistoryOutcome(
    * labelled as what it is (`./afTradeHistoryGrounding.ts`). Read before the refusals below, which
    * used to answer for every native and Fantrax league that it could see no trades at all.
    */
+  let afFallback: TradeHistoryOutcome | null = null
   if (league.platform.toLowerCase() !== 'sleeper') {
     const { buildAfTradeHistoryOutcome } = await import('./afTradeHistoryGrounding')
-    const af = await buildAfTradeHistoryOutcome(leagueId, league, { season: seasonFilter, manager: managerFilter, player: query.player ?? null, maxShown })
-    if (af.kind === 'ok') return { kind: 'ok', text: af.text, uniqueTrades: af.uniqueTrades, shown: af.shown, unresolvedPlayers: af.unresolvedPlayers }
+    const af = await buildAfTradeHistoryOutcome(leagueId, league, {
+      season: seasonFilter,
+      manager: managerFilter,
+      player: query.player ?? null,
+      maxShown,
+      // Grades ride where the Sleeper block's do: only for a caller that asked for frozen grades.
+      ...(query.frozenGrades ? { userId, onGrade: query.onGrade } : {}),
+    })
+    if (af.kind === 'ok') afFallback = { kind: 'ok', text: af.text, uniqueTrades: af.uniqueTrades, shown: af.shown, unresolvedPlayers: af.unresolvedPlayers }
+    // A provider league's own synced history comes first; its AllFantasy (shadow) trades answer only without one.
+    const hasProviderHistory = typeof playerIdSpaceFor({ platform: league.platform.toLowerCase(), sport: league.sport }) === 'object'
+    if (afFallback && !hasProviderHistory) return afFallback
   }
-  if (!league.platformLeagueId) return { kind: 'no-platform-league-id' }
-  // Ingestion is Sleeper-only; another platform's league has no rows here and a
-  // silent empty block would read as "this league has never traded".
-  if (league.platform.toLowerCase() !== 'sleeper') return { kind: 'not-sleeper', platform: league.platform }
+  if (!league.platformLeagueId) return afFallback ?? { kind: 'no-platform-league-id' }
+  /*
+   * 🛑 NOT ONLY SLEEPER ANY MORE (Trade OS, 2026-11-16). The live collector writes ESPN, Yahoo, MFL and
+   * Fleaflicker completed trades to this same `LeagueTrade` table (`persistLiveTrades`), keyed on the provider's
+   * league id — and this read refused them all as "not Sleeper". Their player ids are the PROVIDER's, so they are
+   * named through the provider identity map (`resolveProviderNames`). A platform with no rows here (Fantrax,
+   * native) still answers `not-sleeper` rather than "this league has never traded".
+   */
+  const platform = league.platform.toLowerCase()
+  const space = playerIdSpaceFor({ platform, sport: league.sport })
+  const provider = typeof space === 'object' ? space.provider : null
+  if (platform !== 'sleeper' && !provider) return afFallback ?? { kind: 'not-sleeper', platform: league.platform }
 
   let histories: Array<{ id: string }>
   try {
@@ -338,7 +392,7 @@ export async function buildLeagueTradeHistoryOutcome(
   } catch {
     return { kind: 'history-lookup-failed' }
   }
-  if (histories.length === 0) return { kind: 'no-history-rows' }
+  if (histories.length === 0) return afFallback ?? (provider ? { kind: 'not-sleeper', platform: league.platform } : { kind: 'no-history-rows' })
 
   let rows: TradeRow[]
   try {
@@ -366,7 +420,7 @@ export async function buildLeagueTradeHistoryOutcome(
   } catch {
     return { kind: 'trade-lookup-failed' }
   }
-  if (rows.length === 0) return { kind: 'no-trade-rows', historyCount: histories.length }
+  if (rows.length === 0) return afFallback ?? { kind: 'no-trade-rows', historyCount: histories.length }
 
   const teams = await readTeamLabels(leagueId, league)
   /** The manager whose history row this is — stored as a Sleeper user id on current rows. */
@@ -418,7 +472,9 @@ export async function buildLeagueTradeHistoryOutcome(
    */
   const nameScope = playerFilter ? involved : involved.slice(0, maxShown)
   const allIds = nameScope.flatMap((r) => [...idList(r.playersGiven), ...idList(r.playersReceived)])
-  const names = await resolveNames([...new Set(allIds)], league.sport)
+  const providerNames = provider ? await resolveProviderNames([...new Set(allIds)], provider, league.sport) : null
+  const names = providerNames ? providerNames.names : await resolveNames([...new Set(allIds)], league.sport)
+  const keyOf = providerNames ? providerNames.keyOf : sleeperKey
 
   const matching = playerFilter
     ? involved.filter((r) =>
@@ -443,7 +499,7 @@ export async function buildLeagueTradeHistoryOutcome(
   ].filter((f): f is string => Boolean(f))
 
   const lines: string[] = [
-    `${TRADE_HISTORY_BLOCK_MARKER} (Sleeper league ${league.platformLeagueId}).`,
+    `${TRADE_HISTORY_BLOCK_MARKER} (${provider ? platformName(provider) : 'Sleeper'} league ${league.platformLeagueId}).`,
     `These trades ALREADY HAPPENED. None of them is a pending offer, and nothing here is awaiting the user's response.`,
     `Trades on file in the window read: ${unique.length} (${seasonSummary}).`,
   ]
@@ -494,7 +550,7 @@ export async function buildLeagueTradeHistoryOutcome(
     const a = sideA(r).label
     const b = sideB(r).label
     lines.push(`- ${when} (${r.season} wk ${r.week}): ${a} got [${recv.text}] from ${b} for [${give.text}].`)
-    const graded = query.frozenGrades ? frozenLettersFor(r, frozen.get(frozenKeyOf(r.transactionId))) : null
+    const graded = query.frozenGrades ? frozenLettersFor(r, frozen.get(frozenKeyOf(r.transactionId)), keyOf) : null
     if (graded) {
       const letters = `${graded.mine} for ${a}, ${graded.theirs} for ${b}`
       lines.push(`  AllFantasy grade (the frozen original, on this league's values ${graded.moment}): ${letters}.`)

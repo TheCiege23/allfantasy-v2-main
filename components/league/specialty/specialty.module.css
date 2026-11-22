@@ -10,14 +10,19 @@
  *   - prefers-reduced-motion shows every animation's end state.
  *
  * Theme: the root (.sp) reads --acc / --acc2 / --accInk / --disp, set inline by <SpecialtyShell>.
+ *
+ * Light mode (Guilly only, 2026-11-06): colours read `var(--sp-x, <dark literal>)`. Unset, that IS the literal, so
+ * dark mode and every other format render exactly what they did. One rule at the end sets the tokens for
+ * light mode + [data-specialty='guillotine']; .hero and .stayDark reset them to `initial` (guaranteed-invalid, so
+ * the fallback wins) because they sit on dark artwork. __tests__/guillotine/guillotineLightHub.test.ts.
  */
 .sp {
   --acc: #d9b45a;
   --acc2: #f1d58a;
   --accInk: #1a1204;
   --disp: 'Archivo';
-  background: #07080d;
-  color: #e8eaf2;
+  background: var(--sp-bg, #07080d);
+  color: var(--sp-text, #e8eaf2);
   font: 13px/1.45 'Archivo', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   border-radius: 18px;
@@ -28,24 +33,24 @@
 
 .page { display: flex; flex-direction: column; gap: 20px; padding: 20px 24px 28px; }
 
-.card { background: #0b0d14; border: 1px solid rgba(255, 255, 255, .07); border-radius: 12px; }
-.card2 { background: #10131c; border: 1px solid rgba(255, 255, 255, .07); border-radius: 12px; }
+.card { background: var(--sp-card, #0b0d14); border: 1px solid var(--sp-line, rgba(255, 255, 255, .07)); border-radius: 12px; }
+.card2 { background: var(--sp-card2, #10131c); border: 1px solid var(--sp-line, rgba(255, 255, 255, .07)); border-radius: 12px; }
 .pad { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
 .h1 { margin: 0; font-weight: 700; font-size: 26px; letter-spacing: -.02em; }
-.lbl { font: 600 11px 'Archivo', sans-serif; letter-spacing: .09em; text-transform: uppercase; color: #7d84a3; }
-.t2 { color: #a3a9c2; }
-.t3 { color: #7d84a3; }
+.lbl { font: 600 11px 'Archivo', sans-serif; letter-spacing: .09em; text-transform: uppercase; color: var(--sp-t3, #7d84a3); }
+.t2 { color: var(--sp-t2, #a3a9c2); }
+.t3 { color: var(--sp-t3, #7d84a3); }
 .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
-.accText { color: var(--acc2); }
+.accText { color: var(--sp-acc-text, var(--acc2)); }
 .disp { font-family: var(--disp), 'Archivo', sans-serif; letter-spacing: .02em; }
 
 .btn {
   text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .12);
-  background: #151926; color: #e8eaf2; font: 600 13px 'Archivo', sans-serif; cursor: pointer;
+  min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--sp-line-strong, rgba(255, 255, 255, .12));
+  background: var(--sp-btn, #151926); color: var(--sp-text, #e8eaf2); font: 600 13px 'Archivo', sans-serif; cursor: pointer;
 }
-.btn:hover { background: #1b2030; }
+.btn:hover { background: var(--sp-btn-hover, #1b2030); }
 .btn:focus-visible { outline: 2px solid var(--acc2); outline-offset: 2px; }
 .btnP { background: var(--acc); border-color: var(--acc); color: var(--accInk); }
 .btnP:hover { background: var(--acc); filter: brightness(1.08); }
@@ -53,8 +58,8 @@
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, .12); color: #a3a9c2; font: 600 11px 'Archivo', sans-serif;
-  white-space: nowrap; background: rgba(7, 8, 13, .5);
+  border: 1px solid var(--sp-line-strong, rgba(255, 255, 255, .12)); color: var(--sp-t2, #a3a9c2); font: 600 11px 'Archivo', sans-serif;
+  white-space: nowrap; background: var(--sp-chip, rgba(7, 8, 13, .5));
 }
 .tag {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 22px; padding: 0 8px;
@@ -62,20 +67,20 @@
   white-space: nowrap;
 }
 /* Status-tag tones: colour is never the only signal — the tag always carries text. */
-.toneSafe { background: rgba(58, 190, 120, .14); color: #7fe0a6; }
-.toneDanger { background: rgba(255, 190, 90, .14); color: #ffc46b; }
-.toneZone { background: rgba(224, 64, 46, .2); color: #ff9a8a; }
-.toneAcc { background: color-mix(in srgb, var(--acc) 20%, transparent); color: var(--acc2); }
-.toneGold { background: rgba(242, 201, 76, .16); color: #f2c94c; }
-.tonePink { background: rgba(255, 79, 163, .16); color: #ff8fc8; }
-.toneMuted { background: rgba(255, 255, 255, .06); color: #8d93ad; }
+.toneSafe { background: var(--sp-safe-soft, rgba(58, 190, 120, .14)); color: var(--sp-safe, #7fe0a6); }
+.toneDanger { background: var(--sp-danger-soft, rgba(255, 190, 90, .14)); color: var(--sp-danger, #ffc46b); }
+.toneZone { background: var(--sp-zone-soft, rgba(224, 64, 46, .2)); color: var(--sp-zone, #ff9a8a); }
+.toneAcc { background: color-mix(in srgb, var(--acc) 20%, transparent); color: var(--sp-acc-text, var(--acc2)); }
+.toneGold { background: var(--sp-gold-soft, rgba(242, 201, 76, .16)); color: var(--sp-gold, #f2c94c); }
+.tonePink { background: var(--sp-pink-soft, rgba(255, 79, 163, .16)); color: var(--sp-pink, #ff8fc8); }
+.toneMuted { background: var(--sp-muted-soft, rgba(255, 255, 255, .06)); color: var(--sp-muted, #8d93ad); }
 
-.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: #0b0d14; border: 1px solid rgba(255, 255, 255, .08); }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--sp-card, #0b0d14); border: 1px solid var(--sp-line, rgba(255, 255, 255, .08)); }
 .seg>button {
-  min-height: 44px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: #a3a9c2;
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--sp-t2, #a3a9c2);
   font: 600 12px 'Archivo', sans-serif; cursor: pointer;
 }
-.seg>button[aria-pressed='true'] { background: #151926; color: var(--acc2); box-shadow: inset 0 -2px 0 var(--acc); }
+.seg>button[aria-pressed='true'] { background: var(--sp-btn, #151926); color: var(--sp-acc-text, var(--acc2)); box-shadow: inset 0 -2px 0 var(--acc); }
 .seg>button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ---------- hero ---------- */
@@ -95,40 +100,40 @@
 
 .clock {
   display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 22px; border-radius: 14px;
-  background: rgba(7, 8, 13, .66); border: 1px solid rgba(255, 255, 255, .12); text-align: center;
+  background: var(--sp-clock, rgba(7, 8, 13, .66)); border: 1px solid var(--sp-line-strong, rgba(255, 255, 255, .12)); text-align: center;
 }
-.clock>.lbl { color: var(--acc2); }
-.clockValue { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 36px; font-weight: 700; color: #fff; line-height: 1.1; }
-.clockCaption { font-size: 12px; color: #7d84a3; }
+.clock>.lbl { color: var(--sp-acc-text, var(--acc2)); }
+.clockValue { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-size: 36px; font-weight: 700; color: var(--sp-text-strong, #fff); line-height: 1.1; }
+.clockCaption { font-size: 12px; color: var(--sp-t3, #7d84a3); }
 
 /* ---------- main + rail ---------- */
 .grid { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
 .main { flex: 1 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
 .rail { flex: 0 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
-.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: #10131c; border: 1px solid rgba(255, 255, 255, .05); min-width: 0; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: var(--sp-row, #10131c); border: 1px solid var(--sp-line, rgba(255, 255, 255, .05)); min-width: 0; }
 .av {
   position: relative; flex: none; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center;
   font: 700 11.5px 'Archivo', sans-serif; color: #fff; overflow: hidden;
 }
 .av>img { width: 100%; height: 100%; object-fit: cover; }
-.bar { height: 10px; border-radius: 99px; background: #151926; overflow: hidden; }
+.bar { height: 10px; border-radius: 99px; background: var(--sp-track, #151926); overflow: hidden; }
 .bar>span { display: block; height: 100%; border-radius: 99px; transition: width .5s ease-out; }
 
 .rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.rule { display: flex; gap: 10px; font-size: 13px; color: #a3a9c2; }
-.rule>b { color: var(--acc2); font-family: 'JetBrains Mono', monospace; flex: none; }
+.rule { display: flex; gap: 10px; font-size: 13px; color: var(--sp-t2, #a3a9c2); }
+.rule>b { color: var(--sp-acc-text, var(--acc2)); font-family: 'JetBrains Mono', monospace; flex: none; }
 
 .feed { margin: 0; padding: 0; list-style: none; }
-.feedItem { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
+.feedItem { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--sp-line, rgba(255, 255, 255, .05)); }
 .feedItem:last-child { border-bottom: 0; }
 .feedItem>img { width: 32px; height: 32px; flex: none; }
 .feedText { display: flex; flex-direction: column; min-width: 0; }
-.feedText>strong { font-size: 13.5px; color: #e8eaf2; }
-.feedText>span { font-size: 12px; color: #7d84a3; }
+.feedText>strong { font-size: 13.5px; color: var(--sp-text, #e8eaf2); }
+.feedText>span { font-size: 12px; color: var(--sp-t3, #7d84a3); }
 
-.empty { margin: 0; font-size: 12.5px; color: #7d84a3; }
-.prop { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px dashed rgba(255, 214, 107, .55); color: #ffd66b; font: 600 11px 'Archivo', sans-serif; }
+.empty { margin: 0; font-size: 12.5px; color: var(--sp-t3, #7d84a3); }
+.prop { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; border: 1px dashed var(--sp-prop-line, rgba(255, 214, 107, .55)); color: var(--sp-prop, #ffd66b); font: 600 11px 'Archivo', sans-serif; }
 
 /* ---------- moment (signature screen) ---------- */
 .momentHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -157,4 +162,58 @@
 @media (prefers-reduced-motion: reduce) {
   .pop, .up, .shake { animation: none; }
   .bar>span { transition: none; }
+}
+
+/* ---------- light mode, Guilly only (2026-11-06) ----------
+ * The one rule that sets --sp-* tokens. Values follow /core's light ladder (components/core-app/af-core.css) with its
+ * literals as fallbacks; text tokens are measured >= 4.5:1 on every ground below in guillotineLightHub.test.ts. */
+:global(html[data-mode='light']) .sp[data-specialty='guillotine'] {
+  --sp-bg: var(--surface2, #eef1f9);
+  --sp-card: var(--surface, #ffffff);
+  --sp-card2: #f7f8fc;
+  --sp-row: #f7f8fc;
+  --sp-btn: #ffffff;
+  --sp-btn-hover: #eef1f9;
+  --sp-clock: #ffffff;
+  --sp-chip: rgba(11, 16, 32, .04);
+  --sp-track: rgba(11, 16, 32, .08);
+  --sp-line: var(--line, rgba(11, 16, 32, .09));
+  --sp-line-strong: var(--line2, rgba(11, 16, 32, .16));
+  --sp-text: var(--text, #0b1020);
+  --sp-text-strong: var(--text, #0b1020);
+  --sp-t2: var(--text2, #333c5c);
+  --sp-t3: var(--muted, #484f69);
+  --sp-acc-text: #9e3509;
+  --sp-safe: #097352;
+  --sp-safe-soft: rgba(9, 115, 82, .1);
+  --sp-danger: #8d5905;
+  --sp-danger-soft: rgba(141, 89, 5, .1);
+  --sp-zone: #a3260f;
+  --sp-zone-soft: rgba(186, 44, 46, .1);
+  --sp-gold: #765400;
+  --sp-gold-soft: rgba(166, 124, 0, .12);
+  --sp-pink: #9c1f5e;
+  --sp-pink-soft: rgba(200, 40, 120, .1);
+  --sp-muted: #484f69;
+  --sp-muted-soft: rgba(11, 16, 32, .06);
+  --sp-prop: #765400;
+  --sp-prop-line: rgba(118, 84, 0, .5);
+}
+/* Primary buttons are often <a>: `.nl-workspace a { color: inherit }` beats `.btnP`, so they take the panel's text
+ * colour. In dark that inherited colour is near-white; in light it would be dark text on the accent. Keep the ink. */
+:global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP { color: var(--accInk); }
+/* On dark artwork (the hero) or staged dark on purpose (.stayDark): every token back to its dark fallback.
+ * `color` is re-declared because an INHERITED colour is computed where it is declared (.sp, from the light tokens):
+ * resetting the tokens here does not recompute it, and `.nl-workspace a { color: inherit }` (0,1,1) beats `.btn`,
+ * so the hero's link-buttons went dark-on-dark until this line. In dark mode it equals what .sp gives anyway. */
+.hero,
+.stayDark {
+  color: var(--sp-text, #e8eaf2);
+  --sp-bg: initial; --sp-card: initial; --sp-card2: initial; --sp-row: initial; --sp-btn: initial; --sp-btn-hover: initial;
+  --sp-clock: initial; --sp-chip: initial; --sp-track: initial; --sp-line: initial; --sp-line-strong: initial;
+  --sp-text: initial; --sp-text-strong: initial; --sp-t2: initial; --sp-t3: initial; --sp-acc-text: initial;
+  --sp-safe: initial; --sp-safe-soft: initial; --sp-danger: initial; --sp-danger-soft: initial; --sp-zone: initial;
+  --sp-zone-soft: initial; --sp-gold: initial; --sp-gold-soft: initial; --sp-pink: initial; --sp-pink-soft: initial;
+  --sp-muted: initial; --sp-muted-soft: initial; --sp-prop: initial; --sp-prop-line: initial;
+  --gl-safe-big: initial; --gl-danger-big: initial; --gl-zone-big: initial; --gl-me-row: initial; --gl-me-line: initial;
 }

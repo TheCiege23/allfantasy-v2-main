@@ -17,7 +17,7 @@ import type {
   LeagueStyleFilter,
 } from "@/lib/public-discovery/types"
 
-export interface PublicLeagueDiscoveryPageProps {
+interface PublicLeagueDiscoveryPageProps {
   defaultSport?: string
 }
 

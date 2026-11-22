@@ -32,7 +32,7 @@ import { leagueTypeBasis, type LeagueTypeBasis } from '@/lib/league/leagueTypeGr
 
 const KEY = 'leagueTypeConfirmation'
 
-export type LeagueTypeConfirmation = {
+type LeagueTypeConfirmation = {
   type: SuggestedType
   confirmedByUserId: string
   confirmedAt: string
@@ -52,7 +52,7 @@ export type LeagueTypeConfirmation = {
   baseFormat: PirateBaseFormat | null
 }
 
-export type LeagueTypeState = {
+type LeagueTypeState = {
   leagueId: string
   leagueName: string | null
   /** What the column says. Possibly a guess from a name. */
@@ -74,7 +74,7 @@ export type LeagueTypeState = {
   gradedAs: LeagueTypeBasis
 }
 
-export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
+function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
   if (!settings || typeof settings !== 'object') return null
   const raw = (settings as Record<string, unknown>)[KEY]
   if (!raw || typeof raw !== 'object') return null
@@ -115,7 +115,7 @@ export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirm
  * A Pirate call without an answer cannot reach here (`confirmLeagueType`
  * refuses it); the `dynasty` fallback matches the value book's default.
  */
-export function leagueTypeColumnFor(
+function leagueTypeColumnFor(
   type: SuggestedType,
   baseFormat: PirateBaseFormat | null,
 ): string {
@@ -158,7 +158,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
   }
 }
 
-export type ConfirmResult =
+type ConfirmResult =
   | { ok: true; state: LeagueTypeState }
   | {
       ok: false
@@ -246,6 +246,25 @@ export async function confirmLeagueType(input: {
     })
   } catch {
     return { ok: false, reason: 'write-failed' }
+  }
+
+  /*
+   * A league confirmed as Salary Cap needs its cap config, or every cap feature stays off: the cap
+   * page answers "Not a salary cap league" (`isSalaryCapLeague` reads the config row or a
+   * `salary_cap` variant, and an imported league has neither). Only league creation used to write
+   * one, so all 12 imported Salary Cap leagues in production had none (2026-11).
+   *
+   * `upsertSalaryCapConfig(id, {})` creates the sport defaults the creation wizard uses, and its
+   * update half changes nothing when a config exists — a commissioner's settings are never reset.
+   * A failure is logged, never fatal: the person's confirmation stands either way.
+   */
+  if (input.type === 'salary_cap') {
+    try {
+      const { upsertSalaryCapConfig } = await import('@/lib/salary-cap/SalaryCapLeagueConfig')
+      await upsertSalaryCapConfig(input.leagueId, {})
+    } catch (err) {
+      console.warn('[leagueTypeConfirmation] salary cap config bootstrap failed (non-fatal)', err)
+    }
   }
 
   const after = await leagueTypeState(input.leagueId)

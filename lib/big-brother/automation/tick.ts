@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { runAutomation, type AutomationRunInput } from '../BigBrotherAutomationService'
+import { applyBigBrotherSetupRules } from '../bigBrotherSetupRulesApply'
 import { getCurrentCycleForLeague } from '../BigBrotherPhaseStateMachine'
 import { BB_DEADLINES, deadlineForPhase } from '../schedule'
 import type { BigBrotherWeekPhase } from '../types'
@@ -15,6 +16,8 @@ export async function runBigBrotherAutomationTick(input: BbAutomationTickInput =
   })
   for (const config of configs) {
     try {
+      // Leagues created before setup choices reached the game get them once (../bigBrotherSetupRulesApply.ts).
+      if (!dryRun) await applyBigBrotherSetupRules(config.leagueId, now)
       const cycle = await getCurrentCycleForLeague(config.leagueId)
       if (!cycle || config.weekProgressionPaused) { skipped++; continue }
       const phase = cycle.phase as BigBrotherWeekPhase

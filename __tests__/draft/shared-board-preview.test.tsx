@@ -68,16 +68,15 @@ describe('shared board used by mock engines', () => {
 })
 
 describe('dock navigation in a narrow panel', () => {
-  it('reaches all seven tabs with the keyboard and preserves the queue body', () => {
+  it('reaches all four tabs with the keyboard and preserves the queue body', () => {
     render(<DraftRightDockTabs queueBody={<input aria-label="Queue note" defaultValue="Keep this" />}
-      rosterBody={<div>Roster</div>} chatBody={<div>Chat</div>} intelBody={<div>Intel</div>}
-      chimmyBody={<div>Chimmy</div>} warRoomBody={<div>Legacy</div>} activityBody={<div>Activity</div>} />)
+      rosterBody={<div>Roster</div>} chatBody={<div>Chat</div>} chimmyBody={<div>Chimmy</div>} />)
     const tabs = screen.getByRole('tablist')
     const queue = within(tabs).getByRole('tab', { name: 'Queue' })
     queue.focus()
     fireEvent.keyDown(queue, { key: 'End' })
-    expect(within(tabs).getByRole('tab', { name: 'Activity' })).toHaveFocus()
-    expect(within(tabs).getByRole('tab', { selected: true })).toHaveTextContent('Activity')
+    expect(within(tabs).getByRole('tab', { name: 'Chat' })).toHaveFocus()
+    expect(within(tabs).getByRole('tab', { selected: true })).toHaveTextContent('Chat')
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
     expect(queue).toHaveFocus()
     expect(screen.getByRole('textbox', { name: 'Queue note' })).toHaveValue('Keep this')

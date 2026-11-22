@@ -18,6 +18,7 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["decision-log","evaluate"], load: () => import('@/server/api-route-modules/legacy/decision-log/evaluate/route') },
   { pattern: ["decision-log","resolve"], load: () => import('@/server/api-route-modules/legacy/decision-log/resolve/route') },
   { pattern: ["draft","recommendation-refresh"], load: () => import('@/server/api-route-modules/legacy/draft/recommendation-refresh/route') },
+  { pattern: ["fantrax","trade-history"], load: () => import('@/server/api-route-modules/legacy/fantrax/trade-history/route') },
   { pattern: ["feedback","upload"], load: () => import('@/server/api-route-modules/legacy/feedback/upload/route') },
   { pattern: ["import","status"], load: () => import('@/server/api-route-modules/legacy/import/status/route') },
   { pattern: ["guest-import"], load: () => import('@/server/api-route-modules/legacy/guest-import/route') },

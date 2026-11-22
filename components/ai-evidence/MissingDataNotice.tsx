@@ -4,7 +4,7 @@ import React from 'react'
 import type { MissingDataItem } from '@/lib/ai-context-envelope'
 import MissingDataBlock from './MissingDataBlock'
 
-export interface MissingDataNoticeProps {
+interface MissingDataNoticeProps {
   /** Missing data items — never silently ignored. */
   items: MissingDataItem[]
   title?: string

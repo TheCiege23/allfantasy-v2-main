@@ -32,7 +32,7 @@ class YahooApiResponseErrorMock extends Error {
 }
 
 vi.mock('@/lib/auth-guard', () => ({
-  requireVerifiedUser: requireVerifiedUserMock,
+  requireVerifiedUser: requireVerifiedUserMock, requireAgeConfirmedUser: requireVerifiedUserMock,
 }))
 
 vi.mock('@/lib/prisma', () => ({

@@ -14,7 +14,7 @@
  *    at render time, so the page cannot call Yahoo importable while it is coming soon.
  */
 
-export type CommissionerFeature = {
+type CommissionerFeature = {
   /** Anchor id, also the heading id the section is labelled by. */
   id: string
   eyebrow: string
@@ -27,17 +27,17 @@ export type CommissionerFeature = {
 }
 
 export const COMMISSIONERS_META = {
-  title: 'Commissioner OS — Built by a commissioner, for commissioners | AllFantasy',
+  title: 'Commissioner OS — Built by a long-time commissioner, for commissioners | AllFantasy',
   description:
     'Know when your league needs attention before problems become obvious. League Health, illegal lineup alerts, a trade evaluator that knows your league type, and integrity reports — free to import.',
-  ogTitle: 'Built by a commissioner, for commissioners.',
+  ogTitle: 'Built by a long-time commissioner, for commissioners.',
   ogDescription:
     'Commissioner OS tells you when your league needs attention before problems become obvious. Import your league free.',
 } as const
 
 export const COMMISSIONERS_HERO = {
   eyebrow: 'Commissioner OS',
-  h1a: 'Built by a commissioner,',
+  h1a: 'Built by a long-time commissioner,',
   h1b: 'for commissioners.',
   sub: 'Know when your league needs attention before problems become obvious.',
   founder:
@@ -60,6 +60,21 @@ export const COMMISSIONERS_HEALTH_EXAMPLE = {
   ],
 } as const
 
+/**
+ * "All your leagues + Chimmy" (AllLeaguesChimmy). `{platforms}` is filled from the import config at
+ * render time. The exchange is labelled as an example on the page and mirrors the illustrative health
+ * card above — it is nobody's real league.
+ */
+export const COMMISSIONERS_ALL_LEAGUES = {
+  label: 'Every league + Chimmy',
+  h2: 'All your leagues from {platforms}, in one place.',
+  body: 'Run every league you commission from one League Hub — then ask Chimmy about any of them, in plain words.',
+  exampleLabel: 'Example',
+  question: 'Which of my leagues need me this week?',
+  answer:
+    'Two do. In Gridiron Gang a manager has started an empty slot for two weeks, and in Waiver Warriors a trade was flagged as lopsided — review it before it processes. Dynasty Dragons and End Zone Elites are in good shape.',
+} as const
+
 export const COMMISSIONER_FEATURES: readonly CommissionerFeature[] = [
   {
     id: 'league-health',
@@ -78,14 +93,21 @@ export const COMMISSIONER_FEATURES: readonly CommissionerFeature[] = [
     id: 'illegal-lineups',
     eyebrow: '02 · Illegal Lineup Alerts',
     title: 'Illegal lineups, caught early.',
-    body: 'When a lineup goes illegal, the manager and the commish both get notified, including how long it has been illegal — so it gets fixed before it costs anyone a game.',
+    /*
+     * ⚠ "HOW LONG" IS COUNTED IN WEEKS, AND ONLY THE COMMISH SEES IT. The manager's half is Chimmy's
+     * pre-kickoff lineup check (lib/chimmy-alerts/lineupCheck.ts: empty slots, starters with no game,
+     * ruled-out starters). The commish's half is the integrity flag, which counts consecutive weeks of
+     * illegal or suspicious lineups (TankingDetectionEngine, IntegrityFlagCard "N in a row"). This
+     * used to promise both people "how long it has been illegal", which nothing tracks in hours or days.
+     */
+    body: 'Before kickoff, a manager with an empty slot, a starter on bye or a starter ruled out gets a lineup check from Chimmy. If it keeps happening, the commish gets an alert showing how many weeks in a row.',
     points: [
-      'Notifies the manager and the commish',
-      'Shows how long the lineup has been illegal',
-      'Catches empty slots, byes and injured starters',
+      'A lineup check for the manager before kickoff',
+      'An alert for the commish when it repeats, with the weeks in a row',
+      'Catches empty slots, byes and ruled-out starters',
     ],
     image: '/images/commissioners/illegal-lineups.png',
-    imageAlt: 'An illegal lineup alert naming the team, the empty slot and how long it has been illegal',
+    imageAlt: 'A lineup alert naming the team, the empty slot and how many weeks in a row it has happened',
   },
   {
     id: 'trade-evaluator',

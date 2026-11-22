@@ -1,7 +1,7 @@
 import type { LeagueTeam } from '@prisma/client'
 import type { LeagueTeamSlot } from '@/app/dashboard/types'
 
-export type RosterWalletRow = {
+type RosterWalletRow = {
   platformUserId: string
   faabRemaining: number | null
   waiverPriority: number | null

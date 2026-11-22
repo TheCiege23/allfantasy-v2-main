@@ -2,7 +2,7 @@ import 'server-only'
 
 import { loadTradeRosterIds, playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { extractPlayerNameCandidates, splitSides } from '@/lib/chimmy-trade/tradeSentence'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCanonicalTradeArgs } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { evaluateTrade, type TradeEvaluationReceipt } from '@/lib/decision-os/trade/evaluateTrade'
@@ -12,6 +12,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { createLeagueTradeGrader, gradeDeal } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { marketEvidenceOf } from './marketEvidence'
 import { gradePlayerFromRoster, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import {
   allRosteredIds,
@@ -69,7 +70,7 @@ export type {
 
 export interface TradeScenarioDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
-  loadPlayerNames: (sport: string, ids: string[], platform?: string | null) => Promise<Map<string, { name: string | null; position: string | null; sleeperId?: string; externalId?: string }>>
+  loadPlayerNames: (sport: string, ids: string[], platform?: string | null, membershipCheckedLeagueId?: string) => Promise<Map<string, { name: string | null; position: string | null; sleeperId?: string; externalId?: string }>>
   loadForeignRosterIds?: (leagueId: string) => Promise<Map<string, string[]>>
   evaluate: (args: EvaluateCanonicalTradeArgs, deps: { resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null> }) => Promise<CanonicalTradeEvaluation>
   /** THE grade for the deal, from the viewer's side. */
@@ -80,9 +81,9 @@ export interface TradeScenarioDeps {
 
 const defaultDeps: TradeScenarioDeps = {
   resolveWorld: resolveCanonicalWorld,
-  async loadPlayerNames(sport, ids, platform) {
+  async loadPlayerNames(sport, ids, platform, membershipCheckedLeagueId) {
     const space = playerIdSpaceFor({ platform: platform ?? null, sport })
-    const found = await resolveTradePlayers(ids.slice(0, MAX_LEAGUE_PLAYER_IDS), { sport, space })
+    const found = await resolveTradePlayers(ids.slice(0, MAX_LEAGUE_PLAYER_IDS), { sport, space, membershipCheckedLeagueId })
     return new Map([...found].flatMap(([id, player]) => player.ok ? [[id, player] as const] : []))
   },
   loadForeignRosterIds: loadTradeRosterIds,
@@ -178,8 +179,8 @@ export async function buildTradeScenario(
   }
   const platform = world.provenance?.provider ?? null
   const space = playerIdSpaceFor({ platform, sport: world.league.sport })
-  const foreign = isForeignIdSpace(platform)
-  // The lineup port's ID contract is different. Load provider IDs for trade grounding only.
+  const foreign = rosterIdSpaceOf(platform) !== 'sleeper' || world.league.leagueType === 'c2c'
+  // The lineup port can translate ESPN IDs to Sleeper IDs. Trade grounding needs the original provider IDs.
   const foreignRosterIds = foreign ? await deps.loadForeignRosterIds?.(args.leagueId).catch(() => null) : null
   if (foreign && !foreignRosterIds?.get(viewerRoster.rosterId)?.length) {
     return {
@@ -192,7 +193,7 @@ export async function buildTradeScenario(
     ...world,
     rosters: world.rosters.map((roster) => ({ ...roster, playerIds: foreignRosterIds.get(roster.rosterId) ?? [] })),
   } : world
-  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(rosterWorld), platform).catch(() => new Map())
+  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(rosterWorld), platform, args.leagueId).catch(() => new Map())
   const byName = indexRosterNames(rosterWorld, names)
 
   const left: Located[][] = []
@@ -321,7 +322,7 @@ export async function buildTradeScenario(
           identity: { ok: true, name: p.name, position: p.position, sleeperId: identity?.sleeperId, externalId: identity?.externalId },
         })
       }),
-      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round })),
+      ...picks.map((p) => ({ kind: 'pick' as const, year: p.season as number, round: p.round, ...(p.draftSide ? { draftSide: p.draftSide } : {}) })),
     ],
     unpriceable: [],
   })
@@ -410,6 +411,7 @@ export async function buildTradeScenario(
           withheld: null,
           partnerGrade: receipt.partnerGrade.graded ? receipt.partnerGrade.letter : null,
           marketGrade: grade.letterBasis === 'your_team' && grade.market ? grade.market.letter : null,
+          marketEvidence: marketEvidenceOf(grade),
         }
       : {
           given: null,
@@ -421,6 +423,7 @@ export async function buildTradeScenario(
           label: null,
           basis: grade.basis,
           withheld: grade.reason,
+          ...(grade.divisionImpacts ? { divisionImpacts: grade.divisionImpacts } : {}),
         },
     receiptId: receipt.receiptId,
     lineup,
@@ -545,13 +548,28 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
      * The week and the rules are named in the line itself: this is ONE week under the league's own
      * scoring, and a model left to guess would call it a season rate.
      */
+    /*
+     * Why the values moved, measured from real completed trades. Chimmy is told to cite it — it is the evidence behind
+     * the letter — and to keep the numbers and trade counts exactly as written, so "teams like you paid +8% across 210
+     * trades" is never rounded into a different claim.
+     */
+    ...(s.value.marketEvidence?.length
+      ? [
+          '- Why values moved, measured from completed trades on AllFantasy (cite one or two of these when you explain the grade; keep every number and trade count exactly as written, and do not add facts that are not here):',
+          ...s.value.marketEvidence.map((e) => `  • ${e}`),
+        ]
+      : []),
     s.lineup
       ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     s.playoffOdds.available ? `- Playoff scenario estimate: ${s.playoffOdds.before}% before, ${s.playoffOdds.after}% after. ${s.playoffOdds.reason}` : `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
-    ...(s.picks
+    ...(s.picks && !s.value.divisionImpacts && !s.value.basis?.includes('Campus')
       ? [
-          "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
+          // A pick the AllFantasy pick market repriced is priced on what managers paid for that round and draft, not
+          // the FantasyCalc average — saying "FantasyCalc average" there would contradict the evidence line above.
+          s.value.marketEvidence?.some((e) => e.includes('AllFantasy pick market'))
+            ? "- Draft picks are valued at that round's price for that draft — on the AllFantasy pick market where shown above, the average dynasty market price (FantasyCalc) otherwise — and the exact slot is not known. Say so, and do not quote a slot."
+            : "- Draft picks are valued as the giving team's own pick at that round's average dynasty market price (FantasyCalc) — the exact slot is not known. Say so, and do not quote a slot.",
         ]
       : []),
     // The saved evaluation, so the answer is a record every surface can read back.

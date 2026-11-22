@@ -42,6 +42,20 @@ describe('tanking penalty choice, on the integrity page', () => {
     expect(onSave.mock.calls[0]![0].tankingPenalties).toMatchObject({ penalty: 'faab', lotteryOddsCutPct: 100, faabPercent: 25 })
   })
 
+  it('a league with no future picks (redraft) is offered the FAAB penalty only, and saves it', () => {
+    const onSave = vi.fn()
+    render(<IntegritySettings value={{ ...value, tankingPickPenaltiesSupported: false }} onSave={onSave} />)
+    const kind = screen.getByTestId('tanking-penalty-kind') as HTMLSelectElement
+    expect([...kind.options].map((o) => o.value)).toEqual(['faab'])
+    expect(kind.value).toBe('faab')
+    expect(screen.getByTestId('tanking-penalty-faab-only')).toBeTruthy()
+    expect(screen.queryByText('Round of the pick')).toBeNull()
+    // A stored pick penalty is replaced by the one this league can enforce on any edit.
+    fireEvent.change(screen.getByTestId('tanking-faab-percent'), { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: /save integrity settings/i }))
+    expect(onSave.mock.calls[0]![0].tankingPenalties).toMatchObject({ penalty: 'faab', faabPercent: 50 })
+  })
+
   it('an imported league, with no penalties to set, shows no penalty controls', () => {
     const { tankingPenalties: _omit, ...imported } = value
     render(<IntegritySettings value={imported} onSave={vi.fn()} />)

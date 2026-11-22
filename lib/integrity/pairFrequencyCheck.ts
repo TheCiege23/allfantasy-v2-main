@@ -26,11 +26,11 @@ import { readTradeValueAudits } from './tradeValueAudit'
 
 const WINDOW_MS = 365 * 24 * 60 * 60 * 1000
 
-export function pairKey(f: Pick<PairFinding, 'teamIds'>): string {
+function pairKey(f: Pick<PairFinding, 'teamIds'>): string {
   return `pair:${[...f.teamIds].sort().join('|')}`
 }
 
-export function pairSummary(f: PairFinding): string {
+function pairSummary(f: PairFinding): string {
   const lean =
     Math.abs(f.netShareToFirst) >= 0.15
       ? ` Value has run toward ${f.netShareToFirst > 0 ? f.names[0] : f.names[1]} across those trades.`

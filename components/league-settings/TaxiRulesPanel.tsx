@@ -16,10 +16,11 @@ import type { TaxiRulesView } from '@/lib/taxi/taxiRulesService'
 const fill = (s: string, vars: Record<string, string | number>) =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{{${k}}}`).join(String(v)), s)
 
-type Draft = { maxYears: string; enforced: boolean; lockAfterWeek: string; promotionDeadlineWeek: string; lockBehavior: 'once_promoted_no_return' | 'free_move'; inSeasonMoves: boolean; postseasonMoves: boolean }
+type Draft = { maxYears: string; autoPlaceRookies: boolean; enforced: boolean; lockAfterWeek: string; promotionDeadlineWeek: string; lockBehavior: 'once_promoted_no_return' | 'free_move'; inSeasonMoves: boolean; postseasonMoves: boolean }
 
-const toDraft = (rules: TaxiMoveRules, enforced: boolean, maxYears: number | null): Draft => ({
+const toDraft = (rules: TaxiMoveRules, enforced: boolean, maxYears: number | null, autoPlaceRookies: boolean): Draft => ({
   maxYears: maxYears == null ? 'none' : String(maxYears),
+  autoPlaceRookies,
   enforced,
   lockAfterWeek: rules.lockAfterWeek != null ? String(rules.lockAfterWeek) : '',
   promotionDeadlineWeek: rules.promotionDeadlineWeek != null ? String(rules.promotionDeadlineWeek) : '',
@@ -30,7 +31,7 @@ const toDraft = (rules: TaxiMoveRules, enforced: boolean, maxYears: number | nul
 
 export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
   const { t } = useOptionalLanguage()
-  const ids = { years: useId(), enforce: useId(), lock: useId(), promo: useId(), behavior: useId(), inSeason: useId(), post: useId() }
+  const ids = { years: useId(), autoPlace: useId(), enforce: useId(), lock: useId(), promo: useId(), behavior: useId(), inSeason: useId(), post: useId() }
   const url = `/api/leagues/${encodeURIComponent(leagueId)}/taxi-rules`
   const [view, setView] = useState<TaxiRulesView | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -44,7 +45,7 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
       const data = (await res.json()) as TaxiRulesView | { applies: false }
       if (!data.applies) return
       setView(data)
-      setDraft(toDraft(data.rules, data.enforced, data.maxYears))
+      setDraft(toDraft(data.rules, data.enforced, data.maxYears, data.autoPlaceRookies !== false))
     } catch {
       // A settings card: the page renders without it.
     }
@@ -65,9 +66,10 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        // Max seasons on taxi is any commissioner's; the move rules are AF Commissioner.
+        // Max seasons on taxi and rookie placement are any commissioner's; the move rules are AF Commissioner.
         body: JSON.stringify({
           maxYears: draft.maxYears === 'none' ? null : Number(draft.maxYears),
+          autoPlaceRookies: draft.autoPlaceRookies,
           ...(editable
             ? {
                 enforced: draft.enforced,
@@ -143,6 +145,22 @@ export function TaxiRulesPanel({ leagueId }: { leagueId: string }) {
           <option value="none">{t('lsTaxiRules.maxYears.none')}</option>
         </select>
       </label>
+
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p id={`${ids.autoPlace}-label`} className="text-[13px] font-semibold text-white/90">{t('lsTaxiRules.autoPlace')}</p>
+          <p id={`${ids.autoPlace}-desc`} className="mt-0.5 text-[11px] leading-snug text-white/40">{t('lsTaxiRules.autoPlaceDesc')}</p>
+        </div>
+        <span data-testid="taxi-rules-autoPlace">
+          <SettingsSwitch
+            checked={draft.autoPlaceRookies}
+            onChange={(v) => set('autoPlaceRookies', v)}
+            disabled={!view.isCommissioner || saving}
+            labelledBy={`${ids.autoPlace}-label`}
+            describedBy={`${ids.autoPlace}-desc`}
+          />
+        </span>
+      </div>
 
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0 flex-1">

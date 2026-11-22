@@ -75,7 +75,7 @@ function getTeamGrade(picks: MockDraftPick[], manager: string) {
   }
 }
 
-export interface MockDraftRecapProps {
+interface MockDraftRecapProps {
   /** All picks in order */
   results: MockDraftPick[]
   /** Optional config for header */
@@ -149,15 +149,6 @@ export function MockDraftRecap({
     () => Array.from(new Set(results.map((p) => p.manager))).filter(Boolean).sort(),
     [results],
   )
-
-  const byRound = useMemo(() => {
-    const maxRound = Math.max(0, ...results.map((p) => p.round))
-    const map: Record<number, MockDraftPick[]> = {}
-    for (let r = 1; r <= maxRound; r++) {
-      map[r] = results.filter((p) => p.round === r).sort((a, b) => a.pick - b.pick)
-    }
-    return map
-  }, [results])
 
   const teamGrades = useMemo(() => {
     const grades: Record<string, ReturnType<typeof getTeamGrade>> = {}
@@ -359,9 +350,9 @@ export function MockDraftRecap({
 
       {/* AI recap summary placeholder */}
       <section className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] p-6 text-center">
-        <p className="text-sm font-medium text-white/70">AI recap summary</p>
+        <p className="text-sm font-medium text-white/70">Chimmy recap summary</p>
         <p className="mt-2 text-[12px] text-white/50">
-          Post-draft AI analysis will appear here (e.g. best value picks, risks, and lineup outlook).
+          Post-draft Chimmy analysis will appear here (e.g. best value picks, risks, and lineup outlook).
           This is a placeholder for a future model-generated recap.
         </p>
       </section>

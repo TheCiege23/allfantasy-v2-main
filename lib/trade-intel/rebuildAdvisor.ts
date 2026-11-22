@@ -31,7 +31,7 @@ import { fillLineup } from '@/lib/decision-os/trade/rosterImpact'
 import type { Posture } from './contention'
 import { ELIGIBILITY, readStarterSlots, type PartnerAsset, type SuggestionGrade } from './partnerRanking'
 
-export type RebuildLean = 'rising' | 'flat' | 'declining'
+type RebuildLean = 'rising' | 'flat' | 'declining'
 
 export type RebuildPlayer = {
   id: string
@@ -44,7 +44,7 @@ export type RebuildPlayer = {
   leanRatio?: number | null
 }
 
-export type RebuildPick = {
+type RebuildPick = {
   pickId: string
   label: string
   value: number | null
@@ -63,10 +63,10 @@ export type RebuildRoster = {
 
 export type RebuildTrigger = 'eliminated' | 'strategy'
 
-export type RebuildCall = { asset: PartnerAsset; why: string }
-export type RebuildBuyer = { rosterId: string; ownerName: string | null; why: string }
-export type RebuildSell = RebuildCall & { buyers: RebuildBuyer[] }
-export type RebuildTarget = RebuildCall & { rosterId: string; ownerName: string | null }
+type RebuildCall = { asset: PartnerAsset; why: string }
+type RebuildBuyer = { rosterId: string; ownerName: string | null; why: string }
+type RebuildSell = RebuildCall & { buyers: RebuildBuyer[] }
+type RebuildTarget = RebuildCall & { rosterId: string; ownerName: string | null }
 export type RebuildPackage = {
   rosterId: string
   ownerName: string | null
@@ -116,8 +116,18 @@ function pickAsset(p: RebuildPick & { value: number }): PartnerAsset {
   return { id: p.pickId, name: p.label, position: 'PICK', value: p.value, kind: 'pick' }
 }
 
-const pct = (ratio: number | null | undefined, rising: boolean) =>
-  typeof ratio === 'number' && ratio > 0 ? Math.round(Math.abs(rising ? ratio - 1 : 1 - ratio) * 100) : null
+/**
+ * Above this the percentage is not a market reading, it is a near-zero redraft value in the denominator:
+ * "Priced 8724% higher in dynasty than in redraft" printed for a rookie tight end (live, 2026-11-14). The
+ * sentence then says "priced higher" with no number, which every caller already has as its fallback.
+ */
+export const MAX_SHOWN_PCT = 300
+
+export const pct = (ratio: number | null | undefined, rising: boolean): number | null => {
+  if (typeof ratio !== 'number' || !(ratio > 0)) return null
+  const v = Math.round(Math.abs(rising ? ratio - 1 : 1 - ratio) * 100)
+  return v > MAX_SHOWN_PCT ? null : v
+}
 
 function starterIds(players: readonly Priced[], slots: readonly string[]): Set<string> {
   return new Set(

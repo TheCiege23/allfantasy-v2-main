@@ -1,5 +1,8 @@
 import type { SGConfig, SGMatchup, SGPeriod, SGTeam } from './types'
 
+export type SGTieDecision = { immuneTribeId: string | null; choppedTeamIds: string[]; placements: string[];
+  matchupWinners?: Record<string, string>; reason: string; rewardWinnerId?: string }
+
 export interface SGResolution {
   status: 'resolved' | 'commissioner_required'
   immuneTribeId: string | null
@@ -16,10 +19,16 @@ function compareLow(a: SGTeam, b: SGTeam): number {
 }
 
 /** Weekly points, then previous period. An unresolved boundary is never randomly chopped. */
-function selectLowest(teams: SGTeam[], count: number): SGTeam[] | null {
+function selectLowest(teams: SGTeam[], count: number, preferred?: string[]): SGTeam[] | null {
   const sorted = [...teams].sort(compareLow)
   if (sorted.length < count) return null
-  if (sorted[count] && compareLow(sorted[count - 1], sorted[count]) === 0) return null
+  if (sorted[count] && compareLow(sorted[count - 1], sorted[count]) === 0) {
+    const line = sorted[count - 1]
+    const selected = teams.filter(team => preferred?.includes(team.id))
+    if (selected.length !== count || selected.some(team => compareLow(team, line) > 0) ||
+        sorted.some(team => compareLow(team, line) < 0 && !selected.some(choice => choice.id === team.id))) return null
+    return selected.sort(compareLow)
+  }
   return sorted.slice(0, count)
 }
 
@@ -58,6 +67,7 @@ export function validateSGMatchups(teams: SGTeam[], matchups: SGMatchup[]): stri
 export function resolveSGPeriod(args: {
   config: SGConfig; period: SGPeriod; teams: SGTeam[]; matchups?: SGMatchup[]
   protectedTeamIds?: string[]; gauntletImmuneTribeId?: string
+  tieDecision?: SGTieDecision
 }): SGResolution {
   const { config, period, teams, matchups = [], protectedTeamIds = [], gauntletImmuneTribeId } = args
   if (new Set(teams.map(team => team.id)).size !== teams.length || teams.length !== period.teamsEntering) return failure('Active team count or identities do not match the schedule.')
@@ -69,7 +79,14 @@ export function resolveSGPeriod(args: {
   if (period.mode === 'final_three') {
     if (teams.length !== 3) return failure('Exactly three managers must enter the finale.')
     const ranked = [...teams].sort((a, b) => compareLow(b, a))
-    if (ranked.some((team, i) => i > 0 && compareLow(team, ranked[i - 1]) === 0)) return failure('Final placement tie requires commissioner resolution.')
+    if (ranked.some((team, i) => i > 0 && compareLow(team, ranked[i - 1]) === 0)) {
+      const choices = args.tieDecision?.placements ?? []
+      const selected = choices.map(id => teams.find(t => t.id === id))
+      if (choices.length !== 3 || new Set(choices).size !== 3 || selected.some(t => !t) ||
+          selected.some((team, i) => i > 0 && compareLow(selected[i - 1]!, team!) < 0)) return failure('Final placement tie requires commissioner resolution within the tied scores.')
+      result.placements = choices
+      return result
+    }
     result.placements = ranked.map(team => team.id)
     return result
   }
@@ -87,12 +104,13 @@ export function resolveSGPeriod(args: {
     if (period.mode === 'match_play') {
       const errors = validateSGMatchups(teams, matchups)
       if (errors.length) return failure(errors.join(' '))
-      for (const matchup of matchups) {
+      for (const [index, matchup] of matchups.entries()) {
         const a = teams.find(team => team.id === matchup.team1)!
         const b = teams.find(team => team.id === matchup.team2)!
         const comparison = compareLow(a, b)
-        if (!comparison) return failure('A tied individual matchup requires commissioner resolution.')
-        const winner = comparison > 0 ? a : b
+        const chosen = args.tieDecision?.matchupWinners?.[String(index)]
+        if (!comparison && chosen !== a.id && chosen !== b.id) return failure('A tied individual matchup requires commissioner resolution.')
+        const winner = comparison ? comparison > 0 ? a : b : chosen === a.id ? a : b
         metrics.set(winner.tribeId, metrics.get(winner.tribeId)! + 1)
       }
     } else {
@@ -109,8 +127,11 @@ export function resolveSGPeriod(args: {
       // Screenshot rule: the tribe containing the lower weekly scorer loses the tie.
       const floors = tied.map(id => ({ id, floor: [...teams.filter(team => team.tribeId === id)].sort(compareLow)[0] }))
         .sort((a, b) => compareLow(b.floor, a.floor))
-      if (compareLow(floors[0].floor, floors[1].floor) === 0) return failure('Tribe contest remains tied after weekly and previous-week scores.')
-      result.immuneTribeId = floors[0].id
+      if (compareLow(floors[0].floor, floors[1].floor) === 0) {
+        const chosen = args.tieDecision?.immuneTribeId
+        if (!chosen || !floors.some(row => row.id === chosen && compareLow(row.floor, floors[0].floor) === 0)) return failure('Tribe contest remains tied after weekly and previous-week scores.')
+        result.immuneTribeId = chosen
+      } else result.immuneTribeId = floors[0].id
     }
   }
   const unprotected = teams.filter(team => team.tribeId !== result.immuneTribeId)
@@ -120,7 +141,7 @@ export function resolveSGPeriod(args: {
   for (const group of groups) {
     const count = groups.length === 2 ? 1 : period.chops
     const eligible = group.filter(team => !protectedIds.has(team.id))
-    const chopped = selectLowest(eligible, count)
+    const chopped = selectLowest(eligible, count, args.tieDecision?.choppedTeamIds)
     if (!chopped) return failure('Insufficient unprotected teams or an unresolved elimination tie; commissioner resolution required.')
     result.choppedTeamIds.push(...chopped.map(team => team.id))
     // Only immunity above the actual chop line appears as a save in the ceremony.

@@ -34,7 +34,7 @@ import type { TokenSpendRuleCode } from '@/lib/tokens/constants'
 import type { TokenLedgerEntryView, TokenSpendPreview } from '@/lib/tokens/TokenSpendService'
 
 /** Storyline / scroll / basic idol coaching — free surface (deterministic engine still authoritative). */
-export const SURVIVOR_AI_UNGATED_TYPES: readonly SurvivorAIType[] = ['host_intro', 'host_scroll', 'idol_help']
+const SURVIVOR_AI_UNGATED_TYPES: readonly SurvivorAIType[] = ['host_intro', 'host_scroll', 'idol_help']
 
 const HOST_NARRATION_TYPES: readonly SurvivorAIType[] = [
   'host_challenge',
@@ -53,9 +53,6 @@ const PLAYER_STRATEGY_TYPES: readonly SurvivorAIType[] = [
   'weekly_plan',
 ]
 
-/** Token rule per AI type — one table, shared with the command centre's price list. */
-export { SURVIVOR_AI_TYPE_RULE_CODE }
-
 function ruleCodeForType(type: SurvivorAIType): TokenSpendRuleCode | null {
   if (SURVIVOR_AI_UNGATED_TYPES.includes(type as (typeof SURVIVOR_AI_UNGATED_TYPES)[number])) return null
   return SURVIVOR_AI_TYPE_RULE_CODE[type as keyof typeof SURVIVOR_AI_TYPE_RULE_CODE] ?? 'survivor_ai_vote_risk_quick'
@@ -69,7 +66,7 @@ function mustMeterSubscribedUsers(ruleCode: TokenSpendRuleCode): boolean {
   return tokenCostForRule(ruleCode) >= 2
 }
 
-export type SurvivorAiAccessResult =
+type SurvivorAiAccessResult =
   | {
       ok: true
       featureDecision: FeatureGateDecision
@@ -106,7 +103,7 @@ export async function resolveSurvivorAiAccess(input: {
       entitlement,
       requiredPlan: null,
       upgradePath: '/settings',
-      message: 'Ungated Survivor AI surface.',
+      message: 'Ungated Survivor Chimmy surface.',
     }
     return {
       ok: true,
@@ -163,7 +160,7 @@ export async function resolveSurvivorAiAccess(input: {
     tokenRuleCode: ruleCode,
     tokenSourceType: 'survivor_ai',
     tokenSourceId: `${leagueId}:${type}:${Date.now()}`,
-    tokenDescription: `Survivor AI — ${type}`,
+    tokenDescription: `Survivor Chimmy — ${type}`,
     tokenMetadata: { leagueId, survivorAiType: type },
   })
 

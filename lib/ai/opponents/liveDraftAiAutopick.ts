@@ -220,7 +220,7 @@ export async function tryAiOpponentAutopickForExpiredTimer(
             where: { leagueId_externalId: { leagueId, externalId: onClockRosterId } },
             select: { ownerName: true, teamName: true },
           })
-          const teamName = leagueTeam?.ownerName || leagueTeam?.teamName || 'AI Team'
+          const teamName = leagueTeam?.ownerName || leagueTeam?.teamName || 'Chimmy Team'
 
           bot = createBotProfileFromStrategy(
             leagueTeamId,
@@ -255,7 +255,7 @@ export async function tryAiOpponentAutopickForExpiredTimer(
         where: { id: leagueTeamId },
         select: { ownerName: true, teamName: true },
       })
-      const teamName = leagueTeam?.ownerName || leagueTeam?.teamName || 'AI Team'
+      const teamName = leagueTeam?.ownerName || leagueTeam?.teamName || 'Chimmy Team'
       bot = createBotProfileFromStrategy(
         leagueTeamId,
         teamName,
@@ -363,7 +363,7 @@ export async function tryAiOpponentAutopickForExpiredTimer(
     team: row.team,
     playerId: row.playerId,
     byeWeek: row.byeWeek,
-    reason: `AI opponent: ${decision.reason}`,
+    reason: `Chimmy opponent: ${decision.reason}`,
     strategy: "bpa",
   }
 

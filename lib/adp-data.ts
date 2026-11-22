@@ -16,6 +16,8 @@ export interface ADPEntry {
   adpLow: number | null;
   adpStdev: number | null;
   bye: number | null;
+  /** A college (devy) row's class year as the devy workers write it ("JR"); the mock board's class chip. */
+  classYearLabel?: string | null;
 }
 
 export interface FFCMeta {
@@ -370,6 +372,7 @@ async function getDevyADP(limit: number): Promise<ADPEntry[]> {
       age: null,
       value: null,
       source: 'devy',
+      classYearLabel: typeof p.classYearLabel === 'string' ? p.classYearLabel : null,
       ffcPlayerId: null,
       timesDrafted: null,
       adpHigh: null,

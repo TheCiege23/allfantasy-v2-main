@@ -30,8 +30,7 @@ vi.mock('@/lib/core-app/providerIdentityNames', () => ({
 
 import {
   normalizeIdentitySport,
-  resolveRosterPlayerIdentities,
-} from '@/lib/player-identity/resolveRosterPlayerIdentities'
+  resolveRosterPlayerIdentities, tidyRegistryName } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -39,6 +38,23 @@ beforeEach(() => {
   mocks.sleeper.mockResolvedValue(new Map())
   mocks.crosswalk.mockResolvedValue(new Map())
   mocks.providerNames.mockResolvedValue(new Map())
+})
+
+/** Production 2026-11-20: the draft archive and matchup page showed "Jaxon Smith-njigba" and "James Cook Iii". */
+describe('tidyRegistryName', () => {
+  it('capitalises after a hyphen and upper-cases a trailing generational numeral', () => {
+    expect(tidyRegistryName('Jaxon Smith-njigba')).toBe('Jaxon Smith-Njigba')
+    expect(tidyRegistryName('James Cook Iii')).toBe('James Cook III')
+    expect(tidyRegistryName('Marvin Harrison Ii')).toBe('Marvin Harrison II')
+  })
+
+  it('leaves a name that is already right alone, and guesses nothing', () => {
+    for (const name of ['Josh Allen', "Ja'Marr Chase", 'Amon-Ra St. Brown', 'Kenneth Walker III', 'Viliami Fehoko Jr.', 'Ivy Vi']) {
+      expect(tidyRegistryName(name)).toBe(name)
+    }
+    expect(tidyRegistryName('  ')).toBeNull()
+    expect(tidyRegistryName(null)).toBeNull()
+  })
 })
 
 describe('normalizeIdentitySport', () => {

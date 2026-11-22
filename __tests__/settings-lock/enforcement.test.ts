@@ -87,15 +87,25 @@ describe('every route that writes one area checks that area', () => {
   const calls = (path: string) =>
     readFileSync(path, 'utf8').split('\n').filter((l) => /settings(Patch)?LockedResponse\(/.test(l) && !/^\s*(\*|\/\/|import)/.test(l))
   it.each([
-    ['scoring/route.ts', 'scoring'], ['nfl-scoring/route.ts', 'scoring'], ['nba-scoring/route.ts', 'scoring'],
-    ['mlb-scoring/route.ts', 'scoring'], ['nhl-scoring/route.ts', 'scoring'], ['ncaab-scoring/route.ts', 'scoring'],
-    ['ncaaf-scoring/route.ts', 'scoring'], ['soccer-scoring/route.ts', 'scoring'], ['idp/apply-scoring-preset/route.ts', 'scoring'],
+    ['scoring/route.ts', 'scoring'], ['idp/apply-scoring-preset/route.ts', 'scoring'],
     ['idp/scoring-overrides/route.ts', 'scoring'], ['roster-settings/route.ts', 'rosters'], ['roster-settings/import/route.ts', 'rosters'],
     ['roster-settings/reset-default/route.ts', 'rosters'], ['playoff-settings/route.ts', 'playoffs'], ['playoffs/route.ts', 'playoffs'],
   ])('%s → %s', (file, group) => {
     const found = calls(base + file)
     expect(found).toHaveLength(1)
     expect(found[0]).toContain(`'${group}'`)
+  })
+  // The seven sport scoring saves share one implementation with shared scoring (2026-11-16): each route's PUT
+  // calls applySportScoringToLeague, and that function makes the scoring lock check exactly once.
+  it.each([['nfl'], ['nba'], ['mlb'], ['nhl'], ['ncaab'], ['ncaaf'], ['soccer']])('%s-scoring/route.ts saves through the shared scoring save', (sport) => {
+    const src = readFileSync(`${base}${sport}-scoring/route.ts`, 'utf8')
+    expect(src).toMatch(/^\s*const result = await applySportScoringToLeague\(\{/m)
+    expect(src).not.toMatch(/^\s*await saveLeague\w+ScoringConfig\(/m)
+  })
+  it('the shared scoring save checks the scoring lock', () => {
+    const found = calls('lib/league/applySportScoring.ts')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toContain(`'scoring'`)
   })
   it.each([['route.ts'], ['settings/route.ts']])('the %s settings PATCH checks the patch by value', (file) => {
     expect(calls(base + file).some((l) => l.includes('settingsPatchLockedResponse('))).toBe(true)

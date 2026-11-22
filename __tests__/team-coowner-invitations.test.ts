@@ -8,6 +8,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/commissioner/permissions', () => ({ isCommissioner: db.commissioner }))
 vi.mock('@/lib/league/isNativeLeague', () => ({ isNativePlatform: (value: string) => value === 'allfantasy' }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: db.league }, roster: { findFirst: db.roster }, leagueTeam: { findFirst: db.team }, appUser: { findMany: db.users }, teamCoOwner: { findUnique: db.invite, findFirst: db.invite, create: db.create, updateMany: db.update, deleteMany: db.remove } } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import { POST, PATCH, DELETE } from '@/app/api/leagues/[leagueId]/team-coowners/handler'
 
 const ctx = { params: Promise.resolve({ leagueId: 'league-1' }) }

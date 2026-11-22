@@ -46,7 +46,7 @@ export function isInstalled(): boolean {
 export async function shareApp(): Promise<'copied' | void> {
   const shareData = {
     title: 'AllFantasy.ai',
-    text: 'Fantasy Sports With AI Superpowers — Draft smarter, dominate waivers, win your league.',
+    text: 'Fantasy Sports With Chimmy Superpowers — Draft smarter, dominate waivers, win your league.',
     url: 'https://www.allfantasy.ai',
   };
 

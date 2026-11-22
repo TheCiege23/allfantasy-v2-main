@@ -14,7 +14,7 @@
  * trade engine's — `lib/decision-os/trade/evaluateTrade.ts`.)
  */
 
-export type ValuedAsset = {
+type ValuedAsset = {
   id: string
   /** Rank within the value source, 1 = most valuable. Null when unvalued. */
   rank: number | null

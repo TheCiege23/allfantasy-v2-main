@@ -16,6 +16,7 @@ import { getCurrentUser } from '@/lib/get-current-user'
 import { buildBestBallWarRoomContext } from '@/lib/best-ball-war-room/bestBallWarRoomContext'
 import { evaluateUserRosterConstruction } from '@/lib/best-ball-war-room/bestBallRosterConstructionEngine'
 import { evaluateDepth } from '@/lib/best-ball-war-room/bestBallDepthEngine'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,18 @@ export async function GET(
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
 
   const context = result.context
-  const construction = evaluateUserRosterConstruction(context)
+  /*
+   * Roster construction is AF Legacy's `roster_construction_planning` (owner decision 2026-11-11). It
+   * used to ride along with this state for everyone; without the plan it is left out and
+   * `constructionLocked` tells the panel to show the lock. Depth and the rest of the state are unchanged.
+   */
+  const plan = await requireFeatureEntitlement({
+    userId: user.id,
+    userEmail: user.email,
+    featureId: 'roster_construction_planning',
+  })
+  const constructionLocked = !plan.ok
+  const construction = constructionLocked ? null : evaluateUserRosterConstruction(context)
   const depth = context.userRosterId ? evaluateDepth(context, context.userRosterId) : null
 
   // Members only get full per-player rosters for their own team; others are light summaries.
@@ -39,5 +51,5 @@ export async function GET(
     context.teams = context.teams.map((t) => (t.isUserTeam ? t : { ...t, players: [] }))
   }
 
-  return NextResponse.json({ context, construction, depth })
+  return NextResponse.json({ context, construction, depth, constructionLocked })
 }

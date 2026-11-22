@@ -5,7 +5,7 @@ import { normalizeToUTC } from '@/lib/time-engine/normalize'
 /**
  * Human freshness label relative to server time (authoritative).
  */
-export function formatFreshnessLabel(
+function formatFreshnessLabel(
   lastUpdated: Date | string | number | null | undefined,
   serverNow?: Date
 ): string {

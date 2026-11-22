@@ -4,11 +4,12 @@
  * screen the app never could. They are dumped to JSON for the capture script. Harness-only.
  */
 import type { IdpCapSummaryJson, IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
+import type { HarnessApiRoute } from '../harnessApi'
 
 export const HARNESS_USER_ID = 'e2e-idp-user'
-export const HARNESS_ROSTER_ID = 'ckidproster00001'
+const HARNESS_ROSTER_ID = 'ckidproster00001'
 
-export const season = {
+const season = {
   season: {
     season: 2026,
     currentWeek: 10,
@@ -41,7 +42,7 @@ const c = (
   acquisitionMethod: 'auction', isFranchiseTagged: false, cutPenaltyCurrent: Math.round(salary * 0.25 * 10) / 10, ...extra,
 })
 
-export const contracts = {
+const contracts = {
   contracts: [
     c('1', 'Jayden Daniels', 'QB', false, 34.5, 4, 3),
     c('2', 'Bijan Robinson', 'RB', false, 28, 3, 2, { isFranchiseTagged: true }),
@@ -55,7 +56,7 @@ export const contracts = {
   ] satisfies IdpSalaryRecordJson[],
 }
 
-export const projections = {
+const projections = {
   projections: [2026, 2027, 2028, 2029].map((projectionYear, i) => ({
     projectionYear,
     committedSalary: [171.4, 148.2, 101.7, 46.3][i]!,
@@ -64,7 +65,7 @@ export const projections = {
   })),
 }
 
-export const deadMoney = {
+const deadMoney = {
   deadMoney: [
     { playerName: 'Darius Leonard', position: 'LB', currentYearDead: 6.3, reason: 'Released with 2 years left', season: 2026 },
     { playerName: 'Jamal Adams', position: 'S', currentYearDead: 2.2, reason: 'Released with 1 year left', season: 2026 },
@@ -72,4 +73,14 @@ export const deadMoney = {
 }
 
 /** /api/league/settings — only `hasAfCommissionerSub` is read here; false shows the upgrade note. */
-export const settings = { hasAfCommissionerSub: false }
+const settings = { hasAfCommissionerSub: false }
+
+/** Every /api/ answer the IDP cap screens need, served by scripts/e2e-harness-capture.mjs. */
+export const HARNESS_API: HarnessApiRoute[] = [
+  { path: '/api/redraft/season', body: season },
+  { path: '/api/idp/cap', query: { type: 'summary' }, body: summary },
+  { path: '/api/idp/cap', query: { type: 'contracts' }, body: contracts },
+  { path: '/api/idp/cap', query: { type: 'projections' }, body: projections },
+  { path: '/api/idp/cap', query: { type: 'dead_money' }, body: deadMoney },
+  { path: '/api/league/settings', body: settings },
+]

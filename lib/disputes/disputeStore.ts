@@ -21,12 +21,12 @@
 export const DISPUTE_CATEGORIES = ['stat_correction', 'lineup', 'trade', 'collusion', 'waiver', 'rules', 'leaving', 'other'] as const
 export type DisputeCategory = (typeof DISPUTE_CATEGORIES)[number]
 
-export const RULING_OUTCOMES = ['upheld', 'denied', 'partial'] as const
+const RULING_OUTCOMES = ['upheld', 'denied', 'partial'] as const
 export type RulingOutcome = (typeof RULING_OUTCOMES)[number]
 
-export type DisputeStatus = 'open' | 'ruled' | 'withdrawn'
+type DisputeStatus = 'open' | 'ruled' | 'withdrawn'
 
-export type DisputeRuling = {
+type DisputeRuling = {
   outcome: RulingOutcome
   text: string
   ruledByUserId: string
@@ -140,7 +140,7 @@ export type DisputeError =
   | 'invalid_outcome'
   | 'ruling_required'
 
-export type FileDisputeInput = {
+type FileDisputeInput = {
   category: unknown
   subject: unknown
   details: unknown
@@ -175,7 +175,7 @@ export function fileDispute(
   return { ok: true, dispute, disputes: [dispute, ...disputes] }
 }
 
-export type RuleDisputeInput = {
+type RuleDisputeInput = {
   outcome: unknown
   text: unknown
   postToChat: boolean
@@ -249,11 +249,11 @@ export const DISPUTE_ERROR_STATUS: Record<DisputeError, number> = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** How far back a filed dispute still weighs on League Health. */
-export const HEALTH_DISPUTE_WINDOW_DAYS = 120
+const HEALTH_DISPUTE_WINDOW_DAYS = 120
 /** How long "I might leave" counts after it is filed, unless it is still open. */
-export const HEALTH_LEAVING_WINDOW_DAYS = 60
+const HEALTH_LEAVING_WINDOW_DAYS = 60
 
-export type DisputeHealthSignals = {
+type DisputeHealthSignals = {
   /** Disputes filed in the window, any status — not counting `leaving`, which is not a dispute about play. */
   disputeCount: number
   /** Open disputes, not counting `leaving`. */

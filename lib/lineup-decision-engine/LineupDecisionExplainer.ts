@@ -1,7 +1,7 @@
 import { runCostControlledOpenAIText } from '@/lib/ai-cost-control'
 import type { PremiumLineupDecisionJson } from './build-premium-lineup-decision'
 
-export interface LineupDecisionExplanation {
+interface LineupDecisionExplanation {
   summary: string
   bullets: string[]
   source: 'ai' | 'deterministic'

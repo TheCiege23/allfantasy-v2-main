@@ -78,7 +78,7 @@ export type MatchupSide = {
   starters: MatchupPlayer[]
 }
 
-export type WinProbabilityResult =
+type WinProbabilityResult =
   | {
       available: true
       /** 0–1 for the first side. */

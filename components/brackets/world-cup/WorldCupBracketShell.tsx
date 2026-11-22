@@ -128,7 +128,6 @@ import WorldCupGroupStagePicks from "./WorldCupGroupStagePicks"
 import WorldCupReadinessPanel from "./WorldCupReadinessPanel"
 import WorldCupPoolCountdownBanner from "./WorldCupPoolCountdownBanner"
 import type { WorldCupCountdownFirstMatch } from "./WorldCupPoolCountdownBanner"
-import { ChimmyFreshnessChip } from "./ChimmyFreshnessChip"
 import WorldCupAiInsightsCTA from "./WorldCupAiInsightsCTA"
 import WorldCupDailyEdgeReportCard from "./WorldCupDailyEdgeReportCard"
 import WorldCupMatchImpactCenter from "./WorldCupMatchImpactCenter"
@@ -138,21 +137,7 @@ import {
   WorldCupChatEmptyState,
   WorldCupAiPromptChips,
 } from "./chat"
-import type {
-  WorldCupChatMode as WcChatMode,
-  WorldCupPoolChatMessage as WcPoolChatMsg,
-  WorldCupChatGifAttachment as WcGifAttachment,
-  WorldCupChatImageAttachment as WcImageAttachment,
-  WorldCupChatPollAttachment as WcPollAttachment,
-  WorldCupChatPollOption as WcPollOption,
-  WorldCupDmMember as WcDmMember,
-  WorldCupMentionSuggestion as WcMentionSuggestion,
-  WorldCupDmThread as WcDmThread,
-  WorldCupDmMessage as WcDmMsg,
-  WorldCupAiPromptAction as WcAiPromptAction,
-  WorldCupChatAiGate as WcChatAiGate,
-  WorldCupComposerPanel as WcComposerPanel,
-} from "./chat"
+import type { WorldCupChatMode as WcChatMode, WorldCupPoolChatMessage as WcPoolChatMsg, WorldCupChatGifAttachment as WcGifAttachment, WorldCupChatImageAttachment as WcImageAttachment, WorldCupDmMember as WcDmMember, WorldCupMentionSuggestion as WcMentionSuggestion, WorldCupDmThread as WcDmThread, WorldCupDmMessage as WcDmMsg, WorldCupComposerPanel as WcComposerPanel } from "./chat"
 type Tab = WorldCupBracketTab
 // Chat types are now imported from ./chat — local aliases kept for zero-diff usages below
 type WorldCupPoolChatMessage = WcPoolChatMsg
@@ -162,8 +147,6 @@ type WorldCupDmThread = WcDmThread
 type WorldCupDmMessage = WcDmMsg
 type WorldCupChatGifAttachment = WcGifAttachment
 type WorldCupChatImageAttachment = WcImageAttachment
-type WorldCupChatPollOption = WcPollOption
-type WorldCupChatPollAttachment = WcPollAttachment
 type WorldCupComposerPanel = WcComposerPanel
 type WorldCupChatMode = WcChatMode
 type WorldCupAdminSimulationRound =
@@ -2425,7 +2408,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Ask Chimmy for a Pool Intro</p>
-                <p className="mt-0.5 text-[11px] text-white/50">AI-written intro to share with your players — free to try</p>
+                <p className="mt-0.5 text-[11px] text-white/50">Chimmy-written intro to share with your players — free to try</p>
               </div>
               <Sparkles className="h-4 w-4 shrink-0 text-cyan-300/50" />
             </button>
@@ -2459,7 +2442,7 @@ export default function WorldCupBracketShell({
             <p className="mt-2 text-center text-[11px] text-white/30">
               Use code{" "}
               <span className="font-bold text-amber-300/60">WassupFred</span>
-              {" "}for 20% off your first AI upgrade
+              {" "}for 20% off your first Chimmy upgrade
             </p>
           </div>
         </div>
@@ -2962,7 +2945,7 @@ export default function WorldCupBracketShell({
                       ok: true,
                     },
                     {
-                      label: "AI previews available",
+                      label: "Chimmy previews available",
                       ok: view.matches.some((m) => m.homeTeamId && m.awayTeamId) ? true : null,
                       hint: "Requires team IDs on matches",
                     },
@@ -4242,7 +4225,7 @@ export default function WorldCupBracketShell({
 
                     <section
                       data-testid="world-cup-review-ai-report"
-                      aria-label="Bracket AI report"
+                      aria-label="Bracket Chimmy report"
                       className="space-y-3 rounded-2xl border border-cyan-300/15 bg-gradient-to-b from-cyan-300/[0.04] to-transparent p-3 sm:p-4"
                     >
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -5221,7 +5204,7 @@ function WorldCupDashBracketPreviewToolbar({
             onClick={() => setDashboardPreviewMode("ai")}
             className={`rounded-lg px-3 py-1.5 text-[11px] font-black ${dashboardPreviewMode === "ai" ? "bg-cyan-300 text-black" : "text-white/55 hover:text-white"}`}
           >
-            AI Simulation
+            Chimmy Simulation
           </button>
         </div>
         <button
@@ -5273,7 +5256,7 @@ function PremiumFeatureCard({
 }: {
   title: string
   description: string
-  tier: "AF Commissioner" | "AI/Pro"
+  tier: "AF Commissioner" | "Chimmy/Pro"
   unlocked: boolean
 }) {
   const { language } = useOptionalLanguage()
@@ -5394,25 +5377,25 @@ function WorldCupPremiumAccessPanel({
           <div className="grid gap-2 sm:grid-cols-2">
             <PremiumFeatureCard
               title={t("wc.premium.card.bracketBuilder.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.bracketBuilder.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.matchupPreview.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.matchupPreview.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.whatIf.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.whatIf.desc")}
             />
             <PremiumFeatureCard
               title={t("wc.premium.card.alerts.title")}
-              tier="AI/Pro"
+              tier="Chimmy/Pro"
               unlocked={aiUnlocked}
               description={t("wc.premium.card.alerts.desc")}
             />
@@ -5523,11 +5506,6 @@ function WorldCupCommunityFoundationPanel({
   }, [pendingChimmyPrompt, onPendingChimmyPromptConsumed])
 
   const isChimmyPrompt = chatMode === "ai" || /(^|[\s*_~\]])@chimmy\b/i.test(chatBody)
-  const chatModeOptions: Array<{ mode: WorldCupChatMode; label: string; icon: typeof MessageSquare }> = [
-    { mode: "ai", label: tChat("wc.chat.mode.ai"), icon: Bot },
-    { mode: "pool", label: tChat("wc.chat.mode.pool"), icon: MessageSquare },
-    { mode: "dm", label: tChat("wc.chat.mode.dm"), icon: Users },
-  ]
   const aiPromptActions = useMemo(() => {
     const availability = promptAvailability ?? {
       hasLeaderboard: true,
@@ -6680,7 +6658,7 @@ function WorldCupCommunityFoundationPanel({
               <div className="flex items-start gap-2">
                 <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-black text-white">You reached today&apos;s AI limit.</p>
+                  <p className="text-[11px] font-black text-white">You reached today&apos;s Chimmy limit.</p>
                   <p className="mt-0.5 text-xs leading-5 text-white/60">
                     {chatAiGate.message}
                   </p>
@@ -6696,7 +6674,7 @@ function WorldCupCommunityFoundationPanel({
                 className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/15 px-4 py-1.5 text-[11px] font-black text-amber-300 transition-colors hover:bg-amber-400/25"
               >
                 <Zap className="h-3 w-3" aria-hidden />
-                Upgrade for more AI
+                Upgrade for more Chimmy
               </Link>
             </div>
           ) : chatError ? (
@@ -6837,60 +6815,6 @@ function WorldCupImageUploadPanel({
           {error}
         </p>
       ) : null}
-    </div>
-  )
-}
-
-function WorldCupPollMessage({
-  poll,
-  messageId,
-  isVoting,
-  onVote,
-}: {
-  poll: WorldCupChatPollAttachment
-  messageId: string
-  isVoting: boolean
-  onVote: (optionId: string) => void
-}) {
-  return (
-    <div className="mt-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3">
-      <p className="text-xs font-black text-white">{poll.question}</p>
-      <div className="mt-3 space-y-2">
-        {poll.options.map((option) => {
-          const selected = poll.currentUserVote === option.id
-          return (
-            <button
-              key={`${messageId}-${option.id}`}
-              type="button"
-              onClick={() => onVote(option.id)}
-              disabled={isVoting || poll.closed}
-              className={[
-                "w-full overflow-hidden rounded-lg border bg-black/25 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-65",
-                selected ? "border-cyan-300/70" : "border-white/10 hover:border-cyan-300/35",
-              ].join(" ")}
-            >
-              <span className="relative block">
-                <span
-                  className="absolute inset-y-0 left-0 bg-cyan-300/15"
-                  style={{ width: `${option.percentage}%` }}
-                  aria-hidden
-                />
-                <span className="relative flex items-center justify-between gap-2 px-3 py-2">
-                  <span className="font-bold text-white/75">{option.label}</span>
-                  <span className="text-[11px] font-black text-white/65">
-                    {option.votes} vote{option.votes === 1 ? "" : "s"} · {option.percentage}%
-                  </span>
-                </span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-white/35">
-        {poll.totalVotes} total vote{poll.totalVotes === 1 ? "" : "s"}
-        {poll.currentUserVote ? " · Your vote is counted" : ""}
-        {poll.closed ? " · Closed" : ""}
-      </p>
     </div>
   )
 }

@@ -29,7 +29,7 @@
 import { fetchIpApi } from "./geoIpFetch"
 import { parseIpApiPayload } from "./geoIpParse"
 
-export interface CachedGeo {
+interface CachedGeo {
   country: string | null
   regionCode: string | null
 }

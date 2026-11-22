@@ -160,6 +160,8 @@ describe('drama engine — no profile label reaches a drama summary', () => {
     const unlabelled = await detectDramaEvents({ leagueId: 'league-1', sport: 'NFL', season: 2026 })
     expect(labelled.length).toBeGreaterThan(0)
     expect(labelled).toEqual(unlabelled)
+    // Since 2026-11-19 (re-score build item 10) the detector does not read a profile at all.
+    expect(mocks.listProfilesByLeague).not.toHaveBeenCalled()
   })
 
   it('a stored legacy summary is projected label-free on every read path', async () => {
@@ -189,10 +191,11 @@ describe('relationship insights — coverage and facts only', () => {
     ])
     const { getUnifiedRelationshipInsights } = await import('@/lib/relationship-insights/RelationshipQueryService')
     const insights = await getUnifiedRelationshipInsights({ leagueId: 'league-1', season: 2026 })
-    // Positive control: a profiled manager with linked drama, and a storyline whose
-    // score behaviour heat still feeds, are in the payload.
+    // Positive control: a manager with linked drama, and a storyline ranked on rivalry and drama facts, are in
+    // the payload. Since 2026-11-19 (re-score build item 10) no profile is read and none is returned.
     expect(insights.storylines.length).toBeGreaterThan(0)
-    expect(insights.profiles).toEqual([{ id: 'profile-mgr-1', managerId: 'mgr-1' }])
+    expect(insights).not.toHaveProperty('profiles')
+    expect(mocks.listProfilesByLeague).not.toHaveBeenCalled()
     expect(insights.behaviorDramaContext[0]?.managerId).toBe('mgr-1')
     expect(insights.behaviorDramaContext[0]?.dramaEvents.length).toBeGreaterThan(0)
     const json = JSON.stringify(insights)

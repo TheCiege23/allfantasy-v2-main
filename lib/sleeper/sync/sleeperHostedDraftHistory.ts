@@ -5,7 +5,7 @@
 
 const SLEEPER_V1 = 'https://api.sleeper.app/v1'
 
-export type SleeperSeasonDraftRowJson = {
+type SleeperSeasonDraftRowJson = {
   season: string
   leagueId: string
   draftId: string | null

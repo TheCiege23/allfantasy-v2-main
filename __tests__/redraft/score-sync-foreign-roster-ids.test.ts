@@ -48,7 +48,8 @@ const prismaMock = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/redraft/scoringEngine', () => ({ calculateScoreFromSportConfig: vi.fn(async () => 12) }))
+// leagueIsBestBall: the sync asks it whether to add the best ball week-as-held roster (none of these leagues is).
+vi.mock('@/lib/redraft/scoringEngine', () => ({ calculateScoreFromSportConfig: vi.fn(async () => 12), leagueIsBestBall: vi.fn(() => false) }))
 
 const rosterPlayer = (playerId: string, position: string, team = 'BUF') => ({ playerId, position, sport: 'NFL', team })
 const strangerWeek = (playerId: string, pass_yds: number) => ({ playerId, payload: { weeks: [{ week: 2, stats: { pass_yds } }] } })

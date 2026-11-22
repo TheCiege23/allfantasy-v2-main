@@ -31,7 +31,7 @@
 // ─── Decision types ───────────────────────────────────────────────────────────
 
 /** What kind of AI answer is required for this question. */
-export type AiRouteMode =
+type AiRouteMode =
   /** Answer from deterministic data — never calls the LLM. */
   | "deterministic"
   /** LLM call, but check cache first (most strategy questions). */
@@ -49,7 +49,7 @@ export type AiRouteMode =
  * Intent category — used for analytics and prompt tuning.
  * Maps loosely to what the user is actually asking.
  */
-export type AiQuestionIntent =
+type AiQuestionIntent =
   | "score_query"         // "what's the score"
   | "standings_query"     // "who's in first / who's leading"
   | "scoring_rules_query" // "how does scoring work"
@@ -237,7 +237,7 @@ export function routeAiIntent(input: AiIntentRouterInput): AiRouteDecision {
     return {
       mode: "upgrade",
       intent: "general",
-      reason: "User does not have AI entitlement — route to upgrade prompt",
+      reason: "User does not have Chimmy entitlement — route to upgrade prompt",
       modelHint: null,
     }
   }

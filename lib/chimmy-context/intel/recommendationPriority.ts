@@ -15,21 +15,21 @@
 import type { OpponentStrengthOutput } from "./opponentStrength"
 import type { UrgencyOutput } from "./urgency"
 
-export type RecommendationPriority =
+type RecommendationPriority =
   | "critical"
   | "important"
   | "optional"
   | "watchlist"
   | "unknown"
 
-export type RecommendationCategory =
+type RecommendationCategory =
   | "lineup"
   | "waiver"
   | "trade"
   | "drop"
   | "general"
 
-export type PrioritizeInput = {
+type PrioritizeInput = {
   category: RecommendationCategory
   urgency: UrgencyOutput | null
   opponentStrength: OpponentStrengthOutput | null
@@ -37,7 +37,7 @@ export type PrioritizeInput = {
   projectionMargin: number | null
 }
 
-export type PrioritizeOutput = {
+type PrioritizeOutput = {
   category: RecommendationCategory
   priority: RecommendationPriority
   /** 0-100 priority score; `null` until formula lands. */

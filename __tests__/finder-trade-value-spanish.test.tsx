@@ -449,7 +449,10 @@ describe('your shares, in Spanish', () => {
     const { container } = render(<PlayerSharesBoard state={{ available: true, data: SHARES }} />)
     const out = expectSpanish(container, 'shares all')
     expect(out).toContain('Tus acciones')
-    expect(out).toContain('31 jugadores en 4 plantillas · 1 en una plataforma que aún no podemos leer')
+    // 2026-11-14: the count on the sub-line; the caveat said once, at the foot.
+    expect(out).toContain('31 jugadores en 4 plantillas')
+    expect(out).toContain('Sin contar: 1 liga en una plataforma que aún no podemos leer.')
+    expect(out).not.toContain('plantillas · 1 en una plataforma')
     expect(out).toContain('3 de 4')
     expect(out).toContain('2 titulares · 1 IR')
     expect(out).toContain('De dónde vienen tus titulares')
@@ -587,7 +590,8 @@ describe('English mode is unchanged', () => {
     r.unmount()
 
     r = render(<PlayerSharesBoard state={{ available: true, data: SHARES }} league={LEAGUE_SHARES} />)
-    expect(r.container.textContent).toContain('31 players across 4 rosters · 1 on a platform we can\'t read yet')
+    expect(r.container.textContent).toContain('31 players across 4 rosters')
+    expect(r.container.textContent).toContain("Not counted: 1 league on a platform we can't read yet.")
     expect(r.container.textContent).toContain('You · starting')
     r.unmount()
     r = render(<PlayerSharesBoard state={{ available: true, data: SHARES }} />)

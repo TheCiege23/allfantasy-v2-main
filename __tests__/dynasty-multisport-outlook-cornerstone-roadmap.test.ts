@@ -30,7 +30,6 @@ vi.mock('@/lib/prisma', () => ({
 import { AGING_FROM, agingThreshold, loadDynastyOutlook, summariseAges } from '@/lib/core-app/dynastyOutlook'
 import { getPeakAgeRange } from '@/lib/dynasty-engine/SportDynastyResolver'
 import { classifyCornerstone } from '@/lib/trade-engine/league-intelligence'
-import { classifyCornerstone as classifyCornerstoneTiers, defaultThresholds } from '@/lib/trade-engine/dynasty-tiers'
 import { DEFAULT_THRESHOLDS, type Asset, type LeagueSettings } from '@/lib/trade-engine/types'
 import { buildDynastyRoadmapPrompt } from '@/lib/rankings-engine/dynastyRoadmapPrompt'
 
@@ -119,8 +118,6 @@ describe('cornerstones exist in every sport', () => {
     expect(out.isCornerstone).toBe(true)
     expect(out.cornerstoneReason).toBe(`Elite ${sport.toUpperCase()} cornerstone.`)
     expect(classifyCornerstone(asset(pos, DEFAULT_THRESHOLDS.SKILL_CORNERSTONE - 1), s).isCornerstone).toBe(false)
-    const tiers = classifyCornerstoneTiers(asset(pos, 9500), { ...s, sport }, defaultThresholds())
-    expect(tiers.isCornerstone).toBe(true)
   })
 
   it('NFL rules are unchanged', () => {
@@ -129,8 +126,6 @@ describe('cornerstones exist in every sport', () => {
     expect(classifyCornerstone(asset('WR', 9000), settings({ sport: 'nfl' })).cornerstoneReason).toBe('Elite skill cornerstone.')
     expect(classifyCornerstone(asset('C', 9999), settings({ sport: 'nfl' })).isCornerstone).toBe(false)
     expect(classifyCornerstone(asset('LB', 4200), settings({ idpEnabled: true })).isCornerstone).toBe(true)
-    expect(classifyCornerstoneTiers(asset('TE', 8000), settings(), defaultThresholds()).cornerstoneReason).toBe('Elite TE cornerstone.')
-    expect(classifyCornerstoneTiers(asset('PG', 9999), settings(), defaultThresholds()).isCornerstone).toBe(false)
   })
 })
 

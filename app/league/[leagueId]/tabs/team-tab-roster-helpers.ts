@@ -12,7 +12,7 @@ import type { DisplayPlayerMap } from '@/lib/player-data/adapters/redraftDisplay
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 
-export function rosterSectionBadge(lists: RosterLineupLists, playerId: string): string {
+function rosterSectionBadge(lists: RosterLineupLists, playerId: string): string {
   if (!playerId?.trim()) return '—'
   const loc = findPlayerLocation(lists, playerId)
   if (!loc) return '—'

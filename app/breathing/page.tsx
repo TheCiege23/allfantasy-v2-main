@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 import Link from "next/link"
 
 export const metadata: Metadata = {
@@ -6,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Use Zen Lab by AllFantasy for guided breathing exercises, structured breathwork patterns, and quick calm sessions that help with stress and anxiety.",
   alternates: {
-    canonical: "https://allfantasy.ai/breathing",
+    canonical: `${getPublicSiteOrigin()}/breathing`,
   },
   openGraph: {
     title: "Guided Breathing Exercises for Calm \u2014 Zen Lab",
     description:
       "Follow simple 4\u20114\u20116, box breathing, and 4\u20117\u20118 patterns with Zen Lab\u2019s breathing circle for calmer days and easier wind-downs.",
-    url: "https://allfantasy.ai/breathing",
+    url: `${getPublicSiteOrigin()}/breathing`,
     type: "website",
   },
 }
@@ -27,14 +28,14 @@ export default function BreathingPage() {
             "@context": "https://schema.org",
             "@type": "WebPage",
             name: "Guided Breathing Exercises for Calm & Anxiety — Zen Lab",
-            url: "https://allfantasy.ai/breathing",
+            url: `${getPublicSiteOrigin()}/breathing`,
             inLanguage: ["en", "es"],
             description:
               "Guided breathing exercises and calming breathwork patterns in Zen Lab, including 4-4-6, box breathing, and 4-7-8 sequences for stress and anxiety.",
             isPartOf: {
               "@type": "WebSite",
               name: "AllFantasy",
-              url: "https://allfantasy.ai/",
+              url: `${getPublicSiteOrigin()}/`,
             },
           }),
         }}

@@ -14,7 +14,7 @@
  */
 export const LEAGUE_SCREEN_KEYS: ReadonlySet<string> = new Set([
   'home',
-  'moves',
+  /* No Moves (2026-11-14): it folded into Trades, and /core/moves redirects there. */
   'schedule',
   'my-team',
   'matchup',

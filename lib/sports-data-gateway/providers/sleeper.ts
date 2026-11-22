@@ -7,10 +7,6 @@
  * resolution step assigns the real canonical id (canonical ids are never provider ids).
  */
 import type { CanonicalPlayer } from '../contracts'
-import type { ProviderCapabilityDeclaration } from '../capabilities'
-import type { ProviderResult } from '../errors'
-import { classifyError } from '../errors'
-import { BaseProviderAdapter, type FetchPlayersInput, type ProviderHealth } from '../adapter'
 
 const BASE = 'https://api.sleeper.app/v1' // db-first-exception: gateway provider adapter (server-side sports data)
 
@@ -110,64 +106,6 @@ export function fetchSleeperLeagueDrafts(leagueId: string): Promise<SleeperRawDr
 /** Draft picks (Sleeper `/draft/:id/picks`). */
 export function fetchSleeperDraftPicks(draftId: string): Promise<SleeperRawPick[] | null> {
   return fetchOrNull<SleeperRawPick[]>(`${BASE}/draft/${draftId}/picks`)
-}
-
-export class SleeperAdapter extends BaseProviderAdapter {
-  provider = 'sleeper'
-
-  getCapabilities(): ProviderCapabilityDeclaration {
-    return {
-      provider: 'sleeper',
-      sports: ['NFL'],
-      capabilities: ['players', 'rosters', 'transactions', 'draft_data'],
-      refreshSupport: { players: 'scheduled', rosters: 'scheduled', transactions: 'scheduled', draft_data: 'scheduled' },
-      limitations: [
-        'No projections, live scores, play-by-play, or weather.',
-        'Injury data limited to a coarse player.injury_status field (not a full availability feed).',
-        'The full player map is large — cache aggressively; do not refetch every run.',
-      ],
-    }
-  }
-
-  async healthCheck(): Promise<ProviderHealth> {
-    const started = Date.now()
-    const r = await getJson<{ season?: string }>(`${BASE}/state/nfl`, 6000)
-    const latencyMs = Date.now() - started
-    if (r.ok && r.data && typeof r.data === 'object') return { provider: this.provider, state: 'healthy', checkedAt: new Date().toISOString(), latencyMs }
-    return { provider: this.provider, state: 'unavailable', checkedAt: new Date().toISOString(), latencyMs, detail: 'state endpoint unreachable' }
-  }
-
-  async fetchPlayers(input: FetchPlayersInput): Promise<ProviderResult<CanonicalPlayer[]>> {
-    const sport = input.sport.toLowerCase()
-    if (sport !== 'nfl') return { ok: false, provider: this.provider, error: classifyError(this.provider, new Error(`unsupported sport ${input.sport}`)) }
-    const fetchedAt = new Date().toISOString()
-    const snapshotVersion = `sleeper-players-nfl:${fetchedAt.slice(0, 10)}`
-
-    const r = await getJson<Record<string, RawSleeperPlayer>>(`${BASE}/players/nfl`, 20000)
-    if (!r.ok) return { ok: false, provider: this.provider, error: classifyError(this.provider, r.err, r.status) }
-
-    // Schema-drift protection: the payload MUST be a non-empty object map of player records.
-    const map = r.data
-    if (!map || typeof map !== 'object' || Array.isArray(map)) {
-      return { ok: false, provider: this.provider, error: { code: 'schema_mismatch', provider: this.provider, message: 'players payload was not an object map', retriable: false } }
-    }
-    const entries = Object.entries(map)
-    if (entries.length === 0) {
-      return { ok: false, provider: this.provider, error: { code: 'schema_mismatch', provider: this.provider, message: 'players payload was empty', retriable: false } }
-    }
-
-    const limit = input.limit ?? entries.length
-    const players: CanonicalPlayer[] = []
-    let rejected = 0
-    for (const [id, raw] of entries) {
-      if (players.length >= limit) break
-      const canonical = mapPlayer(id, raw, fetchedAt, snapshotVersion)
-      if (canonical) players.push(canonical)
-      else rejected++
-    }
-
-    return { ok: true, provider: this.provider, data: players, partial: rejected > 0, fetchedAt, snapshotVersion }
-  }
 }
 
 /** Pure Sleeper→CanonicalPlayer mapping (the seam). Rejects records missing the minimal required shape. */

@@ -7,7 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { StackedBarChart, InfoCard } from '@/components/commissioner-os/cards'
-import { reportOutcomesByTemplate, REPORT_OUTCOME_SERIES } from '@/lib/commissioner-ui/charts/deriveChartSeries'
+import { reportOutcomesByTemplate } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ReportTemplateCard } from './ReportTemplateCard'
 import { ReportDetailDialog } from './ReportDetailDialog'
@@ -18,7 +18,7 @@ import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosErrorText, reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface ReportsViewProps {
+interface ReportsViewProps {
   templates: ReportTemplate[]
   history: GeneratedReport[]
   dataMode: CommissionerDataMode

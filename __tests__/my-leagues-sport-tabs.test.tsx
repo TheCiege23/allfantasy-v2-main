@@ -79,7 +79,8 @@ describe('My Leagues sport tabs', () => {
   it('shows one tab per sport the account plays, with counts', () => {
     renderList(mixed)
     const tabs = within(screen.getByRole('group', { name: 'Filter by sport' })).getAllByRole('button')
-    expect(tabs.map((t) => t.textContent)).toEqual(['All sports 5', 'NFL 2', 'NBA 1', 'NHL 1', 'Other 1'])
+    // 'All sports' carries no count since the guide (2026-11-14): the eyebrow already says the total once.
+    expect(tabs.map((t) => t.textContent)).toEqual(['All sports', 'NFL 2', 'NBA 1', 'NHL 1', 'Other 1'])
   })
 
   it('filters the list to one sport, and a second tap returns to all', () => {

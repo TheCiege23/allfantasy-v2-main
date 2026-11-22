@@ -18,8 +18,44 @@
  * more of than their habit says is passed over. Not enough history means no style: the caller falls
  * back to its ordinary autopick rather than guessing.
  *
+ * ROSTER NEED (2026-11-22). The style tilts a pick; the roster decides what is still worth tilting
+ * toward. Given the team's open starting slots (the league template's starters, minus what this team
+ * has drafted — the same `openStarterSlots` the autopick starter guard uses), a player who would fill
+ * a slot only his position can fill gets a bonus, one who would fill only a flex slot half of it, and
+ * one with no open starting slot left while other positions still have one gets a penalty. It weighs
+ * about what a position habit does, so habit still leans the pick and need breaks the RB-or-WR call
+ * a habit alone used to make the same way twice. No open slots passed (no template) means no need
+ * term at all, exactly as before.
+ *
  * Pure. No Prisma, no fetch.
  */
+
+/** A starting slot still open: its name, the positions it takes, and how many are left. */
+export type OpenStarterSlot = { slotName: string; allowedPositions: readonly string[]; count: number }
+
+/** Bonus for a player who fills an open slot only his position can fill. */
+const NEED_DEDICATED = 0.6
+/** Bonus for a player who fills only an open flex slot. */
+const NEED_FLEX = 0.3
+/** Penalty when no open starting slot takes his position but another position still has one. */
+const NEED_FILLED = -0.5
+
+/** Pure: how much this team still needs a position, on the scale the pick's other terms use. */
+export function rosterNeedScore(position: string, open: readonly OpenStarterSlot[] | null | undefined): number {
+  if (!open || open.length === 0) return 0
+  const p = String(position ?? '').trim().toUpperCase()
+  const fitting = open.filter((s) => s.count > 0 && s.allowedPositions.map((a) => a.toUpperCase()).includes(p))
+  if (fitting.some((s) => s.allowedPositions.length === 1)) return NEED_DEDICATED
+  if (fitting.length > 0) return NEED_FLEX
+  return open.some((s) => s.count > 0) ? NEED_FILLED : 0
+}
+
+/** Pure: "a WR" when the pick fills a starting slot only that position can fill; null otherwise. */
+export function filledNeedLabel(position: string, open: readonly OpenStarterSlot[] | null | undefined): string | null {
+  if (rosterNeedScore(position, open) !== NEED_DEDICATED) return null
+  const p = String(position ?? '').trim().toUpperCase()
+  return `${/^[AEFHILMNORSX]/.test(p) ? 'an' : 'a'} ${p}`
+}
 
 export type StylePick = {
   overall: number
@@ -42,7 +78,7 @@ export type DraftStyle = {
   youthLean: number | null
 }
 
-export type BoardPlayer = {
+type BoardPlayer = {
   playerName: string
   position: string
   adp: number | null
@@ -52,20 +88,20 @@ export type BoardPlayer = {
 /** Past picks needed before a style is trusted. */
 export const MIN_STYLE_SAMPLE = 10
 /** Picks deep in a draft drift from ADP for reasons that are not style (the board runs thin). */
-export const STYLE_ADP_HORIZON = 150
+const STYLE_ADP_HORIZON = 150
 /** Only the top of the board is considered. */
-export const WINDOW = 15
+const WINDOW = 15
 /** A reach is capped at this many picks, so one wild past draft cannot send a pick off the board. */
-export const MAX_REACH = 18
+const MAX_REACH = 18
 /** A youth lean is capped at this many years, for the same reason. */
-export const MAX_YOUTH_LEAN = 3
+const MAX_YOUTH_LEAN = 3
 /** A lean smaller than this is noise, not a habit, and tilts nothing. */
-export const MIN_YOUTH_LEAN = 0.5
+const MIN_YOUTH_LEAN = 0.5
 /** Score per (year of lean × year younger than the window's average). A 2-year lean and a player 3 years
  *  younger than the window add 0.3 — about a position habit's weight, never more than ADP closeness. */
-export const YOUTH_WEIGHT = 0.05
+const YOUTH_WEIGHT = 0.05
 /** A player's age gap from the window counts up to this many years, so youth alone can never outweigh a long reach. */
-export const MAX_AGE_GAP = 3
+const MAX_AGE_GAP = 3
 
 const pos = (p: string) => String(p ?? '').trim().toUpperCase()
 
@@ -113,6 +149,8 @@ export function pickLikeManager<T extends BoardPlayer>(args: {
   board: readonly T[]
   ownPositions: readonly string[]
   eligible?: ReadonlySet<string> | null
+  /** Starting slots this team still has open; none (or absent) leaves the pick to style alone. */
+  openStarters?: readonly OpenStarterSlot[] | null
 }): { player: T; targetAdp: number } | null {
   const { style, overall } = args
   const window = args.board
@@ -145,7 +183,8 @@ export function pickLikeManager<T extends BoardPlayer>(args: {
     const closeness = -Math.abs((p.adp as number) - targetAdp) / spread
     const habit = (share - 1 / positions) * 1.5
     const youth = lean !== 0 && windowAge != null && p.age != null && Number.isFinite(p.age) ? lean * Math.max(-MAX_AGE_GAP, Math.min(MAX_AGE_GAP, windowAge - p.age)) * YOUTH_WEIGHT : 0
-    const score = closeness + habit + youth
+    const need = rosterNeedScore(position, args.openStarters)
+    const score = closeness + habit + youth + need
     if (!best || score > best.score) best = { player: p, score }
   }
   return best ? { player: best.player, targetAdp } : null

@@ -3,14 +3,6 @@
  * Filenames match current assets; rename files anytime and update paths here.
  */
 
-export const ZOMBIE_VIDEO_DIRS = {
-  humanToZombie: '/zombie/videos/human-to-zombie',
-  zombieToHuman: '/zombie/videos/zombie-to-human',
-  bashing: '/zombie/videos/bashing',
-  ambush: '/zombie/videos/ambush',
-  whisperer: '/zombie/videos/whisperer',
-} as const
-
 /**
  * Canonical URLs for animation overlays (see `animationEngine` metadata enrichment).
  *
@@ -35,7 +27,7 @@ export const ZOMBIE_VIDEO_ASSETS = {
   whispererChosen: '/zombie/videos/whisperer/Whisperer.mp4',
 } as const
 
-export type ZombieClip = { url: string; type: 'video' | 'image' }
+type ZombieClip = { url: string; type: 'video' | 'image' }
 
 /**
  * Default clip for an animation row. Callers may override via metadata; `animationEngine` merges this in.

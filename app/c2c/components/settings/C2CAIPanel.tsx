@@ -100,7 +100,7 @@ export function C2CAIPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>
-            C2C AI runs with AF Commissioner. Until then, these toggles are saved as preferences only.
+            C2C Chimmy runs with AF Commissioner. Until then, these toggles are saved as preferences only.
           </span>
           <SubscriptionGateBadge
             featureId="commissioner_c2c_scouting"
@@ -109,7 +109,7 @@ export function C2CAIPanel({
         </div>
       ) : null}
 
-      <SettingsSection id="c2c-ai" title="C2C AI preferences">
+      <SettingsSection id="c2c-ai" title="C2C Chimmy preferences">
         <SettingsRow
           label="Campus scouting"
           control={
@@ -147,7 +147,7 @@ export function C2CAIPanel({
           }
         />
         <SettingsRow
-          label="Draft AI"
+          label="Draft Chimmy"
           control={
             <input
               type="checkbox"
@@ -185,7 +185,7 @@ export function C2CAIPanel({
       </SettingsSection>
 
       {locked ? (
-        <p className="text-[12px] text-amber-200/90">Upgrade to run C2C AI endpoints from this panel.</p>
+        <p className="text-[12px] text-amber-200/90">Upgrade to run C2C Chimmy endpoints from this panel.</p>
       ) : null}
 
       <div className="space-y-3 rounded-xl border border-white/[0.08] bg-[#0a1228] p-4">

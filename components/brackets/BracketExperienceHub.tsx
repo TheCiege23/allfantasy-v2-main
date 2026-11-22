@@ -19,7 +19,7 @@ type Tab = "bracket" | "standings" | "rules"
 const CREATE_SPORT: Record<Sport, string> = { ncaaf: "NCAAF", nba_cup: "NBA_CUP", nfl: "NFL" }
 const createHref = (sport: Sport) => `/brackets/leagues/new?sport=${CREATE_SPORT[sport]}&challengeType=playoff_challenge`
 
-export type HubTournamentProp = { tournament: Sport; live: boolean; season: number; opensAt: string }
+type HubTournamentProp = { tournament: Sport; live: boolean; season: number; opensAt: string }
 
 /** Public SSR preview first; authenticated API reads progressively load the visitor's own league.
  * No useSession or browser-only state participates in the first render.

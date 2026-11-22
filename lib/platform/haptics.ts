@@ -17,7 +17,7 @@
 
 import { isInIosAppClient } from './iosApp'
 
-export type HapticKind = 'success' | 'light'
+type HapticKind = 'success' | 'light'
 
 const HAPTICS_PLUGIN = 'Haptics'
 

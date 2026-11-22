@@ -13,6 +13,12 @@ import { defineMessages } from '@/lib/i18n/messages'
  * playerCardCopy.ts: they are keyed on English or built from parts, not en/es pairs.
  */
 
+type Sample = { kind: 'games' | 'at_bats' | 'innings'; count: number }
+const sampleCount = (s: Sample) => (s.kind === 'innings' ? String(s.count) : String(Math.round(s.count)))
+/** "26 games", "412 at-bats", "41.2 innings". */
+const sampleEn = (s: Sample) => `${sampleCount(s)} ${s.kind === 'games' ? 'games' : s.kind === 'at_bats' ? 'at-bats' : 'innings'}`
+const sampleEs = (s: Sample) => `${sampleCount(s)} ${s.kind === 'games' ? 'partidos' : s.kind === 'at_bats' ? 'turnos al bate' : 'entradas'}`
+
 /** A market mode or format ("dynasty", "DYNASTY", "redraft") as Player Finder's value basis says it. */
 export const modeEs = (mode: string) => (mode.toLowerCase() === 'dynasty' ? 'dinastía' : mode.toLowerCase())
 
@@ -24,6 +30,9 @@ const UNREADABLE_ES = (() => {
 
 export const playerCardMessages = defineMessages<PlayerCardCopy>({
   en: {
+    afRank: 'AF league rank', afTrade: 'AF league trade value', afWeek: week => `AF week ${week}`,
+    afFullSeason: 'AF full season', afRemaining: 'AF rest of season', afPerGame: 'per game',
+    afStandardSeason: 'standard season length', afPoints: 'fantasy points', afCategory: 'category score',
     back: '‹ Back',
     dialogLabel: (name) => `${name} player card`,
     follow: (name) => `Follow ${name}`,
@@ -60,6 +69,14 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     basedOn: (basis) => `Based on ${basis}.`,
     leaguePrice: 'LEAGUE PRICE',
     leaguePriceSub: (mode, numQbs, teams) => `${mode} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams}-team`,
+    leagueValue: 'LEAGUE VALUE',
+    leagueValueSub: (perGame, unit, gamesLeft, scheduleKnown) =>
+      `${perGame} ${unit === 'category score' ? 'cat' : 'pts'}/g · ${scheduleKnown ? `${gamesLeft} games left` : `${gamesLeft}-game season`}`,
+    dynastyValue: 'DYNASTY',
+    dynastyValueSub: (age) => (age != null ? `age ${age} · model estimate` : 'no age on file · model estimate'),
+    boardBasis: (b) =>
+      `${b.sport} value on this league's own board, the one its trade grades use: ${b.perGame} ${b.unit} per game against ${b.replacement} for the best free agent at his position (${b.replacementName}), ${b.scheduleKnown ? `over ${b.gamesLeft} games left` : `over a full ${b.gamesLeft}-game season (the schedule is not posted yet)`}.` +
+      (b.sample ? ` Rests on ${sampleEn(b.sample)}${b.baseline ? `, leaning on the ${b.baseline} season` : ''}.` : ''),
     notPriced: 'not priced',
     slot: 'SLOT',
     tradePrice: 'TRADE PRICE',
@@ -101,6 +118,9 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     notGraded: (reason) => `Not graded: ${reason}`,
   },
   es: {
+    afRank: 'Ranking AF en la liga', afTrade: 'Valor de intercambio AF', afWeek: week => `AF semana ${week}`,
+    afFullSeason: 'Temporada completa AF', afRemaining: 'Resto de temporada AF', afPerGame: 'por partido',
+    afStandardSeason: 'duración estándar', afPoints: 'puntos de fantasía', afCategory: 'puntos de categoría',
     back: '‹ Volver',
     dialogLabel: (name) => `Ficha de ${name}`,
     follow: (name) => `Seguir a ${name}`,
@@ -137,6 +157,14 @@ export const playerCardMessages = defineMessages<PlayerCardCopy>({
     basedOn: (basis) => `Basado en ${basis}.`,
     leaguePrice: 'PRECIO EN LA LIGA',
     leaguePriceSub: (mode, numQbs, teams) => `${modeEs(mode)} · ${numQbs === 2 ? 'SF' : '1QB'} · ${teams} equipos`,
+    leagueValue: 'VALOR EN LA LIGA',
+    leagueValueSub: (perGame, unit, gamesLeft, scheduleKnown) =>
+      `${perGame} ${unit === 'category score' ? 'cat' : 'pts'}/p · ${scheduleKnown ? `quedan ${gamesLeft} partidos` : `temporada de ${gamesLeft} partidos`}`,
+    dynastyValue: 'DINASTÍA',
+    dynastyValueSub: (age) => (age != null ? `${age} años · estimación del modelo` : 'sin edad registrada · estimación del modelo'),
+    boardBasis: (b) =>
+      `Valor de ${b.sport} en la tabla propia de esta liga, la misma que usan sus notas de intercambios: ${b.perGame} ${b.unit === 'category score' ? 'de puntaje de categorías' : 'puntos de fantasy'} por partido frente a ${b.replacement} del mejor agente libre en su posición (${b.replacementName}), ${b.scheduleKnown ? `en los ${b.gamesLeft} partidos que quedan` : `en una temporada completa de ${b.gamesLeft} partidos (el calendario todavía no se publicó)`}.` +
+      (b.sample ? ` Se apoya en ${sampleEs(b.sample)}${b.baseline ? `, todavía con peso de la temporada ${b.baseline}` : ''}.` : ''),
     notPriced: 'sin precio',
     slot: 'PUESTO',
     tradePrice: 'PRECIO DE INTERCAMBIO',

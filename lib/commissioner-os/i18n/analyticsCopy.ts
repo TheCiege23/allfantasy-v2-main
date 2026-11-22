@@ -81,6 +81,7 @@ const ERROR_ES: Record<string, string> = {
   'The live Decision OS backend is not yet integrated in this environment.':
     'El backend en vivo de Decision OS aún no está integrado en este entorno.',
   'No active league could be resolved for this session.': 'No se pudo determinar una liga activa para esta sesión.',
+  'Manager records could not be read right now.': 'No se pudieron leer los historiales de los mánagers ahora.',
   'Decision OS response failed contract validation.': 'La respuesta de Decision OS no pasó la validación del contrato.',
   'This league has not been scanned yet. The workspace task scan runs daily; an empty list here would claim a clean bill of health nothing has checked.':
     'Esta liga todavía no se ha analizado. El análisis de tareas del espacio de trabajo se ejecuta a diario; una lista vacía aquí afirmaría que todo está en orden sin que nada lo haya comprobado.',
@@ -427,7 +428,7 @@ export function analyticsCopy(language: string | null | undefined): AnalyticsCop
 
 /* ── Reports ──────────────────────────────────────────────────────────────── */
 
-export interface ReportsCopy {
+interface ReportsCopy {
   status: Record<'queued' | 'generating' | 'ready' | 'failed', string>
   category: Record<'season_recap' | 'engagement' | 'transactions' | 'commissioner_digest', string>
   frequency: Record<'weekly' | 'monthly' | 'manual', string>
@@ -649,7 +650,7 @@ export function reportText(text: string | null | undefined, language: string | n
 
 type TaskStatus = 'open' | 'in_progress' | 'waiting_on_manager' | 'waiting_on_league_vote' | 'completed' | 'archived'
 
-export interface WorkspaceCopy {
+interface WorkspaceCopy {
   status: Record<TaskStatus, string>
   nextAction: Record<TaskStatus, string>
   // A task's priority badge is `taskPriorityLabelText` in cardsCopy, beside the masculine severity
@@ -793,7 +794,7 @@ const TASK_EXACT_ES: Record<string, string> = {
   'League dues are unpaid': 'Hay cuotas de la liga sin pagar',
   'Payout request awaits approval': 'Una solicitud de pago espera aprobación',
   'A league payout request is waiting for commissioner approval.': 'Una solicitud de pago de la liga espera la aprobación del comisionado.',
-  'An AI commissioner alert is open for this league.': 'Hay una alerta del comisionado IA abierta en esta liga.',
+  'a Chimmy commissioner alert is open for this league.': 'Hay una alerta del comisionado Chimmy abierta en esta liga.',
   'A dispute needs your ruling': 'Una disputa espera tu decisión',
   'Managers say they paid dues': 'Hay mánagers que dicen haber pagado las cuotas',
   'A rule change is waiting for you': 'Un cambio de reglas te está esperando',

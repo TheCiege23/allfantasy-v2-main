@@ -20,6 +20,8 @@ import {
   YahooImportLeagueNotFoundError,
 } from './yahoo/YahooLeagueFetchService'
 import { describeYahooRejection } from './yahoo/yahooRejection'
+import { isYahooSnapshotSourceId, parseYahooSnapshotSourceId } from './yahoo/snapshot/yahooSnapshotModel'
+import { loadYahooSnapshot } from './yahoo/snapshot/yahooSnapshotStore'
 import { fetchMflUserLeagues, parseMflSourceInput, MflImportLeagueNotFoundError } from './mfl/MflLeagueFetchService'
 import { MEMBERSHIP_VERIFIED_UNDETERMINED_COMMISSIONER } from './attestationProviders'
 
@@ -102,12 +104,12 @@ export interface CommissionerGateResult {
  * source for the whole import screen); the one override kept is MFL's short form, which reads
  * better mid-sentence than "MyFantasyLeague (MFL)".
  */
-export function gateProviderLabel(provider: ImportProvider): string {
+function gateProviderLabel(provider: ImportProvider): string {
   if (provider === 'mfl') return 'MFL'
   return getImportProviderLabel(provider)
 }
 
-export interface AttestationInput {
+interface AttestationInput {
   /** User explicitly confirmed they are the commissioner/co-commissioner. */
   accepted: boolean
   /** Their free-text statement, stored in the audit trail. */
@@ -216,7 +218,25 @@ async function checkSleeper(appUserId: string, sourceLeagueId: string): Promise<
   }
 }
 
+/**
+ * A league the user PASTED (`yahoo-snapshot:<id>`). There is no Yahoo account to ask, so nothing
+ * about membership or commissioner status is provable — exactly the open-read situation. It resolves
+ * the way OPEN_READ_PROVIDERS do: `ok` with `verification: 'api'` and commissioner unknown, which
+ * sends a full-league commit through the recorded commissioner ATTESTATION below and never past it.
+ * The snapshot itself is per-user (its cache key carries the user id), so this also proves the
+ * caller is the one who pasted it; anyone else's `yahoo-snapshot:<id>` resolves to not-found.
+ */
+async function checkYahooSnapshot(appUserId: string, sourceLeagueId: string): Promise<CommissionerGateResult> {
+  const leagueId = parseYahooSnapshotSourceId(sourceLeagueId)
+  const snapshot = leagueId ? await loadYahooSnapshot(appUserId, leagueId).catch(() => null) : null
+  if (!snapshot) {
+    return { ok: false, notFound: true, reason: 'That pasted Yahoo league was not found — paste your league pages again.' }
+  }
+  return { ok: true, verification: 'api' }
+}
+
 async function checkYahoo(appUserId: string, sourceLeagueId: string): Promise<CommissionerGateResult> {
+  if (isYahooSnapshotSourceId(sourceLeagueId)) return checkYahooSnapshot(appUserId, sourceLeagueId)
   try {
     const payload = await fetchYahooLeagueForImport(appUserId, sourceLeagueId)
     const viewerTeamKey = payload.viewerTeamKey?.trim() || null
@@ -405,7 +425,7 @@ export const OPEN_READ_PROVIDERS: readonly ImportProvider[] = [
  *  - OPEN_READ_PROVIDERS (fantrax, fleaflicker): public read, NO membership proof at all
  *    → attest. Closes the "any authenticated user can import" hole.
  */
-export const ATTESTATION_REQUIRED_PROVIDERS: readonly ImportProvider[] = [
+const ATTESTATION_REQUIRED_PROVIDERS: readonly ImportProvider[] = [
   ...MEMBERSHIP_VERIFIED_UNDETERMINED_COMMISSIONER,
   ...OPEN_READ_PROVIDERS,
 ]
@@ -795,7 +815,7 @@ export async function recordCommissionerVerificationMethod(args: {
  * from what a user would agree to today — the record itself is immutable
  * audit evidence, not something rewritten in place when copy changes.
  */
-export const COMMISSIONER_ATTESTATION_TEXT_VERSION = 'v1'
+const COMMISSIONER_ATTESTATION_TEXT_VERSION = 'v1'
 
 export async function recordImportAttestation(args: {
   leagueId: string

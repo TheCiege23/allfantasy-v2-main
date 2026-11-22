@@ -4,11 +4,11 @@
  * GET /api/leagues/[leagueId]/draft/audit-log
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +23,7 @@ export async function GET(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const allowed = await isCommissioner(leagueId, userId)
+  const allowed = await canCommissionerAct(leagueId, userId, 'view')
   if (!allowed) {
     return NextResponse.json(
       { error: 'Commissioner only', code: 'AUDIT_LOG_COMMISSIONER_ONLY' },

@@ -24,7 +24,7 @@ const IDP_TIPS = [
   'Waivers matter for IDP \u2014 defensive snap counts and matchups change weekly.',
 ]
 
-export interface IDPFirstEntryModalProps {
+interface IDPFirstEntryModalProps {
   leagueId: string
   userId: string
   enabled: boolean

@@ -21,7 +21,7 @@ import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 import { scoringFormatFromRec, scoringRulesFrom } from '@/lib/decision-os/trade/scoringContextFromWorld'
 import { hasIdpScoring } from './scoringNotes'
-import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
+import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
 import { isIdpLeagueVariant } from './idpLeagueVariant'
 import { leagueVariantFor } from './valueBook'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
@@ -33,7 +33,7 @@ import type {
   StatusSource,
 } from './portfolioInsightsTypes'
 
-export type ClassifiableLeague = {
+type ClassifiableLeague = {
   leagueType?: string | null
   isDynasty?: boolean | null
   keeperCount?: number | null
@@ -42,11 +42,12 @@ export type ClassifiableLeague = {
   settings?: unknown
   leagueVariant?: string | null
   bestBallMode?: boolean | null
+  guillotineMode?: boolean | null
   status?: string | null
   lifecycleState?: string | null
 }
 
-export type LeagueFormatFacts = {
+type LeagueFormatFacts = {
   concept: string
   family: FormatFamily
   bestBall: boolean
@@ -111,42 +112,14 @@ export function classifyLeagueFormat(league: ClassifiableLeague): LeagueFormatFa
   return {
     concept,
     family: FAMILY[concept] ?? 'other',
-    bestBall: isBestBallLeague(league.leagueVariant ?? null, league.bestBallMode ?? null),
+    // Classic Best Ball or best ball Guilly, so the best ball filter finds both (lib/bestball/bestBallLeagueState.ts).
+    bestBall: bestBallLineupSetsItself(league),
     idp: hasIdpScoring(rulebook) || isIdpLeagueVariant(league.leagueVariant ?? null) || aliasIdp,
     superflex: leagueVariantFor(league.settings, league.leagueType ?? null).superflex,
     scoring: scoringFormatFromRec(rec) ?? null,
     tePremium: tep != null && tep > 0,
     stage: stageOf(league),
   }
-}
-
-/** Human labels, used by the screen and the tests alike so the two cannot drift. */
-export const FAMILY_LABEL: Record<FormatFamily, string> = {
-  dynasty: 'Dynasty',
-  keeper: 'Keeper',
-  redraft: 'Redraft',
-  other: 'Other formats',
-}
-
-export const SCORING_LABEL: Record<ScoringKind, string> = {
-  ppr: 'PPR',
-  half_ppr: 'Half PPR',
-  standard: 'Standard',
-}
-
-export const STATUS_LABEL: Record<CompetitiveStatus, string> = {
-  contender: 'Contender',
-  middle: 'Middle of the pack',
-  rebuild: 'Rebuilding',
-  unknown: 'Not enough to say',
-}
-
-export const STAGE_LABEL: Record<PortfolioStage, string> = {
-  drafting: 'Drafting',
-  pre_draft: 'Pre-draft',
-  in_season: 'In season',
-  complete: 'Season over',
-  unknown: 'Stage unknown',
 }
 
 type Third = -1 | 0 | 1
@@ -202,9 +175,3 @@ export function competitiveStatus(input: {
   return { status, source }
 }
 
-export const STATUS_SOURCE_LABEL: Record<StatusSource, string> = {
-  you: 'you told Chimmy',
-  standings: 'from the standings',
-  roster_value: 'from roster value',
-  standings_and_value: 'from standings and roster value',
-}

@@ -8,7 +8,6 @@ export {
   fetchSleeperStandings,
   fetchSleeperTradesForSeason,
   fetchSleeperRosterToOwner,
-  fetchSleeperLeagueUsers,
 } from "./sleeper-historical";
 export {
   persistStandings,
@@ -19,4 +18,3 @@ export {
   runDynastyBackfill,
   getDynastyBackfillStatus,
 } from "./backfill-orchestrator";
-export type { DynastyBackfillInput, DynastyBackfillResult } from "./backfill-orchestrator";

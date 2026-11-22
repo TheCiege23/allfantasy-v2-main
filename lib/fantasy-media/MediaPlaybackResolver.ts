@@ -9,6 +9,3 @@ export function resolvePlaybackUrl(episode: FantasyMediaEpisode): string | null 
   return null;
 }
 
-export function canPlay(episode: FantasyMediaEpisode): boolean {
-  return episode.status === 'completed' && !!episode.playbackUrl;
-}

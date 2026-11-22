@@ -1,6 +1,6 @@
 /**
  * Canonical imported-league lifecycle completion. Reads the `League` and
- * `LeagueTeam` rows already persisted by import, including Fantrax Soccer's
+ * `LeagueTeam` rows already persisted by import, including Fantrax’s
  * period metadata in league settings.
  *
  * Scope, stated honestly: this does NOT touch the renewal engine
@@ -17,6 +17,8 @@ import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRoste
 import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
 import { DAILY_SPORT_SEASON_SHAPE, playoffStartWeekFor, type DailySeasonSport } from '@/lib/sportConfig/dailySportSeasonShape'
 import { SOCCER_CONFIG } from '@/lib/sportConfig/configs/soccer'
+import { NCAAB_CONFIG } from '@/lib/sportConfig/configs/ncaab'
+import { usesFantraxPeriodCalendar } from './fantrax/fantraxProSports'
 
 /** Sports whose imported leagues get a season on the canonical tables. */
 const MATERIALIZED_SPORTS = new Set<string>(['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB'])
@@ -29,7 +31,7 @@ function positivePeriod(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 }
 
-function soccerSeasonFields(league: { status: string | null; settings: unknown }) {
+function fantraxSeasonFields(league: { status: string | null; settings: unknown }, defaultWeeks: number) {
   const settings = league.settings as {
     current_week?: number
     fantrax_settings?: { lastPeriod?: number; firstPlayoffPeriod?: number } | null
@@ -37,7 +39,7 @@ function soccerSeasonFields(league: { status: string | null; settings: unknown }
   const sourcePlayoffStart = positivePeriod(settings?.fantrax_settings?.firstPlayoffPeriod)
   const sourceCurrent = positivePeriod(settings?.current_week)
   const totalWeeks = Math.max(
-    positivePeriod(settings?.fantrax_settings?.lastPeriod) ?? SOCCER_CONFIG.defaultSeasonWeeks,
+    positivePeriod(settings?.fantrax_settings?.lastPeriod) ?? defaultWeeks,
     sourceCurrent ?? 1,
     sourcePlayoffStart ?? 1,
   )
@@ -83,8 +85,8 @@ export async function materializeRedraftSeasonForImportedLeague(
    * every imported NHL and MLB league, from 32 to 256 teams (Fantrax-scale simulation, 2026-11-07).
    * Native NHL and MLB leagues already play full seasons on these same tables.
    */
-  const fantraxSoccer = sport === 'SOCCER' && league.platform?.toLowerCase() === 'fantrax'
-  if (!fantraxSoccer && !MATERIALIZED_SPORTS.has(sport)) {
+  const fantraxPeriodSeason = league.platform?.toLowerCase() === 'fantrax' && usesFantraxPeriodCalendar(sport)
+  if (!fantraxPeriodSeason && !MATERIALIZED_SPORTS.has(sport)) {
     return { seasonId: null, created: false, rosterCount: 0, skippedReason: 'UNSUPPORTED_SPORT' }
   }
   const seasonYear = league.season ?? new Date().getFullYear()
@@ -92,7 +94,7 @@ export async function materializeRedraftSeasonForImportedLeague(
   const existing = await prisma.redraftSeason.findUnique({
     where: { leagueId_season: { leagueId, season: seasonYear } },
   })
-  if (existing && !fantraxSoccer) {
+  if (existing && !fantraxPeriodSeason) {
     const rosterCount = await prisma.redraftRoster.count({ where: { seasonId: existing.id } })
     /*
      * 🛑 THE ALREADY-MATERIALISED PATH NEEDS THE PLAYERS TOO, AND THIS IS WHERE A FORWARD-ONLY FIX
@@ -143,14 +145,15 @@ export async function materializeRedraftSeasonForImportedLeague(
   const playoffStartWeek = league.playoffStartWeek ?? (isDailySeasonSport(sport) ? playoffStartWeekFor(sport) : 15)
   const totalWeeks = Math.max(playoffStartWeek - 1, 1)
 
-  const seasonFields = fantraxSoccer ? soccerSeasonFields(league) : {
+  const defaultWeeks = sport === 'NCAAB' ? NCAAB_CONFIG.defaultSeasonWeeks : SOCCER_CONFIG.defaultSeasonWeeks
+  const seasonFields = fantraxPeriodSeason ? fantraxSeasonFields(league, defaultWeeks) : {
     status: seasonStatus,
     totalWeeks,
     playoffStartWeek,
     currentWeek: seasonStatus === 'complete' ? totalWeeks : 1,
   }
   const seasonData = { leagueId, sport, season: seasonYear, ...seasonFields }
-  const season = fantraxSoccer
+  const season = fantraxPeriodSeason
     ? await prisma.redraftSeason.upsert({
         where: { leagueId_season: { leagueId, season: seasonYear } },
         create: seasonData,
@@ -174,7 +177,7 @@ export async function materializeRedraftSeasonForImportedLeague(
         pointsFor: t.pointsFor ?? 0,
         playoffSeed: t.currentRank ?? null,
       }
-      return fantraxSoccer
+      return fantraxPeriodSeason
         ? prisma.redraftRoster.upsert({
             where: { seasonId_ownerId: { seasonId: season.id, ownerId: data.ownerId } },
             create: data,

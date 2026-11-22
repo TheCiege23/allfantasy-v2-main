@@ -77,7 +77,7 @@ const FAILURE_RETRY_MS = 30 * 60 * 1000
  */
 const MAX_PERIODS_PER_LEAGUE = 20
 
-export interface FleaflickerMatchupConnection {
+interface FleaflickerMatchupConnection {
   /** `League.platformLeagueId` — for Fleaflicker this is the bare numeric league id, e.g. "206154". */
   platformLeagueId: string
   leagueId: number

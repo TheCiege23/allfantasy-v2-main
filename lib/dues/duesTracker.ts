@@ -38,7 +38,7 @@ const KIND_HOSTS: Record<Exclude<PaymentLinkKind, 'other'>, readonly string[]> =
 }
 
 export const MAX_PAYMENT_LINKS = 4
-export const SELF_REPORT_NOTE_MAX = 140
+const SELF_REPORT_NOTE_MAX = 140
 
 export type DuesEntry = {
   teamId: string
@@ -70,7 +70,7 @@ export type DuesConfig = {
   lastUpdatedBy: string | null
 }
 
-export function defaultDuesConfig(): DuesConfig {
+function defaultDuesConfig(): DuesConfig {
   return {
     enabled: false,
     amount: null,
@@ -153,7 +153,7 @@ export function readDuesConfig(raw: unknown): DuesConfig {
   }
 }
 
-export type DuesUpdateError = 'invalid_payment_link' | 'invalid_due_date' | 'invalid_amount' | 'too_many_links'
+type DuesUpdateError = 'invalid_payment_link' | 'invalid_due_date' | 'invalid_amount' | 'too_many_links'
 
 /** A commissioner's edit applied to the stored config. Every payment link is validated or the edit is refused. */
 export function applyCommissionerUpdate(
@@ -224,6 +224,44 @@ export function applySelfReport(config: DuesConfig, teamId: string, note: unknow
 }
 
 /**
+ * A payment verified outside the tracker (a LeagueSafe notice for a payer the commissioner has confirmed)
+ * marks those teams paid. `confirmedBy` records the source, never a person. A team already marked paid
+ * keeps its own date and confirmer.
+ */
+export function applyVerifiedPayment(
+  config: DuesConfig,
+  teamIds: readonly string[],
+  opts: { season: number; multiSeason: boolean; now: Date; source: string },
+): DuesConfig {
+  if (teamIds.length === 0) return config
+  let changed = false
+  const stamp = (e: DuesEntry): DuesEntry => {
+    const seasonDone = !opts.multiSeason || e.paidSeasons.includes(opts.season)
+    if (e.paid && seasonDone) return e
+    changed = true
+    return {
+      ...e,
+      paid: true,
+      paidSeasons: opts.multiSeason && !e.paidSeasons.includes(opts.season) ? [...e.paidSeasons, opts.season].sort() : e.paidSeasons,
+      paidAt: e.paidAt ?? opts.now.toISOString(),
+      confirmedBy: e.confirmedBy ?? opts.source,
+    }
+  }
+  const wanted = new Set(teamIds)
+  const seen = new Set<string>()
+  const entries = config.entries.map((e) => {
+    if (!wanted.has(e.teamId)) return e
+    seen.add(e.teamId)
+    return stamp(e)
+  })
+  for (const teamId of wanted) {
+    if (seen.has(teamId)) continue
+    entries.push(stamp({ teamId, paid: false, paidSeasons: [], paidAt: null, selfReportedAt: null, selfReportedNote: null, confirmedBy: null }))
+  }
+  return changed ? { ...config, entries, lastUpdatedAt: opts.now.toISOString(), lastUpdatedBy: opts.source } : config
+}
+
+/**
  * Is this league tracking dues? The switch, or simply having set an amount: the tracker never showed the
  * switch, so `enabled` was false for every league that used it.
  */
@@ -238,7 +276,7 @@ export function teamPaid(config: DuesConfig, teamId: string, season: number, mul
   return multiSeason ? e.paidSeasons.includes(season) || e.paid : e.paid
 }
 
-export type ReminderKind = 'week_before' | 'day_before' | 'overdue'
+type ReminderKind = 'week_before' | 'day_before' | 'overdue'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

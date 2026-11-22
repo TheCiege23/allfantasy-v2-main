@@ -5,7 +5,7 @@ import { playServiceAccount, PlayBillingError } from "./billingConfig"
 
 const API = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${PLAY_PACKAGE}`
 let cached: { token: string; expires: number; email: string } | undefined
-export async function playAccessToken() {
+async function playAccessToken() {
   const account = playServiceAccount()
   if (cached && cached.email === account.email && cached.expires > Date.now() + 60_000) return cached.token
   const key = await importPKCS8(account.key, "RS256")

@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const userSubscriptionFindManyMock = vi.hoisted(() => vi.fn())
 const adminSubscriptionGrantFindManyMock = vi.hoisted(() => vi.fn())
+const appUserFindUniqueMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    // The owner-email bypass now requires the account to have VERIFIED that address
+    // (lib/auth/provenPrivilegedEmail), read from the user's own row.
+    appUser: {
+      findUnique: appUserFindUniqueMock,
+    },
     userSubscription: {
       findMany: userSubscriptionFindManyMock,
     },
@@ -107,7 +113,17 @@ describe("EntitlementResolver", () => {
     expect(userSubscriptionFindManyMock).not.toHaveBeenCalled()
   })
 
+  it("does NOT return supreme entitlement when the owner email is unverified on this account", async () => {
+    appUserFindUniqueMock.mockResolvedValueOnce({ email: "cjabar.henson@gmail.com", emailVerified: null })
+    userSubscriptionFindManyMock.mockResolvedValueOnce([])
+    const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
+    const resolver = new EntitlementResolver()
+    const snapshot = await resolver.resolveSnapshot("attacker-id", "CJABAR.HENSON@GMAIL.COM")
+    expect(snapshot.plans).not.toContain("supreme")
+  })
+
   it("returns supreme entitlement for the configured owner email", async () => {
+    appUserFindUniqueMock.mockResolvedValueOnce({ email: "cjabar.henson@gmail.com", emailVerified: new Date() })
     const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
     const resolver = new EntitlementResolver()
     const snapshot = await resolver.resolveSnapshot("normal-id", "CJABAR.HENSON@GMAIL.COM")

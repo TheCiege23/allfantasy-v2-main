@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { lockedMessage, type LockGroup } from './settingsLock'
+import { groupForSettingsKey, lockedMessage, type LockGroup } from './settingsLock'
 import { lockedGroups, lockedGroupsForPatch } from './settingsLockService'
 
 /**
@@ -35,6 +35,24 @@ export async function settingsPatchLockedResponse(leagueId: string, body: Record
     return NextResponse.json({ error: lockedMessage(locked), code: 'settings_locked', lockedGroups: locked }, { status: 423 })
   } catch (e) {
     console.warn('[settings-lock] patch check failed, allowing the write', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
+/**
+ * The lock check for a route whose body names several settings at once (dynasty settings, a format's setup): each
+ * key is mapped to its area with `groupForSettingsKey`, and any locked area refuses the whole request. Keys no lock
+ * covers (draft setup, names) never refuse. Fails open, like the checks above.
+ */
+export async function settingsKeysLockedResponse(leagueId: string, keys: readonly string[]): Promise<NextResponse | null> {
+  const groups = [...new Set(keys.map(groupForSettingsKey).filter((g): g is LockGroup => g != null))]
+  if (groups.length === 0) return null
+  try {
+    const locked = await lockedGroups(leagueId, groups)
+    if (!locked.length) return null
+    return NextResponse.json({ error: lockedMessage(locked), code: 'settings_locked', lockedGroups: locked }, { status: 423 })
+  } catch (e) {
+    console.warn('[settings-lock] key check failed, allowing the write', e instanceof Error ? e.message : e)
     return null
   }
 }

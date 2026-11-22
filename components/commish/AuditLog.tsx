@@ -75,7 +75,7 @@ function stamp(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export function AuditLog({ entries, emptyNote }: { entries: AuditEntry[]; emptyNote?: string }) {
+function AuditLog({ entries, emptyNote }: { entries: AuditEntry[]; emptyNote?: string }) {
   if (entries.length === 0) {
     return (
       <p className="af-cm-empty">

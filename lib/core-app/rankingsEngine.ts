@@ -69,8 +69,8 @@ export const MIN_SAMPLE_OPTIONS = [1, 3, 5, 10, 25] as const
 
 /* ───────────────────────────────── filters ──────────────────────────────── */
 
-export const LEAGUE_TYPE_FILTERS = ['redraft', 'keeper', 'dynasty', 'bestball', 'guillotine', 'survivor'] as const
-export const FORMAT_FILTERS = ['ppr', 'half', 'standard', 'superflex', 'te_premium'] as const
+const LEAGUE_TYPE_FILTERS = ['redraft', 'keeper', 'dynasty', 'bestball', 'guillotine', 'survivor'] as const
+const FORMAT_FILTERS = ['ppr', 'half', 'standard', 'superflex', 'te_premium'] as const
 
 export type LeagueTypeFilter = (typeof LEAGUE_TYPE_FILTERS)[number]
 export type FormatFilter = (typeof FORMAT_FILTERS)[number]
@@ -210,7 +210,7 @@ export function describeFilters(f: RankingFilters): string {
   return parts.length ? parts.join(' · ') : 'All leagues'
 }
 
-export type FilterOption<T extends string | number> = { value: T; label: string; count: number }
+type FilterOption<T extends string | number> = { value: T; label: string; count: number }
 
 export type FilterOptions = {
   leagues?: Array<{ value: string; label: string; count: number }>
@@ -297,9 +297,9 @@ export function buildScoringCohorts(rows: CareerLedgerRow[]): ScoringCohorts {
   return out
 }
 
-export type ComponentKey = keyof typeof SCORE_WEIGHTS | 'survival'
+type ComponentKey = keyof typeof SCORE_WEIGHTS | 'survival'
 
-export type ScoreComponent = {
+type ScoreComponent = {
   key: ComponentKey
   label: string
   /** Nominal weight from `SCORE_WEIGHTS`. */
@@ -612,7 +612,7 @@ export type CommunityEntry = {
 }
 
 /** The number a board ranks by, or null when this manager cannot be placed on it. */
-export function boardMetric(board: BoardKey, s: ManagerScore): number | null {
+function boardMetric(board: BoardKey, s: ManagerScore): number | null {
   switch (board) {
     case 'overall':
       return s.score
@@ -631,7 +631,7 @@ export function boardMetric(board: BoardKey, s: ManagerScore): number | null {
   }
 }
 
-export function formatBoardMetric(board: BoardKey, s: ManagerScore): string {
+function formatBoardMetric(board: BoardKey, s: ManagerScore): string {
   const m = boardMetric(board, s)
   if (m == null) return '—'
   switch (board) {
@@ -646,7 +646,7 @@ export function formatBoardMetric(board: BoardKey, s: ManagerScore): string {
   }
 }
 
-export type BoardRow = {
+type BoardRow = {
   userId: string
   handle: string
   avatarUrl: string | null
@@ -658,7 +658,7 @@ export type BoardRow = {
   score: ManagerScore
 }
 
-export type RankedBoard = {
+type RankedBoard = {
   key: BoardKey
   rows: BoardRow[]
   /** Managers left off because their sample is under the minimum. */
@@ -707,7 +707,7 @@ export function rankBoard(entries: CommunityEntry[], board: BoardKey, minSample:
   return { key: board, rows, belowSample, unmeasured }
 }
 
-export const SORT_KEYS = ['rank', 'manager', 'winRate', 'titles', 'playoffs', 'scoring', 'sample', 'move'] as const
+const SORT_KEYS = ['rank', 'manager', 'winRate', 'titles', 'playoffs', 'scoring', 'sample', 'move'] as const
 export type SortKey = (typeof SORT_KEYS)[number]
 export type SortDir = 'asc' | 'desc'
 

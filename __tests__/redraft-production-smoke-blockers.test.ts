@@ -43,12 +43,11 @@ describe('redraft production smoke blockers', () => {
   })
 
   it('roster settings show polished standard redraft slot controls including Superflex default 0', () => {
-    expect(rosterSettings).toContain("key: 'SF'")
-    expect(rosterSettings).toContain("label: 'Superflex (QB/RB/WR/TE)'")
-    expect(rosterSettings).toContain('defaultValue: 0')
+    // 🛑 The settings window's own football-only slot grid sent `rosterSlotCounts`, which the save ignores
+    // (2026-11-15). Its Roster tab now renders the League settings roster editor, which saves what lineups read.
     expect(rosterSettings).toContain('data-testid="roster-slot-controls"')
-    expect(rosterSettings).toContain('data-testid={`roster-slot-${testKey}`}')
-    expect(rosterSettings).toContain('SLOT_BADGE_CLASS')
+    expect(rosterSettings).toContain('<RosterSettingsEditor')
+    expect(rosterSettings).not.toContain('rosterSlotCounts')
     expect(rosterSettings).toContain('Advanced reserve settings')
     expect(rosterSettingsEditor).toContain('SUPERFLEX: 0')
     expect(rosterSettingsEditor).toContain('next.SUPERFLEX = Number(next.SF || 0)')
@@ -108,10 +107,10 @@ describe('redraft production smoke blockers', () => {
     expect(draftChat).not.toContain('bottomRef.current?.scrollIntoView')
   })
 
-  it('War Room is visible inside the draft room dock and popup', () => {
-    expect(draftRightDock).toContain("id: 'war_room', label: 'AF Legacy'")
-    expect(draftRightDock).toContain('warRoomBody?: ReactNode')
-    expect(draftRoomClient).toContain('warRoomBody=')
+  it('War Room is visible inside the draft room (Chimmy tab "Board read") and popup', () => {
+    // 2026-11-19: the AF Legacy tab folded into the Chimmy tab as "Board read".
+    expect(draftRightDock).not.toContain("id: 'war_room'")
+    expect(draftRoomClient).toContain('data-testid="draft-chimmy-board-read"')
     expect(draftRoomClient).toContain('<DraftTeamPanel {...draftTeamPanelProps} />')
     expect(draftRoomClient).toContain('War Room')
   })

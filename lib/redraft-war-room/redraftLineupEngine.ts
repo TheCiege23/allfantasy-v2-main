@@ -26,7 +26,7 @@ function sourceLabel(source: ValueSource): string {
         : 'eligibility'
 }
 
-export interface LineupAssignment {
+interface LineupAssignment {
   slotName: string
   playerId: string | null
   playerName: string | null
@@ -36,7 +36,7 @@ export interface LineupAssignment {
   reason: string
 }
 
-export interface StartSitQuestion {
+interface StartSitQuestion {
   position: string
   starter: { playerId: string; playerName: string; value: number | null }
   bench: { playerId: string; playerName: string; value: number | null }

@@ -9,6 +9,8 @@ vi.mock('@/lib/zombie/correctionFollowup', () => ({ finishZombieCorrectionEffect
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: h.permission }))
 vi.mock('@/lib/zombie/weeklyReportApproval', () => ({ approveZombieWeeklyReport: h.approveReport }))
 vi.mock('@/lib/zombie/weeklyUpdateEngine', () => ({ buildWeeklyUpdate: vi.fn() }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import * as route from '@/app/api/zombie/corrections/route'
 import { POST as approveReport } from '@/app/api/zombie/weekly-update/route'
 const req = (body: object) => new Request('http://localhost/api/zombie/corrections', { method: 'POST', body: JSON.stringify(body) })

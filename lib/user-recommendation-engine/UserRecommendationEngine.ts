@@ -100,7 +100,7 @@ async function getLeagueContext(userId: string): Promise<
 /**
  * Build user recommendation profile from leagues + engagement behavior.
  */
-export async function getUserRecommendationProfile(
+async function getUserRecommendationProfile(
   userId: string
 ): Promise<UserRecommendationProfile> {
   const since = new Date()
@@ -129,7 +129,7 @@ export async function getUserRecommendationProfile(
 /**
  * Get league recommendations for the user (personalized by sport and preferences).
  */
-export async function getLeagueRecommendations(
+async function getLeagueRecommendations(
   userId: string,
   options: { limit?: number; sport?: string | null } = {}
 ): Promise<RecommendedLeague[]> {
@@ -143,7 +143,7 @@ export async function getLeagueRecommendations(
 /**
  * Get player recommendations (trending players in the user's primary sport).
  */
-export async function getPlayerRecommendations(
+async function getPlayerRecommendations(
   userId: string,
   options: { limit?: number; sport?: string | null; profile?: UserRecommendationProfile } = {}
 ): Promise<RecommendedPlayer[]> {
@@ -164,7 +164,7 @@ export async function getPlayerRecommendations(
 /**
  * Get strategy recommendations (lineup, trade, waiver) with optional ordering by tool usage.
  */
-export async function getStrategyRecommendations(
+async function getStrategyRecommendations(
   userId: string,
   options: { profile?: UserRecommendationProfile } = {}
 ): Promise<RecommendedStrategy[]> {
@@ -194,7 +194,7 @@ export async function getStrategyRecommendations(
   return results
 }
 
-export interface GetRecommendationsOptions {
+interface GetRecommendationsOptions {
   leagueLimit?: number
   playerLimit?: number
   sport?: string | null

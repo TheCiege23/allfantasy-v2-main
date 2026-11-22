@@ -15,10 +15,16 @@
  * today's lists until each is confirmed to handle other sizes.
  */
 
-export const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball']
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 
-/** Same ceiling as redraft's 2-32 catalog range. */
-export const IMPORTED_TEAM_COUNT_MAX = 32
+/**
+ * C2C joined 2026-11-22, when a college C2C league's size was capped at what its pro side can fill:
+ * the owner's Road To Glory college C2C leagues run 140 and 180 teams on Fantrax and keep that size.
+ */
+const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'c2c']
+
+/** Same ceiling as a native redraft league. */
+const IMPORTED_TEAM_COUNT_MAX = MAX_NATIVE_TEAMS
 
 /** True when `teamCount` may be used for `leagueType` in an import carryover. */
 export function isImportedTeamCountAllowed(

@@ -34,7 +34,7 @@ export interface ClosestEntry {
 
 export type ClosestAllOverRule = 'closest_overall' | 'no_winner'
 
-export interface ClosestRanked {
+interface ClosestRanked {
   userId: string
   guess: number
   /** target - guess. Negative when over. */
@@ -42,7 +42,7 @@ export interface ClosestRanked {
   over: boolean
 }
 
-export interface ClosestResult {
+interface ClosestResult {
   target: number
   winnerUserId: string | null
   /** True when every guess went over and the all-over rule applied. */

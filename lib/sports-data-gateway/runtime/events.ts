@@ -16,7 +16,7 @@ export type DiffEvent = {
   record: unknown
 }
 
-export type SnapshotDiff = { events: DiffEvent[]; changed: number; added: number; unchangedSuppressed: number }
+type SnapshotDiff = { events: DiffEvent[]; changed: number; added: number; unchangedSuppressed: number }
 
 /**
  * Diff by canonical key + content hash. `previous` maps canonicalKey → prior contentHash.

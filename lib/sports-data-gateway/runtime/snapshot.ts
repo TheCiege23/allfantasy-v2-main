@@ -7,8 +7,6 @@
 import type { SportsDataCapability } from '../capabilities'
 import { snapshotChecksum } from './checksum'
 
-export type SnapshotStatus = 'building' | 'partial' | 'certified' | 'rejected'
-
 export type SnapshotRecordDraft = {
   canonicalKey: string
   resolutionStatus: 'resolved' | 'ambiguous' | 'unresolved' | 'conflicting'
@@ -35,9 +33,9 @@ export type SnapshotDraft = {
   scopeRef?: string | null
 }
 
-export type CertificationDecision = { certifiable: true; checksum: string; counts: SnapshotCounts } | { certifiable: false; reasons: string[] }
+type CertificationDecision = { certifiable: true; checksum: string; counts: SnapshotCounts } | { certifiable: false; reasons: string[] }
 
-export type SnapshotCounts = { recordCount: number; resolvedCount: number; ambiguousCount: number; unresolvedCount: number; rejectedCount: number }
+type SnapshotCounts = { recordCount: number; resolvedCount: number; ambiguousCount: number; unresolvedCount: number; rejectedCount: number }
 
 export function countSnapshot(draft: SnapshotDraft): SnapshotCounts {
   return {

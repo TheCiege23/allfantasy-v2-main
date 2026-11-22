@@ -8,7 +8,7 @@ import type {
   LeagueStyleFilter,
 } from "@/lib/public-discovery/types"
 
-export interface DiscoveryFiltersProps {
+interface DiscoveryFiltersProps {
   sport: string
   format: DiscoveryFormat
   style: LeagueStyleFilter
@@ -35,6 +35,7 @@ const STYLE_OPTIONS: Array<{ value: LeagueStyleFilter; label: string }> = [
   { value: "best_ball", label: "Best ball" },
   { value: "keeper", label: "Keeper" },
   { value: "survivor", label: "Survivor" },
+  { value: "guillotine", label: "Guilly" },
   { value: "bracket", label: "Bracket" },
   { value: "community", label: "Community" },
 ]

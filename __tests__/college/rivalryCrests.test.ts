@@ -55,6 +55,36 @@ describe("collegeRivalry", () => {
     expect(collegeRivalry("NCAAF", "Florida State Seminoles", "Miami Hurricanes")).toBe("storm")
   })
 
+  it("names batch 8, either way round", () => {
+    expect(collegeRivalry("NCAAF", "Oregon State Beavers", "Oregon Ducks")).toBe("valley")
+    expect(collegeRivalry("NCAAF", "Minnesota Golden Gophers", "Wisconsin Badgers")).toBe("northwoods")
+    expect(collegeRivalry("NCAAF", "Purdue Boilermakers", "Indiana Hoosiers")).toBe("oaken")
+    expect(collegeRivalry("NCAAF", "Minnesota Golden Gophers", "Iowa Hawkeyes")).toBe("barn")
+    expect(collegeRivalry("NCAAF", "North Carolina Tar Heels", "Duke Blue Devils")).toBe("road")
+    expect(collegeRivalry("NCAAF", "Ole Miss Rebels", "LSU Tigers")).toBe("magnolia")
+    expect(collegeRivalry("NCAAF", "Alabama Crimson Tide", "LSU Tigers")).toBe("lights")
+    expect(collegeRivalry("NCAAF", "Navy Midshipmen", "Air Force Falcons")).toBe("wings")
+  })
+
+  it("keeps batch 8's shared schools straight", () => {
+    // Minnesota: Wisconsin and Iowa. LSU: Ole Miss and Alabama. Navy: Army and Air Force.
+    // Alabama now sits in three (Auburn, Tennessee, LSU); Iowa in two (Iowa State, Minnesota).
+    expect(collegeRivalry("NCAAF", "Minnesota Golden Gophers", "Wisconsin Badgers")).toBe("northwoods")
+    expect(collegeRivalry("NCAAF", "Minnesota Golden Gophers", "Iowa Hawkeyes")).toBe("barn")
+    expect(collegeRivalry("NCAAF", "LSU Tigers", "Ole Miss Rebels")).toBe("magnolia")
+    expect(collegeRivalry("NCAAF", "LSU Tigers", "Alabama Crimson Tide")).toBe("lights")
+    expect(collegeRivalry("NCAAF", "Navy Midshipmen", "Army Black Knights")).toBe("service")
+    expect(collegeRivalry("NCAAF", "Navy Midshipmen", "Air Force Falcons")).toBe("wings")
+    expect(collegeRivalry("NCAAF", "Iowa Hawkeyes", "Iowa State Cyclones")).toBe("cyhawk")
+  })
+
+  it("keeps look-alikes off batch 8", () => {
+    expect(collegeRivalry("NCAAF", "NC State Wolfpack", "Duke Blue Devils")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Indiana State Sycamores", "Purdue Boilermakers")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Portland State Vikings", "Oregon State Beavers")).toBeNull()
+    expect(collegeRivalry("NCAAF", "Auburn Tigers", "LSU Tigers")).toBeNull()
+  })
+
   it("keeps Miami (OH) and other look-alikes off batch 7", () => {
     expect(collegeRivalry("NCAAF", "Miami (OH) RedHawks", "Florida State Seminoles")).toBeNull()
     expect(collegeRivalry("NCAAF", "Kentucky Wildcats", "Kansas State Wildcats")).toBeNull()

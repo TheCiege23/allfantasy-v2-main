@@ -4,9 +4,9 @@ import { pointsForSeries } from "./playoffScoring"
 import { championshipTotal, rankBrackets } from "./playoffCompetition"
 import { nbaCupLockedReason } from "./nbaCupTournament"
 
-export type LedgerReason = "correct" | "wrong" | "pending" | "no_pick" | "draft" | "late" | "invalid_pick"
+type LedgerReason = "correct" | "wrong" | "pending" | "no_pick" | "draft" | "late" | "invalid_pick"
 export type LedgerRow = { id: string; round: string; home: string; away: string; pick: string | null; winner: string | null; points: number; available: number; reason: LedgerReason; homeScore: number | null; awayScore: number | null; sourceAt: string | null }
-export type ScoreChange = { id: string; seriesId: string; observedAt: string; kind: "settled" | "corrected" | "eligibility"; before: LedgerRow | null; after: LedgerRow; delta: number }
+type ScoreChange = { id: string; seriesId: string; observedAt: string; kind: "settled" | "corrected" | "eligibility"; before: LedgerRow | null; after: LedgerRow; delta: number }
 export type ScoreSnapshot = { version: 1; since: string; observedAt: string; rows: LedgerRow[]; rank: number | null; events: ScoreChange[]; trimmed: number; alertKeys: string[] }
 export type BracketAlertPreferences = { enabled: boolean; missingPicks: boolean; locks: boolean; results: boolean; rankChanges: boolean; spoilerSafe: boolean; leadMinutes: number; locale: "en" | "es" }
 export const defaultBracketAlerts: BracketAlertPreferences = { enabled: true, missingPicks: true, locks: true, results: true, rankChanges: true, spoilerSafe: true, leadMinutes: 30, locale: "en" }
@@ -54,7 +54,7 @@ export function entryChecklist(view: PlayoffChallengeView, now = Date.now()) {
     pendingMatchups: view.series.filter(g => !g.startsAt || /^(Winner|TBD|East Champion|West Champion)/i.test(g.homeTeamName + " " + g.awayTeamName)).length }
 }
 export type ProjectionEntry = { id: string; name: string; totalScore: number; correctPicks: number; finalizedAt: string | null; rank: number | null; tiebreakerTotalScore: number | null }
-export type ProjectionPick = { entryId: string; seriesId: string; pickTeamName: string; confirmedAt?: Date | string | null }
+type ProjectionPick = { entryId: string; seriesId: string; pickTeamName: string; confirmedAt?: Date | string | null }
 /** Hypothetical only: currently leading, fresh, single-game matchups. No final-score writes. */
 export function provisionalStandings(view: PlayoffChallengeView, entries: ProjectionEntry[], picks: ProjectionPick[], now = Date.now()) {
   const live = view.series.filter(g => g.bestOf === 1 && g.status === "in_progress" && !g.winnerTeamName)

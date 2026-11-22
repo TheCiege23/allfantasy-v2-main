@@ -5,10 +5,10 @@
  * - intent=send: create deterministic outbound proposal draft (optional createProposal)
  */
 
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import {
@@ -41,7 +41,7 @@ export async function POST(
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'trades')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -126,7 +126,7 @@ export async function POST(
 
     const proposerName = slotOrder.find((s) => s.rosterId === rosterId)?.displayName ?? 'AI Orphan Manager'
     const receiverName = slotOrder.find((s) => s.rosterId === targetRosterId)?.displayName ?? 'Manager'
-    const summary = `AI manager suggests ${proposerName} send ${givePick.round}.${String(givePick.slot).padStart(2, '0')} for ${receiverName}'s ${receivePick.round}.${String(receivePick.slot).padStart(2, '0')}.`
+    const summary = `Chimmy manager suggests ${proposerName} send ${givePick.round}.${String(givePick.slot).padStart(2, '0')} for ${receiverName}'s ${receivePick.round}.${String(receivePick.slot).padStart(2, '0')}.`
     const createProposal = Boolean(body.createProposal ?? body.applyDecision ?? false)
 
     let createdProposalId: string | null = null

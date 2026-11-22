@@ -68,14 +68,6 @@ export interface SurvivorActiveEffectSummary {
   sourceRosterId?: string | null
 }
 
-interface SurvivorEffectMetadata {
-  week: number
-  rewardType: string
-  rosterId?: string | null
-  tribeId?: string | null
-  amount?: number | null
-}
-
 interface SurvivorResolvedRewardInput {
   rewardType: string
   rosterId?: string | null

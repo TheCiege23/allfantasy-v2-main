@@ -19,6 +19,8 @@ vi.mock('@/lib/tokens/paidToolBilling', () => ({
 vi.mock('@/lib/tokens/storylineSpendRefund', () => ({ refundStorylineSpend: refundMock }))
 vi.mock('@/lib/league-story-creator/OneBrainNarrativeComposer', () => ({ rewriteHookInTone: rewriteMock }))
 vi.mock('@/lib/storyline-studio/storylineService', () => ({ storylineEntitled: entitledMock, readStudioView: readStudioViewMock }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 const ROUTE = '../../app/api/leagues/[leagueId]/storylines/rewrite/route'
 const ctx = { params: Promise.resolve({ leagueId: 'l1' }) }

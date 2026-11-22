@@ -456,7 +456,7 @@ export function buildChimmyAnswerContract(args: {
   const validated = ChimmyAnswerContractSchema.safeParse(contract)
   if (validated.success) return { contract: validated.data, fallbackUsed: false }
 
-  const fallbackReason = validated.error.errors
+  const fallbackReason = validated.error.issues
     .map((e) => `${e.path.join('.')}: ${e.message}`)
     .slice(0, 5)
     .join('; ')

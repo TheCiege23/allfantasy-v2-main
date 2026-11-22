@@ -2,7 +2,7 @@ import "server-only"
 import { EntitlementResolver } from "@/lib/subscription/EntitlementResolver"
 import type { SubscriptionFeatureId } from "@/lib/subscription/types"
 
-export const WORLD_CUP_ADVANCED_COMMISSIONER_FEATURE: SubscriptionFeatureId = "advanced_scoring"
+const WORLD_CUP_ADVANCED_COMMISSIONER_FEATURE: SubscriptionFeatureId = "advanced_scoring"
 
 export async function userHasWorldCupCommissionerAccess(
   userId: string,

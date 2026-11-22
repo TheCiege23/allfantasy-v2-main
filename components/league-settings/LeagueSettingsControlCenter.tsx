@@ -18,7 +18,7 @@ import { CommissionerTab } from './tabs/CommissionerTab'
 import { ConceptRulesTab } from './tabs/ConceptRulesTab'
 import { AISettingsTab } from './tabs/AISettingsTab'
 
-export type LeagueSettingsHubTabId =
+type LeagueSettingsHubTabId =
   | 'general'
   | 'scoring'
   | 'roster'

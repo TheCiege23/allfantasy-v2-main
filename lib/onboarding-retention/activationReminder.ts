@@ -24,7 +24,6 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 
 export const FIRST_REMINDER_AFTER_SIGNUP_MS = 24 * 60 * 60 * 1000
 export const SECOND_REMINDER_AFTER_FIRST_MS = 7 * 24 * 60 * 60 * 1000
-export const MAX_ACTIVATION_REMINDERS = 2
 
 /** Sleeper sign-in gives an account this placeholder; it is not a mailbox. */
 const PLACEHOLDER_DOMAINS = ['sleeper.allfantasy.ai']
@@ -58,7 +57,7 @@ function esc(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export type ActivationReminderEmail = { subject: string; html: string }
+type ActivationReminderEmail = { subject: string; html: string }
 
 export function renderActivationReminder(
   n: 1 | 2,

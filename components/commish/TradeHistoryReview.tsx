@@ -18,18 +18,20 @@ import {
  * inside the fair range — postable to the league so the league sees the same numbers.
  */
 
-export type TradeAuditView = {
+type TradeAuditView = {
   ready: boolean
   rows: AuditRow[]
   teams: { teamId: string; name: string; trades: number }[]
   pairs: PairFinding[]
+  /** Facts beside each trade, by trade key (`tradeMarketContext.ts`): how unusual the gap is, records, the pick market. */
+  marketContext?: Record<string, string[]>
 }
 
 const BAND_LABEL: Record<FairnessBand, string> = { fair: 'Fair', watch: 'Worth a look', outside: 'Outside fair range' }
 const BAND_SEV: Record<FairnessBand, string> = { fair: 'low', watch: 'medium', outside: 'high' }
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 
-export function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagueId: string; view?: TradeAuditView; canPost?: boolean }) {
+function TradeHistoryReview({ leagueId, view: initial, canPost = true }: { leagueId: string; view?: TradeAuditView; canPost?: boolean }) {
   const [view, setView] = useState<TradeAuditView | null>(initial ?? null)
   const [error, setError] = useState<string | null>(null)
   const [teamId, setTeamId] = useState<string | null>(initial?.teams[0]?.teamId ?? null)
@@ -93,6 +95,22 @@ export function TradeHistoryReview({ leagueId, view: initial, canPost = true }: 
               <li key={p.teamIds.join('|')}>
                 {p.names[0]} and {p.names[1]}: {p.count} trades, {expectedLabel(p.expected)} expected from the league&rsquo;s volume
                 {p.outside > 0 ? ` · ${p.outside} outside the fair range` : ''}.
+                {p.elsewhere ? (
+                  /* One fact per line: as a run-on sentence the comparison was unreadable on a phone (seen 2026-11-22). */
+                  <span data-testid="trade-audit-pair-elsewhere" style={{ display: 'block', marginTop: 4 }}>
+                    <span style={{ display: 'block' }}>Middle value gap between them: {p.gapTogether}%.</span>
+                    {p.names.map((name, i) => {
+                      const e = p.elsewhere[i]!
+                      return (
+                        <span key={name} style={{ display: 'block' }}>
+                          {e.gap == null
+                            ? `${name} has ${e.trades} ${e.trades === 1 ? 'trade' : 'trades'} with other teams, too few to compare.`
+                            : `${name}'s ${e.trades} trades with other teams: ${e.gap}%.`}
+                        </span>
+                      )
+                    })}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -145,6 +163,16 @@ export function TradeHistoryReview({ leagueId, view: initial, canPost = true }: 
                 <p className="af-cm-audit-basis">
                   {l.band === 'fair' ? 'About even.' : `${l.gapPct > 0 ? team.name : l.partnerName} received more.`} Values {basisLabel(l.basis)}.
                 </p>
+                {view.marketContext?.[l.tradeKey]?.length ? (
+                  <div className="af-cm-audit-market" data-testid="trade-audit-market">
+                    <div className="af-label">Against the market</div>
+                    <ul className="af-cm-evidence">
+                      {view.marketContext[l.tradeKey]!.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ol>

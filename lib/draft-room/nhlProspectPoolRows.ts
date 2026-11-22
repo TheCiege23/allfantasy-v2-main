@@ -29,7 +29,7 @@ export function shouldOfferNhlFantraxProspects(input: {
   return pool === 'rookies_only' || String(input.draftModeLabel ?? '').trim().toLowerCase() === 'rookie'
 }
 
-export type NhlProspectRawRow = {
+type NhlProspectRawRow = {
   name: string
   position: string
   team: string | null

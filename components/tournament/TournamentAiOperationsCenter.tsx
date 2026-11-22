@@ -68,8 +68,8 @@ export function TournamentAiOperationsCenter({
   return (
     <div className="space-y-6">
       <WarRoomPanel
-        title="AI operations center"
-        subtitle="Automations for the whole tournament. Your choices are saved for this tournament."
+        title="Chimmy operations center"
+        subtitle="Turn on the automations you want running across the tournament. Changes save to the tournament settings."
       >
         {showCommissionerLock ? (
           <div className="mb-4">

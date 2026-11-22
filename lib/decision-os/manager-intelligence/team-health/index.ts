@@ -13,6 +13,4 @@ export {
 export { aggregateManagerTeamHealth } from './teamHealthAggregator'
 export {
   createLiveTeamHealthDataProvider,
-  type TeamHealthDataProvider,
-  type TeamHealthResolverArgs,
 } from './teamHealthResolver'
