@@ -130,3 +130,13 @@ describe('reference helpers', async () => {
     expect(await draftAsMeStatus('L', 'r1')).toMatchObject({ ready: false, ownPicks: 0, summary: expect.stringContaining('has 0') })
   })
 })
+
+describe('Draft like me says when it filled a roster need (2026-11-22)', () => {
+  it('names the starting spot the pick filled', async () => {
+    m.pastPicks.mockResolvedValue(history)
+    const open = [{ slotName: 'WR', allowedPositions: ['WR'], count: 2 }]
+    const pick = await tryDraftAsMePick({ ...args, ownPositions: ['RB', 'RB'], openStarters: open })
+    expect(pick?.position).toBe('WR')
+    expect(pick?.reason).toMatch(/Your roster still needed a WR to start\./)
+  })
+})

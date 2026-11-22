@@ -33,6 +33,8 @@ export type PresetFacts = {
   settings: unknown
   dynasty: boolean
   commissionerPlan: boolean
+  /** The league owner's plan lets Chimmy run teams (AF Pro or AF Supreme). */
+  autopilotPlan: boolean
   rookieDraftAutoOpen: boolean
   liveRookieOrderOn: boolean
   tankingMonitorOn: boolean
@@ -101,7 +103,7 @@ export function planAutomationPreset(preset: AutomationPreset, f: PresetFacts): 
     if (f.dynasty) {
       wanted.push({ key: 'rookie_draft_opens', on: true }, { key: 'rookie_draft_starts', days: 7 }, { key: 'live_rookie_order', on: true })
     }
-    if (preset === 'run_it') wanted.push({ key: 'auto_handover', rule: { days: 14, to: f.commissionerPlan ? 'autopilot' : 'lineups' } })
+    if (preset === 'run_it') wanted.push({ key: 'auto_handover', rule: { days: 14, to: f.autopilotPlan ? 'autopilot' : 'lineups' } })
   }
 
   const handover = readAutoHandover(f.settings)

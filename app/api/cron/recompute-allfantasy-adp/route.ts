@@ -13,6 +13,8 @@ import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJo
 import { prisma } from '@/lib/prisma'
 import { runScheduledMarketRecalc, type ScheduledMarketRecalcResult } from '@/lib/trade-market/scheduledMarketRecalc'
 import { describePickMarket } from '@/lib/trade-market/pickMarketLearner'
+import { describePostureMarket } from '@/lib/trade-market/postureMarketLearner'
+import { describeNeedMarket } from '@/lib/trade-market/needMarketLearner'
 
 /*
  * ⚠ THE AllFantasy TRADE MARKET REBUILD RIDES THIS SLOT (2026-11-11) — the same reason MLB/NBA/NHL
@@ -57,6 +59,23 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...(r.formatBackfill
             ? [`league type, all seasons: ${r.formatBackfill.resolved} of ${r.formatBackfill.histories} trade histories resolved (${r.formatBackfill.unresolved} unresolved), ${r.formatBackfill.rowsStamped} trade rows labelled`]
             : ['league type, all seasons: the pass failed this run']),
+          // FAAB filled onto older Sleeper trades from the transaction warehouse, before the markets read them.
+          ...(r.faabBackfill == null
+            ? ['FAAB backfill: the pass failed this run']
+            : r.faabBackfill.off
+              ? ['FAAB backfill: off (TRADE_FAAB_BACKFILL=off)']
+              : [`FAAB backfill: ${r.faabBackfill.rowsFilled} trade rows given their FAAB`]),
+          // Where the pick, posture and need markets read from, and what the historical series priced.
+          ...(r.structural
+            ? [
+                r.structural.ok
+                  ? `structural pass (picks, posture, need): every season from ${r.structural.sinceSeason}`
+                  : `structural pass failed: picks, posture and need read the market's widest window instead`,
+                ...r.structural.history.map(
+                  (h) => `history chart ${h.book}: ${h.tradesPriced} older trades priced on their own day; ${h.scale?.note ?? 'not measured'}`,
+                ),
+              ]
+            : []),
           // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
           ...(r.datedShadow ?? []).map(
             (d) =>
@@ -69,6 +88,18 @@ async function rebuildTradeMarket(startedAt: number): Promise<
             (m) =>
               `${describePickMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
               `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.pickMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What contenders and rebuilders pay over middle teams (shadow).
+          ...(r.postureMarkets ?? []).map(
+            (m) =>
+              `${describePostureMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.postureMarketsWritten ? '' : '; ⚠ not stored this run'}`,
+          ),
+          // What teams short of (or deep at) a position pay for it over normal-depth teams (shadow).
+          ...(r.needMarkets ?? []).map(
+            (m) =>
+              `${describeNeedMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
+              `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.needMarketsWritten ? '' : '; ⚠ not stored this run'}`,
           ),
         ],
       }),

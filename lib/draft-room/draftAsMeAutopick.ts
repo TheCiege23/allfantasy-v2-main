@@ -4,7 +4,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
-import { buildDraftStyle, MIN_STYLE_SAMPLE, pickLikeManager, type DraftStyle } from './draftAsMe'
+import { buildDraftStyle, filledNeedLabel, MIN_STYLE_SAMPLE, pickLikeManager, type DraftStyle, type OpenStarterSlot } from './draftAsMe'
 import { loadManagerPastPicks } from './managerHistoryReads'
 import { loadDraftPlayerAges } from './draftPlayerAges'
 import { isAutopilotRoster } from '@/lib/live-draft-engine/instantAutopick'
@@ -53,13 +53,42 @@ export function styleReferenceOf(picks: ReadonlyArray<{ leagueName?: string | nu
   return { ownPicks: picks.length, drafts }
 }
 
+/** Graded Draft like me picks needed before their record is shown (the draft card's tips wait for the same). */
+export const AUTOPICK_RECORD_MIN_DECIDED = 20
+
+/**
+ * Pure: how Chimmy's Draft like me picks have held up this season, from the Decision OS ledger
+ * (`autopicks['draft-as-me']`, graded against the board each pick was made on) — or null below the bar.
+ */
+export function draftAsMeRecordLine(ledger: Partial<Record<string, { held: number; missed: number }>> | null | undefined): string | null {
+  if (!ledger) return null
+  let held = 0
+  let missed = 0
+  for (const band of Object.values(ledger)) {
+    held += band?.held ?? 0
+    missed += band?.missed ?? 0
+  }
+  const decided = held + missed
+  if (decided < AUTOPICK_RECORD_MIN_DECIDED) return null
+  return `This season Draft like me picks have outscored the players left on the board ${Math.round((held / decided) * 100)}% of the time (${decided} graded).`
+}
+
+async function draftAsMeLedgerLine(): Promise<string | null> {
+  try {
+    const { readAdviceLearningSnapshot } = await import('@/lib/chimmy-outcomes/learningStore')
+    return draftAsMeRecordLine((await readAdviceLearningSnapshot())?.ledger?.autopicks?.['draft-as-me'])
+  } catch {
+    return null
+  }
+}
+
 /** What the draft room says about this manager's "Draft like me" before any pick is made. */
 export async function draftAsMeStatus(leagueId: string, rosterId: string): Promise<{ ready: boolean; ownPicks: number; needed: number; summary: string }> {
-  const past = await loadManagerPastPicks(leagueId, rosterId)
+  const [past, record] = await Promise.all([loadManagerPastPicks(leagueId, rosterId), draftAsMeLedgerLine()])
   const style = buildDraftStyle(past)
   const ref = styleReferenceOf(past)
   if (!style) return { ready: false, ownPicks: ref.ownPicks, needed: MIN_STYLE_SAMPLE, summary: describeNotEnoughHistory(ref.ownPicks) }
-  return { ready: true, ownPicks: ref.ownPicks, needed: MIN_STYLE_SAMPLE, summary: `${describeDraftStyle(style)} ${describeStyleReference(ref)}` }
+  return { ready: true, ownPicks: ref.ownPicks, needed: MIN_STYLE_SAMPLE, summary: `${describeDraftStyle(style)} ${describeStyleReference(ref)}${record ? ` ${record}` : ''}` }
 }
 
 export function describeDraftStyle(style: DraftStyle): string {
@@ -117,6 +146,8 @@ export async function tryDraftAsMePick(args: {
   board: readonly AutopickFallbackPoolEntry[]
   ownPositions: readonly string[]
   eligible?: ReadonlySet<string> | null
+  /** The team's open starting slots (the autopick starter guard's `open`), for roster need. */
+  openStarters?: readonly OpenStarterSlot[] | null
   /** The draft's own ADP, keyed `name|position|team`, preferred over the pool's market ADP. */
   aiAdpByKey?: Record<string, number>
   /** The draft's sport, for player ages. */
@@ -138,8 +169,10 @@ export async function tryDraftAsMePick(args: {
   // Ages only matter when this manager has a youth lean; otherwise the board is not read for them.
   const ages = style.youthLean != null ? await loadDraftPlayerAges(args.sport, args.board.map((e) => e.playerId)).catch(() => new Map<string, number>()) : new Map<string, number>()
   const board = args.board.map((e) => ({ ...e, adp: args.aiAdpByKey?.[key(e)] ?? e.adp, age: e.playerId ? ages.get(e.playerId) ?? null : null }))
-  const chosen = pickLikeManager({ style, overall: args.overall, board, ownPositions: args.ownPositions, eligible: args.eligible })
+  const chosen = pickLikeManager({ style, overall: args.overall, board, ownPositions: args.ownPositions, eligible: args.eligible, openStarters: args.openStarters })
   if (!chosen) return null
   const original = args.board.find((e) => key(e) === key(chosen.player))
-  return original ? { ...original, reason: `${describeDraftStyle(style)} ${describeStyleReference(styleReferenceOf(past))}` } : null
+  const need = original ? filledNeedLabel(original.position, args.openStarters) : null
+  const needLine = need ? ` Your roster still needed ${need} to start.` : ''
+  return original ? { ...original, reason: `${describeDraftStyle(style)}${needLine} ${describeStyleReference(styleReferenceOf(past))}` } : null
 }

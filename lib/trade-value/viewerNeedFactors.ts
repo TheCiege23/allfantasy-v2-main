@@ -17,15 +17,76 @@ import {
 import { getPositionScarcity, type ScarcityBoard } from '@/lib/trade-intel/positionScarcity'
 import { resolveViewerLeagueRoster } from '@/lib/trade-intel/viewerLeagueRoster'
 import type { LeagueValueAdjustment } from './leagueTradeValue'
+import {
+  learnedNeedOn,
+  learnedNeedPremium,
+  learnedPostureAdjustment,
+  learnedPostureOn,
+  loadLearnedTables,
+  type LearnedTables,
+} from '@/lib/trade-market/learnedInGrades'
+import { postureOf, VETERAN_MIN_AGE, YOUTH_MAX_AGE, type Posture } from '@/lib/trade-market/postureMarketLearner'
 
 /** One asset in the deal, as the need model sees it. `base` orders who fills a hole first. */
-export type NeedLine = { name: string; position: string | null; base: number | null; injuryStatus?: string | null }
+export type NeedLine = {
+  name: string
+  position: string | null
+  base: number | null
+  injuryStatus?: string | null
+  /** Sleeper id, when known — the learned contend/rebuild move reads the player's age by it. */
+  sleeperId?: string | null
+  /** True for a draft-pick line. */
+  isPick?: boolean
+}
+
+/**
+ * The learned tables in the need model (`lib/trade-market/learnedInGrades.ts`), each behind its own switch.
+ * `book` is the chart's market book key ("DYNASTY:SUPERFLEX"), the book the tables were measured in.
+ */
+export type LearnedNeedInputs = {
+  book: string
+  tables: LearnedTables
+  /** `TRADE_LEARNED_NEED=on`: the measured premium for a position you cannot fill replaces the hand-set one. */
+  need: boolean
+  /** `TRADE_LEARNED_POSTURE=on`, with your record: what teams with that record pay for what you take on. */
+  posture: Posture | null
+  /** Players' ages today, by Sleeper id — for the posture move's "27 or older" / "24 or younger". */
+  ages?: ReadonlyMap<string, number | null>
+}
 
 export type NeedFactors = {
   give: Array<LeagueValueAdjustment | null>
   get: Array<LeagueValueAdjustment | null>
   /** Why need could not be priced at all — printed under "what we couldn't see". Null when it ran. */
   gap: string | null
+}
+
+/**
+ * What the learned tables contribute, when a switch is on and the book is known; null otherwise (the need model then
+ * runs exactly as before). Posture needs the team's record, read from `LeagueTeam`, and the incoming players' ages.
+ */
+async function learnedInputsFor(args: { book: string | null; leagueId: string; teamExternalId: string | null; get: NeedLine[] }): Promise<LearnedNeedInputs | null> {
+  const needOn = learnedNeedOn()
+  const postureOn = learnedPostureOn() && args.teamExternalId != null
+  if (!args.book || (!needOn && !postureOn)) return null
+  const tables = await loadLearnedTables(prisma)
+  let posture: Posture | null = null
+  let ages: Map<string, number | null> | undefined
+  if (postureOn) {
+    const team = await prisma.leagueTeam.findUnique({
+      where: { leagueId_externalId: { leagueId: args.leagueId, externalId: args.teamExternalId! } },
+      select: { wins: true, losses: true, ties: true },
+    })
+    // The posture rule needs week 4 on: three games played, read as the week after them.
+    const games = team ? team.wins + team.losses + team.ties : 0
+    posture = team ? postureOf(team, games + 1) : null
+    const ids = args.get.flatMap((l) => (l.sleeperId ? [l.sleeperId] : []))
+    if (posture && ids.length) {
+      const rows = await prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids } }, select: { sleeperId: true, age: true } })
+      ages = new Map(rows.flatMap((r) => (r.sleeperId ? [[r.sleeperId, r.age ?? null] as const] : [])))
+    }
+  }
+  return { book: args.book, tables, need: needOn, posture, ages }
 }
 
 const none = (give: NeedLine[], get: NeedLine[], gap: string | null): NeedFactors => ({
@@ -60,6 +121,7 @@ export function allocateNeedFactors(args: {
   /** Need on the roster after the whole deal. */
   needAfterTrade: RosterNeed
   scarcity: ScarcityBoard
+  learned?: LearnedNeedInputs | null
 }): { give: Array<LeagueValueAdjustment | null>; get: Array<LeagueValueAdjustment | null> } {
   const give: Array<LeagueValueAdjustment | null> = args.give.map(() => null)
   const get: Array<LeagueValueAdjustment | null> = args.get.map(() => null)
@@ -88,12 +150,38 @@ export function allocateNeedFactors(args: {
       // A premium covers at most the open slots, best asset first; a surplus discount covers every one.
       const ordered = [...idxs].sort((a, b) => (lines[b]!.base ?? -1) - (lines[a]!.base ?? -1))
       const covered = delta.factor > 1 ? ordered.slice(0, Math.max(0, row?.deficit ?? 0)) : ordered
-      for (const i of covered) out[i] = { kind: 'need', factor: delta.factor, reason: phrase(delta.basis) }
+      /*
+       * TRADE_LEARNED_NEED=on: a premium (an open slot) is the one MEASURED for teams short at this position, where the
+       * daily run published one — in place of the hand-set 6% per open slot. A discount (surplus) is left as it is.
+       */
+      const measured = delta.factor > 1 && args.learned?.need ? learnedNeedPremium(args.learned.tables, args.learned.book, pos, 'short') : null
+      const factor = measured ? 1 + measured.pct / 100 : delta.factor
+      const reason = measured
+        ? `${phrase(delta.basis)}; teams short at ${pos} paid ${measured.pct > 0 ? '+' : ''}${measured.pct}% over normal-depth teams across ${measured.trades} completed trades`
+        : phrase(delta.basis)
+      for (const i of covered) out[i] = { kind: 'need', factor, reason }
     }
   }
 
   allocate(args.get, get, args.needAfterOutgoing, (b) => b)
   allocate(args.give, give, args.needAfterTrade, (b) => `after this trade ${b}`)
+
+  /*
+   * TRADE_LEARNED_POSTURE=on, with your record: what you TAKE ON is moved by what teams with that record pay for that
+   * kind of asset over middle teams. Only incoming lines — you are the buyer of those. Combined with any need move on the
+   * same line, both reasons kept.
+   */
+  const L = args.learned
+  if (L?.posture) {
+    args.get.forEach((l, i) => {
+      const age = l.sleeperId ? L.ages?.get(l.sleeperId) ?? null : null
+      const kind = l.isPick ? 'picks' : age == null ? null : age >= VETERAN_MIN_AGE ? 'veteran' : age <= YOUTH_MAX_AGE ? 'youth' : null
+      const move = learnedPostureAdjustment(L.tables, L.book, L.posture, kind)
+      if (!move) return
+      const prior = get[i]
+      get[i] = prior ? { kind: 'need', factor: prior.factor * move.factor, reason: `${prior.reason}; ${move.reason}` } : move
+    })
+  }
   return { give, get }
 }
 
@@ -110,6 +198,8 @@ export async function loadViewerNeedFactors(args: {
   starters: unknown
   give: NeedLine[]
   get: NeedLine[]
+  /** The chart's market book key, for the learned tables (`TRADE_LEARNED_NEED` / `TRADE_LEARNED_POSTURE`). */
+  book?: string | null
 }): Promise<NeedFactors> {
   const { give, get } = args
   try {
@@ -118,7 +208,8 @@ export async function loadViewerNeedFactors(args: {
 
     const viewer = await resolveViewerLeagueRoster(args.leagueId, args.userId)
     if (!viewer.ok) return none(give, get, viewer.gap)
-    return await rosterNeedFactors({ ...args, requirements, playerData: viewer.roster.playerData })
+    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: viewer.team.externalId ?? null, get }).catch(() => null)
+    return await rosterNeedFactors({ ...args, requirements, playerData: viewer.roster.playerData, learned })
   } catch {
     return none(give, get, 'your roster in this league — it could not be read just now')
   }
@@ -136,12 +227,15 @@ export async function loadRosterNeedFactors(args: {
   starters: unknown
   give: NeedLine[]
   get: NeedLine[]
+  book?: string | null
 }): Promise<NeedFactors> {
   const { give, get } = args
   try {
     const requirements: SlotRequirements | null = readSlotRequirements(args.starters)
     if (!requirements) return none(give, get, "this league's starting lineup, so roster need is not priced")
-    return await rosterNeedFactors({ ...args, requirements })
+    // A roster named directly has no claimed team, so no record: the learned need premium only, never posture.
+    const learned = await learnedInputsFor({ book: args.book ?? null, leagueId: args.leagueId, teamExternalId: null, get }).catch(() => null)
+    return await rosterNeedFactors({ ...args, requirements, learned })
   } catch {
     return none(give, get, 'this roster — it could not be read just now')
   }
@@ -154,6 +248,7 @@ async function rosterNeedFactors(args: {
   requirements: SlotRequirements
   give: NeedLine[]
   get: NeedLine[]
+  learned?: LearnedNeedInputs | null
 }): Promise<NeedFactors> {
   const { give, get, requirements } = args
   {
@@ -226,6 +321,6 @@ async function rosterNeedFactors(args: {
       positions,
     }).catch(() => new Map() as ScarcityBoard)
 
-    return { ...allocateNeedFactors({ give, get, needAfterOutgoing, needAfterTrade, scarcity }), gap: null }
+    return { ...allocateNeedFactors({ give, get, needAfterOutgoing, needAfterTrade, scarcity, learned: args.learned ?? null }), gap: null }
   }
 }

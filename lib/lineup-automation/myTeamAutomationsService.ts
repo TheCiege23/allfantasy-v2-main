@@ -5,6 +5,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { readManagedLineups, managedForOwner } from '@/lib/inactive-manager/inactiveManagerMode'
 import { ownerHasAfCommissionerPlan } from '@/lib/stat-corrections/applyStatCorrections'
+import { autopilotEntitled } from '@/lib/inactive-manager/inactiveManagerService'
 import { autoBenchByeLeagueBlock } from './autoBenchByeService'
 import { autoSwitchInjuredFor } from './autoSwitchInjured'
 import { ownerHasAutoSwitchPlan } from './autoSwitchInjuredService'
@@ -31,6 +32,7 @@ export async function readMyTeamAutomations(leagueId: string, userId: string, ro
     settings: league.settings,
     weeklyLineups: block === null,
     commissionerPlan: await ownerHasAfCommissionerPlan(league.userId),
+    autopilotPlan: await autopilotEntitled(league.userId),
     managed,
     autoSwitch: await (async () => {
       const s = autoSwitchInjuredFor(roster.settings, roster.platformUserId)

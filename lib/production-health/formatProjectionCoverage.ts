@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   read_failed: 'Read failed',
   projected: 'Projected',
   no_game_this_week: 'Zero scheduled games',
+  no_nba_roster: 'Verified scoring baseline with no current NBA roster assignment',
   weekly_schedule_missing: 'Per-game rate available, weekly schedule missing',
   stored_projection_missing_on_board: 'Stored AF projection missing from league board',
   verified_stats_without_projection: 'Verified stats available, AF projection missing',

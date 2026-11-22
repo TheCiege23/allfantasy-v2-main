@@ -18,7 +18,7 @@ describe('plan comparison', () => {
   })
 
   it('puts the manager tools on Pro and Supreme only', () => {
-    for (const id of ['trade_breakdown', 'player_depth', 'competitive_edge', 'start_sit', 'waivers']) {
+    for (const id of ['trade_breakdown', 'player_depth', 'competitive_edge', 'start_sit', 'waivers', 'chimmy_drafts', 'chimmy_runs_team']) {
       expect(cells(id), id).toEqual(['no', 'yes', 'no', 'yes'])
     }
   })

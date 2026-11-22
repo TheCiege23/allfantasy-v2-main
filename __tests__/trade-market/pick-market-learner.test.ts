@@ -14,6 +14,7 @@ import {
 } from '@/lib/trade-market/pickMarketLearner'
 import { bookKey, gatherFormatObservations, recalculateFormatMarkets, teamsFromSettings } from '@/lib/trade-market/formatMarkets'
 import { runScheduledMarketRecalc } from '@/lib/trade-market/scheduledMarketRecalc'
+import { structuralWeight } from '@/lib/trade-market/datedMarketLearner'
 
 /**
  * Trade learning, step 3 (owner's call, 2026-11-22): draft pick values learned from what the trades paid for them —
@@ -198,6 +199,8 @@ describe('reading the trades', () => {
     // The 2027 3rd of a 4-team league (a 12-team 1st; next draft, traded in October) bought a player worth 1300 that
     // day — not today's 3000.
     expect(picks.observations[0]).toMatchObject({ transactionId: 't-pick', net: { '1:0': 1 }, y: 1300 })
+    // Weighted on the two-year structural half-life, not the player market's 90 days.
+    expect(picks.observations[0]!.weight).toBeCloseTo(structuralWeight(new Date(Date.UTC(2026, 9, 10) + 3 * 3600_000), NOW), 6)
     expect(picks.skipped).toEqual({})
     expect(g.byBookPicks.has(bookKey({ format: 'REDRAFT', qbFormat: 'SUPERFLEX' }))).toBe(false)
   })
@@ -212,7 +215,7 @@ describe('reading the trades', () => {
 })
 
 describe('the scheduled run', () => {
-  it('keeps the widest window\'s pick market and stores it once; a failed store is reported, not thrown', async () => {
+  it('stores the structural pass\'s pick market (every season from 2020) once; its failure falls back to the widest window', async () => {
     const market = (tradesUsed: number) => ({ book: { format: 'DYNASTY' as const, qbFormat: 'SUPERFLEX' as const }, concept: 'c', generatedAt: '', tradesUsed, classes: [], roundsOrdered: true, horizonsOrdered: true, skipped: {} })
     const recalc = vi.fn(async (_p: unknown, o: { sinceSeason: number }) => ({
       books: [], pickMarkets: [market(o.sinceSeason)], lineup: { factors: [] } as never, lineupWritten: false, tradesUsed: 0, tradesStamped: 0, skipped: {},
@@ -220,9 +223,22 @@ describe('the scheduled run', () => {
     const writePicks = vi.fn(async () => undefined)
     const r = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup: vi.fn() as never, stampAll: vi.fn(async () => null) as never, writePicks })
     expect(writePicks).toHaveBeenCalledTimes(1)
-    expect(r.pickMarkets.map((m) => m.sinceSeason)).toEqual([2024])
-    expect(r.pickMarkets[0]!.tradesUsed).toBe(2024)
+    expect(r.pickMarkets.map((m) => m.sinceSeason)).toEqual([2020])
+    expect(r.pickMarkets[0]!.tradesUsed).toBe(2020)
     expect(r.pickMarketsWritten).toBe(true)
+    expect(r.structural).toMatchObject({ sinceSeason: 2020, ok: true })
+    // The structural pass skips every book, so no market is rewritten by it.
+    const structuralCall = recalc.mock.calls.find((c) => (c[1] as { sinceSeason: number }).sinceSeason === 2020)![1] as { skipBooks: Set<string>; stampTrades: boolean }
+    expect(structuralCall.skipBooks.size).toBe(4)
+    expect(structuralCall.stampTrades).toBe(false)
+
+    const structuralFails = vi.fn(async (_p: unknown, o: { sinceSeason: number }) => {
+      if (o.sinceSeason === 2020) throw new Error('timeout')
+      return { books: [], pickMarkets: [market(o.sinceSeason)], lineup: { factors: [] } as never, lineupWritten: false, tradesUsed: 0, tradesStamped: 0, skipped: {} }
+    })
+    const fallback = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: structuralFails as never, writeLineup: vi.fn() as never, stampAll: vi.fn(async () => null) as never, writePicks: vi.fn(async () => undefined) })
+    expect(fallback.pickMarkets.map((m) => m.sinceSeason)).toEqual([2024])
+    expect(fallback.structural.ok).toBe(false)
 
     const failing = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup: vi.fn() as never, stampAll: vi.fn(async () => null) as never, writePicks: vi.fn(async () => { throw new Error('db down') }) })
     expect(failing.pickMarketsWritten).toBe(false)

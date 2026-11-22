@@ -6,6 +6,7 @@ const facts = (over: Partial<PresetFacts> = {}): PresetFacts => ({
   settings: {},
   dynasty: true,
   commissionerPlan: true,
+  autopilotPlan: true,
   rookieDraftAutoOpen: false,
   liveRookieOrderOn: false,
   tankingMonitorOn: false,
@@ -30,8 +31,11 @@ describe('planAutomationPreset', () => {
   it('run it for me adds the 14-day handover, to Chimmy with the plan and to AllFantasy without', () => {
     const withPlan = planAutomationPreset('run_it', facts()).changes.find((c) => c.step.key === 'auto_handover')!
     expect(withPlan.step).toEqual({ key: 'auto_handover', rule: { days: 14, to: 'autopilot' } })
-    const without = planAutomationPreset('run_it', facts({ commissionerPlan: false })).changes.find((c) => c.step.key === 'auto_handover')!
+    const without = planAutomationPreset('run_it', facts({ commissionerPlan: false, autopilotPlan: false })).changes.find((c) => c.step.key === 'auto_handover')!
     expect(without.step).toEqual({ key: 'auto_handover', rule: { days: 14, to: 'lineups' } })
+    // Chimmy running a team is AF Pro / AF Supreme (2026-11-22): AF Commissioner alone hands over to AllFantasy.
+    const commissionerOnly = planAutomationPreset('run_it', facts({ commissionerPlan: true, autopilotPlan: false })).changes.find((c) => c.step.key === 'auto_handover')!
+    expect(commissionerOnly.step).toEqual({ key: 'auto_handover', rule: { days: 14, to: 'lineups' } })
   })
 
   it('without AF Commissioner, the paid automations are listed as needing it and not changed', () => {
@@ -43,7 +47,7 @@ describe('planAutomationPreset', () => {
   })
 
   it('says every change in Spanish too', () => {
-    const plan = planAutomationPreset('run_it', facts({ commissionerPlan: false }))
+    const plan = planAutomationPreset('run_it', facts({ commissionerPlan: false, autopilotPlan: false }))
     expect(plan.changes.map((c) => c.labelEs)).toEqual([
       'El draft de novatos se abre solo', 'El draft de novatos empieza solo 7 días después de abrirse', 'Pasar un equipo tras 14 días sin actividad, a AllFantasy',
     ])

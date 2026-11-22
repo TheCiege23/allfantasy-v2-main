@@ -453,6 +453,7 @@ export async function runTradeConsoleAnalysis(
     getLines,
     givePriced: gP,
     getPriced: tP,
+    teams: chart.leagueSize ?? null,
   }).catch(() => null)
   mark('trade_market')
 
@@ -486,6 +487,7 @@ export async function runTradeConsoleAnalysis(
     tradeMarket: marketOverlay?.tradeMarket ?? null,
     lineup: marketOverlay?.lineup ?? null,
     lineupNote: marketOverlay?.lineupNote ?? null,
+    learnedPicks: marketOverlay?.learnedPicks ?? null,
     mark,
   })
   const leagueGrade = graded.leagueGrade

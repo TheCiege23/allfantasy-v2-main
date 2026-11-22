@@ -66,6 +66,8 @@ export type BoardPlayer = {
   /** The season the projection's numbers come from (last season, until this one has games). */
   tradeMarket?: { percent: number; trades: number }
   currentSeasonParticipant?: boolean
+  /** NBA date (Eastern) when a verified roster review found the player outside the NBA. */
+  verifiedNbaInactiveSince?: string
   sourceSeason?: number | null
   /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
   seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null

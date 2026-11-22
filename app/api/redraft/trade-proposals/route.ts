@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
   if (proposer.ownerId !== userId && !await isAcceptedCoOwnerForRedraftRoster(leagueId, proposerRosterId, userId)) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
-  // Chimmy autopilot (AF Commissioner): a team nobody is running does not take trade offers.
+  // Chimmy autopilot (AF Pro / AF Supreme): a team nobody is running does not take trade offers.
   // In a multi-team trade that holds for every team the offer is made to.
   const { isOwnerOnAutopilot } = await import('@/lib/inactive-manager/inactiveManagerService')
   for (const party of [receiver, ...additionalRosters]) {

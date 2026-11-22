@@ -14,11 +14,13 @@
  */
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { resolveWaiverRules } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { buildManagerRecord, type ManagerRecord, type ManagerRecordInput } from './managerRecord'
+import type { SavedTradeContext } from './tradeSituationFacts'
 import type { EdgeWaiverClaim } from './waiverEdge'
 import { readSleeperTradeHistory } from './tradeEdgeLoader'
 import { readWaiverEdgeInput } from './waiverEdgeLoader'
@@ -166,6 +168,45 @@ type LeagueHistory = {
   drafts: ManagerRecordInput['drafts']
 }
 
+/** `MANAGER_TRADE_SITUATION=off` drops the situation lines from every manager record. */
+export const MANAGER_TRADE_SITUATION_ENV = 'MANAGER_TRADE_SITUATION'
+export function managerTradeSituationOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env[MANAGER_TRADE_SITUATION_ENV] ?? '').trim().toLowerCase() !== 'off'
+}
+
+/**
+ * Each cached trade's saved context (`LeagueTrade.contextSnapshot`, keyed `<seasonLeagueId>:<transactionId>` like the
+ * trade itself) and the age of every player taken on. Two bounded reads: the trades' rows, and those players.
+ */
+export async function readTradeSituation(
+  trades: ReadonlyArray<{ id: string; sides: ReadonlyArray<{ playersIn: ReadonlyArray<{ playerId?: string }> }> }>,
+  now: Date,
+): Promise<NonNullable<Extract<ManagerRecordInput['trades'], { available: true }>['data']['situation']>> {
+  const keys = trades.flatMap((t) => {
+    const i = t.id.lastIndexOf(':')
+    return i > 0 ? [{ id: t.id, league: t.id.slice(0, i), tx: t.id.slice(i + 1) }] : []
+  })
+  const contexts = new Map<string, SavedTradeContext>()
+  for (let i = 0; i < keys.length; i += 500) {
+    const part = keys.slice(i, i + 500)
+    const rows = await prisma.leagueTrade.findMany({
+      where: { transactionId: { in: [...new Set(part.map((k) => k.tx))] }, history: { sleeperLeagueId: { in: [...new Set(part.map((k) => k.league))] } }, NOT: { contextSnapshot: { equals: Prisma.DbNull } } },
+      select: { transactionId: true, contextSnapshot: true, history: { select: { sleeperLeagueId: true } } },
+    })
+    for (const r of rows) {
+      const id = `${r.history.sleeperLeagueId}:${r.transactionId}`
+      if (!contexts.has(id) && r.contextSnapshot && typeof r.contextSnapshot === 'object') contexts.set(id, r.contextSnapshot as SavedTradeContext)
+    }
+  }
+  const ids = [...new Set(trades.flatMap((t) => t.sides.flatMap((s) => s.playersIn.flatMap((p) => (p.playerId ? [p.playerId] : [])))))]
+  const ages = new Map<string, number | null>()
+  for (let i = 0; i < ids.length; i += 1000) {
+    const rows = await prisma.sportsPlayer.findMany({ where: { sleeperId: { in: ids.slice(i, i + 1000) } }, select: { sleeperId: true, age: true } })
+    for (const r of rows) if (r.sleeperId && !ages.has(r.sleeperId)) ages.set(r.sleeperId, r.age ?? null)
+  }
+  return { contexts, ages, now }
+}
+
 const couldNotRead = (what: string) => ({ available: false as const, reason: `${what} history could not be read right now.` })
 
 /**
@@ -187,13 +228,18 @@ async function readHistory(input: {
   const leagueUsesFaab = Boolean(rules?.waiverType.available && rules.waiverType.data.kind === 'faab')
 
   if (league.platform === 'sleeper') {
-    const [trades, draftsRead, waiverRead] = await Promise.all([
+    const [tradesRead, draftsRead, waiverRead] = await Promise.all([
       league.platformLeagueId
         ? readSleeperTradeHistory(league.platformLeagueId, now).catch(() => couldNotRead('Trade'))
         : Promise.resolve({ available: false as const, reason: 'This league has no Sleeper league id on file.' }),
       readDraftEdgeInput(league.id).catch(() => ({ ok: false as const, reason: 'Draft history could not be read right now.' })),
       readWaiverEdgeInput({ leagueId: league.id, userId: input.userId, usesFaab: leagueUsesFaab, now }).catch(() => couldNotRead('Waiver')),
     ])
+    // The situation around each trade (record, roster, ages), best-effort: a failed read loses those lines only.
+    const trades: ManagerRecordInput['trades'] =
+      tradesRead.available && managerTradeSituationOn()
+        ? { available: true, data: { ...tradesRead.data, situation: (await readTradeSituation(tradesRead.data.trades, now).catch(() => null)) ?? undefined } }
+        : tradesRead
     return {
       trades,
       waivers: waiverRead.available

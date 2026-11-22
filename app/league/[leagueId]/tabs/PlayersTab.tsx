@@ -23,6 +23,7 @@ import { StartVsComparisonLauncher } from '@/components/app/player-comparison/St
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import type { LeaguePlayerMetric, LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { mergeNbaCampusPlayers } from '@/lib/league/collegePro/mergeNbaCampusPlayers'
 import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 // Roster codes ("ACT"/"INACT") are not injuries — this used to dot every healthy RI-mapped player.
 import { injuryNeedsAttention } from '@/lib/injuries/injuryStatusDisplay'
@@ -51,6 +52,7 @@ type PlayerSubtab = 'available' | 'waivers' | 'freeAgents' | 'claims'
 type PlayerPoolRow = DisplayPlayerRecord & {
   normalizedStats?: Record<string, unknown>
   afProjectionPlayerId?: string | null
+  alternateIds?: string[]
 }
 
 const NFL_FILTERS: PosFilter[] = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB', 'K', 'DEF', 'MORE']
@@ -130,7 +132,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const [selectedWeek, setWeekNum] = useState<number | null>(null)
   const [selectedSeason, setSeasonSel] = useState(seasonYear)
   const [campusBoard, setCampusBoard] = useState<LeaguePlayerMetrics | null>(null)
-  const [campusLoading, setCampusLoading] = useState(false)
+  const [campusLoading, setCampusLoading] = useState(campusPoolEnabled)
   const activeCampusBoard = campusBoard?.leagueId === league.id && (selectedWeek == null || campusBoard.week === selectedWeek)
     ? campusBoard : null
   const weekNum = selectedWeek ?? (campusPoolEnabled ? activeCampusBoard?.week ?? league.currentWeek : null) ?? 1
@@ -232,10 +234,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 
   const toggleWatchPlayer = useCallback(
-    (playerId: string) => {
+    (player: PlayerPoolRow) => {
       const next = new Set(wlIds)
-      if (next.has(playerId)) next.delete(playerId)
-      else next.add(playerId)
+      const ids = [player.id, ...(player.alternateIds ?? [])]
+      if (ids.some((id) => next.has(id))) ids.forEach((id) => next.delete(id))
+      else next.add(player.id)
       persistWatchlist(next)
     },
     [wlIds, persistWatchlist],
@@ -358,18 +361,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
     }
     // Redraft, not NFL/NBA: never fall back to the NFL map (see `leaguePool`).
     if (leaguePool) return []
-    if (campusPoolEnabled && !freeAgents && activeCampusBoard) {
-      const unmatchedProfiles = new Map(Object.values(players).map((player) => [player.id, player]))
-      const projected: PlayerPoolRow[] = activeCampusBoard.rows.map((row) => {
-        const id = row.availabilityId ?? row.rosterPlayerId ?? row.playerId
-        const profile = unmatchedProfiles.get(id)
-        unmatchedProfiles.delete(id)
-        return { ...profile, id, name: row.playerName, position: profile?.position || row.position, team: row.team ?? profile?.team ?? 'FA' }
-      })
-      return [...projected, ...unmatchedProfiles.values()]
+    if (campusPoolEnabled && projection && !freeAgents) {
+      return mergeNbaCampusPlayers(activeCampusBoard?.rows ?? [], Object.values(players))
     }
     return Object.values(players)
-  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players, campusPoolEnabled, activeCampusBoard])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, leaguePool, faRows, players, campusPoolEnabled, projection, activeCampusBoard])
 
   const weeklyProjectionFor = useCallback((player: PlayerPoolRow) => campusPoolEnabled
     ? campusMetricsById.get(player.afProjectionPlayerId ?? player.id)?.weekly ?? null
@@ -396,7 +392,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       rows = rows.filter((p) => p.years_exp === 0)
     }
     if (watchlist) {
-      rows = rows.filter((p) => wlIds.has(p.id))
+      rows = rows.filter((p) => wlIds.has(p.id) || p.alternateIds?.some((id) => wlIds.has(id)))
     }
     rows.sort((a, b) => {
       // Honest sort: only REAL metrics rank; players with no sourced value sort last
@@ -773,6 +769,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                     ? ri.fantasyPointsPerGame * ri.gamesPlayed
                     : null)
                 const inj = p.injuryStatus ?? ri?.injuryStatus
+                const watched = wlIds.has(p.id) || p.alternateIds?.some((id) => wlIds.has(id)) || false
                 return (
                   <div
                     key={p.id}
@@ -780,17 +777,17 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleWatchPlayer(p.id)}
-                      aria-pressed={wlIds.has(p.id)}
+                      onClick={() => toggleWatchPlayer(p)}
+                      aria-pressed={watched}
                       className={`rdp-watch flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
-                        wlIds.has(p.id)
+                        watched
                           ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
                           : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
                       }`}
-                      aria-label={wlIds.has(p.id) ? 'Remove from watchlist' : 'Add to watchlist'}
+                      aria-label={watched ? 'Remove from watchlist' : 'Add to watchlist'}
                       title="Watchlist"
                     >
-                      {wlIds.has(p.id) ? '★' : '+'}
+                      {watched ? '★' : '+'}
                     </button>
                     <button
                       type="button"
@@ -888,7 +885,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             )}
           </div>
           {!busy && filtered.length === 0 ? (
-            <p className="rdp-empty py-8 text-center text-sm text-white/40">No players match filters.</p>
+            <p className="rdp-empty py-8 text-center text-sm text-white/40">
+              {campusPoolEnabled && projection && !freeAgents && !activeCampusBoard
+                ? 'Weekly AF projections are unavailable right now.'
+                : 'No players match filters.'}
+            </p>
           ) : null}
         </div>
       </div>

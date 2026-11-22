@@ -191,10 +191,10 @@ export const ENTITLEMENTS = {
     key: 'commissioner_chimmy_autopilot',
     label: 'Chimmy Autopilot',
     description:
-      'Chimmy runs a team whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Requires AF Commissioner subscription.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+      'Chimmy runs a team — drafting for it and managing it — whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Part of AF Pro and AF Supreme (owner decision 2026-11-22; it was AF Commissioner).',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
     highlightParam: 'chimmy_autopilot',
   },
   commissioner_integrity_monitoring: {
@@ -405,6 +405,6 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   manager_psychology: 'af_pro',
   dispersal_draft: 'af_commissioner',
   integrity_monitoring: 'af_commissioner',
-  chimmy_autopilot: 'af_commissioner',
+  chimmy_autopilot: 'af_pro',
   commissioner_waiver_ai: 'af_commissioner',
 }

@@ -364,10 +364,49 @@ function recorderKeyToOutcomeKey(key: string): string {
  */
 async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<DraftTipLedger> {
   const records = await db.draftRecommendationRecord.findMany({
-    where: { sport: 'NFL', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    // Advice only: an auto-pick is graded on its own (`gradeAutopicks`), never into the card's confidence.
+    where: { sport: 'NFL', surface: { not: 'autopick' }, createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
     select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
     take: 20_000,
   })
+  return gradeRecordedPicks(records, season, cal, now, db, () => 'all').then((byGroup) => byGroup.all ?? {})
+}
+
+/**
+ * The picks the clock made this NFL season, graded the same way as the card's tips, one ledger per strategy
+ * (`draft-as-me`, `queue`, `bpa`…) — how Chimmy's own auto-picks held up (2026-11-22).
+ */
+async function gradeAutopicks(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<Record<string, DraftTipLedger>> {
+  const records = await db.draftRecommendationRecord.findMany({
+    where: { sport: 'NFL', surface: 'autopick', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
+    take: 20_000,
+  })
+  return gradeRecordedPicks(records, season, cal, now, db, (r) => {
+    const s = (r.detail as { autopick?: { strategy?: unknown } } | null)?.autopick?.strategy
+    return typeof s === 'string' && s.trim() ? s.trim() : 'other'
+  })
+}
+
+type RecordedPick = {
+  createdAt: Date
+  round: number
+  servedMode: string
+  observeName: string | null
+  observePosition: string | null
+  activeName: string | null
+  activePosition: string | null
+  detail: unknown
+}
+
+async function gradeRecordedPicks(
+  records: readonly RecordedPick[],
+  season: number,
+  cal: WeekCalendar,
+  now: Date,
+  db: Db,
+  groupOf: (r: RecordedPick) => string,
+): Promise<Record<string, DraftTipLedger>> {
   if (records.length === 0) return {}
   const through = completedThrough(cal, now)
   const [players, gameRaw] = await Promise.all([
@@ -381,7 +420,7 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
   const space = chooseIdSpace(buildIdSpaces(players), game.rows.map((r) => r.playerId)).space
   const { byKey } = weeklyByKey(game.rows, space)
   const windows = new Map<number, Map<string, number>>()
-  const calls: Array<{ round: number; grade: 'held' | 'missed' | null }> = []
+  const calls = new Map<string, Array<{ round: number; grade: 'held' | 'missed' | null }>>()
   for (const r of records) {
     const from = firstWeekNotKickedOff(cal, new Date(r.createdAt))
     if (from == null || from > through) continue
@@ -391,7 +430,10 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
     const servedPos = r.servedMode === 'active' ? r.activePosition : r.observePosition
     const detail = (r.detail ?? {}) as { projections?: Record<string, number> }
     const window = pts
-    calls.push({
+    const group = groupOf(r)
+    let list = calls.get(group)
+    if (!list) calls.set(group, (list = []))
+    list.push({
       round: r.round,
       grade: gradeDraftTip({
         servedKey: servedName ? `${servedName}|${servedPos ?? ''}` : null,
@@ -400,7 +442,7 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
       }),
     })
   }
-  return foldDraftTips(calls)
+  return Object.fromEntries([...calls].map(([group, list]) => [group, foldDraftTips(list)]))
 }
 
 /** Swallow only "this part's table/column is not there"; anything else is the caller's to see. */
@@ -445,6 +487,11 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     console.warn('[ledgerGrading] draft tip grading failed', err instanceof Error ? err.message : err)
     return {} as DraftTipLedger
   })
+  // Chimmy's own auto-picks, per strategy — contained the same way, for the same reason.
+  const autopicks = await gradeAutopicks(season, cal, now, db).catch((err: unknown) => {
+    console.warn('[ledgerGrading] autopick grading failed', err instanceof Error ? err.message : err)
+    return {} as Record<string, DraftTipLedger>
+  })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
   return foldLedger({
     season,
@@ -458,6 +505,7 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     tradeLetters: graded.letters,
     commissionerTradeLetters: commissionerGraded.letters,
     draftTips,
+    autopicks,
   })
 }
 
