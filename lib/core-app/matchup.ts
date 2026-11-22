@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
 import { lineupCrosswalkToSleeperIds, lineupRegistryNames, type LineupRegistryName } from './lineupCrosswalk'
+import { ownPointsByPlayer } from './matchupOwnPoints'
+import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -214,6 +216,12 @@ export type MatchupPlayerCell = {
    * stats are imported daily after the games, so a Sunday line appears the next morning.
    */
   statLine?: string | null
+  /**
+   * AllFantasy's own estimate of what he scored, from that same stored stat line under this league's
+   * rules (lib/core-app/matchupOwnPoints.ts). Only when the platform's own per-player scores are not on
+   * file, only for a final game, and never copied into `actual`.
+   */
+  ownPoints?: number | null
 }
 
 export type MatchupSlot = {
@@ -939,7 +947,7 @@ async function buildMatchupData(
       ? prisma.playerGameStat
           .findMany({
             where: { sportType: 'NFL', source: 'sleeper', season: latest.seasonYear, weekOrRound: latest.week, playerId: { in: lookupIds } },
-            select: { playerId: true, statPayload: true },
+            select: { playerId: true, statPayload: true, normalizedStatMap: true },
           })
           .catch(() => [])
       : Promise.resolve([]))
@@ -990,6 +998,13 @@ async function buildMatchupData(
     const line = nflStatLine(row.statPayload)
     if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, line)
   }
+  /*
+   * With no platform score on file for anyone, price those same lines under this league's rules. Shown
+   * beside the box score as an estimate; `actual`, the live totals and the win probability are untouched.
+   */
+  const ownPointsBy = scoreRows.length === 0
+    ? ownPointsByPlayer(statRows, extractScoringSettings(league.settings))
+    : new Map<string, number>()
   /*
    * Each club's game THIS week — kickoff and opponent — from the same rows the states come from.
    * Regular-season fixtures only (an untyped live-writer row may be a preseason reading), earliest
@@ -1137,11 +1152,13 @@ async function buildMatchupData(
     entry: { playerId: string; unavailable?: Unavailable | null },
     sleeperId: string | null,
     team: string | null | undefined,
-  ): { result: GameResult | null; statLine: string | null } => {
-    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null }
+  ): { result: GameResult | null; statLine: string | null; ownPoints: number | null } => {
+    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null, ownPoints: null }
     return {
       result: resultOf(normalizeTeamAbbrev(team)),
       statLine: sleeperId ? statLineBy.get(sleeperId) ?? null : null,
+      // Not in a league whose scoring type we refuse to price: its projections are withheld for the same reason.
+      ownPoints: sleeperId && !withholdPointsProjections ? ownPointsBy.get(sleeperId) ?? null : null,
     }
   }
   const cellFor = (
