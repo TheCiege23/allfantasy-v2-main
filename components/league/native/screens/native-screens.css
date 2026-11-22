@@ -370,10 +370,15 @@
   .nls-table-players td:first-child { width: 100%; max-width: 0; }
   .nls-table-players th:not(:first-child), .nls-table-players td:not(:first-child) { width: 1%; white-space: nowrap; }
   .nls-table-players .nls-player { flex: 1 1 0; }
-  .nls-table-players .nls-player small[data-stats] { white-space: normal; }
-  .nls-table-players .nls-pcell [data-watch] { flex: none; }
+  .nls-table-players .nls-pstats-wide { margin: 6px 0 0; font-size: 11px; white-space: normal; }
+  .nls-table-players .nls-pcell-pos .nls-pos { min-width: 0; min-height: 0; height: auto; padding: 1px 6px; font-size: 11px; border-radius: 5px; }
+  .nls-table-players .nls-player small { display: flex; align-items: center; gap: 6px; }
+  .nls-table-players td { vertical-align: top; }
+  .nls-table-players td:not(:first-child) { padding-top: 14px; }
+  .nls-table-players .nls-pcell [data-watch] { flex: none; min-width: 30px; }
+  .nls-table-players .nls-pcell { gap: 8px; }
   .nls-table-players .nls-pcell > .nls-pos { display: none; }
-  .nls-table-players .nls-pcell-pos { display: inline; }
+  .nls-table-players .nls-pcell-pos { display: inline-flex; }
   .nls-oddsbar > span:first-child { width: 56px; }
   .nls-team .nls-avatar { display: none; }
   .nls-team strong { font-size: 14px; }
@@ -447,6 +452,7 @@
 .nls-gl-cut::before, .nls-gl-cut::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--bad) 60%, transparent); }
 
 .nls-pcell-pos { display: none; }
+.nls-pstats-wide { display: block; margin: 2px 0 0 120px; color: var(--faint); font: 12px/1.4 var(--nl-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A player's name as a button that opens his card: it keeps the look of the text it replaces. */
 .nls-namebtn { appearance: none; background: none; border: 0; padding: 0; margin: 0; max-width: 100%; overflow: hidden; color: inherit; font: inherit; text-align: inherit; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .nls-namebtn:hover, .nls-namebtn:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
