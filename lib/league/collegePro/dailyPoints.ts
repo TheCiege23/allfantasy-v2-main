@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { aggregateWeeklyStats, getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNormalization'
 import { buildLeagueStatScorer } from '@/lib/redraft/scoringEngine'
 import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
+import { readFantraxBasketballScoring, scoreFantraxBasketballGame } from './fantraxBasketballScoring'
 
 /**
  * Points for a basketball half (NBA or NCAAB) of a college + pro league, over one scoring period.
@@ -10,10 +11,11 @@ import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
  * Read from the Rolling Insights box lines in `player_game_stats` (`rolling_insights_live`), keyed on
  * the identity id and reached through each Fantrax player's `rollingInsightsId`. Selected by GAME
  * DATE inside the period, the way native NBA C2C campus scoring selects them
- * (lib/c2c/campusScoring.ts `campusBasketballPointsForMatchup`). The same normalizer and the same
- * default scorer are used, and preseason rows are left out.
+ * (lib/c2c/campusScoring.ts `campusBasketballPointsForMatchup`). Preseason rows are left out.
  *
- * ⚠ AN ESTIMATE, NOT FANTRAX'S NUMBER: the league's own Fantrax scoring settings are not applied.
+ * Scored with the league's own Fantrax categories when `settings` carries them, game by game, so
+ * double- and triple-doubles count per game (`fantraxBasketballScoring.ts`). Otherwise the native
+ * NBA/NCAAB defaults, as before.
  */
 
 export type DailyPoints = {
@@ -21,6 +23,10 @@ export type DailyPoints = {
   points: Record<string, number>
   /** Whether ANY box line exists for this sport in the period: false means stats have not arrived. */
   statsOnFile: boolean
+  /** 'league' when the league's own Fantrax scoring was applied, 'standard' for the native defaults. */
+  scoredWith: 'league' | 'standard'
+  /** League categories no box line carries ("wins"), so they are not in the number. */
+  unscored: string[]
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -30,6 +36,8 @@ export async function loadDailyPoints(args: {
   /** `[start, end)` as UTC-midnight DATE keys, the form `game_date` is stored in. */
   window: { start: Date; end: Date }
   players: Array<{ id: string; rollingInsightsId: string | null; position: string | null }>
+  /** The Fantrax league's `League.settings`, for its own scoring. Omitted → native defaults. */
+  settings?: unknown
 }): Promise<DailyPoints> {
   const sportKeys = [args.sport, args.sport.toLowerCase()]
   const riIds = [...new Set(args.players.map((p) => p.rollingInsightsId).filter((id): id is string => !!id))]
@@ -63,9 +71,25 @@ export async function loadDailyPoints(args: {
     byPlayer.set(who.id, [...(byPlayer.get(who.id) ?? []), row.normalizedStatMap])
   }
 
+  const points: Record<string, number> = {}
+  const league = readFantraxBasketballScoring(args.settings)
+  if (league) {
+    for (const [id, playerRows] of byPlayer) {
+      let total = 0
+      let games = 0
+      for (const row of playerRows) {
+        const stats = (row as { stats?: unknown } | null)?.stats
+        if (!stats || typeof stats !== 'object') continue
+        total += scoreFantraxBasketballGame(stats as Record<string, unknown>, league)
+        games += 1
+      }
+      if (games) points[id] = round2(total)
+    }
+    return { points, statsOnFile: anyRow != null, scoredWith: 'league', unscored: league.unscored }
+  }
+
   const normalizer = getDailySportNormalizer(args.sport)
   const scorer = buildLeagueStatScorer({ sport: args.sport, settings: null })
-  const points: Record<string, number> = {}
   if (normalizer && scorer) {
     for (const [id, playerRows] of byPlayer) {
       const week = aggregateWeeklyStats(playerRows, normalizer)
@@ -74,7 +98,7 @@ export async function loadDailyPoints(args: {
       points[id] = round2(scorer(week.stats, position))
     }
   }
-  return { points, statsOnFile: anyRow != null }
+  return { points, statsOnFile: anyRow != null, scoredWith: 'standard', unscored: [] }
 }
 
 /**
