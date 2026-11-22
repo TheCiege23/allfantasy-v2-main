@@ -148,9 +148,9 @@ describe('the Guilly component reads tokens, not dark literals', () => {
     for (const c of ['#151a28', '#7fe0a6', '#ffc46b', '#ff9a8a', '#ffb0a4', '#a3a9c2']) expect(bare, c).not.toContain(c)
   })
 
-  it('the chop moment and the phone header stay dark on purpose', () => {
+  it('the chop moment stays dark on purpose (the phone has no second header: the workspace banner is the one header)', () => {
     expect(moment).toMatch(/className=\{`\$\{sp\.card\} \$\{sp\.pad\} \$\{sp\.stayDark\}/)
-    expect(home).toMatch(/className=\{`\$\{gl\.phoneHead\} \$\{sp\.stayDark\}`\}/)
+    expect(home).not.toMatch(/gl\.phoneHead\b/)
   })
 
   it('the Guilly stylesheet reads tokens for its text colours', () => {
