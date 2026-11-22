@@ -15,7 +15,7 @@ import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosErrorText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface WorkspaceViewProps {
+interface WorkspaceViewProps {
   tasks: CommissionerTask[]
   dataMode: CommissionerDataMode
   /** Set when the adapter returned an error (today, only in `live` mode) — supersedes the normal queue/list UI with an honest error rather than an empty-looking queue. */

@@ -26,7 +26,7 @@ import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { applyRequestedFormat, type RequestableFormat } from '@/lib/create-league-v2/requestedFormat'
 
-export interface CreateLeagueV2ClientProps {
+interface CreateLeagueV2ClientProps {
   userId: string
   /** Opened from the demo league: offer "Create a test league" pre-selected. */
   fromDemo?: boolean
@@ -66,8 +66,8 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
     tePremiumPoints: typeof state.tePremiumPoints === 'number' ? state.tePremiumPoints : null,
     survivorTribeCount: leagueType === 'survivor' && !getSurvivorTribeOptions(state.teamCount).includes(state.survivorTribeCount)
       ? (getSurvivorTribeOptions(state.teamCount)[0] ?? 2) : state.survivorTribeCount,
-    survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'participating_player'
-      ? 'participating_player' : 'non_participating_host',
+    survivorCommissionerParticipationMode: state.survivorCommissionerParticipationMode === 'non_participating_host'
+      ? 'non_participating_host' : 'participating_player',
   }
 }
 
@@ -296,7 +296,7 @@ function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; o
       <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6" aria-label="Test league">
         <label
           data-testid="create-test-league-toggle"
-          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 pr-16 sm:pr-20 lg:pr-4"
+          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] px-4 py-3 pr-16 sm:pr-20 lg:pr-4"
         >
           <input
             type="checkbox"
@@ -304,13 +304,21 @@ function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; o
             checked={checked}
             onChange={(e) => onChange(e.target.checked)}
           />
+          {/*
+            One line until it is switched on. The full explanation filled a phone's first screen and
+            pushed every sport card below the fold; it opens when the box is ticked (or from the demo).
+          */}
           <span>
             <span className="block text-sm font-bold">Create a test league</span>
-            <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]">
-              Every empty team gets a placeholder AI manager, so you can run the whole flow — draft, lineups,
-              trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
-              {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
-            </span>
+            {checked || fromDemo ? (
+              <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]" data-testid="create-test-league-details">
+                Every empty team gets a placeholder Chimmy manager, so you can run the whole flow — draft, lineups,
+                trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
+                {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
+              </span>
+            ) : (
+              <span className="mt-0.5 block text-xs leading-5 text-[color:var(--text-secondary)]">Chimmy runs the empty teams. No invites sent.</span>
+            )}
           </span>
         </label>
       </section>

@@ -119,7 +119,17 @@ describe('lifecycle gate and data rule', () => {
     expect(saved()).toEqual({
       scoring_mode: 'h2h_category', category_preset_id: 'mlb_5x5', category_record_mode: 'most', category_ids: null, unrelated: 'kept',
     })
-    expect(h.logAction).not.toHaveBeenCalled()
+    // Recorded for the league even before the season (2026-11-15), with no mid-season announcement.
+    expect(h.logAction).toHaveBeenCalledTimes(1)
+    expect(h.logAction.mock.calls[0]![0]).toMatchObject({ actionType: 'settings_patch', metadata: { section: 'scoring', source: 'scoring-type' } })
+    expect(JSON.stringify(h.publish.mock.calls)).not.toContain('mid-season')
+  })
+
+  it('a season scoring lock refuses the switch, and nothing is written', async () => {
+    setLeague('MLB', 'pre_draft', { ...MLB_POINTS, settings_lock: { season: 2026, groups: ['scoring'], lockedAt: '2026-08-01T00:00:00Z', lockedBy: 'u1', unlockedUntil: {}, votes: [] } })
+    const res = await put({ mode: 'h2h_category', presetId: 'mlb_5x5' })
+    expect(res.status).toBe(423)
+    expect(h.leagueUpdate).not.toHaveBeenCalled()
   })
 
   it('in_season without the flag: 409 mid_season_confirmation_required, nothing written', async () => {

@@ -570,7 +570,7 @@ Also one-line summary at the top starting with SUMMARY:`,
     temperature: 0.45,
     maxTokens: 700,
   })
-  const text = res.ok ? res.text : 'AI unavailable.'
+  const text = res.ok ? res.text : 'Chimmy unavailable.'
   const lines = text.split('\n').filter(Boolean)
   const recommendations: CapRecommendation[] = lines
     .filter((l) => l.includes('→'))

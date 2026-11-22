@@ -2,7 +2,7 @@
 
 import type { BroadcastRivalryRow } from '@/lib/broadcast-engine/types'
 
-export interface RivalriesPanelProps {
+interface RivalriesPanelProps {
   rivalries: BroadcastRivalryRow[]
   title?: string
   className?: string

@@ -246,4 +246,3 @@ export function SurvivorTribalCouncilPanel({
   )
 }
 
-export default SurvivorTribalCouncilPanel

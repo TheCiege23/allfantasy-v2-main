@@ -48,6 +48,20 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, locked: due.length, reading: reading.length })
 }
 
+/**
+ * A refusal the service threw (one council a week; no ballots and no final scores to fall back on) is
+ * the host's answer, not a server fault: it used to surface as a bare 500 with no text, so the host
+ * saw a failure and no reason. Only the service's own short, one-line reasons are shown. Anything
+ * else (a database error) stays a 500 with generic text and is logged.
+ */
+function hostRefusal(error: unknown, fallback: string): NextResponse {
+  const message = error instanceof Error ? error.message : ''
+  const refusal = message && !message.includes('\n') && message.length <= 120 && !/prisma/i.test(message)
+  if (refusal) return NextResponse.json({ error: message }, { status: 409 })
+  console.error('[survivor/tribal]', fallback, error)
+  return NextResponse.json({ error: fallback }, { status: 500 })
+}
+
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -70,13 +84,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'open') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const week = typeof body.week === 'number' ? body.week : 1
     const tribeId = typeof body.tribeId === 'string' ? body.tribeId : null
     const deadline = typeof body.deadline === 'string' ? new Date(body.deadline) : new Date(Date.now() + 3600000)
-    const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
-    return NextResponse.json(council)
+    try {
+      const council = await openTribalCouncil(leagueId, week, tribeId, deadline)
+      return NextResponse.json(council)
+    } catch (error) {
+      return hostRefusal(error, 'Could not open council')
+    }
   }
 
   if (action === 'vote') {
@@ -106,7 +124,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'lock') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -119,7 +137,13 @@ export async function POST(req: NextRequest) {
     if (!council || council.leagueId !== leagueId) {
       return NextResponse.json({ error: 'Council not found' }, { status: 404 })
     }
-    const locked = await lockVoting(councilId)
+    let locked: Awaited<ReturnType<typeof lockVoting>>
+    try {
+      locked = await lockVoting(councilId)
+    } catch (error) {
+      // e.g. no ballots and the week's scores are not final yet, so nobody can be named.
+      return hostRefusal(error, 'Could not lock the vote')
+    }
     if (!locked.ok) return NextResponse.json({ error: locked.error, code: locked.code }, { status: 409 })
     // No outcome here: the verdict is published when the last ballot of the read is released.
     return NextResponse.json({ ok: true, readInProgress: !locked.complete })
@@ -128,7 +152,7 @@ export async function POST(req: NextRequest) {
   if (action === 'reveal_next') {
     // Verify commissioner on the request's leagueId BEFORE any DB lookup
     // so cross-league councilId probes leak nothing about council existence.
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -161,7 +185,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'eliminate') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -214,7 +238,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'rocks_draw') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     if (!councilId) return NextResponse.json({ error: 'councilId required' }, { status: 400 })
@@ -231,7 +255,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'commissioner_resolve_tie') {
-    const gate = await assertLeagueCommissioner(leagueId, userId)
+    const gate = await assertLeagueCommissioner(leagueId, userId, 'league')
     if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const councilId = typeof body.councilId === 'string' ? body.councilId : ''
     const eliminateRosterId = typeof body.eliminateRosterId === 'string' ? body.eliminateRosterId : ''

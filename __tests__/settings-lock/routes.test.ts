@@ -45,6 +45,7 @@ vi.mock('@/lib/subscription/FeatureGateService', () => ({
     this.evaluateUserFeatureAccess = vi.fn(async () => ({ allowed: true }))
   }),
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromRole(() => async () => m.role))
 
 import { GET, POST, PUT } from '@/app/api/commissioner/leagues/[leagueId]/settings-lock/route'
 import { PUT as putNfl } from '@/app/api/commissioner/leagues/[leagueId]/nfl-scoring/route'

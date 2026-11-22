@@ -14,7 +14,7 @@
  */
 import type { DecisionTelemetryDebugEvent } from '../telemetryDebugStore'
 
-export interface SurfaceParitySummary {
+interface SurfaceParitySummary {
   decisionType: string
   surface: string
   totalEvents: number

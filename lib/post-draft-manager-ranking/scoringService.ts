@@ -10,7 +10,7 @@ import { scoreToLetterGrade } from './gradeMapper'
 import type { PickScoreEntry, ManagerRankingEntry, DraftResultsPayload } from './types'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
-export interface ScoringInput {
+interface ScoringInput {
   leagueId: string
   leagueName: string | null
   sport: string

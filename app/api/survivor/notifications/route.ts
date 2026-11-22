@@ -1,9 +1,9 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   // by passing ?userId=. Only a commissioner who does NOT play may look at someone else's: a playing
   // commissioner is a manager for hidden information, and `idol_found` rows name idol holders.
   if (filterUserId !== userId) {
-    if (!(await isCommissioner(leagueId, userId))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!(await canCommissionerAct(leagueId, userId, 'view'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const access = await resolveSurvivorAccessContext(leagueId, userId)
     if (!access?.decisions.canSeeHiddenIdolAssignments) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

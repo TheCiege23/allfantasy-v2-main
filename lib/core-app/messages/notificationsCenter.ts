@@ -1,8 +1,12 @@
 import { defineMessages } from '@/lib/i18n/messages'
 
 /**
- * Notifications center (components/core-app/screens/NotificationsCenter.tsx). Every string is the one
- * the screen printed before the move, byte for byte, in both languages — a relocation, not a rewrite.
+ * Notifications center (components/core-app/screens/NotificationsCenter.tsx).
+ *
+ * 2026-11-14: the header says how many are unread instead of "N waiting. The ones with a clock on
+ * them are at the top" (there was often no clock section at all), the 60-row note became one line
+ * under the list, and the news groups, the per-league lineup lines and the delivery menu got their
+ * words here. Rules: lib/core-app/notificationsGuide.ts.
  */
 export const notificationsCenterMessages = defineMessages({
   en: {
@@ -12,11 +16,31 @@ export const notificationsCenterMessages = defineMessages({
     daysAgo: (days: number) => `${days}d ago`,
     matchingNotices: (n: number) => ` · ${n} matching notices`,
     loading: 'Loading notifications…',
-    waiting: (unread: number, inLeague: boolean) =>
-      `${unread} waiting${inLeague ? ' in this league' : ''}. The ones with a clock on them are at the top.`,
-    olderNotListed: (listed: number, older: number) =>
-      `The ${listed} most recent are listed here. ${older} older ${older === 1 ? 'notification is' : 'notifications are'} not shown, so the counts above describe this page rather than everything you have.`,
+    unread: (count: string, inLeague: boolean) => `${count} unread${inLeague ? ' in this league' : ''}`,
+    needAction: (n: number) => `${n} ${n === 1 ? 'needs' : 'need'} action — ${n === 1 ? "it's" : "they're"} at the top.`,
+    showingNewest: (n: number) => `Showing your newest ${n}.`,
     nothingUnder: (filter: string) => `Nothing under ${filter}.`,
+    news: 'News',
+    sportNews: (sport: string) => `${sport} news`,
+    stories: (n: number) => `${n} ${n === 1 ? 'story' : 'stories'}`,
+    storiesFrom: (n: number, source: string) => `${n} ${n === 1 ? 'story' : 'stories'} from ${source}`,
+    unreadFilter: 'Unread',
+    readOn: (source: string) => `Read on ${source}`,
+    deliveryLabel: 'Where this went',
+    inbox: 'In your inbox here',
+    phone: 'Phone',
+    phoneTablet: 'Phone and tablet',
+    desktop: 'Desktop browser',
+    email: 'Email',
+    text: 'Text',
+    sent: 'sent',
+    someDevices: 'sent to some devices',
+    retrying: 'will try again',
+    notSent: 'not sent',
+    quietHours: 'not sent (quiet hours)',
+    noDevice: 'no device set up',
+    failed: "didn't go through",
+    unknown: 'unknown',
   },
   es: {
     justNow: 'ahora mismo',
@@ -25,9 +49,30 @@ export const notificationsCenterMessages = defineMessages({
     daysAgo: (days) => `hace ${days} d`,
     matchingNotices: (n) => ` · ${n} avisos coincidentes`,
     loading: 'Cargando notificaciones…',
-    waiting: (unread, inLeague) => `${unread} pendientes${inLeague ? ' en esta liga' : ''}. Los avisos con plazo aparecen primero.`,
-    olderNotListed: (listed, older) =>
-      `Aquí se muestran los ${listed} avisos más recientes. ${older} anteriores no aparecen; los conteos de arriba describen esta página, no todos tus avisos.`,
+    unread: (count, inLeague) => `${count} sin leer${inLeague ? ' en esta liga' : ''}`,
+    needAction: (n) => `${n} ${n === 1 ? 'requiere' : 'requieren'} acción; ${n === 1 ? 'está' : 'están'} arriba.`,
+    showingNewest: (n) => `Se muestran tus ${n} avisos más recientes.`,
     nothingUnder: (filter) => `Nada en ${filter}.`,
+    news: 'Noticias',
+    sportNews: (sport) => `Noticias de ${sport}`,
+    stories: (n) => `${n} ${n === 1 ? 'noticia' : 'noticias'}`,
+    storiesFrom: (n, source) => `${n} ${n === 1 ? 'noticia' : 'noticias'} de ${source}`,
+    unreadFilter: 'Sin leer',
+    readOn: (source) => `Leer en ${source}`,
+    deliveryLabel: 'Adónde llegó',
+    inbox: 'En tu bandeja de aquí',
+    phone: 'Teléfono',
+    phoneTablet: 'Teléfono y tableta',
+    desktop: 'Navegador de escritorio',
+    email: 'Correo',
+    text: 'Mensaje de texto',
+    sent: 'enviado',
+    someDevices: 'enviado a algunos dispositivos',
+    retrying: 'se volverá a intentar',
+    notSent: 'no enviado',
+    quietHours: 'no enviado (horario de silencio)',
+    noDevice: 'ningún dispositivo configurado',
+    failed: 'no se pudo enviar',
+    unknown: 'desconocido',
   },
 })

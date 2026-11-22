@@ -30,9 +30,9 @@ import { importedWaiverSettings } from './waiverRowMeta'
  * drawing an empty budget table that reads like "nobody has spent anything".
  */
 
-export type WaiverTone = 'good' | 'warn' | 'bad'
+type WaiverTone = 'good' | 'warn' | 'bad'
 
-export type WaiverBudgetRow = {
+type WaiverBudgetRow = {
   rosterId: string
   handle: string
   initials: string
@@ -42,9 +42,9 @@ export type WaiverBudgetRow = {
   tone: WaiverTone
 }
 
-export type WaiverRunResult = 'won' | 'outbid' | 'short' | 'blocked' | 'not_awarded'
+type WaiverRunResult = 'won' | 'outbid' | 'short' | 'blocked' | 'not_awarded'
 
-export type WaiverRunRow = {
+type WaiverRunRow = {
   id: string
   player: string
   manager: string
@@ -82,8 +82,8 @@ export type WaiverOversight =
     }
 
 /** Below this share of the season budget a manager is getting low; below the second, nearly out. */
-export const FAAB_WARN_SHARE = 0.5
-export const FAAB_BAD_SHARE = 0.2
+const FAAB_WARN_SHARE = 0.5
+const FAAB_BAD_SHARE = 0.2
 const STUCK_AFTER_MS = 30 * 60 * 1000
 const RUN_ROW_CAP = 12
 

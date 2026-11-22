@@ -8,7 +8,7 @@ import { buildBestBallSlots } from '@/lib/bestball/productionLineup'
 import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { checkBestBallPoolCapacity, settingsWithRosterSlots, type BestBallPoolCheck } from './poolCapacity'
 
-export type PoolCheckLeague = {
+type PoolCheckLeague = {
   sport: string | null
   settings: unknown
   bestBallMode?: boolean | null

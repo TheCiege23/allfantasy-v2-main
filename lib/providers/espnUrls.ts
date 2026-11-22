@@ -40,12 +40,6 @@
 
 export const ESPN_SITE_API_BASE = 'https://site.web.api.espn.com/apis/site/v2/sports'
 
-/**
- * The host that is blocked, kept as a named value so a check for it reads as intent rather than a
- * magic string. Nothing should build a URL from this.
- */
-export const ESPN_BLOCKED_SITE_API_HOST = 'site.api.espn.com'
-
 /** `sport/league` path segments, e.g. `football/nfl`. */
 export function espnSiteApiUrl(pathSegment: string, query?: Record<string, string | number>): string {
   const url = new URL(`${ESPN_SITE_API_BASE}/${pathSegment.replace(/^\/+/, '')}`)
@@ -66,7 +60,7 @@ export function espnSiteApiUrl(pathSegment: string, query?: Record<string, strin
  * `espn_s2` COOKIES, sent as a header by `lib/league-import/espn/espnFantasyClient.ts`. Putting
  * them in a query string would leak a live ESPN session into every log line that prints a URL.
  */
-export const ESPN_FANTASY_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games'
+const ESPN_FANTASY_API_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games'
 
 export type EspnFantasyGame = 'ffl' | 'flb'
 

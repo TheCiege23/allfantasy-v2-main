@@ -195,7 +195,7 @@ export const DRAFT_WHEN_LABELS: Record<DraftWhenFilter, string> = {
 // ── Free-text search ────────────────────────────────────────────────────────
 
 /** Lower-cased words, with `-`/`_`/`/` treated as spaces so "best_ball" and "best-ball" both read as two words. */
-export function searchWords(text: string | null | undefined): string[] {
+function searchWords(text: string | null | undefined): string[] {
   return String(text ?? "")
     .toLowerCase()
     .replace(/[-_/]+/g, " ")

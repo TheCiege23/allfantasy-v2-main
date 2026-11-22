@@ -5,7 +5,7 @@ import { TrendingUp, Loader2 } from "lucide-react"
 import { LeagueDiscoveryCard } from "./LeagueDiscoveryCard"
 import type { DiscoveryCard } from "@/lib/public-discovery/types"
 
-export interface TrendingLeaguesSectionProps {
+interface TrendingLeaguesSectionProps {
   sport?: string | null
   limit?: number
 }

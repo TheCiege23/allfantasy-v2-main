@@ -13,7 +13,7 @@
 
 import type { WorldCupAiPromptAction } from "./worldCupChatTypes"
 
-export type WorldCupAiPromptChipsProps = {
+type WorldCupAiPromptChipsProps = {
   actions: WorldCupAiPromptAction[]
   onSelect: (prompt: string) => void
   /** Aria label for the scrollable region */

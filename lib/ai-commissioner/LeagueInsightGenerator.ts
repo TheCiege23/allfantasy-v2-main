@@ -25,7 +25,7 @@ function buildWeeklyRecapPost(input: {
 }): WeeklyRecapPost {
   const bullets: string[] = []
   bullets.push(`${input.matchupCount} matchup storyline(s) summarized for ${input.sport}.`)
-  bullets.push(`${input.waiverCount} waiver result highlight(s) reviewed by AI Commissioner.`)
+  bullets.push(`${input.waiverCount} waiver result highlight(s) reviewed by Chimmy Commissioner.`)
   bullets.push(`${input.tradeCount} recent trade(s) scanned for fairness and controversy risk.`)
   bullets.push(`${input.draftCommentaryCount} draft commentary note(s) generated from recent picks.`)
   if (input.pendingWaiverClaims > 0) {

@@ -36,10 +36,10 @@ export type WeekPositionDb = {
   }
 }
 
-export const WEEK_POSITION_SOURCE = 'weekly_score_sync'
+const WEEK_POSITION_SOURCE = 'weekly_score_sync'
 
 /** Prisma's codes for "the migration has not been applied here". */
-export function isMissingWeekPositionTable(e: unknown): boolean {
+function isMissingWeekPositionTable(e: unknown): boolean {
   const code = (e as { code?: string } | null)?.code
   if (code === 'P2021' || code === 'P2022') return true
   const msg = e instanceof Error ? e.message : String(e)

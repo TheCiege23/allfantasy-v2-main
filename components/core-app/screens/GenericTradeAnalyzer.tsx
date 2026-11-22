@@ -13,6 +13,9 @@ import { TradeValueChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
 import { rosterSpotRowLabel } from '@/lib/trade-value/rosterSpotCharge'
+import { TradeReviewLink } from '@/components/monetization/TradeReviewLink'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 type Result = {
   grade?: TradeGradeView
@@ -66,7 +69,7 @@ const SCORING_CHOICES: Readonly<Record<string, { label: string; choices: Readonl
 }
 
 /** "$25 FAAB", "25 faab", "FAAB 25" → a FAAB asset. Exported for its test. */
-export function parseFaabLine(line: string): number | null {
+function parseFaabLine(line: string): number | null {
   const m = /^(?:\$?\s*(\d{1,5})\s*(?:faab|fab)|(?:faab|fab)\s*\$?\s*(\d{1,5}))$/i.exec(line.trim())
   if (!m) return null
   const amount = Number(m[1] ?? m[2])
@@ -137,6 +140,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
   const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy({result,assets:[...teamA.split(/\r?\n/),...teamB.split(/\r?\n/)].map(name=>({name}))})
+  const depthCopy = coreDepthLockCopy(language)
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -414,6 +418,23 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
               <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
               <p>{copy("Team A receives ")}{copy((result.grade.getValue ?? result.grade.getMarket).toLocaleString(locale))}{copy(" in market value and sends ")}{copy((result.grade.giveValue ?? result.grade.giveMarket).toLocaleString(locale))}{copy("; Team B is the opposite. The gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the bigger side.")} <TopicTip topic="tradeGrade" /></p>
               <p className="af-tc-generic-hint">{copy("This grade compares market value only. It doesn’t account for league scoring, roster needs, injuries, whether they’ll accept, or how players will perform.")}</p>
+              {sport !== 'NFL' || qbPreset === '1qb' || qbPreset === 'sf' ? (
+                <TradeReviewLink
+                  draft={{
+                    give: assets(teamA, sport, verifiedA),
+                    get: assets(teamB, sport, verifiedB),
+                    sport: normalizeToSupportedSport(sport),
+                    format: dynasty ? 'dynasty' : 'redraft',
+                    qbFormat: qbPreset === '1qb' ? '1qb' : 'sf',
+                    scoring: scoring ? (scoring === 'points' ? 'Points' : 'Categories') : undefined,
+                  }}
+                  source="market_trade_review"
+                  viewerId={viewerId}
+                  storageError={depthCopy.tradeDraftStorageError}
+                >
+                  {depthCopy.fullTradeReview}
+                </TradeReviewLink>
+              ) : null}
               {result.tradeMarket?.lines.length || result.tradeMarket?.note ? (
                 <div className="af-tc-generic-market" data-testid="generic-trade-market">
                   <strong>{copy("What real trades say")}</strong>

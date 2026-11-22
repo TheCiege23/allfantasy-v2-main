@@ -271,7 +271,7 @@ export default function ZombieUniverseHomePage() {
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                 <p className="font-semibold text-white">Storylines</p>
-                <p className="mt-1">Chat, AI, and standings all orbit the same universe pressure instead of acting like separate tools.</p>
+                <p className="mt-1">Chat, Chimmy, and standings all orbit the same universe pressure instead of acting like separate tools.</p>
               </div>
             </div>
           </div>
@@ -313,7 +313,7 @@ export default function ZombieUniverseHomePage() {
           }`}
         >
           <Sparkles className="h-4 w-4" />
-          AI
+          Chimmy
         </button>
       </div>
 

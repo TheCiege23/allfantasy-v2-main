@@ -104,7 +104,7 @@ export async function POST(
   } catch (e) {
     console.error('[salary-cap/ai]', e)
     return NextResponse.json(
-      { error: 'AI generation failed', message: e instanceof Error ? e.message : 'Unknown error' },
+      { error: 'Chimmy generation failed', message: e instanceof Error ? e.message : 'Unknown error' },
       { status: 500 }
     )
   }

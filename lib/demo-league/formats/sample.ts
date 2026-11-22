@@ -275,7 +275,14 @@ export function buildSampleBase(opts: SampleOptions): SampleBase {
   // Round-robin schedule (circle method). Odd counts get a bye.
   const ids = [...teams.map((t) => t.key), ...(teamCount % 2 ? ['__bye__'] : [])]
   const weekRows: SourceSnapshot['weekRows'] = []
-  for (let week = 1; week <= totalWeeks; week++) {
+  /*
+   * The schedule runs to the end of the regular season (playoffStartWeek 15 → week 14), with weeks after
+   * the current one stored at 0–0 the way Sleeper stores them. Without them the standings board sees no
+   * games left and calls every team clinched or eliminated in week 9. Those weeks draw no random
+   * numbers, so every score above stays exactly as it was.
+   */
+  const scheduleWeeks = Math.max(totalWeeks, 14)
+  for (let week = 1; week <= scheduleWeeks; week++) {
     const rot = [ids[0]!, ...ids.slice(1).map((_, i, rest) => rest[(i + week - 1) % rest.length]!)]
     for (let m = 0; m < rot.length / 2; m++) {
       const a = rot[m]!

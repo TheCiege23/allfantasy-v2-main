@@ -31,6 +31,14 @@ export default async function ContactPage(props: ContactPageProps) {
           For account issues, bugs, league import problems, or general questions, reach out and we will get back to
           you as soon as we can.
         </p>
+        <Link
+          href="/help"
+          className="mt-3 inline-block rounded-xl bg-cyan-400 px-4 py-2 font-semibold text-[#020817] hover:bg-cyan-300"
+          data-testid="contact-message-us"
+        >
+          Message us in the app
+        </Link>
+        <p className="mt-2 text-white/70">A real person reads every message, and our reply reaches you in the app and by email.</p>
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-white">AllFantasy Support</p>
           <p className="text-white/70">

@@ -95,7 +95,7 @@ export function championshipTotal(
     ? final.liveHomeScore + final.liveAwayScore : null
 }
 
-export type RankedBracket = {
+type RankedBracket = {
   id: string
   totalScore: number
   potentialTotal: number

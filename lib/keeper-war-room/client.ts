@@ -44,9 +44,6 @@ async function postAction<T>(leagueId: string, action: string, body: Record<stri
   return parse<T>(res)
 }
 
-export const fetchKeeperRecommendations = (leagueId: string, rosterId?: string) =>
-  postAction<{ recommendations: KeeperRecommendationResult }>(leagueId, 'keeper-recommendations', { rosterId })
-
 export const fetchKeeperCutList = (leagueId: string, rosterId?: string) =>
   postAction<{ cutList: KeeperCutListResult }>(leagueId, 'cut-list', { rosterId })
 

@@ -1,4 +1,4 @@
-export interface FantraxImportLeague {
+interface FantraxImportLeague {
   leagueId: string
   name: string
   sport: string
@@ -10,7 +10,7 @@ export interface FantraxImportLeague {
   isDevy: boolean
 }
 
-export interface FantraxImportSettings {
+interface FantraxImportSettings {
   scoringType: string | null
   rosterPositions: Array<{ position: string; count: number }>
   /** Real per-team roster size, measured from the rosters. Null when unknown. */
@@ -41,7 +41,7 @@ export interface FantraxImportTeam {
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
 
-export interface FantraxImportScheduleWeek {
+interface FantraxImportScheduleWeek {
   week: number
   season: number
   matchups: Array<{
@@ -80,6 +80,14 @@ export interface FantraxImportDraftPick {
   team?: string | null
 }
 
+/** One future-season pick and who holds it, in this payload's own team ids. */
+export interface FantraxImportFuturePick {
+  season: number
+  round: number
+  originalTeamId: string
+  ownerTeamId: string
+}
+
 export interface FantraxImportPayload {
   sourceInput: string
   league: FantraxImportLeague
@@ -88,6 +96,12 @@ export interface FantraxImportPayload {
   schedule: FantraxImportScheduleWeek[]
   transactions: FantraxImportTransaction[]
   draftPicks: FantraxImportDraftPick[]
+  /**
+   * Every future-season pick Fantrax lists for the league, traded or not. Absent when no inventory
+   * is on file (a CSV-era snapshot, or a league imported before picks were read): that is "unknown",
+   * not "no picks".
+   */
+  futurePicks?: FantraxImportFuturePick[]
   /**
    * Where `draftPicks` and `transactions` came from, so coverage can say so. Absent on payloads built
    * before this existed (and in tests), which reads as "export only".

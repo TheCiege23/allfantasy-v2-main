@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
-export interface ImportSourceInputPanelProps {
+interface ImportSourceInputPanelProps {
   provider: ImportProvider | null;
   /** For available providers: league ID or provider-specific source input. */
   sourceInput: string;

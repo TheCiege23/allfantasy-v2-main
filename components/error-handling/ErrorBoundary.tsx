@@ -4,7 +4,7 @@ import React from 'react'
 import { captureException } from '@/lib/error-tracking'
 import { ErrorFallback } from './ErrorFallback'
 
-export type ErrorBoundaryProps = {
+type ErrorBoundaryProps = {
   children: React.ReactNode
   fallback?: React.ReactNode
   onError?: (error: Error, info: React.ErrorInfo) => void

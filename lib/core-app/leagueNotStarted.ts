@@ -10,7 +10,7 @@
  * Either field may carry it: `status` is written by the importer and the setup flow,
  * `lifecycleState` by the lifecycle engine, and production holds rows where they disagree. PURE.
  */
-export const NOT_STARTED_LEAGUE_STATES: ReadonlySet<string> = new Set(['setup', 'pre_draft', 'predraft', 'drafting'])
+const NOT_STARTED_LEAGUE_STATES: ReadonlySet<string> = new Set(['setup', 'pre_draft', 'predraft', 'drafting'])
 
 export function isLeagueNotStarted(
   league: { status?: string | null; lifecycleState?: string | null } | null | undefined,

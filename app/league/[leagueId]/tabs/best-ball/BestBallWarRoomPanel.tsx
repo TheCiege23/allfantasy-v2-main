@@ -130,7 +130,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
     try {
       const res = await askBestBallWarRoom(leagueId, q)
       if (res.aiUnavailable) {
-        setAskNote('AI is temporarily unavailable — showing grounded facts only.')
+        setAskNote('Chimmy is temporarily unavailable — showing grounded facts only.')
         setAnswer(null)
       } else setAnswer(res.answer)
     } catch (e) {

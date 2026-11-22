@@ -1,4 +1,4 @@
-export type CategoryMatchupInput = {
+type CategoryMatchupInput = {
   teamId1: string
   teamId2: string | null
   categories1?: Record<string, number>

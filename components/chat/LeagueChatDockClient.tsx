@@ -24,7 +24,9 @@ export default function LeagueChatDockClient() {
           cache: "no-store",
         })
         const json = await res.json().catch(() => ({}))
-        if (active) setIsCommissioner(Boolean(json?.isCommissioner))
+        // Chat moderation is the chat area: a co-commissioner needs it (lib/league/commissionerAccess.ts).
+        const scopes = Array.isArray(json?.scopes) ? (json.scopes as string[]) : null
+        if (active) setIsCommissioner(Boolean(json?.isCommissioner) && (scopes == null || scopes.includes("chat")))
       } catch {
         if (active) setIsCommissioner(false)
       }

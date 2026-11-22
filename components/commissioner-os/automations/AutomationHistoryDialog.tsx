@@ -13,7 +13,7 @@ import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { automationText, dateText, historyTitleText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
-export interface AutomationHistoryDialogProps {
+interface AutomationHistoryDialogProps {
   automation: AutomationCatalogEntry | null
   history: AutomationExecutionEntry[]
   onOpenChange: (open: boolean) => void

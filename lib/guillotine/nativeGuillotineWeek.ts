@@ -27,13 +27,14 @@ import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig, isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { isPastCorrectionCutoff, savePeriodScores } from '@/lib/guillotine/GuillotineWeekEvaluator'
 import { runElimination } from '@/lib/guillotine/GuillotineEliminationEngine'
+import { AWAITING_COMMISSIONER_TIEBREAK_REASON } from '@/lib/guillotine/commissionerTiebreakStore'
 import { ensureGuillotineSeason } from '@/lib/guillotine/ensureGuillotineSeason'
 import { finalizeRedraftWeek, readWeekSlate, WEEK_KEYED_SPORTS } from '@/lib/redraft/weekFinalizer'
 import { scoreRosterForWeek, type DailyBestBallDetail } from '@/lib/redraft/scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { finishGuillotineSeason, rosterIdForOwner } from '@/lib/guillotine/finishGuillotineSeason'
-import { recordChoppedReleases } from '@/lib/guillotine/choppedReleases'
+import { releaseNativeChoppedPlayers } from '@/lib/guillotine/nativeChopRelease'
 import { firstChopWeekAfterDraft } from '@/lib/guillotine/draftWeekFloor'
 import { recordGuillotineCorrectionBaseline } from '@/lib/guillotine/statCorrectionHandler'
 import { periodEndWeek, previousPeriodEnd, readPeriodWeeks, weeksInPeriod } from '@/lib/guillotine/eliminationPeriods'
@@ -375,29 +376,24 @@ export async function runNativeGuillotineWeek(
     if (result?.reason === 'final stage complete') return { ...(await completeSeason(season.id, gSeason, base)), week }
     if (result?.reason === 'final stage scored') return { ...base, outcome: 'final_stage_scored', week }
     if (result?.reason === 'no chop scheduled') return { ...base, outcome: 'no_chop', week }
+    // A tie is waiting on the commissioner's pick (./commissionerTiebreak.ts); the next run chops once they decide.
+    if (result?.reason === AWAITING_COMMISSIONER_TIEBREAK_REASON) return { ...base, outcome: 'waiting', week, reason: 'commissioner_tiebreak' }
     if (!result || result.choppedRosterIds.length === 0) {
       return { ...base, outcome: 'refused', week, reason: result?.reason ?? 'engine_returned_nothing' }
     }
 
     // Release: the chopped team's players become free agents for the next waiver run.
-    if (choppedRedraft.length > 0) {
-      /*
-       * Listed first, while the roster still holds them: the home's chop moment and the war room show
-       * these players with a Bid button (lib/guillotine/choppedReleases.ts). Best-effort — the chop has
-       * happened, and a failed list must not stop the players reaching waivers.
-       */
-      if (gSeason.ok) {
-        try {
-          await recordChoppedReleases({ leagueId: season.leagueId, guillotineSeasonId: gSeason.seasonId, week, redraftRosterIds: choppedRedraft, availableAt: now })
-        } catch (error) {
-          console.warn('[native-guillotine] released players not listed; the chop stands', { seasonId: season.id, week, error: error instanceof Error ? error.message : String(error) })
-        }
-      }
-      await prisma.redraftRosterPlayer.updateMany({
-        where: { rosterId: { in: choppedRedraft }, droppedAt: null },
-        data: { droppedAt: now },
-      })
-    }
+    /*
+     * Listed first, while the roster still holds them: the home's chop moment and the war room show these
+     * players with a Bid button (lib/guillotine/choppedReleases.ts), and an undone chop restores exactly them.
+     */
+    await releaseNativeChoppedPlayers({
+      leagueId: season.leagueId,
+      guillotineSeasonId: gSeason.ok ? gSeason.seasonId : null,
+      week,
+      redraftRosterIds: choppedRedraft,
+      now,
+    })
     if (gSeason.ok) {
       await prisma.guillotineSeason.updateMany({ where: { id: gSeason.seasonId, status: 'setup' }, data: { status: 'active' } })
     }

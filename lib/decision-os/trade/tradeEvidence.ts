@@ -2,11 +2,11 @@ import type { TradeGradeLine } from './tradeGrade'
 
 const DAY = 86_400_000
 /** Operational freshness rule, not a measured probability that the verdict is right. */
-export const TRADE_VALUE_STALE_DAYS = 7
+const TRADE_VALUE_STALE_DAYS = 7
 const MARKET = new Set(['fantasycalc', 'fantasycalc_pick'])
 const APPROXIMATE = new Set(['position_baseline', 'pick_curve', 'draft_analytics', 'historical_file', 'devy_option', 'league_kicker', 'league_defense'])
 
-export type TradeEvidence = {
+type TradeEvidence = {
   status: 'dated' | 'mixed' | 'limited'
   label: string
   priced: number
@@ -56,7 +56,7 @@ export function tradeEvidence(lines: readonly TradeGradeLine[], at: string, gaps
   }
 }
 
-export type TradePackageReview = { givePlayers: number; getPlayers: number; netPlayerSlots: number; note: string }
+type TradePackageReview = { givePlayers: number; getPlayers: number; netPlayerSlots: number; note: string }
 
 /** Picks and FAAB do not occupy player roster slots. Never infer an asset's kind from its name. */
 export function tradePackageReview(

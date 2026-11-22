@@ -28,7 +28,7 @@ const TONE_BY_STATE: Record<LegacyDataState, string> = {
   link_required: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
 }
 
-export type LegacyDataNoticeProps = {
+type LegacyDataNoticeProps = {
   status: LegacyDataStatus
   compact?: boolean
   onRetry?: () => void

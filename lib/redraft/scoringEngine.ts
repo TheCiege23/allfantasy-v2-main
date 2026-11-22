@@ -21,6 +21,7 @@ import { applyScoringPresetToRecPoints, resolveLeagueScoringRules } from './leag
 import { fantraxSoccerScoringPosition } from '@/lib/league-import/fantrax/fantraxScoring'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { adjustmentFor, adjustedScore, readScoreAdjustments } from '@/lib/score-adjustments/scoreAdjustments'
+import { isManuallyFinal, readManualFinals } from '@/lib/score-adjustments/manualFinal'
 import { assignExtraMatchupForWeek } from '@/lib/redraft/oddTeamExtraMatchup'
 import { readExtraMatchupRecord, readExtraMatchupSettings } from '@/lib/redraft/oddTeamExtraMatchupRules'
 import {
@@ -227,6 +228,11 @@ export async function calculateScoreFromSportConfig(
  * Moved out of `calculateScoreFromSportConfig` unchanged (2026-10-09): the weekly matchup engine and the
  * trade grade must score a stat line the same way, so they share this rather than a copy.
  */
+export function calculateScoreForLeague(league: Parameters<typeof resolveLeagueScoringRules>[0], rawStats: Record<string, number>, position?: string | null): number {
+  const scorer = buildLeagueStatScorer(league)
+  return scorer ? scorer(rawStats, position) : calculateFantasyPoints(rawStats, [] as unknown as SportConfig['statCategories'], undefined)
+}
+
 export function buildLeagueStatScorer(league: Parameters<typeof resolveLeagueScoringRules>[0]): LeagueStatScorer | null {
   const rules = resolveLeagueScoringRules(league)
   if (!rules) return null
@@ -1159,6 +1165,11 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   const seasonYear = season.season
 
   const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true, platform: true, sport: true, leagueVariant: true, leagueType: true } })
+  // A game the commissioner closed by hand (lib/score-adjustments/manualFinal.ts) is left exactly as it
+  // stands: its status and its score. Without this the status below would go back to 'active'.
+  if (isManuallyFinal(readManualFinals(scoringLeague?.settings), matchupId)) {
+    return { matchupId, week, homeScore: m.homeScore, awayScore: m.awayScore, isComplete: true, missingPlayerIds: [] }
+  }
   // The scoring type in force for THIS week: a mid-season switch never re-scores a week played before it.
   const scoringSettings = settingsForScoringWeek(scoringLeague?.settings as Record<string, any> | null, seasonYear, week)
   const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'

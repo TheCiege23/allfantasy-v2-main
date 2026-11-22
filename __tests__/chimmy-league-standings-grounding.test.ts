@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   seasonFindFirst: vi.fn(),
   rosterFindMany: vi.fn(),
+  rosterCount: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftSeason: { findFirst: mocks.seasonFindFirst },
-    redraftRoster: { findMany: mocks.rosterFindMany },
+    redraftRoster: { findMany: mocks.rosterFindMany, count: mocks.rosterCount },
   },
 }))
 
@@ -37,6 +38,8 @@ describe('buildLeagueStandingsContext', () => {
     vi.clearAllMocks()
     mocks.seasonFindFirst.mockResolvedValue({ id: 'season-1', season: 2026 })
     mocks.rosterFindMany.mockResolvedValue([roster()])
+    // Unreadable count: the reader falls back to the rows it has, as before.
+    mocks.rosterCount.mockRejectedValue(new Error('count unavailable'))
   })
 
   /*
@@ -111,6 +114,36 @@ describe('buildLeagueStandingsContext', () => {
 
     const out = await buildLeagueStandingsContext('lg1', 'a')
     expect(out.indexOf('First')).toBeLessThan(out.indexOf('Third'))
+  })
+
+  /*
+   * 2026-11-15: "who is the best team and why?" got a bare name, and the real story — the leader
+   * was not the top scorer — only came on a follow-up. The tool now says it outright.
+   */
+  it('ranks PF/PA and says when the standings leader is not the top scorer', async () => {
+    mocks.rosterFindMany.mockResolvedValue([
+      roster({ ownerId: 'a', teamName: 'Leader', wins: 5, losses: 1, pointsFor: 679, pointsAgainst: 647, playoffSeed: 1 }),
+      roster({ ownerId: 'b', teamName: 'Scorer', wins: 3, losses: 3, pointsFor: 791, pointsAgainst: 765, playoffSeed: 2 }),
+      roster({ ownerId: 'c', teamName: 'Middle', wins: 3, losses: 3, pointsFor: 741, pointsAgainst: 716, playoffSeed: 3 }),
+    ])
+    const out = await buildLeagueStandingsContext('lg1', 'a')
+    expect(out).toContain('PF 679.0 (#3)')
+    expect(out).toContain('PA 765.0 (#1)')
+    expect(out).toContain('Most points scored: Scorer (791.0 PF).')
+    expect(out).toContain('The standings leader, Leader, is NOT the top scorer — #3 in points for.')
+    expect(out).toContain('Toughest schedule so far: Scorer')
+  })
+
+  it('gives no ranks or key facts on a truncated list, where a rank would be a guess', async () => {
+    mocks.rosterCount.mockResolvedValue(50)
+    mocks.rosterFindMany.mockResolvedValue([
+      roster({ ownerId: 'a', teamName: 'Leader', wins: 5, pointsFor: 679, playoffSeed: 1 }),
+      roster({ ownerId: 'b', teamName: 'Scorer', wins: 3, pointsFor: 791, playoffSeed: 2 }),
+    ])
+    const out = await buildLeagueStandingsContext('lg1', 'a')
+    expect(out).toContain('ONLY 2 of those 50 teams')
+    expect(out).not.toContain('KEY FACTS')
+    expect(out).not.toMatch(/PF 679\.0 \(#/)
   })
 
   it('returns null when the league has no redraft season on file', async () => {

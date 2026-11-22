@@ -9,12 +9,12 @@
  */
 
 /** The Play package (docs/play-store/twa-manifest.json `packageId`, public/.well-known/assetlinks.json). */
-export const ANDROID_APP_PACKAGE = 'ai.allfantasy.app'
+const ANDROID_APP_PACKAGE = 'ai.allfantasy.app'
 
 export const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_APP_PACKAGE}`
 
 /** An Android phone or tablet browser. iPhone/iPad/desktop user agents never contain "Android". */
-export function isAndroidUserAgent(userAgent: string | null | undefined): boolean {
+function isAndroidUserAgent(userAgent: string | null | undefined): boolean {
   return /Android/i.test(String(userAgent ?? ''))
 }
 

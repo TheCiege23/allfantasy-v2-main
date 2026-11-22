@@ -5,7 +5,6 @@ import {
   isPositionEligibleForSlot,
   getPositionsForSport,
 } from '@/lib/roster-defaults/PositionEligibilityResolver'
-import { validateRoster, canAddPlayerToSlot } from '@/lib/roster-defaults/RosterValidationEngine'
 import { getRosterTemplate } from '@/lib/multi-sport/RosterTemplateService'
 
 vi.mock('@/lib/prisma', () => ({
@@ -109,59 +108,6 @@ describe('Prompt 12 — Default Roster Templates for Soccer + NFL IDP', () => {
     it('allowed positions for UTIL slot include all soccer positions', () => {
       const allowed = getAllowedPositionsForSlot('SOCCER', 'UTIL')
       expect(allowed).toEqual(expect.arrayContaining(['GKP', 'GK', 'DEF', 'MID', 'FWD']))
-    })
-  })
-
-  describe('Soccer Roster Validation', () => {
-    it('validates valid soccer roster with all positions', () => {
-      const result = validateRoster('SOCCER', [
-        { playerId: 'gk1', position: 'GKP', slotName: 'GKP' },
-        { playerId: 'def1', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def2', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def3', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def4', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'mid1', position: 'MID', slotName: 'MID' },
-        { playerId: 'mid2', position: 'MID', slotName: 'MID' },
-        { playerId: 'mid3', position: 'MID', slotName: 'MID' },
-        { playerId: 'mid4', position: 'MID', slotName: 'MID' },
-        { playerId: 'fwd1', position: 'FWD', slotName: 'FWD' },
-        { playerId: 'fwd2', position: 'FWD', slotName: 'FWD' },
-        { playerId: 'util1', position: 'DEF', slotName: 'UTIL' },
-      ])
-
-      expect(result.valid).toBe(true)
-      expect(result.errors.length).toBe(0)
-    })
-
-    it('validates GK alias in soccer roster', () => {
-      const result = validateRoster('SOCCER', [
-        { playerId: 'gk1', position: 'GK', slotName: 'GKP' },
-        { playerId: 'def1', position: 'DEF', slotName: 'DEF' },
-      ])
-
-      expect(result.valid).toBe(true)
-    })
-
-    it('rejects invalid position in slot (FWD in GKP)', () => {
-      const result = validateRoster('SOCCER', [
-        { playerId: 'p1', position: 'FWD', slotName: 'GKP' },
-      ])
-
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.includes('not allowed'))).toBe(true)
-    })
-
-    it('rejects overfilled slot', () => {
-      const result = validateRoster('SOCCER', [
-        { playerId: 'def1', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def2', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def3', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def4', position: 'DEF', slotName: 'DEF' },
-        { playerId: 'def5', position: 'DEF', slotName: 'DEF' },
-      ])
-
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.includes('DEF'))).toBe(true)
     })
   })
 
@@ -351,92 +297,6 @@ describe('Prompt 12 — Default Roster Templates for Soccer + NFL IDP', () => {
     })
   })
 
-  describe('NFL IDP Roster Validation', () => {
-    it('validates valid IDP roster with offensive + defensive positions', () => {
-      const result = validateRoster('NFL', [
-        // Offense
-        { playerId: 'p1', position: 'QB', slotName: 'QB' },
-        { playerId: 'p2', position: 'RB', slotName: 'RB' },
-        { playerId: 'p3', position: 'RB', slotName: 'RB' },
-        { playerId: 'p4', position: 'WR', slotName: 'WR' },
-        { playerId: 'p5', position: 'WR', slotName: 'WR' },
-        { playerId: 'p6', position: 'TE', slotName: 'TE' },
-        { playerId: 'p7', position: 'K', slotName: 'K' },
-        { playerId: 'p8', position: 'RB', slotName: 'FLEX' },
-        // Defense
-        { playerId: 'p9', position: 'DE', slotName: 'DE' },
-        { playerId: 'p10', position: 'DE', slotName: 'DE' },
-        { playerId: 'p11', position: 'DT', slotName: 'DT' },
-        { playerId: 'p12', position: 'LB', slotName: 'LB' },
-        { playerId: 'p13', position: 'LB', slotName: 'LB' },
-        { playerId: 'p14', position: 'CB', slotName: 'CB' },
-        { playerId: 'p15', position: 'CB', slotName: 'CB' },
-        { playerId: 'p16', position: 'S', slotName: 'S' },
-        { playerId: 'p17', position: 'S', slotName: 'S' },
-        // Flex defensive
-        { playerId: 'p18', position: 'DE', slotName: 'DL' },
-        { playerId: 'p19', position: 'CB', slotName: 'DB' },
-        { playerId: 'p20', position: 'LB', slotName: 'IDP_FLEX' },
-      ], 'IDP')
-
-      expect(result.valid).toBe(true)
-      expect(result.errors.length).toBe(0)
-    })
-
-    it('rejects IDP roster with invalid defensive position in offensive slot', () => {
-      const result = validateRoster('NFL', [
-        { playerId: 'p1', position: 'DE', slotName: 'QB' },
-      ], 'IDP')
-
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.includes('not allowed'))).toBe(true)
-    })
-
-    it('rejects IDP roster with invalid offensive position in defensive slot', () => {
-      const result = validateRoster('NFL', [
-        { playerId: 'p1', position: 'WR', slotName: 'DE' },
-      ], 'IDP')
-
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.includes('not allowed'))).toBe(true)
-    })
-
-    it('rejects overfilled DE slot (max 2)', () => {
-      const result = validateRoster('NFL', [
-        { playerId: 'p1', position: 'DE', slotName: 'DE' },
-        { playerId: 'p2', position: 'DE', slotName: 'DE' },
-        { playerId: 'p3', position: 'DE', slotName: 'DE' },
-      ], 'IDP')
-
-      expect(result.valid).toBe(false)
-      expect(result.errors.some((e) => e.includes('DE'))).toBe(true)
-    })
-
-    it('allows flexible DL slot to accept both DE and DT', () => {
-      const de = canAddPlayerToSlot('NFL', 'DL', 'DE', [], 'IDP')
-      const dt = canAddPlayerToSlot('NFL', 'DL', 'DT', [], 'IDP')
-
-      expect(de.allowed).toBe(true)
-      expect(dt.allowed).toBe(true)
-    })
-
-    it('allows flexible DB slot to accept both CB and S', () => {
-      const cb = canAddPlayerToSlot('NFL', 'DB', 'CB', [], 'IDP')
-      const s = canAddPlayerToSlot('NFL', 'DB', 'S', [], 'IDP')
-
-      expect(cb.allowed).toBe(true)
-      expect(s.allowed).toBe(true)
-    })
-
-    it('allows IDP_FLEX to accept all defensive positions', () => {
-      const positions = ['DE', 'DT', 'LB', 'CB', 'S']
-      for (const pos of positions) {
-        const result = canAddPlayerToSlot('NFL', 'IDP_FLEX', pos, [], 'IDP')
-        expect(result.allowed).toBe(true)
-      }
-    })
-  })
-
   describe('NFL IDP Roster Template DTO', () => {
     it('generates valid RosterTemplateDto for IDP', async () => {
       const template = await getRosterTemplate('NFL', 'IDP')
@@ -518,13 +378,6 @@ describe('Prompt 12 — Default Roster Templates for Soccer + NFL IDP', () => {
 
       // Eligibility
       expect(isPositionEligibleForSlot('SOCCER', 'GKP', 'GK')).toBe(true)
-
-      // Validation
-      const validation = validateRoster('SOCCER', [
-        { playerId: 'gk1', position: 'GK', slotName: 'GKP' },
-        { playerId: 'def1', position: 'DEF', slotName: 'DEF' },
-      ])
-      expect(validation.valid).toBe(true)
     })
 
     it('IDP template is fully integrated and functional', async () => {
@@ -540,13 +393,6 @@ describe('Prompt 12 — Default Roster Templates for Soccer + NFL IDP', () => {
       // Eligibility
       expect(isPositionEligibleForSlot('NFL', 'DE', 'DE', 'IDP')).toBe(true)
       expect(isPositionEligibleForSlot('NFL', 'DL', 'DE', 'IDP')).toBe(true)
-
-      // Validation
-      const validation = validateRoster('NFL', [
-        { playerId: 'p1', position: 'QB', slotName: 'QB' },
-        { playerId: 'p2', position: 'DE', slotName: 'DE' },
-      ], 'IDP')
-      expect(validation.valid).toBe(true)
     })
   })
 })

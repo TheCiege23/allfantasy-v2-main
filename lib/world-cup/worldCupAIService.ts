@@ -75,9 +75,9 @@ function buildMatchupContract(opts: { matchLabel: string }): AIGroundingContract
   }
 }
 
-export type MatchupIntelligenceIntent = "panel" | "ask_ai" | "explain"
+type MatchupIntelligenceIntent = "panel" | "ask_ai" | "explain"
 
-export type BuildWorldCupMatchupIntelligenceArgs = {
+type BuildWorldCupMatchupIntelligenceArgs = {
   match: WorldCupMatchView
   strategy?: WorldCupAiStrategy
   intent?: MatchupIntelligenceIntent

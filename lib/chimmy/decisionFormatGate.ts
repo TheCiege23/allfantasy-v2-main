@@ -34,7 +34,7 @@ import { bestBallLineupSetsItself } from '@/lib/bestball/bestBallLeagueState'
  * maps `survivor_guillotine` onto its `guillotine` chassis. `resolveLeagueRules` keeps the
  * confirmed concept, so it can. It was caught before merge, by a cross-check against the catalog.
  */
-export type DecisionFormatInput = {
+type DecisionFormatInput = {
   leagueType: string | null
   isDynasty: boolean
   settings: unknown
@@ -43,7 +43,7 @@ export type DecisionFormatInput = {
   guillotineMode?: boolean | null
 }
 
-export type DecisionFormatBlock = {
+type DecisionFormatBlock = {
   code: 'best_ball_auto_lineup' | 'trades_not_allowed'
   detail: string
   remedy: string
@@ -53,7 +53,7 @@ export type DecisionFormatBlock = {
  * The trade rule lives in `lib/league-rules/tradeLegality.ts`, shared with the Player Finder so the two
  * surfaces cannot disagree about whether a league trades. Re-exported for this module's callers.
  */
-export { leagueForbidsTrades, tradeBanReason }
+export { leagueForbidsTrades }
 
 export function decisionFormatBlock(league: DecisionFormatInput, kind: ChimmyDecisionKind): DecisionFormatBlock | null {
   // Classic Best Ball (the column) OR best ball Guilly (`guillotineMode`/`leagueType: 'guillotine'` +

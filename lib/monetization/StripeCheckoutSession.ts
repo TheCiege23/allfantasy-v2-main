@@ -1,5 +1,7 @@
 import "server-only"
 import type Stripe from "stripe"
+import { normalizeEntrySource } from "@/lib/monetization/upgradeEntrySource"
+import { readTrialDays } from "@/lib/monetization/freeTrial"
 import { getStripeClient } from "@/lib/stripe-client"
 import { getBaseUrl } from "@/lib/get-base-url"
 import {
@@ -69,6 +71,13 @@ export async function buildStripeCheckoutSessionForSku(input: {
    * decides eligibility; this builder decides whether the coupon may ride THIS session.
    */
   foundingMember?: boolean | null
+  /** Which surface sent the buyer (upgradeEntrySource.ts) — rides the session's metadata to the webhook. */
+  entrySource?: string | null
+  /**
+   * Free-trial days for this session (lib/monetization/freeTrial.ts), already decided by the caller —
+   * eligibility is the route's job. Subscriptions only; 0 or absent = no trial.
+   */
+  trialDays?: number | null
   env?: NodeJS.ProcessEnv
 }): Promise<StripeCheckoutSessionResult | null> {
   const env = input.env ?? process.env
@@ -104,6 +113,10 @@ export async function buildStripeCheckoutSessionForSku(input: {
   }
   const couponCode = input.couponCode?.trim()
   if (couponCode) metadata.couponCode = couponCode
+  const entrySource = normalizeEntrySource(input.entrySource)
+  if (entrySource) metadata.entrySource = entrySource
+  const trialDays = mode === "subscription" && item.type === "subscription" ? readTrialDays(input.trialDays) : 0
+  if (trialDays > 0) metadata.trialDays = String(trialDays)
 
   const params: Stripe.Checkout.SessionCreateParams = {
     mode,
@@ -127,6 +140,15 @@ export async function buildStripeCheckoutSessionForSku(input: {
   else if (email) params.customer_email = email
   if (mode === "subscription") {
     params.subscription_data = { metadata: { ...metadata } }
+    /*
+     * The AF Pro free trial (lib/monetization/freeTrial.ts): Stripe's own subscription trial, so
+     * nothing is charged today and the first invoice lands when it ends. The card is still taken
+     * ("always"), which is what makes day 8 a charge rather than a lapse — and what the buyer is told.
+     */
+    if (trialDays > 0) {
+      params.subscription_data.trial_period_days = trialDays
+      params.payment_method_collection = "always"
+    }
   }
 
   const stripe = getStripeClient()

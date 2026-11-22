@@ -1,3 +1,5 @@
+import { capToRealLeague } from '@/lib/league/teamCountLimits'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zombie/creationPolicy'
 /**
  * Create League v2 — rules engine.
@@ -10,11 +12,7 @@ import { getZombieCreationTeamCounts, ZOMBIE_DEFAULT_MANAGERS } from '@/lib/zomb
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
-import {
-  NFL_DYNASTY_TEAM_COUNTS,
-  SURVIVOR_CREATE_CAST_SIZES,
-  getTeamCountOptionsForSport,
-} from '@/lib/league-creation-wizard/sport-team-limits'
+import { NFL_DYNASTY_TEAM_COUNTS, SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
 import { SUPPORTED_SPORTS, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import {
   getDraftTypeUiHint,
@@ -149,6 +147,21 @@ export function getTeamCountOptions(
   leagueType: LeagueTypeId,
   soccerPipeline?: 'mls' | 'euro' | null
 ): number[] {
+  // Never bigger than the real league for a pro sport (lib/league/teamCountLimits.ts `capToRealLeague`).
+  const sizes = capToRealLeague(sport, leagueType, listedTeamCountOptions(sport, leagueType, soccerPipeline))
+  // A pro-sport Redraft or Dynasty league is offered only the sizes its players can fill
+  // (lib/league-creation/playerSupply.ts), so the form never offers a size the server refuses.
+  // A C2C league too: a college one drafts pros on its C2C side (owner's decision, 2026-11-22).
+  if (leagueType !== 'redraft' && leagueType !== 'dynasty' && leagueType !== 'c2c') return sizes
+  const supply = checkNewLeaguePlayerSupply({ sport, leagueType, teamCount: sizes[0] ?? 2 })
+  return supply.verified ? sizes.filter((n) => n <= supply.maxTeams) : sizes
+}
+
+function listedTeamCountOptions(
+  sport: SupportedSport,
+  leagueType: LeagueTypeId,
+  soccerPipeline?: 'mls' | 'euro' | null
+): number[] {
   if (leagueType === 'zombie') return getZombieCreationTeamCounts(sport)
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.teamCountOptionsByConceptSport?.[leagueType]?.[sport]
@@ -156,7 +169,8 @@ export function getTeamCountOptions(
     return leagueType === 'survivor' ? survivorCastSizesThatFitNow(sport, seeded) : [...seeded]
   }
 
-  if (leagueType === 'dynasty' && sport === 'NFL') return [...NFL_DYNASTY_TEAM_COUNTS]
+  if (leagueType === 'dynasty') return [...NFL_DYNASTY_TEAM_COUNTS]
+  if (leagueType === 'redraft') return [...UNIVERSAL_CREATE_TEAM_COUNTS]
 
   if (leagueType === 'tournament') {
     return [...TOURNAMENT_POOL_SIZES]

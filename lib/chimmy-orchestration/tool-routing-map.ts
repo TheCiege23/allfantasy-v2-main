@@ -74,13 +74,13 @@ export function resolveToolLaunches(
         'trade_analyzer',
         'Trade Analyzer',
         `/trade-evaluator${qs({ ...base, week: w })}`,
-        'Full trade evaluation with fairness and AI synthesis.'
+        'Full trade evaluation with fairness and Chimmy synthesis.'
       )
       break
     case 'waiver':
       push(
         'waiver_ai',
-        'Waiver AI',
+        'Waiver Chimmy',
         `/waiver-ai${qs({ leagueId: ctx.leagueId ?? undefined, sport })}`,
         'Prioritized adds with FAAB and roster fit.'
       )
@@ -117,9 +117,9 @@ export function resolveToolLaunches(
       if (ctx.leagueId) {
         launches.push({
           id: 'draft_assistant',
-          label: 'AF Legacy AI',
+          label: 'AF Legacy Chimmy',
           href: `/app/league/${encodeURIComponent(ctx.leagueId)}?tab=war_room`,
-          description: 'Tier board, queue, compare, outlook — AF Legacy AI panel.',
+          description: 'Tier board, queue, compare, outlook — AF Legacy Chimmy panel.',
         })
       }
       break
@@ -204,9 +204,9 @@ export function resolveToolLaunches(
     default:
       push(
         'fantasy_coach',
-        'AI tool hub',
+        'Chimmy tool hub',
         `/ai/tools${qs({ sport })}`,
-        'Browse all AllFantasy AI tools.'
+        'Browse all AllFantasy Chimmy tools.'
       )
   }
 

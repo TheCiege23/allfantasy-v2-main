@@ -99,7 +99,9 @@ const SECTION_LABELS: Record<string, Line> = {
   playoffs: { en: 'playoff', es: 'playoffs' },
   commissioner: { en: 'commissioner', es: 'comisionado' },
   conceptRules: { en: 'format', es: 'formato' },
-  ai: { en: 'AI', es: 'IA' },
+  dynasty: { en: 'dynasty', es: 'dinastía' },
+  divisions: { en: 'division', es: 'divisiones' },
+  ai: { en: 'Chimmy', es: 'Chimmy' },
 }
 
 type Action = {
@@ -120,6 +122,10 @@ export const LOG_ACTIONS: Record<string, Action> = {
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
       const label = section ? SECTION_LABELS[section] : undefined
+      // Shared scoring (2026-11-16) says so, without naming the other league: its members are not this league's.
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring settings to the commissioner’s shared scoring', es: 'Cambió la puntuación a la puntuación compartida del comisionado' }
+      }
       return label
         ? { en: `Changed the ${label.en} settings`, es: `Cambió los ajustes de ${label.es}` }
         : { en: 'Changed the league settings', es: 'Cambió los ajustes de la liga' }
@@ -130,6 +136,9 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: (ctx) => {
       const section = str(obj(ctx.row.metadata).section)
+      if (section === 'scoring' && obj(ctx.row.metadata).source === 'shared-scoring') {
+        return { en: 'Changed the scoring rules mid-season to the commissioner’s shared scoring', es: 'Cambió la puntuación a mitad de temporada a la puntuación compartida del comisionado' }
+      }
       return section === 'scoring'
         ? { en: 'Changed the scoring rules mid-season', es: 'Cambió la puntuación a mitad de temporada' }
         : { en: 'Changed the roster settings mid-season', es: 'Cambió la plantilla a mitad de temporada' }
@@ -330,6 +339,42 @@ export const LOG_ACTIONS: Record<string, Action> = {
     members: true,
     line: () => ({ en: 'Recalculated the standings', es: 'Recalculó la clasificación' }),
   },
+  // Written when a commissioner picks who goes in a tied Guilly chop (lib/guillotine/commissionerTiebreakStore.ts).
+  // The chop itself follows on the next score sync; this records that the commissioner, not a rule, decided it.
+  guillotine_tiebreak_decided: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = str(obj(ctx.row.metadata).key)?.split(':')[1]
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const tied = Array.isArray(a.tiedRosterIds) ? a.tiedRosterIds.length : 0
+      const wk = { en: week ? ` in week ${week}` : '', es: week ? ` en la semana ${week}` : '' }
+      return {
+        en: `Broke the chop tie${wk.en}: ${names(a.choppedRosterIds, 'en') || 'a team'} goes`,
+        es: `Desempató la eliminación${wk.es}: cae ${names(a.choppedRosterIds, 'es') || 'un equipo'}`,
+        detailEn: tied ? `${tied} teams were tied, and the league's tiebreak order left it to the commissioner.` : null,
+        detailEs: tied ? `${tied} equipos estaban empatados y el orden de desempate de la liga lo dejó al comisionado.` : null,
+      }
+    },
+  },
+  // Written when the commissioner undoes a Guilly chop (lib/guillotine/chopUndoService.ts). Members see it: a chop
+  // being taken back is exactly the kind of ruling the league log exists to make visible.
+  guillotine_chop_undone: {
+    category: 'rulings',
+    members: true,
+    line: (ctx) => {
+      const a = obj(ctx.row.afterState)
+      const week = num(obj(ctx.row.metadata).week)
+      const names = (v: unknown, lang: LogLang) => (Array.isArray(v) ? v : []).map((id) => team(ctx, id)[lang]).join(', ')
+      const wk = { en: week != null ? ` week ${week}` : '', es: week != null ? ` de la semana ${week}` : '' }
+      const restored = Array.isArray(a.restoredRosterIds) ? a.restoredRosterIds.length : 0
+      return {
+        en: `Undid the${wk.en} chop: ${names(a.restoredRosterIds, 'en') || 'a team'} ${restored === 1 ? 'is' : 'are'} back in`,
+        es: `Deshizo la eliminación${wk.es}: ${names(a.restoredRosterIds, 'es') || 'un equipo'} ${restored === 1 ? 'vuelve' : 'vuelven'}`,
+      }
+    },
+  },
   dispute_ruled: {
     category: 'rulings',
     members: true,
@@ -445,10 +490,82 @@ export const LOG_ACTIONS: Record<string, Action> = {
         ? { en: 'Turned on auto-subs', es: 'Activó los cambios automáticos' }
         : { en: 'Turned off auto-subs', es: 'Desactivó los cambios automáticos' },
   },
+  // lib/schedule-runtime/matchupSwapService.ts — two teams traded places in one week.
+  schedule_matchup_swap: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const week = num(m.week)
+      const a = team(ctx, m.rosterA)
+      const b = team(ctx, m.rosterB)
+      const wk = week != null ? week : '?'
+      return {
+        en: `Swapped ${a.en} and ${b.en} in the week ${wk} schedule`,
+        es: `Intercambió a ${a.es} y ${b.es} en el calendario de la semana ${wk}`,
+      }
+    },
+  },
+  schedule_rivalry_week: {
+    category: 'league',
+    members: true,
+    line: (ctx) => {
+      const week = num(obj(ctx.row.metadata).week)
+      const wk = week != null ? week : '?'
+      return { en: `Made week ${wk} rivalry week`, es: `Convirtió la semana ${wk} en semana de rivalidades` }
+    },
+  },
+  schedule_regenerated: {
+    category: 'league',
+    members: true,
+    line: () => ({ en: 'Rebuilt the schedule for the weeks that had not started', es: 'Rehízo el calendario de las semanas que no habían empezado' }),
+  },
   commissioner_undo_draft_pick: {
     category: 'draft',
     members: true,
     line: () => ({ en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }),
+  },
+  // lib/draft-room/commissionerDraftActions.ts — one row per commissioner action in the draft room. The line reads
+  // only `action`, `overall`, `rosterId` and `seconds`; an action this map does not name still shows, generically.
+  draft_commissioner_action: {
+    category: 'draft',
+    members: true,
+    line: (ctx) => {
+      const m = obj(ctx.row.metadata)
+      const action = str(m.action) ?? ''
+      const overall = num(m.overall)
+      const seconds = num(m.seconds)
+      const at = overall != null ? ` #${overall}` : ''
+      const t = team(ctx, m.rosterId)
+      switch (action) {
+        case 'start': return { en: 'Started the draft', es: 'Inició el draft' }
+        case 'pause': return { en: 'Paused the draft', es: 'Pausó el draft' }
+        case 'resume': return { en: 'Resumed the draft', es: 'Reanudó el draft' }
+        case 'reset_timer': return { en: 'Restarted the pick clock', es: 'Reinició el reloj de la elección' }
+        case 'set_timer_seconds':
+          return seconds != null
+            ? { en: `Set the pick clock to ${seconds} seconds`, es: `Puso el reloj de elección en ${seconds} segundos` }
+            : { en: 'Changed the pick clock', es: 'Cambió el reloj de elección' }
+        case 'force_autopick': return { en: 'Made an automatic pick for the team on the clock', es: 'Hizo una elección automática para el equipo en turno' }
+        case 'skip_pick': return { en: `Skipped the pick on the clock`, es: 'Saltó la elección en turno' }
+        case 'undo_pick': return { en: 'Undid the last draft pick', es: 'Deshizo la última elección del draft' }
+        case 'complete': return { en: 'Ended the draft', es: 'Terminó el draft' }
+        case 'resolve_auction': return { en: 'Closed the current auction', es: 'Cerró la subasta en curso' }
+        case 'reset_draft': return { en: 'Reset the draft', es: 'Reinició el draft' }
+        case 'swap_manager': return { en: 'Swapped two teams’ draft slots', es: 'Intercambió los turnos de dos equipos' }
+        case 'create_next_draft': return { en: 'Set up next season’s draft', es: 'Preparó el draft de la próxima temporada' }
+        case 'pick_edit': return { en: `Changed pick${at}`, es: `Cambió la elección${at}` }
+        case 'commissioner_pick': return { en: `Made pick${at} for ${t.en}`, es: `Hizo la elección${at} por ${t.es}` }
+        case 'order': return { en: 'Changed the draft order', es: 'Cambió el orden del draft' }
+        case 'randomize_order': return { en: 'Randomized the draft order', es: 'Sorteó el orden del draft' }
+        default: return { en: 'Made a change in the draft room', es: 'Hizo un cambio en la sala del draft' }
+      }
+    },
+  },
+  draft_reset: {
+    category: 'draft',
+    members: true,
+    line: () => ({ en: 'Reset the draft', es: 'Reinició el draft' }),
   },
   league_lock_toggle: {
     category: 'league',
@@ -549,7 +666,8 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
   const ids = new Set<string>()
   for (const row of rows) {
     const m = obj(row.metadata)
-    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if ((row.actionType.startsWith('score_adjustment_') || row.actionType === 'commissioner_undo' || row.actionType === 'draft_commissioner_action') && str(m.rosterId)) ids.add(str(m.rosterId)!)
+    if (row.actionType === 'schedule_matchup_swap') for (const k of ['rosterA', 'rosterB']) if (str(m[k])) ids.add(str(m[k])!)
     if (
       (row.actionType === 'commissioner_roster_override' ||
         row.actionType === 'commissioner_edit_faab' ||
@@ -559,6 +677,17 @@ export function rosterIdsNamedBy(rows: readonly AuditRow[]): string[] {
       str(row.entityId)
     ) {
       ids.add(str(row.entityId)!)
+    }
+    if (row.actionType === 'guillotine_chop_undone') {
+      for (const id of (Array.isArray(obj(row.afterState).restoredRosterIds) ? (obj(row.afterState).restoredRosterIds as unknown[]) : [])) {
+        if (str(id)) ids.add(str(id)!)
+      }
+    }
+    if (row.actionType === 'guillotine_tiebreak_decided') {
+      const a = obj(row.afterState)
+      for (const id of [a.choppedRosterIds, a.tiedRosterIds].flatMap((v) => (Array.isArray(v) ? v : []))) {
+        if (str(id)) ids.add(str(id)!)
+      }
     }
     if (row.actionType === 'guillotine_stat_correction') {
       const a = obj(row.afterState)

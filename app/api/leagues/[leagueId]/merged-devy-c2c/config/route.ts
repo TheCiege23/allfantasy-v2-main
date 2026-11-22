@@ -3,13 +3,17 @@
  * Commissioner or league member can read; only commissioner can write.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { isC2CLeague, getC2CConfig, upsertC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { mirrorRookieDraftToDynasty, publishVariantConfigChange, readVariantConfigRules } from '@/lib/league-rules-explainer/variantConfigChange'
+import { formatRulesLockedResponse, logFormatRulesChange } from '@/lib/league/formatRulesGuard'
+import { prisma } from '@/lib/prisma'
+import { campusSport } from '@/lib/c2c/campusLineup'
+import { BASKETBALL_C2C_RULE, basketballC2CConflicts } from '@/lib/c2c/basketballC2CRules'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,13 +103,20 @@ export async function PATCH(
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'league')
   if (!commissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
 
   const isC2C = await isC2CLeague(leagueId)
   if (!isC2C) return NextResponse.json({ error: 'Not a C2C / Merged Devy league' }, { status: 404 })
+  const formatLocked = await formatRulesLockedResponse(leagueId)
+  if (formatLocked) return formatLocked
 
   const body = await req.json().catch(() => ({}))
+  // A basketball league cannot score with college best ball or non-unified standings (lib/c2c/basketballC2CRules.ts).
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true, sport: true } })
+  if (leagueRow && campusSport(leagueRow) === 'basketball' && basketballC2CConflicts(body).length) {
+    return NextResponse.json({ error: BASKETBALL_C2C_RULE, fields: basketballC2CConflicts(body) }, { status: 400 })
+  }
   // The popup's rookie-draft and taxi rules, before the write, for the "What changed" card.
   const rulesBefore = await readVariantConfigRules(leagueId)
   const updated = await upsertC2CConfig(leagueId, {
@@ -148,5 +159,6 @@ export async function PATCH(
   // The rookie draft is built from the dynasty config: its rounds and type go there too.
   await mirrorRookieDraftToDynasty(leagueId, body)
   await publishVariantConfigChange({ leagueId, actorUserId: userId, section: 'c2c', before: rulesBefore })
+  await logFormatRulesChange({ leagueId, userId, format: 'c2c', fields: Object.keys(body) })
   return NextResponse.json({ ok: true, config: updated })
 }

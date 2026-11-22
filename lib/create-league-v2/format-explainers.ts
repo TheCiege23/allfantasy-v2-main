@@ -6,7 +6,7 @@
  * phase-by-phase "What's next?" guidance after creation is `lib/league/whats-next/`.
  */
 
-export type FormatExplainer = {
+type FormatExplainer = {
   summary: string
   howItWorks: string[]
 }

@@ -9,7 +9,7 @@
 import { playerValue, isInjured } from './guillotineValue'
 import type { GuillotinePlayerFact, GuillotineWarRoomContext } from './types'
 
-export interface GuillotineRosterWeakness {
+interface GuillotineRosterWeakness {
   position: string
   severity: 'critical' | 'high' | 'moderate'
   reason: string

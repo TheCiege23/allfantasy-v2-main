@@ -53,6 +53,8 @@ const pd = (rows: Array<[string, string, string]>) => ({
   lineup_sections: { starters: rows.map(([id, name, position]) => ({ id, name, position, team: 'KC' })), bench: [], ir: [], taxi: [], devy: [] },
 })
 
+/** The owner a roster query asks for: the plain field, or the first-team half of "first team or managed by". */
+const ownerOf = (where?: { platformUserId?: string; OR?: Array<{ platformUserId?: string }> }) => where?.platformUserId ?? where?.OR?.[0]?.platformUserId
 const MINE = { id: 'r1', platformUserId: 'u1', playerData: pd([['p1', "Ja'Marr Chase", 'WR'], ['p2', 'Tony Pollard', 'RB']]) }
 const THEIRS = { id: 'r2', platformUserId: 'u2', playerData: pd([['p9', 'Justin Jefferson', 'WR']]) }
 const OPEN = { id: 'r3', platformUserId: 'orphan-3', playerData: pd([['p7', 'Travis Kelce', 'TE']]) }
@@ -68,7 +70,10 @@ beforeEach(() => {
     if (where.platformUserId === 'u1') return MINE
     return [MINE, THEIRS, OPEN].find((r) => r.id === where.id) ?? null
   })
-  h.rosterFindMany.mockResolvedValue([MINE, THEIRS, OPEN])
+  // "My teams" is read as a list by owner (lib/league/viewerTeams.ts); the league's rosters with no owner filter.
+  h.rosterFindMany.mockImplementation(async ({ where }: { where?: { platformUserId?: string; OR?: Array<{ platformUserId?: string }> } } = {}) =>
+    ownerOf(where) ? [MINE, THEIRS, OPEN].filter((r) => r.platformUserId === ownerOf(where)) : [MINE, THEIRS, OPEN],
+  )
   h.appUser.mockImplementation(async ({ where }: { where: { id: string } }) => (where.id.startsWith('u') ? { id: where.id } : null))
   h.validate.mockReturnValue({ ok: true })
   h.deadline.mockReturnValue(false)
@@ -145,7 +150,10 @@ describe('proposeTrade', () => {
   })
 
   it('refuses players that come from more than one team', async () => {
-    h.rosterFindMany.mockResolvedValue([MINE, THEIRS, { ...OPEN, platformUserId: 'u3' }])
+    const all = [MINE, THEIRS, { ...OPEN, platformUserId: 'u3' }]
+    h.rosterFindMany.mockImplementation(async ({ where }: { where?: { platformUserId?: string; OR?: Array<{ platformUserId?: string }> } } = {}) =>
+      ownerOf(where) ? all.filter((r) => r.platformUserId === ownerOf(where)) : all,
+    )
     const out = await proposeTrade({ leagueId: 'L1', userId: 'u1', give: ["Ja'Marr Chase"], get: ['Justin Jefferson', 'Travis Kelce'], now: NOW })
     expect(out).toMatchObject({ ok: false, text: expect.stringMatching(/ONE other team/) })
   })
@@ -185,8 +193,8 @@ describe('executeTradeAction', () => {
 
   it('refuses when the card is not for this user’s team', async () => {
     const p = await payload()
-    h.rosterFindFirst.mockImplementation(async ({ where }: { where: { platformUserId?: string } }) =>
-      where.platformUserId === 'u2' ? THEIRS : null,
+    h.rosterFindFirst.mockImplementation(async ({ where }: { where: { id?: string; platformUserId?: string } }) =>
+      where.platformUserId === 'u2' || where.id === THEIRS.id ? THEIRS : null,
     )
     expect(await executeTradeAction(p, 'u2')).toMatchObject({ ok: false })
     expect(h.create).not.toHaveBeenCalled()

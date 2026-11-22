@@ -34,4 +34,3 @@ export function WarPlanAsk({ leagueId, input, className }: { leagueId: string; i
   )
 }
 
-export default WarPlanAsk

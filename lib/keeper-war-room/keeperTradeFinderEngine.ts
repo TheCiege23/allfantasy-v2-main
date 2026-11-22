@@ -10,7 +10,7 @@ import { rankKeepers } from './keeperValueEngine'
 import { evaluateKeeperRosterNeeds } from './keeperRosterNeedsEngine'
 import type { KeeperWarRoomContext } from './types'
 
-export interface KeeperTradeTarget {
+interface KeeperTradeTarget {
   rosterId: string
   teamName: string | null
   fitScore: number

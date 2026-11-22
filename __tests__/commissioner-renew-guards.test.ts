@@ -54,6 +54,7 @@ vi.mock('@/lib/redraft/offseason/renewRedraftLeague', async (importOriginal) => 
   ...(await importOriginal<typeof import('@/lib/redraft/offseason/renewRedraftLeague')>()),
   renewRedraftLeague: vi.fn().mockResolvedValue({ ok: false, code: 'NO_SEASON', message: 'no season' }),
 }))
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('./helpers/commissionerAccessMock')).accessFromOwner(() => 'commish'))
 
 function baseLeague(overrides: Record<string, unknown> = {}) {
   return {

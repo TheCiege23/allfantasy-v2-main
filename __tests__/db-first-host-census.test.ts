@@ -87,6 +87,7 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'request-origin', why: 'NBA website used only as Origin and Referer headers; official JSON is fetched from the NBA stats and CDN hosts', test: /^www\.nba\.com$/i },
   { name: 'oauth', why: 'Google OIDC issuer used to authenticate signed Pub/Sub purchase notifications', test: /^accounts\.google\.com$/i },
   { name: 'platform-infra', why: 'Google Play purchase verification, fulfillment and catalog management, not fantasy data', test: /^androidpublisher\.googleapis\.com$/i },
   { name: 'payment-platform', why: 'Digital Goods payment method identifier and Google subscription-management link', test: /^play\.google\.com$/i },
@@ -144,6 +145,10 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * quietly exempting a data read.
    */
   { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|platform\.twitter\.com|syndication\.twitter\.com|api\.stripe\.com|hooks\.stripe\.com|www\.google-analytics\.com)$/i },
+  // Apple MusicKit JS: a <script src> the visitor's browser loads when they open the Apple
+  // Music tab (lib/apple-music/musicKitClient.ts), allowed in script-src. Our code never
+  // fetches it, and the developer-token route signs locally without calling Apple.
+  { name: 'browser-only', why: 'Apple MusicKit JS script tag loaded by the visitor\'s browser and listed in the CSP allowlist; never fetched by our code', test: /^js-cdn\.music\.apple\.com$/i },
   // Ad and analytics vendors Google Tag Manager injects into the visitor's page; named in
   // the report-only CSP (lib/security/cspReportOnly.ts) from the measured csp-report log.
   // Same NEVER_FETCHED guarantee as above: our code must never call them.
@@ -188,6 +193,12 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * reporting, not a fantasy data feed, so the DB-first rule does not apply.
    */
   { name: 'platform-infra', why: 'Play Console installs export for admin download counts; not a fantasy data feed', test: /^storage\.googleapis\.com$/i },
+  /*
+   * App Store Connect's Sales Reports API, read only by lib/app-store/appStoreSalesFetch.ts
+   * for the admin Apps page's download counts — the iOS twin of the Play export above. Each
+   * past day is cached durably in sportsDataCache by lib/app-store/appStoreDownloads.ts.
+   */
+  { name: 'platform-infra', why: 'App Store sales reports for admin download counts (api.), and the console link beside them; not a fantasy data feed', test: /^(api\.)?appstoreconnect\.apple\.com$/i },
   { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
@@ -196,6 +207,11 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * Product analytics, not a read Postgres could serve.
    */
   { name: 'platform-infra', why: 'PostHog analytics SDK assets (extensions, remote config) proxied for the browser', test: /^us-assets\.i\.posthog\.com$/i },
+  /*
+   * PostHog's query API, read by lib/admin-dashboard/AppPlatformStatsService.ts for the
+   * admin Apps page (people by iOS app / Android app / web). Our own product analytics,
+   * admin-only — not a fantasy data feed, and not something Postgres holds.
+   */
   /*
    * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
    * these; they are not reads that Postgres could have served, which is what the
@@ -478,7 +494,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only', 'request-origin'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 

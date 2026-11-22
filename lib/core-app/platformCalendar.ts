@@ -13,9 +13,9 @@ import { nextWaiverRunMs, type WaiverSchedule } from './waiverRunClock'
  * PURE and client-safe: the caller reads the schedules and passes them in.
  */
 
-export type CalendarLeague = { id: string; platform: string | null }
+type CalendarLeague = { id: string; platform: string | null }
 
-export type CalendarWaiverGroup = {
+type CalendarWaiverGroup = {
   schedule: WaiverSchedule
   /** The next run as an instant, so the client can say it in the reader's own time zone. */
   nextRunIso: string | null

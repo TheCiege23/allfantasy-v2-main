@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { Trophy, ChevronDown, MessageCircle, Pin, Send, X, Share2, Copy, Check, Settings, Zap, Crown, Shield } from "lucide-react"
+import { Trophy, ChevronDown, Share2, Copy, Check, Settings, Zap, Crown, Shield } from "lucide-react"
 import { BracketTreeView } from "./BracketTreeView"
 import { PoolStandings } from "./PoolStandings"
 import { GameScores } from "./GameScores"
@@ -88,12 +88,6 @@ export function LeagueHomeTabs(props: Props) {
   )
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(true)
-
-  const isCommissioner = useMemo(() => {
-    if (props.isOwner) return true
-    const member = props.members.find(m => m.userId === props.currentUserId)
-    return member?.role === "CO_COMMISSIONER"
-  }, [props.isOwner, props.members, props.currentUserId])
 
   const { data: live } = useBracketLive({
     tournamentId: props.tournamentId,

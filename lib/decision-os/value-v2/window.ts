@@ -37,7 +37,7 @@ export type InjuryTreatment = 'included-in-playoff-probability' | 'excluded'
  * same draft capital twice. A caller supplying a pick-free strength figure
  * from somewhere else declares 'separate' and provides both.
  */
-export type PickTreatment = 'included-in-roster-strength' | 'separate'
+type PickTreatment = 'included-in-roster-strength' | 'separate'
 
 export interface WindowCoefficients {
   version: string

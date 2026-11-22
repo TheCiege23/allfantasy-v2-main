@@ -1,21 +1,15 @@
 /**
  * GET: Compute and return rookie draft order preview. FREE: any member can see either order.
- * PUT: Save rookie draft order mode config (league owner only). Turning automatic ordering ON is
- *      AF COMMISSIONER; turning it off, or saving a mode with it off, is free.
+ * PUT: Save the rookie draft order config (league owner only).
  * Only for dynasty/C2C/devy leagues, future seasons (not first season).
  *
- * ⚠ THE SAME RULE AS THE LIVE ORDER (./live/route.ts), WHICH THIS ROUTE PREDATES. Calculating an
- * order is free; having the system seat the next rookie draft with it is the Commissioner plan's
- * automation (docs/commissioner/DYNASTY_COMMISH_CHECKLIST.md, "Legacy rookie-order route"). This
- * header used to say the route was free on purpose, because saving had been gated on the unrelated
- * `commissioner_ai_tools` — a wrong gate, not proof that none belongs here. Two routes that seat the
- * same draft must not disagree about who may automate it, and before this the free one let any
- * league switch on what the live route sells.
- *
- * Nothing a free league needs is behind it: without an enabled config the draft keeps its default
- * order, and the preview stays free. A config already saved enabled keeps seating drafts after a
- * plan lapses, like the live order's automation.
+ * WORST RECORD FIRST IS FREE AND ON BY DEFAULT (owner's decision, 2026-11-19;
+ * lib/rookie-order/automaticRookieOrder.ts). Any commissioner can switch the automatic order on or
+ * off. Only switching it on with LOWEST MAX PF FIRST is the league owner's AF Commissioner plan,
+ * refused here with AF_COMMISSIONER_REQUIRED. A max PF config already saved keeps its setting after
+ * a plan lapses, and the draft is then seated worst record first.
  */
+import { commissionerAccessResponse, canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -29,7 +23,7 @@ import {
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { publishRookieDraftOrderChange } from '@/lib/league-rules-explainer/rookieOrderChange'
 import { isLeagueEntitledToLiveRookieOrder } from '@/lib/rookie-order/liveRookieOrderService'
-import { isOwnerOrLeagueCommissioner } from '@/lib/commissioner/leagueCommissionerAccount'
+import { automaticRookieOrderFromSettings } from '@/lib/rookie-order/automaticRookieOrder'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,10 +57,11 @@ export async function GET(
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
   }
 
-  const isCommissioner = await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id)
-  const [savedConfig, canAutomate] = await Promise.all([
+  const isCommissioner = await canCommissionerAct(leagueId, session.user.id, 'league')
+  const [savedConfig, canAutomate, dynasty] = await Promise.all([
     getRookieDraftOrderConfig(leagueId),
     isCommissioner ? isLeagueEntitledToLiveRookieOrder(league.userId) : Promise.resolve(false),
+    prisma.dynastyLeagueConfig.findUnique({ where: { leagueId }, select: { rookiePickOrderMethod: true } }).catch(() => null),
   ])
   const mode: RookieDraftOrderMode = savedConfig?.mode ?? 'worst_to_first'
 
@@ -79,9 +74,10 @@ export async function GET(
   return NextResponse.json({
     ...result,
     savedMode: savedConfig?.mode ?? null,
-    enabled: savedConfig?.enabled ?? false,
+    /** On unless the league switched it off: worst record first is the default. */
+    enabled: automaticRookieOrderFromSettings(league.settings, dynasty?.rookiePickOrderMethod ?? null) !== null,
     isCommissioner,
-    /** The league owner holds AF Commissioner, so automatic ordering can be switched on. */
+    /** The league owner holds AF Commissioner, so lowest max PF first can be automated. */
     canAutomate,
   })
 }
@@ -99,7 +95,8 @@ export async function PUT(
     select: { userId: true, isDynasty: true, leagueVariant: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!(await isOwnerOrLeagueCommissioner(league, leagueId, session.user.id))) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  const refused = await commissionerAccessResponse(leagueId, session.user.id, 'league')
+  if (refused) return refused
 
   if (!isDynastyLike(league)) {
     return NextResponse.json({ error: 'Only available for Dynasty, C2C, Devy, and Keeper leagues' }, { status: 400 })
@@ -108,10 +105,10 @@ export async function PUT(
   const body = await req.json().catch(() => ({}))
   const mode = body.mode === 'reverse_max_pf' ? 'reverse_max_pf' : 'worst_to_first'
   const enabled = body.enabled !== false
-  if (enabled && !(await isLeagueEntitledToLiveRookieOrder(league.userId))) {
+  if (enabled && mode === 'reverse_max_pf' && !(await isLeagueEntitledToLiveRookieOrder(league.userId))) {
     return NextResponse.json(
       {
-        error: 'AF Commissioner is required to automate the rookie draft order.',
+        error: 'AF Commissioner is required to order the rookie draft by lowest max points for.',
         errorCode: 'AF_COMMISSIONER_REQUIRED',
         upgradePath: '/upgrade?plan=commissioner',
       },

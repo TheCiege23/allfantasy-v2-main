@@ -53,7 +53,6 @@ describe('Matchup — redraft score bug gates', () => {
     expect(container.querySelector('.af-mu')?.getAttribute('data-week')).toBe('final')
     expect(container.querySelector('.af-mu-wp')).not.toBeNull()
     expect(shown(container.querySelector('.af-mu-wp'))).toBe(false)
-    expect(shown(container.querySelector('.af-mu-centre-value'))).toBe(false)
     // The result chip stays: on a final week it IS the result.
     expect(shown(container.querySelector('.af-mu-margin'))).toBe(true)
     unmount()
@@ -66,7 +65,8 @@ describe('Matchup — redraft score bug gates', () => {
     const { container } = render(<Shell redraft><Matchup data={matchupFixture('NFL', state)} /></Shell>)
     expect(container.querySelector('.af-mu')?.getAttribute('data-week')).toBe(state)
     expect(shown(container.querySelector('.af-mu-wp'))).toBe(true)
-    expect(shown(container.querySelector('.af-mu-centre-value'))).toBe(true)
+    // The number is the headline's (2026-11-14); the scoreboard draws the bar.
+    expect(container.querySelector('.af-mu-centre-value')).toBeNull()
   })
 
   it('no win probability provided: nothing is drawn in its place but the existing dash', () => {

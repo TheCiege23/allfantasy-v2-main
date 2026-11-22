@@ -6,12 +6,6 @@ import { prisma } from '@/lib/prisma'
 import type { AggregatedEvidence } from './ReputationScoreCalculator'
 import type { ReputationEvidenceType } from './types'
 
-/** Evidence row from DB. */
-export interface EvidenceRow {
-  evidenceType: string
-  value: number
-}
-
 function clamp0to100(value: number): number {
   return Math.max(0, Math.min(100, value))
 }

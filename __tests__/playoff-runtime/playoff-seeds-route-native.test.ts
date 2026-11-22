@@ -2,6 +2,10 @@
  * GET /api/leagues/[id]/scoring/playoff-seeds: a native season answers with the playoff runtime's own
  * seeds (lib/playoff-runtime/playoffSeedPreview.ts), flagged `projected` until the bracket exists; a
  * league without one keeps reading the stored `FantasyStanding.playoffSeed` rows.
+ *
+ * A native seed's wins and points come from the season's own roster row (`RedraftRoster`), keyed by the
+ * seed's season roster id. `FantasyStanding` is not written for a points league that plays here, so
+ * reading it there showed every seed at 0 wins and 0.0.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -10,6 +14,8 @@ const h = vi.hoisted(() => ({
   preview: null as null | { locked: boolean; seeds: Array<Record<string, unknown>> },
   stored: [] as Array<Record<string, unknown>>,
   all: [] as Array<Record<string, unknown>>,
+  seasonRosters: [] as Array<Record<string, unknown>>,
+  seasonRosterWhere: null as unknown,
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'user-rt-1' } })) }))
@@ -27,6 +33,12 @@ vi.mock('@/lib/prisma', () => ({
     fantasyStanding: {
       findMany: vi.fn(async (args: { where: Record<string, unknown> }) => ('playoffSeed' in args.where ? h.stored : h.all)),
     },
+    redraftRoster: {
+      findMany: vi.fn(async (args: { where: unknown }) => {
+        h.seasonRosterWhere = args.where
+        return h.seasonRosters
+      }),
+    },
   },
 }))
 
@@ -42,7 +54,10 @@ const call = async () => {
 beforeEach(() => {
   h.preview = null
   h.stored = [{ rosterId: 'generic-rt-old', playoffSeed: 1, wins: 3, pointsFor: 400 }]
-  h.all = [{ rosterId: 'generic-rt-west', wins: 8, pointsFor: 1440 }]
+  // What the old read would have returned for this team: a native seed must NOT show these.
+  h.all = [{ rosterId: 'generic-rt-west', wins: 0, pointsFor: 0 }]
+  h.seasonRosters = [{ id: 'rr-rt-west', wins: 8, pointsFor: 1440 }]
+  h.seasonRosterWhere = null
 })
 
 describe('playoff-seeds route', () => {
@@ -54,6 +69,16 @@ describe('playoff-seeds route', () => {
     const body = await call()
     expect(body).toMatchObject({ source: 'playoff_runtime', projected: true })
     expect(body.seeds).toEqual([{ rosterId: 'generic-rt-west', seed: 2, teamName: 'West Winners', qualifiedBy: 'division', wins: 8, pointsFor: 1440 }])
+    // Asked of the season's rosters, by the seed's season roster id.
+    expect(h.seasonRosterWhere).toEqual({ id: { in: ['rr-rt-west'] } })
+  })
+
+  it('a seed whose season roster cannot be read shows 0, never another table’s numbers', async () => {
+    h.preview = { locked: false, seeds: [{ rosterId: 'generic-rt-west', redraftRosterId: 'rr-rt-west', seed: 2, displayName: 'Team W', qualifiedBy: 'division' }] }
+    h.all = [{ rosterId: 'generic-rt-west', wins: 99, pointsFor: 9999 }]
+    h.seasonRosters = []
+    const body = await call()
+    expect(body.seeds[0]).toMatchObject({ wins: 0, pointsFor: 0 })
   })
 
   it('a generated bracket: not projected', async () => {

@@ -90,8 +90,9 @@ describe('context derivation', () => {
   })
 
   it('takes leagueType and scoring from the league, and season from the fact', async () => {
+    // Two rounds is a rookie draft in a dynasty league (2026-11-22): its own board, never the startup's.
     const { picks } = await collectDraftFactSamples({ sport: 'NFL' })
-    expect(picks[0]!.context.leagueType).toBe('dynasty')
+    expect(picks[0]!.context.leagueType).toBe('dynasty:rookie')
     expect(picks[0]!.context.scoringFormat).toBe('ppr')
     expect(picks[0]!.context.season).toBe('2024')
   })
@@ -277,5 +278,31 @@ describe('non-Sleeper imports resolve through their own id column', () => {
     expect(names.has('Player 1')).toBe(true)
     expect(names.has('Espn Player 1')).toBe(true)
     expect(picks).toHaveLength(16)
+  })
+})
+
+describe('rookie drafts and the QB format (2026-11-22)', () => {
+  /** A 4-team draft of `rounds` rounds. */
+  const draft = (rounds: number, leagueId = 'lg1') =>
+    Array.from({ length: rounds * 4 }, (_, i) => ({ leagueId, season: 2024, round: Math.floor(i / 4) + 1, pickNumber: i + 1, playerId: `sleeper-${(i % 8) + 1}` }))
+
+  it('a long dynasty draft is a startup; a short one is a rookie draft; a redraft is never "rookie"', async () => {
+    mockIdentityFindMany.mockResolvedValue(identityRows(8))
+    mockDraftFactFindMany.mockResolvedValue(draft(7))
+    expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.leagueType).toBe('dynasty')
+    mockDraftFactFindMany.mockResolvedValue(draft(6))
+    expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.leagueType).toBe('dynasty:rookie')
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, isDynasty: false }])
+    mockDraftFactFindMany.mockResolvedValue(draft(3))
+    expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.leagueType).toBe('redraft')
+  })
+
+  it('a superflex league’s draft goes to the superflex board', async () => {
+    mockIdentityFindMany.mockResolvedValue(identityRows(8))
+    mockDraftFactFindMany.mockResolvedValue(draft(8))
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, settings: { roster_positions: ['QB', 'RB', 'WR', 'SUPER_FLEX', 'BN'] } }])
+    expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.rosterFormat).toBe('superflex')
+    mockLeagueFindMany.mockResolvedValue([{ ...LEAGUE, settings: { roster_positions: ['QB', 'RB', 'WR', 'FLEX', 'BN'] } }])
+    expect((await collectDraftFactSamples({ sport: 'NFL' })).picks[0]!.context.rosterFormat).toBe('standard')
   })
 })

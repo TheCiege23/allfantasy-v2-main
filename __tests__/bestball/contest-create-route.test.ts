@@ -5,6 +5,8 @@ vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: h.permission }))
 vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: h.league }, $transaction: h.transaction } }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 import { POST } from '@/app/api/bestball/contest/route'
 const request = (extra: Record<string,unknown> = {}) => new NextRequest('http://localhost/api/bestball/contest', { method: 'POST', body: JSON.stringify({ leagueId:'league-a', name:'Test contest', ...extra }) })
 beforeEach(() => {

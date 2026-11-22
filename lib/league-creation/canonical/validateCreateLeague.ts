@@ -7,6 +7,7 @@ import { isSurvivorPlanSport } from '@/lib/survivor/survivorPlanCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { checkNewBestBallLeaguePool } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply } from '@/lib/league-creation/playerSupply'
 import { supportsTwoWeekPeriods } from '@/lib/guillotine/eliminationPeriods'
 /**
  * Create League (canonical) — request validation before preset engine + transaction.
@@ -56,7 +57,7 @@ export function normalizeDraftTypeForEngine(draftType: string): string {
   return normalizeDraftTypeForEngineValidation(draftType)
 }
 
-export const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
+const FORBIDDEN_CREATE_LEAGUE_USER_KEYS = [
   'userId',
   'user_id',
   'commissionerUserId',
@@ -96,7 +97,7 @@ const dynastyCreationChoicesSchema = z.object({
 
 const SPORTS = z.enum(['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'])
 
-export const createLeagueBodySchema = z.object({
+const createLeagueBodySchema = z.object({
   concept: z.string().min(1).max(64),
   sport: SPORTS,
   scoringPreset: z.string().min(1).max(96).trim(),
@@ -114,7 +115,7 @@ export type ValidatedCreateLeagueBody = z.infer<typeof createLeagueBodySchema> &
   sport: LeagueSport
 }
 
-export type ValidateCreateLeagueResult =
+type ValidateCreateLeagueResult =
   | { ok: true; data: ValidatedCreateLeagueBody }
   | { ok: false; error: string; status: number; errors: ValidationIssue[] }
 
@@ -368,6 +369,25 @@ export function validateCreatePayload(
           message: `Draft type "${data.draftType}" is not allowed for ${formatId} / ${sport}`,
         },
       ],
+    }
+  }
+
+  /*
+   * A pro-sport Redraft or Dynasty league must fit the sport's players (lib/league-creation/
+   * playerSupply.ts): the form offers 250 teams in every sport and a 250-team NFL draft runs dry.
+   * Checked before the size list, so the answer is the reason and not a list of 73 numbers.
+   * College leagues are not checked. A league carried over from an import keeps the size it has.
+   */
+  // C2C as well: a college C2C league's pro side must fit the pro sport (owner's decision, 2026-11-22).
+  if ((formatId === 'redraft' || formatId === 'dynasty' || formatId === 'c2c') && !(options.importedTeamCount != null && options.importedTeamCount === data.teamCount)) {
+    const supply = checkNewLeaguePlayerSupply({ sport, leagueType: idpRequested ? 'idp' : formatId, teamCount: data.teamCount })
+    if (!supply.ok && supply.message) {
+      return {
+        ok: false,
+        status: 400,
+        error: supply.message,
+        errors: [{ path: 'teamCount', message: supply.message, code: 'PLAYER_SUPPLY_EXHAUSTED' }],
+      }
     }
   }
 

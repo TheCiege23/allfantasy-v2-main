@@ -1,8 +1,8 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { isAdminEmailAllowed, isAdminRole } from '@/lib/adminAuth'
 import { loadCareerLedger, type CareerLedgerRow } from '@/lib/rank/careerLedger'
 import { careerXp } from '@/lib/rank/careerXp'
@@ -24,8 +24,8 @@ export type SessionUserLike = { id?: string | null; role?: string | null; email?
 export async function canManageClassExceptions(leagueId: string, user: SessionUserLike): Promise<boolean> {
   if (!user.id) return false
   if (isAdminRole(user.role) || isAdminEmailAllowed(user.email)) return true
-  const role = await getLeagueRole(leagueId, user.id)
-  return role === 'commissioner' || role === 'co_commissioner'
+  // Who joins the league is league setup: a co-commissioner needs that area (lib/league/commissionerAccess.ts).
+  return await canCommissionerAct(leagueId, user.id, 'league')
 }
 
 async function updateSettingsLocked(

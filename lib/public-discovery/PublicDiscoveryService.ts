@@ -13,7 +13,6 @@ import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
 import { isValidIanaTimeZone } from "@/lib/timezone"
-import { getDiscoverySports } from "./discovery-sports"
 import { draftFitsWindow, rankBandFor, timeZoneRegionFor } from "./findLeagueFilters"
 import {
   getCachedBracketCards,
@@ -35,22 +34,7 @@ import {
   queryPublicFantasyLeagueCards,
   queryPrivateRequestableFantasyLeagueCards,
 } from "./DiscoveryQueryLayer"
-import type {
-  DiscoveryCard,
-  DiscoverLeaguesInput,
-  DiscoverLeaguesResult,
-  DiscoveryFormat,
-  DraftStatusFilter,
-  DraftTypeFilter,
-  DraftWhenFilter,
-  DiscoveryLeagueStyle,
-  DiscoverySort,
-  EntryFeeFilter,
-  LeagueStyleFilter,
-  RankBand,
-  RankBandFilter,
-  TimeZoneRegionFilter,
-} from "./types"
+import type { DiscoveryCard, DiscoverLeaguesInput, DiscoverLeaguesResult, DiscoveryFormat, DraftStatusFilter, DraftTypeFilter, DraftWhenFilter, DiscoverySort, EntryFeeFilter, LeagueStyleFilter, RankBand, RankBandFilter, TimeZoneRegionFilter } from "./types"
 
 export function clearDiscoveryCache(): void {
   clearDiscoveryCardCaches()

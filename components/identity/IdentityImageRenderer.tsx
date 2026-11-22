@@ -2,7 +2,7 @@
 
 import { getAvatarPresetEmoji } from "@/lib/avatar"
 
-export interface IdentityImageRendererProps {
+interface IdentityImageRendererProps {
   avatarUrl?: string | null
   avatarPreset?: string | null
   displayName?: string | null

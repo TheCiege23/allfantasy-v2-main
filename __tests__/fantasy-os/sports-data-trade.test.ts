@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { CertifiedTradeIntegrationService, extractTradePlayerRefs } from '@/lib/sports-evidence/tradeIntegration'
 import type { CertifiedScheduleDescription } from '@/lib/sports-evidence/lineupIntegration'
@@ -96,7 +98,8 @@ describe('5E-f Trade — settlement paths invoke certified evidence before persi
     const src = read(PROCESS)
     expect(src).toMatch(/evaluateTradeSettlementGuard/)
     expect(src.indexOf('evaluateTradeSettlementGuard')).toBeLessThan(src.indexOf('finalizeAfLeagueTradeProcessing({'))
-    expect(src).toMatch(/isElevatedCommissioner/) // commissioner authority preserved
+    // Commissioner authority preserved, through the shared rule with the trades area (2026-11-16).
+    expect(src).toMatch(/canCommissionerAct\(leagueId, userId, 'trades'\)/)
     expect(src).toMatch(/code: 'SPORTS_DATA_LOCK'/)
     expect(noProvider(src)).toBe(false)
   })

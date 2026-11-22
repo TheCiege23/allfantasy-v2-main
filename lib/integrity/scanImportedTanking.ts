@@ -16,7 +16,7 @@ import type { LineupCard } from '@/lib/integrity/nativeLineupCards'
 const SCANNED_MARKER_MS = 400 * 24 * 60 * 60 * 1000
 
 /** Imported platforms the scan reads. The key keeps Sleeper's original shape, so no past week is rescanned. */
-export type ImportedTankingPlatform = 'sleeper' | 'espn'
+type ImportedTankingPlatform = 'sleeper' | 'espn'
 
 export function importedTankingScanMarkerKey(leagueId: string, season: number, week: number, platform: ImportedTankingPlatform = 'sleeper'): string {
   return `integrity-tanking-scan:${leagueId}:${platform}:${season}:${week}`
@@ -122,7 +122,7 @@ const defaultDeps: ImportedTankingScanDeps = {
   lineupScores: defaultLineupScores,
 }
 
-export type ImportedTankingScanOutcome =
+type ImportedTankingScanOutcome =
   | 'not_monitored'
   | 'not_entitled'
   | 'unsupported'
@@ -274,7 +274,7 @@ export async function scanImportedLeagueForTanking(
   return { outcome: 'scanned', week, flagged }
 }
 
-export type ImportedTankingBatchResult = { discovered: number; scanned: number; flagged: number; failed: number }
+type ImportedTankingBatchResult = { discovered: number; scanned: number; flagged: number; failed: number }
 
 /**
  * The daily pass (rides `/api/cron/commissioner-workspace-refresh`): every imported Sleeper league

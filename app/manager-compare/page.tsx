@@ -10,6 +10,7 @@ import HomeTopNav from '@/components/navigation/HomeTopNav'
 import SeoLandingFooter from '@/components/landing/SeoLandingFooter'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
+import { readPlanRefusal } from '@/lib/monetization/planRefusal'
 
 type CompareFormat = 'redraft' | 'dynasty' | 'specialty'
 type CompareWinner = 'A' | 'B' | 'TIE' | 'INCOMPARABLE'
@@ -657,7 +658,7 @@ export default function ManagerComparePage() {
 
         const payload = (await response.json().catch(() => ({}))) as CompareSuccessPayload & CompareErrorPayload
         if (!response.ok) {
-          setError(payload.error ?? payload.message ?? 'Manager comparison failed.')
+          setError(readPlanRefusal(response.status, payload)?.message ?? payload.error ?? payload.message ?? 'Manager comparison failed.')
           setRetryAfterSec(typeof payload.retryAfterSec === 'number' ? payload.retryAfterSec : null)
           return
         }

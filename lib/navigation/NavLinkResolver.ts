@@ -52,7 +52,7 @@ export interface NavGroup {
   items: NavLinkItem[]
 }
 
-export const PRIMARY_NAV_GROUPS: NavGroup[] = [
+const PRIMARY_NAV_GROUPS: NavGroup[] = [
   { id: "home", label: "Home", items: [{ href: "/dashboard", label: "Home" }] },
   {
     id: "play",
@@ -101,7 +101,3 @@ export function getPrimaryNavItems(isAdmin: boolean): NavLinkItem[] {
   return [...PRIMARY_NAV_ITEMS, ADMIN_NAV_ITEM]
 }
 
-/** Resolve product switcher items. */
-export function getProductNavItems(): NavLinkItem[] {
-  return PRODUCT_NAV_ITEMS
-}

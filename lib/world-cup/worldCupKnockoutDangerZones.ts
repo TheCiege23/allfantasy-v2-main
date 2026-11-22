@@ -31,9 +31,9 @@ export type DangerTag =
   | "Already eliminated"
   | "Live now"
 
-export type DangerStatus = "ready" | "no_entry" | "no_picks" | "no_risks"
+type DangerStatus = "ready" | "no_entry" | "no_picks" | "no_risks"
 
-export type DangerZone = {
+type DangerZone = {
   label: string
   description: string
   severity: DangerSeverity
@@ -46,13 +46,13 @@ export type DangerZone = {
   strengthDelta?: number
 }
 
-export type DangerZoneResult = {
+type DangerZoneResult = {
   status: DangerStatus
   zones: DangerZone[]
   lockedLines?: string[]
 }
 
-export type DangerEntry = {
+type DangerEntry = {
   id: string
   championTeamId: string | null
   championTeamName: string | null

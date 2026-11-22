@@ -89,11 +89,11 @@ export async function validateAndMergeAssignments(
   const orphanIds = new Set(await getOrphanRosterIdsForLeague(input.leagueId))
   const active = input.assignments.filter((a) => a.active)
   if (active.length > MAX_AI_TEAMS) {
-    return { ok: false, error: `At most ${MAX_AI_TEAMS} AI-managed teams per draft.` }
+    return { ok: false, error: `At most ${MAX_AI_TEAMS} Chimmy-managed teams per draft.` }
   }
   const seen = new Set<string>()
   for (const a of active) {
-    if (seen.has(a.rosterId)) return { ok: false, error: 'Duplicate roster in AI assignments.' }
+    if (seen.has(a.rosterId)) return { ok: false, error: 'Duplicate roster in Chimmy assignments.' }
     seen.add(a.rosterId)
     if (!orphanIds.has(a.rosterId)) {
       return { ok: false, error: `Roster ${a.rosterId} is not an empty/orphan team.` }
@@ -153,17 +153,17 @@ export function canAiProposeTrade(params: {
   const rules = { ...DEFAULT_TRADE_RULES, ...b.tradeRules }
   if (!isRosterAiControlled(b, params.proposerRosterId)) return { allowed: true }
   if (rules.blockAiToAi && isRosterAiControlled(b, params.receiverRosterId)) {
-    return { allowed: false, reason: 'AI teams cannot trade pick proposals with each other.' }
+    return { allowed: false, reason: 'Chimmy teams cannot trade pick proposals with each other.' }
   }
   if (!rules.allowOutbound) {
-    return { allowed: false, reason: 'AI outbound trades are disabled for this draft.' }
+    return { allowed: false, reason: 'Chimmy outbound trades are disabled for this draft.' }
   }
   const assign = getAssignmentForRoster(b, params.proposerRosterId)
   if (assign?.allowOutbound === false) {
-    return { allowed: false, reason: 'This AI team has outbound trades disabled.' }
+    return { allowed: false, reason: 'This Chimmy team has outbound trades disabled.' }
   }
   if (assign?.tradeAggression === 'none') {
-    return { allowed: false, reason: 'This AI team has trade aggression set to none.' }
+    return { allowed: false, reason: 'This Chimmy team has trade aggression set to none.' }
   }
   const last = b._meta?.lastOutboundProposalAtByRosterId?.[params.proposerRosterId]
   if (last && rules.proposalCooldownSeconds > 0) {
@@ -187,7 +187,7 @@ export function checkAiProposalRoundCap(
   const pr = b._meta?.proposalsThisRound
   const n = pr?.round === currentRound ? pr.byRosterId[proposerRosterId] ?? 0 : 0
   if (n >= rules.maxProposalsPerRound) {
-    return { ok: false, reason: `Maximum ${rules.maxProposalsPerRound} AI trade proposals per round for this team.` }
+    return { ok: false, reason: `Maximum ${rules.maxProposalsPerRound} Chimmy trade proposals per round for this team.` }
   }
   return { ok: true }
 }

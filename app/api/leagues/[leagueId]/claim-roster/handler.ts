@@ -1,3 +1,4 @@
+import { managedRosterWhere } from '@/lib/league/rosterManager'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -39,7 +40,7 @@ export async function GET(
 
   // Check membership and bail out if user already has a roster.
   const myRoster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: userId },
+    where: managedRosterWhere(leagueId, userId),
     select: { id: true },
   })
   if (myRoster) {

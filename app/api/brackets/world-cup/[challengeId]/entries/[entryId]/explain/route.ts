@@ -121,7 +121,7 @@ async function paidToolPost(
     } catch {
       return NextResponse.json(
         {
-          error: "Token spend failed after AI generation. No tokens were deducted.",
+          error: "Token spend failed after Chimmy generation. No tokens were deducted.",
           code: "token_spend_failed_no_deduction",
           upgrade: true,
           upgradePath: "/tokens?ruleCode=world_cup_ai_bracket_explanation",

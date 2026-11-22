@@ -5,12 +5,12 @@
  * See docs/readiness/ncaaf-reserve-identity-proofs-2026-10-06.md.
  */
 export type NcaafReserveAvailability = 'college_inactive' | 'prospect' | 'needs_verification'
-export type VerifiedNcaafReserve = {
+type VerifiedNcaafReserve = {
  fantraxId: string; name: string; position: string; cfbdId: string | null; cfbdName: string | null;
  historicalSchool: string | null; season: number; availability: NcaafReserveAvailability;
  reason: string; evidenceUrl: string; verifiedAt: string
 }
-export const VERIFIED_NCAAF_RESERVES: readonly VerifiedNcaafReserve[] = [
+const VERIFIED_NCAAF_RESERVES: readonly VerifiedNcaafReserve[] = [
   {
     "fantraxId": "05khp",
     "name": "E.J. Smith",

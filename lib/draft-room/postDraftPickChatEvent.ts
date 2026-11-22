@@ -4,6 +4,7 @@
  * (league GET excludes source=draft), while the draft chat GET merges these in when sync is on.
  */
 
+import { rosterManagerKey } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 
@@ -38,6 +39,10 @@ export type PostDraftPickChatEventInput = {
    * by upstream invariant (source is one of 'auto' | 'commissioner' |
    * 'user' | 'keeper' | 'devy' | 'college' | 'promoted_devy'). */
   commissionerOverride?: boolean
+  /** Row id for the chat message; a repeat post with the same key is a no-op (Sleeper mirror re-syncs). */
+  idempotencyKey?: string
+  /** When the pick was made, if known; defaults to now. */
+  pickedAt?: string | null
 }
 
 /**
@@ -56,14 +61,14 @@ async function resolveActorAppUserId(input: PostDraftPickChatEventInput): Promis
 
   const roster = await prisma.roster.findFirst({
     where: { id: input.rosterId, leagueId: input.leagueId },
-    select: { platformUserId: true },
+    select: { platformUserId: true, managerUserId: true },
   })
   const league = await prisma.league.findUnique({
     where: { id: input.leagueId },
     select: { userId: true },
   })
 
-  const candidates = [direct, roster?.platformUserId, league?.userId].filter(
+  const candidates = [direct, roster ? rosterManagerKey(roster) : null, league?.userId].filter(
     (id): id is string => typeof id === 'string' && id.trim().length > 0,
   )
   if (candidates.length === 0) return null
@@ -82,7 +87,7 @@ export async function postDraftPickChatEvent(input: PostDraftPickChatEventInput)
   const actorId = await resolveActorAppUserId(input)
   if (!actorId) return
 
-  const pickedAt = new Date().toISOString()
+  const pickedAt = input.pickedAt ?? new Date().toISOString()
   const summary = `${input.playerName} (${input.position}) → ${input.rosterDisplayName}`
   const roundPart =
     input.round != null && input.roundSlot != null
@@ -91,6 +96,7 @@ export async function postDraftPickChatEvent(input: PostDraftPickChatEventInput)
   const body = `${summary} · Pick ${input.pickLabel} (#${input.overall})${roundPart}`
 
   await createLeagueChatMessage(input.leagueId, actorId, body, {
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     type: 'draft_pick',
     source: 'draft',
     metadata: {

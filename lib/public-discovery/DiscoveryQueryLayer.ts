@@ -165,13 +165,13 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
   }
 
   const featureMap: Array<{ key: string; label: string }> = [
-    { key: "ai_adp_enabled", label: "AI ADP" },
+    { key: "ai_adp_enabled", label: "Chimmy ADP" },
     { key: "draft_helper_enabled", label: "Draft helper" },
-    { key: "orphan_team_ai_manager_enabled", label: "AI manager" },
+    { key: "orphan_team_ai_manager_enabled", label: "Chimmy manager" },
     { key: "ai_feature_trade_analyzer_enabled", label: "Trade analyzer" },
-    { key: "ai_feature_waiver_ai_enabled", label: "Waiver AI" },
+    { key: "ai_feature_waiver_ai_enabled", label: "Waiver Chimmy" },
     { key: "ai_feature_player_comparison_enabled", label: "Player compare" },
-    { key: "ai_feature_matchup_simulator_enabled", label: "Matchup AI" },
+    { key: "ai_feature_matchup_simulator_enabled", label: "Matchup Chimmy" },
     { key: "ai_feature_fantasy_coach_enabled", label: "Fantasy coach" },
     { key: "ai_feature_ai_chat_chimmy_enabled", label: "Chimmy chat" },
   ]

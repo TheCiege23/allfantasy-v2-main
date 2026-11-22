@@ -45,7 +45,7 @@ test.describe("@coach fantasy coach mode click audit", () => {
 
     await page.getByTestId("coach-lineup-optimize-ai-toggle").click()
     await page.getByTestId("coach-lineup-optimize-button").click()
-    await expect(optimizerPanel).toContainText("Explanation source: AI")
+    await expect(optimizerPanel).toContainText("Explanation source: Chimmy")
   })
 
   test("recommendation, waiver target, and trade suggestion links navigate correctly", async ({ page }) => {

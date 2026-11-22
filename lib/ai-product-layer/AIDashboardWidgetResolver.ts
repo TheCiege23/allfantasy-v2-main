@@ -9,7 +9,7 @@ import { getAIProductHrefForFeature } from './AIProductRouteResolver';
 const WIDGETS: Array<Omit<AIDashboardWidget, 'href'>> = [
   {
     id: 'trade',
-    label: 'AI Trade Analyzer',
+    label: 'Chimmy Trade Analyzer',
     description: 'Context-aware trade evaluations',
     tabId: 'trade',
     featureKey: 'trade_analyzer',
@@ -51,7 +51,7 @@ const WIDGETS: Array<Omit<AIDashboardWidget, 'href'>> = [
   },
   {
     id: 'chat',
-    label: 'AI Chat',
+    label: 'Chimmy Chat',
     description: 'Ask Chimmy anything',
     tabId: 'chat',
     featureKey: 'chimmy',

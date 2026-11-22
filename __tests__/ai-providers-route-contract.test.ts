@@ -91,7 +91,7 @@ describe('GET /api/ai/providers contract', () => {
             "available": true,
             "id": "openclaw",
             "name": "OpenClaw Dev Assistant",
-            "role": "Workflow assistant routing for development and AI operations support",
+            "role": "Workflow assistant routing for development and Chimmy operations support",
           },
           {
             "available": false,

@@ -7,7 +7,7 @@
  * fallback, or either total is missing/malformed/negative, the honest answer is null
  * (rendered as an explicit unavailable state), never a percentage that looks measured.
  */
-export type WinProbabilitySide = {
+type WinProbabilitySide = {
   projectedTotal: number
   projectedTotalIncludesFallback: boolean
 }

@@ -221,6 +221,8 @@ async function runOneSport(
           errors: cfbd.errors,
           // Per-game lines written into player_game_stats (lib/stats/cfbdGameLogs.ts).
           gameLogs: cfbd.gameLogs ?? null,
+          // Which weeks were asked of CFBD this run (lib/stats/cfbdWeekFetchPlan.ts): the call count.
+          weekCalls: cfbd.weekCalls ?? null,
           cfbdIdBridge: bridgeError ? { error: bridgeError } : bridge,
           durationMs: Date.now() - startedAt,
         },

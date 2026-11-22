@@ -13,6 +13,7 @@ import { DraftTab } from '@/components/league-settings/tabs/DraftTab'
 import { WaiversTab } from '@/components/league-settings/tabs/WaiversTab'
 import { TradesTab } from '@/components/league-settings/tabs/TradesTab'
 import { PlayoffsTab } from '@/components/league-settings/tabs/PlayoffsTab'
+import { AfOptionsSettingsPanel } from '@/components/league-settings/AfOptionsSettingsPanel'
 import { AISettingsTab } from '@/components/league-settings/tabs/AISettingsTab'
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
 import { CoOwnerSettingsPanel } from '@/components/league-settings/CoOwnerSettingsPanel'
@@ -65,6 +66,9 @@ export function LeagueSettingsSubPageBody({
     case 'trades':
       body = <TradesTab {...props} />
       break
+    case 'af-options':
+      body = <AfOptionsSettingsPanel leagueId={leagueId} />
+      break
     case 'playoffs':
       body = <PlayoffsTab {...props} />
       break
@@ -89,7 +93,7 @@ export function LeagueSettingsSubPageBody({
     case 'commissioner-tools':
       body = (
         <div className="space-y-10">
-          <CommissionerControlPanel leagueId={leagueId} />
+          <CommissionerControlPanel leagueId={leagueId} initialView={ctx.commissionerToolsView ?? null} />
           <LeagueHistoryPanel leagueId={leagueId} />
           {ctx.isHeadCommissioner ? (
             <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} platform={ctx.league.platform} leagueName={ctx.league.name} />

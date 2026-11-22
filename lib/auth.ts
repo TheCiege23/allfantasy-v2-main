@@ -16,7 +16,7 @@ import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
-import { clearSharedRateLimit, consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
+import { clearPasswordGuesses, spendPasswordGuess } from "@/lib/auth/passwordGuessBudget";
 import { prisma } from "@/lib/prisma";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import {
@@ -300,9 +300,9 @@ const providers: NextAuthOptions["providers"] = [
         // phone spellings of one account share it; spent BEFORE the compare so a
         // parallel burst cannot all get a guess in. Answers exactly like a wrong
         // password — it must not confirm the account exists.
-        const budgetKey = `signin-account:${user.id}`;
-        const budget = await consumeSharedRateLimit(budgetKey, 10, 15 * 60);
-        if (!budget.success) {
+        // Shared with the current-password checks on the settings routes
+        // (lib/auth/passwordGuessBudget), so a guess costs the same anywhere.
+        if (!(await spendPasswordGuess(user.id))) {
           return null;
         }
 
@@ -311,7 +311,7 @@ const providers: NextAuthOptions["providers"] = [
         if (!isValidPassword) {
           return null;
         }
-        await clearSharedRateLimit(budgetKey).catch(() => undefined);
+        await clearPasswordGuesses(user.id);
 
         // A suspended or banned account (lib/moderation/accountSuspension). Checked only after
         // the password matched, so it tells nothing to someone who does not have it.
@@ -329,6 +329,23 @@ const providers: NextAuthOptions["providers"] = [
       } catch (err: unknown) {
         throw err;
       }
+    },
+  }),
+  /*
+   * Sign in with a text code (no password). The code was sent by
+   * /api/auth/phone/login/start; this checks it with Twilio Verify. Only a VERIFIED
+   * phone number is a way in — see lib/auth/phoneCodeSignIn.ts.
+   */
+  CredentialsProvider({
+    id: "phone-code",
+    name: "Text code",
+    credentials: {
+      phone: { label: "Phone number", type: "tel" },
+      code: { label: "Code", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizePhoneCode } = await import("@/lib/auth/phoneCodeSignIn");
+      return authorizePhoneCode(credentials?.phone, credentials?.code);
     },
   }),
   /*

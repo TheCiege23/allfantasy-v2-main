@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { processLeagueWeek } from '@/server/services/weeklyProcessor'
 import { logAction } from '@/server/services/auditService'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { recalcNativeLeagueWeek } from '@/lib/redraft/commissionerRecalcWeek'
 
 export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -27,7 +28,24 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   const season = Math.max(2000, Math.min(2100, Number(body.season) || league.season))
   const week = Math.max(1, Math.min(40, Number(body.week) || 1))
 
-  const result = await processLeagueWeek({ leagueId: params.leagueId, season, week })
+  // A league that plays here: re-score its own games for the week (lib/redraft/commissionerRecalcWeek.ts).
+  const native = await recalcNativeLeagueWeek({ leagueId: params.leagueId, seasonYear: season, week })
+  if (native.kind === 'week_final') {
+    return NextResponse.json(
+      { error: `Week ${week} is final. To change a final score, add a score adjustment for that game.`, code: 'WEEK_FINAL' },
+      { status: 409 },
+    )
+  }
+  if (native.kind === 'week_not_started') {
+    return NextResponse.json({ error: `Week ${week} has not started yet.`, code: 'WEEK_NOT_STARTED' }, { status: 409 })
+  }
+  if (native.kind === 'no_games') {
+    return NextResponse.json({ error: `No games are scheduled for week ${week}.`, code: 'NO_GAMES' }, { status: 409 })
+  }
+  const result =
+    native.kind === 'recalculated'
+      ? { matchupsWritten: true, source: 'season' as const, games: native.games, incomplete: native.incomplete }
+      : await processLeagueWeek({ leagueId: params.leagueId, season, week })
 
   void logAction({
     leagueId: params.leagueId,

@@ -1,9 +1,9 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { requireAfSub } from '@/lib/redraft/ai/requireAfSub'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import {
   getDefenderStartSitRec,
   getIDPWaiverTargets,
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   if (IDP_AI_OFFLINE && action !== 'ai_prefs') {
     return NextResponse.json(
       {
-        error: 'IDP AI is temporarily offline while we connect it to live defensive stats.',
+        error: 'IDP Chimmy is temporarily offline while we connect it to live defensive stats.',
         code: 'IDP_AI_OFFLINE',
       },
       { status: 503 },
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'This IDP AI action is offline: its data source is not ingested yet, and serving an invented answer would be worse than none.',
+          'This IDP Chimmy action is offline: its data source is not ingested yet, and serving an invented answer would be worse than none.',
         code: 'IDP_AI_ACTION_OFFLINE',
       },
       { status: 503 },
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(data)
       }
       case 'power_rankings': {
-        if (!(await isCommissioner(leagueId, userId))) {
+        if (!(await canCommissionerAct(leagueId, userId, 'league'))) {
           return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
         }
         const data = await generateIDPPowerRankings(leagueId, week)

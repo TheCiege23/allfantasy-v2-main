@@ -37,7 +37,7 @@ export interface DynastyDataAvailability {
   freeAgentPool: DataState
 }
 
-export interface DynastyFreshness {
+interface DynastyFreshness {
   generatedAt: string
   valuesAsOf: string | null
   injuriesAsOf: string | null
@@ -181,11 +181,3 @@ export interface DynastyWarRoomContext {
   }
 }
 
-export type DynastyWarRoomAction =
-  | 'team-direction'
-  | 'buy-sell-hold'
-  | 'trade-analyze'
-  | 'trade-find'
-  | 'waivers'
-  | 'lineup'
-  | 'ask'

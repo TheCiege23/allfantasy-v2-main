@@ -1,5 +1,7 @@
 'use client'
 
+import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
+
 import Link from 'next/link'
 import { usePathname, useParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -259,6 +261,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
                 </span>
               </p>
             </div>
+            <LeagueFormatFaqLink league={{ leagueType: 'tournament' }} className="text-white" />
             {conference ? (
               <span
                 className="hidden max-w-[140px] truncate rounded-full border border-white/10 px-3 py-1 text-[11px] font-semibold text-white/90 sm:inline-block"

@@ -22,7 +22,7 @@
  * is news and goes out; the same fact again does not.
  */
 
-export type SweepTopAlert = {
+type SweepTopAlert = {
   title: string
   leagueId?: string | null
   metadata?: Record<string, unknown>

@@ -11,6 +11,7 @@
  * in — a bare league id would let anyone queue requests at any league.
  */
 
+import { readAllowMultiTeamManagers } from '@/lib/league/multiTeamManagers'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -20,7 +21,19 @@ import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { careerJoinRefusal, evaluateCareerJoinGate } from '@/lib/league-join/careerJoinGate'
 import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
-import { notifyCommissionerOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { managersHere } from '@/lib/league/managersHere'
+import { notifyCommissionerOfJoin, notifyInviterOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+
+/**
+ * Give a week, get a week (lib/referral/proWeek.ts): a referred leaguemate JOINING a league through an
+ * invite brings a league exactly as importing one does, so it earns both a free week of AF Pro. Fired
+ * after the join is committed, never awaited, never throws; the award claims once per friend.
+ */
+function rewardReferredJoin(userId: string): void {
+  void import('@/lib/referral/proWeekGrant')
+    .then((m) => m.awardReferralProWeekOnImport(userId))
+    .catch(() => undefined)
+}
 import { resolveGuillotineSeatSummary } from '@/lib/guillotine/lateStartSeats'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -101,7 +114,11 @@ export async function POST(req: NextRequest) {
       body.action === 'sleeper_claim_start'
         ? await startSleeperTeamClaim({ userId, leagueId, teamExternalId })
         : await verifySleeperTeamClaim({ userId, leagueId, teamExternalId })
-    if (result.ok) return NextResponse.json(result)
+    if (result.ok) {
+      // A verified claim puts them on their team: that is joining the league.
+      if (body.action === 'sleeper_claim_verify') rewardReferredJoin(userId)
+      return NextResponse.json(result)
+    }
     const status =
       result.reason === 'not_member' || result.reason === 'linked_elsewhere' || result.reason === 'other_account'
         ? 403
@@ -228,7 +245,11 @@ export async function POST(req: NextRequest) {
       { userId, leagueId: result.leagueId },
       tx,
     )
-    if (priorClaim?.viaOtherAccount) {
+    const multiTeamLeague = priorClaim?.viaOtherAccount
+      ? await tx.league.findUnique({ where: { id: result.leagueId }, select: { settings: true } })
+      : null
+    // The commissioner can allow one person to run several teams, each under its own account.
+    if (priorClaim?.viaOtherAccount && !readAllowMultiTeamManagers(multiTeamLeague?.settings)) {
       return {
         success: false as const,
         status: 409,
@@ -540,9 +561,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (!joinResult.alreadyMember) {
+    rewardReferredJoin(userId)
     // After the commit, and never awaited by the response: the join stands whatever the alert does.
     void notifyCommissionerOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
       console.warn('[league-join] commissioner join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+    void notifyInviterOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] inviter join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
+    })
+    void notifyLeagueMatesOfJoin({ leagueId: joinResult.leagueId, joinerUserId: userId }).catch((err) => {
+      console.warn('[league-join] league mates join alert failed', { leagueId: joinResult.leagueId, error: err instanceof Error ? err.message : String(err) })
     })
   }
 
@@ -607,12 +635,23 @@ export async function GET(req: NextRequest) {
     resolveGuillotineSeatSummary(leagueId).catch(() => null),
   ])
 
+  // Who is already here (lib/league/managersHere.ts): names for the people in this league to see.
+  const claimedTeams = await prisma.leagueTeam.findMany({
+    where: { leagueId, claimedByUserId: { not: null } },
+    select: { teamName: true, ownerName: true, claimedByUserId: true },
+  }).catch(() => [])
+  const claimedIds = [...new Set(claimedTeams.map((t) => t.claimedByUserId).filter((id): id is string => Boolean(id)))]
+  const profiles = claimedIds.length
+    ? await prisma.userProfile.findMany({ where: { userId: { in: claimedIds } }, select: { userId: true, displayName: true, sleeperUsername: true } }).catch(() => [])
+    : []
+  const nameById = new Map(profiles.map((p) => [p.userId, p.displayName?.trim() || p.sleeperUsername?.trim() || '']))
+
   return NextResponse.json({
     leagueName: league.name,
     inviteCode: result.inviteCode,
     inviteLink: result.inviteLink,
     inviteExpiresAt: result.inviteExpiresAt,
-    claim: { teamCount, claimedCount },
+    claim: { teamCount, claimedCount, managersHere: managersHere(claimedTeams, nameById, userId) },
     guillotineSeats,
   })
 }

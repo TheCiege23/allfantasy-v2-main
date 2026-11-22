@@ -1,3 +1,4 @@
+import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -8,6 +9,7 @@ import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
 import { isKnownNonNflSport } from './rosterIdSpace'
 import { isIdpEligiblePosition } from '@/lib/af-projections/idpScoring'
+import { loadAfNflWeek } from '@/lib/af-projections/nflLeagueWeek'
 import type { StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
 
 /**
@@ -99,27 +101,17 @@ function toProjection(row: {
  * is that it asked for the wrong week.
  */
 export async function latestProjectionWeek(): Promise<{ season: string; week: number } | null> {
-  /*
-   * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
-   * `sport` and returned a college week for NCAAF. There is no college week to
-   * return: college baseline `AFProjectionSnapshot` rows have `week = null`, because
-   * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
-   * A sport-aware version here could only have invented a number or returned null and
-   * switched college projections off entirely. `lookupProjections` resolves the
-   * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
-   */
-  /*
-   * 🛑 THE WEEK THE FEED IS BEING REFRESHED FOR, NOT THE HIGHEST WEEK ON FILE. Those differ the
-   * moment a week is written early, and it was — every week of 2026 until the importer was fixed:
-   * its date guess ran a week ahead (see `approximateCurrentWeek` in cron/import-projections), so
-   * "highest week" answered NEXT week from each Tuesday through Monday night's game, and every
-   * lineup, matchup and waiver number shown as "this week" was next week's. The importer now pulls
-   * Sleeper's own current week each day, so the most recently fetched week IS the current one —
-   * and the early rows already on file stop deciding anything the next time it runs.
-   *
-   * ⚠ A HAND-RUN `?week=N` import becomes "the week" until the next scheduled run. That is the
-   * price of reading this from the data rather than a clock, and the reason not to prefill.
-   */
+  const baseline = await prisma.aFProjectionSnapshot?.findFirst({
+    where: { sport: 'NFL', week: null, eventId: null }, orderBy: { computedAt: 'desc' }, select: { season: true },
+  }).catch(() => null)
+  if (baseline?.season) {
+    const period = await resolveSportWeek('NFL', baseline.season).catch(() => null)
+    if (period?.ok && period.seasonType === 'regular') {
+      const week = period.state === 'played' ? period.nextSportWeek : period.sportWeek
+      if (week != null) return { season: String(baseline.season), week }
+    }
+  }
+  // Older installations with only vendor projections still expose their refreshed week.
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
@@ -192,6 +184,11 @@ export async function lookupProjections(
 
   const when = at ?? (await latestProjectionWeek())
   if (!when) return new Map()
+
+  if (idp?.scoringSettings && String(sport ?? '').trim().toUpperCase() === 'NFL') {
+    const pool = await loadAfNflWeek(when)
+    return new Map(ids.flatMap((id) => pool.has(id) ? [[id, pool.get(id)!] as const] : []))
+  }
 
   const rows = await prisma.fantasyProjection.findMany({
     where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' }, ...projectionSportScope(sport) },

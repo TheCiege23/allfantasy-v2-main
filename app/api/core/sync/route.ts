@@ -42,7 +42,7 @@
  * putting a key in the body. The worst a bad `only` can do is sync nothing.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import {
   collectResyncCandidates,
   type ResyncCandidate,
@@ -81,7 +81,7 @@ type LeagueOutcome = {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAgeConfirmedUser()
   if (!auth.ok) return auth.response
 
   const body = (await req.json().catch(() => ({}))) as { only?: unknown }

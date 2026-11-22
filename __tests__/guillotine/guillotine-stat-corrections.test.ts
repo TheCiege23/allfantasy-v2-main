@@ -50,6 +50,8 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
     league: { findUnique: vi.fn(async () => state.league) },
+    // The disputed-chop alert's head-commissioner lookup (lib/guillotine/commissionerTiebreakStore.ts).
+    leagueTeam: { findMany: vi.fn(async () => []) },
     playerDailyScore: {
       findMany: vi.fn(async ({ where }: Row) =>
         state.daily.filter(
@@ -121,6 +123,13 @@ vi.mock('@/lib/prisma', () => ({
       }),
     },
   },
+}))
+const dispatched = vi.hoisted(() => [] as Array<Record<string, any>>)
+vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
+  dispatchNotification: vi.fn(async (p: Record<string, any>) => {
+    dispatched.push(p)
+    return {}
+  }),
 }))
 vi.mock('@/lib/automation/locks', () => ({
   acquireAutomationLock: vi.fn(async () => ({ ok: true })),
@@ -257,6 +266,29 @@ describe('a stat correction after the chop', () => {
       afterState: { choppedRedraftRosterIds: ['rr-b'], wouldHaveChoppedRedraftRosterIds: ['rr-c'], chopStands: true },
       metadata: { week: 3, changed: 1, chopDisputed: true },
     })
+  })
+
+  it('a disputed chop alerts the commissioner, linking to Undo; an undisputed one does not', async () => {
+    await arrange()
+    state.league = { ...state.league, userId: 'owner-1', name: 'Dynasty Bros' }
+    dispatched.length = 0
+    correct('b1', 100)
+    await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({
+      userIds: ['owner-1'],
+      category: 'commissioner_alerts',
+      severity: 'high',
+      actionHref: '/league/L1/guillotine-tiebreak#undo',
+      dedupePrefix: 'guillotine-chop-disputed:L1:w3',
+    })
+
+    await arrange()
+    state.league = { ...state.league, userId: 'owner-1' }
+    dispatched.length = 0
+    correct('b1', 75) // still the lowest: the chop is not disputed
+    await applyGuillotineStatCorrectionsForWeek({ seasonId: 's1', week: 3 }, deps())
+    expect(dispatched).toHaveLength(0)
   })
 
   it('a later week\'s running total moves with the corrected week', async () => {

@@ -24,16 +24,16 @@ import type { RankSnapshot } from '@/lib/core-app/rankingsEngine'
  * because it reads as "nobody moved".
  */
 
-export const SNAPSHOT_KEY_PREFIX = 'core-rankings:daily:v1:'
-export const SNAPSHOT_RETENTION_DAYS = 400
+const SNAPSHOT_KEY_PREFIX = 'core-rankings:daily:v1:'
+const SNAPSHOT_RETENTION_DAYS = 400
 /**
  * Rows kept per day. At today's population this is never reached; it bounds the
  * document if the board grows, and managers below the cut simply show no
  * movement rather than a wrong one.
  */
-export const SNAPSHOT_MAX_ROWS = 5000
+const SNAPSHOT_MAX_ROWS = 5000
 
-export function snapshotKey(dateKey: string): string {
+function snapshotKey(dateKey: string): string {
   return `${SNAPSHOT_KEY_PREFIX}${dateKey}`
 }
 

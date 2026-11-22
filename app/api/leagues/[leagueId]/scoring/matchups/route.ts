@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
+import { loadNativeScoreboard } from '@/server/services/nativeMatchupCenter'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const leagueId = params.leagueId
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { id: true, season: true },
+    select: { id: true, season: true, sport: true, settings: true, leagueVariant: true, platform: true, playoffWeeksPerRound: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -25,6 +26,47 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   }
 
   const sp = req.nextUrl.searchParams
+
+  /*
+   * A league that plays here: the week's games from its own schedule and bracket. `teamWeekResult`
+   * below is never written for it on a schedule (lib/matchup-center/nativeMatchupModel.ts). `games`
+   * is one line per game, so a team that plays several games in a week is drawn once per game;
+   * `matchups` keeps the one-row-per-team shape for anything still reading it.
+   */
+  const askedSeason = Number(sp.get('season'))
+  const askedWeek = Number(sp.get('week'))
+  const native = await loadNativeScoreboard({
+    league,
+    viewerUserId: session.user.id,
+    season: Number.isInteger(askedSeason) && askedSeason >= 2000 && askedSeason <= 2100 ? askedSeason : undefined,
+    week: Number.isInteger(askedWeek) && askedWeek >= 1 && askedWeek <= 60 ? askedWeek : undefined,
+  })
+  if (native) {
+    // The per-team rows only ever existed for a scored week, with a number in them: keep that contract.
+    // A game not started yet, and a bye, are in `games` only.
+    const side = (
+      mine: { rosterId: string; teamName: string; totalPoints: number | null },
+      theirs: { rosterId: string; teamName: string; totalPoints: number | null },
+      status: string,
+    ) => {
+      const a = mine.totalPoints ?? 0
+      const b = theirs.totalPoints ?? 0
+      return {
+        rosterId: mine.rosterId,
+        teamName: mine.teamName,
+        totalPoints: a,
+        opponentRosterId: theirs.rosterId,
+        opponentName: theirs.teamName,
+        winLoss: status === 'final' ? (a > b ? 'W' : a < b ? 'L' : 'T') : null,
+        status,
+      }
+    }
+    const matchups = native.games.flatMap((g) =>
+      g.away && g.status !== 'upcoming' ? [side(g.home, g.away, g.status), side(g.away, g.home, g.status)] : [],
+    )
+    return NextResponse.json({ season: native.season, week: native.week, matchups, games: native.games })
+  }
+
   const season = Math.max(2000, Math.min(2100, Number(sp.get('season')) || league.season))
   const week = Math.max(1, Math.min(40, Number(sp.get('week')) || 1))
 

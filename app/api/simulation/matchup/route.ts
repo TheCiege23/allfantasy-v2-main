@@ -94,7 +94,7 @@ async function paidToolPost(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'Unauthorized',
-          message: 'Sign in and upgrade to AF Pro for matchup AI explanations.',
+          message: 'Sign in and upgrade to AF Pro for matchup Chimmy explanations.',
         },
         { status: 401 }
       )
@@ -109,7 +109,7 @@ async function paidToolPost(req: NextRequest) {
       tokenRuleCode: 'ai_matchup_explanation_single',
       tokenSourceType: 'matchup_simulation_ai_explanation',
       tokenSourceId: `${body.leagueId ?? 'matchup'}:${weekOrPeriod}:${Date.now()}`,
-      tokenDescription: 'Matchup simulation AI explanation fallback',
+      tokenDescription: 'Matchup simulation Chimmy explanation fallback',
       tokenMetadata: {
         leagueId: body.leagueId ?? null,
         sport,

@@ -14,7 +14,7 @@
  */
 import type { SalaryCapView } from '@/components/salary-cap/types'
 
-export const SALARY_CAP_VALUE = 'salary_cap'
+const SALARY_CAP_VALUE = 'salary_cap'
 
 export function isSalaryCapWorkspaceLeague(league: { leagueVariant?: string | null; leagueType?: string | null }): boolean {
   return String(league.leagueVariant ?? '').toLowerCase() === SALARY_CAP_VALUE || String(league.leagueType ?? '').toLowerCase() === SALARY_CAP_VALUE
@@ -27,11 +27,9 @@ export const SALARY_CAP_TABS: ReadonlyArray<{ id: string; label: string; view: S
   { id: 'cap_contracts', label: 'Contracts', view: 'contracts' },
   { id: 'cap_team_builder', label: 'Team builder', view: 'team-builder' },
   { id: 'cap_auction', label: 'Startup auction', view: 'draft' },
-  { id: 'cap_ai', label: 'Cap AI', view: 'ai' },
+  { id: 'cap_ai', label: 'Cap Chimmy', view: 'ai' },
   { id: 'cap_rules', label: 'Cap rules', view: 'rules' },
 ]
-
-export const SALARY_CAP_TAB_IDS: ReadonlySet<string> = new Set(SALARY_CAP_TABS.map((t) => t.id))
 
 export function salaryCapViewForTab(tabId: string): SalaryCapView {
   return SALARY_CAP_TABS.find((t) => t.id === tabId)?.view ?? 'home'

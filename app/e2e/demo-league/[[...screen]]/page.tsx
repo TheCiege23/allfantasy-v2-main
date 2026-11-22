@@ -1,7 +1,11 @@
 import { notFound } from 'next/navigation'
-import { DemoBanner } from '@/components/demo-league/DemoBanner'
-import { DemoNav } from '@/components/demo-league/DemoNav'
-import { DemoOverview, DemoTeamScreen, DemoTradesScreen } from '@/components/demo-league/DemoScreens'
+import { DemoCoreShell } from '@/components/demo-league/DemoCoreShell'
+import { DemoLeagueExtras, DemoTeamScreen, DemoTradesScreen } from '@/components/demo-league/DemoScreens'
+import { Standings } from '@/components/core-app/screens/Standings'
+import { demoLeagueStandings } from '@/lib/demo-league/coreStandings'
+import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
+import { DEMO_HIDDEN_HOME_SECTIONS, demoLeagueHome } from '@/lib/demo-league/coreHome'
+import { demoRailItems } from '@/lib/demo-league/demoRail'
 import { DemoTradeEvaluator } from '@/components/demo-league/DemoTradeEvaluator'
 import { buildDemoLeagueView } from '@/lib/demo-league/view'
 import type { SourceSnapshot } from '@/lib/demo-league/source'
@@ -35,7 +39,9 @@ function sampleSource(): SourceSnapshot {
     isOrphan: false,
   }))
   const weekRows: SourceSnapshot['weekRows'] = []
-  for (let week = 1; week <= 10; week++) {
+  // Through week 14 (the regular season), weeks after 10 stored at 0–0 as Sleeper stores them — the
+  // standings board needs the games left to say who has clinched.
+  for (let week = 1; week <= 14; week++) {
     for (let m = 0; m < 6; m++) {
       const a = (m + week) % 12
       const b = (11 - m + week) % 12
@@ -94,17 +100,19 @@ export default async function DemoLeagueHarness(props: { params: Promise<{ scree
     body = <DemoTeamScreen view={view} team={team} />
   } else if (screen[0] === 'trades') {
     body = <DemoTradesScreen view={view} />
+  } else if (screen[0] === 'standings') {
+    body = <Standings data={demoLeagueStandings(view, { id: 'demo-league', name: view.leagueName })} />
   } else if (screen[0] === 'trade-evaluator') {
     body = <DemoTradeEvaluator teams={view.teams} rosters={view.rosters.map((r) => ({ slot: r.slot, players: [...r.starters, ...r.bench].map((p) => ({ name: p.name, position: p.position })) }))} />
   } else {
-    body = <DemoOverview view={view} />
+    body = (
+      <>
+        <LeagueHome data={demoLeagueHome(view)} hiddenSections={[...DEMO_HIDDEN_HOME_SECTIONS]} otherLeagueIssueCount={0} identityInShell />
+        <DemoLeagueExtras view={view} />
+      </>
+    )
   }
 
-  return (
-    <div className="af-surface min-h-dvh" data-demo-league="1">
-      <DemoBanner />
-      <DemoNav />
-      <main className="mx-auto max-w-6xl px-4 pb-16 pt-4 sm:px-6">{body}</main>
-    </div>
-  )
+  // The same frame and Home as /demo (app/demo/layout.tsx, app/demo/page.tsx), on sample data.
+  return <DemoCoreShell rail={demoRailItems()}>{body}</DemoCoreShell>
 }

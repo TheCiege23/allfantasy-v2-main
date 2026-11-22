@@ -39,7 +39,7 @@ function mergePlayerStatsIntoTeam(target: TeamStatTotals, rawStats: Record<strin
   }
 }
 
-export type ProcessWeekResult = {
+type ProcessWeekResult = {
   leagueId: string
   season: number
   week: number

@@ -26,7 +26,7 @@ import {
  * lineup factor table) older than `AF_MARKET_MAX_AGE_DAYS` are therefore ignored, not served.
  */
 
-export const AF_MARKET_SPORT = 'NFL'
+const AF_MARKET_SPORT = 'NFL'
 export const AF_MARKET_MAX_AGE_DAYS = 21
 
 export type AfMarketRow = {
@@ -132,12 +132,15 @@ export async function loadAfTradeMarketRows(
   sleeperIds: readonly string[],
   book: MarketBook,
   now = new Date(),
+  includeFlat = false,
 ): Promise<Map<string, AfMarketRow>> {
   const ids = [...new Set(sleeperIds.map((s) => s.trim()).filter((s) => /^\d+$/.test(s)))]
   const out = new Map<string, AfMarketRow>()
   if (ids.length === 0) return out
   const rows = await findRows(prisma, { ...freshWhere(book, now), playerId: { in: ids } })
-  for (const r of rows) if (isApplicableMarketRow(r, now)) out.set(r.playerId, r)
+  for (const r of rows) {
+    if (isApplicableMarketRow(r, now) || (includeFlat && r.adjustmentPercent === 0 && r.sampleSize >= 5 && r.generatedAt >= freshSince(now))) out.set(r.playerId, r)
+  }
   return out
 }
 
@@ -217,7 +220,7 @@ export function lineupNote(table: LineupFactorTable | null, lineup: LineupProfil
 
 // ─── The public board ───────────────────────────────────────────────────────────────────────────────
 
-export type AfMarketMover = {
+type AfMarketMover = {
   playerId: string
   name: string
   position: string | null
@@ -228,7 +231,7 @@ export type AfMarketMover = {
   confidence: number
 }
 
-export type AfMarketBoard = {
+type AfMarketBoard = {
   /** False when there is no fresh run to show — the UI then says so rather than showing old movers. */
   fresh: boolean
   generatedAt: string | null

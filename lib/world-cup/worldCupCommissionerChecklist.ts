@@ -36,9 +36,9 @@ export type ChecklistEntryStatus =
   | "Needs picks"
   | "Unknown"
 
-export type ChecklistStatus = "ready" | "no_members" | "no_data"
+type ChecklistStatus = "ready" | "no_members" | "no_data"
 
-export type ChecklistRow = {
+type ChecklistRow = {
   /** Entry display name (e.g. "Bracket 1"). */
   entryName: string
   /** Member display name (sanitized — never email, never user id). */
@@ -48,7 +48,7 @@ export type ChecklistRow = {
   missingPicks: number
 }
 
-export type ChecklistSummary = {
+type ChecklistSummary = {
   totalEntries: number
   finalized: number
   inProgress: number
@@ -57,7 +57,7 @@ export type ChecklistSummary = {
   percentComplete: number
 }
 
-export type ChecklistResult = {
+type ChecklistResult = {
   status: ChecklistStatus
   summary: ChecklistSummary
   rows: ChecklistRow[]
@@ -67,7 +67,7 @@ export type ChecklistResult = {
 }
 
 /** Snapshot-like input from the Commissioner Brain endpoint. */
-export type WorldCupChecklistSnapshot = {
+type WorldCupChecklistSnapshot = {
   totalEntries: number
   completedBracketCount: number
   incompleteBracketCount: number

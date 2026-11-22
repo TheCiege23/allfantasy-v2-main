@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { rosterIdFromOrphanSeat, seatPlaceholderUserIdOr } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { createSurvivorChatMessage, upsertSurvivorChatMessage } from './survivorChatBridge'
@@ -125,7 +126,6 @@ export async function postChimmyCastawayLine(leagueId: string, userId: string, l
   }
 }
 
-const SEAT_PREFIX = 'orphan-'
 const PRE_MERGE_PHASES = new Set(['pre_draft', 'drafting', 'pre_merge', 'post_swap'])
 
 /**
@@ -137,14 +137,14 @@ export async function postChimmyWeekLines(leagueId: string, week: number): Promi
   try {
     const [cast, league, game] = await Promise.all([
       prisma.survivorPlayer.findMany({
-        where: { leagueId, userId: { startsWith: SEAT_PREFIX }, playerState: 'active' },
+        where: { leagueId, OR: seatPlaceholderUserIdOr(), playerState: 'active' },
         select: { userId: true, redraftRosterId: true },
       }),
       prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
       prisma.survivorGameState.findUnique({ where: { leagueId }, select: { phase: true } }),
     ])
     const managed = readManagedLineups(league?.settings)
-    const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
+    const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? rosterIdFromOrphanSeat(p.userId) ?? '', p.userId))
     if (chimmy.length === 0) return 0
     const userIds = chimmy.map((p) => p.userId)
     const councils = await prisma.survivorTribalCouncil.findMany({

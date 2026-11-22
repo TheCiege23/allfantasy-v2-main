@@ -104,11 +104,11 @@ const STATIC_PAGES: SearchResultItem[] = [
   },
   {
     id: "legacy",
-    label: "Legacy AI",
+    label: "Legacy Chimmy",
     href: "/af-legacy",
     category: "page",
     keywords: ["legacy", "dynasty", "trade", "draft"],
-    description: "Legacy workflows and AI",
+    description: "Legacy workflows and Chimmy",
   },
   {
     id: "tools-hub",
@@ -124,7 +124,7 @@ const STATIC_PAGES: SearchResultItem[] = [
     href: "/chimmy",
     category: "page",
     keywords: ["chimmy", "ai", "chat"],
-    description: "AI landing and onboarding",
+    description: "Chimmy landing and onboarding",
   },
   {
     id: "messages",
@@ -204,7 +204,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   },
   {
     id: "legacy-chat",
-    label: "AI Chat",
+    label: "Chimmy Chat",
     href: CHIMMY_HREF,
     category: "tool",
     keywords: ["chat", "chimmy", "ai"],
@@ -244,7 +244,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   },
 ]
 
-export function getStaticSearchItems(): SearchResultItem[] {
+function getStaticSearchItems(): SearchResultItem[] {
   return [...STATIC_PAGES, ...STATIC_TOOLS]
 }
 

@@ -27,7 +27,8 @@ export const finderSearchMessages = defineMessages({
 /** The search box (searchBoxCopy). */
 export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
   en: {
-    searchLabel: 'Search any player',
+    // A player or his team (2026-11-13 guide): "Bills" / "BUF" lists the club's players.
+    searchLabel: 'Search a player or team',
     sportLabel: 'Sport',
     allSports: 'All sports',
     soccer: 'Soccer',
@@ -41,7 +42,7 @@ export const finderSearchBoxMessages = defineMessages<SearchBoxCopy>({
     noteSignedOut: 'One search covers every league you connect. Connect a league to see your own slots and matchups.',
   },
   es: {
-    searchLabel: 'Buscar cualquier jugador',
+    searchLabel: 'Busca un jugador o un equipo',
     sportLabel: 'Deporte',
     allSports: 'Todos los deportes',
     soccer: 'Fútbol',

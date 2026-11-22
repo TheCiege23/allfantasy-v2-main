@@ -111,4 +111,3 @@ export function LeagueTabsScroller({
   )
 }
 
-export default LeagueTabsScroller

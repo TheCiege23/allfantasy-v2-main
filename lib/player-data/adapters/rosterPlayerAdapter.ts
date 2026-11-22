@@ -22,10 +22,10 @@ import {
 } from '@/lib/player-data/nflRedraftLiveScoringContext'
 import { rosterBadgeStatus } from '@/lib/injuries/injuryStatusDisplay'
 
-export type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
+type RosterSectionKey = 'starters' | 'bench' | 'ir' | 'taxi' | 'devy'
 
 /** Minimal row shape merged by id — matches useRosterManager `RosterPlayer` + optional enrichments */
-export type RosterPlayerMergeable = {
+type RosterPlayerMergeable = {
   id: string
   name: string
   team: string

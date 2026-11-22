@@ -29,7 +29,7 @@ export function pickDealKey(a: { year: number; round: number; label: string }): 
 
 const ORDINAL_EN = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th']
 
-export const dynastyPickCapitalMessages = defineMessages({
+const dynastyPickCapitalMessages = defineMessages({
   en: {
     title: 'Your draft capital',
     total: (n: number): string => (n === 1 ? 'pick held' : 'picks held'),

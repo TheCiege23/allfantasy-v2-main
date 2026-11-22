@@ -12,15 +12,7 @@ import { toast } from "sonner"
 import WaiverFilters from "@/components/waiver-wire/WaiverFilters"
 import WaiverPlayerRow from "@/components/waiver-wire/WaiverPlayerRow"
 import WaiverClaimDrawer from "@/components/waiver-wire/WaiverClaimDrawer"
-import {
-  getTabLabel,
-  getWaiverRuleSummary,
-  getWaiverTypeLabel,
-  WAIVER_EMPTY_PLAYERS_TITLE,
-  WAIVER_EMPTY_PLAYERS_HINT,
-  WAIVER_EMPTY_PENDING_TITLE,
-  WAIVER_EMPTY_HISTORY_TITLE,
-} from "@/lib/waiver-wire/WaiverWireViewService"
+import { getTabLabel, getWaiverRuleSummary, getWaiverTypeLabel, WAIVER_EMPTY_PLAYERS_TITLE, WAIVER_EMPTY_PLAYERS_HINT, WAIVER_EMPTY_HISTORY_TITLE } from "@/lib/waiver-wire/WaiverWireViewService"
 import { getWaiverAIChatUrl, buildWaiverSummaryForAI } from "@/lib/waiver-wire/WaiverToAIContextBridge"
 import type { WriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { waiverPositionMatches } from "@/lib/waiver-wire/SportWaiverResolver"
@@ -112,7 +104,7 @@ type Transaction = {
   isDefensiveDrop?: boolean
 }
 
-export type WaiverWireActiveTab = "available" | "trending" | "claimed" | "dropped" | "pending" | "history"
+type WaiverWireActiveTab = "available" | "trending" | "claimed" | "dropped" | "pending" | "history"
 
 type WaiverWirePageProps = {
   leagueId: string
@@ -1454,7 +1446,7 @@ export default function WaiverWirePage({
       {!lockedTab && (
       <section id="waiver-ai-engine-panel" className="rounded-xl border border-[var(--line2)] bg-[var(--surface2)] p-4" data-testid="waiver-ai-engine-panel">
         <InContextMonetizationCard
-          title="Waiver AI access"
+          title="Waiver Chimmy access"
           featureId="ai_waivers"
           tokenRuleCodes={["ai_waiver_engine_run"]}
           className="mb-3"
@@ -1462,7 +1454,7 @@ export default function WaiverWirePage({
         />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--accent)]">Waiver AI Engine</h2>
+            <h2 className="text-sm font-semibold text-[var(--accent)]">Waiver Chimmy Engine</h2>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Deterministic waiver pickups scored from available players and team-needs context, with an optional explanation from Chimmy.
             </p>
@@ -1481,7 +1473,7 @@ export default function WaiverWirePage({
               className="rounded border-[var(--line2)] bg-[var(--surface2)]"
               data-testid="waiver-ai-engine-explanation-toggle"
             />
-            AI explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
+            Chimmy explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
           </label>
         </div>
 

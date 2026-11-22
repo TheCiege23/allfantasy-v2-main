@@ -25,7 +25,7 @@ export function createStoryApiDeps(): StoryApiDeps {
       return r.ok ? { ok: true } : { ok: false, status: r.status }
     },
     assertCommissioner: async (leagueId, userId): Promise<AccessResult> => {
-      const r = await assertLeagueCommissioner(leagueId, userId)
+      const r = await assertLeagueCommissioner(leagueId, userId, 'view')
       return r.ok ? { ok: true } : { ok: false, status: r.status }
     },
     engine: new StoryEngine(new IntelligenceQueryService(prisma)),

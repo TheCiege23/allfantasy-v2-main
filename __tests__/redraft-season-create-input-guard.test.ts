@@ -13,6 +13,7 @@ import { createMockNextRequest } from './helpers/createMockNextRequest'
 
 const getServerSessionMock = vi.fn()
 const assertLeagueMemberMock = vi.fn()
+const assertLeagueCommissionerMock = vi.fn()
 const prismaMock = {
   league: { findFirst: vi.fn() },
   redraftSeason: { findFirst: vi.fn() },
@@ -22,7 +23,7 @@ const prismaMock = {
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: assertLeagueMemberMock }))
+vi.mock('@/lib/league/league-access', () => ({ assertLeagueMember: assertLeagueMemberMock, assertLeagueCommissioner: assertLeagueCommissionerMock }))
 vi.mock('@/lib/post-draft', () => ({ ensurePostDraftFinalized: vi.fn() }))
 vi.mock('@/lib/redraft/scheduleEngine', () => ({ generateSchedule: vi.fn(() => []) }))
 vi.mock('@/lib/redraft/sportKey', () => ({ leagueSportToConfigSport: vi.fn(() => 'nfl') }))
@@ -38,6 +39,8 @@ describe('redraft season create route — numeric setup input guard (beta)', () 
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
     assertLeagueMemberMock.mockResolvedValue({ ok: true, status: 200 })
+    assertLeagueCommissionerMock.mockResolvedValue({ ok: true, status: 200 })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(null)
     prismaMock.league.findFirst.mockResolvedValue({
       id: 'L',
       sport: 'NFL',
@@ -108,5 +111,33 @@ describe('redraft season create route — numeric setup input guard (beta)', () 
     const res = await POST(post({ totalWeeks: 'abc' }))
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({ error: 'leagueId required' })
+  })
+})
+
+describe('creating a season is the commissioner\'s (2026-11-15)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: 'member-1' } })
+    assertLeagueCommissionerMock.mockResolvedValue({ ok: true, status: 200 })
+    prismaMock.league.findFirst.mockResolvedValue({ id: 'L', sport: 'NFL', season: 2026, medianGame: false, userId: 'owner', teams: [] })
+    prismaMock.redraftSeason.findFirst.mockResolvedValue(null)
+    prismaMock.$transaction.mockResolvedValue({ id: 'rs1', rosters: [] })
+  })
+
+  it('REGRESSION: a member who is not the commissioner is refused, and nothing is created', async () => {
+    assertLeagueCommissionerMock.mockResolvedValue({ ok: false, status: 403 })
+    const { POST } = await import('@/app/api/redraft/season/route')
+    const res = await POST(post({ leagueId: 'L', season: 2027 }))
+    expect(res.status).toBe(403)
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('a year that already has a season is refused rather than replaced', async () => {
+    prismaMock.redraftSeason.findFirst.mockResolvedValue({ id: 'rs-live' })
+    const { POST } = await import('@/app/api/redraft/season/route')
+    const res = await POST(post({ leagueId: 'L', season: 2026 }))
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('SEASON_EXISTS')
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 })

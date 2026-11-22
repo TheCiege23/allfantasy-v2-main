@@ -19,6 +19,7 @@ import {
 } from './espnLookups'
 import { recordEspnCookiesAccepted, recordEspnCookiesRejected } from './espnConnectionHealth'
 import { fillEspnPlayerDirectory, type EspnPlayerSummary } from './espnPlayerDirectoryFill'
+import { resolveEspnViewerTeamWithCode } from './espnTeamCode'
 import type {
   EspnImportDraftPick,
   EspnImportLeague,
@@ -60,6 +61,8 @@ export { EspnApiResponseError, EspnFormatChangedError, EspnUnavailableError }
  */
 const ESPN_BENCH_SLOT = 20
 const ESPN_IR_SLOT = 21
+/** ESPN's D/ST lineup slot — the key its scoring `pointsOverrides` uses for team-defense rules. */
+const ESPN_DST_LINEUP_SLOT_ID = 16
 
 type EspnAuthContext = {
   swid: string | null
@@ -360,7 +363,7 @@ async function loadEspnLeagueRaw(args: {
  * is retried for the adjacent one before anyone is told the league does not exist. An explicit
  * season (from a URL or `2025:123`) is never second-guessed.
  */
-export async function loadEspnLeagueRawForInput(args: {
+async function loadEspnLeagueRawForInput(args: {
   input: EspnLeagueInput
   auth: EspnAuthContext
   views: string[]
@@ -578,9 +581,20 @@ function parseEspnSettings(raw: any): EspnImportSettings | null {
       if (!isRecord(item)) return null
       const statId = parseNumber(item.statId, null)
       if (statId == null) return null
+      /*
+       * 🛑 A D/ST RULE'S VALUE IS IN `pointsOverrides["16"]`, NOT IN `points`. ESPN writes every
+       * team-defense rule as `points: 0` with the real weight keyed by lineup slot 16 (D/ST) — 27 of
+       * the 46 items in `contracts/espn/fixtures/fantasy-league.NFL.2026.json`, sack +1, INT +2,
+       * shutout +5. Reading `points` alone stored every defence rule as 0, so a league's D/ST scored
+       * nothing it should. Slot 16 is the only override key ESPN uses there, and wherever an item
+       * carries both, the two are equal — so the override is read only when `points` is 0.
+       */
+      const base = parseNumber(item.points, 0) ?? 0
+      const overrides = isRecord(item.pointsOverrides) ? item.pointsOverrides : null
+      const dstOverride = overrides ? parseNumber(overrides[String(ESPN_DST_LINEUP_SLOT_ID)], null) : null
       return {
         statId,
-        points: parseNumber(item.points, 0) ?? 0,
+        points: base !== 0 ? base : dstOverride ?? 0,
       }
     })
     .filter(Boolean) as EspnImportSettings['scoringItems']
@@ -622,16 +636,19 @@ function parseEspnRosterEntries(
 ): {
   playerIds: string[]
   starterIds: string[]
+  /** ESPN's own slot for each starter (`QB`, `FLEX`, `D/ST`…), keyed by player id. */
+  starterSlotById: Record<string, string>
   reserveIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 } {
   const playerIds: string[] = []
   const starterIds: string[] = []
+  const starterSlotById: Record<string, string> = {}
   const reserveIds: string[] = []
   const playerMap: Record<string, { name: string; position: string; team: string }> = {}
 
   if (!Array.isArray(entries)) {
-    return { playerIds, starterIds, reserveIds, playerMap }
+    return { playerIds, starterIds, starterSlotById, reserveIds, playerMap }
   }
 
   for (const entry of entries) {
@@ -659,6 +676,13 @@ function parseEspnRosterEntries(
       reserveIds.push(playerId)
     } else if (!isBench) {
       starterIds.push(playerId)
+      /*
+       * Kept so My Team can name the slot rather than infer it from the player — without it an
+       * ESPN FLEX holding a tight end read "TE". An id this table does not know is left out, which
+       * makes the reader ignore the whole map (all-or-nothing, `storedStarterSlotLabels`).
+       */
+      const slotLabel = ESPN_SLOT_LABELS[lineupSlotId]
+      if (slotLabel) starterSlotById[playerId] = slotLabel
     }
     const positionLabel = ESPN_POSITION_LABELS[positionId]
     if (!positionLabel && positionId > 0 && unmappedPositions) {
@@ -671,7 +695,7 @@ function parseEspnRosterEntries(
     }
   }
 
-  return { playerIds, starterIds, reserveIds, playerMap }
+  return { playerIds, starterIds, starterSlotById, reserveIds, playerMap }
 }
 
 /**
@@ -753,6 +777,7 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
         waiverPriority: parseNumber(team.waiverRank, null),
         rosterPlayerIds: roster.playerIds,
         starterPlayerIds: roster.starterIds,
+        starterSlotById: roster.starterSlotById,
         reservePlayerIds: roster.reserveIds,
         playerMap: roster.playerMap,
       }
@@ -1434,7 +1459,18 @@ export async function fetchEspnLeagueForImport(
       })
     : []
 
-  const viewerTeamId = resolveEspnViewerTeamId(raw, auth.swid)
+  /*
+   * The SWID cookie first; the phone-friendly team code only when the cookie cannot answer
+   * (`espnTeamCode.ts`). Both feed the SAME field, so the commissioner gate and the normalized
+   * import agree on which team is the importer's however it was proven.
+   */
+  const viewer = resolveEspnViewerTeamWithCode({
+    raw,
+    swidTeamId: resolveEspnViewerTeamId(raw, auth.swid),
+    userId,
+    espnLeagueId: leagueId,
+  })
+  const viewerTeamId = viewer.teamId
   const commissionerTeamIds = resolveEspnCommissionerTeamIds(raw)
 
   return {
@@ -1449,6 +1485,7 @@ export async function fetchEspnLeagueForImport(
     draftFetched: draftRaw != null,
     previousSeasons,
     viewerTeamId,
+    viewerTeamProof: viewer.proof,
     viewerEspnConnected: buildEspnCookieHeader(auth) !== null,
     commissionerTeamIds,
   }
@@ -1498,6 +1535,7 @@ export { resolveEspnOwners as resolveEspnOwnersForTest }
  * regression test that does not require a live ESPN league or its cookies.
  */
 export { parseEspnSchedule as parseEspnScheduleForTest }
+export { parseEspnSettings as parseEspnSettingsForTest }
 
 /**
  * The activity the trade windows read, for the Decision OS activity ingest

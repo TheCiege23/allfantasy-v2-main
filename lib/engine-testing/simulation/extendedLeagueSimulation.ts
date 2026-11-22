@@ -44,7 +44,7 @@ import {
   assertValidSpecialtyAutomationTrigger,
 } from '@/lib/engine-testing/hardening/engineInvariants'
 
-export type ExtendedSimulationStep =
+type ExtendedSimulationStep =
   | SimulationStep
   | { kind: 'create_payload'; ok: boolean }
   | { kind: 'trade_validation'; ok: boolean; code?: string }

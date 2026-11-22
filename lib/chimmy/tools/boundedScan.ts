@@ -28,7 +28,7 @@ export interface BoundedScanOptions {
   now?: () => number
 }
 
-export interface BoundedScanResult<T, R> {
+interface BoundedScanResult<T, R> {
   done: Array<{ item: T; result: R }>
   timedOut: T[]
   failed: T[]

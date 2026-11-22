@@ -1,7 +1,7 @@
+import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getOrCreateDraftSession, startDraftSession, buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { transitionLeagueState } from '@/server/services/leagueLifecycleService'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
@@ -24,7 +24,7 @@ export async function POST(
   const { leagueId } = await params
 
   try {
-    await assertCommissioner(leagueId, userId)
+    await assertCommissionerAccess(leagueId, userId, 'league')
   } catch {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

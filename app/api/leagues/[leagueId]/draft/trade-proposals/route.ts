@@ -3,6 +3,7 @@
  * POST: Create a draft pick trade proposal.
  */
 
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -10,7 +11,6 @@ import { canAccessLeagueDraft, getCurrentUserRosterIdForLeague } from '@/lib/liv
 import { getDraftSessionByLeague } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolveOverallForRoundSlot } from '@/lib/live-draft-engine/draftPickTradeInventory'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
-import { isCommissioner } from '@/lib/commissioner/permissions'
 import { prisma } from '@/lib/prisma'
 import { isDraftPickTradingAllowedForLeague } from '@/lib/tournament-mode/safety'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -47,7 +47,7 @@ export async function GET(
   if (!draftSession) return NextResponse.json({ proposals: [] })
 
   const myRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
-  const commissioner = await isCommissioner(leagueId, userId)
+  const commissioner = await canCommissionerAct(leagueId, userId, 'view')
 
   let where: Record<string, unknown>
   if (commissioner) {
@@ -300,7 +300,7 @@ export async function POST(
       category: 'trade_proposals',
       productType: 'app',
       type: 'draft_trade_ai_private_review',
-      title: `Private AI trade review${league?.name ? ` - ${league.name}` : ''}`,
+      title: `Private Chimmy trade review${league?.name ? ` - ${league.name}` : ''}`,
       body: `${aiReview.summary} Suggested action: ${aiReview.verdict.toUpperCase()}. Counter suggestion: ${privateAiDm.counterSuggestion}.`,
       actionHref: `/league/${leagueId}?tab=Draft`,
       actionLabel: 'Open draft trade panel',

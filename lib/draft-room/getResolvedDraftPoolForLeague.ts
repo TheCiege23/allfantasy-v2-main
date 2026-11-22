@@ -1,9 +1,13 @@
+import { currentSGNflPool, enforceCurrentSGNflEntries } from '@/lib/survivor-guillotine/currentNflPool'
 import { ffcObservationIsFresh } from '@/lib/adp/ffcObservation'
 import { buildObservedAdpIdentityIndex, observedAdpCanonicalId, observedAdpForPlayer } from './observedAdpIdentity'
 import { nflDraftSeasonLine } from './nflDraftSeasonLine'
+import { byeWeekForTeam, loadDraftPoolByeWeekMap } from './draftPoolByeWeeks'
+import { collegeByeWeekFor, loadCollegeByeIndex, type CollegeByeIndex } from './collegeByeWeeks'
 import { observedAdpSeason } from './observedAdpSeason'
 import { reconcileCurrentDraftSeeds } from './reconcileCurrentDraftSeeds'
 import { loadStoredDraftSeasonStats } from './storedDraftSeasonStats'
+import { attachTeamDefenseStats, loadNflTeamDefenseSeason, type TeamDefenseByTeam } from './nflTeamDefenseSeason'
 /**
  * Single server source for normalized draft pool rows (same enrichment as GET /draft/pool).
  * Use from API route, DraftWorker, autopick fallback, and tests.
@@ -20,6 +24,7 @@ import { entryRookieVerdict, hasRookieVerdicts, resolveRookieFilterState, type R
 import { resolveDraftIdProvenance, type DraftIdProvenance } from './draftIdProvenance'
 import { applyStoredTeamLogos, loadDraftPoolTeamLogoResolver } from '@/lib/draft-room/draftPoolTeamLogos'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { poolTypeForStartupDraftLabel } from '@/lib/draft-defaults/startupCollegeDraft'
 import { isDevyLeague } from '@/lib/devy'
 import { currentNcaabRosterEvidence } from '@/lib/devy/ncaabRosterPool'
 import { getPromotedProPlayerIdsExcludedFromRookiePool } from '@/lib/devy'
@@ -381,10 +386,6 @@ function normalizePositionForMapKey(pos: string | null | undefined): string {
   return POSITION_FULL_TO_ABBREV[lower] ?? lower
 }
 
-const LOOSE_NAME_ALIASES: Record<string, string> = {
-  cam: 'cameron',
-}
-
 /**
  * Phase 2 â delegated to shared `canonicalName`. The previous body turned
  * apostrophes into spaces and special-cased only `de von â devon`, missing
@@ -395,10 +396,6 @@ const LOOSE_NAME_ALIASES: Record<string, string> = {
  */
 function normalizeLooseName(name: string | null | undefined): string {
   return canonicalName(name)
-}
-
-function loosePlayerKey(name: string, position: string): string {
-  return `${normalizeLooseName(name)}|${normalizeKeyPart(position)}`
 }
 
 function loosePlayerTeamKey(name: string, position: string, team?: string | null): string {
@@ -807,7 +804,6 @@ function poolRowSleeperId(row: SportPoolRow): string | null {
   return raw === '' ? null : raw
 }
 
-
 function jrAliasBaseKey(name: string, position: string, team: string | null | undefined): string {
   const n = canonicalName(name).replace(/(^|\s)jr$/, '').trim()
   return `${n}|${canonicalPosition(position)}|${canonicalTeam(team)}`
@@ -996,7 +992,8 @@ function resolveConflictingExternalIds(
   return rows
 }
 
-const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal'])
+// `college`: a Devy / C2C league's second startup draft (lib/draft-defaults/startupCollegeDraft.ts).
+const FOLLOW_UP_DRAFT_MODES = new Set(['rookie', 'supplemental', 'dispersal', 'college'])
 
 export function isFollowUpDraftMode(draftModeLabel: string | null | undefined): boolean {
   return FOLLOW_UP_DRAFT_MODES.has(String(draftModeLabel ?? '').toLowerCase())
@@ -1207,6 +1204,9 @@ async function buildResolvedDraftPoolForLeague(
   const devyEnabled = Boolean(rawDevyConfig?.enabled)
   const c2cEnabled = Boolean(rawC2cConfig?.enabled) || isC2C
   const liveDraftUsesDevyPools = devyEnabled || c2cEnabled
+  // A two-draft startup (lib/draft-defaults/startupCollegeDraft.ts): the pro draft offers pros only, the
+  // college draft college players only, so the board and auto-pick match what each round accepts.
+  if (poolType == null) poolType = poolTypeForStartupDraftLabel(draftSession?.draftModeLabel, { isC2C, isDevy: isDevyDynasty })
   if (isDevyDynasty && !isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_vet'
   if (isC2C && poolType == null && !liveDraftUsesDevyPools) poolType = 'startup_merged'
   const mergeCollegePool = (devyEnabled || c2cEnabled) && (sport === 'NFL' || sport === 'NBA')
@@ -1701,7 +1701,8 @@ async function buildResolvedDraftPoolForLeague(
     }
   }
 
-  let rawListFiltered = rawList
+  const sgCurrentNfl = sport === 'NFL' && league?.leagueVariant === 'survivor_guillotine' ? await currentSGNflPool(rawList) : null
+  let rawListFiltered = sgCurrentNfl ?? rawList
   // Type cast is widened to include `playerId` so keeper entries that carry an
   // external player-id (but no name) are also excluded from the pool.
   const keeperSelections = draftSession?.keeperSelections as Array<{ playerName?: string; playerId?: string | null }> | null
@@ -1830,13 +1831,33 @@ async function buildResolvedDraftPoolForLeague(
   if (sport === 'NFL' && identityByPoolKey.size > 0) {
     const riIds = [...new Set([...identityByPoolKey.values()].map((v) => v.rollingInsightsPlayerId))]
     const perfRiDetail = perfStart(`9. loadRollingInsightsStatsDetailByPlayerIds (n=${riIds.length})`)
-    riDetailByPlayerId = await loadRollingInsightsStatsDetailByPlayerIds(riIds)
+    const statsYear = Number(defaultNflPlayerStatsSeason())
+    riDetailByPlayerId = await loadRollingInsightsStatsDetailByPlayerIds(riIds, {
+      candidateSeasons: [String(statsYear), String(statsYear - 1)],
+    })
     perfRiDetail()
   }
+  const nflByeWeeks =
+    sport === 'NFL'
+      ? await loadDraftPoolByeWeekMap(sport, Number.isInteger(league?.season) ? Number(league?.season) : null)
+      : {}
+  /*
+   * College byes (collegeByeWeeks.ts): NCAAF pools, and the college players in an NFL devy / C2C
+   * pool — whose school used to go through the NFL lookup, which matches by city ("Miami" -> MIA).
+   */
+  const leagueSeason = Number.isInteger(league?.season) ? Number(league?.season) : null
+  const collegeByes: CollegeByeIndex | null =
+    sport === 'NCAAF' || (sport === 'NFL' && (isDevyDynasty || isC2C || mergeCollegePool))
+      ? await loadCollegeByeIndex(leagueSeason).catch(() => null)
+      : null
+  /** The one season every NFL stat column shows (see pickPoolStatSeason). */
+  const nflPoolStatSeason: string | null =
+    sport === 'NFL'
+      ? ([...riDetailByPlayerId.values()].find((d) => d.season)?.season ?? defaultNflPlayerStatsSeason())
+      : null
 
   // F.1: Fallback PlayerSeasonStats loader for rows without RI identity
   let fallbackSeasonByPoolKey = new Map<string, RollingInsightsSeasonSlice>()
-  let playerSeasonStatsDiagnostics = { exactIdHits: 0, namePositionHits: 0, ambiguousSkips: 0, misses: 0 }
   if (sport === 'NFL' && rawListFiltered.length > 0) {
     const fallbackRows = rawListFiltered.map((r: RawRow) => {
       const nk = normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')
@@ -1854,7 +1875,6 @@ async function buildResolvedDraftPoolForLeague(
     const fallbackResult = await loadPlayerSeasonStatsFallback({ rows: fallbackRows })
     perfFallback()
     fallbackSeasonByPoolKey = fallbackResult.seasonByPoolKey
-    playerSeasonStatsDiagnostics = fallbackResult.diagnostics
   }
 
   /*
@@ -2076,7 +2096,7 @@ async function buildResolvedDraftPoolForLeague(
           settings: league?.settings ?? null,
         },
         session: draftSession
-          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
+          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null, playerPool: draftSession.playerPool ?? null }
           : null,
       })
       const perfAiAdp = perfStart('10. loadAdpBoard')
@@ -2398,10 +2418,24 @@ async function buildResolvedDraftPoolForLeague(
           })
         : null
 
+    // The box AND its games-played come from the same pool-season row. The season slice above
+    // may be a different season (it is chosen for a usable PPG), so it must not supply the
+    // games divisor for this box.
+    const poolSeasonDetail = idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId) ?? null : null
+    const seasonLineRow = poolSeasonDetail
+      ? {
+          stats: poolSeasonDetail.stats,
+          fantasyPointsPerGame: poolSeasonDetail.fantasyPointsPerGame,
+          fantasyPointsSeason: poolSeasonDetail.fantasyPoints,
+          gamesPlayed: poolSeasonDetail.gamesPlayed ?? null,
+          season: poolSeasonDetail.season ?? null,
+          updatedAt: poolSeasonDetail.updatedAt ?? new Date(0),
+        }
+      : idn ? null : fallbackRiSlice
     const observedNfl = sport === 'NFL' ? nflDraftSeasonLine(
-      effectiveRiSlice,
-      idn ? riDetailByPlayerId.get(idn.rollingInsightsPlayerId)?.stats : undefined,
-      position, Number(nflStatsSeason), nflStatScorer,
+      seasonLineRow,
+      seasonLineRow?.stats,
+      position, Number(nflPoolStatSeason ?? nflStatsSeason), nflStatScorer,
     ) : null
     const nflDraftProjectionSplits =
       observedNfl?.splits ?? (sport === 'NFL'
@@ -2632,6 +2666,16 @@ async function buildResolvedDraftPoolForLeague(
     return {
       ...base,
       draftIdProvenance: resolveDraftIdProvenance(sport, selectedDraftId, poolMatch),
+      byeWeek:
+        (row as RawRow).byeWeek ??
+        (row as RawRow).bye ??
+        (sport === 'NCAAF' || (row as RawRow).isDevy === true || (row as RawRow).poolType === 'college'
+          ? collegeByes
+            ? collegeByeWeekFor(collegeByes, (row as RawRow).school ?? team)
+            : null
+          : sport === 'NFL'
+            ? byeWeekForTeam(nflByeWeeks, team)
+            : null),
       graduatedToNFL: row.graduatedToNFL ?? (promoted ? true : undefined),
       school: row.school ?? promoted?.school ?? null,
       college: row.college ?? promoted?.school ?? null,
@@ -2876,8 +2920,19 @@ async function buildResolvedDraftPoolForLeague(
       sport,
       entries,
     })
-  entries = entriesWithProjectionFallbacks
+  entries = sgCurrentNfl ? enforceCurrentSGNflEntries(entriesWithProjectionFallbacks, sgCurrentNfl) : entriesWithProjectionFallbacks
   perfProjectionFallbacks()
+
+  // NFL team defenses: SACK / INT / TD / PA/G from stored defender rows and scores
+  // (nflTeamDefenseSeason.ts), for the same season every other NFL column shows. A failed read
+  // leaves the DEF columns as dashes rather than failing the pool.
+  if (sport === 'NFL' && nflPoolStatSeason) {
+    const defenseByTeam = await loadNflTeamDefenseSeason(nflPoolStatSeason, nflStatScorer).catch((error) => {
+      console.warn('[draft-pool] team defense stats unavailable', { leagueId, error: String(error) })
+      return new Map() as TeamDefenseByTeam
+    })
+    entries = attachTeamDefenseStats(entries, defenseByTeam)
+  }
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.

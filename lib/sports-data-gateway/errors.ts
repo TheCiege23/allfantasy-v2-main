@@ -4,7 +4,7 @@
  * Every adapter method returns a ProviderResult so failures are structured, never thrown into OS consumers.
  * The gateway classifies failures deterministically and NEVER fabricates data on failure (fails closed).
  */
-export type GatewayErrorCode =
+type GatewayErrorCode =
   | 'unsupported_capability'
   | 'not_configured'
   | 'authentication_failed'
@@ -16,7 +16,7 @@ export type GatewayErrorCode =
   | 'provider_unavailable'
   | 'unknown'
 
-export type GatewayError = {
+type GatewayError = {
   code: GatewayErrorCode
   provider: string
   message: string
@@ -29,10 +29,6 @@ export type ProviderResult<T> =
 
 export function unsupported(provider: string, detail: string): ProviderResult<never> {
   return { ok: false, provider, error: { code: 'unsupported_capability', provider, message: detail, retriable: false } }
-}
-
-export function notConfigured(provider: string, detail: string): ProviderResult<never> {
-  return { ok: false, provider, error: { code: 'not_configured', provider, message: detail, retriable: false } }
 }
 
 const RETRIABLE: ReadonlySet<GatewayErrorCode> = new Set(['rate_limited', 'timeout', 'provider_unavailable'])

@@ -99,6 +99,11 @@ export interface DynastySetupState {
   /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */
   devyRoundsEnabled: boolean
   devyRoundCount: number
+  /**
+   * Devy / C2C: one merged startup draft instead of a pro draft then a college draft. Off by default
+   * (owner's rule, 2026-11-22; lib/draft-defaults/startupCollegeDraft.ts).
+   */
+  mergedCollegeDraft: boolean
   waiverType: 'faab' | 'rolling' | 'reverse_standings'
   faabBudget: number
   visibility: DynastyVisibility
@@ -278,6 +283,7 @@ export function getDefaultDynastySetup(sport: SupportedSport, draftType: WizardD
     futurePickTradeYears: 3,
     devyRoundsEnabled: false,
     devyRoundCount: 2,
+    mergedCollegeDraft: false,
     waiverType: 'faab',
     faabBudget: 100,
     visibility: 'private',
@@ -368,7 +374,8 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   tournamentPoolSize: 32,
   survivorTribeCount: 4,
   survivorGuillotineTribeCount: 2,
-  survivorCommissionerParticipationMode: 'non_participating_host',
+  // Owner's call, 2026-11-21: the commissioner plays by default; "Host only" is the switch.
+  survivorCommissionerParticipationMode: 'participating_player',
   survivorEntryFeeMode: 'free',
   survivorTwistPreset: SURVIVOR_TWIST_PRESET_DEFAULT,
   survivorDuesUsd: '',

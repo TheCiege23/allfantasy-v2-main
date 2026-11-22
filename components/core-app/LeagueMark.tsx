@@ -40,4 +40,3 @@ export function LeagueMark({
   )
 }
 
-export default LeagueMark

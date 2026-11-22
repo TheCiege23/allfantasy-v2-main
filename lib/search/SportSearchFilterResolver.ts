@@ -14,11 +14,6 @@ export interface SportFilterOption {
   label: string
 }
 
-/** Supported sport codes for filter dropdown/chips. */
-export function getSupportedSportFilters(): string[] {
-  return [...SUPPORTED_SPORTS]
-}
-
 export function getSportSearchFilterOptions(): SportFilterOption[] {
   return [
     { value: ALL_SPORT_SEARCH_FILTER, label: "All sports" },

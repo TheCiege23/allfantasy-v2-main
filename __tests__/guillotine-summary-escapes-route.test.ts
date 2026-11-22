@@ -15,7 +15,7 @@ vi.mock('@/lib/guillotine/GuillotineWeeklySummaryService', () => ({ buildWeeklyS
 vi.mock('@/lib/share/guillotineEscape', () => ({ getGuillotineEscapesForUser: h.escapes }))
 // The route now resolves the current week and the viewer's roster (2026-10-13); never reach a real DB.
 vi.mock('@/lib/league-specialty/guillotineHome', () => ({ buildGuillotineHomeExtras: h.home }))
-vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, findViewerRosterId: h.roster }))
+vi.mock('@/lib/guillotine/guillotineCurrentWeek', () => ({ resolveGuillotineCurrentWeek: h.week, resolveGuillotineLiveWeek: h.week, findViewerRosterId: h.roster }))
 /*
  * 🛑 EVERY OTHER MODULE THE ROUTE IMPORTS THAT TOUCHES THE DB IS MOCKED TOO (2026-11-07). The route grew
  * the advanced chop rules, Chop Watch, the commissioner check, "Who's next?" and the PATCH/POST helpers

@@ -29,13 +29,23 @@ export type DemoStandingRow = {
   pointsAgainst: number
 }
 
-export type DemoMatchupSide = { slot: number; points: number }
+type DemoMatchupSide = { slot: number; points: number }
 
 export type DemoMatchup = {
   home: DemoMatchupSide
   away: DemoMatchupSide | null
   status: 'final' | 'live' | 'upcoming'
 }
+
+/**
+ * `matchupId` is the provider's per-week game number (1…n), which pairs two seats into one game —
+ * the same public schedule fact a scoreboard shows. The real standings board needs it to tell wins
+ * from losses. Optional: a source with no pairing (a points-only league) leaves it out.
+ */
+export type DemoWeekScores = { week: number; scores: Array<{ slot: number; points: number; matchupId?: number | null }> }
+
+/** A week's games nobody has scored in yet, as seat pairs — the published schedule, nothing more. Used by `DemoLeagueView.upcoming`. */
+export type DemoUpcomingWeek = { week: number; pairs: Array<[number, number]> }
 
 export type DemoPlayer = {
   name: string
@@ -60,7 +70,7 @@ export type DemoTrade = {
   sides: Array<{ slot: number; received: DemoTradeAsset[] }>
 }
 
-export type DemoHealth = {
+type DemoHealth = {
   score: number
   status: string
   summary: string
@@ -70,7 +80,7 @@ export type DemoHealth = {
 
 export type DemoAlert = { kind: 'health' | 'commissioner' | 'roster'; text: string }
 
-export type DemoLeagueSettings = {
+type DemoLeagueSettings = {
   sport: string
   season: number
   scoringLabel: string | null
@@ -95,6 +105,18 @@ export type DemoLeagueView = {
   teams: DemoTeam[]
   standings: DemoStandingRow[]
   matchups: DemoMatchup[]
+  /**
+   * Every COMPLETED week's score per team, oldest first. Numbers and public slots only — the same
+   * kind of data as `standings`. Demo Chimmy reads it for recent form and schedule luck (all-play
+   * record), so "who is the best team and why" can be answered on the first try.
+   */
+  weeklyScores: DemoWeekScores[]
+  /**
+   * The rest of the regular-season schedule (unplayed games, by seat), so the standings board can say
+   * who has clinched — without it every team "clinches" or is "eliminated" with weeks still to play.
+   * Optional so a hand-built view (tests, sample formats with no future rows) can leave it out.
+   */
+  upcoming?: DemoUpcomingWeek[]
   rosters: DemoRoster[]
   trades: DemoTrade[]
   health: DemoHealth | null

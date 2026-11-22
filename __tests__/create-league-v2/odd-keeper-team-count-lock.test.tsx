@@ -15,7 +15,11 @@ describe('odd keeper sizes in the create wizard', () => {
     expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '20')
     expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4, 6, 8, 10, 12, 14, 16, 18, 20')
     expect(screen.getByTestId('g30-team-count-locked')).toHaveTextContent('Odd sizes (5, 7, 9, 11, 13, 15, 17, 19) are part of AF Commissioner.')
-    expect(screen.getByTestId('g30-team-count-upgrade')).toHaveAttribute('href', '/pricing?plan=commissioner')
+    const upgrade = new URL(screen.getByTestId('g30-team-count-upgrade').getAttribute('href')!, window.location.origin)
+    expect(upgrade.pathname).toBe('/upgrade')
+    expect(upgrade.searchParams.get('plan')).toBe('commissioner')
+    expect(upgrade.searchParams.get('offer')).toBe('monthly')
+    expect(upgrade.searchParams.get('from')).toBe('lock_league_creation_team_count')
   })
 
   it('with AF Commissioner: every size from 4 to 20, nothing locked', () => {

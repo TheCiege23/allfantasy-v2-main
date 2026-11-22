@@ -1,12 +1,12 @@
 import type { AssetValue } from '@/lib/hybrid-valuation'
-import type { TeamNeedsMap, UserGoal, SlotNeed, PositionalDepth } from '@/lib/waiver-engine/team-needs'
+import type { TeamNeedsMap, UserGoal, SlotNeed } from '@/lib/waiver-engine/team-needs'
 import {
   foldPosition,
   scorableWithoutLeagueEvidence,
   TEAM_UNIT_POSITIONS,
 } from '@/lib/waiver-engine/team-needs'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
-import { computeAthleticGrade, computeCollegeProductionGrade } from '@/lib/player-analytics'
+import { computeAthleticGrade } from '@/lib/player-analytics'
 
 export type CrowdTrendData = {
   addCount: number
@@ -18,14 +18,14 @@ export type CrowdTrendData = {
   dropRank: number | null
 }
 
-export type WaiverDimensions = {
+type WaiverDimensions = {
   startNow: number
   stash: number
   needFit: number
   leagueDemand: number
 }
 
-export type WaiverDriverId =
+type WaiverDriverId =
   | 'wa_starter_upgrade'
   | 'wa_bye_week_fill'
   | 'wa_need_slot'
@@ -38,7 +38,7 @@ export type WaiverDriverId =
   | 'wa_role_trend'
   | 'wa_crowd_trend'
 
-export type WaiverDriver = {
+type WaiverDriver = {
   id: WaiverDriverId
   label: string
   score: number
@@ -87,7 +87,17 @@ export type WaiverScoringContext = {
   faabRemaining?: number | null
   analyticsMap?: Map<string, PlayerAnalytics>
   trendingMap?: Map<string, CrowdTrendData>
+  /**
+   * What the trade market says a hole at each position costs, by position (`tradeNeedEvidence`, 2026-11-22). Added to
+   * the "fills a need" line as evidence. 🛑 It never moves a score, a rank or a bid — only the sentence.
+   */
+  tradeNeedEvidence?: Readonly<Record<string, string>>
 }
+
+/** The needs, optionally carrying the trade market's sentence per position (set in `waiverEngineInputFrom`). */
+export type TeamNeedsWithTradeEvidence = TeamNeedsMap & { tradeNeedEvidence?: Readonly<Record<string, string>> }
+const tradeEvidenceFor = (ctx: WaiverScoringContext, position: string): string | undefined =>
+  (ctx.tradeNeedEvidence ?? (ctx.teamNeeds as TeamNeedsWithTradeEvidence).tradeNeedEvidence)?.[position.toUpperCase()]
 
 export type ScoredWaiverTarget = {
   playerId: string
@@ -112,7 +122,6 @@ export type ScoredWaiverTarget = {
     riskLabel: string
   } | null
 }
-
 
 export type WaiverIntelSignal = {
   playerName: string
@@ -467,11 +476,16 @@ function computeDrivers(
       ? CATEGORICAL_NEED_DRIVER
       : 20,
     direction: matchingSlot ? 'positive' : ctx.needs.includes(candidate.position) ? 'positive' : 'neutral',
-    detail: matchingSlot
-      ? `Upgrades your ${matchingSlot.slot} (+${matchingSlot.gapPpg} PPG gap)`
-      : ctx.needs.includes(candidate.position)
-      ? `Fills ${candidate.position} need`
-      : `${candidate.position} is adequate`,
+    detail:
+      (matchingSlot
+        ? `Upgrades your ${matchingSlot.slot} (+${matchingSlot.gapPpg} PPG gap)`
+        : ctx.needs.includes(candidate.position)
+        ? `Fills ${candidate.position} need`
+        : `${candidate.position} is adequate`) +
+      // The trade market's price for the same hole, where one was measured — only when this pickup fills a need.
+      ((matchingSlot || ctx.needs.includes(candidate.position)) && tradeEvidenceFor(ctx, candidate.position)
+        ? `. ${tradeEvidenceFor(ctx, candidate.position)} — a pickup fills it without paying that`
+        : ''),
   })
 
   const byeCluster = ctx.teamNeeds.byeWeekClusters.find(
@@ -935,5 +949,4 @@ export function scoreWaiverCandidates(
 
   return scored.slice(0, maxResults)
 }
-
 

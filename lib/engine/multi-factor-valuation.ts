@@ -41,7 +41,7 @@ export interface PlayerValuationInput {
   historicalPerformance?: number // 0–100: career track record
 }
 
-export interface PlayerValuationResult {
+interface PlayerValuationResult {
   totalValue: number // 0–1000 composite
   factors: {
     marketValue: { raw: number; weighted: number; weight: number }
@@ -193,16 +193,6 @@ function computeHistoricalFactor(input: PlayerValuationInput): number {
 // Batch valuation
 // ---------------------------------------------------------------------------
 
-/**
- * Compute valuations for multiple players in batch.
- * Optimized for speed — processes sequentially but avoids async overhead.
- */
-export function computeMultiFactorBatch(
-  inputs: PlayerValuationInput[]
-): PlayerValuationResult[] {
-  return inputs.map(computeMultiFactorValue)
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -211,4 +201,3 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-export { FACTOR_WEIGHTS, SPORT_AGE_PEAKS }

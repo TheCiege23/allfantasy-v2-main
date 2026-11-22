@@ -16,7 +16,7 @@ import { isFootballLike } from '@/lib/create-league-v2/state'
 import { normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 
-export type LegacyManualCanonicalBuildInput = {
+type LegacyManualCanonicalBuildInput = {
   sport: string
   leagueName: string
   teamCount: number

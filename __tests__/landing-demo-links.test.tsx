@@ -1,7 +1,8 @@
 /**
- * The landing hero is where a signed-out visitor can try AllFantasy before signing up:
- * "Try the demo" (the live, anonymized league) and a link to an example of every league
- * type. Both must render in every landing language and point at public demo routes.
+ * A signed-out visitor can try AllFantasy before signing up: "Try the demo" in the hero (the
+ * live, anonymized league), and the demo section's "League types" tab, which links to an example
+ * of every league type (moved out of the hero on 2026-11-13). Both must render in every landing
+ * language and point at public demo routes.
  */
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -20,10 +21,10 @@ describe('landing hero: try before you sign up', () => {
     expect(a?.textContent?.trim()).toBe(getLandingCopy(lang, { min: '$9.99', max: '$19.99' }).hero.ctaDemo)
   })
 
-  it.each(LANDING_LANGS)('%s: a link opens the example of every league type', (lang) => {
-    const a = hero(lang).querySelector('[data-testid="landing-hero-league-types-link"] a')
+  it.each(LANDING_LANGS)('%s: the demo section links to the example of every league type', (lang) => {
+    const a = hero(lang).querySelector('#demo [data-testid="landing-league-types-link"] a')
     expect(a?.getAttribute('href')).toBe('/demo/formats')
-    const text = getLandingCopy(lang, { min: '$9.99', max: '$19.99' }).hero.leagueTypesLink
+    const text = getLandingCopy(lang, { min: '$9.99', max: '$19.99' }).demo.typesCta
     expect(text.length).toBeGreaterThan(10)
     expect(a?.textContent?.trim()).toBe(text)
   })

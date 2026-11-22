@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton'
 
-export interface LoadingStateProps {
+interface LoadingStateProps {
   /** Number of skeleton rows — matches the final content's approximate shape, never a generic spinner (Design Language §17). */
   rows?: number
 }
@@ -15,11 +15,3 @@ export function LoadingState({ rows = 3 }: LoadingStateProps) {
   )
 }
 
-export function KpiCardSkeleton() {
-  return (
-    <div className="space-y-2 p-2" aria-busy="true">
-      <Skeleton className="h-3 w-20" />
-      <Skeleton className="h-8 w-24" />
-    </div>
-  )
-}

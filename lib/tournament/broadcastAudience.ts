@@ -69,7 +69,7 @@ export function parseAudience(value: string): AudienceFilter | null {
   return null
 }
 
-export type AudienceMember = {
+type AudienceMember = {
   participantId: string
   displayName: string
   appUserId: string | null
@@ -80,7 +80,7 @@ export type AudienceMember = {
   unmatched: boolean
 }
 
-export type ResolvedAudience = {
+type ResolvedAudience = {
   /** Everyone the filter selected, reachable or not. */
   members: AudienceMember[]
   /** Distinct AllFantasy accounts a notification can be delivered to. */

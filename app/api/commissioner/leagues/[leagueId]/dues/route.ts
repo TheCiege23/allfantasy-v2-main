@@ -9,6 +9,7 @@
  * Stored in League.settings.dues_tracker. Every payment link is validated (https, on the service's own
  * host) before it is saved, because every member's screen renders it as a link.
  */
+import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import type { Prisma } from '@prisma/client'
@@ -75,11 +76,14 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const config = readDuesConfig(((league.settings as Record<string, unknown>) ?? {}).dues_tracker)
   // Whose team is whose stays on the server: the client learns only which team is the viewer's.
-  const myTeamId = league.teams.find((t) => t.claimedByUserId === v.userId)?.id ?? null
+  // Dues are per team, so a manager who runs several sees each of them.
+  const myTeamIds = league.teams.filter((t) => t.claimedByUserId === v.userId).map((t) => t.id)
+  const myTeamId = myTeamIds[0] ?? null
   return NextResponse.json({
     config,
     isCommissioner: v.isCommissioner,
     myTeamId,
+    myTeamIds,
     teams: league.teams.map(({ claimedByUserId: _c, ...t }) => t), // eslint-disable-line @typescript-eslint/no-unused-vars
     currentSeason: league.season,
     isMultiSeason: isMultiSeason(league),
@@ -98,7 +102,9 @@ const UPDATE_ERROR: Record<string, string> = {
 export async function PUT(req: NextRequest, ctx: Ctx) {
   const v = await viewer(ctx)
   if ('error' in v) return v.error
-  if (!v.isCommissioner) return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  // Dues are money: a co-commissioner needs that area (lib/league/commissionerAccess.ts).
+  const refused = await commissionerAccessResponse(v.leagueId, v.userId, 'money')
+  if (refused) return refused
   const body = ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>
 
   let before: DuesConfig | null = null
@@ -135,8 +141,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (body.action !== 'i_paid') return NextResponse.json({ error: 'invalid_action' }, { status: 400 })
 
   const league = await prisma.league.findUnique({ where: { id: v.leagueId }, select: { userId: true, name: true, teams: { select: { id: true, teamName: true, claimedByUserId: true } } } })
-  const team = league?.teams.find((t) => t.claimedByUserId === v.userId)
-  if (!league || !team) return NextResponse.json({ error: 'You do not have a team in this league.' }, { status: 403 })
+  const mine = league?.teams.filter((t) => t.claimedByUserId === v.userId) ?? []
+  if (!league || mine.length === 0) return NextResponse.json({ error: 'You do not have a team in this league.' }, { status: 403 })
+  // Each team owes its own dues: with several teams, "I paid" has to say which one it is for.
+  const wanted = typeof body.teamId === 'string' ? body.teamId : null
+  if (wanted && !mine.some((t) => t.id === wanted)) return NextResponse.json({ error: 'That team is not yours.', code: 'NOT_YOUR_TEAM' }, { status: 403 })
+  if (!wanted && mine.length > 1) {
+    return NextResponse.json({ error: 'You run more than one team in this league. Choose which team you paid for.', code: 'TEAM_REQUIRED', teamIds: mine.map((t) => t.id) }, { status: 409 })
+  }
+  const team = wanted ? mine.find((t) => t.id === wanted)! : mine[0]!
 
   const updated = await updateTracker(v.leagueId, (c) => (isTracking(c) ? applySelfReport(c, team.id, body.note, new Date()) : null))
   if (!updated) return NextResponse.json({ error: 'Dues are not being tracked in this league.' }, { status: 409 })

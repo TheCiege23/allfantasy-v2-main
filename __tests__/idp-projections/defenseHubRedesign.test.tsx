@@ -61,36 +61,37 @@ afterEach(() => {
   h.language = 'en'
 })
 
-const stat = (key: string) => document.querySelector(`.af-dfh-stat[data-stat="${key}"] .af-dfh-stat-v`)?.textContent
-
-describe('Defense Hub header and coverage note', () => {
-  it('reads its three header counts straight off the payload', async () => {
+/*
+ * 2026-11-14: the three header counts and the coverage note under them said the same numbers twice.
+ * The headline now gives the answer — who leads your defense — off the payload's own first projected
+ * defender and count, and one line says what the projections were built from.
+ */
+describe('Defense Hub header', () => {
+  it('the headline is who leads your defense, read straight off the payload; the counts are not repeated', async () => {
     mount()
-    await waitFor(() => expect(document.querySelector('.af-dfh-stats')).not.toBeNull())
-    expect(stat('rostered')).toBe('3')
-    expect(stat('projected')).toBe('2/3')
-    expect(stat('priced')).toBe('198')
-    const note = screen.getByRole('note')
-    expect(note.textContent).toContain('2 of 3 rostered defenders projected from games through 2026 week 8')
-    expect(note.getAttribute('data-full')).toBe('false')
-    expect(screen.getByRole('heading', { name: 'Your rostered defenders' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('defense-hub-headline').textContent).toContain('leads'))
+    expect(screen.getByTestId('defense-hub-headline').textContent).toBe('Defender 1 leads your 3 defenders: 9.4 projected for week 9')
+    // Built from the games through the week BEFORE the projection's target.
+    expect(screen.getByTestId('defense-hub-basis').textContent).toBe('Projected under this league’s scoring from games through 2026 week 8.')
+    expect(document.querySelector('.af-dfh-stats')).toBeNull()
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Your defenders' })).toBeInTheDocument()
   })
 
-  it('draws no header counts until there is a payload to count', () => {
+  it('says only "Defense Hub" until there is a payload', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     render(<DefenseHubClient leagueId="L1" embedded />)
-    expect(screen.getByText('Defense Hub')).toBeInTheDocument()
-    expect(document.querySelector('.af-dfh-stats')).toBeNull()
+    expect(screen.getByTestId('defense-hub-headline').textContent).toBe('Defense Hub')
+    expect(screen.queryByTestId('defense-hub-basis')).toBeNull()
   })
 
   it('reads Spanish when the reader does', async () => {
     h.language = 'es'
     mount()
-    await waitFor(() => expect(document.querySelector('.af-dfh-stats')).not.toBeNull())
+    await waitFor(() => expect(screen.getByTestId('defense-hub-headline').textContent).toContain('lidera'))
     expect(screen.getByText('Defensa')).toBeInTheDocument()
-    expect(screen.getByText('Defensores en plantilla')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Tus defensores en plantilla' })).toBeInTheDocument()
-    expect(screen.getByRole('note').textContent).toContain('2 de 3 defensores en plantilla proyectados')
+    expect(screen.getByTestId('defense-hub-headline').textContent).toBe('Defender 1 lidera a tus 3 defensores: 9.4 proyectados para la semana 9')
+    expect(screen.getByRole('heading', { name: 'Tus defensores' })).toBeInTheDocument()
     expect(screen.getByText('Jugador')).toBeInTheDocument()
   })
 })

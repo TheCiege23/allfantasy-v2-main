@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getSeasonBoard, type MarketPlayer } from '@/lib/sports-data/sleeperMarketService'
 import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
+import { liveDraftPicks, liveLeagueDrafts, liveLeagueRosters } from '@/lib/sleeper/liveLeagueFeed'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,21 +22,11 @@ export const dynamic = 'force-dynamic'
  * into the roster feed.
  */
 
-const SLEEPER = 'https://api.sleeper.app/v1'
-
-async function j<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${SLEEPER}${path}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
-}
-
-type WireRoster = { roster_id: number; owner_id: string | null; players?: string[] | null; starters?: string[] | null }
-type WireDraft = { draft_id: string; status: string }
-type WireDraftPick = { player_id?: string | null; picked_by?: string | null; round: number; pick_no: number }
+/*
+ * Sleeper is read through a short shared cache (lib/sleeper/liveLeagueFeed.ts, security cleanup
+ * 2026-11-15): every viewer of a league used to make their own uncached calls every 20s poll. Rosters
+ * and drafts are kept 60s, picks 10s, so a pick still lands inside one poll.
+ */
 
 const SLOT_ACCEPTS: Record<string, string[]> = {
   QB: ['QB'], RB: ['RB'], WR: ['WR'], TE: ['TE'], K: ['K'], DEF: ['DEF'],
@@ -65,7 +57,7 @@ export async function GET(req: NextRequest) {
   const league = await prisma.league.findFirst({
     where: {
       id: leagueId,
-      OR: [{ userId: userId }, { teams: { some: { claimedByUserId: userId } } }],
+      OR: leagueMemberWhere(userId),
     },
     select: { platform: true, platformLeagueId: true },
   })
@@ -91,8 +83,8 @@ export async function GET(req: NextRequest) {
   }
 
   const [rosters, drafts, board] = await Promise.all([
-    j<WireRoster[]>(`/league/${sid}/rosters`),
-    j<WireDraft[]>(`/league/${sid}/drafts`),
+    liveLeagueRosters(sid),
+    liveLeagueDrafts(sid),
     getSeasonBoard(context.season),
   ])
   if (!rosters) {
@@ -111,7 +103,7 @@ export async function GET(req: NextRequest) {
   const draftLive = Boolean(liveDraft && liveDraft.status === 'drafting')
   const draftedIds = new Map<string, string>() // playerId → pick label
   if (liveDraft) {
-    const picks = await j<WireDraftPick[]>(`/draft/${liveDraft.draft_id}/picks`)
+    const picks = await liveDraftPicks(liveDraft.draft_id)
     for (const p of picks ?? []) {
       if (p.picked_by === profile.sleeperUserId && p.player_id) {
         draftedIds.set(p.player_id, `pick ${p.round}.${String(p.pick_no).padStart(2, '0')}`)

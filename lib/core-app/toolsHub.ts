@@ -55,7 +55,7 @@ export type ToolCard = {
   alternates?: Array<{ label: string; href: string }>
 }
 
-export type ToolGroup = {
+type ToolGroup = {
   id: 'decide' | 'understand' | 'share' | 'account'
   heading: string
   /** Why these are together. Rendered, not just documentation. */

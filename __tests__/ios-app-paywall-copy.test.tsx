@@ -65,7 +65,7 @@ describe('the /core depth lock', () => {
     expect(app).toContain('Recommended moves are part of AF Pro')
     expect(app).toContain('Upgrade to see the rest.')
     expect(app).not.toContain('not included with your account')
-    expect(visibleCta(container, 'appWithIap')?.textContent).toBe('See AF Pro')
+    expect(visibleCta(container, 'appWithIap')?.textContent).toBe('Unlock with AF Pro')
   })
 
   it('control: the website keeps its plan name, its call to action and the button', () => {
@@ -74,7 +74,7 @@ describe('the /core depth lock', () => {
     expect(web).toContain('Recommended moves are part of AF Pro')
     expect(web).toContain('Upgrade to see the rest.')
     expect(web).not.toContain('not included with your account')
-    expect(visibleCta(container, 'web')?.textContent).toBe('See AF Pro')
+    expect(visibleCta(container, 'web')?.textContent).toBe('Unlock with AF Pro')
   })
 
   it('the "Free until Oct 15 — then AF Pro" note is hidden only in an app build without IAP', () => {

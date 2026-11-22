@@ -13,9 +13,10 @@ import { DEMO_LEAGUE_DISPLAY_NAME, fakeAvatarColor, fakeInitials, fakeManagerNam
 import type { SourceSnapshot, SourceTeam, SourcePlayer } from './source'
 import type { SensitiveTerm } from './redactor'
 import type {
-  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset,
+  DemoAlert, DemoLeagueView, DemoMatchup, DemoPlayer, DemoRoster, DemoStandingRow, DemoTeam, DemoTrade, DemoTradeAsset, DemoUpcomingWeek, DemoWeekScores,
 } from './types'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
+import { makeWeekIsFinished } from './weekProgress'
 
 export function aliasTeam(index: number): DemoTeam {
   const teamName = fakeTeamName(index)
@@ -85,8 +86,14 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     teamByRosterId(id) ?? src.teams.find((t) => t.platformUserId === id || t.claimedByUserId === id)
   const slotOf = (t: SourceTeam | undefined): number | null => (t ? aliasFor.get(t.key)?.slot ?? null : null)
 
+  // ── Which weeks are over ───────────────────────────────────────────────────
+  // One rule for the standings, the current week and Chimmy's recent form — see weekProgress.ts for
+  // the mid-Sunday week that used to count half-played games as wins and losses.
+  const weeks = [...new Set(src.weekRows.map((r) => r.week))].sort((a, b) => a - b)
+  const weekIsComplete = makeWeekIsFinished(src.weekRows, src.inProgressWeek)
+
   // ── Standings ──────────────────────────────────────────────────────────────
-  const scored = src.weekRows.filter((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
+  const scored = src.weekRows.filter((r) => weekIsComplete(r.week))
   let standings: DemoStandingRow[]
   if (scored.length > 0) {
     const agg = new Map<number, Omit<DemoStandingRow, 'rank'>>()
@@ -116,8 +123,6 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
   }
 
   // ── Current week + matchups ────────────────────────────────────────────────
-  const weeks = [...new Set(src.weekRows.map((r) => r.week))].sort((a, b) => a - b)
-  const weekIsComplete = (w: number) => src.weekRows.filter((r) => r.week === w).every((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
   const currentWeek = weeks.find((w) => !weekIsComplete(w)) ?? weeks[weeks.length - 1] ?? null
 
   const matchups: DemoMatchup[] = []
@@ -144,6 +149,34 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
       })
     }
     matchups.sort((x, y) => x.home.slot - y.home.slot)
+  }
+
+  // ── Completed weeks, per team (recent form + all-play for demo Chimmy) ──────
+  const weeklyScores: DemoWeekScores[] = []
+  for (const week of weeks) {
+    if (!weekIsComplete(week)) continue
+    const scores: DemoWeekScores['scores'] = []
+    for (const r of src.weekRows) {
+      if (r.week !== week) continue
+      const slot = slotOf(teamByRosterId(r.rosterId))
+      if (slot != null) scores.push({ slot, points: round1(r.pointsFor), matchupId: r.matchupId ?? null })
+    }
+    if (scores.length > 0) weeklyScores.push({ week, scores: scores.sort((a, b) => a.slot - b.slot) })
+  }
+
+  // ── The rest of the schedule: games where neither side has scored ───────────
+  const upcoming: DemoUpcomingWeek[] = []
+  for (const week of weeks) {
+    if (weekIsComplete(week)) continue
+    const games = new Map<number, number[]>()
+    for (const r of src.weekRows) {
+      if (r.week !== week || r.matchupId == null || r.pointsFor > 0 || r.pointsAgainst > 0) continue
+      const slot = slotOf(teamByRosterId(r.rosterId))
+      if (slot == null) continue
+      games.set(r.matchupId, [...(games.get(r.matchupId) ?? []), slot])
+    }
+    const pairs = [...games.values()].filter((g): g is [number, number] => g.length === 2)
+    if (pairs.length > 0) upcoming.push({ week, pairs })
   }
 
   // ── Rosters ────────────────────────────────────────────────────────────────
@@ -255,6 +288,8 @@ export function buildDemoLeagueView(src: SourceSnapshot, aliasIndex: Map<string,
     teams,
     standings,
     matchups,
+    weeklyScores,
+    upcoming,
     rosters,
     trades,
     health: health ? { score: health.score, status: health.status, summary: health.summary, strengths: health.strengths, problems: health.problems } : null,

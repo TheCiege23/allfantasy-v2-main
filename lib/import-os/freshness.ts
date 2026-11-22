@@ -9,7 +9,7 @@ import type { SeasonState } from './season'
 import { cadenceForState, isInSeason } from './season'
 
 export type SyncStatus = 'current' | 'refreshing' | 'delayed' | 'partial' | 'unavailable'
-export type FreshnessSeverity = 'ok' | 'delayed' | 'critical'
+type FreshnessSeverity = 'ok' | 'delayed' | 'critical'
 
 export type FreshnessContract = {
   lastSuccessfulSyncAt: string | null
@@ -67,7 +67,7 @@ export function computeSyncStatus(input: {
   return age <= currentMax ? 'current' : 'delayed'
 }
 
-export function nextScheduledSyncAt(seasonState: SeasonState, fromIso: string | null, now: Date): string {
+function nextScheduledSyncAt(seasonState: SeasonState, fromIso: string | null, now: Date): string {
   const base = fromIso ? new Date(fromIso).getTime() : now.getTime()
   const cadenceMs = cadenceForState(seasonState) * 60000
   const anchor = Number.isNaN(base) ? now.getTime() : base
@@ -113,17 +113,3 @@ export function isSyncDue(lastFinishedAtIso: string | null, cadenceMinutes: numb
   return now.getTime() - t >= cadenceMinutes * 60000
 }
 
-/** Human summary for the UI, e.g. "Delayed · last update 2h ago". Never claims currency it doesn't have. */
-export function freshnessLabel(f: FreshnessContract, now: Date): string {
-  const age = ageMinutes(f.lastSuccessfulSyncAt, now)
-  const ago =
-    age == null
-      ? 'never'
-      : age < 60
-        ? `${Math.round(age)}m ago`
-        : age < 1440
-          ? `${Math.round(age / 60)}h ago`
-          : `${Math.round(age / 1440)}d ago`
-  const status = f.syncStatus.charAt(0).toUpperCase() + f.syncStatus.slice(1)
-  return `${status} · last update ${ago}`
-}

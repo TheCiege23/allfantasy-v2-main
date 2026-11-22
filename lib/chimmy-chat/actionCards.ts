@@ -32,10 +32,10 @@ function players(v: unknown): ActionCardPlayer[] {
   return Array.isArray(v) ? v.map(player).filter((p): p is ActionCardPlayer => p !== null).slice(0, 10) : []
 }
 
-export function readActionCard(v: unknown): ChimmyActionCard | null {
+function readActionCard(v: unknown): ChimmyActionCard | null {
   if (!v || typeof v !== 'object') return null
   const o = v as Record<string, unknown>
-  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' ? o.kind : null
+  const kind = o.kind === 'lineup' || o.kind === 'trade' || o.kind === 'automation' || o.kind === 'queue' || o.kind === 'settings' ? o.kind : null
   const actionId = str(o.actionId, 80)
   const token = typeof o.token === 'string' && o.token.length > 10 && o.token.length < 16_000 ? o.token : null
   const title = str(o.title, 120)
@@ -77,6 +77,31 @@ export function readActionCard(v: unknown): ChimmyActionCard | null {
     if (changes.length === 0) return null
     return { ...base, automation: { changes } }
   }
+  if (kind === 'settings') {
+    const s = o.settings && typeof o.settings === 'object' ? (o.settings as Record<string, unknown>) : null
+    if (!s || !Array.isArray(s.changes)) return null
+    const changes = s.changes
+      .map((c) => {
+        const r = c && typeof c === 'object' ? (c as Record<string, unknown>) : null
+        const label = str(r?.label, 60)
+        const from = str(r?.from, 80)
+        const to = str(r?.to, 80)
+        return label && from && to ? { label, from, to } : null
+      })
+      .filter((c): c is { label: string; from: string; to: string } => c !== null)
+      .slice(0, 9)
+    if (changes.length === 0) return null
+    return { ...base, settings: { changes, midSeason: s.midSeason === true } }
+  }
+  if (kind === 'queue') {
+    const q = o.queue && typeof o.queue === 'object' ? (o.queue as Record<string, unknown>) : null
+    if (!q) return null
+    const add = players(q.add)
+    const remove = players(q.remove)
+    if (add.length === 0 && remove.length === 0) return null
+    const resultingTop = Array.isArray(q.resultingTop) ? q.resultingTop.map((n) => str(n, 80)).filter((n): n is string => Boolean(n)).slice(0, 5) : []
+    return { ...base, queue: { add, addAt: q.addAt === 'top' ? 'top' : 'bottom', remove, resultingTop } }
+  }
   const t = o.trade && typeof o.trade === 'object' ? (o.trade as Record<string, unknown>) : null
   if (!t) return null
   const youGive = players(t.youGive)
@@ -107,11 +132,6 @@ export function publishChimmyActionCards(cards: ChimmyActionCard[]): void {
   if (cards.length === 0) return
   const known = new Set(current.map((c) => c.actionId))
   current = [...cards.filter((c) => !known.has(c.actionId)), ...current].slice(0, 6)
-  for (const l of listeners) l(current)
-}
-
-export function dismissChimmyActionCard(actionId: string): void {
-  current = current.filter((c) => c.actionId !== actionId)
   for (const l of listeners) l(current)
 }
 

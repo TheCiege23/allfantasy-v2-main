@@ -2,12 +2,12 @@ import 'server-only'
 
 import { syncOutboundLeagueChat } from '@/lib/discord/sync-outbound'
 
-export type NflRedraftDiscordAnnouncementStatus =
+type NflRedraftDiscordAnnouncementStatus =
   | 'sent'
   | 'not_configured'
   | 'failed'
 
-export type NflRedraftDiscordAnnouncementResult = {
+type NflRedraftDiscordAnnouncementResult = {
   status: NflRedraftDiscordAnnouncementStatus
   discordMessageId?: string
   error?: string

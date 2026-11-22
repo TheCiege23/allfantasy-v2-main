@@ -120,7 +120,7 @@ describe('D.2 — SleeperPoolTable component wiring', () => {
   })
 
   it('row click invokes onPlayerSelect (opens PlayerDetailModal in PlayerPanel)', () => {
-    expect(src).toMatch(/onClick=\{\(\) => \{[\s\S]*?onSelect\(\)/)
+    expect(src).toMatch(/onClick=\{\(\) => onSelect\(\)\}/)
     expect(src).toMatch(/onPlayerSelect: \(player: PlayerEntry\) => void/)
   })
 

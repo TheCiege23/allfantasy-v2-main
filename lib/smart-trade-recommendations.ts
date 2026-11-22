@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { findPlayerByName } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
@@ -30,7 +30,7 @@ function getOpenAIClient(): OpenAI | null {
   return openai;
 }
 
-export interface UserTradingProfile {
+interface UserTradingProfile {
   userId: string;
   sleeperUsername: string;
   totalTrades: number;
@@ -61,7 +61,7 @@ export interface UserTradingProfile {
   };
 }
 
-export interface SmartTradeRecommendation {
+interface SmartTradeRecommendation {
   id: string;
   tradeType: 'acquire' | 'sell' | 'swap';
   confidence: number;
@@ -90,7 +90,7 @@ export interface SmartTradeRecommendation {
   suggestedTargetManagers?: string[];
 }
 
-export interface SmartRecommendationsResult {
+interface SmartRecommendationsResult {
   recommendations: SmartTradeRecommendation[];
   userProfile: UserTradingProfile;
   marketInsights: {
@@ -439,14 +439,14 @@ export async function generateSmartRecommendations(
 
   const response = completion.choices[0]?.message?.content;
   if (!response) {
-    throw new Error('No response from AI');
+    throw new Error('No response from Chimmy');
   }
 
   let parsed;
   try {
     parsed = JSON.parse(response);
   } catch {
-    throw new Error('Failed to parse AI response');
+    throw new Error('Failed to parse Chimmy response');
   }
 
   // POST-PROCESSING: Validate and filter recommendations based on actual FantasyCalc values
@@ -669,7 +669,7 @@ ${marketInsights.hotPlayers.slice(0, 10).join(', ') || 'No data'}
 - Undervalued: ${marketInsights.undervaluedPositions.join(', ') || 'None identified'}
 - Overvalued: ${marketInsights.overvaluedPositions.join(', ') || 'None identified'}
 
-### Key Player Insights (from AI learning):
+### Key Player Insights (from Chimmy learning):
 ${platformInsights.filter(i => i.playerName && i.insightText).slice(0, 15).map(i => `- ${i.insightText}`).join('\n') || 'No player-specific insights yet'}
 
 ### Age Curve Patterns:

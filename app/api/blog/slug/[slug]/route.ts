@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isBlogAdminRequest } from "@/lib/automated-blog/blogAdminGate"
+import { isArticleLive } from "@/lib/automated-blog/liveArticles"
 
 /** GET /api/blog/slug/[slug] — get article by slug (for public page). Optional ?preview=1 to include drafts. */
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     // A draft preview is an admin view; to anyone else an unpublished slug does not exist.
-    if (article.publishStatus !== "published" && !(preview && (await isBlogAdminRequest(req)))) {
+    if (!isArticleLive(article) && !(preview && (await isBlogAdminRequest(req)))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     const tags = Array.isArray(article.tags) ? article.tags : []

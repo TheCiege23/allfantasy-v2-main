@@ -1,17 +1,35 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ session: vi.fn(), commish: vi.fn(), access: vi.fn(), paid: vi.fn(), league: vi.fn(), update: vi.fn(), season: vi.fn() }))
+const h = vi.hoisted(() => ({ session: vi.fn(), commish: vi.fn(), access: vi.fn(), paid: vi.fn(), league: vi.fn(), update: vi.fn(), season: vi.fn(), advanceHosted: vi.fn(), restartHosted: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/league/league-access', () => ({ assertLeagueCommissioner: h.commish }))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: h.access }))
 vi.mock('@/lib/guillotine/guillotineRulesSave', () => ({ viewerCanEditPaidGuillotineRules: h.paid }))
-vi.mock('@/lib/survivor-guillotine/operations', () => ({}))
+vi.mock('@/lib/survivor-guillotine/operations', () => ({ advanceSGHostedCeremony: h.advanceHosted, restartSGHostedCeremony: h.restartHosted }))
 vi.mock('@/lib/prisma', () => {
   const tx = { $queryRaw: vi.fn(), league: { findUnique: h.league, update: h.update } }
   return { prisma: { ...tx, survivorGuillotineLeague: { findUnique: h.season }, $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } }
+})
+
+describe('hosted ceremony commissioner actions', () => {
+  it('dispatches reveal and restart with the authenticated commissioner and period', async () => {
+    h.advanceHosted.mockResolvedValue({ period: 2, stage: 1 })
+    h.restartHosted.mockResolvedValue({ period: 2, restarted: true })
+    expect((await post({ action: 'advance_hosted_ceremony', period: 2 })).status).toBe(200)
+    expect(h.advanceHosted).toHaveBeenCalledWith('L', 'u', 2)
+    expect((await post({ action: 'restart_hosted_ceremony', period: 2 })).status).toBe(200)
+    expect(h.restartHosted).toHaveBeenCalledWith('L', 'u', 2)
+  })
+
+  it('rejects invalid periods and non-commissioners', async () => {
+    expect((await post({ action: 'advance_hosted_ceremony', period: 0 })).status).toBe(409)
+    h.commish.mockResolvedValue({ ok: false, status: 403 })
+    expect((await post({ action: 'advance_hosted_ceremony', period: 2 })).status).toBe(403)
+    expect(h.advanceHosted).not.toHaveBeenCalled()
+  })
 })
 
 import { GET, POST } from '@/app/api/leagues/[leagueId]/survivor-guillotine/operations/route'

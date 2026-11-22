@@ -5,7 +5,7 @@
 
 export type OrphanDrafterMode = 'cpu' | 'ai'
 
-export interface DrafterPlayer {
+interface DrafterPlayer {
   name: string
   position: string
   team?: string | null

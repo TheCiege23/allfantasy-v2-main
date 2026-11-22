@@ -16,7 +16,7 @@ const nbaGameDay = (startsAt: string) => new Intl.DateTimeFormat("en-CA", {
  */
 const PUBLISHED_2026 = ["20261030", "20261106", "20261113", "20261120", "20261124", "20261125", "20261127", "20261204", "20261205", "20261208", "20261209", "20261211"]
 
-export function nbaCupDiscoveryDates(season: number, cursor: number, now = new Date()): string[] {
+function nbaCupDiscoveryDates(season: number, cursor: number, now = new Date()): string[] {
   const days: string[] = []
   for (let date = new Date(Date.UTC(season, 9, 1)); date.getUTCFullYear() === season; date.setUTCDate(date.getUTCDate() + 1)) days.push(dayKey(date))
   const rotating = [...days.slice(cursor % days.length), ...days.slice(0, cursor % days.length)]

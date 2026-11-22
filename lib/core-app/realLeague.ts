@@ -31,7 +31,7 @@
  * trap that broke the build on 2026-09-07.
  */
 
-export type RealLeagueIdentity = {
+type RealLeagueIdentity = {
   platform?: string | null
   platformLeagueId?: string | null
   /**

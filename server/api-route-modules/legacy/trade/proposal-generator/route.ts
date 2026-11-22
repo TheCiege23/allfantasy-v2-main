@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateRequestOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
-import { pricePlayer, pricePick, PricedAsset, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
+import { pricePlayer, pricePick, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getCachedOpponentProfile, formatOpponentForPrompt } from '@/lib/opponent-tendencies'
@@ -13,6 +13,7 @@ import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { createLegacyPackageGrader, legacySessionUserId } from '@/lib/legacy/legacyOneGrade'
 import { gradeInputsFromRosterAssets, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -315,6 +316,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
       rateLimit: { action: 'trade_proposal', maxRequests: 10, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_proposals`): the /af-legacy screen locks this action (Trade Command Center), and that lock was the only one —
+     * a direct POST ran the model for anyone. A guest actor (`guest:…`) holds no plan and gets the same lock.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_proposals' })
+    if (!plan.ok) return plan.response
     const username = gate.identity.sleeperUsername
 
     const {

@@ -21,6 +21,9 @@ const spanish: Record<string, string> = {
   Matchup: 'Enfrentamiento',
   Match: 'Partido',
   Team: 'Equipo',
+  // The /core league tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19).
+  Trade: 'Intercambios',
+  'Sections of this tab': 'Secciones de esta pestaña',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
   // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
@@ -35,6 +38,8 @@ const spanish: Record<string, string> = {
   Devy: 'Devy',
   'Devy (league)': 'Devy (liga)',
   Standings: 'Clasificación',
+  /* The league's own rules page (2026-11-15) — the hub's own words for it, so the two match. */
+  'League settings': 'Ajustes de la liga',
   'Season Outlook': 'Proyección de temporada',
   Outlook: 'Proyección',
   'Your career': 'Tu trayectoria',
@@ -100,11 +105,13 @@ const spanish: Record<string, string> = {
   Communications: 'Mensajes',
   'Everyone in one league': 'Todos en una liga',
   'Just you': 'Solo tú',
+  Music: 'Música',
   'Only this Huddle’s members': 'Solo miembros de este grupo',
   'One person': 'Una persona',
   "Everyone in one league's server": 'Todos en el servidor de la liga',
   'Who sees this:': 'Quién puede verlo:',
   'Notification settings': 'Configuración de notificaciones',
+  'Need help? Message us': '¿Necesitas ayuda? Escríbenos',
   'No messages yet — say something to the league': 'Aún no hay mensajes. Saluda a la liga',
   'Open league': 'Abrir liga',
   'Needs you': 'Requiere atención',
@@ -331,6 +338,10 @@ const spanish: Record<string, string> = {
   WIN: 'GANA',
   MARGIN: 'DIF.',
   level: 'empate',
+  Projected: 'Proyectado',
+  Lead: 'Ventaja',
+  Tied: 'Empate',
+  'Not started': 'Sin empezar',
   by: 'por',
   'Not paired into a game yet': 'Aún sin rival asignado',
   FINAL: 'FINAL',
@@ -469,6 +480,16 @@ const spanish: Record<string, string> = {
   'Change what gets through': 'Cambiar qué avisos recibes',
   'to win': 'de ganar',
   vs: 'contra',
+  "This week's games": 'Los partidos de esta semana',
+  "Game": 'Partido',
+  "Not scored yet": 'Aún sin puntuar',
+  "Win": 'Victoria',
+  "Loss": 'Derrota',
+  "Tie": 'Empate',
+  "Ahead": 'Por delante',
+  "AllFantasy estimate": 'Estimación de AllFantasy',
+  "Behind": 'Por detrás',
+  "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
   'No matchups are on file for this week.': 'No hay enfrentamientos registrados para esta semana.',
   'Rivalry Radar': 'Rivales',
@@ -541,7 +562,7 @@ const spanish: Record<string, string> = {
   'Player Comparison': 'Comparación de jugadores',
   'Player Comparison Lab': 'Laboratorio de comparación',
   'League Power Rankings': 'Ranking de poder de la liga',
-  'AI power rankings, trends, strengths and risks for a league.': 'Ranking con IA, tendencias, fortalezas y riesgos de una liga.',
+  'Chimmy power rankings, trends, strengths and risks for a league.': 'Ranking con Chimmy, tendencias, fortalezas y riesgos de una liga.',
   'AF Rankings (career rank)': 'Ranking AF (trayectoria)',
   'Share something': 'Comparte algo',
   'AllFantasy never posts for you. These produce something you copy and post yourself.': 'AllFantasy nunca publica por ti. Crea algo que tú decides compartir.',
@@ -905,6 +926,8 @@ const spanish: Record<string, string> = {
   'Build a trade': 'Crear intercambio',
   'See the verdict': 'Ver evaluación',
   'Analyzing…': 'Analizando…',
+  'Analyze this trade': 'Analizar este intercambio',
+  'Their team': 'Su equipo',
   'Analyze again': 'Analizar de nuevo',
   'Analyze trade': 'Analizar intercambio',
   'Add what you send': 'Añade lo que envías',
@@ -1450,6 +1473,18 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `todavía no se anotó nada en ${m[1]}. El calendario completo ya está registrado, así que hay filas para cada semana, pero ordenarlas sería clasificar a doce equipos que no anotaron nada.`,
   ],
   // Scout — Competitive Edge, a league on a platform it does not read yet.
+  // A manager's record on a platform whose history is not counted per manager yet (2026-11-16,
+  // lib/competitive-edge/providerManagerHistory.ts).
+  [/^(.+) trades aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los intercambios de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  // Fantrax trades from the commissioner's uploaded trade history (lib/competitive-edge/providerManagerHistory.ts).
+  [/^No Fantrax trade history has been uploaded for this league yet\. The commissioner adds it under Commissioner → Trades and draft archive\.$/, () => 'Aún no se ha subido el historial de intercambios de Fantrax de esta liga. El comisionado lo agrega en Comisionado → Intercambios y archivo de drafts.'],
+  [/^The uploaded Fantrax trades could not be matched to this league’s managers\.$/, () => 'Los intercambios de Fantrax subidos no se pudieron asociar a los mánagers de esta liga.'],
+  [/^This league has no Fantrax league id on file\.$/, () => 'Esta liga no tiene registrado un id de liga de Fantrax.'],
+  [/^Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not\.$/, () => 'Solo se cuentan los intercambios del archivo de Fantrax subido; los hechos desde la última subida no.'],
+  [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
+  [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
+  [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [
     /^Competitive Edge reads Sleeper trade and waiver history today, and (.+) leagues aren't connected yet$/,
     (m) => `Competitive Edge lee hoy el historial de intercambios y agentes libres de Sleeper, y las ligas de ${m[1]} todavía no están conectadas`,
@@ -1604,6 +1639,23 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [
     /^Per-game points from AllFantasy's (.+) season projection, on AllFantasy's default \1 scoring — not each league's own rules, which are written in a stat vocabulary the projection engine does not read yet\. A season rate, not a projection for this week\.$/,
     (m) => `Puntos por partido de la proyección de temporada de AllFantasy para ${m[1]}, con la puntuación predeterminada de AllFantasy, no con las reglas de cada liga, que usan un vocabulario de estadísticas que el motor todavía no lee. Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  // The league value board (lib/waivers/waiverSportBasis.ts, seasonRateWaiverBoard.ts — 2026-11-16).
+  [
+    /^Values from this league's own (.+) value board — the one its trade grades use — as per-game fantasy points under this league's own scoring\. A season rate, not a projection for this week\.$/,
+    (m) => `Valores de la tabla de valor de ${m[1]} de esta liga, la misma que usan sus notas de intercambios, en puntos de fantasy por partido con la puntuación propia de esta liga. Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  [
+    /^Values from this league's own (.+) value board — the one its trade grades use — as per-game category score under this league's categories \((.+)\)\. A season rate, not a projection for this week\.$/,
+    (m) => `Valores de la tabla de valor de ${m[1]} de esta liga, la misma que usan sus notas de intercambios, como puntaje por partido en las categorías de esta liga (${m[2]}). Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  [
+    /^This league's own (.+) value board is not available \((.+)\), so the wire is priced on the basis below instead\.$/,
+    (m) => `La tabla de valor de ${m[1]} de esta liga no está disponible (${coreUiCopy(`${m[2]}.`, 'es').replace(/[.]$/, '')}), así que los agentes libres se valoran con la base de abajo.`,
+  ],
+  [
+    /^Values still lean on the (.+) season while this one has few games; each add shows what its value rests on\.$/,
+    (m) => `Los valores todavía se apoyan en la temporada ${m[1]} mientras esta tiene pocos partidos; cada alta muestra en qué se apoya su valor.`,
   ],
   // Waiver Intelligence — a ruled-out target's reason line ("IR — he cannot play this week…").
   [

@@ -8,7 +8,7 @@
 
 import type { ImportCoverageBucket, ImportCoverageState, NormalizedImportResult } from '@/lib/league-import/types'
 
-export type EspnImportSummaryRow = {
+type EspnImportSummaryRow = {
   key: 'teams' | 'rosters' | 'settings' | 'scoring' | 'schedule' | 'draft' | 'transactions' | 'history'
   label: string
   count: number | null

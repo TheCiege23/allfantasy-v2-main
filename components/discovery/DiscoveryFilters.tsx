@@ -8,7 +8,7 @@ import type {
   LeagueStyleFilter,
 } from "@/lib/public-discovery/types"
 
-export interface DiscoveryFiltersProps {
+interface DiscoveryFiltersProps {
   sport: string
   format: DiscoveryFormat
   style: LeagueStyleFilter

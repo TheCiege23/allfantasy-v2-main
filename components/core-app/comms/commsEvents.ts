@@ -29,7 +29,8 @@ export const COMMS_OPEN_EVENT = 'af-comms-open'
 export type CommsOpenDetail = {
   /** Explicitly reviewed public draft, scoped to one league. It never sends automatically. */
   leagueDraft?: import('@/lib/core-app/commissionerWeeklyPlan').ReviewedLeagueDraft
-  tab?: 'league' | 'chimmy' | 'huddle' | 'dms'
+  /** 'music' opens the app-wide music controls — the draft room's "Play music" button sends it. */
+  tab?: 'league' | 'chimmy' | 'huddle' | 'dms' | 'music'
   prefill?: string
   /**
    * Scope the drawer to this league, even when the user picked another one by hand earlier.

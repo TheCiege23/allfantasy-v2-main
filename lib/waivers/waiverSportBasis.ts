@@ -16,8 +16,7 @@
  *           `AFProjectionSnapshot`, season baseline rows, PER GAME, keyed by `PlayerIdentityMap.id`,
  *           scored by the engine under its DEFAULT category rules (af-projections/categoryScoring:
  *           DraftKings conventions). Written by cron/compute-projections for every sport.
- *   SOCCER  nothing. The stats vendor serves no soccer player season stats, so the engine has no
- *           rules and no lines for it (categoryScoring.ts says so), and nothing else projects it.
+ *   SOCCER  the league value board, built from stored club match statistics.
  *
  * ── 🛑 WHY THE CATEGORY SPORTS ARE NOT RE-SCORED UNDER THE LEAGUE'S RULES ──────────────────────
  * The engine stores its per-game component rates in the provider's vocabulary (`total_rebounds`,
@@ -35,11 +34,17 @@
  * changed role, and every surface that shows it labels it "per game" — never "this week".
  */
 
-export type WaiverValueBasis = 'weekly_projection' | 'season_per_game_league' | 'season_per_game_af_default'
+/**
+ * `league_value_board` (2026-11-16): a sport valued on its league's own value board — the trade grade's
+ * board, scored under the league's points or categories (lib/sport-values/leagueValueBoard.ts). The
+ * season-rate loaders use it for a sport in `BOARD_VALUE_SPORTS` whenever that board can be built, and
+ * fall back to the default basis below, saying why, when it cannot.
+ */
+export type WaiverValueBasis = 'weekly_projection' | 'season_per_game_league' | 'season_per_game_af_default' | 'league_value_board'
 
 export type WaiverSportPlan =
   | { sport: string; kind: 'weekly'; basis: 'weekly_projection' }
-  | { sport: string; kind: 'per_game'; basis: 'season_per_game_league' | 'season_per_game_af_default' }
+  | { sport: string; kind: 'per_game'; basis: 'season_per_game_league' | 'season_per_game_af_default' | 'league_value_board' }
   | { sport: string; kind: 'none'; reason: string }
 
 /** A league's `sport`, as the loaders compare it. A missing sport has always meant NFL here. */
@@ -79,14 +84,7 @@ export function waiverSportPlan(raw: string | null | undefined): WaiverSportPlan
   if (sport === 'NFL') return { sport, kind: 'weekly', basis: 'weekly_projection' }
   if (sport === 'NCAAF') return { sport, kind: 'per_game', basis: 'season_per_game_league' }
   if (AF_DEFAULT_SCORED.has(sport)) return { sport, kind: 'per_game', basis: 'season_per_game_af_default' }
-  if (sport === 'SOCCER') {
-    return {
-      sport,
-      kind: 'none',
-      reason:
-        'No projection exists for soccer players: our stats provider serves no soccer player season stats, so the projection engine has nothing to project from and this wire cannot be priced.',
-    }
-  }
+  if (sport === 'SOCCER') return { sport, kind: 'per_game', basis: 'league_value_board' }
   return {
     sport,
     kind: 'none',
@@ -103,8 +101,22 @@ export function noSeasonProjectionsReason(sport: string): string {
 }
 
 /** One sentence naming the basis every number in a section was priced on. */
-export function waiverBasisSentence(basis: WaiverValueBasis, sport: string): string {
+export function waiverBasisSentence(
+  basis: WaiverValueBasis,
+  sport: string,
+  /** `league_value_board` only: the categories a category league is valued on ("PTS, REB, … and TO"). */
+  board?: { categoryList: string | null } | null,
+): string {
   const label = inSentence(sport)
+  if (basis === 'league_value_board') {
+    const scoring = board?.categoryList
+      ? `per-game category score under this league's categories (${board.categoryList})`
+      : "per-game fantasy points under this league's own scoring"
+    return (
+      `Values from this league's own ${label} value board — the one its trade grades use — as ${scoring}. ` +
+      `A season rate, not a projection for this week.`
+    )
+  }
   if (basis === 'season_per_game_league') {
     return (
       `Per-game rates from AllFantasy's ${label} season projection, re-scored under each league's own scoring_settings. ` +
@@ -121,10 +133,7 @@ export function waiverBasisSentence(basis: WaiverValueBasis, sport: string): str
   return "Weekly projections, re-scored under each league's own scoring_settings."
 }
 
-/** The short unit a per-game figure is printed with. */
-export const PER_GAME_UNIT = 'pts/g'
-
-/** True for the two season-rate bases. */
+/** True for the season-rate bases. */
 export function isPerGameBasis(basis: WaiverValueBasis | null | undefined): boolean {
-  return basis === 'season_per_game_league' || basis === 'season_per_game_af_default'
+  return basis === 'season_per_game_league' || basis === 'season_per_game_af_default' || basis === 'league_value_board'
 }

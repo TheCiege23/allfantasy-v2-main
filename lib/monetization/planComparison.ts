@@ -38,7 +38,7 @@ const TIER_PLAN_IDS: Record<ComparisonTier, SubscriptionPlanId[]> = {
 /** One cell: included, not included, coming soon, or a short limit ("2 a day"). */
 export type ComparisonCell = { kind: 'yes' } | { kind: 'no' } | { kind: 'soon' } | { kind: 'text'; text: string }
 
-export type ComparisonRow = {
+type ComparisonRow = {
   id: string
   label: string
   /** One plain sentence under the label. */
@@ -85,6 +85,18 @@ const GROUPS: { id: string; title: string; rows: RowSpec[] }[] = [
       { id: 'competitive_edge', label: 'Competitive Edge', detail: 'What the other managers in your league have actually done — their trades, picks and waiver bids.', featureId: 'manager_psychology' },
       { id: 'start_sit', label: 'Start/sit calls', featureId: 'pro_start_sit' },
       { id: 'waivers', label: 'Waiver recommendations', featureId: 'ai_waivers' },
+      {
+        id: 'chimmy_drafts',
+        label: 'Chimmy drafts for you',
+        detail: 'On auto-pick, Chimmy picks from your queue or the way you draft, and fills what your roster still needs.',
+        featureId: 'pro_draft_ai',
+      },
+      {
+        id: 'chimmy_runs_team',
+        label: 'Chimmy runs a team',
+        detail: 'Hand a team with no manager to Chimmy: it drafts for it and manages it until someone takes over. One team is free.',
+        featureId: 'commissioner_chimmy_autopilot',
+      },
     ],
   },
   {
@@ -180,6 +192,7 @@ export const PLAN_EXAMPLES: Record<ComparisonTier, readonly PlanExample[]> = {
   af_pro: [
     { text: 'Open any trade and see why it grades the way it does — the value layers, and the counter-offer worth sending.', featureId: 'trade_analyzer' },
     { text: 'Before you send an offer, see what that manager has actually done: their past trades, draft picks and waiver bids.', featureId: 'manager_psychology' },
+    { text: 'Put your draft on auto and let Chimmy pick the way you draft — or hand an empty team to Chimmy to run.', featureId: 'commissioner_chimmy_autopilot' },
   ],
   af_commissioner: [
     {

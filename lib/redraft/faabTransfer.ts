@@ -30,7 +30,7 @@ import type { Prisma } from '@prisma/client'
 
 type FaabDb = Pick<Prisma.TransactionClient, 'redraftRoster'>
 
-export const INSUFFICIENT_FAAB_MESSAGE = 'Insufficient FAAB balance to complete trade'
+const INSUFFICIENT_FAAB_MESSAGE = 'Insufficient FAAB balance to complete trade'
 
 /**
  * @param deltas net FAAB change per roster id: negative = pays, positive = receives.

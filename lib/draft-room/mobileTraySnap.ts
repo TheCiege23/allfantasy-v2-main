@@ -18,7 +18,7 @@ export type TraySnap = 'peek' | 'half' | 'full'
 const ORDER: readonly TraySnap[] = ['peek', 'half', 'full']
 
 /** Share of the full height used by the half snap. */
-export const HALF_RATIO = 0.55
+const HALF_RATIO = 0.55
 
 /** px/ms. Above this a release counts as a flick. ~0.5 is the common platform figure. */
 export const FLICK_VELOCITY = 0.5

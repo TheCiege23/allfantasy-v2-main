@@ -446,22 +446,24 @@ export function tankingPenaltyRule(settings: unknown): TankingPenaltyRule {
  * The rookie draft order the draft ENGINE seats from, which is not always the dynasty config's method.
  * The engine (`lib/live-draft-engine/DraftSessionService.ts`) applies, highest first: the weighted
  * lottery (`rookiePickOrderMethod: 'weighted_lottery'`); the live rookie order
- * (`settings.rookie_draft_order.live`, AF Commissioner); the automatic order the commissioner switched
- * on (`settings.rookie_draft_order {enabled, mode}`). The popup used to print the dynasty config's
+ * (`settings.rookie_draft_order.live`, AF Commissioner); the automatic order
+ * (`settings.rookie_draft_order {enabled, mode}`). The popup used to print the dynasty config's
  * method whatever the engine did, so it could say "reverse max PF" over a draft seated worst record
  * first.
  *
- * ⚠ A STANDINGS METHOD ON ITS OWN SEATS NOTHING. Standings order the rookie draft only under the automatic
- * order, an AF Commissioner setting that is off by default (lib/rookie-order/automaticRookieOrder.ts). With
- * none of the above on, the draft takes the league's own order, so a dynasty config's `max_pf` /
- * `reverse_standings` reads as the commissioner setting it — never as an order the draft does not use.
+ * WORST RECORD FIRST IS THE DEFAULT (lib/rookie-order/automaticRookieOrder.ts). A league that never
+ * saved the automatic-order toggle is seated worst record first, whatever standings method its dynasty
+ * config names, so that is what the popup says. Switched off, or with the dynasty method `commissioner`,
+ * the draft takes the league's own order and reads as the commissioner setting it.
  */
 export function effectiveRookieDraftOrder(configMethod: string | null | undefined, leagueSettings: unknown): string | null {
   if (isWeightedRookieLottery(configMethod)) return 'weighted_lottery'
   const rookie = record(record(leagueSettings).rookie_draft_order)
   if (record(rookie.live).enabled === true) return 'live'
   if (rookie.enabled === true) return rookie.mode === 'reverse_max_pf' ? 'auto_reverse_max_pf' : 'auto_worst_to_first'
-  if (configMethod === 'max_pf' || configMethod === 'reverse_standings') return 'commissioner'
+  if (configMethod === 'max_pf' || configMethod === 'reverse_standings') {
+    return rookie.enabled === false ? 'commissioner' : 'auto_worst_to_first'
+  }
   return configMethod ?? null
 }
 

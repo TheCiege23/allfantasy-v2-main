@@ -47,7 +47,7 @@ function windowAround(t: HubTournament, now: Date): { start: number; end: number
   return build(year + 1)
 }
 
-export type HubTournamentState = {
+type HubTournamentState = {
   tournament: HubTournament
   /** True while today is inside the tournament's window. */
   live: boolean

@@ -120,6 +120,22 @@ describe('Chimmy\'s turn at an open council', () => {
     expect(h.played).toEqual([])
   })
 
+  it('🛑 takes its turn for an open seat of a league AllFantasy hosts (open-slot-…), as Fill empty slots leaves it', async () => {
+    // Production shape, 2026-11-22: a hosted league's unclaimed seats are `open-slot-<league>-<n>`,
+    // not `orphan-…`. Chimmy never voted for them and their ballots were cast as an absentee's.
+    const seat = 'open-slot-L-9'
+    h.settings = { af_managed_lineups: { r9: { ...chimmyEntry, ownerUserId: seat } } }
+    h.ctx = {
+      ...h.ctx!,
+      eligibility: { voterUserIds: [seat, 'u1', 'u2', 'u3'], targetUserIds: [seat, 'u1', 'u2', 'u3'], targetsByVoter: { [seat]: ['u1', 'u2', 'u3'] } },
+      userToRoster: { [seat]: 'r9', u1: 'r1', u2: 'r2', u3: 'r3' },
+    }
+    h.scores = h.scores.map((s) => (s.userId === 'orphan-r9' ? { ...s, userId: seat } : s))
+    const turn = await runChimmyCouncilTurn('L', 'c1')
+    expect(turn.voted).toEqual([seat])
+    expect(h.submitted).toEqual([[seat, 'u2']])
+  })
+
   it('CONTROL: a seat Chimmy does not run, and a council that has closed, get nothing', async () => {
     h.settings = {}
     await runChimmyCouncilTurn('L', 'c1')

@@ -47,7 +47,7 @@ import {
 import { SGChopCardView, SGLineupMeter, SGMultiRaceBoard, SGReversalCard, SGTribeDrawCard, SGTribeSetupCard, SGWaiversCard } from './SGBoards'
 import s from './survguil.module.css'
 
-export type SGVisualExtras = {
+type SGVisualExtras = {
   ownPlayers?: SGOwnPlayer[]
   releasedPlayers?: SGReleasedPlayer[]
   reversals?: SGReversalRow[]

@@ -16,7 +16,7 @@ import { scoringRulesFrom } from './scoringContextFromWorld'
  * standing decision for a generic number under a "your league" label is to REFUSE (league-view
  * scoring audit, #949), and the user chose this basis for trade lineups on 2026-09-17.
  *
- * So a lineup number here is the vendor's weekly component line re-scored by
+ * A lineup number here uses AF's weekly component line re-scored by
  * `computeLeagueProjectedPoints` — the basis My Team and the matchup tabs already use — and a league
  * this cannot price is refused BY NAME, never priced generically.
  *

@@ -1,6 +1,6 @@
 export type * from './types'
 export { resolveChimmyRoutingPlan, runChimmyOrchestrator } from './ChimmyOrchestrator'
-export { classifyChimmyIntent } from './intent-classifier'
+export { classifyChimmyIntent, classifyChimmyTurn } from './intent-classifier'
 export { buildFollowUps, intentToToolId, resolveToolLaunches } from './tool-routing-map'
 export type { ToolRoutingContext } from './tool-routing-map'
 export {
@@ -10,5 +10,4 @@ export {
 } from './build-orchestration-meta'
 export {
   parseOrchestrationResponseSections,
-  type ParsedOrchestrationSections,
 } from './parse-orchestration-response-sections'

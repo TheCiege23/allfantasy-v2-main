@@ -20,7 +20,7 @@ import type { BestBallRiskResult } from './bestBallRiskEngine'
 import type { BestBallWaiverResult } from './bestBallWaiverEngine'
 import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from './bestBallTradeEngine'
 
-export interface BestBallWarRoomPromptInputs {
+interface BestBallWarRoomPromptInputs {
   context: BestBallWarRoomContext
   construction?: BestBallConstructionResult | null
   depth?: BestBallDepthResult | null

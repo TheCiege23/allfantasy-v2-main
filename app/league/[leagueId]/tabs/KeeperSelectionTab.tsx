@@ -48,6 +48,26 @@ export function keeperValueLine(v: KeeperValue): string {
   return `${head} · market #${v.marketRank}, costs pick ~#${v.pickSlot}`
 }
 
+/**
+ * Why a player could not be kept, in words. The save answered with the engine's own codes
+ * ("duplicate_round_5; rejected_by_commissioner"), which is what the manager was shown.
+ */
+export function keeperRefusalText(conflict: { playerIds?: string[]; reason: string }, nameOf: (playerId: string) => string): string {
+  const names = (conflict.playerIds ?? []).map(nameOf).filter(Boolean).join(' and ') || 'This player'
+  const many = (conflict.playerIds ?? []).length > 1
+  const round = /^duplicate_round_(\d+)$/.exec(conflict.reason)?.[1]
+  if (round) return `${names} ${many ? 'both cost' : 'costs'} a round ${round} pick. Keep one, or ask your commissioner how the league settles it.`
+  switch (conflict.reason) {
+    case 'rejected_by_commissioner': return `${names}: your commissioner rejected this keeper.`
+    case 'not_on_roster': return `${names} ${many ? 'are' : 'is'} not on your roster.`
+    case 'max_years_reached': return `${names} ${many ? 'have' : 'has'} been kept the most seasons your league allows.`
+    case 'not_drafted': return `${names}: your league only allows keeping players who were drafted.`
+    case 'above_round_floor': return `${names} ${many ? 'were' : 'was'} drafted too early to keep under your league's rules.`
+    case 'no_pick_available': return `${names}: you have no draft pick left to pay for this keeper.`
+    default: return `${names} ${many ? 'are' : 'is'} not eligible to be kept.`
+  }
+}
+
 type KeeperRec = {
   id: string
   playerId: string
@@ -202,7 +222,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
       }
       if (Array.isArray(j.conflicted) && j.conflicted.length > 0) {
         toast.message('Some players could not be kept', {
-          description: j.conflicted.map((c: { reason: string }) => c.reason).join('; '),
+          description: j.conflicted.map((c: { playerIds?: string[]; reason: string }) => keeperRefusalText(c, (id) => players.find((p) => p.playerId === id)?.playerName ?? '')).join(' '),
         })
       } else {
         toast.success('Keeper declaration saved')
@@ -272,8 +292,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
             }`}
           >
             <p>
-              <span className="font-semibold text-white">Status:</span> {session.status}
-              {locked ? ' — editing disabled' : ''}
+              <span className="font-semibold text-white">Status:</span> {locked ? 'Locked' : 'Open'}
+              {locked ? ' — editing disabled' : ` · ${selected.size} of ${maxKeepers} selected`}
             </p>
             <p className="mt-1">
               Deadline: {new Date(session.deadline).toLocaleString()}
@@ -294,7 +314,8 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
 
           <div className="space-y-2">
             {players.length === 0 ? (
-              <p className="text-[12px] text-white/45">No players on your roster for this season yet.</p>
+              // The roster arrives after the window does: say "loading" until it has, not that there is no team.
+              <p className="text-[12px] text-white/45">{loading ? 'Loading your roster…' : 'No players on your roster for this season yet.'}</p>
             ) : (
               players.map((p) => {
                 const e = eligByPlayer.get(p.playerId)

@@ -5,8 +5,14 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ board: [] as unknown[] }))
+const h = vi.hoisted(() => ({ board: [] as ReturnType<typeof fantasyCalcPlayerFromSnapshot>[] }))
 
+vi.mock('@/lib/trade-value-console/afLeaguePlayerPrice', () => ({
+  loadAfNflMarketQuote: async ({ sleeperId }: { sleeperId: string }) => {
+    const row = h.board.find(entry => entry.player.sleeperId === sleeperId)
+    return row ? { marketValue: row.value, position: row.player.position, generatedAt: new Date('2026-10-09T04:00:00.000Z') } : null
+  },
+}))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {

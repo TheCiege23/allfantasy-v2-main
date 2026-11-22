@@ -146,6 +146,7 @@ export async function getDraftBoardData(
   })
   /* AllFantasy's own projection for every drafted player — one read for the board. */
   const afs = await loadDraftAfProjections({
+    leagueId,
     platform: league.platform,
     playerIds: picks.map((p) => p.playerId),
     leagueSettings: league.settings,

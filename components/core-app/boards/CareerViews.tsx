@@ -1,5 +1,3 @@
-import Link from 'next/link'
-
 import type { CareerData } from '@/lib/core-app/careerModel'
 import { SectionHead } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'

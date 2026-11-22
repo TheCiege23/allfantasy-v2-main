@@ -70,7 +70,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-gm-analyze", tool: 
     const {
       leagueId,
       trade,
-      sport = 'nfl',
     } = body
 
     const gate = await requireLegacySleeperIdentity(request, {

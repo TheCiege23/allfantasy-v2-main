@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
@@ -7,10 +8,6 @@ import { getLeagueMemberAppUserIds } from '@/lib/draft-notifications/DraftNotifi
 import { isSystemLeagueOwner } from '@/lib/league-import/systemLeagueOwner'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { invokeLeagueFanoutHandlers } from '@/lib/league-events/subscribers'
-import {
-  leagueFanoutNotificationsAllowed,
-  parseLeagueNotificationPrefs,
-} from '@/lib/league/league-notification-prefs'
 import type { LeagueEventVisibility, LeagueFanoutEventType } from '@/lib/league-events/types'
 
 async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {
@@ -36,7 +33,7 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
     select: { platformUserId: true },
   })
   for (const row of co) {
-    if (row.platformUserId && !String(row.platformUserId).startsWith('orphan-')) {
+    if (row.platformUserId && !isSeatPlaceholderUserId(String(row.platformUserId))) {
       ids.add(row.platformUserId)
     }
   }

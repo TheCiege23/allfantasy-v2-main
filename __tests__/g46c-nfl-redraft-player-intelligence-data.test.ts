@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
@@ -15,11 +14,6 @@ import { mergeUnifiedIntoRosterState, type RosterStateMergeable } from '@/lib/pl
 import { tradeEvidenceFromUnifiedWire } from '@/lib/player-data/adapters/tradePlayerContextAdapter'
 import { matchupContextFromUnifiedWire } from '@/lib/player-data/adapters/matchupPlayerAdapter'
 import { displayPlayerFromUnifiedRow } from '@/lib/player-data/adapters/redraftDisplayPlayers'
-import {
-  getDraftRoomDisplayInjury,
-  getDraftRoomDisplayIntelligence,
-} from '@/lib/player-data/adapters/draftRoomDisplayFields'
-import { mapNormalizedDraftEntryToPlayerEntry } from '@/lib/player-data/adapters/draftRoomPlayerAdapter'
 
 const NOW = new Date('2026-07-03T12:00:00.000Z')
 
@@ -383,53 +377,5 @@ describe('G46C NFL redraft player intelligence data', () => {
       unifiedProjectedPoints: 19.8,
       canonicalPlayerIntelligence: intel,
     })
-  })
-
-  it('wires canonical intelligence through draft room and mock draft player rows', () => {
-    const entry = {
-      playerId: 'player-46c',
-      name: 'Draft Intelligence',
-      position: 'WR',
-      team: 'DAL',
-      adp: 18.1,
-      display: {
-        playerId: 'player-46c',
-        displayName: 'Draft Intelligence',
-        sport: 'NFL',
-        assets: {
-          headshotUrl: 'https://draft.test/player.png',
-          teamLogoUrl: 'https://draft.test/dal.svg',
-        },
-        team: {
-          teamId: 'dal',
-          abbreviation: 'DAL',
-          displayName: 'Dallas Cowboys',
-          sport: 'NFL',
-          logoUrl: 'https://draft.test/dal.svg',
-        },
-        stats: { adp: 18.1 },
-        metadata: {
-          position: 'WR',
-          teamAbbreviation: 'DAL',
-          injuryStatus: 'Doubtful',
-          practiceStatus: 'DNP',
-        },
-      },
-      projectionSource: 'sportsdataio',
-      nflDraftProjectionSplits: {
-        projectedPointsPerGame: 15.1,
-        projectedPoints: 255.5,
-      },
-    } as unknown as NormalizedDraftEntry
-
-    const row = mapNormalizedDraftEntryToPlayerEntry(entry, {
-      useAllFantasyAdp: true,
-      aiAdpLookupMaps: { strict: new Map(), loose: new Map() },
-    })
-
-    expect(getDraftRoomDisplayIntelligence(row)?.projection.projectedFantasyPoints).toBe(15.1)
-    expect(getDraftRoomDisplayIntelligence(row)?.ranking.adp).toBe(18.1)
-    expect(getDraftRoomDisplayInjury(row)).toBe('Doubtful')
-    expect(JSON.stringify(getDraftRoomDisplayIntelligence(row))).not.toContain('player-46c')
   })
 })

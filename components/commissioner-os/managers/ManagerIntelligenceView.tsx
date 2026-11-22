@@ -1,103 +1,94 @@
 'use client'
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { TrendIndicator } from '@/components/commissioner-os/primitives/TrendIndicator'
-import { EmptyState } from '@/components/commissioner-os/states'
+import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
+import { ManagerRecordView } from '@/components/core-app/manager-record/ManagerRecordSheet'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
-import type { ManagerDnaProfile } from '@/lib/commissioner-ui/managers/decision-os-client'
+import type { ManagerDirectoryEntry } from '@/lib/commissioner-ui/managers/decision-os-client/types'
+import type { ManagerRecord } from '@/lib/competitive-edge/managerRecord'
 import { Users } from 'lucide-react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { cardsCopy, cosLoaderText, managerNameText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cardsCopy, managerNameText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cosErrorText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
-export interface ManagerIntelligenceViewProps {
-  managers: ManagerDnaProfile[]
+interface ManagerIntelligenceViewProps {
+  managers: ManagerDirectoryEntry[]
   dataMode: CommissionerDataMode
+  /** The adapter's error. A failed read is never drawn as an empty league. */
+  errorMessage?: string | null
 }
 
-const TREND_LABEL = { rising: 'Rising', steady: 'Steady', declining: 'Declining' } as const
-const TREND_DIRECTION = { rising: 'up', steady: 'flat', declining: 'down' } as const
-const RELIABILITY_LABEL = {
-  reliable: 'Consistent',
-  inconsistent: 'Some gaps',
-  unreliable: 'Major gaps',
-} as const
-
 /**
- * Manager Intelligence owns behavioral pattern analysis only — this
- * component renders it, never computes it. No overall score is ever
- * shown (Privacy & Trust: no single collapsed "manager score"); every
- * profile shows Recognition and Risk with equal structural weight, never
- * one without the other where both apply.
+ * The commissioner's Managers screen — every manager's record as FACTS (2026-11-16, re-score item 11):
+ * trades by position, waiver claims and FAAB this season, past drafts. The record Chimmy and the manager
+ * card read, so the three never disagree.
  *
- * Spanish: the screen's own labels through `cardsCopy`; `recognition` and `riskFlag` are sentences the
- * loader wrote, translated at render through `cosLoaderText`. Manager names stay as written.
+ * 🛑 NO PROFILE, NO SCORE, NO PREDICTION. This screen once showed archetypes and a reliability score
+ * from the Manager DNA classifier, retired in Milestone 32. Every line now is a count a commissioner
+ * can check, and the facts are drawn by the same component the manager card uses.
  */
-export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntelligenceViewProps) {
+export function summaryLine(r: ManagerRecord, language: string): string {
+  const es = language === 'es'
+  const parts: string[] = []
+  if (r.trades.available) {
+    const n = r.trades.data.coverage.trades
+    parts.push(es ? `${n} ${n === 1 ? 'intercambio' : 'intercambios'}` : `${n} ${n === 1 ? 'trade' : 'trades'}`)
+  }
+  if (r.waivers.available) {
+    const n = r.waivers.data.claims
+    parts.push(es ? `${n} ${n === 1 ? 'reclamo ganado' : 'reclamos ganados'} esta temporada` : `${n} waiver ${n === 1 ? 'claim' : 'claims'} won this season`)
+    const faab = r.waivers.data.faabRemaining
+    if (faab != null) parts.push(es ? `$${faab} de FAAB` : `$${faab} FAAB left`)
+  }
+  if (r.drafts.available) {
+    const n = r.drafts.data.drafts
+    parts.push(es ? `${n} ${n === 1 ? 'draft' : 'drafts'} registrados` : `${n} ${n === 1 ? 'draft' : 'drafts'} on file`)
+  }
+  return parts.join(' · ')
+}
+
+export function ManagerIntelligenceView({ managers, dataMode, errorMessage }: ManagerIntelligenceViewProps) {
   const { language } = useOptionalLanguage()
   const ui = (english: string) => cardsCopy(english, language)
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
 
-      {managers.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={ui('No manager history yet.')}
-          description={ui('Behavioral profiles build over time as the season progresses.')}
-        />
+      {errorMessage ? (
+        <ErrorState message={cosErrorText(errorMessage, language)} />
+      ) : managers.length === 0 ? (
+        <EmptyState icon={Users} title={ui('No managers in this league yet.')} description={ui('Each manager’s record appears here once their team is imported.')} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {managers.map((manager) => (
-            <Card key={manager.id}>
-              <CardHeader>
-                {/* A real name stays as written; only the loader's own placeholder for a missing one translates. */}
-                <CardTitle>{managerNameText(manager.managerName, language)}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {/* Tenure and trend are each rendered ONLY when real. An absent trend means the
-                    manager has fewer than two behavioral snapshots, which is unknown — rendering a
-                    flat indicator there would be indistinguishable from a measured 'steady'. */}
-                {(manager.tenureSeasons !== undefined || manager.engagementTrend) && (
-                  <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
-                    {manager.tenureSeasons !== undefined ? (
-                      <span>{ui(`Tenure: ${manager.tenureSeasons} season${manager.tenureSeasons === 1 ? '' : 's'}`)}</span>
-                    ) : (
-                      <span />
-                    )}
-                    {manager.engagementTrend && (
-                      <TrendIndicator
-                        direction={TREND_DIRECTION[manager.engagementTrend]}
-                        label={ui(TREND_LABEL[manager.engagementTrend])}
-                      />
-                    )}
-                  </div>
-                )}
-                {/* The live backend classifies reliability as an ordinal level; demo/stub supply a
-                    score. Prefer the real classification, fall back to the score, show neither
-                    rather than a placeholder. */}
-                {(manager.engagementReliability ?? manager.reliabilityScore) !== undefined && (
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                    {ui('Reliability:')}{' '}
-                    {manager.engagementReliability
-                      ? ui(RELIABILITY_LABEL[manager.engagementReliability])
-                      : manager.reliabilityScore}
-                  </div>
-                )}
-                {manager.recognition && (
-                  <p className="text-xs" style={{ color: 'var(--severity-positive-text)' }}>
-                    {cosLoaderText(manager.recognition, language)}
-                  </p>
-                )}
-                {manager.riskFlag && (
-                  <p className="text-xs" style={{ color: 'var(--severity-elevated-text)' }}>
-                    {cosLoaderText(manager.riskFlag, language)}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <>
+          <p className="mb-3 text-xs" style={{ color: 'var(--muted)' }}>
+            {ui('What each manager has done, as counts you can check — never a label, never a prediction.')}
+          </p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {managers.map((m) => {
+              const summary = summaryLine(m.record, language)
+              return (
+                <Card key={m.id} data-testid="cos-manager-record">
+                  <CardHeader>
+                    {/* A real name stays as written; only the loader's own placeholder for a missing one translates. */}
+                    <CardTitle>{managerNameText(m.managerName, language)}</CardTitle>
+                    {summary ? (
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                        {summary}
+                      </p>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent>
+                    <details>
+                      <summary className="cursor-pointer text-sm">{ui('Full record')}</summary>
+                      <ManagerRecordView record={m.record} language={language} />
+                    </details>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

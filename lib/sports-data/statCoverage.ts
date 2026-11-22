@@ -29,7 +29,7 @@ export async function pendingStatCorrectionDates(db: Pick<PrismaClient, '$queryR
   if (!['NBA', 'NHL', 'MLB'].includes(sport)) return []
   const rows = await db.$queryRaw<Array<{ day: string }>>`SELECT
       to_char("startTime" AT TIME ZONE 'America/New_York', 'YYYY-MM-DD') AS day
-    FROM sports_stat_coverage WHERE sport = ${sport} AND kind = 'game' AND source = 'rolling_insights_live'
+    FROM sports_stat_coverage WHERE sport = ${sport} AND kind = 'game' AND (source = 'rolling_insights_live' OR (sport = 'NBA' AND source = 'nba_official_live'))
       AND "firstFinalObservedAt" <= ${new Date(now.getTime() - STAT_CORRECTION_WINDOW_MS)}
       AND "recordedAt" < "firstFinalObservedAt" + interval '12 hours'
     GROUP BY day ORDER BY min("firstFinalObservedAt"), day LIMIT ${Math.max(1, Math.min(5, Math.floor(limit) || 2))}`
@@ -73,7 +73,7 @@ export function dailyBoxCoverage(proof: FinalBoxCoverage): StatCoverage {
  * response includes measured defense stats for every team on the slate.
  * Finalization separately requires a complete post-correction refetch.
  * A successful HTTP response or an empty/partial week alone is insufficient. */
-export async function recordNflWeeklyCoverage(db: PrismaClient, season: number, week: number,
+export async function recordNflWeeklyCoverage(db: Pick<PrismaClient, 'sportsGame' | '$executeRaw'>, season: number, week: number,
   byId: ReadonlyMap<string, unknown>, now = new Date()): Promise<boolean> {
   const games = pickFreshestSourceRows(await db.sportsGame.findMany({ where: { sport: 'NFL', season, week, seasonType: 'regular' } }))
     .filter(game => !/pre|post|playoff/i.test(game.seasonType ?? '') && normalizeGameStatus(game.status) !== 'cancelled')
@@ -112,3 +112,6 @@ export async function readStatCoverage(db: PrismaClient, sport: string, season: 
     Array.isArray(row.teams) && row.teams.length >= 2 && Array.isArray(row.gameKeys) && row.gameKeys.length > 0 &&
     row.startTime instanceof Date && row.endTime instanceof Date)
 }
+
+/** Separate official provenance, accepted only for measured NBA game boxes. */
+export const acceptedDailyBoxSource = (sport: string, source: string) => source === 'rolling_insights_live' || sport === 'NBA' && source === 'nba_official_live'

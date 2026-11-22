@@ -9,7 +9,7 @@ import { showAdminNav } from "@/lib/navigation"
 import { getPrimaryChimmyEntry } from "@/lib/ai-product-layer"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 
-export interface MobileNavigationDrawerProps {
+interface MobileNavigationDrawerProps {
   open: boolean
   onClose: () => void
   isAdmin?: boolean

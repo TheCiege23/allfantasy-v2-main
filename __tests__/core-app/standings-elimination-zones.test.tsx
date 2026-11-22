@@ -141,9 +141,14 @@ describe('the Standings screen tile in an elimination league', () => {
     expect(container.textContent).not.toMatch(/outside the playoffs|in a playoff spot|in a bye spot/)
   })
 
-  it('CONTROL: without `elimination` the tile keeps its playoff wording', () => {
+  /*
+   * CONTROL (2026-11-14): an ordinary league has no place tile at all — its headline says the place and the
+   * playoff line ("You're 2nd of 4, …"). Only the elimination league keeps one, for the week's status.
+   */
+  it('CONTROL: without `elimination` there is no place tile, and the headline says it', () => {
     const { container } = render(<Standings data={data()} />)
-    expect(tile(container)).toMatch(/bye|playoff|bubble|clinched|eliminated/i)
-    expect(tile(container)).not.toMatch(/this week/)
+    expect(container.textContent).not.toContain('Table position')
+    expect(container.querySelector('.af-st-title')?.textContent).toMatch(/^You’re 2nd of 4, /)
+    expect(container.textContent).not.toMatch(/(safe|on the bubble) this week/)
   })
 })

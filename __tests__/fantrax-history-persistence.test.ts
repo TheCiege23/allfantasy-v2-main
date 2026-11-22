@@ -19,7 +19,7 @@ import type { FantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi
 
 const h = vi.hoisted(() => ({
   findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), upsert: vi.fn(), userUpsert: vi.fn(),
-  info: vi.fn(), rosters: vi.fn(), standings: vi.fn(), players: vi.fn(), schedule: vi.fn(), draft: vi.fn(),
+  info: vi.fn(), rosters: vi.fn(), standings: vi.fn(), players: vi.fn(), schedule: vi.fn(), draft: vi.fn(), picks: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
@@ -31,6 +31,7 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', async (original) => ({
   getFantraxLeagueInfo: h.info, getFantraxTeamRosters: h.rosters,
   getFantraxStandings: h.standings, getFantraxPlayerIds: h.players,
   fetchFantraxScheduleWithScores: h.schedule, getFantraxDraftResults: h.draft,
+  getFantraxDraftPicks: h.picks,
 }))
 import { importFantraxLeague } from '@/lib/league-import/fantrax/importFantraxLeague'
 import {
@@ -39,6 +40,7 @@ import {
   mergeFantraxSnapshotHistory,
   readStoredFantraxDerived,
   readStoredFantraxDraft,
+  readStoredFantraxFuturePicks,
 } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 
 const raw = JSON.parse(readFileSync('__tests__/fixtures/fantrax-draft-results.json', 'utf8')) as {
@@ -79,6 +81,38 @@ beforeEach(() => {
   h.standings.mockResolvedValue({ ok: true, data: [] })
   h.schedule.mockResolvedValue({ rows: [], position: { state: 'in_progress', period: 5 }, periodsRead: 0, periodsFailed: 0 })
   h.draft.mockResolvedValue(null)
+  h.picks.mockResolvedValue({ ok: false, failure: { kind: 'not_found', message: 'no picks' } })
+})
+
+describe('stored future picks', () => {
+  const future = [
+    { year: 2027, round: 1, originalOwnerTeamId: 'team1', currentOwnerTeamId: 'team2' },
+    { year: 2027, round: 1, originalOwnerTeamId: 'team2', currentOwnerTeamId: 'team2' },
+  ]
+
+  it('are written into the snapshot on import, each with its teams\' names', async () => {
+    h.picks.mockResolvedValue({ ok: true, data: { current: [], future } })
+    expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+    expect(h.picks).toHaveBeenCalledWith('vendor-id')
+    const written = h.updateMany.mock.calls[0][0].data.transactions
+    expect(readStoredFantraxFuturePicks(written)?.picks).toEqual([
+      { season: 2027, round: 1, originalTeamId: 'team1', ownerTeamId: 'team2', originalTeamName: 'My team', ownerTeamName: 'Other' },
+      { season: 2027, round: 1, originalTeamId: 'team2', ownerTeamId: 'team2', originalTeamName: 'Other', ownerTeamName: 'Other' },
+    ])
+  })
+
+  it('a pick read that FAILED, or threw, keeps the inventory on file and the import still succeeds', async () => {
+    h.picks.mockResolvedValue({ ok: true, data: { current: [], future } })
+    await importFantraxLeague(args)
+    const onFile = h.updateMany.mock.calls[0][0].data.transactions
+    h.findUnique.mockResolvedValue(snapshot({ transactions: onFile }))
+    for (const failure of [() => h.picks.mockResolvedValue({ ok: false, failure: { kind: 'unavailable', message: 'down' } }), () => h.picks.mockRejectedValue(new Error('boom'))]) {
+      h.updateMany.mockClear()
+      failure()
+      expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+      expect(readStoredFantraxFuturePicks(h.updateMany.mock.calls[0][0].data.transactions)?.picks).toHaveLength(2)
+    }
+  })
 })
 
 describe('stored draft board', () => {

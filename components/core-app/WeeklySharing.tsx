@@ -1,4 +1,5 @@
 'use client'
+import { useMyReferralLink } from '@/lib/referral/myReferralLink'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -38,6 +39,7 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
     } catch {}
   },[])
   const cardGeneration = useRef(0)
+  const referralLink = useMyReferralLink()
   const shareData = useMemo(()=>includeStory ? data : {...data,rivalry:undefined},[data,includeStory])
   const scenario = weeklyCardScenarios(shareData,path)
   useEffect(()=>{cardGeneration.current++;setImage(null);setStatus('')},[shareData,path,es])
@@ -46,7 +48,9 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
     try { drawWeeklyShareCard(canvasRef.current,shareData,es,path) }
     catch { setStatus(m.previewUnavailable) }
   },[previewOpen,shareData,path,es,m])
-  const post = weeklySocialPost(shareData,platform,es), story = rivalryNarrative(data,es)
+  // The sharer's referral link replaces the signed-in-only week URL when there is one (lib/referral/referralShareLink.ts).
+  const shareUrl = referralLink ?? WEEK_PUBLIC_URL
+  const post = weeklySocialPost(shareData,platform,es,shareUrl), story = rivalryNarrative(data,es)
   const commId = data.focusLeagueId && data.commissionerLeagueIds?.includes(data.focusLeagueId) ? data.focusLeagueId : null
   async function copy(text: string) {
     try { await navigator.clipboard.writeText(text); setStatus(m.copied) }
@@ -99,7 +103,7 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
       <textarea aria-label={m.postLabel} value={post} readOnly onFocus={e=>e.target.select()} rows={7}/>
       <div className="af-wbp-buttons"><button type="button" onClick={()=>copy(post)}>{m.copyPost}</button><button type="button" onClick={share}>{m.shareToApps}</button>
         {platform === 'X' ? <a href={`https://x.com/intent/tweet?text=${encodeURIComponent(post)}`} target="_blank" rel="noopener noreferrer">{m.openXDraft}</a> : null}
-        {platform === 'Facebook' ? <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(WEEK_PUBLIC_URL)}`} target="_blank" rel="noopener noreferrer">{m.openFacebook}</a> : null}
+        {platform === 'Facebook' ? <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer">{m.openFacebook}</a> : null}
         <button type="button" disabled={busy} onClick={createImage}>{m.downloadPng}</button>
         {image ? <button type="button" onClick={shareImage}>{m.shareCard}</button> : null}
         <button type="button" disabled={busy} onClick={exportExcel}>{hasCharts ? m.downloadExcelCharts : m.downloadExcel}</button>

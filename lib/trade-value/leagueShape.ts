@@ -59,7 +59,7 @@ const SLOT_ELIGIBILITY: Record<string, readonly string[]> = {
   IDP_FLEX: ['LB', 'DL', 'DB'],
 }
 
-export interface FlexGroup {
+interface FlexGroup {
   count: number
   eligible: readonly string[]
 }
@@ -86,7 +86,7 @@ export interface LeagueShape {
   deadlineWeek: number | null
 }
 
-export interface BuildLeagueShapeInput {
+interface BuildLeagueShapeInput {
   teams: number
   starterSlots: readonly string[] | null | undefined
   rosterSize?: number | null
@@ -213,7 +213,7 @@ export const REFERENCE_SHAPE: LeagueShape = {
  * Returns 1.0 exactly when the position's demand matches the reference, so a standard 12-team
  * league is byte-identical to the pre-shape behaviour.
  */
-export const DEMAND_EXPONENT = 0.5
+const DEMAND_EXPONENT = 0.5
 export const DEMAND_MULTIPLIER_MIN = 0.5
 export const DEMAND_MULTIPLIER_MAX = 2.5
 

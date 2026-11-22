@@ -91,7 +91,7 @@ export function buildHistoricalDecisionBackfill(input: {
   }
 }
 
-export type HistoricalBackfillResult = { scanned: number; created: number; recoveredMarketGrades: number; unavailableOriginalGrades: number }
+type HistoricalBackfillResult = { scanned: number; created: number; recoveredMarketGrades: number; unavailableOriginalGrades: number }
 
 /** Bounded, idempotent recovery. It writes only archived facts and never recalculates an old trade with today's data. */
 export async function backfillHistoricalTradeDecisionSnapshots(limit = 50): Promise<HistoricalBackfillResult> {

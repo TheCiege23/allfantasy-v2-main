@@ -33,8 +33,8 @@ import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
-import { buildRuntimeConstraints, formatConstraintsForPrompt, DEFAULT_TRADE_CONSTRAINTS, getPickValueWithRange, getPickRange } from '@/lib/trade-constraints'
-import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-values'
+import { buildRuntimeConstraints, formatConstraintsForPrompt } from '@/lib/trade-constraints'
+import { buildHistoricalTradeContext } from '@/lib/historical-values'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
@@ -48,7 +48,7 @@ import type { Asset } from '@/lib/trade-engine/types'
 import { computeDraftProjectionScore, devyAcceptanceAdjustment, applyTeamDirectionAdjustment } from '@/lib/devy-model'
 import { extractAcceptanceFeatures, acceptanceProbabilityWithLiquidity } from '@/lib/acceptance-model'
 import { computeLiquidity, liquidityTier, type LiquidityMetrics } from '@/lib/liquidity-model'
-import { simulateMatchup, computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
+import { computeChampionshipDelta, type TeamProjection } from '@/lib/monte-carlo'
 import { simulatePortfolio, type PortfolioAsset } from '@/lib/portfolio-simulator'
 import { generateOptimalCounters, buildAvailableSweeteners, type TradeShape } from '@/lib/counter-builder'
 import { prisma } from '@/lib/prisma'
@@ -63,6 +63,7 @@ import { evaluateCommissionerAlert } from '@/lib/legacy-tool/fairness'
 import { normalizeGrokSignalsToDeltaEvents, persistGrokDeltaEvents } from '@/lib/legacy-tool/grok-delta'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 import { loadTradeAnalyzerPlayerContext, type TradeContextResult } from '@/lib/legacy/tradeAnalyzerPlayerContext'
+import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import {
   buildPrivateTradeCoachingNotification,
   buildLeagueTradeProcessedNotification,
@@ -947,7 +948,6 @@ function getScarcityMultiplier(numTeams: number): number {
   return 1.0
 }
 
-
 function buildPickContext(assets: TradeAsset[], numTeams: number) {
   return assets
     .filter(a => a.type === 'pick')
@@ -1228,7 +1228,6 @@ The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; d
   )
 }
 
-
 type TradeProviderAudit = {
   providers: {
     openai: string
@@ -1293,8 +1292,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const sleeperB = String(reqData.sleeper_username_b || '').trim()
 
     const clientLeagueContext = reqData.leagueContext
-    const clientMarketContext = reqData.marketContext
-    const clientNflContext = reqData.nflContext
 
     console.log('[TradeAnalyze] incoming roster ids', {
       leagueId,
@@ -1395,6 +1392,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       rateLimit: { action: 'trade_analyze', maxRequests: 20, windowMs: 60_000 },
     })
     if (!gate.ok) return gate.response
+
+    /*
+     * AF Legacy (`legacy_trade_hub`, owner's decision 2026-11-17: lock all four free AF Legacy AI tools). The Trade Hub report (and /af-legacy/trade-analyzer, which calls this route) ran its
+     * model for anyone before; the /af-legacy screen now locks it too. A guest actor holds no plan.
+     */
+    const plan = await requireFeatureEntitlement({ userId: gate.identity.actorId, userEmail: null, featureId: 'legacy_trade_hub' })
+    if (!plan.ok) return plan.response
     const viewerSleeperUsername = gate.identity.sleeperUsername
 
     // Client-provided rosters (already prepared by frontend)
@@ -2919,5 +2923,4 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     )
   }
 })
-
 

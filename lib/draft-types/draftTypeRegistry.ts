@@ -424,6 +424,23 @@ export function isExecutionModeDraftType(id: string): boolean {
 }
 
 /**
+ * `LeagueSettings.draftType` ('snake' | 'linear' | 'auction' | '3rd_reversal') for a draft hub type and its 3rd-round
+ * reversal flag (2026-11-15). The inverse of `sessionDraftTypeFromLeagueSettings`
+ * (lib/live-draft-engine/DraftSessionService.ts).
+ *
+ * 🛑 DRAFT TYPE LIVED IN TWO STORES THAT COULD DISAGREE. The Draft tab (PATCH /draft/settings) wrote the hub's
+ * `config.draft_type`; the settings window wrote `LeagueSettings.draftType`. Each screen showed its own value, the
+ * last save won on the live session, and a session rebuilt from scratch read only `LeagueSettings`. The Draft tab
+ * now writes both.
+ */
+export function leagueSettingsDraftTypeFor(draftType: string, thirdRoundReversal: boolean): 'snake' | 'linear' | 'auction' | '3rd_reversal' {
+  const core = mapCanonicalDraftTypeToEngineCore(draftType)
+  if (core === 'auction') return 'auction'
+  if (core === 'linear') return 'linear'
+  return thirdRoundReversal ? '3rd_reversal' : 'snake'
+}
+
+/**
  * Map persisted / API canonical draft type to engine core type for draft session + pick order.
  */
 export function mapCanonicalDraftTypeToEngineCore(draftType: string): EngineCoreDraftType {

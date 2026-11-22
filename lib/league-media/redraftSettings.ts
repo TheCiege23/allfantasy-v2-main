@@ -24,8 +24,8 @@ import { resolveRedraftIdentity, type RedraftIdentityLeague, type RedraftSportTh
 import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 
-export type RedraftSettingsPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason'
-export type RedraftSettingsStage = 'done' | 'now' | 'next'
+type RedraftSettingsPhase = 'Setup' | 'Draft' | 'Regular season' | 'Playoffs' | 'Offseason'
+type RedraftSettingsStage = 'done' | 'now' | 'next'
 
 /** The four points of a redraft season a setting belongs to, in order. */
 type SeasonPoint = 'before' | 'draft' | 'season' | 'playoffs'
@@ -98,7 +98,7 @@ export type RedraftSettingsLeague = RedraftIdentityLeague & {
   settings?: unknown
 }
 
-export type RedraftSettingsSection = { when: string; stage?: RedraftSettingsStage }
+type RedraftSettingsSection = { when: string; stage?: RedraftSettingsStage }
 
 export type RedraftSettingsView = {
   sport: RedraftSportTheme

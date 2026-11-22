@@ -11,12 +11,13 @@
  * The only additions are friendlier wording for the same codes.
  */
 
+import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
 import { getEffectiveLeagueType, type CreateLeagueV2State } from './state'
 import { getTeamCountOptions } from './rules-engine'
 import type { CreateLeagueCompletionIssue } from './form-completion'
 
 /** The wizard's four steps (Summary was folded into Review). Keep in step with CreateLeagueWizard. */
-export type CreateWizardStep = 'sport' | 'basics' | 'draft' | 'review'
+type CreateWizardStep = 'sport' | 'basics' | 'draft' | 'review'
 
 export const CREATE_WIZARD_STEPS: readonly CreateWizardStep[] = ['sport', 'basics', 'draft', 'review']
 
@@ -39,7 +40,7 @@ export type CreateWizardField =
   | 'survivor'
   | 'tePremium'
 
-export interface StepIssue extends CreateLeagueCompletionIssue {
+interface StepIssue extends CreateLeagueCompletionIssue {
   step: CreateWizardStep
   field: CreateWizardField | null
 }
@@ -101,10 +102,11 @@ export function friendlyIssueMessage(issue: CreateLeagueCompletionIssue, state: 
   switch (issue.code) {
     case 'team_count_invalid':
     case 'tournament_pool_invalid': {
-      const sizes = lt === 'redraft' ? [] : getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+      const sizes = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+      if (lt === 'redraft') return `Pick between ${sizes[0] ?? 2} and ${sizes[sizes.length - 1] ?? MAX_NATIVE_TEAMS} teams.`
       if (sizes.length === 1) return `${format} leagues need exactly ${sizes[0]} managers.`
       if (sizes.length > 1) return `${format} leagues need ${listSizes(sizes)} managers. You have ${state.teamCount}.`
-      return 'Pick between 2 and 32 teams.'
+      return `Pick between 2 and ${MAX_NATIVE_TEAMS} teams.`
     }
     case 'team_count_required':
       return 'Enter how many teams will play.'

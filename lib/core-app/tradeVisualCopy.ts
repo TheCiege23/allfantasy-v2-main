@@ -1,7 +1,7 @@
 import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
-export const tradeVisualSpanish: Record<string,string> = {
+const tradeVisualSpanish: Record<string,string> = {
   "We couldn’t check your roster limit.":"No pudimos comprobar el límite de tu plantilla.",
   // Plain-language trade copy (2026-11-11).
   "sent,":"enviado,",
@@ -239,12 +239,23 @@ export const tradeVisualSpanish: Record<string,string> = {
   "League settings are unavailable, so this league trade cannot be graded.":"La configuración de la liga no está disponible, así que este intercambio de liga no se puede calificar.",
   "only two-team trades are graded":"solo se califican los intercambios entre dos equipos",
   "FAAB in this trade is not priced on the league chart":"el FAAB de este intercambio no tiene precio en la tabla de la liga",
+  "this trade moved waiver budget, and the league's own budget isn't on file to price it against":"este intercambio movió presupuesto de reclamos (FAAB), y el presupuesto propio de la liga no está registrado para valorarlo",
   "Draft picks are not priced in a Guilly league — every roster is gone by next season. This deal is not graded.":"Las selecciones del draft no se valoran en una liga Guilly: ninguna plantilla sigue en la próxima temporada. Este intercambio no se califica.",
   "No live team’s FAAB balance is on file, so FAAB in this deal cannot be priced. This deal is not graded.":"No hay registrado el saldo de FAAB de ningún equipo vivo, así que el FAAB de este intercambio no se puede valorar. Este intercambio no se califica.",
 }
 
 /** Templates use {n} slots. Captured player/team names are preserved, never machine-translated. */
 const templates: Array<[string,string]> = [
+  // A manager's whole trade record (lib/competitive-edge/tradeEdge.ts buildTradeRecord, 2026-11-16). The
+  // "none" forms come first: the general form below would match them too and translate "none" as a count.
+  ["{0} took on a {1} in {2} of their {3} trades and sent one away in none.","{0} adquirió un {1} en {2} de sus {3} intercambios y no cedió ninguno."],
+  ["{0} sent away a {1} in {2} of their {3} trades and took one on in none.","{0} cedió un {1} en {2} de sus {3} intercambios y no adquirió ninguno."],
+  ["{0} took on a {1} in {2} of their {3} trades and sent one away in {4}.","{0} adquirió un {1} en {2} de sus {3} intercambios y cedió uno en {4}."],
+  ["{0} took on draft picks in {1} of their {2} trades and gave picks up in {3}.","{0} adquirió selecciones en {1} de sus {2} intercambios y cedió selecciones en {3}."],
+  // The trade record's coverage shortfall (tradeEdge.ts) — shown on the manager card and Commissioner Managers.
+  ["Only {0} completed trades on file — fewer than {1}, so no pattern is shown.","Solo hay {0} intercambios completados registrados (menos de {1}), así que no se muestra ningún patrón."],
+  ["Only {0} completed trade on file — fewer than {1}, so no pattern is shown.","Solo hay {0} intercambio completado registrado (menos de {1}), así que no se muestra ningún patrón."],
+  ["No completed trades by {0} on file, so there is nothing to read yet.","No hay intercambios completados de {0} registrados, así que todavía no hay nada que leer."],
   // Plain-language trade copy (2026-11-11).
   ["You send {0} player and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugador y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],
   ["You send {0} players and receive {1}. {2} The grade already counts what that roster spot is worth. Check your lineup to see who you’d drop.","Envías {0} jugadores y recibes {1}. {2} La nota ya cuenta lo que vale ese puesto en la plantilla. Revisa tu alineación para ver a quién darías de baja."],

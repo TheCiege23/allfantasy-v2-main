@@ -11,6 +11,7 @@
  *   - All numbers come from DB; none are invented by AI
  *   - safeAnswerRules enforced in every AI system prompt
  */
+import { resolveViewingRoster } from '@/lib/league/viewerTeams'
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { loadFantasyDataEvidence } from "@/lib/fantasy-data/fantasyDataEvidence"
@@ -662,17 +663,29 @@ async function loadViewerRoster(
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean)
 
-    const roster = await (prisma as any).roster.findFirst({
-      where: {
-        leagueId,
-        OR: rosterOwnerIds.map((platformUserId) => ({ platformUserId })),
-      },
-      select: {
-        playerData: true,
-        settings: true,
-        league: { select: { platform: true, sport: true } },
-      },
-    }).catch(() => null)
+    const rosterSelect = { playerData: true, settings: true, league: { select: { platform: true, sport: true } } }
+    /*
+     * A manager who runs several teams here: the team above and the roster below are separate reads and
+     * could describe two different teams. The roster is then the manager's first (a read:
+     * lib/league/viewerTeams.ts) and the name is that roster's own team. One team: the original read.
+     */
+    const viewing = await resolveViewingRoster(leagueId, userId, null, { allowCoOwner: false }).catch(() => null)
+    let ownTeamName: string | null = null
+    let roster: any = null
+    if (viewing && viewing.heldCount > 1) {
+      roster = await (prisma as any).roster.findFirst({ where: { leagueId, id: viewing.rosterId }, select: rosterSelect }).catch(() => null)
+      const own = await (prisma as any).leagueTeam.findFirst({ where: { leagueId, externalId: viewing.rosterId }, select: { teamName: true } }).catch(() => null)
+      ownTeamName = own?.teamName ? String(own.teamName) : null
+    }
+    if (!roster) {
+      roster = await (prisma as any).roster.findFirst({
+        where: {
+          leagueId,
+          OR: rosterOwnerIds.map((platformUserId) => ({ platformUserId })),
+        },
+        select: rosterSelect,
+      }).catch(() => null)
+    }
     if (!roster) return null
 
     const parsePlayer = (p: unknown): LeagueGroundingRosterPlayer | null => {
@@ -741,7 +754,7 @@ async function loadViewerRoster(
 
     return {
       userId,
-      teamName: team?.teamName ? String(team.teamName) : null,
+      teamName: ownTeamName ?? (team?.teamName ? String(team.teamName) : null),
       idSpace: rosterIdSpaceOf(platform, sport) === "other" ? "other" : "sleeper",
       starters: allPlayers.filter((p) => starterIds.has(p.playerId) || p.isStarter),
       bench: allPlayers.filter((p) => !starterIds.has(p.playerId) && !p.isStarter),

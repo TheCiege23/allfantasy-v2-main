@@ -7,7 +7,7 @@
  */
 import type { IslandScene } from '@/lib/core-app/survivorIsland'
 
-export type LegacyIslandSceneInput = {
+type LegacyIslandSceneInput = {
   phase?: string | null
   councilStatus?: string | null
   challengeStatus?: string | null

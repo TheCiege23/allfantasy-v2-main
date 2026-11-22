@@ -194,6 +194,15 @@ provider call is the cache-MISS path, exactly as this file already sanctions for
 | `app/api/music/track-info/route.ts:66` | `theaudiodb.com` |
 | `server/api-route-modules/legacy/trade/analyze/route.ts:434` | `thesportsdb.com` |
 
+✅ **RESOLVED — re-measured 2026-11-15 on `origin/main`: none of the six is a request-path finding any more.**
+`app/api/mfl/leagues/route.ts` no longer exists; `app/api/mfl/import` now goes through the import pipeline
+(ingestion, an explicit user action); the trade-analyze route no longer calls TheSportsDB. The music routes
+read `lib/music/musicCatalog.ts` (30-day `sportsDataCache` read-through) over the adapter
+`lib/music/theAudioDbFetch.ts`, the ONLY place TheAudioDB's key-in-path URL is built; live-roster reads
+`lib/sleeper/liveLeagueFeed.ts` (short shared cache: rosters 60s, picks 10s) over `lib/sleeper/liveLeagueFetch.ts`.
+Both adapters are allowlisted by exact path on a caller census. The only request-path findings left are the
+three accepted read-through caches above. The table below is kept as the 2026-09-12 record.
+
 ⚠ **THE TWO MFL ONES ALSO PUT A CREDENTIAL ON THE WIRE FROM A REQUEST PATH**, sending
 `Cookie: MFL_USER_ID=${connection.mflCookie}`. That is the `RSC_token`-in-a-query-parameter
 shape reached a different way — and note the `db-first-auth-exchange:` marker correctly
@@ -2456,7 +2465,11 @@ git ls-remote origin refs/heads/worker-release   # what the crons are actually r
 ```
 
 ⚠ Expect it to be behind `main` by up to a day. That is the design. If a cron fix is
-urgent, dispatch the workflow by hand rather than repointing the service. There is also
+urgent, dispatch the workflow by hand rather than repointing the service — **but a hand dispatch
+within 6 hours of the last advance is refused unless it passes `force=true` and a `reason`.**
+On 2026-11-22 the workflow ran 12 times in a day, 11 by hand from sessions each wanting its own
+fix live, so the "daily" worker redeployed about every two hours and two overlapping builds hung.
+Most cron fixes can wait for 21:20 UTC; say why yours cannot. There is also
 `/api/af-debug/sha` on either service, which answers `{branch, sha}` for the container
 actually serving you.
 

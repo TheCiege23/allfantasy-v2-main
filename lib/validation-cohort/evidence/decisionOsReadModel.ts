@@ -10,7 +10,7 @@ import type { OperatingSystemKey } from '../types'
 import { probeLeague } from '../decisionOsProbe'
 import type { PersistedLeagueEvidence } from '../persistence/evidenceStore'
 
-export type OsCompat = {
+type OsCompat = {
   os: OperatingSystemKey
   available: boolean
   evidence: string

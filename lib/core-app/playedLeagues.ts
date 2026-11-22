@@ -14,14 +14,6 @@
  */
 
 /**
- * The fields this rule reads. Documentation, not a constraint — see the note on `toPlayedLeagues`.
- */
-export type PlayableLeague = {
-  name?: unknown
-  hasUnifiedRecord?: boolean
-}
-
-/**
  * Played leagues, name-sorted.
  *
  * ⚠ `!== false`, NOT `=== true`. The flag is optional: a row that simply does not carry it is a

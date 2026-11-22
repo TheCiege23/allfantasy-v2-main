@@ -14,7 +14,7 @@ import { lineupEntriesFromSettings } from '@/lib/core-app/valueBook'
  * decide the 1QB / superflex chart. Bench, IR and taxi are not starters and are ignored.
  */
 
-export type QbClass = 'ONE_QB' | 'SUPERFLEX' | 'QB_HEAVY'
+type QbClass = 'ONE_QB' | 'SUPERFLEX' | 'QB_HEAVY'
 
 export type LineupPosition = 'QB' | 'RB' | 'WR' | 'TE'
 
@@ -60,7 +60,7 @@ const IDP_SLOTS = new Set(['DL', 'LB', 'DB', 'DE', 'DT', 'CB', 'S', 'IDP_FLEX', 
 const NOT_STARTERS = new Set(['BN', 'BE', 'BENCH', 'IR', 'TAXI', 'RES', 'NA'])
 
 /** Who usually fills each flex slot — see the `demand` caveat above. */
-export const FLEX_SHARES = {
+const FLEX_SHARES = {
   flex: { RB: 0.45, WR: 0.45, TE: 0.1 },
   wrrb: { RB: 0.5, WR: 0.5 },
   rec: { WR: 0.8, TE: 0.2 },

@@ -36,6 +36,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/sports-data/sleeperMarketService', () => ({ getWeekBoard: vi.fn(async () => null) }))
 
 import { writeAfProjectionSnapshots } from '@/lib/af-projections/writeAfProjectionSnapshots'
+import { getWeekBoard } from '@/lib/sports-data/sleeperMarketService'
 
 const fielder = (position: string, stats: Record<string, number>) => ({ group: 'fielders', position, stats })
 const keeper = (stats: Record<string, number>) => ({ group: 'goalkeepers', position: 'Goalkeeper', stats })
@@ -61,6 +62,8 @@ describe('the soccer projection run', () => {
     const result = await writeAfProjectionSnapshots({ sport: 'SOCCER' })
     expect(result).toMatchObject({ sourceSeason: 2026, targetSeason: 2026, written: 2, refused: 1 })
     expect(result.refusalsByReason).toEqual({ insufficient_sample: 1 })
+    expect(getWeekBoard).not.toHaveBeenCalled()
+    expect(result.errors).toEqual([])
   })
 
   it('stores per-appearance rates in the engine’s keys and a per-appearance points projection', async () => {

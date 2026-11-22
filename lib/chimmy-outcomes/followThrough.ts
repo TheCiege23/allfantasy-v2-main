@@ -23,9 +23,9 @@ export const BEHAVIOR_HALF_LIFE_DAYS = 60
 export const ACCEPTED_EVENT = 'chimmy_recommendation_accepted'
 export const REJECTED_EVENT = 'chimmy_recommendation_rejected'
 
-export type FeedbackEventRow = { actionType: string; result: unknown; createdAt?: Date | null }
+type FeedbackEventRow = { actionType: string; result: unknown; createdAt?: Date | null }
 
-export type FollowThroughTally = {
+type FollowThroughTally = {
   /** Decayed weight of accepted and rejected votes, and of both. */
   accepted: number
   rejected: number

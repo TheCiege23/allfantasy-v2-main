@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * data"). The Player Finder posts no body and keeps refreshing every claimed league.
  */
 const h = vi.hoisted(() => ({ refresh: vi.fn() }))
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: vi.fn(async () => ({ ok: true, userId: 'me' })) }))
+vi.mock('@/lib/auth-guard', () => ({ requireAgeConfirmedUser: vi.fn(async () => ({ ok: true, userId: 'me' })) }))
 vi.mock('@/lib/rate-limit', () => ({ consumeRateLimit: vi.fn(() => ({ success: true })), buildRateLimit429: vi.fn() }))
 vi.mock('@/lib/import-os/collector/lineupRefresh', () => ({ refreshLineupsNow: h.refresh }))
 

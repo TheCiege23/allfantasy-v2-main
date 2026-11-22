@@ -377,7 +377,7 @@ export function useLeagueWarRoomCompanion({
           }),
         )
         setCopilotEmptyMessage(
-          'Copilot picks refresh when your team is on the clock. War Room AI and headlines below stay available.',
+          'Copilot picks refresh when your team is on the clock. War Room Chimmy and headlines below stay available.',
         )
         return
       }

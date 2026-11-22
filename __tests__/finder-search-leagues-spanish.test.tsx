@@ -152,7 +152,7 @@ describe('PlayerSearchBox in Spanish', () => {
   it('the search box, its note and every suggestion chip read Spanish — signed in and out', async () => {
     lang.language = 'es'
     const { container, unmount } = render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
-    await typeInto('Buscar cualquier jugador')
+    await typeInto('Busca un jugador o un equipo')
     expect(screen.getByRole('button', { name: 'Buscar' })).toBeTruthy()
     expect(screen.getByRole('listbox', { name: 'Sugerencias' })).toBeTruthy()
     const out = ownText(container)
@@ -183,7 +183,7 @@ describe('PlayerSearchBox in Spanish', () => {
 
   it('English is unchanged', async () => {
     const { container } = render(<PlayerSearchBox query="" selectedLeagueId={null} signedIn />)
-    await typeInto('Search any player')
+    await typeInto('Search a player or team')
     expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy()
     expect(screen.getByRole('listbox', { name: 'Suggestions' })).toBeTruthy()
     const out = container.textContent ?? ''

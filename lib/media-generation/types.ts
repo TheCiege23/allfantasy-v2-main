@@ -4,7 +4,7 @@
  */
 
 export type MediaType = 'podcast' | 'video' | 'blog' | 'social'
-export type MediaProvider = 'heygen' | 'grok' | 'openai' | 'internal'
+type MediaProvider = 'heygen' | 'grok' | 'openai' | 'internal'
 export type MediaWorkflowAction = 'generate' | 'preview' | 'approve' | 'publish'
 
 export interface MediaGenerateResponse {

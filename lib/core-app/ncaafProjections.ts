@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { bridgeNcaafRosterIdsToCfbdIds, type NcaafRosterNamespace } from '@/lib/redraft/ncaafGameLogIdBridge'
+import { resolveRosterIdsToKeys } from '@/lib/waivers/seasonRatePool'
 import type { PlayerProjection } from './playerProjections'
 
 /**
@@ -149,7 +150,12 @@ export async function lookupNcaafProjections(
     const cfbdId = cfbdByRosterId.get(id)
     return cfbdId ? [[id, cfbdId] as const] : []
   }))
-  return lookupNcaafProjectionsForCfbdLinks(ordered, season)
+  const out = await lookupNcaafProjectionsForCfbdLinks(ordered, season)
+  const missing = ids.filter(id => !out.has(id))
+  if (!missing.length || namespace === 'pool') return out
+  const linked = await resolveRosterIdsToKeys(prisma, 'NCAAF', namespace === 'fantrax' ? 'fantraxId' : 'espnId', missing, new Set())
+  for (const [id, projection] of await lookupNcaafProjectionsForCfbdLinks(linked, season)) out.set(id, projection)
+  return out
 }
 
 /** Read projections by an already-proven roster ID to CFBD athlete ID link. */

@@ -69,15 +69,16 @@ describe("the fallback places a request the edge could not", () => {
     expect(geo.detectionSource).toBe("ip_api")
   })
 
-  it("BLOCKS Washington on a request shaped like production traffic today", async () => {
+  it("PAID-BLOCKS Washington on a request shaped like production traffic today", async () => {
     // The end-to-end assertion. Before this change stateCode was null here and
-    // isFullyBlocked(null) is false, so the gate did not fire.
+    // the gate did not fire. (Nov 2026: Washington is paid-block, no longer full-block.)
     mockedIpApi.mockResolvedValue({ country_code: "US", region_code: "WA" })
 
     const geo = await detectUserState(unplaced())
 
     expect(geo.stateCode).not.toBeNull()
-    expect(isFullyBlocked(geo.stateCode as string)).toBe(true)
+    expect(isPaidBlocked(geo.stateCode as string)).toBe(true)
+    expect(isFullyBlocked(geo.stateCode as string)).toBe(false)
   })
 
   it("applies the paid-tier block to Nevada through the same path", async () => {

@@ -625,8 +625,9 @@ describe('TradesBoard', () => {
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
     const text = container.textContent ?? ''
-    expect(text).toMatch(/ungraded: one side could not be priced/i)
-    expect(container.querySelector('.af-bd-v')?.textContent).not.toBe('C')
+    // 2026-11-14: "Not graded: <reason>", and no grade on either side.
+    expect(text).toMatch(/Not graded: one side could not be priced/i)
+    expect(container.querySelector('.af-tg-grade')).toBeNull()
   })
 
   /* An unpriced asset is a dash. A zero beside a real name says he is worthless. */
@@ -822,7 +823,8 @@ describe('DraftHqBoard', () => {
         totalLeagues={65}
       />,
     )
-    expect(container.textContent ?? '').toMatch(/55 of your leagues carry no draft we can read/i)
+    // One footer clause since the 2026-11-13 guide (was "55 of your leagues carry no draft we can read").
+    expect(container.textContent ?? '').toMatch(/55 leagues have no draft we can read/i)
   })
 })
 
@@ -1262,7 +1264,7 @@ describe('TradesBoard — whose side is whose', () => {
   const sideLabels = (c: HTMLElement) =>
     Array.from(c.querySelectorAll('.af-bd-side-label')).map((n) => n.textContent)
 
-  it('says "You received" for the reader and names the other manager', () => {
+  it('says "You got" for the reader and names the other manager', () => {
     const { container } = render(
       <TradesBoard
         data={tradesData({
@@ -1274,8 +1276,9 @@ describe('TradesBoard — whose side is whose', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    expect(sideLabels(container)).toContain('You received')
-    expect(sideLabels(container)).toContain('Jordan received')
+    // 2026-11-14: "<team> got", with that team's grade beside it (none here: this trade is ungraded).
+    expect(sideLabels(container)).toContain('You got')
+    expect(sideLabels(container)).toContain('Jordan got')
     // Each side holds what its named manager RECEIVED, so the reader's grade sits over what they got.
     const [mine, theirs] = Array.from(container.querySelectorAll('.af-bd-side'))
     expect(mine.textContent).toContain('Dana Okoye')
@@ -1288,8 +1291,8 @@ describe('TradesBoard — whose side is whose', () => {
     const { container } = render(
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
-    expect(sideLabels(container)).toContain('TheCiege24 received')
-    expect(sideLabels(container)).not.toContain('You received')
+    expect(sideLabels(container)).toContain('TheCiege24 got')
+    expect(sideLabels(container)).not.toContain('You got')
   })
 })
 
@@ -1392,12 +1395,18 @@ describe('TradesBoard — a priced pick shows its price', () => {
     expect(row!.querySelector('.af-bd-asset-val')?.textContent).toBe('\u2014')
   })
 
-  it('names both managers in the value split, summing to 100', () => {
-    const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
-    const text = container.textContent ?? ''
-    expect(text).toContain('Value split')
-    expect(text).toContain('TheCiege24 42%')
-    expect(text).toContain('Jordan 58%')
+  /*
+   * 2026-11-14: the percentage split is gone — it restated the two grades. What replaced it is a grade
+   * beside EACH team, named, which is the half of the verdict one letter could not carry.
+   */
+  it('puts a grade beside each team, named', () => {
+    const d = withPick(1231, 'D', 42)
+    d.windows[0].latest = { ...d.windows[0].latest!, partnerLetter: 'B' }
+    const { container } = render(<TradesBoard data={d} allHref="/core/trades?all=1" />)
+    const [first, second] = [...container.querySelectorAll('.af-bd-side')] as HTMLElement[]
+    expect(first.querySelector('.af-tg-grade')?.getAttribute('aria-label')).toBe('TheCiege24: grade D')
+    expect(second.querySelector('.af-tg-grade')?.getAttribute('aria-label')).toBe('Jordan: grade B')
+    expect(container.textContent).not.toContain('Who got more value')
   })
 
   /*
@@ -1437,7 +1446,11 @@ describe('TradesBoard — the breakdown', () => {
     }
   }
 
-  it('renders every sentence of the breakdown', () => {
+  /*
+   * 2026-11-14: folded under "How this was graded", and without its first sentence — that one is the
+   * verdict in other words, which the verdict line and the grades beside each team already say.
+   */
+  it('folds the rest of the breakdown, leaving out the verdict sentence', () => {
     const { container } = render(
       <TradesBoard
         data={withBreakdown([
@@ -1447,11 +1460,11 @@ describe('TradesBoard — the breakdown', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    const items = [...container.querySelectorAll('.af-bd-breakdown li')].map((el) => el.textContent)
-    expect(items).toEqual([
-      'Jordan got the better end — TheCiege24 took 42%.',
-      'The most valuable asset was Dana Okoye, and Jordan got him.',
-    ])
+    const fold = container.querySelector('[data-testid="trade-how-graded"]') as HTMLDetailsElement
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.open).toBe(false)
+    const items = [...fold.querySelectorAll('.af-bd-breakdown li')].map((el) => el.textContent)
+    expect(items).toEqual(['The most valuable asset was Dana Okoye, and Jordan got him.'])
   })
 
   /*
@@ -1465,6 +1478,6 @@ describe('TradesBoard — the breakdown', () => {
       <TradesBoard data={withBreakdown([], null)} allHref="/core/trades?all=1" />,
     )
     expect(container.querySelector('.af-bd-breakdown')).toBeNull()
-    expect(container.textContent).toContain('ungraded')
+    expect(container.textContent).toContain('Not graded')
   })
 })

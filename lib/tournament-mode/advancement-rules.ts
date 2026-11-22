@@ -6,17 +6,6 @@
 
 import { getQualificationCutSlotsPerConference } from './tournament-sport-cutoffs'
 
-/** @deprecated Prefer getQualificationCutSlotsPerConference with full tournament settings. */
-export const ADVANCEMENT_SLOTS_BY_POOL: Record<number, number> = {
-  60: 16,
-  72: 30,
-  120: 32,
-  144: 60,
-  180: 48,
-  216: 90,
-  240: 64,
-}
-
 /** Fallback advancement per conference when only pool size is known (assumes 2 conferences, sport NFL). */
 export function getAdvancementSlotsPerConference(participantPoolSize: number): number {
   return getQualificationCutSlotsPerConference('NFL', participantPoolSize, undefined, 2)
@@ -24,8 +13,6 @@ export function getAdvancementSlotsPerConference(participantPoolSize: number): n
 
 /** Default tiebreaker order (deterministic). Commissioner override can be stored in Tournament.settings.qualificationTiebreakers. */
 export const DEFAULT_TIEBREAKER_ORDER = ['wins', 'points_for'] as const
-
-export type TiebreakerKey = 'wins' | 'points_for' | 'points_against' | 'head_to_head'
 
 /**
  * Head-to-head record between two rosters in the same league.

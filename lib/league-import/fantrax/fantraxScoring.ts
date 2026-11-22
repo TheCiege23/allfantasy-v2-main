@@ -21,7 +21,7 @@ import type { FantraxLeagueInfo } from './fantraxApi'
 
 export type FantraxScoringRule = { stat_key: string; points_value: number }
 
-export type FantraxScoringResult = {
+type FantraxScoringResult = {
   rules: FantraxScoringRule[]
   /** Categories we could not place, named rather than dropped. */
   gaps: string[]

@@ -1,6 +1,8 @@
 import { isAcceptedCoOwnerForRedraftRoster } from '@/lib/team-coowners/access'
 import { randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -91,7 +93,7 @@ async function rosterAccess(input: {
   })
   if (!roster) return { ok: false as const, status: 404 as const, error: 'Roster not found' }
   if (roster.ownerId === input.userId || await isAcceptedCoOwnerForRedraftRoster(input.leagueId, roster.id, input.userId)) return { ok: true as const, roster, isCommissioner: false }
-  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId)
+  const commissioner = await assertLeagueCommissioner(input.leagueId, input.userId, 'league')
   if (commissioner.ok) return { ok: true as const, roster, isCommissioner: true }
   return { ok: false as const, status: 403 as const, error: 'Forbidden' }
 }
@@ -139,16 +141,19 @@ export async function GET(req: NextRequest) {
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
-  const commissioner = await assertLeagueCommissioner(leagueId, userId)
+  const commissioner = await assertLeagueCommissioner(leagueId, userId, 'view')
   const wantsLeagueScope = scope === 'league'
   if (wantsLeagueScope && !commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // League OS holds the ruleset 60 s, so one page load's resolvers share it (GET only — see `WaiverRuntimeRulesDeps`).
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftWaiverRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
     includeFreeAgents,
-  })
+  }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })
@@ -176,10 +181,14 @@ export async function POST(request: Request) {
   if (!leagueId) return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
   const member = await assertLeagueMember(leagueId, userId)
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueVariant: true } })
+  if (league?.leagueVariant === 'survivor_guillotine' && action !== 'cancel_claim') {
+    return NextResponse.json({ error: 'Use your Survivor Guilly league waiver board for claims and processing.' }, { status: 409 })
+  }
 
   try {
     if (action === 'process_waivers' || action === 'apply_commissioner_override') {
-      const commissioner = await assertLeagueCommissioner(leagueId, userId)
+      const commissioner = await assertLeagueCommissioner(leagueId, userId, 'league')
       if (!commissioner.ok) return NextResponse.json({ error: 'Forbidden' }, { status: commissioner.status })
       const result = await processNflRedraftWaiverWindow({
         seasonId: body.seasonId,

@@ -13,7 +13,7 @@ import { FINDER_SPORTS } from './finderSports'
 
 export type HomeSport = { sport: string; leagues: number }
 
-export type HomeSportTab = { id: string; sport: string | null; leagues: number; href: string; active: boolean }
+type HomeSportTab = { id: string; sport: string | null; leagues: number; href: string; active: boolean }
 
 const ORDER: readonly string[] = FINDER_SPORTS
 

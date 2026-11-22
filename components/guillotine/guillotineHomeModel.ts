@@ -23,7 +23,7 @@ export interface ChopLineRow {
   cutAbove: boolean
 }
 
-export interface ChopLine {
+interface ChopLine {
   rows: ChopLineRow[]
   cutScore: number | null
   me: ChopLineRow | null

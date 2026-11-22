@@ -5,7 +5,7 @@
  * `nonproduction_connected` when a real request has verified it. Credentials present without a verified
  * request are `configured_not_verified` (per the Phase 5 stop-gate).
  */
-export type ProviderInventoryStatus =
+type ProviderInventoryStatus =
   | 'production_connected'
   | 'nonproduction_connected'
   | 'partial'
@@ -14,7 +14,7 @@ export type ProviderInventoryStatus =
   | 'unused'
   | 'deprecated'
 
-export type ProviderInventoryRecord = {
+type ProviderInventoryRecord = {
   provider: string
   sports: string[]
   capabilities: string[]

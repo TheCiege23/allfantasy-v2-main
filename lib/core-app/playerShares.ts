@@ -39,7 +39,7 @@ import { isTranslatedSportLeague, translateSportRosters, type SportCatalogPlayer
  */
 
 const MAX_LEAGUES = 250
-export const SHARES_LIMIT = 20
+const SHARES_LIMIT = 20
 
 export type ShareRow = {
   /** `source` is the feed that minted `externalId`; the finder ref carries it (playerRef.ts). */

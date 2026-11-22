@@ -1,3 +1,4 @@
+import { resolveActingRoster, resolveViewingRoster } from '@/lib/league/viewerTeams'
 import 'server-only'
 
 /**
@@ -50,11 +51,15 @@ export function autoBenchByeLeagueBlock(league: {
 }
 
 /** The owner's switch for their own team in this league. */
-export async function readAutoBenchBye(leagueId: string, userId: string): Promise<{ available: boolean; on: boolean; reason?: string }> {
-  const [league, roster] = await Promise.all([
+export async function readAutoBenchBye(leagueId: string, userId: string, rosterId?: string | null): Promise<{ available: boolean; on: boolean; reason?: string }> {
+  const [league, viewing] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true, settings: true, leagueType: true, bestBallMode: true } }),
-    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { settings: true, platformUserId: true } }),
+    // With several teams: the named one when it is theirs, else their first (lib/league/viewerTeams.ts).
+    resolveViewingRoster(leagueId, userId, rosterId, { allowCoOwner: false }),
   ])
+  const roster = viewing
+    ? await prisma.roster.findFirst({ where: { id: viewing.rosterId, leagueId }, select: { settings: true, platformUserId: true } })
+    : null
   if (!league || !roster) return { available: false, on: false, reason: 'no_team' }
   const block = autoBenchByeLeagueBlock(league)
   return { available: !block, on: !block && autoBenchByeOn(roster.settings, roster.platformUserId), ...(block ? { reason: block } : {}) }
@@ -64,13 +69,19 @@ export async function setAutoBenchBye(
   leagueId: string,
   userId: string,
   on: unknown,
+  rosterId?: string | null,
 ): Promise<{ ok: true; on: boolean } | { ok: false; status: number; error: string }> {
   if (typeof on !== 'boolean') return { ok: false, status: 400, error: 'Send on: true or false.' }
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true, sport: true, settings: true, leagueType: true, bestBallMode: true } })
   if (!league) return { ok: false, status: 404, error: 'League not found.' }
   const block = autoBenchByeLeagueBlock(league)
   if (block) return { ok: false, status: 409, error: 'This league does not use weekly lineups set on AllFantasy, so there is nothing to bench.' }
-  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true, settings: true } })
+  // A manager with several teams must say which one; it is never guessed (lib/league/viewerTeams.ts).
+  const acting = await resolveActingRoster(leagueId, userId, rosterId, { allowCoOwner: false })
+  if (!acting.ok && acting.code === 'TEAM_REQUIRED') return { ok: false, status: acting.status, error: acting.message }
+  const roster = acting.ok
+    ? await prisma.roster.findFirst({ where: { id: acting.rosterId, leagueId }, select: { id: true, settings: true } })
+    : null
   if (!roster) return { ok: false, status: 403, error: 'Only a team’s owner can change this.' }
   await prisma.roster.update({ where: { id: roster.id }, data: { settings: withAutoBenchBye(roster.settings, on, userId) as object } })
   return { ok: true, on }

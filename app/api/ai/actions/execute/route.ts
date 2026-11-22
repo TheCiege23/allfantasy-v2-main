@@ -12,7 +12,7 @@ import { recordUnifiedMemoryInteraction } from '@/lib/ai-memory/unified-memory-s
 
 const ActionTypeSchema = z.string().refine(
   (value): value is AIActionType => value in AI_ACTION_REGISTRY,
-  'Unsupported AI action type.',
+  'Unsupported Chimmy action type.',
 )
 
 const RoleSchema = z.enum(['member', 'co-owner', 'commissioner', 'admin']).nullable()

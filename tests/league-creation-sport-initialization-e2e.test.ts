@@ -78,23 +78,6 @@ describe('Prompt 10 — League Creation End-to-End Sport Initialization', () => 
     })
   })
 
-  describe('Frontend Hooks for Sport Context', () => {
-    it('useLeagueSport hook loads sport from league data', async () => {
-      const { useLeagueSport } = await import('@/hooks/useLeagueSport')
-      expect(typeof useLeagueSport).toBe('function')
-    })
-
-    it('useNormalizedDraftPool loads sport-scoped draft entries', async () => {
-      const { useNormalizedDraftPool } = await import('@/hooks/useNormalizedDraftPool')
-      expect(typeof useNormalizedDraftPool).toBe('function')
-    })
-
-    it('useSportsData hook supports sport data fetching', async () => {
-      const { useSportsData } = await import('@/hooks/useSportsData')
-      expect(typeof useSportsData).toBe('function')
-    })
-  })
-
   describe('AI Context Building', () => {
     it('Sport context builder generates context strings', async () => {
       const { buildSportContextString } = await import('@/lib/ai/AISportContextResolver')

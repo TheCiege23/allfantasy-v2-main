@@ -13,7 +13,7 @@
  */
 
 /** Rail section ids. `now` and `league` keep their ids so the Survivor theme's renames still apply. */
-export type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
+type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all' | 'manage'
 
 /**
  * The rail's sections, in order. The league-scoped groups come first: with a league held — which
@@ -24,7 +24,9 @@ export type NavSectionId = 'top' | 'now' | 'league' | 'plan' | 'commish' | 'all'
 export const NAV_SECTION_ORDER: ReadonlyArray<{ id: NavSectionId; heading: string | null; keys: readonly string[] }> = [
   { id: 'top', heading: null, keys: ['home'] },
   { id: 'now', heading: 'This week', keys: ['my-team', 'matchup', 'live', 'waivers'] },
-  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'moves'] },
+  /* No Moves (2026-11-14): it folded into Trades; /core/moves redirects there (next.config.js). */
+  /* League settings (2026-11-15): the league's rules, read-only for an imported league. */
+  { id: 'league', heading: 'League', keys: ['standings', 'schedule', 'trades', 'league-settings'] },
   {
     id: 'plan',
     heading: 'Plan ahead',
@@ -65,6 +67,69 @@ export const NAV_SECTION_ORDER_NO_LEAGUE: ReadonlyArray<{ id: NavSectionId; head
   { id: 'manage', heading: 'Manage', keys: ['notifications', 'settings', 'plans', 'admin'] },
 ]
 
+/**
+ * The sections the DESKTOP AND TABLET RAIL leaves out while a league is held (2026-11-15).
+ *
+ * "All leagues" and "Manage" are about the account, not the league on screen: eleven rows under a
+ * league's own tabs that read as part of it. Inside a league the rail ends with one "All leagues"
+ * row instead (AfCoreShell), Notifications moves to the top bar with its count, and Settings and
+ * Plans are in the account menu.
+ *
+ * ⚠ THE PHONE'S MORE SHEET KEEPS THEM. A phone hides the account menu, so More is the only way to
+ * Settings, Plans and the inbox there — which is why this is a rail filter and not a change to
+ * NAV_SECTION_ORDER, which the More sheet reads too.
+ */
+export const LEAGUE_RAIL_OMITTED_SECTIONS: ReadonlySet<string> = new Set(['all', 'manage'])
+
+/**
+ * Inside a league, the desktop and tablet rail is Sleeper's tabs (owner, 2026-11-19: "Sleeper's six only", the same
+ * tabs the native league page uses, lib/league/nativeLeagueNavigation.ts). Each tab links to its first screen, and the
+ * shell draws the tab's screens as a row of links above the screen. /core has no News screen, so a league here gets
+ * five. The screens and their routes are unchanged.
+ *
+ * Draft HQ sits under League: the shell does not know whether an imported league's draft is done, and an imported
+ * league drafts on its own platform. A league-scoped destination no tab names lands under League too, so nothing the
+ * rail used to show becomes unreachable.
+ *
+ * ⚠ THE PHONE'S MORE SHEET STILL READS NAV_SECTION_ORDER, like LEAGUE_RAIL_OMITTED_SECTIONS above.
+ */
+export const LEAGUE_TABS: ReadonlyArray<{ id: string; label: string; keys: readonly string[] }> = [
+  { id: 'matchup', label: 'Matchup', keys: ['matchup', 'live', 'schedule', 'war-room'] },
+  { id: 'team', label: 'Team', keys: ['my-team', 'waivers', 'players', 'defense-hub', 'devy-league'] },
+  { id: 'league', label: 'League', keys: ['home', 'standings', 'draft-hq'] },
+  { id: 'trade', label: 'Trade', keys: ['trades', 'season-outlook'] },
+  // "League settings", not Sleeper's "Settings": the account's own Settings lives in the account menu, and a league
+  // tab with the same bare name read as that (__tests__/core-app/league-rail-settings.test.tsx).
+  { id: 'settings', label: 'League settings', keys: ['league-settings', 'commissioner'] },
+]
+
+/** The league-scoped rail sections LEAGUE_TABS replaces; anything in them that no tab names goes under League. */
+export const LEAGUE_SCOPED_SECTIONS: ReadonlySet<string> = new Set(['top', 'now', 'league', 'plan', 'commish'])
+
+/**
+ * Fold the rail's league-scoped items into LEAGUE_TABS. `sections` are what the rail would show, in rail order; a tab
+ * with none of its screens available is dropped. Generic so the shell keeps its own item type.
+ */
+export function groupLeagueTabs<T extends { key: string }>(
+  sections: ReadonlyArray<{ id: string; items: readonly T[] }>,
+): Array<{ id: string; label: string; children: T[] }> {
+  const scoped = sections.filter((s) => LEAGUE_SCOPED_SECTIONS.has(s.id)).flatMap((s) => s.items)
+  const byKey = new Map(scoped.map((item) => [item.key, item]))
+  const placed = new Set<string>()
+  const tabs = LEAGUE_TABS.map((tab) => {
+    const children = tab.keys.flatMap((key) => {
+      const item = byKey.get(key)
+      if (!item) return []
+      placed.add(key)
+      return [item]
+    })
+    return { id: tab.id, label: tab.label, children }
+  })
+  const league = tabs.find((tab) => tab.id === 'league')
+  league?.children.push(...scoped.filter((item) => !placed.has(item.key)))
+  return tabs.filter((tab) => tab.children.length > 0)
+}
+
 /** The section the rail names the selected league above — the first league-scoped one. */
 export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
 
@@ -74,7 +139,7 @@ export const LEAGUE_CHIP_SECTION: NavSectionId = 'now'
  * ⚠ ONLY A MEASURED `false` HIDES. `undefined` and `null` mean "not determined" — no coverage block
  * on file, or a read that failed — and hiding on an unknown would take a working league's views away.
  */
-export type LeagueCapabilities = {
+type LeagueCapabilities = {
   hasScoredWeek?: boolean | null
   trades?: boolean
   draft?: boolean

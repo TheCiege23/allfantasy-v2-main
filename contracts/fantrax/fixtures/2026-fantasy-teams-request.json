@@ -1,0 +1,58 @@
+{
+  "capturedAt": "2026-11-22",
+  "source": "Captured in the league owner's own logged-in Chrome, with their consent, from one 34-team NFL dynasty league. League and team ids are placeholders; team names and logo file names are synthetic and only show the shape.",
+  "request": {
+    "method": "POST",
+    "origin": "https://www.fantrax.com",
+    "path": "/fxpa/req",
+    "query": { "leagueId": "<sourceLeagueId>" },
+    "headers": { "Accept": "application/json", "Content-Type": "text/plain" },
+    "credentials": "include",
+    "body": {
+      "msgs": [{ "method": "getFantasyTeams", "data": {} }],
+      "uiv": 3,
+      "refUrl": "https://www.fantrax.com/fantasy/league/<sourceLeagueId>/home",
+      "dt": 0,
+      "at": 0,
+      "tz": "America/New_York",
+      "v": "188.3.7"
+    },
+    "note": "No token in the body or the headers: the Fantrax login cookie is the only credential. `refUrl` was the page that sent the request. `v` is the site's own version and will change."
+  },
+  "response": {
+    "path": "responses[0].data.fantasyTeams",
+    "teamKeys": ["id", "name", "shortName", "logoUrl128", "logoUrl256", "logoId", "commissioner"],
+    "sample": [
+      {
+        "id": "<sourceTeamId>",
+        "name": "#5 Team A",
+        "shortName": "TMA",
+        "logoUrl128": "https://fantraximg.com/logos/abc/tmLogo_<logoId>_128.webp",
+        "logoUrl256": "https://fantraximg.com/logos/abc/tmLogo_<logoId>_256.webp",
+        "logoId": "<logoId>",
+        "commissioner": false
+      }
+    ],
+    "measured": {
+      "teams": 34,
+      "teamsWithLogoOnFantraximgLogos": 34,
+      "logoFileExtension": "webp",
+      "logoUrlsWithQueryString": 0,
+      "teamsFlaggedCommissioner": 12
+    }
+  },
+  "logoImage": {
+    "checkedWithoutLogin": true,
+    "result": "200 image/webp for both the 128 and the 256 file, fetched with no cookie",
+    "otherShapeSeenOnThePage": "https://fantraximg.com/assets/images/icons/fantasyteams/<sport>/<set>/<file> — Fantrax's stock icons, used by teams with no uploaded logo in other leagues"
+  },
+  "alsoSeen": {
+    "getTeamRosterInfo": "Sent by a team's roster page. Its response has `settings.logoUploaded`, `settings.logoUrl` and `teamHeadingInfo.owners` (the managers' names). Shape only; values were not captured."
+  },
+  "notCaptured": [
+    "The response without a login",
+    "Whether the request is refused when `v` is out of date",
+    "Whether a request sent by a browser extension, not the site's own page, is accepted",
+    "The managers' names"
+  ]
+}

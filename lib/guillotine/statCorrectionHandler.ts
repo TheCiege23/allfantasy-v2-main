@@ -646,6 +646,39 @@ async function recordCorrection(args: {
       metadata: { season: baseline.season, week, changed: body.changes.length, chopDisputed: body.chopDisputed },
     },
   })
+  if (body.chopDisputed) await alertCommissionerOfDisputedChop(baseline.leagueId, week)
+}
+
+/**
+ * "The corrected scores would have chopped a different team" used to reach only the commissioner's league log.
+ * Now it is an urgent alert that opens the Undo screen (lib/guillotine/chopUndo.ts), where the commissioner can
+ * bring the team back and chop the right one — while that is still safe. Once per league and week; best-effort.
+ */
+async function alertCommissionerOfDisputedChop(leagueId: string, week: number): Promise<void> {
+  try {
+    const [{ dispatchNotification }, { commissionerUserIds }] = await Promise.all([
+      import('@/lib/notifications/NotificationDispatcher'),
+      import('./commissionerTiebreakStore'),
+    ])
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, userId: true } })
+    const userIds = await commissionerUserIds(leagueId, league?.userId)
+    if (!userIds.length) return
+    await dispatchNotification({
+      userIds,
+      category: 'commissioner_alerts',
+      type: 'guillotine_chop_disputed',
+      title: `A stat correction changes week ${week}'s chop in ${league?.name?.trim() || 'your league'}`,
+      body: 'With the corrected scores, a different team would have been chopped. You can undo the chop and chop the right team, until the next waiver run.',
+      actionHref: `/league/${leagueId}/guillotine-tiebreak#undo`,
+      actionLabel: 'Review the chop',
+      leagueId,
+      meta: { week },
+      severity: 'high',
+      dedupePrefix: `guillotine-chop-disputed:${leagueId}:w${week}`,
+    })
+  } catch (error) {
+    console.warn('[guillotine] disputed-chop alert not sent', { leagueId, week, error: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 /**

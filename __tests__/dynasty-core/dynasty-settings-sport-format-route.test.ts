@@ -6,7 +6,10 @@ const m = vi.hoisted(() => ({
   leagueUpdate: vi.fn(),
   apply: vi.fn(),
   upsert: vi.fn(),
+  locked: vi.fn(async () => [] as string[]),
 }))
+vi.mock('@/lib/league/settingsLockService', () => ({ lockedGroups: m.locked, lockedGroupsForPatch: vi.fn(async () => []) }))
+vi.mock('@/server/services/auditService', () => ({ logAction: vi.fn(async () => ({ id: 'a' })) }))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => ({ user: { id: 'commish' } })) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -36,6 +39,8 @@ vi.mock('@/lib/dynasty-core/applyDynastySportPreset', async (orig) => ({
   ...(await orig<typeof import('@/lib/dynasty-core/applyDynastySportPreset')>()),
   applyDynastySportPresetToLeague: m.apply,
 }))
+// Routes ask lib/league/commissionerAccess.ts (2026-11-16); this defers to the old check this test mocks.
+vi.mock('@/lib/league/commissionerAccess', async () => (await import('../helpers/commissionerAccessMock')).accessFromLegacyMocks())
 
 import { GET, PUT } from '@/app/api/leagues/[leagueId]/dynasty-settings/handler'
 
@@ -81,5 +86,19 @@ describe('dynasty-settings — sport format presets', () => {
     m.apply.mockResolvedValue({ ok: false, status: 409, error: 'Dynasty format presets can only be applied before the draft.' })
     const res = await put({ sportPresetId: 'nba_dynasty_points_deep' })
     expect(res.status).toBe(409)
+  })
+})
+
+describe('dynasty-settings honours the settings lock (2026-11-15)', () => {
+  it('a taxi rule change in a league with rosters locked is refused, and nothing is written', async () => {
+    m.leagueFindUnique.mockResolvedValue({ id: 'L1', sport: 'NFL', isDynasty: true, leagueVariant: null, settings: {} })
+    m.locked.mockImplementation(async (_id: string, groups: readonly string[]) => groups.filter((g) => g === 'rosters'))
+    const res = await put({ taxiSlots: 5 })
+    expect(res.status).toBe(423)
+    expect(m.locked).toHaveBeenCalledWith('L1', ['rosters'])
+    expect(m.leagueUpdate).not.toHaveBeenCalled()
+    expect(m.upsert).not.toHaveBeenCalled()
+    m.locked.mockReset()
+    m.locked.mockResolvedValue([])
   })
 })

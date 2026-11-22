@@ -39,7 +39,7 @@ export async function handoffCompletedSeasonDraft(leagueId: string, now: Date) {
 }
 
 /** Draft ownership, lineup and matchup storage commit with the completed board. */
-export async function materializeSeasonDraft(
+async function materializeSeasonDraft(
   tx: Prisma.TransactionClient, leagueId: string, context: Context, picks: DraftPick[],
 ) {
   const seasonId = seasonScoringId(leagueId)

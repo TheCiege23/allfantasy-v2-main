@@ -54,7 +54,7 @@ function earliestLeagueDate(info: Pick<FantraxLeagueInfo, 'startDate' | 'scoring
  *      basketball/hockey, so it is used only when there is no calendar to check it against;
  *   4. the season in progress on `now`.
  */
-export function fantraxSplitSeasonStartYear(
+function fantraxSplitSeasonStartYear(
   info: Pick<FantraxLeagueInfo, 'seasonYear' | 'startDate' | 'scoringPeriods'>,
   now: Date = new Date(),
 ): number {
@@ -128,10 +128,11 @@ const record = (value: unknown): Record<string, unknown> =>
  * IR and minors limits are not in any capture and are not invented here.
  */
 export function mapFantraxRosterSlots(
-  sport: 'NBA' | 'NHL',
+  sport: 'NBA' | 'NHL' | 'NCAAB',
   rosterInfo: unknown,
 ): { slots: Array<{ position: string; count: number }>; gaps: string[] } {
-  return mapSlots(SLOT_CODES[sport], sport, rosterInfo)
+  // College basketball uses the basketball slot codes (G, F, C, G/F, F/C, Flx).
+  return mapSlots(SLOT_CODES[sport === 'NCAAB' ? 'NBA' : sport], sport, rosterInfo)
 }
 
 function mapSlots(
@@ -181,7 +182,9 @@ function mapSlots(
  * `DB,ID`). ⚠ `ER` (in that same capture, on a DL player) is deliberately absent: which of our
  * positions it accepts is not established, so it is reported rather than guessed.
  *
- * Baseball: the captured MLB codes (`C` … `UT`, `CI`, `MI`, `P`), `UT` spelled as our `UTIL`.
+ * Baseball: the captured MLB codes (`C` … `UT`, `CI`, `MI`, `P`), `UT` spelled as our `UTIL`, plus the
+ * split outfield (`LF`, `CF`, `RF`) and `DH`, which are slots in our own baseball table
+ * (lib/core-app/sportSlotEligibility.ts).
  */
 const FOOTBALL_SLOT_CODES: Record<string, string> = {
   QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', DEF: 'DEF', DST: 'DST', 'D/ST': 'D/ST',
@@ -193,7 +196,7 @@ const LINEUP_SLOT_CODES: Record<'NFL' | 'NCAAF' | 'MLB' | 'SOCCER', Record<strin
   NCAAF: FOOTBALL_SLOT_CODES,
   SOCCER: { G: 'GKP', D: 'DEF', M: 'MID', F: 'FWD' },
   MLB: {
-    C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', CI: 'CI', MI: 'MI',
+    C: 'C', '1B': '1B', '2B': '2B', '3B': '3B', SS: 'SS', OF: 'OF', LF: 'LF', CF: 'CF', RF: 'RF', DH: 'DH', CI: 'CI', MI: 'MI',
     SP: 'SP', RP: 'RP', P: 'P', UT: 'UTIL', UTIL: 'UTIL',
   },
 }

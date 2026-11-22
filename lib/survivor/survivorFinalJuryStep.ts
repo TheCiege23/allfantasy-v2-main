@@ -24,7 +24,7 @@
 import { settleClosestWithoutGoingOver, type ClosestEntry } from './survivorClosestWithoutGoingOver'
 import type { SurvivorFinaleSettings } from './survivorFinaleSettings'
 
-export type FinalJuryStepSettings = Pick<SurvivorFinaleSettings, 'finalJuryStepEnabled' | 'finalJuryStepCount'>
+type FinalJuryStepSettings = Pick<SurvivorFinaleSettings, 'finalJuryStepEnabled' | 'finalJuryStepCount'>
 
 export interface FinalJuryStepChallenge {
   challengeId: string

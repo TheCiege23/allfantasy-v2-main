@@ -3,9 +3,9 @@ import { computeBestBallLineup, resolveBestBallSlots } from '@/lib/bestball/prod
 import { computeRosterScoreForWeek, weekKeyedStatsUnavailableReason } from '@/lib/multi-sport/MultiSportMatchupScoringService'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
-export type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'UNRESOLVED'
+type BestBallDataStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'UNRESOLVED'
 
-export type BestBallLineupResult = {
+type BestBallLineupResult = {
   /**
    * AVAILABLE — every roster player has a real stat row for this week.
    * PARTIAL — some players are missing stats; the lineup was optimized over the rest.

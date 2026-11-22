@@ -1,6 +1,3 @@
-// lib/waiver-engine/waiver-types.ts
-export type WaiverSide = "ADD" | "DROP";
-
 export type WaiverPlayerRef = {
   id?: string;
   name?: string;
@@ -9,7 +6,7 @@ export type WaiverPlayerRef = {
   tags?: string[];
 };
 
-export type WaiverSuggestionAI = {
+type WaiverSuggestionAI = {
   narrative?: string[];
   messageTemplate?: string;
   tags?: string[];

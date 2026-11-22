@@ -2,6 +2,7 @@
 import { prisma } from '@/lib/prisma'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
 import { cfbdGet, describeCfbdFailure, CFBD_BASE_URL, type CfbdResult } from '@/lib/cfbd-fetch'
+import { cfbdFetch } from './cfbd-quota'
 
 export interface CFBPlayer {
   id: number
@@ -194,7 +195,7 @@ export async function searchCFBPlayers(searchTerm: string): Promise<CFBPlayer[]>
   }
 
   try {
-    const response = await fetch(
+    const response = await cfbdFetch(
       `${CFBD_BASE}/player/search?searchTerm=${encodeURIComponent(searchTerm)}`,
       {
         headers: {
@@ -247,7 +248,7 @@ export async function getCFBPlayerStats(year: number, team?: string): Promise<CF
     let url = `${CFBD_BASE}/stats/player/season?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Accept': 'application/json',
@@ -323,11 +324,21 @@ export interface CFBDraftPick {
   playerName: string
   height: number | null
   weight: number | null
+  /**
+   * The drafted player's CFBD athlete id: the same id `PlayerIdentityMap.cfbdId` holds, so a drafted
+   * player can be found on a college roster without matching names.
+   *
+   * ⚠ STRICT, UNLIKE `collegeId` ABOVE. `collegeId` falls back to the SCHOOL id when the athlete id is
+   * absent, and a school id matched against athlete ids would link the wrong people. Null when CFBD
+   * sends no athlete id.
+   */
+  collegeAthleteId?: string | null
 }
 
 function mapDraftPick(p: any): CFBDraftPick {
   return {
     collegeId: p.collegeAthleteId || p.collegeId || null,
+    collegeAthleteId: p.collegeAthleteId != null && String(p.collegeAthleteId).trim() !== '' ? String(p.collegeAthleteId).trim() : null,
     collegeName: p.name || '',
     collegeTeam: p.collegeTeam || p.college || '',
     collegeConference: p.collegeConference || null,
@@ -608,7 +619,6 @@ async function getCachedOrFetch<T>(cacheKey: string, ttlMs: number, fetcher: () 
   }
 }
 
-const ONE_HOUR = 3600_000
 const ONE_DAY = 86_400_000
 const SEVEN_DAYS = 7 * ONE_DAY
 const THIRTY_DAYS = 30 * ONE_DAY
@@ -647,7 +657,7 @@ export async function getCFBRecruits(year: number, team?: string, position?: str
     if (team) url += `&team=${encodeURIComponent(team)}`
     if (position) url += `&position=${encodeURIComponent(position)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
 
@@ -696,7 +706,7 @@ export async function getCFBTeamRecruitingRankings(year: number, team?: string):
     let url = `${CFBD_BASE}/recruiting/teams?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -739,7 +749,7 @@ export async function getCFBTransferPortal(year: number): Promise<CFBTransferPor
   const cacheKey = `cfbd-transfer-portal-${year}`
 
   const result = await getCachedOrFetch<CFBTransferPortalEntry[]>(cacheKey, ONE_DAY, async () => {
-    const response = await fetch(`${CFBD_BASE}/player/portal?year=${year}`, {
+    const response = await cfbdFetch(`${CFBD_BASE}/player/portal?year=${year}`, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
 
@@ -800,7 +810,7 @@ export async function getCFBReturningProduction(year: number, team?: string): Pr
     let url = `${CFBD_BASE}/player/returning?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -856,7 +866,7 @@ export async function getCFBPlayerUsage(year: number, team?: string, position?: 
     if (team) url += `&team=${encodeURIComponent(team)}`
     if (position) url += `&position=${encodeURIComponent(position)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -906,7 +916,7 @@ export async function getCFBPlayerPPA(year: number, team?: string, position?: st
     if (team) url += `&team=${encodeURIComponent(team)}`
     if (position) url += `&position=${encodeURIComponent(position)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -959,7 +969,7 @@ export async function getCFBSPRatings(year: number, team?: string): Promise<CFBT
     let url = `${CFBD_BASE}/ratings/sp?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1028,7 +1038,7 @@ export async function getCFBCoaches(year: number): Promise<CFBCoach[]> {
   const cacheKey = `cfbd-coaches-${year}`
 
   const result = await getCachedOrFetch<CFBCoach[]>(cacheKey, THIRTY_DAYS, async () => {
-    const response = await fetch(`${CFBD_BASE}/coaches?year=${year}`, {
+    const response = await cfbdFetch(`${CFBD_BASE}/coaches?year=${year}`, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1110,7 +1120,7 @@ export async function getCFBPlayerWEPAPassing(year: number, team?: string): Prom
     let url = `${CFBD_BASE}/wepa/players/passing?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1142,7 +1152,7 @@ export async function getCFBPlayerWEPARushing(year: number, team?: string): Prom
     let url = `${CFBD_BASE}/wepa/players/rushing?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1228,7 +1238,7 @@ export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
    * ingest a venue-less copy for up to a month after this shipped.
    */
   const directory = await getCachedOrFetch<CFBTeamDirectoryEntry[]>('cfbd-team-directory:v2', THIRTY_DAYS, async () => {
-    const response = await fetch(`${CFBD_BASE}/teams`, {
+    const response = await cfbdFetch(`${CFBD_BASE}/teams`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1511,7 +1521,7 @@ export async function getCFBPassingPlayerSeason(year: number, team?: string): Pr
     let url = `${CFBD_BASE}/passing/players/season?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1540,7 +1550,7 @@ export async function getCFBPassingPlayerGames(
     if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
     if (options?.week != null) url += `&week=${options.week}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1596,7 +1606,7 @@ export async function getCFBPassingTeamSeason(year: number, team?: string): Prom
     let url = `${CFBD_BASE}/passing/teams/season?year=${year}`
     if (team) url += `&team=${encodeURIComponent(team)}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1625,7 +1635,7 @@ export async function getCFBPassingTeamGames(
     if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
     if (options?.week != null) url += `&week=${options.week}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)
@@ -1690,7 +1700,7 @@ export async function getCFBPassingPlays(
     if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
     if (options?.week != null) url += `&week=${options.week}`
 
-    const response = await fetch(url, {
+    const response = await cfbdFetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
     assertCfbdAvailable(response)

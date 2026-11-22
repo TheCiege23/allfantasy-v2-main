@@ -14,8 +14,8 @@ import { randomBytes as nodeRandomBytes } from 'node:crypto'
 
 /** `lease_owner VARCHAR(64)` in the checkpoint table. */
 export const LEASE_TOKEN_MAX_LENGTH = 64
-export const LEASE_WORKER_PREFIX_MAX_LENGTH = 8
-export const LEASE_TOKEN_RANDOM_BYTES = 16 // 128 bits
+const LEASE_WORKER_PREFIX_MAX_LENGTH = 8
+const LEASE_TOKEN_RANDOM_BYTES = 16 // 128 bits
 
 /** base64url plus the separator — safe in SQL, URLs and logs. */
 export const LEASE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,8}-[0-9a-z]+-[A-Za-z0-9_-]{22}$/
@@ -27,7 +27,7 @@ export interface LeaseTokenDeps {
   now: () => number
 }
 
-export const defaultLeaseTokenDeps: LeaseTokenDeps = {
+const defaultLeaseTokenDeps: LeaseTokenDeps = {
   randomBytes: (size) => nodeRandomBytes(size),
   now: () => Date.now(),
 }

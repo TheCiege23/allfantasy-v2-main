@@ -8,20 +8,7 @@ import { useResendCooldown } from '@/hooks/useResendCooldown'
 import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import { EMAIL_VERIFY_LINK_LIFETIME } from '@/lib/auth/emailVerifyLink'
-import {
-  BangGlyph,
-  CheckGlyph,
-  MailGlyph,
-  RecoveryAlert,
-  RecoveryCard,
-  RecoveryIcon,
-  RecoveryNote,
-  RecoveryShell,
-  RecoverySub,
-  RecoveryTitle,
-  ShieldGlyph,
-  WarnGlyph,
-} from './RecoveryChrome'
+import { BangGlyph, CheckGlyph, MailGlyph, RecoveryAlert, RecoveryCard, RecoveryIcon, RecoveryNote, RecoveryShell, RecoverySub, RecoveryTitle, WarnGlyph } from './RecoveryChrome'
 
 /**
  * Screen 16b — post-signup email verification.
@@ -59,7 +46,7 @@ type SendOutcome = 'sent' | 'already' | 'rate_limited' | 'send_failed' | 'login_
 /** The send route's own spacing rule is 60s; the button mirrors it. */
 const RESEND_COOLDOWN_SECONDS = 60
 
-export type VerifyEmailV4Props = {
+type VerifyEmailV4Props = {
   /** From the server session — the handoff prints it in the pending card. */
   email: string | null
   /** True when the account is already verified before this page loads. */
@@ -773,4 +760,3 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   )
 }
 
-export default VerifyEmailV4

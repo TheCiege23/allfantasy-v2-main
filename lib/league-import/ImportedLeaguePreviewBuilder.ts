@@ -21,8 +21,9 @@ import {
   mapImportedLeagueToFormat,
   resolveLeagueFormat,
 } from '@/lib/league/format-engine'
+import { expandProviderRosterPositions, footballSlotSpec } from '@/lib/league/importedLineupTemplate'
 
-export interface ImportPreviewLeague {
+interface ImportPreviewLeague {
   id: string
   name: string
   sport: string
@@ -42,7 +43,7 @@ export interface ImportPreviewLeague {
   }
 }
 
-export interface ImportPreviewManager {
+interface ImportPreviewManager {
   rosterId: string
   ownerId: string
   username: string
@@ -108,7 +109,7 @@ function resolveImportTeamIdentity(
   }
 }
 
-export interface ImportPreviewDataQuality {
+interface ImportPreviewDataQuality {
   fetchedAt: number
   sources: {
     users: boolean
@@ -311,6 +312,16 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
   const leagueSettings = normalized.league as Record<string, unknown>
   const rosterPositions = (leagueSettings.roster_positions as string[]) ?? []
   /*
+   * One token per seat. ESPN, Yahoo, MFL and Fantrax store `SLOT:COUNT` pairs ("QB:1", "RB:2"), so
+   * every check below that compares slot NAMES must read these, never the raw entries. `rosterPositions`
+   * itself is returned unchanged: the re-import diff compares it with what the league stored.
+   */
+  const isFootballLeague = ['NFL', 'NCAAF'].includes(String(normalized.league.sport ?? '').toUpperCase())
+  const slotTokens = expandProviderRosterPositions(rosterPositions).map((token) =>
+    // ESPN's superflex is `OP`, Yahoo's `Q/W/R/T`: one name, so superflex is detected for all of them.
+    isFootballLeague && footballSlotSpec(token)?.name === 'SUPERFLEX' && token !== 'SUPERFLEX' ? 'SUPER_FLEX' : token,
+  )
+  /*
    * The reception RATE, not a yes/no: `'half'` used to read as 1, and the preview then showed a
    * half-PPR league as "PPR". `ppr` stays a boolean for existing readers; `scoringLabel` names the rate
    * with the Sleeper mapper's labels.
@@ -321,7 +332,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     rateOf(normalized.scoring?.scoring_format) ??
     rateOf(normalized.league.scoring) ??
     0
-  const superflex = rosterPositions.filter((p: string) => p === 'SUPER_FLEX').length > 0
+  const superflex = slotTokens.includes('SUPER_FLEX')
   const tep = (leagueSettings.scoring_settings as Record<string, number>)?.bonus_rec_te ?? 0
 
   const league: ImportPreviewLeague = {
@@ -353,7 +364,7 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     sport: normalized.league.sport,
     isDynasty: normalized.league.isDynasty,
     scoring: normalized.league.scoring,
-    rosterPositions,
+    rosterPositions: slotTokens,
     leagueType: typeof leagueSettings.league_type === 'string' ? leagueSettings.league_type : null,
   })
   const resolution = resolveLeagueFormat({
@@ -366,12 +377,15 @@ export function buildImportedLeaguePreview(normalized: NormalizedImportResult): 
     leagueType: mappedFormat.formatId,
     requestedModifiers: mappedFormat.modifiers,
   })
-  const unsupportedPositions = rosterPositions.filter((slot) => {
-    const upper = String(slot).toUpperCase()
-    return !(
-      upper in resolution.roster.starterSlots ||
-      ['BENCH', 'BN', 'IR', 'RES', 'TAXI', 'SUPER_FLEX', 'SUPERFLEX'].includes(upper)
-    )
+  const unsupportedPositions = [...new Set(slotTokens)].filter((upper) => {
+    if (upper in resolution.roster.starterSlots) return false
+    if (['BENCH', 'BN', 'IR', 'RES', 'TAXI', 'SUPER_FLEX', 'SUPERFLEX'].includes(upper)) return false
+    // A football provider's own spelling of a slot AF has: ESPN `D/ST`, `BE`, `OP`, Yahoo `W/R/T`.
+    const spec = isFootballLeague ? footballSlotSpec(upper) : null
+    if (spec && (spec.kind !== 'starter' || spec.name in resolution.roster.starterSlots || spec.name === 'SUPERFLEX')) {
+      return false
+    }
+    return true
   })
 
   const managers: ImportPreviewManager[] = normalized.rosters.map((r) => {
@@ -429,7 +443,7 @@ function finiteOrNull(v: unknown): number | null {
 }
 
 /** Pure projection of the normalized league onto the fields the review screen shows. */
-export function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
+function buildImportReviewFacts(normalized: NormalizedImportResult): ImportReviewFacts {
   const l = normalized.league as NormalizedImportResult['league'] & Record<string, unknown>
   const rawType = l.league_type ?? l.sleeper_league_type
   return {
@@ -455,7 +469,8 @@ export function buildImportReviewFacts(normalized: NormalizedImportResult): Impo
       .filter((r) => r.is_orphan === true || !String(r.owner_name ?? '').trim())
       .map((r) => r.source_team_id),
     failedRosterTeamIds: normalized.rosters.filter((r) => r.fetch_status === 'failed').map((r) => r.source_team_id),
-    tradedPickCount: normalized.traded_picks?.length ?? 0,
+    // Fantrax lists untraded picks too (`traded: false`); only the moved ones are "traded picks".
+    tradedPickCount: (normalized.traded_picks ?? []).filter((p) => p.traded !== false).length,
     standingsCount: normalized.standings?.length ?? 0,
   }
 }

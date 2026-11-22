@@ -15,7 +15,7 @@ import './af-primitives.css'
  * to the actions area. They sit in a row with the heading, outside it, so they never become part of
  * the heading's accessible name.
  */
-export type PageHeaderProps = {
+type PageHeaderProps = {
   title: ReactNode
   eyebrow?: ReactNode
   eyebrowTestId?: string

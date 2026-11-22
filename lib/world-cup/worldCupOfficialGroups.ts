@@ -153,12 +153,3 @@ export function resolveWorldCup2026OfficialGroup(input: {
   return null
 }
 
-export function isWorldCup2026OfficialGroupComplete(rows: Array<{ groupName?: string | null }>) {
-  const counts = new Map<WorldCupOfficialGroupKey, number>()
-  for (const row of rows) {
-    const key = row.groupName?.trim().toUpperCase() as WorldCupOfficialGroupKey | undefined
-    if (!key || !(key in WORLD_CUP_2026_OFFICIAL_GROUPS)) continue
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  return Object.keys(WORLD_CUP_2026_OFFICIAL_GROUPS).every((group) => counts.get(group as WorldCupOfficialGroupKey) === 4)
-}

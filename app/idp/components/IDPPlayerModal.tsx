@@ -19,7 +19,7 @@ import type { IdpPlayerCardPayload } from '@/lib/idp-projections/idpPlayerCard'
 import type { IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
 import type { DefenderEvaluation } from '@/lib/idp/ai/idpCapChimmy'
 
-export type IDPPlayerModalProps = {
+type IDPPlayerModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   leagueId: string
@@ -417,7 +417,7 @@ export function IDPPlayerModal({
 
           {aiEval || aiNarrative ? (
             <section className="space-y-3 border-t border-white/[0.06] pt-3" data-testid="idp-player-ai-panel">
-              <h4 className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">AI evaluation</h4>
+              <h4 className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Chimmy evaluation</h4>
               {aiEval ? (
                 <div className="space-y-3 rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3">
                   <div className="flex items-center gap-4">
@@ -535,7 +535,7 @@ export function IDPPlayerModal({
               data-testid="idp-player-ai-analysis"
             >
               {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-amber-200/90" />}
-              AI Analysis (AF Commissioner)
+              Chimmy Analysis (AF Commissioner)
             </button>
           </div>
         </DialogContent>

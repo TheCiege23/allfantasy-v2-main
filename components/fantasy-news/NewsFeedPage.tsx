@@ -71,7 +71,7 @@ export function NewsFeedPage() {
         <h1 className="text-2xl font-semibold text-white">Fantasy News</h1>
       </div>
       <p className="text-sm text-white/60">
-        Aggregated player/team feeds with AI-summarized headlines and direct article links.
+        Aggregated player/team feeds with Chimmy-summarized headlines and direct article links.
       </p>
 
       <div className="flex flex-wrap items-end gap-4">
@@ -144,7 +144,7 @@ export function NewsFeedPage() {
             onChange={(e) => setUseAiSummaries(e.target.checked)}
             data-testid="fantasy-news-summarize-toggle"
           />
-          AI summarized headlines
+          Chimmy summarized headlines
         </label>
         <div className="flex items-center gap-2 pb-1">
           <Button

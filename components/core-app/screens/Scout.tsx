@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { PageHeader } from '@/components/core-app/primitives/PageHeader'
 import '@/components/core-app/af-scout.css'
@@ -9,6 +9,7 @@ import '@/components/core-app/af-scout.css'
 import '@/components/core-app/af-core-redraft-trades.css'
 import '@/components/core-app/af-scout-room.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { ManagerRecordButton } from '@/components/core-app/manager-record/ManagerRecordSheet'
 import { TopicTip } from '@/components/core-app/TopicTip'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -21,6 +22,7 @@ import type { RailStanding } from '@/lib/core-app/railMatchups'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { messagesFor } from '@/lib/i18n/messages'
 import { scoutScreenMessages } from '@/lib/core-app/messages/scoutScreen'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
 import { buildRoomGrid, type RoomGrid as RoomGridModel, type RoomGridCell } from '@/lib/core-app/scoutRoomGrid'
 
 /**
@@ -285,11 +287,14 @@ function Facts({ s }: { s: ScoutStanding }) {
 
 function ManagerCard({
   m,
+  leagueId,
   tradesHref,
   edge,
   elimination = null,
 }: {
   m: ScoutedManager
+  /** For the manager card ("Full record"). */
+  leagueId: string
   tradesHref: string
   edge: ScoutEdgeManager | null
   /** Set in an elimination league: the card shows Safe / On the bubble / Eliminated, never a playoff zone. */
@@ -369,15 +374,22 @@ function ManagerCard({
         {edge ? <EdgeLine m={edge} /> : null}
 
         {/* No trade with yourself, and none with a chopped team — its roster has gone to waivers. */}
-        {m.isYou || m.eliminated ? null : (
+        {m.isYou ? null : (
           <footer className="af-sc-card-foot">
+            {/*
+              Their whole record as facts — trades by position, waivers, past drafts (2026-11-16). The
+              card checks the plan on the server and draws the lock without it.
+            */}
+            <ManagerRecordButton leagueId={leagueId} teamExternalId={m.managerId} managerName={m.ownerName ?? m.teamName} />
             {/*
               The Trade Center grades a deal with them, and its Competitive Edge section binds their
               trade record to the positions in that deal — more than the counts above can say.
             */}
-            <Link className="af-sc-cta" href={tradesHref}>
-              {msg.buildTrade} &rarr;
-            </Link>
+            {m.eliminated ? null : (
+              <Link className="af-sc-cta" href={tradesHref}>
+                {msg.buildTrade} &rarr;
+              </Link>
+            )}
           </footer>
         )}
       </article>
@@ -605,6 +617,13 @@ function FormatNote({ format }: { format: ScoutData['format'] }) {
   return null
 }
 
+/**
+ * ⚠ HOW MANY MANAGER CARDS SHOW BEFORE "SHOW ALL" (2026-11-10 phone pass). Live at 375px the twelve cards
+ * were 4,633px of a 7,094px War Room. The list arrives with this week's opponent first, then the table,
+ * so the first four are the opponent and the top of the league.
+ */
+export const SCOUT_CARDS_PREVIEW = 4
+
 export function Scout({
   data,
   gamePlanHref,
@@ -624,7 +643,25 @@ export function Scout({
 }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
   const { language, m, copy } = useScoutCopy()
+  const [showAllManagers, setShowAllManagers] = useState(false)
   const roomGrid = data.managers.available ? buildRoomGrid(data.managers.data) : null
+  /*
+   * 2026-11-14: the h1 says who you play and where you both stand. "Scout · ‹league›" said only where
+   * you were. A league with no game this week says where you stand; one with no table keeps the old title.
+   */
+  const placed = data.managers.available ? data.managers.data.filter((x) => x.standing).length : 0
+  const youSeed = data.you?.standing?.seed ?? null
+  const oppStanding =
+    data.opponent && data.managers.available
+      ? (data.managers.data.find((x) => x.managerId === data.opponent!.managerId)?.standing ?? null)
+      : null
+  const title = data.opponent
+    ? m.headVs(data.opponent.teamName, oppStanding?.seed ?? null, oppStanding ? recordText(oppStanding.record) : null, youSeed, placed)
+    : youSeed != null && placed > 0
+      ? m.headStanding(data.league.name, youSeed, placed)
+      : `Scout · ${data.league.name}`
+  /* The information that is not a move this week, folded under one summary. */
+  const hasMore = Boolean(roomGrid || road || race || ready || chest || brief)
   return (
     <div className="af-sc">
       <PageHeader
@@ -633,8 +670,8 @@ export function Scout({
         eyebrowClassName="af-sc-eyebrow"
         titleClassName="af-sc-title"
         subClassName="af-sc-blurb"
-        eyebrow={m.eyebrow}
-        title={<>Scout · {data.league.name}</>}
+        eyebrow={m.eyebrowLeague(data.league.name)}
+        title={title}
         sub={
           <>
             {m.blurb}
@@ -662,21 +699,38 @@ export function Scout({
 
       <FormatNote format={data.format} />
 
-      {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
-
+      {/*
+        2026-11-14: your three moves first — who you play (above), what to fix before it locks, who to trade
+        with — and everything else under one fold. Eleven sections ran in a row before, and the two you act
+        on sat fourth and seventh.
+      */}
       {leaguePlan}
-
-      {road}
-
-      {race}
-
-      {ready}
 
       {tradeIdeas}
 
-      {chest}
+      {/*
+        2026-11-20: the shared "More detail" fold (MoreDetail.tsx) — the same word and look on every /core
+        page. "More about this league" was this page's own name for it; its contents line ("the table, the
+        road ahead, the race…") is now the `note`. Closed by default, as before. Contents unchanged.
+      */}
+      {hasMore ? (
+        <MoreDetail className="af-sc-more" testId="war-room-more" note={m.moreHint}>
+          <div className="af-sc-more-body">
+            {roomGrid ? <RoomGrid grid={roomGrid} /> : null}
+            {road}
+            {race}
+            {ready}
+            {chest}
+            {brief}
+          </div>
+        </MoreDetail>
+      ) : null}
 
-      {brief}
+      {data.managers.available ? (
+        <h2 className="af-sc-managers-title" data-testid="war-room-managers-title">
+          {m.managersTitle}
+        </h2>
+      ) : null}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them
@@ -717,17 +771,31 @@ export function Scout({
       ) : null}
 
       {data.managers.available ? (
-        <ul className="af-sc-list">
-          {data.managers.data.map((m) => (
+        <>
+        <ul className="af-sc-list" id="af-sc-list">
+          {(showAllManagers ? data.managers.data : data.managers.data.slice(0, SCOUT_CARDS_PREVIEW)).map((manager) => (
             <ManagerCard
-              key={m.managerId}
-              m={m}
+              key={manager.managerId}
+              m={manager}
+              leagueId={data.league.id}
               tradesHref={tradesHref}
-              edge={m.isYou ? null : (edgeBy?.[m.managerId] ?? null)}
-              elimination={data.format.elimination ? { status: elimStatusOf(m, eliminationStanding) } : null}
+              edge={manager.isYou ? null : (edgeBy?.[manager.managerId] ?? null)}
+              elimination={data.format.elimination ? { status: elimStatusOf(manager, eliminationStanding) } : null}
             />
           ))}
         </ul>
+        {data.managers.data.length > SCOUT_CARDS_PREVIEW ? (
+          <button
+            type="button"
+            className="af-sc-cards-toggle"
+            aria-expanded={showAllManagers}
+            aria-controls="af-sc-list"
+            onClick={() => setShowAllManagers((open) => !open)}
+          >
+            {showAllManagers ? m.showFewerManagers : m.showAllManagers(data.managers.data.length)}
+          </button>
+        ) : null}
+        </>
       ) : (
         <section className="af-frame af-sc-section">
           <p className="af-sc-unavailable">{copy(data.managers.reason)}</p>

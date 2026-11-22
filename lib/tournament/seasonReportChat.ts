@@ -7,7 +7,7 @@ import { SEASON_REPORT_PUBLISHED } from './seasonReportPublication'
 import { seasonReportSummary, type SeasonReportSnapshot } from './seasonReportFormat'
 import { can, isSeasonLiveStaff } from './tournamentPermissions'
 
-export const SEASON_REPORT_CHAT_RECEIPT = 'season_report_chat_delivered'
+const SEASON_REPORT_CHAT_RECEIPT = 'season_report_chat_delivered'
 const COMPLETE = 'season_report_chat_complete'
 export const seasonReportAudience = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('stage') }).strict(),

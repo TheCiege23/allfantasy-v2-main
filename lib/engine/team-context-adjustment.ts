@@ -42,7 +42,7 @@ export interface TeamContextInput {
   totalWeeks?: number
 }
 
-export interface TeamContextResult {
+interface TeamContextResult {
   /** Multiplier to apply to player value (0.80–1.20) */
   multiplier: number
   /** Direction: contend, rebuild, middle */
@@ -305,4 +305,3 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-export { DEFAULT_STARTER_NEEDS }

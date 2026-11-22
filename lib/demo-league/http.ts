@@ -8,7 +8,7 @@ import { clientIpFromHeaders } from '@/lib/http/clientIp'
 import { demoJsonBody, getDemoContext, type DemoContext } from './service'
 import type { DemoUnavailable } from './types'
 
-export const DEMO_RESPONSE_HEADERS: Record<string, string> = {
+const DEMO_RESPONSE_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
   // Anonymized, but still per-moment league data: never let a shared cache hold it.
   'Cache-Control': 'no-store',
@@ -16,7 +16,7 @@ export const DEMO_RESPONSE_HEADERS: Record<string, string> = {
   'X-AF-Demo': '1',
 }
 
-export function demoUnavailableResponse(u: DemoUnavailable): NextResponse {
+function demoUnavailableResponse(u: DemoUnavailable): NextResponse {
   return new NextResponse(JSON.stringify(u), { status: u.reason === 'error' ? 503 : 404, headers: DEMO_RESPONSE_HEADERS })
 }
 
@@ -29,16 +29,26 @@ export function demoResponse(ctx: DemoContext, body: unknown, status = 200): Nex
   return new NextResponse(out.text, { status, headers: DEMO_RESPONSE_HEADERS })
 }
 
-export function demoError(status: number, error: string): NextResponse {
-  return new NextResponse(JSON.stringify({ demo: true, error }), { status, headers: DEMO_RESPONSE_HEADERS })
+/** `extra` carries machine-readable fields (a `code`, `retryable`) — never league data. */
+export function demoError(status: number, error: string, extra?: Record<string, string | number | boolean>): NextResponse {
+  return new NextResponse(JSON.stringify({ demo: true, error, ...extra }), { status, headers: DEMO_RESPONSE_HEADERS })
 }
 
-/** Per-IP limiter. Returns a 429 response when over the limit, else null. */
-export function demoRateLimit(req: Request, bucket: string, max: number, windowMs: number): NextResponse | null {
+/**
+ * Per-IP limiter. Returns a 429 response when over the limit, else null. `body` lets a caller say
+ * something kinder than the generic line and tag it with a `code` its client can act on.
+ */
+export function demoRateLimit(
+  req: Request,
+  bucket: string,
+  max: number,
+  windowMs: number,
+  body?: { error: string; code: string },
+): NextResponse | null {
   const ip = clientIpFromHeaders(req.headers) ?? 'unknown'
   const r = rateLimit(`demo:${bucket}:${ip}`, max, windowMs)
   if (r.success) return null
-  return new NextResponse(JSON.stringify({ demo: true, error: 'Too many requests — try again in a minute.' }), {
+  return new NextResponse(JSON.stringify({ demo: true, error: 'Too many requests — try again in a minute.', ...body }), {
     status: 429,
     headers: { ...DEMO_RESPONSE_HEADERS, 'Retry-After': String(Math.ceil(windowMs / 1000)) },
   })

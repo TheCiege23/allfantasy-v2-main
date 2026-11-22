@@ -37,7 +37,7 @@ export type WhatsNextFormatId =
  *  - `everyone`        every manager has something to do (set a lineup, set protections)
  *  - `automatic`       nobody: it resolves on its own at a deadline
  */
-export type PhaseActor = 'viewer_decides' | 'commissioner' | 'everyone' | 'automatic'
+type PhaseActor = 'viewer_decides' | 'commissioner' | 'everyone' | 'automatic'
 
 export type PhaseAction = {
   /** A league tab id (LeagueShell `tabDefs`). */
@@ -111,7 +111,7 @@ export type WhatsNextViewer = {
   hasTeam?: boolean
 }
 
-export type WhatsNextRole = 'actor' | 'commissioner' | 'involved' | 'member'
+type WhatsNextRole = 'actor' | 'commissioner' | 'involved' | 'member'
 
 export type WhatsNextView = {
   format: WhatsNextFormatId

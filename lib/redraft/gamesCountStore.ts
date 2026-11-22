@@ -83,8 +83,8 @@ export async function gamesCountTablesExist(db: unknown = prisma): Promise<boole
   if (tablesSeen) return true
   let ok = false
   try {
-    const rows = await (db as TableProbeDb).$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass('public.player_week_game_scores') IS NOT NULL
-        AND to_regclass('public.redraft_games_count_choices') IS NOT NULL) AS ok`
+    const rows = await (db as TableProbeDb).$queryRaw<Array<{ ok: boolean }>>`SELECT (to_regclass(format('%I.%I', current_schema(), 'player_week_game_scores')) IS NOT NULL
+        AND to_regclass(format('%I.%I', current_schema(), 'redraft_games_count_choices')) IS NOT NULL) AS ok`
     ok = rows?.[0]?.ok === true
   } catch {
     ok = false

@@ -50,7 +50,7 @@ import { prisma } from '@/lib/prisma'
 import { birthDay } from '@/lib/player-identity/matchProviderAthlete'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 
-export type SleeperDirectoryEntry = {
+type SleeperDirectoryEntry = {
   sleeperId: string
   espnId: string | null
   /** Sleeper's `full_name`. Only the birthday pass reads it. */
@@ -59,10 +59,10 @@ export type SleeperDirectoryEntry = {
   birthDate?: string | null
 }
 /** An ESPN athlete we already hold, from `PlayerProviderIdentity` (provider `espn`). */
-export type EspnAthlete = { espnId: string; name: string | null; dob: string | null }
-export type IdentityRowIds = { id: string; sleeperId: string | null; espnId: string | null }
+type EspnAthlete = { espnId: string; name: string | null; dob: string | null }
+type IdentityRowIds = { id: string; sleeperId: string | null; espnId: string | null }
 
-export type EspnIdFillPlan = {
+type EspnIdFillPlan = {
   writes: Array<{ id: string; espnId: string }>
   /** ESPN id Sleeper gives to more than one player. */
   refusedAmbiguous: number
@@ -74,7 +74,7 @@ export type EspnIdFillPlan = {
   alreadySet: number
 }
 
-export type EspnBirthdayMatchPlan = {
+type EspnBirthdayMatchPlan = {
   writes: Array<{ id: string; espnId: string }>
   /** ESPN athletes with no name or no birthday to match on. */
   noEvidence: number

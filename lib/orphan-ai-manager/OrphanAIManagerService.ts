@@ -200,7 +200,7 @@ export async function executeDraftPickForOrphan(
   const { leagueId, triggeredByUserId } = input
   const uiSettings = await getDraftUISettingsForLeague(leagueId)
   if (!uiSettings.orphanTeamAiManagerEnabled) {
-    return { success: false, error: 'Orphan team AI manager is not enabled for this league.' }
+    return { success: false, error: 'Orphan team Chimmy manager is not enabled for this league.' }
   }
   if (uiSettings.executionMode === 'offline') {
     return { success: false, error: 'This is an offline draft: the commissioner enters every pick.' }
@@ -218,7 +218,7 @@ export async function executeDraftPickForOrphan(
   const orphanRosterIds = await getOrphanRosterIdsForLeague(leagueId)
   const currentRosterId = snapshot.currentPick.rosterId
   if (!orphanRosterIds.includes(currentRosterId)) {
-    return { success: false, error: 'Current pick is not an orphan roster. Only orphan rosters use the AI manager.' }
+    return { success: false, error: 'Current pick is not an orphan roster. Only orphan rosters use Chimmy manager.' }
   }
 
   const league = await prisma.league.findUnique({
@@ -239,6 +239,16 @@ export async function executeDraftPickForOrphan(
   const eligiblePool = await filterCandidatesForPlayerPool(leagueId, sessionPool?.playerPool, pool, (p) => ({
     playerName: p.full_name,
   }))
+  // The pool row's id, kept beside the drafter's name-only candidates: the pick is submitted with it.
+  // (It was submitted with none, so an AI manager's pick could finish the draft with a made-up id.)
+  const poolIdOf = new Map<string, string>()
+  const poolKey = (name: string, position: string | null | undefined) => `${name.trim().toLowerCase()}|${String(position ?? '').trim().toUpperCase()}`
+  for (const p of eligiblePool) {
+    const id = String(p.external_source_id ?? p.player_id ?? '').trim()
+    const key = poolKey(p.full_name, p.position)
+    // Two pool rows under one name and position cannot be told apart here: neither id is used.
+    if (id) poolIdOf.set(key, poolIdOf.has(key) && poolIdOf.get(key) !== id ? '' : id)
+  }
   const available = eligiblePool
     .filter((p) => !draftedNames.has(p.full_name))
     .slice(0, 250)
@@ -317,6 +327,7 @@ export async function executeDraftPickForOrphan(
     playerName: pickResult.player.name,
     position: pickResult.player.position,
     team: pickResult.player.team ?? null,
+    playerId: poolIdOf.get(poolKey(pickResult.player.name, pickResult.player.position)) || null,
     rosterId: currentRosterId,
     source: 'auto',
     ...(input.expectedOverall != null ? { expectedOverall: input.expectedOverall } : {}),
@@ -329,8 +340,8 @@ export async function executeDraftPickForOrphan(
   const reasonBits = [
     usedFallback
       ? aiProviderAvailable
-        ? 'AI mode fell back to deterministic CPU execution for this pick.'
-        : 'AI providers unavailable; deterministic CPU fallback executed.'
+        ? 'Chimmy mode fell back to deterministic CPU execution for this pick.'
+        : 'Chimmy providers unavailable; deterministic CPU fallback executed.'
       : null,
     `${strategyProfile.label} profile.`,
     pickResult.reason,

@@ -1,3 +1,4 @@
+import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
@@ -78,7 +79,7 @@ export async function POST(
       where: { id: leagueId },
       select: { userId: true },
     });
-    if (!league || league.userId !== session.user.id) {
+    if (!league || !(await canCommissionerAct(leagueId, session.user.id, 'league'))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const body = await req.json().catch(() => ({}));

@@ -30,7 +30,7 @@ export function readGuillotineBestBall(settings: unknown): boolean {
 }
 
 /** A guillotine league, by the fields the league row carries. */
-export function isGuillotineRow(league: { leagueType?: string | null; leagueVariant?: string | null; guillotineMode?: boolean | null }): boolean {
+function isGuillotineRow(league: { leagueType?: string | null; leagueVariant?: string | null; guillotineMode?: boolean | null }): boolean {
   return league.guillotineMode === true || league.leagueType === 'guillotine' || league.leagueVariant === 'guillotine'
 }
 

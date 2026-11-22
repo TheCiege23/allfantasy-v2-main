@@ -1,6 +1,6 @@
 /* Guillotine specialty home + chop moment. Layered on components/league/specialty/specialty.module.css. */
 .big { font-family: 'Bebas Neue', 'Archivo', sans-serif; letter-spacing: .02em; font-weight: 400; }
-.rank { width: 22px; flex: none; text-align: right; font: 700 12px 'JetBrains Mono', monospace; color: #7d84a3; }
+.rank { width: 22px; flex: none; text-align: right; font: 700 12px 'JetBrains Mono', monospace; color: var(--sp-t3, #7d84a3); }
 .name { flex: 0 1 190px; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pts { width: 64px; flex: none; text-align: right; font-weight: 700; }
 .delta { width: 64px; flex: none; text-align: right; font-size: 12px; }
@@ -11,12 +11,12 @@
   position: absolute; right: 0; top: -12px; white-space: nowrap; padding: 1px 8px; border-radius: 4px;
   background: #e0402e; color: #fff; font: 700 11px 'Archivo', sans-serif; letter-spacing: .08em;
 }
-.chopChip>s { color: #8d93ad; }
-.chopChip>span { color: #ff9a8a; }
+.chopChip>s { color: var(--sp-muted, #8d93ad); }
+.chopChip>span { color: var(--sp-zone, #ff9a8a); }
 .list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.survBig { font-size: 40px; line-height: 1; color: #bff3d0; }
-.survBigDanger { color: #ffd59a; }
-.survBigZone { color: #ffb0a4; }
+.survBig { font-size: 40px; line-height: 1; color: var(--gl-safe-big, #bff3d0); }
+.survBigDanger { color: var(--gl-danger-big, #ffd59a); }
+.survBigZone { color: var(--gl-zone-big, #ffb0a4); }
 
 /* ---------- phone vs desktop ---------- */
 .desktopOnly { display: contents; }
@@ -30,11 +30,15 @@
 
 .phone { flex-direction: column; gap: 16px; }
 .phoneStatus { text-align: center; padding: 20px 18px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-.phoneMargin { font-size: 64px; line-height: 1; color: #bff3d0; }
+.phoneMargin { font-size: 64px; line-height: 1; color: var(--gl-safe-big, #bff3d0); }
 .phoneCtas { display: flex; flex-direction: column; gap: 12px; }
 .phoneCtas>* { min-height: 52px; width: 100%; }
 
-/* ---------- the chop (signature moment) ---------- */
+/* ---------- the chop (signature moment) ----------
+ * The blade, the slash and the CHOPPED stamp all land in the AVATAR ZONE (the card's top padding plus the
+ * 56px avatar), so the chopped team's name and score stay readable under them (2026-11-06). The stamp used
+ * to be centred on the whole card and covered the name completely at 820 and 1440px.
+ * __tests__/guillotine/guillotineChopStamp.test.ts checks the arithmetic at both sizes. */
 .stage { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding-top: 120px; }
 .card {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 16px;
@@ -46,15 +50,15 @@
 .blade { position: absolute; left: 50%; top: -118px; width: 200px; max-width: 110%; margin-left: -100px; z-index: 3; transition: transform .5s cubic-bezier(.7, 0, .9, .4); }
 .blade>svg { display: block; width: 100%; overflow: visible; }
 .slash {
-  position: absolute; left: -6px; right: -6px; top: 50%; height: 4px; background: #e0402e; box-shadow: 0 0 14px #e0402e;
+  position: absolute; left: -6px; right: -6px; top: 50px; height: 4px; background: #e0402e; box-shadow: 0 0 14px #e0402e;
   transform: rotate(-8deg) scaleX(0); transform-origin: left; transition: transform .3s ease-out .5s; z-index: 2;
 }
-.stampWrap { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; }
+.stampWrap { position: absolute; left: 0; right: 0; top: 0; height: 78px; display: grid; place-items: center; pointer-events: none; z-index: 4; }
 .stamp {
-  display: inline-block; padding: 6px 14px; border: 4px solid #e0402e; color: #ff6a5a; font: 400 40px 'Bebas Neue', sans-serif;
+  display: inline-block; padding: 6px 14px; border: 4px solid #e0402e; color: #ff6a5a; font: 400 34px 'Bebas Neue', sans-serif;
   letter-spacing: .08em; border-radius: 6px; background: rgba(7, 8, 13, .7); animation: glPop .4s ease-out .6s both; rotate: -10deg;
 }
-.chopped .blade { transform: translateY(96px); }
+.chopped .blade { transform: translateY(84px); }
 .chopped .slash { transform: rotate(-8deg) scaleX(1); }
 .chopped .target { animation: glShake .4s ease-out .5s both; background: rgba(224, 64, 46, .16); border-color: #e0402e; }
 .chopped .target .avDim { filter: grayscale(1) brightness(.7); }
@@ -70,11 +74,23 @@
   .card { padding: 14px 6px; }
   .cardPts { font-size: 22px; }
   .blade { width: 120px; margin-left: -60px; top: -88px; }
+  .slash { top: 42px; }
+  .stampWrap { height: 70px; }
   .chopped .blade { transform: translateY(70px); }
-  .stamp { font-size: 26px; padding: 4px 8px; }
+  .stamp { font-size: 24px; padding: 3px 8px; border-width: 3px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .blade, .slash, .card { transition: none; }
   .stamp, .released, .chopped .target { animation: none; }
+}
+
+/* Light mode (2026-11-06): the Guilly-only tokens. Set on .home (the shell root, via className) and reset inside the
+ * hero and .stayDark by components/league/specialty/specialty.module.css. */
+:global(html[data-mode='light']) .home {
+  --gl-safe-big: #097352;
+  --gl-danger-big: #8d5905;
+  --gl-zone-big: #a3260f;
+  --gl-me-row: #e8edf8;
+  --gl-me-line: rgba(11, 16, 32, .22);
 }

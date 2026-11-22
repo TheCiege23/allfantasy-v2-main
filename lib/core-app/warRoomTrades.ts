@@ -45,12 +45,12 @@ export const MIN_GAIN = 1
 /** Ideas priced by simulation. The rest are discarded after the screen. */
 const PRICE_TOP = 6
 /** Ideas shown. */
-export const MAX_IDEAS = 3
+const MAX_IDEAS = 3
 /** Sell mode: veterans listed, and partners named per veteran. */
 const MAX_VETERANS = 3
 const PARTNERS_PER_VETERAN = 2
 
-export type TradePlayer = { id: string; name: string; position: string | null; team: string | null; age: number | null }
+type TradePlayer = { id: string; name: string; position: string | null; team: string | null; age: number | null }
 
 export type WinNowIdea = {
   partnerRosterId: string
@@ -67,7 +67,7 @@ export type WinNowIdea = {
   partnerPlayoffPct: number | null
 }
 
-export type SellIdea = {
+type SellIdea = {
   player: TradePlayer
   /** The age at which this position usually declines (dynastyAging.ts) — printed beside the age. */
   agingFrom: number

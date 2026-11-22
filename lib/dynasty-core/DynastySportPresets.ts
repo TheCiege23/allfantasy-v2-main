@@ -26,9 +26,9 @@
 import type { DynastySetupState } from '@/lib/create-league-v2/state'
 import { sportSupportsProspectStash } from '@/lib/league-creation/prospectStashPolicy'
 
-export type DynastySportPresetSport = 'NBA' | 'NHL' | 'MLB'
+type DynastySportPresetSport = 'NBA' | 'NHL' | 'MLB'
 
-export type DynastySportPreset = {
+type DynastySportPreset = {
   id: string
   sport: DynastySportPresetSport
   scoringPresetId: string
@@ -53,11 +53,6 @@ export const DYNASTY_SPORT_PRESETS: readonly DynastySportPreset[] = [
   { id: 'mlb_dynasty_points_minors', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 18, irCount: 4, taxiSlotCount: 0, taxiEligibilityYears: 2, startupRosterDepth: 34 },
   { id: 'mlb_dynasty_points_deep', sport: 'MLB', scoringPresetId: 'mlb_points', benchCount: 26, irCount: 6, taxiSlotCount: 0, taxiEligibilityYears: 3, startupRosterDepth: 40 },
 ]
-
-export function isDynastySportPresetSport(sport: string | null | undefined): sport is DynastySportPresetSport {
-  const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'NBA' || s === 'NHL' || s === 'MLB'
-}
 
 /** Presets for one sport, default first. Empty for NFL / NCAAF / NCAAB / SOCCER. */
 export function getDynastySportPresets(sport: string | null | undefined): DynastySportPreset[] {
