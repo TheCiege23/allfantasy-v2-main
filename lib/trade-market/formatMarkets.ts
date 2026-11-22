@@ -36,6 +36,14 @@ import {
   type PostureMarket,
   type PostureObservation,
 } from './postureMarketLearner'
+import {
+  computeNeedMarket,
+  needAt,
+  packagePosition,
+  slotsFromRosterPositions,
+  type NeedMarket,
+  type NeedObservation,
+} from './needMarketLearner'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
 
 /**
@@ -366,6 +374,8 @@ type FormatGather = {
   byBookPicks: Map<string, PickGather>
   /** Every book: one observation per side whose posture and purchase could be read (`postureMarketLearner.ts`). */
   byBookPosture: Map<string, PostureGather>
+  /** Every book: one observation per side whose need at the position it bought could be read (`needMarketLearner.ts`). */
+  byBookNeed: Map<string, NeedGather>
   lineupObservations: LineupObservation[]
   /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
   formatStamps: Array<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>
@@ -579,15 +589,18 @@ export async function gatherFormatObservations(
   for (const b of MARKET_BOOKS) if (b.format === 'DYNASTY') byBookPicks.set(bookKey(b), { observations: [], skipped: {} })
   const byBookPosture = new Map<string, PostureGather>()
   for (const b of MARKET_BOOKS) byBookPosture.set(bookKey(b), { observations: [], skipped: {} })
+  const byBookNeed = new Map<string, NeedGather>()
+  for (const b of MARKET_BOOKS) byBookNeed.set(bookKey(b), { observations: [], skipped: {} })
   try {
-    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, now: opts.now ?? new Date() })
+    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, byBookNeed, now: opts.now ?? new Date() })
   } catch {
     for (const g of byBookDated.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
     for (const g of byBookPicks.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
     for (const g of byBookPosture.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
+    for (const g of byBookNeed.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
   }
 
-  return { byBook, byBookDated, byBookPicks, byBookPosture, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
+  return { byBook, byBookDated, byBookPicks, byBookPosture, byBookNeed, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -608,6 +621,7 @@ async function gatherDatedObservations(
     byBookDated: Map<string, DatedGather>
     byBookPicks?: Map<string, PickGather>
     byBookPosture?: Map<string, PostureGather>
+    byBookNeed?: Map<string, NeedGather>
     now: Date
   },
 ): Promise<void> {
@@ -696,6 +710,12 @@ async function gatherDatedObservations(
       const read = postureObservationsFor(t, dated.get(`${key}|${day}`)!, ctx.meta, faabMoved, league, recencyWeight(t.tradeDate, ctx.now), ctx.now)
       if (Array.isArray(read)) postureGather.observations.push(...read)
       else postureGather.skipped[read] = (postureGather.skipped[read] ?? 0) + 1
+    }
+    const needGather = ctx.byBookNeed?.get(key)
+    if (needGather && t.tradeDate) {
+      const read = needObservationsFor(t, dated.get(`${key}|${day}`)!, ctx.meta, faabMoved, league, recencyWeight(t.tradeDate, ctx.now))
+      if (Array.isArray(read)) needGather.observations.push(...read)
+      else needGather.skipped[read] = (needGather.skipped[read] ?? 0) + 1
     }
     const attributed = attributeTrade(t, dated.get(`${key}|${day}`)!, {
       allowPicks: league.book.format === 'DYNASTY',
@@ -972,7 +992,7 @@ export async function recalculateFormatMarkets(
     now?: Date
     env?: NodeJS.ProcessEnv
   },
-): Promise<{ books: BookResult[]; pickMarkets: PickBookResult[]; postureMarkets: PostureBookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
+): Promise<{ books: BookResult[]; pickMarkets: PickBookResult[]; postureMarkets: PostureBookResult[]; needMarkets: NeedBookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
   const dryRun = opts.dryRun !== false
   const generatedAt = opts.now ?? new Date()
   const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason, now: generatedAt })
@@ -1010,6 +1030,12 @@ export async function recalculateFormatMarkets(
         return g ? [{ book, concept: bookConcept(book), ...computePostureMarket(g.observations, generatedAt), skipped: g.skipped }] : []
       })
     : []
+  const needMarkets: NeedBookResult[] = needLearnerOn(opts.env)
+    ? MARKET_BOOKS.flatMap((book) => {
+        const g = gathered.byBookNeed.get(bookKey(book))
+        return g ? [{ book, concept: bookConcept(book), ...computeNeedMarket(g.observations, generatedAt), skipped: g.skipped }] : []
+      })
+    : []
 
   const lineup = computeLineupFactors(
     gathered.lineupObservations,
@@ -1023,13 +1049,31 @@ export async function recalculateFormatMarkets(
   }
   // Best-effort and last: a stamping failure must never cost the markets this run already wrote.
   const tradesStamped = !dryRun && opts.stampTrades ? await stampTradeFormats(prisma, gathered.formatStamps).catch(() => 0) : 0
-  return { books, pickMarkets, postureMarkets, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
+  return { books, pickMarkets, postureMarkets, needMarkets, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
 }
 
 /** One book's posture observations and why the rest were not used. */
 type PostureGather = { observations: PostureObservation[]; skipped: Record<string, number> }
 
-type SnapshotSide = { rosterId?: unknown; record?: { wins?: unknown; losses?: unknown; ties?: unknown } | null }
+type SnapshotSide = {
+  rosterId?: unknown
+  record?: { wins?: unknown; losses?: unknown; ties?: unknown } | null
+  rosterBefore?: Array<{ id?: unknown; position?: string | null }>
+}
+type SnapshotShape = { sides?: SnapshotSide[]; unavailable?: unknown; starterSlots?: Record<string, number> | null; league?: { roster_positions?: unknown } }
+
+/**
+ * The two sides of a trade in its saved context: the row's partner roster names the other side, so the row's own side
+ * is the context side that is NOT the partner. Null when there is no usable context. PURE.
+ */
+function contextSidesOf(t: Pick<TradeRow, 'partnerRosterId' | 'contextSnapshot'>): { snap: SnapshotShape; own: SnapshotSide; partner: SnapshotSide } | null {
+  const snap = t.contextSnapshot && typeof t.contextSnapshot === 'object' ? (t.contextSnapshot as SnapshotShape) : null
+  const sides = snap && !snap.unavailable && Array.isArray(snap.sides) ? snap.sides : null
+  if (!snap || !sides || sides.length !== 2 || t.partnerRosterId == null) return null
+  const partner = sides.find((x) => String(x.rosterId) === String(t.partnerRosterId))
+  const own = sides.find((x) => x !== partner)
+  return partner && own ? { snap, own, partner } : null
+}
 
 /**
  * Both sides of one trade, read for posture: each side's record from the saved context, what it bought, and what it
@@ -1046,12 +1090,9 @@ export function postureObservationsFor(
   weight: number,
   now: Date,
 ): PostureObservation[] | 'no_context' | 'no_posture' | 'unpriced_player' | 'mixed_package' {
-  const snap = t.contextSnapshot && typeof t.contextSnapshot === 'object' ? (t.contextSnapshot as { sides?: SnapshotSide[]; unavailable?: unknown }) : null
-  const sides = snap && !snap.unavailable && Array.isArray(snap.sides) ? snap.sides : null
-  if (!sides || sides.length !== 2 || t.partnerRosterId == null || !t.tradeDate) return 'no_context'
-  const partner = sides.find((s) => String(s.rosterId) === String(t.partnerRosterId))
-  const own = sides.find((s) => s !== partner)
-  if (!partner || !own) return 'no_context'
+  const ctxSides = contextSidesOf(t)
+  if (!ctxSides || !t.tradeDate) return 'no_context'
+  const { own, partner } = ctxSides
   const rec = (s: SnapshotSide) => s.record ? { wins: Number(s.record.wins) || 0, losses: Number(s.record.losses) || 0, ties: Number(s.record.ties) || 0 } : null
   const week = Number(t.week ?? 0)
   const ownPosture = postureOf(rec(own), week)
@@ -1110,6 +1151,71 @@ export async function writePostureMarketTable(prisma: PrismaClient, markets: rea
   await prisma.sportsDataCache.upsert({
     where: { cacheKey: POSTURE_MARKET_CACHE_KEY },
     create: { cacheKey: POSTURE_MARKET_CACHE_KEY, expiresAt, data: data as unknown as object },
+    update: { expiresAt, data: data as unknown as object },
+  })
+}
+
+/** One book's need observations and why the rest were not used. */
+type NeedGather = { observations: NeedObservation[]; skipped: Record<string, number> }
+
+/**
+ * Both sides of one trade, read for need: each buyer's depth at the one position it bought, from its roster just
+ * before the trade against the league's starting slots, and what it paid on the trade day's chart. PURE.
+ */
+export function needObservationsFor(
+  t: Pick<TradeRow, 'transactionId' | 'partnerRosterId' | 'contextSnapshot' | 'playersGiven' | 'playersReceived' | 'picksGiven' | 'picksReceived'>,
+  chart: ReadonlyMap<string, number>,
+  meta: ReadonlyMap<string, { position: string | null }>,
+  faabMoved: { given: number; received: number } | null,
+  league: Pick<ResolvedTradeLeague, 'faabBudget'>,
+  weight: number,
+): NeedObservation[] | 'no_context' | 'no_slots' | 'unpriced_player' | 'not_one_position' {
+  const ctxSides = contextSidesOf(t)
+  if (!ctxSides) return 'no_context'
+  const slots = ctxSides.snap.starterSlots ?? slotsFromRosterPositions(ctxSides.snap.league?.roster_positions)
+  if (!slots) return 'no_slots'
+  const given = asIds(t.playersGiven)
+  const received = asIds(t.playersReceived)
+  if (![...given, ...received].every((id) => chart.has(id))) return 'unpriced_player'
+  const picks = (raw: unknown) => (parsePicks(raw) ?? []).reduce((n, p) => n + FIRST_ROUND_IN_MARKET_UNITS * pickRoundShare(p.round), 0)
+  const value = (ids: string[], picksRaw: unknown, faab: number) =>
+    ids.reduce((n, id) => n + (chart.get(id) ?? 0), 0) + picks(picksRaw) + (faab > 0 ? normalizedFaabValue(faab, league.faabBudget) : 0)
+  const gave = value(given, t.picksGiven, faabMoved?.given ?? 0)
+  const got = value(received, t.picksReceived, faabMoved?.received ?? 0)
+  if (!(gave > 0) || !(got > 0)) return 'unpriced_player'
+  // A package is one position only if its PLAYERS make up most of it — picks and FAAB count against that.
+  const partsOf = (ids: string[], total: number) => [
+    ...ids.map((id) => ({ position: meta.get(id)?.position ?? null, value: chart.get(id) ?? 0 })),
+    { position: null, value: total - ids.reduce((n, id) => n + (chart.get(id) ?? 0), 0) },
+  ]
+  const out: NeedObservation[] = []
+  const ownPos = packagePosition(partsOf(received, got))
+  const ownNeed = ownPos ? needAt(ctxSides.own.rosterBefore, slots, ownPos) : null
+  if (ownPos && ownNeed) out.push({ transactionId: t.transactionId, position: ownPos, need: ownNeed, ratio: gave / got, weight })
+  const partnerPos = packagePosition(partsOf(given, gave))
+  const partnerNeed = partnerPos ? needAt(ctxSides.partner.rosterBefore, slots, partnerPos) : null
+  if (partnerPos && partnerNeed) out.push({ transactionId: t.transactionId, position: partnerPos, need: partnerNeed, ratio: got / gave, weight })
+  return out.length ? out : 'not_one_position'
+}
+
+/** One book's need premiums (shadow — stored, read by nothing yet). */
+export type NeedBookResult = { book: MarketBook; concept: string } & NeedMarket & { skipped: Record<string, number> }
+
+/** `TRADE_NEED_LEARNER=off` stops the need market being computed or stored. */
+export const TRADE_NEED_LEARNER_ENV = 'TRADE_NEED_LEARNER'
+export function needLearnerOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env[TRADE_NEED_LEARNER_ENV] ?? '').trim().toLowerCase() !== 'off'
+}
+
+export const NEED_MARKET_CACHE_KEY = 'af-trade-market:need-premiums:NFL'
+
+/** Store the need premiums, per book, for 21 days. Shadow: nothing reads this key yet. */
+export async function writeNeedMarketTable(prisma: PrismaClient, markets: readonly NeedBookResult[], generatedAt: Date): Promise<void> {
+  const expiresAt = new Date(generatedAt.getTime() + 21 * 24 * 60 * 60 * 1000)
+  const data = { generatedAt: generatedAt.toISOString(), books: markets.map((m) => ({ ...m, book: bookKey(m.book) })) }
+  await prisma.sportsDataCache.upsert({
+    where: { cacheKey: NEED_MARKET_CACHE_KEY },
+    create: { cacheKey: NEED_MARKET_CACHE_KEY, expiresAt, data: data as unknown as object },
     update: { expiresAt, data: data as unknown as object },
   })
 }
