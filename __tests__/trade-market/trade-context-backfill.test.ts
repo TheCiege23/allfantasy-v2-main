@@ -9,7 +9,10 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-const { sidesOf, buildRebuiltTradeContext, backfillTradeContexts, TRADE_CONTEXT_BACKFILL_MIN_AGE_MS, TRADE_CONTEXT_BACKFILL_MIN_RUNWAY_MS } =
+const {
+  sidesOf, buildRebuiltTradeContext, backfillTradeContexts, rosterWeekFor, week1RowsAfterTrade, tradePlayerIds,
+  TRADE_CONTEXT_BACKFILL_MIN_AGE_MS, TRADE_CONTEXT_BACKFILL_MIN_RUNWAY_MS,
+} =
   await import('@/lib/trade-market/tradeContextBackfill')
 
 const NOW = new Date('2026-11-22T12:00:00Z')
@@ -68,9 +71,89 @@ describe('rebuilding one trade', () => {
       return 'unavailable' in r ? r.unavailable : 'rebuilt'
     }
     expect(reason({ rows: [candidate.rows[0]!] })).toBe('one_side_stored')
-    expect(reason({ week: 1 })).toBe('no_trade_week')
-    expect(reason({ week: 0 })).toBe('no_trade_week')
     expect(reason({}, rosterRows.filter((r) => r.rosterId !== '7'))).toBe('no_roster_rows')
+    // An offseason trade with no week-1 rows for a team has nothing to rebuild from.
+    expect(reason({ week: 0 }, rosterRows.filter((r) => r.rosterId !== '7'))).toBe('no_roster_rows')
+  })
+})
+
+describe('an offseason trade', () => {
+  // In the offseason A (roster 3) sent qb1 to B (roster 7) for wr5. Week 1's rows show the rosters AFTER it.
+  const offseason = {
+    ...candidate, week: 0, tradeAt: new Date('2026-05-01T18:00:00Z'),
+    rows: [
+      { managerId: 'mgr-a', partnerRosterId: 7, playersGiven: ['qb1'], playersReceived: ['wr5'] },
+      { managerId: 'mgr-b', partnerRosterId: 3, playersGiven: ['wr5'], playersReceived: ['qb1'] },
+    ],
+  }
+  const week1After = [
+    { playerId: 'wr5', rosterId: '3', isStarter: true },
+    { playerId: 'te9', rosterId: '3', isStarter: false },
+    { playerId: 'qb1', rosterId: '7', isStarter: true },
+    { playerId: 'rb4', rosterId: '7', isStarter: true },
+  ]
+  const build = (rows: typeof week1After, c = offseason) =>
+    buildRebuiltTradeContext({ candidate: c, rosterRows: rows, resultRows, league, positions, now: NOW })
+  const roster = (ctx: ReturnType<typeof build>, rid: string) => {
+    if ('unavailable' in ctx) throw new Error(`expected a rebuild, got ${ctx.unavailable}`)
+    return ctx.sides.find((s) => s.rosterId === rid)!.rosterBefore.map((p) => [p.id, p.starter])
+  }
+
+  it('reads week 1 and undoes the trade: what a side got comes off, what it gave goes back, lineup unknown for it', () => {
+    expect(rosterWeekFor(0)).toBe(1)
+    expect(rosterWeekFor(1)).toBe(1)
+    expect(rosterWeekFor(9)).toBe(8)
+    const ctx = build(week1After)
+    if ('unavailable' in ctx) throw new Error('expected a rebuild')
+    expect(ctx.rosterBasis).toEqual({ kind: 'week1_unwound', week: 1 })
+    expect(roster(ctx, '3')).toEqual([['qb1', null], ['te9', false]])
+    expect(roster(ctx, '7')).toEqual([['rb4', true], ['wr5', null]])
+    // The record before an offseason trade is 0-0: none of the season's games had been played.
+    expect(ctx.sides[0]!.record).toMatchObject({ wins: 0, losses: 0, pointsFor: 0 })
+  })
+
+  it('a week-1 trade whose rows already predate it is read as it is, not undone twice', () => {
+    const week1Before = [
+      { playerId: 'qb1', rosterId: '3', isStarter: true },
+      { playerId: 'wr5', rosterId: '7', isStarter: true },
+    ]
+    const ctx = build(week1Before, { ...offseason, week: 1 })
+    if ('unavailable' in ctx) throw new Error('expected a rebuild')
+    expect(ctx.rosterBasis).toEqual({ kind: 'weekly_rows', week: 1 })
+    expect(roster(ctx, '3')).toEqual([['qb1', true]])
+    expect(roster(ctx, '7')).toEqual([['wr5', true]])
+  })
+
+  it('evidence is counted, not assumed: no players on either roster reads as after the trade', () => {
+    const sides = [{ rosterId: '3' }, { rosterId: '7' }]
+    const by = (rows: typeof week1After) => {
+      const m = new Map<string, typeof week1After>()
+      for (const r of rows) m.set(r.rosterId, [...(m.get(r.rosterId) ?? []), r])
+      return m
+    }
+    expect(week1RowsAfterTrade(offseason.rows, sides, by(week1After))).toBe(true)
+    expect(week1RowsAfterTrade(offseason.rows, sides, by([{ playerId: 'qb1', rosterId: '3', isStarter: true }]))).toBe(false)
+    expect(week1RowsAfterTrade(offseason.rows, sides, by([{ playerId: 'zz', rosterId: '3', isStarter: true }]))).toBe(true)
+  })
+
+  it('stored player columns become ids, whether plain ids or objects carrying one', () => {
+    expect(tradePlayerIds(['4046', 17, ' '])).toEqual(['4046', '17'])
+    expect(tradePlayerIds([{ id: 'a' }, { playerId: 'b' }, { sleeperId: 9 }, { name: 'no id' }, null])).toEqual(['a', 'b', '9'])
+    expect(tradePlayerIds('not a list')).toEqual([])
+  })
+
+  it('a run reads week 1 for it and looks up the position of a player it puts back', async () => {
+    // B has since dropped qb1, so no week-1 row names him — only the unwind puts him back, and his position is still looked up.
+    const loadRosterRows = vi.fn(async () => week1After.filter((r) => r.playerId !== 'qb1'))
+    const loadPositions = vi.fn(async () => positions)
+    const r = await backfillTradeContexts({
+      listCandidates: vi.fn(async () => [offseason]), loadRosterRows, loadResultRows: vi.fn(async () => []),
+      loadLeague: vi.fn(async () => league), loadPositions, save: vi.fn(async () => 2), remainingMs: () => 200_000, now: () => NOW,
+    }, {})
+    expect(r).toMatchObject({ rebuilt: 1, errors: [] })
+    expect(loadRosterRows).toHaveBeenCalledWith('sl-1', 2026, 1)
+    expect(loadPositions.mock.calls[0]![1]).toEqual(expect.arrayContaining(['qb1', 'wr5', 'te9', 'rb4']))
+    expect(loadPositions).toHaveBeenCalledTimes(1)
   })
 })
 
