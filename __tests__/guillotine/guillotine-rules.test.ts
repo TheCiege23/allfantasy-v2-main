@@ -248,6 +248,19 @@ describe('saveGuillotineRules', () => {
     expect(leagueUpdate.mock.calls[0]![0].data.settings.guillotineFaabOnChop).toBe('keep')
   })
 
+  it('refuses "split" while FAAB after a chop tops up or resets survivors (owner, 2026-11-22), and writes nothing', async () => {
+    evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
+    leagueFindUnique.mockResolvedValue({
+      sport: 'NBA',
+      settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'set', amount: 100 } } },
+      guillotineEndgame: 'last_team_standing',
+    })
+    const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })
+    expect(r).toMatchObject({ ok: false, status: 409, field: 'faabOnChop' })
+    expect('error' in r && r.error).toMatch(/can't both be on/)
+    expect(leagueUpdate).not.toHaveBeenCalled()
+  })
+
   it('saves the chopped-team FAAB choice to League.settings for an AF Commissioner', async () => {
     evaluateUserFeatureAccess.mockResolvedValue({ allowed: true })
     const r = await saveGuillotineRules('L1', 'u1', { faabOnChop: 'split' })

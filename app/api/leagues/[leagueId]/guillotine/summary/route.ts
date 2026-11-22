@@ -287,7 +287,7 @@ export async function PATCH(
     const before = await bestEffort(() => readGuillotineAdvanced(leagueId))
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
-      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
+      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : saved.error === 'faab_conflict' ? 409 : 400
       const message =
         saved.error === 'not_entitled'
           ? 'Chop schedules, immunity and FAAB after a chop are part of AF Commissioner.'

@@ -74,3 +74,18 @@ describe('FAAB after a chop', () => {
     expect(db.state.events).toEqual([])
   })
 })
+
+describe('FAAB after a chop with the split also on (a league saved before they were exclusive)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.state.rosters = [{ id: 'a', faabRemaining: 40 }, { id: 'out', faabRemaining: 90 }]
+    db.state.chopped = ['out']
+    db.state.events = []
+  })
+  it('skips the reset so the split stands, and records nothing', async () => {
+    db.state.settings = { guillotineFaabOnChop: 'split', guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'set', amount: 100 } } }
+    expect(await applyFaabAfterChop({ leagueId: 'l', seasonKey: 's1', weekOrPeriod: 4 })).toEqual({ applied: false, reason: 'split_active' })
+    expect(balances()).toEqual({ a: 40, out: 90 })
+    expect(db.state.events).toEqual([])
+  })
+})

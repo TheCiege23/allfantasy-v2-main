@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { faabAfterChop, readAdvanced } from './chopSchedule'
+import { readFaabOnChop } from './faabOnChop'
+import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
 
 /**
  * Apply the league's "FAAB after a chop" rule (./chopSchedule, spec §4.5 released-player rules) once
@@ -16,7 +18,7 @@ import { faabAfterChop, readAdvanced } from './chopSchedule'
 
 export type FaabAfterChopResult =
   | { applied: true; rosters: number }
-  | { applied: false; reason: 'rule_unchanged' | 'already_applied' | 'no_survivors' }
+  | { applied: false; reason: 'rule_unchanged' | 'split_active' | 'already_applied' | 'no_survivors' }
 
 export async function applyFaabAfterChop(input: { leagueId: string; seasonKey: string; weekOrPeriod: number }): Promise<FaabAfterChopResult> {
   const key = `${input.seasonKey}:${input.weekOrPeriod}`
@@ -25,6 +27,9 @@ export async function applyFaabAfterChop(input: { leagueId: string; seasonKey: s
     const league = await tx.league.findUnique({ where: { id: input.leagueId }, select: { settings: true } })
     const rule = readAdvanced(league?.settings).faab
     if (rule.mode === 'unchanged') return { applied: false, reason: 'rule_unchanged' } as const
+    // Both rules on (saved before they were made exclusive, faabOnChop.ts): the split has already run for this
+    // chop, and a reset after it would erase it. The split wins; the commissioner is told at the next save.
+    if (readFaabOnChop(league?.settings) === 'split') return { applied: false, reason: 'split_active' } as const
     const done = await tx.guillotineEventLog.findFirst({
       where: { leagueId: input.leagueId, eventType: 'faab_after_chop', metadata: { path: ['key'], equals: key } },
       select: { id: true },
@@ -43,6 +48,9 @@ export async function applyFaabAfterChop(input: { leagueId: string; seasonKey: s
     for (const c of changes) {
       if (c.after !== c.before) await tx.roster.update({ where: { id: c.rosterId }, data: { faabRemaining: c.after } })
     }
+    // The redraft roster's balance is what the redraft waiver screens show; the split mirrors the same way.
+    const moved = changes.filter((c) => c.after !== c.before).map((c) => c.rosterId)
+    if (moved.length) await copyGenericFaabToRedraft(tx, moved)
     await tx.guillotineEventLog.create({
       data: { leagueId: input.leagueId, eventType: 'faab_after_chop', metadata: { key, weekOrPeriod: input.weekOrPeriod, rule, changes } },
     })

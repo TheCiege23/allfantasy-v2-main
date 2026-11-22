@@ -51,3 +51,17 @@ describe('saveGuillotineAdvanced', () => {
     expect(db.prisma.league.update).not.toHaveBeenCalled()
   })
 })
+
+describe('FAAB after a chop and the FAAB split cannot both be on (owner, 2026-11-22)', () => {
+  it('refuses a top-up or reset while the league splits a chopped team\'s FAAB, and writes nothing', async () => {
+    db.state.settings = { scoring: 'ppr', guillotineFaabOnChop: 'split' }
+    const saved = await saveGuillotineAdvanced('L1', 'u1', { ...rules, faab: { mode: 'set', amount: 100 } })
+    expect(saved).toMatchObject({ ok: false, error: 'faab_conflict' })
+    expect('message' in saved && saved.message).toMatch(/can't both be on/)
+    expect(db.prisma.league.update).not.toHaveBeenCalled()
+  })
+  it('still saves a schedule with FAAB left unchanged while the split is on', async () => {
+    db.state.settings = { scoring: 'ppr', guillotineFaabOnChop: 'split' }
+    expect(await saveGuillotineAdvanced('L1', 'u1', rules)).toMatchObject({ ok: true })
+  })
+})
