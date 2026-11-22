@@ -6,6 +6,7 @@ import { NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY 
 import { equivalentRoundBucket, nextDraftYear, type PickClassKey } from './pickMarketLearner'
 import type { NeedLevel, NeedPosition } from './needMarketLearner'
 import type { AssetKind, Posture } from './postureMarketLearner'
+import { booksNotHeld, HOLDOUT_CACHE_KEY, holdoutRowsOf } from './holdoutCheck'
 
 /**
  * THE LEARNED TABLES IN THE GRADES — EACH BEHIND ITS OWN SWITCH, ALL OFF (owner's call, 2026-11-22: "switching them on
@@ -58,6 +59,20 @@ export function booksOf<T>(raw: unknown, field: 'classes' | 'premiums', now: Dat
   return out
 }
 
+/**
+ * Drop every book whose learner did NOT hold on later trades (`holdoutCheck.ts`). Only a stored `not_held` removes
+ * anything — no verdict, a stale one or `unknown` leaves the tables exactly as read. PURE.
+ */
+export function withoutNotHeld(tables: LearnedTables, holdoutRaw: unknown, now: Date): LearnedTables {
+  const rows = holdoutRowsOf(holdoutRaw, now)
+  if (rows.length === 0) return tables
+  const keep = <T,>(m: Map<string, T[]>, learner: 'picks' | 'posture' | 'need') => {
+    const drop = booksNotHeld(rows, learner)
+    return drop.size === 0 ? m : new Map([...m].filter(([book]) => !drop.has(book)))
+  }
+  return { picks: keep(tables.picks, 'picks'), posture: keep(tables.posture, 'posture'), need: keep(tables.need, 'need') }
+}
+
 type CacheDelegate = { sportsDataCache: { findUnique: (args: { where: { cacheKey: string } }) => PromiseLike<unknown> } }
 
 let memo: { at: number; tables: LearnedTables } | null = null
@@ -70,12 +85,16 @@ export async function loadLearnedTables(prisma: CacheDelegate, now = new Date())
     const row = (await Promise.resolve(prisma.sportsDataCache.findUnique({ where: { cacheKey: key } })).catch(() => null)) as { data?: unknown } | null
     return row?.data ?? null
   }
-  const [picks, posture, need] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY)])
-  const tables: LearnedTables = {
-    picks: booksOf<PickClassRow>(picks, 'classes', now),
-    posture: booksOf(posture, 'premiums', now),
-    need: booksOf(need, 'premiums', now),
-  }
+  const [picks, posture, need, holdout] = await Promise.all([read(PICK_MARKET_CACHE_KEY), read(POSTURE_MARKET_CACHE_KEY), read(NEED_MARKET_CACHE_KEY), read(HOLDOUT_CACHE_KEY)])
+  const tables = withoutNotHeld(
+    {
+      picks: booksOf<PickClassRow>(picks, 'classes', now),
+      posture: booksOf(posture, 'premiums', now),
+      need: booksOf(need, 'premiums', now),
+    },
+    holdout,
+    now,
+  )
   memo = { at: now.getTime(), tables }
   return tables
 }

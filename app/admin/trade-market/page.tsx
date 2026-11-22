@@ -52,6 +52,15 @@ export default async function TradeMarketPage() {
             <p className="text-sm text-white/70" data-testid="admin-trade-market-summary">
               {data.publishedRows} of {data.totalRows} measured numbers are published.
             </p>
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/70" data-testid="admin-trade-market-holdout">
+              <span className="font-semibold text-white">Checked on later trades: </span>
+              {data.holdout.status.missing
+                ? "not run yet. Until it runs, the publish thresholds alone decide what a grade uses."
+                : `last run ${data.holdout.status.generatedAt?.slice(0, 16).replace("T", " ")} UTC${data.holdout.cutoff ? `, testing on trades from ${data.holdout.cutoff.slice(0, 10)} on` : ""}. A number that made grades worse on those trades is ignored until it holds again.`}{" "}
+              {data.holdout.releasedToPartners
+                ? "The partner page shows the trade market panel."
+                : "The partner page keeps the trade market panel hidden until more of these hold than fail."}
+            </p>
             {data.sections.map((s) => <SectionView key={s.key} section={s} />)}
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-section="other-sports">
               <h2 className="text-base font-bold">Other sports — NBA, MLB, NHL, NCAAB, soccer</h2>
@@ -119,6 +128,16 @@ function SectionView({ section: s }: { section: ReportSection }) {
               {b.label}
               {b.tradesUsed != null ? <span className="ml-2 font-normal text-white/50">{b.tradesUsed.toLocaleString("en-US")} observations</span> : null}
             </h3>
+            {b.holdout ? (
+              <p
+                className={`mt-1 rounded-lg border p-2 text-xs ${b.holdout.verdict === "not_held" ? "border-rose-400/40 bg-rose-400/10 text-rose-100" : b.holdout.verdict === "held" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100" : "border-white/15 bg-white/5 text-white/65"}`}
+                data-testid={`holdout-${s.key}-${b.book}`}
+                data-verdict={b.holdout.verdict}
+              >
+                <span className="font-semibold">Checked on later trades. </span>
+                {b.holdout.says}
+              </p>
+            ) : null}
             {b.warnings.map((w) => (
               <p key={w} className="mt-1 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2 text-xs text-amber-100">{w}</p>
             ))}

@@ -19,6 +19,7 @@ import {
 import { backfillTradeFaab } from './tradeFaabBackfill'
 import { runBoardSportLearning } from './boardSportLearning'
 import type { BoardSportMarket } from './boardSportLearner'
+import { runHoldoutCheck, type HoldoutDoc } from './holdoutCheck'
 
 /**
  * The SCHEDULED writer for the AllFantasy trade market (rides `/api/cron/recompute-allfantasy-adp`).
@@ -69,6 +70,8 @@ export type ScheduledMarketRecalcResult = {
   faabBackfill: { off?: true; rowsFilled: number } | null
   /** NBA / MLB / NHL / NCAAB / soccer trade learning (shadow) — null when the read failed. */
   boardSports: { off?: true; markets: BoardSportMarket[]; written: boolean } | null
+  /** Do the learned numbers hold on later trades (`holdoutCheck.ts`)? Null: switched off, too few dated trades, or the pass failed. */
+  holdout: HoldoutDoc | null
   /**
    * Where the pick, posture and need markets came from: the STRUCTURAL pass (every season from 2020, older dynasty
    * trades priced on the historical series), or — when that pass failed — the market's widest window.
@@ -100,6 +103,7 @@ export async function runScheduledMarketRecalc(
     writeNeed?: typeof writeNeedMarketTable
     faabBackfill?: typeof backfillTradeFaab
     boardSports?: typeof runBoardSportLearning
+    holdout?: typeof runHoldoutCheck
   } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
@@ -208,6 +212,10 @@ export async function runScheduledMarketRecalc(
   // different rows and must never cost the NFL markets this run already wrote.
   const boardSports = await (opts.boardSports ?? runBoardSportLearning)(prisma as never, { now }).catch(() => null)
 
+  // The hold-out check, after the tables it judges are stored. Best-effort: with no stored verdict the grades are
+  // unchanged, so a failure here can never switch anything on or off.
+  const holdout = await (opts.holdout ?? runHoldoutCheck)(prisma as never, { now, sinceSeason: STRUCTURAL_SINCE_SEASON }).catch(() => null)
+
   // Last and best-effort: labelling old trades must never cost the markets this run already wrote.
   const formatBackfill = await (opts.stampAll ?? stampAllTradeFormats)(prisma).catch(() => null)
 
@@ -230,5 +238,6 @@ export async function runScheduledMarketRecalc(
     faabBackfill,
     structural,
     boardSports,
+    holdout,
   }
 }

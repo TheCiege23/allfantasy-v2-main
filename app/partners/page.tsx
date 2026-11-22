@@ -16,6 +16,7 @@ import { ActivityChart } from '@/components/partners/ActivityChart'
 import { DecisionBars } from '@/components/partners/DecisionBars'
 import { PartnerInquiryForm } from '@/components/partners/PartnerInquiryForm'
 import { TradeMarketBars } from '@/components/partners/TradeMarketBars'
+import { tradeMarketPanelReleased } from '@/lib/partner-portal/tradeMarketRelease'
 import {
   Card,
   DataQualityTable,
@@ -49,6 +50,9 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
   const selected = findDemoLeague(leagueParam)
   const summary = summarizeTenant(DEMO_LEAGUES)
   const leagues = leaguesByAttention(DEMO_LEAGUES)
+  const showTradeMarket = await import('@/lib/prisma')
+    .then(({ prisma }) => tradeMarketPanelReleased(prisma as never))
+    .catch(() => false)
 
   return (
     <main className="min-h-screen bg-[#050814] text-white">
@@ -119,13 +123,16 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             <DecisionBars rows={DEMO_DECISIONS} />
           </Card>
 
-          <Card
-            id="trade-market"
-            title="What your managers actually pay in trades"
-            subtitle="Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it."
-          >
-            <TradeMarketBars rows={DEMO_TRADE_MARKET} />
-          </Card>
+          {/* Shown only once the daily hold-out check says the learned numbers hold (lib/partner-portal/tradeMarketRelease.ts). */}
+          {showTradeMarket ? (
+            <Card
+              id="trade-market"
+              title="What your managers actually pay in trades"
+              subtitle="Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it."
+            >
+              <TradeMarketBars rows={DEMO_TRADE_MARKET} />
+            </Card>
+          ) : null}
 
           <Card title="Data quality" subtitle="How fresh and complete the data is, per source — including where it falls short.">
             <DataQualityTable rows={DEMO_DATA_QUALITY} />

@@ -4,6 +4,7 @@
  * Auth: `requireCronAuth` (`CRON_SECRET`, `X-Cron-Secret`, or Bearer).
  */
 
+import { describeHoldout } from '@/lib/trade-market/holdoutCheck'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -102,6 +103,8 @@ async function rebuildTradeMarket(startedAt: number): Promise<
               `${describeNeedMarket(`${m.concept} (shadow, since ${m.sinceSeason})`, m)}; ` +
               `not used: ${Object.entries(m.skipped).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}${r.needMarketsWritten ? '' : '; ⚠ not stored this run'}`,
           ),
+          // Did each learner hold on later trades? A `not_held` book is ignored by the grades until it holds again.
+          ...(r.holdout?.rows ?? []).map((h) => `hold-out ${h.learner} ${h.book}: ${describeHoldout(h)}`),
           // NBA / MLB / NHL / NCAAB / soccer: posture and need from the board values saved with each trade (shadow).
           ...(r.boardSports?.markets ?? []).map(
             (m) =>

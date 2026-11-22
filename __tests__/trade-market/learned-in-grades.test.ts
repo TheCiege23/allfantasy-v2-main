@@ -1,3 +1,4 @@
+import { HOLDOUT_CACHE_KEY } from '@/lib/trade-market/holdoutCheck'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -69,7 +70,7 @@ describe('reading the stored tables', () => {
     expect(booksOf({ generatedAt: 'nope', books: [] }, 'classes', NOW).size).toBe(0)
   })
 
-  it('reads the three cache keys once per ten minutes, and a failed read is an empty table', async () => {
+  it('reads the three tables and the hold-out verdict once per ten minutes, and a failed read is an empty table', async () => {
     resetLearnedTablesMemo()
     const asked: string[] = []
     const prisma = {
@@ -82,13 +83,14 @@ describe('reading the stored tables', () => {
       },
     }
     const t = await loadLearnedTables(prisma, NOW)
-    expect(asked.sort()).toEqual([NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY].sort())
+    // The three tables, plus the stored hold-out verdict that can switch a learner off (`holdoutCheck.ts`).
+    expect(asked.sort()).toEqual([NEED_MARKET_CACHE_KEY, PICK_MARKET_CACHE_KEY, POSTURE_MARKET_CACHE_KEY, HOLDOUT_CACHE_KEY].sort())
     expect(t.picks.get(BOOK)).toHaveLength(1)
     expect(t.need.size).toBe(0)
     await loadLearnedTables(prisma, new Date(NOW.getTime() + 60_000))
-    expect(asked).toHaveLength(3)
+    expect(asked).toHaveLength(4)
     await loadLearnedTables(prisma, new Date(NOW.getTime() + 11 * 60_000))
-    expect(asked).toHaveLength(6)
+    expect(asked).toHaveLength(8)
     resetLearnedTablesMemo()
   })
 })
