@@ -397,6 +397,9 @@ type TradeRow = {
   week?: number | null
   partnerRosterId?: number | null
   contextSnapshot?: unknown
+  /** The row's own FAAB, when stored (the live writer since #4044, older trades via `tradeFaabBackfill.ts`). */
+  budgetGiven?: number | null
+  budgetReceived?: number | null
 }
 
 const asIds = (raw: unknown): string[] =>
@@ -426,6 +429,20 @@ export function faabForTradeRow(
   // Two matching sides (both sent nothing but FAAB/picks) cannot be told apart: no claim.
   if (own.length !== 1) return null
   return { given: own[0]!.faabOut, received: own[0]!.faabIn }
+}
+
+/**
+ * The FAAB a trade row's own side moved: its own stored columns first (exact, and the only source for older trades),
+ * then the transaction facts matched by players. Null when neither says. PURE.
+ */
+export function faabOfTradeRow(
+  row: { playersGiven: unknown; playersReceived: unknown; budgetGiven?: number | null; budgetReceived?: number | null },
+  sides: readonly TradeFactSide[] | undefined,
+): { given: number; received: number } | null {
+  if (row.budgetGiven != null && row.budgetReceived != null && Number.isFinite(row.budgetGiven) && Number.isFinite(row.budgetReceived)) {
+    return { given: Math.max(0, row.budgetGiven), received: Math.max(0, row.budgetReceived) }
+  }
+  return faabForTradeRow(row, sides)
 }
 
 /** Recorded FAAB per Sleeper transaction id — only facts written since FAAB capture carry `faabIn`. */
@@ -473,6 +490,8 @@ export async function gatherFormatObservations(
       week: true,
       partnerRosterId: true,
       contextSnapshot: true,
+      budgetGiven: true,
+      budgetReceived: true,
     },
   })) as TradeRow[]
   // ⚠ Every trade is stored once per side; one row describes the whole trade (see completedTradeObservations).
@@ -543,7 +562,7 @@ export async function gatherFormatObservations(
      * grade uses with no live league state (`normalizedFaabValue`). Recorded-and-zero counts as known;
      * unrecorded is priced as before (no FAAB), and counted so the gap stays visible.
      */
-    const faabMoved = faabForTradeRow(t, faab.get(t.transactionId))
+    const faabMoved = faabOfTradeRow(t, faab.get(t.transactionId))
     if (faabMoved == null) bump('faab_not_recorded')
     else if (faabMoved.given > 0 || faabMoved.received > 0) bump('faab_priced')
     const attributed = attributeTrade(t, chart, {
@@ -679,7 +698,7 @@ async function gatherDatedObservations(
 
   for (const { t, key, day, league } of plan) {
     const g = ctx.byBookDated.get(key)!
-    const faabMoved = faabForTradeRow(t, ctx.faab.get(t.transactionId))
+    const faabMoved = faabOfTradeRow(t, ctx.faab.get(t.transactionId))
     const pickGather = ctx.byBookPicks?.get(key)
     if (pickGather && t.tradeDate) {
       // The same trade, read for what its picks were worth: its players on the same day's chart, FAAB the same way.

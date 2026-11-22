@@ -16,6 +16,7 @@ import {
   type LineupFactorTable,
   type StampAllResult,
 } from './formatMarkets'
+import { backfillTradeFaab } from './tradeFaabBackfill'
 
 /**
  * The SCHEDULED writer for the AllFantasy trade market (rides `/api/cron/recompute-allfantasy-adp`).
@@ -62,6 +63,8 @@ export type ScheduledMarketRecalcResult = {
   /** What teams short of (or deep at) a position pay for it over normal-depth teams, widest window (`needMarketLearner.ts`, shadow). */
   needMarkets: Array<NeedBookResult & { sinceSeason: number }>
   needMarketsWritten: boolean
+  /** FAAB filled onto older Sleeper trades this run, before the markets read them (`tradeFaabBackfill.ts`). Null: the pass failed. */
+  faabBackfill: { off?: true; rowsFilled: number } | null
 }
 
 export function marketWindows(now = new Date()): number[] {
@@ -80,6 +83,7 @@ export async function runScheduledMarketRecalc(
     writePicks?: typeof writePickMarketTable
     writePosture?: typeof writePostureMarketTable
     writeNeed?: typeof writeNeedMarketTable
+    faabBackfill?: typeof backfillTradeFaab
   } = {},
 ): Promise<ScheduledMarketRecalcResult> {
   const recalc = opts.recalc ?? recalculateFormatMarkets
@@ -94,6 +98,9 @@ export async function runScheduledMarketRecalc(
   let pickMarkets: ScheduledMarketRecalcResult['pickMarkets'] = []
   let postureMarkets: ScheduledMarketRecalcResult['postureMarkets'] = []
   let needMarkets: ScheduledMarketRecalcResult['needMarkets'] = []
+
+  // First and best-effort: FAAB for older trades, so this run's markets already price it. A failure costs nothing else.
+  const faabBackfill = await (opts.faabBackfill ?? backfillTradeFaab)(prisma).catch(() => null)
 
   const windows = marketWindows(opts.now)
   const published = (t: LineupFactorTable | null) => (t ? t.factors.filter((f) => f.published).length : -1)
@@ -183,5 +190,6 @@ export async function runScheduledMarketRecalc(
     postureMarketsWritten,
     needMarkets,
     needMarketsWritten,
+    faabBackfill,
   }
 }

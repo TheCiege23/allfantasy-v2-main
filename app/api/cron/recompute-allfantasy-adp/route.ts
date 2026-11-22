@@ -59,6 +59,12 @@ async function rebuildTradeMarket(startedAt: number): Promise<
           ...(r.formatBackfill
             ? [`league type, all seasons: ${r.formatBackfill.resolved} of ${r.formatBackfill.histories} trade histories resolved (${r.formatBackfill.unresolved} unresolved), ${r.formatBackfill.rowsStamped} trade rows labelled`]
             : ['league type, all seasons: the pass failed this run']),
+          // FAAB filled onto older Sleeper trades from the transaction warehouse, before the markets read them.
+          ...(r.faabBackfill == null
+            ? ['FAAB backfill: the pass failed this run']
+            : r.faabBackfill.off
+              ? ['FAAB backfill: off (TRADE_FAAB_BACKFILL=off)']
+              : [`FAAB backfill: ${r.faabBackfill.rowsFilled} trade rows given their FAAB`]),
           // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
           ...(r.datedShadow ?? []).map(
             (d) =>
