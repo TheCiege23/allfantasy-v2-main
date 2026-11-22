@@ -84,6 +84,9 @@ export default async function ProductionHealthPage() {
               ← Admin
             </Link>
           </div>
+          <Link href="/api/admin/production-health?view=projection-coverage&format=text" prefetch={false} className="rounded-lg border border-white/15 px-3 py-2 text-sm text-white/80 hover:text-white">
+            Projection coverage report
+          </Link>
         </header>
 
         <p className="text-[11px] text-white/30">Generated {new Date(health.generatedAt).toLocaleString()}</p>
