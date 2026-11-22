@@ -78,11 +78,34 @@ describe('manager records through the psychology feed', () => {
     expect(leagueRead).toHaveBeenCalledTimes(2)
   })
 
-  it('a single team’s record and the commissioner’s whole directory still build live', async () => {
+  it('the record sheet for a leaguemate is served from the viewer’s view, identical to a one-team build', async () => {
+    const { buildLeagueManagerRecords } = await import('@/lib/competitive-edge/managerRecordLoader')
     await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1' })
-    await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', teamExternalId: 't3' })
-    await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', includeViewer: true })
-    expect(leagueRead).toHaveBeenCalledTimes(3)
+    const sheet = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', teamExternalId: 't3' })
+    expect(leagueRead).toHaveBeenCalledTimes(1)
+    const live = await buildLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', teamExternalId: 't3' })
+    expect(sheet.available && JSON.parse(JSON.stringify(sheet.data))).toEqual(live.available && JSON.parse(JSON.stringify(live.data)))
+  })
+
+  it('the viewer’s own team is not in the view, so its sheet builds live; an unknown team still says so', async () => {
+    await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1' })
+    const own = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', teamExternalId: 't1' })
+    expect(own.available && own.data.records.map((r) => r.manager.name)).toEqual(['Avery'])
+    expect(leagueRead).toHaveBeenCalledTimes(2)
+    const unknown = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', teamExternalId: 't9' })
+    expect(unknown).toEqual({ available: false, reason: 'That team is not in this league.' })
+  })
+
+  it('the commissioner’s directory has its own entry, includes the viewer, and never answers for the default view', async () => {
+    const dir = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', includeViewer: true })
+    const again = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1', includeViewer: true })
+    expect(dir.available && dir.data.records.map((r) => r.manager.name)).toEqual(['Avery', 'Blake', 'Casey'])
+    expect(again).toEqual(dir)
+    expect(leagueRead).toHaveBeenCalledTimes(1)
+    expect([...rows.keys()]).toEqual(['psychology/records/user/u1:lg1:all'])
+    const view = await loadLeagueManagerRecords({ leagueId: 'lg1', userId: 'u1' })
+    expect(view.available && view.data.records.map((r) => r.manager.name)).toEqual(['Blake', 'Casey'])
+    expect(leagueRead).toHaveBeenCalledTimes(2)
   })
 
   it('an unavailable result is never cached', async () => {

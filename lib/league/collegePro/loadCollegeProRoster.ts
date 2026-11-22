@@ -7,6 +7,7 @@ import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './dra
 import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
 import { loadHeadToHead, type HeadToHead, type TeamMapEditor } from './headToHead'
 import { currentFantraxPeriod, loadDailyPoints } from './dailyPoints'
+import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { findLinkCandidates, type LinkCandidate } from './linkHalves'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
@@ -445,7 +446,17 @@ async function loadFantraxProPair(args: {
   const format: CollegeProFormat = collegeProFormatOf(league) ?? 'c2c'
 
   const settings = (league.settings ?? {}) as Record<string, unknown>
-  const period = currentFantraxPeriod(settings.fantrax_scoring_periods, now)
+  /*
+   * The period: the league's stored Fantrax periods when it has them (Cream Bowl does), else the NBA
+   * calendar week, as native NBA C2C scores it. "Road To Glory NBA" stores no periods, only
+   * `current_week`, and read as no week at all (live page, 2026-11-22).
+   */
+  const nbaSeason = Number(settings.season) || (now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1)
+  const nbaWeek = dailySportWeekForInstant('NBA', nbaSeason, now)
+  const nbaWindow = nbaWeek ? resolveDailySportWeekWindow('NBA', nbaSeason, nbaWeek) : null
+  const period =
+    currentFantraxPeriod(settings.fantrax_scoring_periods, now) ??
+    (nbaWeek && nbaWindow ? { number: nbaWeek, window: { start: nbaWindow.start, end: nbaWindow.end } } : null)
   const proPlayers = proHalf.players ?? []
   const collegePlayers = collegeHalf.players ?? []
   const toPointsInput = (ps: typeof proPlayers) =>
