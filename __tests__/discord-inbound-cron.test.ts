@@ -1,17 +1,19 @@
 // @vitest-environment node
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 import {NextRequest} from 'next/server'
-const h=vi.hoisted(()=>({auth:vi.fn(),relay:vi.fn(),inbound:vi.fn(),job:vi.fn(),engagement:vi.fn()}))
+const h=vi.hoisted(()=>({auth:vi.fn(),relay:vi.fn(),inbound:vi.fn(),job:vi.fn(),engagement:vi.fn(),awards:vi.fn()}))
 vi.mock('@/lib/engagement-alerts/runSportsEngagement',()=>({runSportsEngagement:h.engagement}))
 vi.mock('@/app/api/cron/_auth',()=>({requireCronAuth:h.auth}))
 vi.mock('@/lib/notifications/outboxRelay',()=>({relayNotificationOutbox:h.relay}))
 vi.mock('@/lib/discord/inboundPass',()=>({runDiscordInboundPass:h.inbound}))
+vi.mock('@/lib/league-chat/awardBallotService',()=>({relayAwardBallotDms:h.awards}))
 vi.mock('@/lib/production-health/syncJobRunTelemetry',()=>({withSyncJobRun:h.job}))
 import {GET} from '@/app/api/cron/notification-outbox-relay/route'
 const req=(query='')=>new NextRequest(`https://example.test/api/cron/notification-outbox-relay${query}`)
 beforeEach(()=>{
  vi.resetAllMocks();h.auth.mockReturnValue(true);h.engagement.mockResolvedValue({games:0,delivered:0,errors:[]})
  h.inbound.mockResolvedValue({channels:1,deferred:0,imported:1,errors:0})
+ h.awards.mockResolvedValue({processed:2,done:2})
  h.relay.mockResolvedValue({claimed:0,sent:0,skipped:0,retried:0,failed:0})
  h.job.mockImplementation(async (_info,run)=>run())
 })
@@ -22,16 +24,19 @@ describe('authenticated minute Discord inbound host',()=>{
   expect(h.job).toHaveBeenCalledWith(expect.objectContaining({jobName:'cron-discord-inbound'}),expect.any(Function),expect.any(Function))
   expect((await result.json()).discordInbound).toMatchObject({imported:1,errors:0})
   expect(h.relay).toHaveBeenCalledTimes(1)
+  expect(h.awards).toHaveBeenCalledTimes(1)
  })
  it('never imports messages on dry run',async()=>{
   const result=await GET(req('?dryRun=1'))
   expect(result.status).toBe(200);expect(h.inbound).not.toHaveBeenCalled()
   expect(h.relay).toHaveBeenCalledWith({limit:undefined,dryRun:true})
+  expect(h.awards).not.toHaveBeenCalled()
  })
  it('never starts either pass without cron auth',async()=>{
   h.auth.mockReturnValue(false)
   expect((await GET(req())).status).toBe(401)
   expect(h.inbound).not.toHaveBeenCalled();expect(h.relay).not.toHaveBeenCalled()
+  expect(h.awards).not.toHaveBeenCalled()
  })
  it('reports Discord failure without preventing the notification relay',async()=>{
   h.inbound.mockRejectedValue(new Error('Discord unavailable'))
@@ -39,6 +44,7 @@ describe('authenticated minute Discord inbound host',()=>{
   expect(result.status).toBe(200)
   expect((await result.json()).discordInbound).toMatchObject({errors:1})
   expect(h.relay).toHaveBeenCalledTimes(1)
+  expect(h.awards).toHaveBeenCalledTimes(1)
  })
 })
 

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { listManagedLeagues, readManagerSeats } from './commissioner/leagueDirectory'
 import { listBroadcastLeagues } from '@/lib/commissioner/broadcastAccess'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import type { CoreIssue } from './outstandingIssues'
@@ -36,12 +37,9 @@ import { buildInactiveLadder, ladderApplies, type LadderEntry, type LadderLeague
  *
  * ── Which leagues ──────────────────────────────────────────────────────────
  *
- * The caller passes the leagues the shell already counts as "you run" (the nav
- * badge's `isCommissioner`), and this keeps only those `listBroadcastLeagues`
- * confirms — the head-or-co-commissioner rule the one-league screen's gate
- * applies. So every card opens a screen that admits the reader, and the "All
- * leagues" pill counts the same leagues the nav badge does, less any the gate
- * would refuse.
+ * The all-leagues page uses the per-league Hub's read role, including delegated commissioners
+ * without a team. Broadcast permission is checked separately. Callers that supply a shortlist
+ * retain their existing scope.
  *
  * ── What it costs ──────────────────────────────────────────────────────────
  *
@@ -81,10 +79,21 @@ export type OverviewLeagueCard = {
 
 export type OverviewQueueRow = TaskCard & { leagueId: string | null; leagueName: string | null }
 
+export type CommissionerDirectoryRow = {
+  leagueId: string
+  name: string
+  platform: string
+  season: number | null
+  commissionerHref: string
+  sync: OverviewLeagueCard['sync']
+  seats: { total: number; claimed: number } | null
+}
+
 export type CommissionerOverviewData = {
   runCount: number
   formatCounts: Record<HubFormat, number>
   leagues: OverviewLeagueCard[]
+  directory?: CommissionerDirectoryRow[]
   stats: HubStat[]
   queue: OverviewQueueRow[]
   /** How many leagues had their manager activity read — the cards drawn. */
@@ -149,8 +158,9 @@ function syncState(row: LeagueRow, native: boolean, now: Date): { label: string;
 
 export async function getCommissionerOverview(input: {
   userId: string
-  /** Leagues the shell counts as run by the reader. */
+  /** Canonical league IDs reachable from the Core shell. */
   candidateLeagueIds: string[]
+  includeDirectory?: boolean
   /** The shell's outstanding issues, every league. */
   issues: CoreIssue[]
   now: Date
@@ -165,12 +175,15 @@ export async function getCommissionerOverview(input: {
     })
 
   const zeroCounts = Object.fromEntries(HUB_FORMATS.map((f) => [f, 0])) as Record<HubFormat, number>
-  type RunLeague = Awaited<ReturnType<typeof listBroadcastLeagues>>[number]
+  type RunLeague = Awaited<ReturnType<typeof listManagedLeagues>>[number]
+  const showDirectory = input.includeDirectory === true
   type Membership = Awaited<ReturnType<typeof readFormatMembership>>
   const [run, membership, tournamentCount] = await Promise.all([
-    input.candidateLeagueIds.length === 0
-      ? Promise.resolve<RunLeague[]>([])
-      : soft<RunLeague[]>('run', listBroadcastLeagues(userId, input.candidateLeagueIds), []),
+    showDirectory
+      ? soft<RunLeague[]>('run', listManagedLeagues(userId, input.candidateLeagueIds), [])
+      : input.candidateLeagueIds.length
+        ? soft<RunLeague[]>('run', listBroadcastLeagues(userId, input.candidateLeagueIds), [])
+        : Promise.resolve<RunLeague[]>([]),
     soft<Membership | null>('formats', readFormatMembership(userId, flags), null),
     soft<number>('tournaments', prisma.tournamentShell.count({ where: { commissionerId: userId } }), 0),
   ])
@@ -478,20 +491,37 @@ export async function getCommissionerOverview(input: {
       : { value: String(staleOnly), label: staleOnly === 1 ? 'league needs a re-sync' : 'leagues need a re-sync', tone: staleOnly > 0 ? 'bad' : 'good' },
   ]
 
-  const mentions =
-    rows.length === 0 ? null : await soft<HubMention[] | null>('mentions', readMentions(userId, rows), null)
   const rowIds = new Set(rows.map((r) => r.id))
+  const [mentions, seats, sendable] = await Promise.all([
+    rows.length === 0 ? null : soft<HubMention[] | null>('mentions', readMentions(userId, rows), null),
+    showDirectory ? soft('manager seats', readManagerSeats([...rowIds]), null) : null,
+    showDirectory ? soft<RunLeague[]>('broadcast', listBroadcastLeagues(userId, [...rowIds]), []) : run,
+  ])
+  const directory = showDirectory ? rows.map((row) => {
+    const native = nativeById.get(row.id) ?? false
+    const id = encodeURIComponent(row.id)
+    return {
+      leagueId: row.id,
+      name: leagueDisplayName(row.name),
+      platform: String(row.platform ?? '').toLowerCase(),
+      season: row.season ?? null,
+      commissionerHref: native ? `/league/${id}?view=commissioner` : `/core/commissioner?league=${id}`,
+      sync: syncState(row, native, now),
+      seats: seats ? seats.get(row.id) ?? { total: 0, claimed: 0 } : null,
+    }
+  }).sort((a, b) => a.name.localeCompare(b.name) || (b.season ?? 0) - (a.season ?? 0)) : undefined
 
   return {
     runCount: rows.length,
     formatCounts,
     leagues,
+    ...(directory ? { directory } : {}),
     stats,
     queue,
     activityChecked: checked,
     mentions,
     // `listBroadcastLeagues`' native subset — exactly what `listSendableLeagueIds` would return.
-    broadcastLeagueIds: run.filter((l) => l.native && rowIds.has(l.id)).map((l) => l.id),
+    broadcastLeagueIds: sendable.filter((l) => l.native && rowIds.has(l.id)).map((l) => l.id),
     ownsAny: rows.some((r) => r.userId === userId),
     tournament: { count: tournamentCount, show: tournamentCount > 0 || rows.length >= 3 },
     partial: flags.partial,

@@ -979,30 +979,57 @@ export function resolveFantraxSeasonPosition(
 export function applyFantraxScores(
   rows: FantraxScheduleRow[],
   periods: FantraxPeriodScore[],
+  info?: Pick<FantraxLeagueInfo, 'teamInfo' | 'playoffs'>,
 ): FantraxScheduleRow[] {
-  const byWeek = new Map<number, FantraxPeriodScore['matchups']>()
-  for (const p of periods) byWeek.set(p.period, p.matchups)
+  type Pair = FantraxPeriodScore['matchups'][number]
+  type ScoredPair = { period: number; pair: Pair; matched: boolean }
+  const scores = new Map<string, ScoredPair[]>()
+  const published: ScoredPair[] = []
+  const pairingKey = (week: number, away: string, home: string) =>
+    JSON.stringify([week, ...[away, home].sort()])
 
-  return rows.map((row) => {
-    const pairings = byWeek.get(row.week)
-    if (!pairings || !row.awayTeamId || !row.homeTeamId) return row
-
-    for (const pairing of pairings) {
-      const straight =
-        pairing.away.teamId === row.awayTeamId && pairing.home.teamId === row.homeTeamId
-      const flipped =
-        pairing.away.teamId === row.homeTeamId && pairing.home.teamId === row.awayTeamId
-      if (!straight && !flipped) continue
-
-      const forAway = straight ? pairing.away : pairing.home
-      const forHome = straight ? pairing.home : pairing.away
-      const played = forAway.gamesPlayed > 0 || forHome.gamesPlayed > 0
-      if (!played) return row
-
-      return { ...row, awayScore: forAway.score, homeScore: forHome.score, played: true }
+  for (const { period, matchups } of periods) {
+    for (const pair of matchups) {
+      const { away, home } = pair
+      if (!away.teamId || !home.teamId || away.teamId === home.teamId) continue
+      if (away.gamesPlayed <= 0 && home.gamesPlayed <= 0) continue
+      const key = pairingKey(period, away.teamId, home.teamId)
+      const group = scores.get(key) ?? []
+      const result = { period, pair, matched: false }
+      group.push(result)
+      published.push(result)
+      scores.set(key, group)
     }
-    return row
+  }
+
+  const merged = rows.map((row) => {
+    const key = pairingKey(row.week, row.awayTeamId, row.homeTeamId)
+    const next = scores.get(key)?.find((result) => !result.matched)
+    if (!next) return row
+    next.matched = true
+    const { away, home } = next.pair
+    const sameOrientation = away.teamId === row.awayTeamId
+    return {
+      ...row, played: true,
+      awayScore: (sameOrientation ? away : home).score,
+      homeScore: (sameOrientation ? home : away).score,
+    }
   })
+
+  // Fantrax publishes scored pairings, including postseason games, that its fixture list can omit.
+  const playoffStart = info?.playoffs?.used ? info.playoffs.firstPlayoffPeriod : null
+  for (const { period, pair: { away, home }, matched } of published) {
+    if (matched) continue
+    const awayTeam = info?.teamInfo[away.teamId]?.name?.trim() || away.teamName
+    const homeTeam = info?.teamInfo[home.teamId]?.name?.trim() || home.teamName
+    if (!awayTeam || !homeTeam) continue
+    merged.push({
+      week: period, awayTeam, homeTeam, awayTeamId: away.teamId, homeTeamId: home.teamId,
+      awayScore: away.score, homeScore: home.score, played: true,
+      isPlayoff: typeof playoffStart === 'number' && playoffStart > 0 && period >= playoffStart,
+    })
+  }
+  return merged
 }
 
 /**
@@ -1076,7 +1103,7 @@ export async function fetchFantraxScheduleWithScores(
   }
 
   return {
-    rows: applyFantraxScores(rows, scored),
+    rows: applyFantraxScores(rows, scored, info),
     position,
     periodsRead: scored.length,
     periodsFailed,

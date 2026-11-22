@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { readFantraxResultsReport, type FantraxResultsReport } from '@/lib/league-import/fantrax/fantraxResultsReport'
+
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
@@ -276,6 +278,8 @@ export type CommissionerHubData = {
     sport?: string
     season: number | null
     native: boolean
+    /** Source-backed scoring period report for a Fantrax import. */
+    fantraxResults?: FantraxResultsReport | null
     /**
      * The budget the trade grader prices budget moves against, and whether it is set HERE: only for a platform whose
      * import records none (Fantrax, Yahoo). `value` null = not known, so budget in a trade reads as not graded.
@@ -1235,6 +1239,7 @@ export async function getCommissionerHub(input: {
       sport,
       season: league.season ?? null,
       native,
+      ...(platform === 'fantrax' ? { fantraxResults: readFantraxResultsReport(league.settings, league.season) } : {}),
       waiverBudget: {
         value: waiverBudgetOnFile({ platform: league.platform, waiverBudget: league.waiverBudget, settings: league.settings }),
         settableHere: importCarriesNoWaiverBudget(league.platform),

@@ -97,6 +97,44 @@ beforeEach(() => {
 })
 
 describe('writing a scored Fantrax week', () => {
+  it('publishes the completed scoring report only after the same rows are written to the league', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'canonical-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    getFantraxLeagueInfo.mockResolvedValue({
+      ok: true,
+      data: { scoringPeriods: [{ number: 1, endDate: '2026-09-29T02:00:00Z' }] },
+    })
+
+    expect((await runFantraxMatchupParity({ now: NOW })).synced).toBe(1)
+
+    const index = executeRaw.mock.calls.findIndex(([, payload]) =>
+      typeof payload === 'string' && payload.includes('fantraxResultsReport'),
+    )
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(JSON.parse(executeRaw.mock.calls[index]![1])).toEqual({
+      fantraxResultsReport: {
+        season: 2026,
+        refreshedAt: NOW.toISOString(),
+        phase: 'in_progress',
+        periods: [{ period: 1, endsOn: '2026-09-28', matchups: 1, playoffMatchups: 0, scoreTies: 0 }],
+      },
+    })
+    expect(weeklyCreateMany.mock.invocationCallOrder[0]).toBeLessThan(executeRaw.mock.invocationCallOrder[index]!)
+  })
+
+  it('keeps the previous report when the provider cannot read a scoring period', async () => {
+    leagueFindMany.mockResolvedValue([{ id: 'canonical-1', platformLeagueId: 'league-uuid', season: 2026 }])
+    fetchFantraxScheduleWithScores.mockResolvedValue({
+      rows: [fixture()],
+      position: { period: 1, state: 'in_progress', scoredThrough: 1 },
+      periodsRead: 0,
+      periodsFailed: 1,
+    })
+
+    expect((await runFantraxMatchupParity({ now: NOW })).failed).toBe(1)
+    expect(executeRaw).not.toHaveBeenCalled()
+    expect(weeklyCreateMany).not.toHaveBeenCalled()
+  })
+
   it('retains verified per-category values from a played period for later history answers', async () => {
     leagueFindMany.mockResolvedValue([{ id: 'internal-1', platformLeagueId: 'league-uuid', season: 2026 }])
     fetchFantraxScheduleWithScores.mockResolvedValue({ rows: [fixture()],

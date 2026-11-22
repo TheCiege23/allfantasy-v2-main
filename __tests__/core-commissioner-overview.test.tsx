@@ -26,6 +26,9 @@ vi.mock('@/lib/core-app/leagueHome', () => ({
 const run = vi.hoisted(() => ({ listBroadcastLeagues: vi.fn() }))
 vi.mock('@/lib/commissioner/broadcastAccess', () => run)
 
+const directory = vi.hoisted(() => ({ listManagedLeagues: vi.fn(), readManagerSeats: vi.fn() }))
+vi.mock('@/lib/core-app/commissioner/leagueDirectory', () => directory)
+
 const formats = vi.hoisted(() => ({
   HUB_FORMATS: ['zombie', 'tournament', 'survivor', 'c2c', 'guillotine', 'efl'],
   readFormatMembership: vi.fn(),
@@ -95,6 +98,28 @@ describe('getCommissionerOverview', () => {
     // An imported league is never offered to the composer.
     expect(data.broadcastLeagueIds).toEqual([])
     expect(data.ownsAny).toBe(true)
+  })
+
+  it('keeps every managed league accessible and separates read access from broadcasting', async () => {
+    const ids = Array.from({ length: 14 }, (_, i) => `fantrax-${i}`)
+    directory.listManagedLeagues.mockResolvedValue(ids.map((id) => ({ id, native: false })))
+    directory.readManagerSeats.mockResolvedValue(new Map([[ids[13], { total: 180, claimed: 155 }]]))
+    run.listBroadcastLeagues.mockResolvedValue([])
+    m.league.findMany.mockResolvedValue(ids.map((id) => row(id, { platform: 'fantrax', season: 2026 })))
+
+    const data = await getCommissionerOverview({ userId: USER, candidateLeagueIds: [...ids, 'viewer'], includeDirectory: true, issues: [], now: NOW })
+
+    expect(data.runCount).toBe(14)
+    expect(data.leagues).toHaveLength(12)
+    expect(data.directory).toHaveLength(14)
+    expect(data.broadcastLeagueIds).toEqual([])
+    expect(directory.readManagerSeats).toHaveBeenCalledWith(ids)
+    render(<CommissionerOverview data={data} />)
+    const directoryPanel = screen.getByText('All managed leagues and manager seats (14)').parentElement!
+    expect(within(directoryPanel).getByText('155 of 180 seats claimed on AllFantasy')).toBeTruthy()
+    expect(within(directoryPanel).getAllByText('Results').some((link) =>
+      link.getAttribute('href') === '/core/commissioner?league=fantrax-13#ch-results',
+    )).toBe(true)
   })
 
   it('reads no candidates at all for someone who runs nothing', async () => {

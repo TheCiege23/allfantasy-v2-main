@@ -1,3 +1,4 @@
+import { buildFantraxResultsReport, FANTRAX_RESULTS_REPORT_KEY, type FantraxResultsReport } from '@/lib/league-import/fantrax/fantraxResultsReport'
 import { reconcileFantraxActuals } from './reconcileFantraxActuals'
 import { syncFantraxNativePresentation } from '@/lib/redraft/fantraxNativePresentation'
 /**
@@ -184,6 +185,19 @@ async function isDue(cacheKey: string, now: Date): Promise<boolean> {
   return row.expiresAt.getTime() <= now.getTime()
 }
 
+async function saveResultsReport(leagueIds: string[], report: FantraxResultsReport | null) {
+  if (!report || leagueIds.length === 0) return
+  const patch = JSON.stringify({ [FANTRAX_RESULTS_REPORT_KEY]: report })
+  await prisma.$executeRaw`
+    UPDATE leagues
+    SET settings = COALESCE(settings, '{}'::jsonb) || ${patch}::jsonb
+    WHERE id IN (${Prisma.join(leagueIds)}) AND season = ${report.season}::int
+      AND (
+        settings->'fantraxResultsReport'->>'refreshedAt' IS NULL
+        OR settings->'fantraxResultsReport'->>'refreshedAt' <= ${report.refreshedAt}
+      )`
+}
+
 export async function runFantraxMatchupParity(input?: {
   now?: Date
   /** Bound the tick: each league costs one request per played period. Default 3. */
@@ -277,12 +291,14 @@ export async function runFantraxMatchupParity(input?: {
       const upcomingFrom =
         fetched.position?.state === 'in_progress' && lastPeriod <= MAX_WEEKLY_PERIODS ? fetched.position.period : null
       const byWeek = new Map<number, ScheduleWeekInput>()
+      const publishedRows: typeof fetched.rows = []
       for (const row of fetched.rows) {
         const scored = row.played && row.awayScore != null && row.homeScore != null
         if (!scored && (upcomingFrom == null || row.week < upcomingFrom)) continue
         const away = rosterIds.get(normalizeFantraxTeamName(row.awayTeam))
         const home = rosterIds.get(normalizeFantraxTeamName(row.homeTeam))
         if (away == null || home == null) continue
+        if (scored) publishedRows.push(row)
         let week = byWeek.get(row.week)
         if (!week) {
           week = { week: row.week, season: connection.season, matchups: [] }
@@ -300,7 +316,7 @@ export async function runFantraxMatchupParity(input?: {
       const linked = await prisma.league.findMany({ where: { platform: { equals: 'fantrax', mode: 'insensitive' }, platformLeagueId: connection.platformLeagueId, season: connection.season }, select: { id: true } })
       if (linked.length && fetched.periodScores?.length) {
         const teams = await prisma.leagueTeam.findMany({ where: { leagueId: linked[0]!.id },
-          select: { externalId: true, teamName: true, ownerName: true }, take: 100 })
+          select: { externalId: true, teamName: true, ownerName: true } })
         for (const period of fetched.periodScores) {
           const pairs = fantraxCategoryPairs(period, teams)
           if (!pairs.length) continue
@@ -315,7 +331,12 @@ export async function runFantraxMatchupParity(input?: {
       for (const league of linked) await syncFantraxNativePresentation(league.id, info.data, fetched.rows, now)
 
       const schedule = Array.from(byWeek.values()).sort((a, b) => a.week - b.week)
+      const report = buildFantraxResultsReport({
+        season: connection.season, now, info: info.data, position: fetched.position, publishedRows,
+      })
+      const leagueIds = linked.map((league) => league.id)
       if (schedule.length === 0) {
+        if (report?.phase === 'preseason') await saveResultsReport(leagueIds, report)
         const note =
           fetched.position?.state === 'preseason'
             ? `season has not started (period ${fetched.position.period} is first)`
@@ -346,6 +367,8 @@ export async function runFantraxMatchupParity(input?: {
         connection.platformLeagueId,
         schedule,
       )
+
+      await saveResultsReport(leagueIds, report)
 
       const evidence = { actualsCompared: 0, scoringDiscrepancies: 0, scoringCoverageGaps: 0, scoringEvidenceErrors: 0 }
       for (const league of linked) {

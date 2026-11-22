@@ -69,6 +69,12 @@ async function handle(req: NextRequest) {
         return { error: e instanceof Error ? e.message.slice(0, 200) : "failed" }
       }
     })()
+    const awardsPromise = dryRun ? Promise.resolve(null) : import('@/lib/league-chat/awardBallotService')
+      .then(({ relayAwardBallotDms }) => relayAwardBallotDms())
+      .catch(() => {
+        console.warn('[cron/award-ballot-dms] pass failed')
+        return { error: 'Award DM pass failed' }
+      })
     const run = () => relayNotificationOutbox({ limit, dryRun })
 
     /*
@@ -90,13 +96,14 @@ async function handle(req: NextRequest) {
           status: r.failed > 0 ? ("partial" as const) : ("success" as const),
         }))
 
-    const [result, engagement, discordInbound, playerNewsDigest] = await Promise.all([relayPromise, engagementPromise, discordPromise, digestPromise])
+    const [result, engagement, discordInbound, playerNewsDigest, awardDms] = await Promise.all([relayPromise, engagementPromise, discordPromise, digestPromise, awardsPromise])
 
     return NextResponse.json({
       ok: true,
       dryRun,
       engagement,
       playerNewsDigest,
+      awardDms,
       ...result,
       discordInbound,
       durationMs: Date.now() - startedAt,

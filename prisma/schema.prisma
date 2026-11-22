@@ -6351,6 +6351,7 @@ enum LeagueLifecycleState {
 }
 
 model League {
+  awardBallots LeagueAwardBallot[]
   leagueSafeConnection LeagueSafeConnection?
 
   id                                    String                                 @id @default(uuid())
@@ -20690,4 +20691,17 @@ model DuesLedgerEntry {
   @@index([connectionId, memberId, occurredAt, id])
   @@index([sourceRawEmailId, connectionId])
   @@index([createdBy])
+}
+
+model LeagueAwardBallot {
+  id              String   @id
+  leagueId        String
+  createdByUserId String
+  closesAt        DateTime
+  data            Json
+  createdAt       DateTime @default(now())
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+  @@map("league_award_ballots")
 }

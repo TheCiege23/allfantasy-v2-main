@@ -10,6 +10,7 @@
  * Connected to real API endpoints for all actions.
  */
 
+import Link from 'next/link'
 import { requestScheduleRebuild } from '@/lib/schedule-runtime/rebuildScheduleRequest'
 import { ScheduleSwapForm } from '@/components/league-settings/ScheduleSwapForm'
 import { RivalryWeekCard } from '@/components/league-settings/RivalryWeekCard'
@@ -587,6 +588,10 @@ export function CommissionerControlPanel({ leagueId, initialView = null }: Props
   // ===== MAIN VIEW: Commissioner Control action buttons =====
   return (
     <div className="space-y-6">
+      <Link href={`/league/${encodeURIComponent(leagueId)}/awards`} className="block rounded-lg border border-white/10 px-4 py-3 text-sm font-semibold text-cyan-300">
+        League awards
+      </Link>
+
       {/* Edit Lineups and Matchups */}
       <div className="space-y-2">
         <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('commControl.editLineups')}</p>

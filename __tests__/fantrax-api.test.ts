@@ -758,6 +758,27 @@ describe('merging results onto fixtures', () => {
     expect(merged[0]).toMatchObject({ awayScore: 118.4, homeScore: 96.2 })
   })
 
+  it('keeps results the fixture feed omitted and uses each repeated pairing once', () => {
+    const side = (teamId: string, score: number, gamesPlayed: number) => ({ teamId, teamName: teamId, score, gamesPlayed })
+    const matchups = [
+      { away: side('a', 110, 5), home: side('b', 100, 5) },
+      { away: side('a', 95, 5), home: side('b', 120, 5) },
+      { away: side('a', 110, 5), home: side('c', 80, 5) },
+      { away: side('a', 0, 0), home: side('d', 0, 0) },
+    ]
+    const a = FIXTURES[0]!
+    const merged = applyFantraxScores(
+      [{ ...a, week: 2, isPlayoff: true }, { ...a, week: 2, isPlayoff: true }],
+      [{ period: 2, matchups }],
+      { teamInfo: { a: { id: 'a', name: a.awayTeam }, c: { id: 'c', name: 'Third team' } },
+        playoffs: { used: true, firstPlayoffPeriod: 2 } },
+    )
+
+    expect(merged).toHaveLength(3)
+    expect(merged.map((row) => [row.awayScore, row.homeScore])).toEqual([[110, 100], [95, 120], [110, 80]])
+    expect(merged[2]).toMatchObject({ awayTeam: a.awayTeam, homeTeam: 'Third team', isPlayoff: true, played: true })
+  })
+
   it('leaves a fixture alone when no period was read for its week', () => {
     expect(applyFantraxScores(FIXTURES, [])).toEqual(FIXTURES)
   })

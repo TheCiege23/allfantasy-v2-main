@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import '@/components/core-app/af-format-hubs.css'
 import '@/components/core-app/hubs/af-commissioner-guide.css'
-import type { CommissionerOverviewData, OverviewLeagueCard } from '@/lib/core-app/commissionerOverview'
+import type { CommissionerDirectoryRow, CommissionerOverviewData, OverviewLeagueCard } from '@/lib/core-app/commissionerOverview'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 import { commissionerGuide } from '@/lib/core-app/commissionerGuide'
 import { ROBOT_KING_ART } from '@/lib/core-app/commissioner/leagueArt'
 import { HubSwitcher } from '@/components/core-app/hubs/HubSwitcher'
@@ -117,6 +118,40 @@ function LeagueCard({ l }: { l: OverviewLeagueCard }) {
   )
 }
 
+function LeagueDirectory({ rows }: { rows: CommissionerDirectoryRow[] }) {
+  return (
+    <details className="cmg-clear" id="afh-league-directory">
+      <summary>All managed leagues and manager seats ({rows.length})</summary>
+      <ul className="afh-stack">
+        {rows.map((row) => {
+          const league = encodeURIComponent(row.leagueId)
+          return (
+            <li key={row.leagueId} className="afh-panel">
+              <div className="afh-row-main">
+                <strong>{row.name}</strong>
+                <span className="afh-row-detail">
+                  {platformLabel(row.platform)}{row.season ? ` · ${row.season}` : ''}{' · '}{row.sync.label}
+                </span>
+                <span className="afh-row-detail">
+                  {row.seats ? `${row.seats.claimed} of ${row.seats.total} seats claimed on AllFantasy` : 'Seat counts unavailable'}
+                </span>
+              </div>
+              <nav className="afh-card-actions" aria-label={`${row.name} commissioner links`}>
+                <Link href={row.commissionerHref}>Commissioner</Link>
+                {row.platform === 'fantrax' ? (
+                  <Link href={`${row.commissionerHref}#ch-results`}>Results</Link>
+                ) : (
+                  <Link href={`/core/standings?league=${league}`}>Standings</Link>
+                )}
+              </nav>
+            </li>
+          )
+        })}
+      </ul>
+    </details>
+  )
+}
+
 export function CommissionerOverview({ data }: { data: CommissionerOverviewData }) {
   const has = data.runCount > 0
   const canSend = data.broadcastLeagueIds.length > 0
@@ -204,11 +239,12 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
               <p className="afh-row-detail" style={{ margin: 0 }}>
                 Showing the {data.leagues.length} that need you most, of {data.runCount}; the to-do list above covers every
                 league. The rest are in{' '}
-                <Link className="afh-link" href="/core/portfolio">
-                  Portfolio →
+                <Link className="afh-link" href={data.directory ? '#afh-league-directory' : '/core/portfolio'}>
+                  {data.directory ? 'All managed leagues' : 'Portfolio →'}
                 </Link>
               </p>
             ) : null}
+            {data.directory?.length ? <LeagueDirectory rows={data.directory} /> : null}
           </section>
 
           {canSend ? (

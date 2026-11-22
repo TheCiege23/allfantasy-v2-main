@@ -4010,14 +4010,14 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
   /*
    * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
    * `segment` because /core/discord and /core/hubs share the commissioner nav key. The
-   * candidates are the leagues the nav badge counts, so the "All leagues" pill and the
-   * badge describe the same set; the loader keeps only those the one-league gate admits.
+   * loader resolves managed leagues using the same read role as the one-league Hub.
    */
   const commissionerOverview =
     activeKey === 'commissioner' && segment === 'commissioner' && !selectedLeagueId
       ? await getCommissionerOverview({
           userId,
-          candidateLeagueIds: playedLeagues.filter((l) => Boolean(l.isCommissioner)).map((l) => l.id),
+          candidateLeagueIds: playedLeagues.map((league) => league.id),
+          includeDirectory: true,
           issues,
           now,
         }).catch((e: unknown) => {

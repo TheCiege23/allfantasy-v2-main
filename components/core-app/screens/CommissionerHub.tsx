@@ -45,6 +45,7 @@ import {
   RecentChangesFallback,
 } from '@/components/core-app/commissioner/HubReports'
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
+import { FantraxResults } from '@/components/core-app/commissioner/FantraxResults'
 import { FantraxTradeHistoryUpload } from '@/components/core-app/commissioner/FantraxTradeHistoryUpload'
 import { WaiverBudgetControl } from '@/components/core-app/commissioner/WaiverBudgetControl'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
@@ -302,6 +303,10 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       ) : null}
 
       {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
+      <Link className="afh-btn" href={`/league/${encodeURIComponent(league.id)}/awards`}>League awards</Link>
+
+      {league.platform === 'fantrax' ? <FantraxResults leagueId={league.id} report={league.fantraxResults ?? null} /> : null}
+
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
       {/* A private league's "Ask to join" requests from Find a League; renders nothing when there are none to show. */}
