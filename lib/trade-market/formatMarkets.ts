@@ -21,6 +21,7 @@ import {
   datedLearnerLive,
   emptyDatedGather,
   recencyWeight,
+  structuralWeight,
   type DatedBookComparison,
   type DatedGather,
 } from './datedMarketLearner'
@@ -45,6 +46,15 @@ import {
   type NeedObservation,
 } from './needMarketLearner'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import {
+  historicalChart,
+  HISTORY_SCALE_MAX_GAP_DAYS,
+  loadHistoricalSeries,
+  measureHistoricalScale,
+  type HistoricalSeries,
+  type HistoryScale,
+} from './historicalValueChart'
 
 /**
  * The AllFantasy trade market, SPLIT BY THE FORMAT EACH TRADE WAS MADE IN.
@@ -376,6 +386,8 @@ type FormatGather = {
   byBookPosture: Map<string, PostureGather>
   /** Every book: one observation per side whose need at the position it bought could be read (`needMarketLearner.ts`). */
   byBookNeed: Map<string, NeedGather>
+  /** Dynasty books: whether older trades could be priced on the historical series, and how many were. */
+  historyByBook: Map<string, HistoryUse>
   lineupObservations: LineupObservation[]
   /** Every trade whose league resolved, with the format to stamp on it (`stampTradeFormats`). */
   formatStamps: Array<{ transactionId: string; tradeFormat: ResolvedTradeLeague['tradeFormat']; isSuperFlex: boolean }>
@@ -471,7 +483,7 @@ async function loadTradeFaab(prisma: PrismaClient, txIds: readonly string[]): Pr
 
 export async function gatherFormatObservations(
   prisma: PrismaClient,
-  opts: { sinceSeason: number; now?: Date },
+  opts: { sinceSeason: number; now?: Date; env?: NodeJS.ProcessEnv },
 ): Promise<FormatGather> {
   const skipped: Record<string, number> = {}
   const bump = (k: string) => (skipped[k] = (skipped[k] ?? 0) + 1)
@@ -610,8 +622,12 @@ export async function gatherFormatObservations(
   for (const b of MARKET_BOOKS) byBookPosture.set(bookKey(b), { observations: [], skipped: {} })
   const byBookNeed = new Map<string, NeedGather>()
   for (const b of MARKET_BOOKS) byBookNeed.set(bookKey(b), { observations: [], skipped: {} })
+  const historyByBook = new Map<string, HistoryUse>()
   try {
-    await gatherDatedObservations(prisma, { unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, byBookNeed, now: opts.now ?? new Date() })
+    await gatherDatedObservations(prisma, {
+      unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, byBookNeed,
+      historyOn: historyChartOn(opts.env), history: historyByBook, now: opts.now ?? new Date(),
+    })
   } catch {
     for (const g of byBookDated.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
     for (const g of byBookPicks.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
@@ -619,7 +635,7 @@ export async function gatherFormatObservations(
     for (const g of byBookNeed.values()) g.skipped.dated_unavailable = (g.skipped.dated_unavailable ?? 0) + 1
   }
 
-  return { byBook, byBookDated, byBookPicks, byBookPosture, byBookNeed, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
+  return { byBook, byBookDated, byBookPicks, byBookPosture, byBookNeed, historyByBook, lineupObservations, formatStamps, skipped, tradesConsidered: unique.size, tradesUsed }
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -641,6 +657,10 @@ async function gatherDatedObservations(
     byBookPicks?: Map<string, PickGather>
     byBookPosture?: Map<string, PostureGather>
     byBookNeed?: Map<string, NeedGather>
+    /** Price older dynasty trades on the historical series (`TRADE_HISTORY_CHART=off` turns it off). */
+    historyOn?: boolean
+    /** Filled per dynasty book: the scale measured and the trades the series priced. */
+    history?: Map<string, HistoryUse>
     now: Date
   },
 ): Promise<void> {
@@ -654,7 +674,50 @@ async function gatherDatedObservations(
     days.set(bookKey(b), rows.map((r) => new Date(r.day).getTime()).filter(Number.isFinite))
   }
 
-  const plan: Array<{ t: TradeRow; key: string; day: number; league: ResolvedTradeLeague }> = []
+  /*
+   * OLDER DYNASTY TRADES: the day's chart from the historical series (`historicalValueChart.ts`), scaled to
+   * FantasyCalc on the nearest pair of days both cover. Measured once per book; skipped, and said why, when it cannot be.
+   */
+  const series = new Map<string, { s: HistoricalSeries; scale: number }>()
+  for (const b of MARKET_BOOKS) {
+    if (b.format !== 'DYNASTY' || !ctx.historyOn) continue
+    const key = bookKey(b)
+    const stats: HistoryUse = { scale: null, tradesPriced: 0 }
+    ctx.history?.set(key, stats)
+    const s = loadHistoricalSeries(b.qbFormat)
+    const fcDays = days.get(key) ?? []
+    if (!s) {
+      stats.scale = { scale: null, players: 0, spread: null, note: 'no historical series on file' }
+      continue
+    }
+    const d0 = fcDays[0]
+    const h0 = d0 == null ? null : [...s.days].reverse().find((d) => d <= d0) ?? null
+    if (d0 == null || h0 == null || (d0 - h0) / DAY_MS > HISTORY_SCALE_MAX_GAP_DAYS) {
+      stats.scale = { scale: null, players: 0, spread: null, note: d0 == null ? 'no FantasyCalc capture to scale against' : `the nearest days the two charts cover are more than ${HISTORY_SCALE_MAX_GAP_DAYS} days apart` }
+      continue
+    }
+    const histDay = s.valuesOn(h0)
+    const ids = [...ctx.meta.entries()].filter(([, m]) => histDay.has(normalizePlayerName(m.name))).map(([id]) => id)
+    const fc = new Map<string, number>()
+    for (const part of chunk(ids)) {
+      const rows = await prisma.playerValueSnapshot.findMany({
+        where: { source: 'FANTASYCALC', format: b.format, qbFormat: b.qbFormat, sleeperId: { in: part }, capturedAt: { gte: new Date(d0), lt: new Date(d0 + DAY_MS) } },
+        distinct: ['sleeperId'],
+        orderBy: [{ sleeperId: 'asc' }, { capturedAt: 'desc' }],
+        select: { sleeperId: true, value: true },
+      })
+      for (const r of rows) if (!fc.has(r.sleeperId)) fc.set(r.sleeperId, Number(r.value))
+    }
+    const measured = measureHistoricalScale(ids.flatMap((id) => {
+      const f = fc.get(id)
+      const h = histDay.get(normalizePlayerName(ctx.meta.get(id)!.name))
+      return f != null && h != null ? [{ fc: f, hist: h }] : []
+    }))
+    stats.scale = { ...measured, note: `${measured.note}; FantasyCalc ${new Date(d0).toISOString().slice(0, 10)} against history ${new Date(h0).toISOString().slice(0, 10)}` }
+    if (measured.scale != null) series.set(key, { s, scale: measured.scale })
+  }
+
+  const plan: Array<{ t: TradeRow; key: string; dk: string; league: ResolvedTradeLeague }> = []
   const needed = new Map<string, Set<string>>()
   for (const t of ctx.unique.values()) {
     const league = ctx.leagues.get(t.historyId)
@@ -666,21 +729,29 @@ async function gatherDatedObservations(
       continue
     }
     const day = captureDayFor(days.get(key) ?? [], t.tradeDate)
-    if (day == null) {
+    const hist = day == null ? series.get(key) : undefined
+    const hday = hist ? captureDayFor(hist.s.days, t.tradeDate) : null
+    if (day == null && hday == null) {
       bump(g, 'no_dated_chart')
       continue
     }
-    const dk = `${key}|${day}`
+    // A FantasyCalc capture day, or `h<day>` for a day of the historical series.
+    const dk = day != null ? `${key}|${day}` : `${key}|h${hday}`
     const ids = needed.get(dk) ?? new Set<string>()
     for (const id of [...asIds(t.playersGiven), ...asIds(t.playersReceived)]) ids.add(id)
     needed.set(dk, ids)
-    plan.push({ t, key, day, league })
+    plan.push({ t, key, dk, league })
   }
 
   const dated = new Map<string, Map<string, number>>()
   for (const [dk, ids] of needed) {
     const [key, dayStr] = dk.split('|') as [string, string]
     const book = MARKET_BOOKS.find((b) => bookKey(b) === key)!
+    if (dayStr.startsWith('h')) {
+      const hist = series.get(key)!
+      dated.set(dk, historicalChart(hist.s, Number(dayStr.slice(1)), ids, (id) => ctx.meta.get(id)?.name, hist.scale))
+      continue
+    }
     const day = Number(dayStr)
     const m = new Map<string, number>()
     for (const part of chunk([...ids])) {
@@ -696,13 +767,17 @@ async function gatherDatedObservations(
     dated.set(dk, m)
   }
 
-  for (const { t, key, day, league } of plan) {
+  for (const { t, key, dk, league } of plan) {
     const g = ctx.byBookDated.get(key)!
+    const chart = dated.get(dk)!
+    // Pick, posture and need values are structural: two-year half-life, so older seasons still count.
+    const structural = structuralWeight(t.tradeDate, ctx.now)
+    let pricedOnHistory = false
     const faabMoved = faabOfTradeRow(t, ctx.faab.get(t.transactionId))
     const pickGather = ctx.byBookPicks?.get(key)
     if (pickGather && t.tradeDate) {
       // The same trade, read for what its picks were worth: its players on the same day's chart, FAAB the same way.
-      const chartOfDay = dated.get(`${key}|${day}`)!
+      const chartOfDay = chart
       const given = asIds(t.playersGiven)
       const received = asIds(t.playersReceived)
       const obs = [...given, ...received].every((id) => chartOfDay.has(id))
@@ -716,35 +791,45 @@ async function gatherDatedObservations(
             playersReceivedValue: received.reduce((n, id) => n + (chartOfDay.get(id) ?? 0), 0),
             faabGivenValue: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
             faabReceivedValue: faabMoved ? normalizedFaabValue(faabMoved.received, league.faabBudget) : 0,
-            weight: recencyWeight(t.tradeDate, ctx.now),
+            weight: structural,
           })
         : ('unpriced_player' as const)
       if (typeof obs === 'object') {
         pickGather.observations.push(obs)
+        pricedOnHistory = true
         if (league.teams == null) pickGather.skipped.teams_assumed_12 = (pickGather.skipped.teams_assumed_12 ?? 0) + 1
       } else if (obs !== 'no_picks') pickGather.skipped[obs] = (pickGather.skipped[obs] ?? 0) + 1
     }
     const postureGather = ctx.byBookPosture?.get(key)
     if (postureGather && t.tradeDate) {
-      const read = postureObservationsFor(t, dated.get(`${key}|${day}`)!, ctx.meta, faabMoved, league, recencyWeight(t.tradeDate, ctx.now), ctx.now)
-      if (Array.isArray(read)) postureGather.observations.push(...read)
+      const read = postureObservationsFor(t, chart, ctx.meta, faabMoved, league, structural, ctx.now)
+      if (Array.isArray(read)) {
+        postureGather.observations.push(...read)
+        pricedOnHistory = true
+      }
       else postureGather.skipped[read] = (postureGather.skipped[read] ?? 0) + 1
     }
     const needGather = ctx.byBookNeed?.get(key)
     if (needGather && t.tradeDate) {
-      const read = needObservationsFor(t, dated.get(`${key}|${day}`)!, ctx.meta, faabMoved, league, recencyWeight(t.tradeDate, ctx.now))
-      if (Array.isArray(read)) needGather.observations.push(...read)
+      const read = needObservationsFor(t, chart, ctx.meta, faabMoved, league, structural)
+      if (Array.isArray(read)) {
+        needGather.observations.push(...read)
+        pricedOnHistory = true
+      }
       else needGather.skipped[read] = (needGather.skipped[read] ?? 0) + 1
     }
-    const attributed = attributeTrade(t, dated.get(`${key}|${day}`)!, {
+    const attributed = attributeTrade(t, chart, {
       allowPicks: league.book.format === 'DYNASTY',
       extraGiven: faabMoved ? normalizedFaabValue(faabMoved.given, league.faabBudget) : 0,
       extraReceived: faabMoved ? normalizedFaabValue(faabMoved.received, league.faabBudget) : 0,
     })
+    const onHistory = dk.includes('|h')
     if (attributed.kind === 'skip') {
+      if (onHistory && pricedOnHistory) ctx.history!.get(key)!.tradesPriced++
       bump(g, attributed.reason)
       continue
     }
+    if (onHistory) ctx.history!.get(key)!.tradesPriced++
     const today = ctx.charts.get(key)!
     const weight = recencyWeight(t.tradeDate, ctx.now)
     let used = false
@@ -1011,10 +1096,10 @@ export async function recalculateFormatMarkets(
     now?: Date
     env?: NodeJS.ProcessEnv
   },
-): Promise<{ books: BookResult[]; pickMarkets: PickBookResult[]; postureMarkets: PostureBookResult[]; needMarkets: NeedBookResult[]; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
+): Promise<{ books: BookResult[]; pickMarkets: PickBookResult[]; postureMarkets: PostureBookResult[]; needMarkets: NeedBookResult[]; history: Array<{ book: string } & HistoryUse>; lineup: LineupFactorTable; lineupWritten: boolean; tradesUsed: number; tradesStamped: number; skipped: Record<string, number> }> {
   const dryRun = opts.dryRun !== false
   const generatedAt = opts.now ?? new Date()
-  const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason, now: generatedAt })
+  const gathered = await gatherFormatObservations(prisma, { sinceSeason: opts.sinceSeason, now: generatedAt, env: opts.env })
   const datedLive = datedLearnerLive(opts.env)
 
   const books: BookResult[] = []
@@ -1068,7 +1153,17 @@ export async function recalculateFormatMarkets(
   }
   // Best-effort and last: a stamping failure must never cost the markets this run already wrote.
   const tradesStamped = !dryRun && opts.stampTrades ? await stampTradeFormats(prisma, gathered.formatStamps).catch(() => 0) : 0
-  return { books, pickMarkets, postureMarkets, needMarkets, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
+  const history = [...gathered.historyByBook.entries()].map(([book, h]) => ({ book, ...h }))
+  return { books, pickMarkets, postureMarkets, needMarkets, history, lineup, lineupWritten, tradesUsed: gathered.tradesUsed, tradesStamped, skipped: gathered.skipped }
+}
+
+/** One dynasty book's use of the historical series. */
+export type HistoryUse = { scale: HistoryScale | null; tradesPriced: number }
+
+/** `TRADE_HISTORY_CHART=off` prices older trades on nothing, as before. */
+export const TRADE_HISTORY_CHART_ENV = 'TRADE_HISTORY_CHART'
+export function historyChartOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env[TRADE_HISTORY_CHART_ENV] ?? '').trim().toLowerCase() !== 'off'
 }
 
 /** One book's posture observations and why the rest were not used. */

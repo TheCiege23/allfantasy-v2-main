@@ -65,6 +65,17 @@ async function rebuildTradeMarket(startedAt: number): Promise<
             : r.faabBackfill.off
               ? ['FAAB backfill: off (TRADE_FAAB_BACKFILL=off)']
               : [`FAAB backfill: ${r.faabBackfill.rowsFilled} trade rows given their FAAB`]),
+          // Where the pick, posture and need markets read from, and what the historical series priced.
+          ...(r.structural
+            ? [
+                r.structural.ok
+                  ? `structural pass (picks, posture, need): every season from ${r.structural.sinceSeason}`
+                  : `structural pass failed: picks, posture and need read the market's widest window instead`,
+                ...r.structural.history.map(
+                  (h) => `history chart ${h.book}: ${h.tradesPriced} older trades priced on their own day; ${h.scale?.note ?? 'not measured'}`,
+                ),
+              ]
+            : []),
           // The dated market, in words per book — read from sync_job_runs to decide TRADE_MARKET_LEARNER=dated.
           ...(r.datedShadow ?? []).map(
             (d) =>

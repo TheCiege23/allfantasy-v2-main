@@ -183,7 +183,7 @@ describe('reading the trades', () => {
     expect(off.postureMarkets).toEqual([])
   })
 
-  it('the scheduled run keeps the widest window and stores it once', async () => {
+  it('the scheduled run stores the structural pass (every season from 2020) once', async () => {
     const market = (n: number) => ({ book: { format: 'DYNASTY' as const, qbFormat: 'SUPERFLEX' as const }, concept: 'c', generatedAt: '', observations: n, premiums: [], skipped: {} })
     const recalc = vi.fn(async (_p: unknown, o: { sinceSeason: number }) => ({
       books: [], pickMarkets: [], postureMarkets: [market(o.sinceSeason)], lineup: { factors: [] } as never, lineupWritten: false, tradesUsed: 0, tradesStamped: 0, skipped: {},
@@ -191,7 +191,7 @@ describe('reading the trades', () => {
     const writePosture = vi.fn(async () => undefined)
     const r = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup: vi.fn() as never, stampAll: vi.fn(async () => null) as never, writePicks: vi.fn(async () => undefined), writePosture })
     expect(writePosture).toHaveBeenCalledTimes(1)
-    expect(r.postureMarkets.map((m) => m.observations)).toEqual([2024])
+    expect(r.postureMarkets.map((m) => m.observations)).toEqual([2020])
     expect(r.postureMarketsWritten).toBe(true)
   })
 })
