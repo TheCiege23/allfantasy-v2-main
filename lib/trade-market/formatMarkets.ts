@@ -38,8 +38,10 @@ import {
   type PostureObservation,
 } from './postureMarketLearner'
 import {
+  availableNeedAt,
   computeNeedMarket,
   needAt,
+  type NeedPosition,
   packagePosition,
   slotsFromRosterPositions,
   type NeedMarket,
@@ -47,6 +49,8 @@ import {
 } from './needMarketLearner'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import {
   historicalChart,
   HISTORY_SCALE_MAX_GAP_DAYS,
@@ -624,8 +628,11 @@ export async function gatherFormatObservations(
   for (const b of MARKET_BOOKS) byBookNeed.set(bookKey(b), { observations: [], skipped: {} })
   const historyByBook = new Map<string, HistoryUse>()
   try {
+    // Byes for the seasons read, best-effort: without them "short this week" counts injuries and reserve only where a
+    // bye could not have mattered — a player on a team the schedule cannot place is "cannot say", never "available".
+    const byes = await loadByeLookup(prisma, [...new Set([...unique.values()].map((t) => t.season))]).catch(() => null)
     await gatherDatedObservations(prisma, {
-      unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, byBookNeed,
+      unique, leagues, faab, meta, charts, byBookDated, byBookPicks, byBookPosture, byBookNeed, byes,
       historyOn: historyChartOn(opts.env), history: historyByBook, now: opts.now ?? new Date(),
     })
   } catch {
@@ -657,6 +664,8 @@ async function gatherDatedObservations(
     byBookPicks?: Map<string, PickGather>
     byBookPosture?: Map<string, PostureGather>
     byBookNeed?: Map<string, NeedGather>
+    /** NFL byes, for "short this week" (`byeLookupFrom`). */
+    byes?: ByeLookup | null
     /** Price older dynasty trades on the historical series (`TRADE_HISTORY_CHART=off` turns it off). */
     historyOn?: boolean
     /** Filled per dynasty book: the scale measured and the trades the series priced. */
@@ -811,7 +820,7 @@ async function gatherDatedObservations(
     }
     const needGather = ctx.byBookNeed?.get(key)
     if (needGather && t.tradeDate) {
-      const read = needObservationsFor(t, chart, ctx.meta, faabMoved, league, structural)
+      const read = needObservationsFor(t, chart, ctx.meta, faabMoved, league, structural, ctx.byes ?? null)
       if (Array.isArray(read)) {
         needGather.observations.push(...read)
         pricedOnHistory = true
@@ -1172,9 +1181,70 @@ type PostureGather = { observations: PostureObservation[]; skipped: Record<strin
 type SnapshotSide = {
   rosterId?: unknown
   record?: { wins?: unknown; losses?: unknown; ties?: unknown } | null
-  rosterBefore?: Array<{ id?: unknown; position?: string | null }>
+  rosterBefore?: Array<{ id?: unknown; position?: string | null; team?: string | null; reserve?: boolean | null; injuryStatus?: string | null }>
 }
-type SnapshotShape = { sides?: SnapshotSide[]; unavailable?: unknown; starterSlots?: Record<string, number> | null; league?: { roster_positions?: unknown } }
+type SnapshotShape = {
+  sides?: SnapshotSide[]
+  unavailable?: unknown
+  source?: string
+  injuriesRead?: boolean
+  starterSlots?: Record<string, number> | null
+  league?: { roster_positions?: unknown }
+}
+
+/** Is this NFL team without a game that week? Null when the schedule cannot say. */
+export type ByeLookup = (team: string | null | undefined, season: number, week: number) => boolean | null
+
+/**
+ * Byes from the stored NFL schedule: a team with no game in a week that has a full slate. One read for the seasons
+ * asked about. A week with fewer than 10 games stored (a gap in the schedule, not a bye week) says nothing. PURE apart
+ * from the read.
+ */
+export function byeLookupFrom(rows: ReadonlyArray<{ season: number; weekOrRound: number; homeTeam: string | null; awayTeam: string | null }>): ByeLookup {
+  const playing = new Map<string, Set<string>>()
+  const games = new Map<string, number>()
+  for (const r of rows) {
+    const k = `${r.season}:${r.weekOrRound}`
+    const set = playing.get(k) ?? new Set<string>()
+    for (const t of [r.homeTeam, r.awayTeam]) {
+      const code = normalizeTeamAbbrev(t)
+      if (code) set.add(code)
+    }
+    playing.set(k, set)
+    games.set(k, (games.get(k) ?? 0) + 1)
+  }
+  return (team, season, week) => {
+    const k = `${season}:${week}`
+    const code = normalizeTeamAbbrev(team)
+    // An unknown team, or a week the schedule does not hold in full, is "cannot say" — never "on bye".
+    if (!code || (games.get(k) ?? 0) < 10) return null
+    return !playing.get(k)!.has(code)
+  }
+}
+
+async function loadByeLookup(prisma: PrismaClient, seasons: readonly number[]): Promise<ByeLookup | null> {
+  if (seasons.length === 0) return null
+  const rows = await prisma.gameSchedule.findMany({
+    where: { sportType: 'NFL', season: { in: [...seasons] } },
+    select: { season: true, weekOrRound: true, homeTeam: true, awayTeam: true },
+  })
+  return rows.length ? byeLookupFrom(rows) : null
+}
+
+/**
+ * Who was out that week, for a context that can say: a LIVE capture whose injuries were read. Reserve, a ruled-out
+ * designation, or a bye. Null for every other context (a rebuilt roster carries today's team, not that season's), so
+ * nothing is claimed about availability there.
+ */
+function outThisWeek(snap: SnapshotShape, season: number, week: number, byes: ByeLookup | null) {
+  if (snap.source !== 'live_sync' || snap.injuriesRead !== true) return null
+  return (p: { team?: string | null; reserve?: boolean | null; injuryStatus?: string | null }): boolean | null => {
+    if (p.reserve === true || isRuledOut(p.injuryStatus)) return true
+    if (!byes || !(week >= 1)) return false
+    const bye = byes(p.team, season, week)
+    return bye == null ? null : bye
+  }
+}
 
 /**
  * The two sides of a trade in its saved context: the row's partner roster names the other side, so the row's own side
@@ -1277,12 +1347,14 @@ type NeedGather = { observations: NeedObservation[]; skipped: Record<string, num
  * before the trade against the league's starting slots, and what it paid on the trade day's chart. PURE.
  */
 export function needObservationsFor(
-  t: Pick<TradeRow, 'transactionId' | 'partnerRosterId' | 'contextSnapshot' | 'playersGiven' | 'playersReceived' | 'picksGiven' | 'picksReceived'>,
+  t: Pick<TradeRow, 'transactionId' | 'partnerRosterId' | 'contextSnapshot' | 'playersGiven' | 'playersReceived' | 'picksGiven' | 'picksReceived'> &
+    Partial<Pick<TradeRow, 'season' | 'week'>>,
   chart: ReadonlyMap<string, number>,
   meta: ReadonlyMap<string, { position: string | null }>,
   faabMoved: { given: number; received: number } | null,
   league: Pick<ResolvedTradeLeague, 'faabBudget'>,
   weight: number,
+  byes: ByeLookup | null = null,
 ): NeedObservation[] | 'no_context' | 'no_slots' | 'unpriced_player' | 'not_one_position' {
   const ctxSides = contextSidesOf(t)
   if (!ctxSides) return 'no_context'
@@ -1304,10 +1376,13 @@ export function needObservationsFor(
   ]
   const out: NeedObservation[] = []
   const ownPos = packagePosition(partsOf(received, got))
-  const ownNeed = ownPos ? needAt(ctxSides.own.rosterBefore, slots, ownPos) : null
+  const isOut = outThisWeek(ctxSides.snap, Number(t.season ?? 0), Number(t.week ?? 0), byes)
+  const levelAt = (roster: SnapshotSide['rosterBefore'], pos: NeedPosition) =>
+    isOut ? availableNeedAt(roster, slots, pos, isOut) : needAt(roster, slots, pos)
+  const ownNeed = ownPos ? levelAt(ctxSides.own.rosterBefore, ownPos) : null
   if (ownPos && ownNeed) out.push({ transactionId: t.transactionId, position: ownPos, need: ownNeed, ratio: gave / got, weight })
   const partnerPos = packagePosition(partsOf(given, gave))
-  const partnerNeed = partnerPos ? needAt(ctxSides.partner.rosterBefore, slots, partnerPos) : null
+  const partnerNeed = partnerPos ? levelAt(ctxSides.partner.rosterBefore, partnerPos) : null
   if (partnerPos && partnerNeed) out.push({ transactionId: t.transactionId, position: partnerPos, need: partnerNeed, ratio: got / gave, weight })
   return out.length ? out : 'not_one_position'
 }

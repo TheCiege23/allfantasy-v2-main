@@ -15,6 +15,10 @@ import { effectiveSample, weightedMedian } from './datedMarketLearner'
  * ⚠ FLEX is not counted toward RB/WR/TE: which position fills it is the manager's choice, not the league's. A team "short"
  * at WR with two flex spots is therefore measured honestly as short of DEDICATED receivers, nothing more.
  *
+ * SHORT THIS WEEK (2026-11-22): the roster has the depth, but not the players AVAILABLE — enough of them are injured, on
+ * reserve or on a bye that week that the available count is at or below the starters required. Read only where the
+ * context can say who was out (`availableNeedAt`: a live capture that read injuries); never assumed.
+ *
  * WHAT WAS BOUGHT is a package whose value is 60%+ players of ONE position (QB/RB/WR/TE), on the trade day's chart.
  *
  * THE PREMIUM is what a short (or deep) team pays for that position, as value given ÷ value received on the trade day's
@@ -28,7 +32,7 @@ import { effectiveSample, weightedMedian } from './datedMarketLearner'
 
 export const NEED_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const
 export type NeedPosition = (typeof NEED_POSITIONS)[number]
-export type NeedLevel = 'short' | 'normal' | 'deep'
+export type NeedLevel = 'short' | 'short_this_week' | 'normal' | 'deep'
 
 export const NEED_MIN_EFFECTIVE_SAMPLE = 20
 export const NEED_MAX_PREMIUM_PCT = 25
@@ -81,6 +85,27 @@ export function needAt(
   return low === level(known + unknown) ? low : null
 }
 
+/**
+ * The buyer's need at a position counting only the players AVAILABLE that week: `short_this_week` when the roster has the
+ * depth but the players out (injured, reserve, bye — `isOut`) leave no spare; otherwise exactly `needAt`. `isOut` returns
+ * null when it cannot say for a player, and then this cannot either for a short-this-week claim (it falls back to depth).
+ */
+export function availableNeedAt<P extends { position?: string | null }>(
+  rosterBefore: ReadonlyArray<P> | null | undefined,
+  slots: Record<string, number> | null | undefined,
+  position: NeedPosition,
+  isOut: (player: P) => boolean | null,
+): NeedLevel | null {
+  const depth = needAt(rosterBefore, slots, position)
+  if (depth == null || depth === 'short') return depth
+  const required = startersRequired(slots, position)!
+  const here = (rosterBefore ?? []).filter((p) => String(p?.position ?? '').toUpperCase() === position)
+  const verdicts = here.map(isOut)
+  if (verdicts.some((v) => v == null)) return depth
+  const available = verdicts.filter((v) => v === false).length
+  return available <= required ? 'short_this_week' : depth
+}
+
 /** The one position a package is, by 60%+ of its value; null when mixed or not a player package. */
 export function packagePosition(parts: ReadonlyArray<{ position: string | null; value: number }>): NeedPosition | null {
   const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0)
@@ -123,7 +148,7 @@ export function computeNeedMarket(observations: readonly NeedObservation[], now:
     const base = usable.filter((o) => o.position === position && o.need === 'normal')
     const baseEff = Math.round(effectiveSample(base.map((o) => o.weight)) * 10) / 10
     const b = median(base)
-    for (const need of ['short', 'deep'] as const) {
+    for (const need of ['short', 'short_this_week', 'deep'] as const) {
       const group = usable.filter((o) => o.position === position && o.need === need)
       const eff = Math.round(effectiveSample(group.map((o) => o.weight)) * 10) / 10
       const g = median(group)
@@ -147,6 +172,6 @@ export function computeNeedMarket(observations: readonly NeedObservation[], now:
 
 export function describeNeedMarket(label: string, m: NeedMarket): string {
   const pub = m.premiums.filter((p) => p.published)
-  const parts = pub.map((p) => `${p.need} at ${p.position} ${p.premiumPct! > 0 ? '+' : ''}${p.premiumPct}%`)
+  const parts = pub.map((p) => `${p.need.replace(/_/g, ' ')} at ${p.position} ${p.premiumPct! > 0 ? '+' : ''}${p.premiumPct}%`)
   return `need market ${label}: ${m.observations} sides, ${pub.length}/${m.premiums.length} premiums measured${parts.length ? ` — ${parts.join(', ')}` : ''}`
 }

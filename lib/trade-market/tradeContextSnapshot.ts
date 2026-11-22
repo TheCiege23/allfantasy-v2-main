@@ -53,6 +53,11 @@ export type TradeContextPlayer = {
   /** Null when the source cannot say — a roster rebuilt from weekly score rows carries no reserve or taxi flag. */
   reserve: boolean | null
   taxi: boolean | null
+  /**
+   * His injury designation when the snapshot was taken (`withInjuryStatus`): the status text, or null for "no report".
+   * ABSENT means injuries were not read for this snapshot (a rebuilt context, a non-NFL league) — never "healthy".
+   */
+  injuryStatus?: string | null
 }
 
 export type TradeContextSide = {
@@ -67,6 +72,8 @@ export type TradeContextSide = {
 
 export type TradeContextSnapshot = {
   version: typeof TRADE_CONTEXT_SNAPSHOT_VERSION
+  /** True when every roster player's `injuryStatus` was read at capture (`withInjuryStatus`). */
+  injuriesRead?: boolean
   /**
    * `live_sync`: captured from the sync that saw the trade — rosters exact.
    * `backfill_rebuilt`: rebuilt later from stored weekly rows (`tradeContextBackfill.ts`) — rosters as of the week
@@ -227,4 +234,30 @@ export function buildTradeContextSnapshot(
     scoring,
     sides,
   }
+}
+
+/**
+ * The snapshot with each roster player's injury designation, read at capture (owner's call, 2026-11-22: a team whose
+ * tight end is out this week pays differently). PURE: the caller supplies the lookup.
+ * `statusOf` returns the designation, null for "no report", or undefined when it CANNOT say (a name shared by two
+ * players) — then the player's status stays absent and the snapshot is not marked read, so nothing downstream reads an
+ * unknown as healthy.
+ */
+export function withInjuryStatus(
+  snapshot: TradeContextSnapshot,
+  statusOf: (player: TradeContextPlayer) => string | null | undefined,
+): TradeContextSnapshot {
+  let all = true
+  const sides = snapshot.sides.map((side) => ({
+    ...side,
+    rosterBefore: side.rosterBefore.map((p) => {
+      const status = statusOf(p)
+      if (status === undefined) {
+        all = false
+        return p
+      }
+      return { ...p, injuryStatus: status }
+    }),
+  }))
+  return { ...snapshot, sides, injuriesRead: all }
 }
