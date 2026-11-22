@@ -54,7 +54,7 @@ export async function buildDraftLiveSyncPayload(
 
   // Recovery and roster materialization can scan a full board and should never hold a clock read.
   if (['in_progress', 'paused', 'completed'].includes(draftSessionRow.status)) {
-    void dedupeInFlight('draft:live-sync-maintenance:' + leagueId, () =>
+    void dedupeInFlight<boolean | void>('draft:live-sync-maintenance:' + leagueId, () =>
       draftSessionRow.status === 'completed'
         ? syncPostDraftArtifactsIfCompletedThrottled(leagueId)
         : repairDraftCompletionIfBoardFull(leagueId),
