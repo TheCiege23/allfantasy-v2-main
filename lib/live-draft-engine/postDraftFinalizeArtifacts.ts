@@ -172,7 +172,7 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true },
+    select: { id: true, status: true, completedAt: true },
   })
   if (session?.status !== 'completed') return
 
@@ -183,7 +183,7 @@ export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: strin
   }
 
   try {
-    if (session.id && await hasPendingDraftFinalization(session.id)) return
+    if (session.completedAt && await hasPendingDraftFinalization(session.id, session.completedAt)) return
     await runPostDraftFinalizationArtifacts(leagueId)
   } catch (err) {
     postDraftArtifactOkAt.delete(leagueId)

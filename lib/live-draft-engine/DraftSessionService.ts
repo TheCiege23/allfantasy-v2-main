@@ -1391,8 +1391,10 @@ export async function completeDraftSession(leagueId: string, scheduleFinalizatio
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
-    if (scheduleFinalization) await queueDraftFinalization(tx as Prisma.TransactionClient, leagueId, session.id)
-    return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
+    const completionJob = scheduleFinalization
+      ? await queueDraftFinalization(tx as Prisma.TransactionClient, leagueId, session.id, completedAt)
+      : null
+    return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id, completionJob }
   })
 
   if (!outcome.ok) return false
@@ -1411,9 +1413,10 @@ export async function completeDraftSession(leagueId: string, scheduleFinalizatio
   }
 
   if (scheduleFinalization) {
-    if (outcome.transitioned) {
+    if (outcome.transitioned && outcome.completionJob) {
+      const jobKey = outcome.completionJob
       scheduleFinalization(async () => {
-        await processDraftFinalizationJob(outcome.sessionId).catch(error => {
+        await processDraftFinalizationJob(jobKey).catch(error => {
           console.error('[completeDraftSession] queued finalization could not start', { leagueId, error })
         })
       })

@@ -22,16 +22,19 @@ vi.mock('@/lib/live-draft-engine/DraftSessionService', () => ({ finishDraftCompl
 
 import { processDraftFinalizationJob, processDueDraftFinalizations } from '@/lib/live-draft-engine/DraftFinalizationJob'
 
+const completedAt = new Date('2026-11-22T06:00:00.000Z')
+const jobKey = `draft_finalization:draft:${completedAt.getTime()}`
+
 describe('draft season setup jobs', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    db.session.mockResolvedValue({ id: 'draft', status: 'completed' })
+    db.session.mockResolvedValue({ id: 'draft', status: 'completed', completedAt })
   })
 
   it('processes one claim when the response callback and the scheduled sweep overlap', async () => {
-    db.sweep.mockResolvedValue([{ idempotencyKey: 'draft_finalization:draft' }])
+    db.sweep.mockResolvedValue([{ idempotencyKey: jobKey }])
     db.claim.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }).mockResolvedValue({ count: 1 })
-    await Promise.all([processDraftFinalizationJob('draft'), processDueDraftFinalizations()])
+    await Promise.all([processDraftFinalizationJob(jobKey), processDueDraftFinalizations()])
     expect(db.finish).toHaveBeenCalledExactlyOnceWith('league', 'draft', true, { requireSeason: true })
     expect(db.claim).toHaveBeenLastCalledWith({
       where: { id: 'job', status: 'running', startedAt: expect.any(Date) },
@@ -42,7 +45,7 @@ describe('draft season setup jobs', () => {
   it('leaves failed setup available to retry with its original draft identity', async () => {
     db.claim.mockResolvedValue({ count: 1 })
     db.finish.mockRejectedValue(new Error('season storage unavailable'))
-    await processDraftFinalizationJob('draft')
+    await processDraftFinalizationJob(jobKey)
     expect(db.claim).toHaveBeenLastCalledWith({
       where: { id: 'job', status: 'running', startedAt: expect.any(Date) },
       data: {
@@ -51,6 +54,17 @@ describe('draft season setup jobs', () => {
         finishedAt: null,
         lastError: 'season storage unavailable',
       },
+    })
+  })
+
+  it('cancels an old setup job when a reset draft has completed again', async () => {
+    db.claim.mockResolvedValue({ count: 1 })
+    db.session.mockResolvedValue({ id: 'draft', status: 'completed', completedAt: new Date(completedAt.getTime() + 1) })
+    await processDraftFinalizationJob(jobKey)
+    expect(db.finish).not.toHaveBeenCalled()
+    expect(db.claim).toHaveBeenLastCalledWith({
+      where: { id: 'job', status: 'running', startedAt: expect.any(Date) },
+      data: { status: 'cancelled', finishedAt: expect.any(Date) },
     })
   })
 })

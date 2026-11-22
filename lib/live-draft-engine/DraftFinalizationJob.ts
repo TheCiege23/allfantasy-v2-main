@@ -7,8 +7,8 @@ const MAX_ATTEMPTS = 8
 const RETRY_MS = 60_000
 const LEASE_MS = 120_000
 
-function key(sessionId: string) {
-  return `${JOB_TYPE}:${sessionId}`
+function key(sessionId: string, completedAt: Date) {
+  return `${JOB_TYPE}:${sessionId}:${completedAt.getTime()}`
 }
 
 function due(now: Date) {
@@ -20,22 +20,26 @@ function due(now: Date) {
   }
 }
 
-export async function queueDraftFinalization(tx: Prisma.TransactionClient, leagueId: string, sessionId: string) {
+export async function queueDraftFinalization(
+  tx: Prisma.TransactionClient, leagueId: string, sessionId: string, completedAt: Date,
+) {
+  const idempotencyKey = key(sessionId, completedAt)
   await tx.automationJob.create({
     data: {
       leagueId,
       jobType: JOB_TYPE,
-      idempotencyKey: key(sessionId),
-      metadata: { sessionId },
+      idempotencyKey,
+      metadata: { sessionId, completedAt: completedAt.toISOString() },
       scheduledFor: new Date(),
       maxAttempts: MAX_ATTEMPTS,
     },
   })
+  return idempotencyKey
 }
 
-export async function hasPendingDraftFinalization(sessionId: string): Promise<boolean> {
+export async function hasPendingDraftFinalization(sessionId: string, completedAt: Date): Promise<boolean> {
   const job = await prisma.automationJob.findUnique({
-    where: { idempotencyKey: key(sessionId) },
+    where: { idempotencyKey: key(sessionId, completedAt) },
     select: { status: true },
   })
   return job?.status === 'pending' || job?.status === 'running'
@@ -55,15 +59,16 @@ async function processJob(idempotencyKey: string) {
   if (!claim.count) return
 
   const job = await prisma.automationJob.findUniqueOrThrow({ where: { idempotencyKey } })
-  const sessionId = idempotencyKey.slice(JOB_TYPE.length + 1)
+  const [, sessionId, completedAt] = idempotencyKey.split(':')
   const lease = { id: job.id, status: 'running', startedAt }
   try {
     const session = job.leagueId && await prisma.draftSession.findFirst({
       where: { leagueId: job.leagueId },
       orderBy: CURRENT_DRAFT_SESSION_ORDER,
-      select: { id: true, status: true },
+      select: { id: true, status: true, completedAt: true },
     })
-    if (!job.leagueId || !session || session.id !== sessionId || session.status !== 'completed') {
+    if (!job.leagueId || !session || session.id !== sessionId || session.status !== 'completed' ||
+      session.completedAt?.getTime() !== Number(completedAt)) {
       await prisma.automationJob.updateMany({ where: lease, data: { status: 'cancelled', finishedAt: new Date() } })
       return
     }
@@ -86,8 +91,8 @@ async function processJob(idempotencyKey: string) {
   }
 }
 
-export function processDraftFinalizationJob(sessionId: string) {
-  return processJob(key(sessionId))
+export function processDraftFinalizationJob(idempotencyKey: string) {
+  return processJob(idempotencyKey)
 }
 
 export async function processDueDraftFinalizations() {
