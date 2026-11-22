@@ -186,6 +186,8 @@ export const myTeamScreenMessages = defineMessages({
     benchAskChimmy: 'Ask Chimmy about this swap',
     benchCaveat: 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.',
     /* The bench check's graded record for a swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`). */
+    /** The same small label as every measured line on /core (`messages/adviceRecord.ts` recordLabel). */
+    benchCheckRecordLabel: 'Track record',
     benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean) => {
       const edge = band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'
       return low
@@ -391,6 +393,7 @@ export const myTeamScreenMessages = defineMessages({
       `¿Debería poner de titular a ${bench} en lugar de ${starter} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`,
     benchAskChimmy: 'Preguntar a Chimmy por este cambio',
     benchCaveat: 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.',
+    benchCheckRecordLabel: 'Historial',
     benchCheckRecord: (pct, n, band, low) => {
       const edge = band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
       return low

@@ -18,18 +18,7 @@
  * The method and what it does NOT answer: `lib/trade-market/learnedMarketBacktest.ts`. What it prints is counts,
  * percentages and errors — no user ids, league names or trade ids — so it is safe to paste back.
  */
-import type { NeedObservation } from '@/lib/trade-market/needMarketLearner'
-import type { PickObservation } from '@/lib/trade-market/pickMarketLearner'
-import type { PostureObservation } from '@/lib/trade-market/postureMarketLearner'
-import {
-  backtestNeed,
-  backtestPicks,
-  backtestPosture,
-  cutoffAtShare,
-  describeBacktest,
-  type DatedObservation,
-  type LearnerBacktest,
-} from '@/lib/trade-market/learnedMarketBacktest'
+import { describeBacktest } from '@/lib/trade-market/learnedMarketBacktest'
 
 function arg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -69,26 +58,12 @@ async function main() {
   const now = new Date()
   const g = await gatherFormatObservations(prisma as never, { sinceSeason, now, env: process.env })
 
-  // Every observation carries its trade id; one read gives each trade its date.
-  const ids = new Set<string>()
-  for (const m of [g.byBookPicks, g.byBookPosture, g.byBookNeed]) for (const v of m.values()) for (const o of v.observations) ids.add(o.transactionId)
-  const dateOf = new Map<string, Date>()
-  const all = [...ids]
-  for (let i = 0; i < all.length; i += 5000) {
-    const rows = await prisma.leagueTrade.findMany({ where: { transactionId: { in: all.slice(i, i + 5000) } }, select: { transactionId: true, tradeDate: true } })
-    for (const r of rows) if (r.tradeDate && !dateOf.has(r.transactionId)) dateOf.set(r.transactionId, r.tradeDate)
-  }
-  const dated = <O extends { transactionId: string }>(obs: O[]): Array<DatedObservation<O>> =>
-    obs.flatMap((o) => (dateOf.has(o.transactionId) ? [{ obs: o, tradeDate: dateOf.get(o.transactionId)! }] : []))
-
-  const cutoff = cutoffGiven ?? cutoffAtShare([...dateOf.values()])
-  if (!cutoff) throw new Error('Not enough dated trades to split.')
+  // The same gather-to-backtest path the daily job stores its verdicts from (`holdoutCheck.ts`).
+  const { backtestGathered } = await import('@/lib/trade-market/holdoutCheck')
+  const bt = await backtestGathered(prisma as never, g, cutoffGiven)
+  if (!bt) throw new Error('Not enough dated trades to split.')
+  const { cutoff, results } = bt
   log(`cutoff ${cutoff.toISOString().slice(0, 10)}: trades before it train, trades on or after it test`)
-
-  const results: LearnerBacktest[] = []
-  for (const [book, v] of g.byBookPicks) results.push(backtestPicks(book, dated<PickObservation>(v.observations), cutoff))
-  for (const [book, v] of g.byBookPosture) results.push(backtestPosture(book, dated<PostureObservation>(v.observations), cutoff))
-  for (const [book, v] of g.byBookNeed) results.push(backtestNeed(book, dated<NeedObservation>(v.observations), cutoff))
 
   if (asJson) {
     console.log(JSON.stringify({ host, cutoff: cutoff.toISOString(), sinceSeason, results }, null, 2))

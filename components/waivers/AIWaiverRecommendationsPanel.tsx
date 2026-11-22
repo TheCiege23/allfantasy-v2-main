@@ -8,6 +8,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
 import { pickupRecord } from '@/lib/chimmy-outcomes/engineRecord'
 import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
+import { EvidenceLine } from '@/components/core-app/primitives'
 
 const recommendationSchema = z.object({
   addPlayerId: z.string().min(1), addPlayerName: z.string().min(1),
@@ -249,7 +250,13 @@ function LeagueWaiverRecommendationsPanel({
             {generatedAt ? <span>Updated: {new Date(generatedAt).toLocaleString()}</span> : null}
           </div>
 
-          {record ? (
+          {record && surface === 'core' ? (
+            /* /core: the shared measured line (primitives/EvidenceLine.tsx), as under a trade grade and a bench swap. */
+            <EvidenceLine
+              label={rm.recordLabel}
+              lines={[{ text: rm.pickupRecord(record.ratePct, record.graded), testId: 'ai-waiver-recommendations-record' }]}
+            />
+          ) : record ? (
             <p className={cx.record} data-testid="ai-waiver-recommendations-record">
               {rm.pickupRecord(record.ratePct, record.graded)}
             </p>

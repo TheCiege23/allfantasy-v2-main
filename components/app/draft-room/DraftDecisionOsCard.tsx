@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
+import { EvidenceLine } from '@/components/core-app/primitives/EvidenceLine'
 
 /**
  * Decision OS in the draft room: the `manager.draft.pick` decision for this manager's next pick.
@@ -169,7 +170,15 @@ export function DraftDecisionOsCard({ leagueId, refreshKey }: { leagueId: string
             </p>
           ) : null}
           {top ? <p className="text-white/65">{decision.fourAnswers.why_it_matters}</p> : null}
-          <p className="text-white/50">{decision.fourAnswers.how_confident}</p>
+          {/*
+            The measured line, said the way every other screen says it (primitives/EvidenceLine.tsx). The draft room is
+            not inside /core, so the three colours the line reads are set here, on this card's own dark surface.
+          */}
+          <EvidenceLine
+            className="[--accent-line:rgba(165,180,252,0.45)] [--muted:rgba(255,255,255,0.55)] [--text2:rgba(255,255,255,0.75)]"
+            label="How sure this is"
+            lines={[{ text: decision.fourAnswers.how_confident, testId: 'draft-decision-os-how-confident' }]}
+          />
 
           <div className="flex flex-wrap gap-1 pt-0.5" data-testid="draft-decision-os-verdicts">
             {(blocking.length > 0 ? blocking : decision.ruleVerdicts).map((v) => (

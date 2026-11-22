@@ -19,4 +19,13 @@ describe('the trade history review, against the market', () => {
     render(<TradeHistoryReview leagueId="L" view={view()} />)
     expect(screen.queryByTestId('trade-audit-market')).toBeNull()
   })
+
+  it('frequent partners: their gap together, beside each team\'s gap elsewhere', () => {
+    const pair = { teamIds: ['1', '2'] as [string, string], names: ['Gridiron', 'Waivers'] as [string, string], count: 5, expected: 0.4, outside: 2, netShareToFirst: 0.2, gapTogether: 38, elsewhere: [{ trades: 6, gap: 7 }, { trades: 1, gap: null }] as [{ trades: number; gap: number | null }, { trades: number; gap: number | null }] }
+    render(<TradeHistoryReview leagueId="L" view={{ ...view(), pairs: [pair] }} />)
+    const text = screen.getByTestId('trade-audit-pair-elsewhere').textContent!
+    expect(text).toContain('Middle value gap between them: 38%.')
+    expect(text).toContain("Gridiron's 6 trades with other teams: 7%.")
+    expect(text).toContain('Waivers has 1 trade with other teams, too few to compare.')
+  })
 })

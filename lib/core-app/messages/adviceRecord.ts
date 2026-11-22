@@ -18,6 +18,8 @@ const abs1 = (n: number) => Math.abs(n).toFixed(1)
 
 export const adviceRecordMessages = defineMessages({
   en: {
+    /** The small label over every measured line (`components/core-app/primitives/EvidenceLine.tsx`). */
+    recordLabel: 'Track record',
     tradeRecord: (letter: string, n: number, netPerWeek: number, aheadPct: number | null, verdict: LetterVerdict) =>
       `How ${letter} grades have held up: across ${n} graded redraft trades, the team we graded ${letter} scored ` +
       `${abs1(netPerWeek)} PPR a week ${netPerWeek >= 0 ? 'more' : 'less'} than the players it gave up` +
@@ -36,6 +38,7 @@ export const adviceRecordMessages = defineMessages({
       (level === 'low' ? ' Treat this deal as closer than the letter suggests.' : ''),
   },
   es: {
+    recordLabel: 'Historial',
     tradeRecord: (letter: string, n: number, netPerWeek: number, aheadPct: number | null, verdict: LetterVerdict) =>
       `Cómo les ha ido a las notas ${letter}: en ${n} intercambios redraft evaluados, el equipo con nota ${letter} sumó ` +
       `${abs1(netPerWeek)} puntos PPR por semana ${netPerWeek >= 0 ? 'más' : 'menos'} que los jugadores que cedió` +

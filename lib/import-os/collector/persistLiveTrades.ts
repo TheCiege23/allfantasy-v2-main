@@ -231,14 +231,16 @@ export async function loadBoardPricer(platformLeagueId: string): Promise<BoardPr
  * The NFL injury designations as of now, matched to a roster player by name, VERIFIED by team and position
  * (`createInjuryRowMatcher` — a name two players share is refused, never guessed). The newest claim wins.
  */
-export async function loadInjuryLookup(now: Date): Promise<InjuryLookup> {
+export async function loadInjuryLookup(now: Date, sport = 'NFL'): Promise<InjuryLookup | null> {
   const rows = await prisma.sportsInjury.findMany({
-    where: { sport: 'NFL', expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
+    where: { sport, expiresAt: { gt: now }, fetchedAt: { gt: new Date(now.getTime() - INJURY_CAPTURE_FRESH_MS) } },
     orderBy: { fetchedAt: 'desc' },
     take: 5000,
     select: { playerName: true, team: true, position: true, status: true, date: true, fetchedAt: true },
   })
-  const match = createInjuryRowMatcher(rows, 'NFL')
+  // No fresh report at all for this sport is "no feed", not "everyone is healthy": the snapshot is then saved unmarked.
+  if (rows.length === 0) return null
+  const match = createInjuryRowMatcher(rows, sport)
   return (p) => {
     const name = p.name
     if (!name) return undefined
@@ -255,8 +257,8 @@ export async function attachTradeContextSnapshots(
     db?: Pick<typeof prisma, 'leagueTrade'>
     now?: Date
     env?: NodeJS.ProcessEnv
-    /** Injury designations for NFL rosters; defaults to the fresh `SportsInjury` rows (`loadInjuryLookup`). */
-    injuries?: (now: Date) => Promise<InjuryLookup | null>
+    /** Injury designations for the league's sport; defaults to its fresh `SportsInjury` rows (`loadInjuryLookup`). */
+    injuries?: (now: Date, sport: string) => Promise<InjuryLookup | null>
     /** NBA / MLB / NHL / NCAAB / soccer: the league's value board as a pricer; defaults to `loadBoardPricer`. */
     board?: (platformLeagueId: string) => Promise<BoardPricer | null>
   } = {},
@@ -267,7 +269,9 @@ export async function attachTradeContextSnapshots(
   const now = deps.now ?? new Date()
   const isNfl = String(input.normalized.league?.sport ?? '').toUpperCase() === 'NFL'
   // One injury read per sync, best-effort: without it a snapshot is saved exactly as before, unmarked.
-  const injuries = isNfl && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now).catch(() => null) : null
+  // Every sport (2026-11-22): who was out at the trade cannot be rebuilt later, so it is recorded wherever a feed exists.
+  const sport = String(input.normalized.league?.sport ?? '').trim().toUpperCase()
+  const injuries = sport && input.trades.length > 0 ? await (deps.injuries ?? loadInjuryLookup)(now, sport).catch(() => null) : null
   // Other sports have no dated market chart: the board's price at capture is the only record of the trade-day value.
   const board = !isNfl && input.trades.length > 0 ? await (deps.board ?? loadBoardPricer)(input.platformLeagueId).catch(() => null) : null
   let saved = 0

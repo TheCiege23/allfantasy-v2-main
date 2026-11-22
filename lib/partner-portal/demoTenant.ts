@@ -293,6 +293,66 @@ export const DEMO_DECISIONS: readonly DecisionRow[] = [
   { kind: "Draft picks", shown: 2980, actedOn: 1460, dismissed: 611, measured: 1460, helped: 862, helpedMeans: "the pick outscored the next player taken at the position" },
 ]
 
+/**
+ * WHAT MANAGERS ACTUALLY PAY IN TRADES — the learned market, as a partner would see it for their own leagues
+ * (sample numbers; the real tables are `lib/trade-market/*Learner.ts`, shown to the owner at /admin/trade-market).
+ *
+ * `premiumPct` is how far completed trades sit from the standard value chart: +15 = managers paid 15% more than the
+ * chart says. `null` = not enough completed trades yet, so nothing is published and grades keep the standard chart —
+ * the row is still shown, because "we do not know yet" is part of what a partner is buying.
+ */
+export type TradeMarketGroup = "Draft picks" | "Team situation" | "Roster need"
+export type TradeMarketRow = {
+  group: TradeMarketGroup
+  label: string
+  premiumPct: number | null
+  /** Completed trades the number rests on. */
+  trades: number
+  /** Trades needed before a number is published (only read when `premiumPct` is null). */
+  needed?: number
+}
+
+export const DEMO_TRADE_MARKET: readonly TradeMarketRow[] = [
+  { group: "Draft picks", label: "Next draft, 1st round", premiumPct: 15, trades: 388 },
+  { group: "Draft picks", label: "Next draft, 2nd round", premiumPct: 28, trades: 301 },
+  { group: "Draft picks", label: "Two or more drafts out, 1st round", premiumPct: -9, trades: 164 },
+  { group: "Team situation", label: "Contenders buying veterans", premiumPct: 8, trades: 210 },
+  { group: "Team situation", label: "Rebuilding teams buying picks", premiumPct: 6, trades: 97 },
+  { group: "Team situation", label: "Rebuilding teams buying young players", premiumPct: null, trades: 12, needed: 20 },
+  { group: "Roster need", label: "Teams with an open tight end slot", premiumPct: 11, trades: 140 },
+  { group: "Roster need", label: "Teams already deep at quarterback", premiumPct: -4, trades: 150 },
+]
+
+/** Rows in their groups, in the order given, plus the scale every bar shares (the largest move, at least 10%). PURE. */
+export function tradeMarketView(rows: readonly TradeMarketRow[]): {
+  groups: Array<{ group: TradeMarketGroup; rows: TradeMarketRow[] }>
+  scalePct: number
+  published: number
+  tradesBehindPublished: number
+} {
+  const groups: Array<{ group: TradeMarketGroup; rows: TradeMarketRow[] }> = []
+  for (const r of rows) {
+    const g = groups.find((x) => x.group === r.group)
+    if (g) g.rows.push(r)
+    else groups.push({ group: r.group, rows: [r] })
+  }
+  const published = rows.filter((r) => r.premiumPct != null)
+  const largest = published.reduce((m, r) => Math.max(m, Math.abs(r.premiumPct as number)), 0)
+  return {
+    groups,
+    scalePct: Math.max(10, Math.ceil(largest / 5) * 5),
+    published: published.length,
+    tradesBehindPublished: published.reduce((n, r) => n + r.trades, 0),
+  }
+}
+
+/** One row as a sentence — the bar's accessible name and the hover readout. PURE. */
+export function tradeMarketSentence(r: TradeMarketRow): string {
+  if (r.premiumPct == null) return `${r.label}: not enough completed trades yet (${r.trades} of ${r.needed ?? 20}), so the standard chart is used`
+  if (r.premiumPct === 0) return `${r.label}: in line with the standard chart across ${r.trades.toLocaleString()} completed trades`
+  return `${r.label}: paid ${Math.abs(r.premiumPct)}% ${r.premiumPct > 0 ? "more" : "less"} than the standard chart across ${r.trades.toLocaleString()} completed trades`
+}
+
 export function decisionShares(r: DecisionRow): { actedPct: number; dismissedPct: number; noResponsePct: number; helpedPct: number | null } {
   const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
   const actedPct = pct(r.actedOn, r.shown)
