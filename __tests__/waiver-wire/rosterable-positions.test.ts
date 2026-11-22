@@ -32,6 +32,23 @@ describe('positionIsRosterable', () => {
     expect(positionIsRosterable('RB', idp)).toBe(false)
   })
 
+  it('reads the other sports the same way', () => {
+    const mlb = rosterablePositions(['C', '1B', '2B', '3B', 'SS', 'OF', 'P'])
+    for (const p of ['LF', 'CF', 'RF', 'SP', 'RP', '1B', 'C']) expect(positionIsRosterable(p, mlb)).toBe(true)
+    expect(positionIsRosterable('DH', mlb)).toBe(false)
+
+    const nba = rosterablePositions(['G', 'F', 'C'])
+    for (const p of ['PG', 'SG', 'SF', 'PF', 'C', 'PG/SG', 'SF-PF']) expect(positionIsRosterable(p, nba)).toBe(true)
+
+    const nhl = rosterablePositions(['C', 'W', 'D', 'G'])
+    for (const p of ['LW', 'RW', 'C', 'D', 'G', 'LW,RW']) expect(positionIsRosterable(p, nhl)).toBe(true)
+
+    const soccer = rosterablePositions(['GK', 'D', 'M', 'F'])
+    for (const p of ['GKP', 'DEF', 'MID', 'FWD']) expect(positionIsRosterable(p, soccer)).toBe(true)
+    const soccerLong = rosterablePositions(['GKP', 'DEF', 'MID', 'FWD'])
+    for (const p of ['GK', 'D', 'M', 'F', 'ST']) expect(positionIsRosterable(p, soccerLong)).toBe(true)
+  })
+
   it('hides no one when the league did not say, or the player has no position on file', () => {
     expect(positionIsRosterable('K', null)).toBe(true)
     expect(positionIsRosterable(null, noKickerNoDefense)).toBe(true)

@@ -21,7 +21,7 @@ import {
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { applyDailySportOutlook, loadDailySportOutlook } from "@/lib/projections/dailySportOutlook"
 import { identityNameKey } from "@/lib/redraft/rosterGameLogIdBridge"
-import { nflRosterIdForPoolRow } from "@/lib/waiver-wire/nflRosterIdForPoolRow"
+import { rosterIdForPoolRow } from "@/lib/waiver-wire/nflRosterIdForPoolRow"
 import {
   linkedRosteredProspectIds,
   loadNhlProspectFreeAgents,
@@ -152,7 +152,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
         (p.external_source_id != null ? holds.get(String(p.external_source_id)) : undefined) ??
         holds.get(dto.id)
       const row2 = hold ? { ...dto, onWaiversUntil: hold.until.toISOString() } : dto
-      const rosterId = nflRosterIdForPoolRow(String(league.sport), p)
+      // The id a drafted player carries on a roster, in every sport (lib/waiver-wire/nflRosterIdForPoolRow.ts).
+      const rosterId = rosterIdForPoolRow(String(league.sport), p)
       return rosterId ? { ...row2, id: rosterId } : row2
     })
 

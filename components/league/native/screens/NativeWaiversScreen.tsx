@@ -209,7 +209,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
   const positions = useMemo(() => {
     const known = SPORT_POSITIONS[String(settings?.sport ?? league.sport ?? 'NFL').toUpperCase()]
     // Only the positions this league has a slot for: no K or DEF filter in a league that starts neither.
-    if (known) return rosterable ? known.filter((position) => positionIsRosterable(position, rosterable)) : known
+    if (known) {
+      const startable = rosterable ? known.filter((position) => positionIsRosterable(position, rosterable)) : known
+      // None matching means the league spells its positions some way this list does not know: offer them all.
+      return startable.length > 0 ? startable : known
+    }
     return Array.from(new Set(players.map((p) => String(p.position ?? '').toUpperCase()).filter(Boolean))).slice(0, 8)
   }, [settings?.sport, league.sport, players, rosterable])
   const { language, t: tr, tInterpolate } = useOptionalLanguage()
@@ -233,7 +237,11 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
     const needle = q.trim().toLowerCase()
     if (!needle && (tab === 'available' || tab === 'trending')) rows = rows.filter((p) => !isInactiveWirePlayer(p))
     // A player at a position the league has no slot for cannot be rostered, so he is not offered.
-    if (tab === 'available' || tab === 'trending') rows = rows.filter((p) => positionIsRosterable(p.position, rosterable))
+    if (tab === 'available' || tab === 'trending') {
+      const startable = rows.filter((p) => positionIsRosterable(p.position, rosterable))
+      // Hiding every player would mean the league's positions are spelled some way this list does not know.
+      if (startable.length > 0 || rows.length === 0) rows = startable
+    }
     if (needle) rows = rows.filter((p) => p.name.toLowerCase().includes(needle) || String(p.team ?? '').toLowerCase().includes(needle))
     if (tab === 'trending') rows = [...rows].sort((a, b) => (trend.get(b.id) ?? 0) - (trend.get(a.id) ?? 0))
     else rows = [...rows].sort((a, b) => (Number(b.projectedPoints ?? -1) || -1) - (Number(a.projectedPoints ?? -1) || -1))
@@ -438,7 +446,13 @@ export function NativeWaiversScreen({ league }: { league: UserLeague }) {
                   const claimed = claimedIds.has(p.id)
                   const holdUntil = playerWaiverHoldUntil(p, settings)
                   const rowImmediate = immediate && !holdUntil
-                  const gameLine = wireGameLine(a.displayOpponent, p.nflRedraftGameContext?.homeAway, a.displayKickoffTime)
+                  // Football carries the week's game; basketball, hockey and baseball carry the period's opponent.
+                  const period = p as { periodOpponent?: string | null; periodHomeAway?: string | null }
+                  const gameLine = wireGameLine(
+                    a.displayOpponent ?? period.periodOpponent ?? null,
+                    p.nflRedraftGameContext?.homeAway ?? period.periodHomeAway,
+                    a.displayKickoffTime,
+                  )
                   const strip = a.seasonStatsSummary.map(splitStatLine)
                   return (
                     <tr key={p.id}>

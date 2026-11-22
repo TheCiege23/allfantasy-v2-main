@@ -10,7 +10,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('@/lib/core-app/unsavedWork', () => ({ useHoldUnsavedWork: () => {} }))
 
-import { nflRosterIdForPoolRow } from '@/lib/waiver-wire/nflRosterIdForPoolRow'
+import { rosterIdForPoolRow } from '@/lib/waiver-wire/nflRosterIdForPoolRow'
+
+const nflRosterIdForPoolRow = rosterIdForPoolRow
 import WaiverClaimDrawer from '@/components/waiver-wire/WaiverClaimDrawer'
 
 describe('nflRosterIdForPoolRow', () => {
@@ -30,8 +32,22 @@ describe('nflRosterIdForPoolRow', () => {
     expect(nflRosterIdForPoolRow('NFL', null)).toBeNull()
   })
 
-  it('changes nothing for another sport', () => {
-    expect(nflRosterIdForPoolRow('NBA', { player_id: 'abc', sleeper_id: '96' })).toBeNull()
+  it("uses the draft's id in every other sport: the row's external source id", () => {
+    // Production, 2026-11-22: a hosted NHL league's drafted ids are provider numbers and `tsdb_…` ids.
+    expect(rosterIdForPoolRow('NHL', { player_id: 'uuid-1', external_source_id: '8478402' })).toBe('8478402')
+    expect(rosterIdForPoolRow('NHL', { player_id: 'uuid-2', external_source_id: 'tsdb_34160301' })).toBe('tsdb_34160301')
+    for (const sport of ['NBA', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER']) {
+      expect(rosterIdForPoolRow(sport, { player_id: 'uuid-3', external_source_id: ' 1629029 ' })).toBe('1629029')
+    }
+  })
+
+  it('keeps the pool id in another sport when the row has no external id', () => {
+    expect(rosterIdForPoolRow('NBA', { player_id: 'abc', external_source_id: null })).toBeNull()
+    expect(rosterIdForPoolRow('MLB', { player_id: 'abc', external_source_id: '  ' })).toBeNull()
+  })
+
+  it('NFL never takes a bare external number, which can be another man\'s Sleeper id', () => {
+    expect(rosterIdForPoolRow('NFL', { player_id: 'abc', sleeper_id: null, external_source_id: '4876' })).toBeNull()
   })
 })
 
