@@ -22,10 +22,10 @@ describe('nativeScreenFor', () => {
     })
   })
 
-  it('an imported league in the workspace gets Matchup, Team, Trades and Standings, and keeps the classic Waivers', () => {
+  it('an imported league in the workspace gets all five native screens, Waivers included', () => {
     expect(map(imported)).toEqual({
       matchups: 'matchup', matchup: 'matchup', roster: 'lineup', team: 'lineup', squad: 'lineup',
-      waivers: null, trades: 'trades', standings: 'standings', decide: null, native_home: null,
+      waivers: 'waivers', trades: 'trades', standings: 'standings', decide: null, native_home: null,
     })
   })
 
