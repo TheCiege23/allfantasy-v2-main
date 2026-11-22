@@ -35,3 +35,26 @@ export function rosterIdForPoolRow(
 
 /** @deprecated The rule covers every sport; use `rosterIdForPoolRow`. */
 export const nflRosterIdForPoolRow = rosterIdForPoolRow
+
+/**
+ * NFL only: the free agents that can be added and scored, i.e. the rows that have a roster id.
+ *
+ * The pool collapses a vendor's copy of a player onto his Sleeper row
+ * (`collapseNflRowsOntoSleeper`), but a vendor row it cannot place stays: a man no Sleeper row
+ * names, or one of several namesakes. Such a row has no Sleeper id, and NFL scoring, projections
+ * and lineups read nothing else, so adding him would put a player on a roster who can never score.
+ * Production, 2026-11-22: 3,514 QB/RB/WR/TE/K rows carry no Sleeper id (3,313 share a name with a
+ * row that does). They are left out of the list rather than offered.
+ *
+ * Fails open: a pool where no row has a Sleeper id at all (a fixture, a half-loaded table) is
+ * returned whole, the same guard the collapse itself uses. Every other sport is returned as it is.
+ */
+export function addableNflPoolRows<T extends { player_id?: unknown; sleeper_id?: unknown; external_source_id?: unknown }>(
+  sport: string | null | undefined,
+  rows: readonly T[],
+): T[] {
+  if (String(sport ?? '').toUpperCase() !== 'NFL') return [...rows]
+  const addable = rows.filter((row) => rosterIdForPoolRow('NFL', row) !== null)
+  const anySleeperId = rows.some((row) => /^\d+$/.test(String(row.sleeper_id ?? '').trim()))
+  return anySleeperId ? addable : [...rows]
+}

@@ -21,7 +21,7 @@ import {
 import { isDailyFormSport } from "@/lib/projections/dailySportForm"
 import { applyDailySportOutlook, loadDailySportOutlook } from "@/lib/projections/dailySportOutlook"
 import { identityNameKey } from "@/lib/redraft/rosterGameLogIdBridge"
-import { rosterIdForPoolRow } from "@/lib/waiver-wire/nflRosterIdForPoolRow"
+import { addableNflPoolRows, rosterIdForPoolRow } from "@/lib/waiver-wire/nflRosterIdForPoolRow"
 import {
   linkedRosteredProspectIds,
   loadNhlProspectFreeAgents,
@@ -109,7 +109,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       ? await linkedRosteredProspectIds(prisma as never, rosteredIds).catch(() => new Set<string>())
       : new Set<string>()
 
-    const available = pool.filter((p: any) => {
+    // NFL: a row with no roster id cannot be scored once added, so it is not offered (addableNflPoolRows).
+    const available = addableNflPoolRows(String(league.sport), pool as any[]).filter((p: any) => {
       const playerId = p.player_id == null ? null : String(p.player_id)
       const externalSourceId = p.external_source_id == null ? null : String(p.external_source_id)
       return !(
