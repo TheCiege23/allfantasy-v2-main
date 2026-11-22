@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * Fantrax's "Transaction History → Claim/Drop" export, read into confirmed claims and drops.
@@ -45,6 +47,10 @@ vi.mock('@/lib/league-import/fantrax/importFantraxTradeHistory', () => ({ import
 import { parseFantraxClaimDropCsv, WRONG_CLAIM_DROP_EXPORT_ERROR } from '@/lib/league-import/fantrax/fantraxClaimDropCsv'
 import { claimDropFactType, importFantraxClaimDropHistory } from '@/lib/league-import/fantrax/importFantraxClaimDropHistory'
 import { fantraxTransactionContext, fantraxTransactionDownloadUrl, importFantraxTransactionExports } from '@/lib/import-os/collector/fantraxTransactionSync'
+
+/* The address is read from the committed capture, never retyped: the code under test must build exactly what was captured. */
+const capture = JSON.parse(readFileSync(join(__dirname, '..', 'contracts', 'fantrax', 'fixtures', '2026-transaction-history-download.json'), 'utf8')).download
+const capturedUrl = (view: string) => `${capture.origin}${capture.path}?${new URLSearchParams({ ...capture.query, leagueId: 'abcdefgh1234', view })}`
 
 const H = '"Player","Team","Position","Type","Team","Bid","Date (EST)","Week"'
 const GOOD = [
@@ -166,9 +172,8 @@ describe('the connector’s transaction sync', () => {
   })
 
   it('builds exactly the captured download address, one per tab', async () => {
-    expect(fantraxTransactionDownloadUrl('abcdefgh1234', 'CLAIM_DROP')).toBe(
-      'https://www.fantrax.com/fxpa/downloadTransactionHistory?leagueId=abcdefgh1234&pageNumber=1&team=ALL&positionOrGroup=ALL&view=CLAIM_DROP&adminMode=false&includeDeleted=false&executedOnly=true',
-    )
+    expect(fantraxTransactionDownloadUrl('abcdefgh1234', 'CLAIM_DROP')).toBe(capturedUrl('CLAIM_DROP'))
+    expect(capturedUrl('CLAIM_DROP')).toContain('view=CLAIM_DROP&adminMode=false&includeDeleted=false&executedOnly=true')
     expect(() => fantraxTransactionDownloadUrl('../evil', 'TRADE')).toThrow()
     const context = await fantraxTransactionContext('u-comm', 'af-league')
     expect(context.leagueName).toBe('Test Dynasty')
