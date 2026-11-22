@@ -15,14 +15,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
     ? readAwardSheetToken(authorization.slice(7), leagueId)
     : (await resolvePlatformUser()).appUserId
   const league = userId && await prisma.league.findFirst({
-    where: { id: leagueId, userId, platform: 'fantrax', season: 2026, sport: 'NFL' },
-    select: { platformLeagueId: true },
-  })
-  const source = league && await prisma.fantraxLeague.findFirst({
-    where: { id: league.platformLeagueId, appUserId: userId, sourceLeagueId: ROAD_TO_GLORY_NFL_ID },
+    where: { id: leagueId, userId, platform: 'fantrax', platformLeagueId: ROAD_TO_GLORY_NFL_ID, season: 2026, sport: 'NFL' },
     select: { id: true },
   })
-  if (!source) return NextResponse.json({ error: 'Road To Glory NFL staging access denied' }, { status: 403 })
+  if (!league) return NextResponse.json({ error: 'Road To Glory NFL staging access denied' }, { status: 403 })
   try {
     const snapshot = await fetchRoadToGloryNflSnapshot()
     return NextResponse.json(snapshot, { headers: { 'Cache-Control': 'private, no-store' } })
