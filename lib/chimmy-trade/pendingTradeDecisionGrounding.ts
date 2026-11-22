@@ -10,6 +10,7 @@ import type { LoadedTrade, LoadedTradeAsset, TradeRef } from '@/lib/decision-os/
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import { marketEvidenceOf } from '@/lib/chimmy/marketEvidence'
 import { letterRecordApplies } from '@/lib/chimmy-outcomes/engineRecord'
 import { tradeLetterConfidence, type TradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibration'
 import { loadTradeLetterCalibration } from '@/lib/decision-os/trade/letterCalibrationStore'
@@ -389,6 +390,14 @@ function gradeLines(
       `  Grade (the one AllFantasy grade, the same the Trade Center and the offer card give it): you ${g.letter} — ${g.label}; ${from} ${partner.graded ? partner.letter : 'not graded'}. ` +
         `League value: you send ${g.giveValue.toLocaleString()}, you receive ${g.getValue.toLocaleString()}.`
     )
+    // Why values moved, measured from completed trades — verbatim from the grade, for Chimmy to cite (`marketEvidence.ts`).
+    const evidence = marketEvidenceOf(g)
+    if (evidence.length) {
+      lines.push(
+        '  Why values moved, measured from completed trades on AllFantasy (cite one or two when you explain this grade; keep every number and trade count exactly as written):',
+        ...evidence.map((e) => `    • ${e}`),
+      )
+    }
     // How sure the record makes that letter — only where the ledger grades this kind of deal (NFL redraft).
     const sure = letterRecordApplies({ sport: r.trade.sport, leagueType: g.leagueType?.type }) ? tradeLetterConfidence(g.letter, calibration) : null
     if (sure) {
