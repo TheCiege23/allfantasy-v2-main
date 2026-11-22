@@ -261,10 +261,8 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
 
   return (
     <>
-    {/* From the demo league the manager came for this switch, so it leads. Otherwise it follows the
-        form: above it, it filled a phone's first screen and pushed every sport card below the fold. */}
-    {!importSourceLeagueId && fromDemo === true ? (
-      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo />
+    {!importSourceLeagueId ? (
+      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={fromDemo === true} />
     ) : null}
     <CreateLeagueWizard
       state={state}
@@ -288,9 +286,6 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       restoredAt={restoredAt}
       onStartOver={importTemplate ? undefined : handleStartOver}
     />
-    {!importSourceLeagueId && fromDemo !== true ? (
-      <TestLeagueToggle checked={testLeague} onChange={setTestLeague} fromDemo={false} />
-    ) : null}
     </>
   )
 }
@@ -301,7 +296,7 @@ function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; o
       <section className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6" aria-label="Test league">
         <label
           data-testid="create-test-league-toggle"
-          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 pr-16 sm:pr-20 lg:pr-4"
+          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] px-4 py-3 pr-16 sm:pr-20 lg:pr-4"
         >
           <input
             type="checkbox"
@@ -309,13 +304,21 @@ function TestLeagueToggle({ checked, onChange, fromDemo }: { checked: boolean; o
             checked={checked}
             onChange={(e) => onChange(e.target.checked)}
           />
+          {/*
+            One line until it is switched on. The full explanation filled a phone's first screen and
+            pushed every sport card below the fold; it opens when the box is ticked (or from the demo).
+          */}
           <span>
             <span className="block text-sm font-bold">Create a test league</span>
-            <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]">
-              Every empty team gets a placeholder Chimmy manager, so you can run the whole flow — draft, lineups,
-              trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
-              {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
-            </span>
+            {checked || fromDemo ? (
+              <span className="mt-1 block text-sm leading-6 text-[color:var(--text-secondary)]" data-testid="create-test-league-details">
+                Every empty team gets a placeholder Chimmy manager, so you can run the whole flow — draft, lineups,
+                trades, scoring — on your own. Test leagues send no invites and don&apos;t count as real leagues.
+                {fromDemo ? ' Pre-selected because you came from the demo league.' : ''}
+              </span>
+            ) : (
+              <span className="mt-0.5 block text-xs leading-5 text-[color:var(--text-secondary)]">Chimmy runs the empty teams. No invites sent.</span>
+            )}
           </span>
         </label>
       </section>
