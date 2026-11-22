@@ -511,6 +511,16 @@ function PlayerHalf({
         ) : null}
         {cell.statLine ? <div className="af-mu-half-statline">{cell.statLine}</div> : null}
         {/*
+          What that line is worth under this league's rules, worked out by AllFantasy. Only where the
+          platform's own player scores are not on file, and named as an estimate: the platform's
+          official number can differ.
+        */}
+        {!live && cell.ownPoints != null ? (
+          <div className="af-mu-half-statline" data-testid="matchup-own-points">
+            {copy('AllFantasy estimate')}: <span className="af-num">{cell.ownPoints.toFixed(1)}</span> {copy('pts')}
+          </div>
+        ) : null}
+        {/*
           His game's state as a chip — live boards only. A starter ruled out or on bye is `final` in
           the game-state read, but he never played; the BYE / OUT flag beside his number says so, and a
           FINAL chip over it would say the opposite. A kickoff is the game line below, styled the same.

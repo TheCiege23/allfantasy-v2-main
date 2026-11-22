@@ -487,6 +487,7 @@ const spanish: Record<string, string> = {
   "Loss": 'Derrota',
   "Tie": 'Empate',
   "Ahead": 'Por delante',
+  "AllFantasy estimate": 'Estimación de AllFantasy',
   "Behind": 'Por detrás',
   "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
