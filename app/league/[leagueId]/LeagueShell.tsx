@@ -111,6 +111,7 @@ import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-sett
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
+import type { ImportedLeagueLike } from '@/lib/league/whats-next/adapters'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
@@ -583,7 +584,8 @@ export function LeagueShell({
       // members too (read-only). Elsewhere redraft Settings stays modal-driven.
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
       else if (nativeWorkspace) core.push({ id: 'settings', label: '⚙ Settings' })
-      if (nativeWorkspace) core.unshift({ id: 'native_home', label: 'League home' })
+      // League home leads every league in the workspace, imported ones too (2026-11-22): one Overview for all.
+      if (workspaceShell) core.unshift({ id: 'native_home', label: 'League home' })
       return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings' || nativeWorkspace).map((tab) => {
         if (tab.id === 'roster') return { ...tab, label: 'My Team' }
         if (tab.id === 'players') return { ...tab, label: 'Players' }
@@ -687,7 +689,7 @@ export function LeagueShell({
     // first tab (and therefore the default landing) for general/imported leagues.
     // Deep links (?view=…) still land on their requested tab via leagueTabSync.
     return [
-      ...(nativeWorkspace ? [{ id: 'native_home', label: 'League home' }] : []),
+      ...(workspaceShell ? [{ id: 'native_home', label: 'League home' }] : []),
       { id: 'decide', label: 'Decide' },
       // Slice 4: live Sleeper draft cockpit. Grouped under Draft by the group
       // bar; renders honest unlinked/no-draft states when there's nothing live.
@@ -702,6 +704,7 @@ export function LeagueShell({
     ]
   }, [
     nativeWorkspace,
+    workspaceShell,
     nflRedraftCore,
     league.sport,
     league.leagueType,
@@ -1272,6 +1275,16 @@ export function LeagueShell({
     () => prismaLeagueToUserLeague(league, { draftDate: draftDateIso, redraftCurrentWeek }),
     [league, draftDateIso, redraftCurrentWeek],
   )
+  /** An imported league's "What's next?" source: where it is hosted, so the panel can send you there. Null when native. */
+  const importedWhatsNext = nativeWorkspace
+    ? null
+    : {
+        platform: String(league.platform ?? ''),
+        sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
+        season: selectedLeague.season ?? null,
+        name: league.name ?? null,
+        status: selectedLeague.status ?? null,
+      }
   /*
    * Dynasty Era chat header clock. Read from the raw row, not `selectedLeague`: the season there
    * falls back to the calendar year, and the first-season fallback needs `createdAt`.
@@ -1939,7 +1952,7 @@ export function LeagueShell({
                 teamCount={league.leagueSize ?? selectedLeague.teamCount ?? null}
               />
             ) : null}
-            {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
+            {!workspaceShell && activeTab === tabDefs[0]?.id ? (
               <div className="mb-4">
                 <WhatsNextPanel
                   league={selectedLeague}
@@ -1949,13 +1962,7 @@ export function LeagueShell({
                   draftDateIso={draftDateIso}
                   availableTabIds={tabDefs.map((item) => item.id)}
                   onSelectTab={setActiveTab}
-                  imported={{
-                    platform: String(league.platform ?? ''),
-                    sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
-                    season: selectedLeague.season ?? null,
-                    name: league.name ?? null,
-                    status: selectedLeague.status ?? null,
-                  }}
+                  imported={importedWhatsNext}
                 />
               </div>
             ) : null}
@@ -2023,6 +2030,7 @@ export function LeagueShell({
               activeTab={activeTab}
               tabDefs={tabDefs}
               importedLeagueCount={leagueList.filter((l) => !isAfHostedPlatform(l.platform)).length}
+              importedWhatsNext={importedWhatsNext}
               leagueRail={leagueRail}
               leagueId={league.id}
               selectedLeague={selectedLeague}
@@ -2369,6 +2377,7 @@ function LeagueTabRouter({
   draftSetupSession,
   hasActiveRedraftSeason,
   importedLeagueCount,
+  importedWhatsNext = null,
   leagueRail,
   viewerUserId,
   autoOpenFormatWalkthrough,
@@ -2402,6 +2411,8 @@ function LeagueTabRouter({
   hasActiveRedraftSeason: boolean
   /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
   importedLeagueCount: number
+  /** Imported leagues: where the league is hosted, for League home's "What's next?". Null for a native league. */
+  importedWhatsNext?: ImportedLeagueLike | null
   /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
   leagueRail?: LeagueRailData | null
   /** The signed-in viewer, for the format walkthrough's per-user "seen" flag. */
@@ -2629,12 +2640,13 @@ function LeagueTabRouter({
           availableTabIds={tabDefs.map((item) => item.id)}
           onSelectTab={onSelectTab}
           autoOpenWalkthrough={autoOpenFormatWalkthrough}
+          imported={importedWhatsNext}
         />
       )
-      if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
+      if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
         return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} /></div>
+      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} /></div>
     }
     case 'home':
       return (
