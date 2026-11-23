@@ -147,6 +147,12 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     children.length ? [{ id: children[0].id, label: tr(key, english), icon, children }] : []
   const solo = (items: WorkspaceNavItem[]): NativeNavTab[] => items.map(entry => ({ ...entry, children: [entry] }))
 
+  /*
+   * Keepers (2026-11-22, keeper audit item 5): LeagueShell adds a `keeper` tab only while a keeper league's keeper
+   * window is open, the one thing every manager has to do then. It leads "This league" as a tab of its own, as Draft
+   * does before the draft, where it used to fall to the end of League's sub-tabs (after Legacy, clipped on a phone).
+   */
+  const keepers = solo(item('league.nav.keepers', 'Keepers', 'career', 'keeper'))
   const draftHq = () => item('league.nav.draftHq', 'Draft HQ', 'draft', 'draft')
   const draftTab = options.draftDone ? [] : top('league.nav.tab.draft', 'Draft', 'draft', draftHq())
   const matchup = top('league.nav.tab.matchup', 'Matchup', 'matchup', [
@@ -233,7 +239,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     })
   const league = top('league.nav.tab.league', 'League', 'standings', [...leagueChildren, ...rest])
   const groups: NativeNavGroup[] = [
-    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: [...draftTab, ...matchup, ...team, ...league, ...trade, ...news, ...settings] },
+    { id: 'league', title: tr('league.nav.group.thisLeague', 'This league'), items: [...keepers, ...draftTab, ...matchup, ...team, ...league, ...trade, ...news, ...settings] },
     { id: 'dynasty', title: tr('league.nav.group.dynasty', 'Dynasty'), items: solo(dynasty) },
     { id: 'survivor', title: tr('league.nav.group.survivor', 'Survivor'), items: solo(survivor) },
     { id: 'bigbrother', title: tr('league.nav.group.bigBrother', 'Big Brother'), items: solo(bigBrother) },
