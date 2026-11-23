@@ -20719,3 +20719,209 @@ model DuesLedgerEntry {
   @@index([sourceRawEmailId, connectionId])
   @@index([createdBy])
 }
+
+// ---------------------------------------------------------------------------
+// Commissioner Partner Codes (docs/partner-codes/README.md)
+// User ids are plain strings (AppUser.id) with indexes, not relations, so this
+// feature never has to edit AppUser.
+// ---------------------------------------------------------------------------
+
+/// Single row (id = "singleton"). Every program number is edited here, never hardcoded.
+model PartnerProgramSettings {
+  id                          String   @id @default("singleton")
+  discountPercent             Int      @default(10)
+  discountMonths              Int      @default(3)
+  yearlyDiscountMode          String   @default("prorated")
+  commissionPercent           Int      @default(10)
+  commissionBasis             String   @default("net")
+  commissionCapMonths         Int?
+  cashThresholdPaidSubs       Int      @default(10)
+  freeSupremePaidSubs         Int      @default(10)
+  freeCommissionerActiveUsers Int      @default(15)
+  freeSupremeActiveUsers      Int      @default(50)
+  rewardHoldDays              Int      @default(30)
+  rewardGraceDays             Int      @default(30)
+  activeMinDays               Int      @default(4)
+  activeWindowDays            Int      @default(28)
+  paymentClearDays            Int      @default(30)
+  minPayoutCents              Int      @default(2500)
+  maxCodeChangesPerYear       Int      @default(2)
+  /// Stripe coupons built from the settings above; rebuilt when they change.
+  stripeMonthlyCouponId       String?
+  /// JSON map of Stripe price id -> yearly amount_off coupon id.
+  stripeYearlyCouponIds       Json?
+  updatedAt                   DateTime @updatedAt
+  updatedByUserId             String?
+}
+
+model PartnerCode {
+  id                    String     @id @default(cuid())
+  ownerUserId           String     @unique
+  /// As the commissioner typed it ("TheCiege").
+  code                  String
+  /// Upper-cased; what everything matches on.
+  codeNormalized        String     @unique
+  /// active | paused | revoked
+  status                String     @default("active")
+  isDemo                Boolean    @default(false)
+  /// First moment the paid meter reached the cash bar. Payments after it earn.
+  cashUnlockedAt        DateTime?
+  /// none | commissioner | supreme: the free plan currently granted.
+  freePlan              String     @default("none")
+  /// LevelState per reward level (lib/partner-codes/meters.ts).
+  rewardLevels          Json?
+  paidSubsCount         Int        @default(0)
+  activeUsersCount      Int        @default(0)
+  pendingPaidCount      Int        @default(0)
+  metersUpdatedAt       DateTime?
+  shareLook             String     @default("midnight")
+  /// af | initials | upload
+  shareLogo             String     @default("initials")
+  logoUrl               String?
+  /// none | pending | approved | rejected
+  logoStatus            String     @default("none")
+  codeChangedAt         DateTime[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  aliases   PartnerCodeAlias[]
+  referrals PartnerReferral[]
+  entries   PartnerCommissionEntry[]
+  payouts   PartnerPayout[]
+
+  @@index([status])
+}
+
+/// Old names after a code change. They keep working.
+model PartnerCodeAlias {
+  codeNormalized String      @id
+  partnerCodeId  String
+  createdAt      DateTime    @default(now())
+  partnerCode    PartnerCode @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+
+  @@index([partnerCodeId])
+}
+
+/// One per referred user, ever.
+model PartnerReferral {
+  id                   String    @id @default(cuid())
+  partnerCodeId        String
+  userId               String    @unique
+  /// web | ios | android: where they subscribed. "web" until then.
+  platform             String    @default("web")
+  /// pro | commissioner | supreme
+  plan                 String?
+  /// month | year
+  interval             String?
+  /// pending | qualified | churned | refunded | flagged | rejected
+  status               String    @default("pending")
+  flagReasons          String[]
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  storeOriginalTxnId   String?
+  cardFingerprint      String?
+  signupIp             String?
+  emailDomain          String?
+  currentlyPaying      Boolean   @default(false)
+  firstPaidAt          DateTime?
+  qualifiedAt          DateTime?
+  churnedAt            DateTime?
+  paidInvoiceCount     Int       @default(0)
+  /// Payment ids already counted, so a re-delivered event never counts twice.
+  seenPaymentRefs      String[]
+  /// Months of payments that have already earned commission (for the optional cap).
+  commissionMonths     Int       @default(0)
+  activeDaysInWindow   Int       @default(0)
+  isDemo               Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  partnerCode PartnerCode               @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  entries     PartnerCommissionEntry[]
+  activity    PartnerReferralActivity[]
+
+  @@index([partnerCodeId, status])
+  @@index([stripeSubscriptionId])
+  @@index([stripeCustomerId])
+  @@index([cardFingerprint])
+  @@index([partnerCodeId, signupIp, createdAt])
+}
+
+/// One row per referred user per day seen: feeds the active-user meter.
+model PartnerReferralActivity {
+  referralId String
+  day        DateTime        @db.Date
+  referral   PartnerReferral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@id([referralId, day])
+}
+
+/// Append-only ledger. Unique on (source, sourceRef, installment) so a webhook
+/// delivered twice cannot pay twice.
+model PartnerCommissionEntry {
+  id                   String   @id @default(cuid())
+  partnerCodeId        String
+  referralId           String?
+  /// stripe | apple | google | adjustment
+  source               String
+  /// Stripe invoice id, store transaction id, or the refund/dispute id for a clawback.
+  sourceRef            String
+  installment          Int      @default(0)
+  /// YYYY-MM
+  periodMonth          String
+  earnedAt             DateTime
+  grossCents           Int      @default(0)
+  feeCents             Int      @default(0)
+  refundCents          Int      @default(0)
+  basisCents           Int      @default(0)
+  /// 1/1000 cent. Negative for a clawback.
+  commissionMillicents Int
+  /// scheduled | accrued | reversed | paid | clawback
+  status               String   @default("accrued")
+  payoutId             String?
+  isDemo               Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  partnerCode PartnerCode      @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  referral    PartnerReferral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  payout      PartnerPayout?   @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@unique([source, sourceRef, installment])
+  @@index([partnerCodeId, status, earnedAt])
+  @@index([referralId])
+}
+
+model PartnerPayout {
+  id            String    @id @default(cuid())
+  partnerCodeId String
+  ownerUserId   String
+  periodMonth   String
+  totalCents    Int
+  /// pending_review | approved | paid | held
+  status        String    @default("pending_review")
+  heldReason    String?
+  /// manual | stripe_connect (later)
+  method        String?
+  externalRef   String?
+  approvedAt    DateTime?
+  approvedBy    String?
+  paidAt        DateTime?
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  partnerCode PartnerCode              @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  entries     PartnerCommissionEntry[]
+
+  @@unique([partnerCodeId, periodMonth])
+  @@index([status])
+}
+
+model PartnerTaxProfile {
+  ownerUserId  String   @id
+  /// missing | submitted | verified. Cash payouts are held until submitted.
+  w9Status     String   @default("missing")
+  payoutMethod String?
+  legalName    String?
+  updatedAt    DateTime @updatedAt
+}

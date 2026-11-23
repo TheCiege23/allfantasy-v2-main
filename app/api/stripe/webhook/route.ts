@@ -1,3 +1,4 @@
+import { onPartnerStripeEvent } from "@/lib/partner-codes/ledger"
 import { NextRequest, NextResponse } from "next/server"
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe-client"
 import { prisma } from "@/lib/prisma"
@@ -773,6 +774,10 @@ export async function POST(req: NextRequest) {
         default:
           break
       }
+
+      // Commissioner Partner Codes (lib/partner-codes/ledger.ts): commission, refunds, churn.
+      // Off unless PARTNER_CODES_ENABLED=1, and it never throws into billing.
+      await onPartnerStripeEvent(stripe, event)
 
       await events.update({
         where: { eventId: event.id },

@@ -8,6 +8,7 @@ import {
   type CouponAppliesTo,
 } from "@/lib/promotions/sponsorCoupon"
 import { getMonetizationCatalogItemBySku, type MonetizationSku } from "@/lib/monetization/catalog"
+import { previewPartnerCoupon } from "@/lib/partner-codes/validate"
 
 /**
  * POST /api/coupons/validate
@@ -51,6 +52,23 @@ export async function POST(req: Request) {
 
     const normalizedCode = normalizeCouponCode(rawCode)
     const result = await validateCouponForUser({ userId, rawCode, productType })
+
+    // Commissioner Partner Codes (lib/partner-codes/validate.ts): a code that is not a sponsor code may
+    // be a commissioner's. Subscriptions only; off unless PARTNER_CODES_ENABLED=1.
+    if (!result.valid && result.reason === "not_found" && productType === "subscription") {
+      const skuForPartner = String(body?.sku ?? "").trim()
+      const partner = await previewPartnerCoupon({
+        userId,
+        rawCode,
+        item: skuForPartner ? getMonetizationCatalogItemBySku(skuForPartner as MonetizationSku) : null,
+      })
+      if (partner?.valid) {
+        return NextResponse.json({ ...partner, sponsorName: null, stripePrefillCode: "", alreadyUsed: false, partner: true })
+      }
+      if (partner) {
+        return NextResponse.json({ valid: false, normalizedCode, reason: partner.reason, alreadyUsed: partner.reason === "already_used" })
+      }
+    }
 
     if (!result.valid) {
       const statusMap: Record<string, number> = {
