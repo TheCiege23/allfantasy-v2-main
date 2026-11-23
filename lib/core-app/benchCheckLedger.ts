@@ -19,11 +19,15 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
  *     2026-11-23) — keyed by the same Sleeper ids the roster uses (a native NFL roster holds Sleeper
  *     ids). ESPN, Yahoo, MFL and Fleaflicker store no weekly player scores, so a call there could never
  *     be graded and is not recorded. A league with no platform is not recorded either.
- *   - NFL leagues only (2026-11-23). The week recorded is the NFL projection feed's week, and the grade
- *     decides "is the week over" from the NFL schedule. A basketball, hockey or baseball league whose own
- *     week number happened to equal the NFL's was recorded under an NFL week and graded on the NFL clock —
- *     a call about a different period. Until each sport is graded on its own calendar, nothing else is
- *     recorded (and the grade ignores any such row already stored: `loadBenchRows`, `foldLedger`).
+ *   - NFL: the week recorded is the NFL projection feed's week, which must equal the real NFL week.
+ *   - NBA, NHL and MLB (2026-11-23): the week recorded is the one My Team PRICED the call for — the
+ *     daily-sport outlook's period (`myTeamDailySport.ts`), on that sport's own calendar and season —
+ *     never the NFL week. Before this a basketball league whose week number happened to equal the NFL's
+ *     was recorded under an NFL week. Only a WEEKLY-lineup POINTS league records: a categories league has
+ *     no period (no points to grade), and a daily-lineup league prices one DAY, which the ledger has no
+ *     column for — recording it under its week would merge seven different calls into one row, so a
+ *     daily-lineup call is not recorded. Graded per sport (`sportBenchGrading.ts`), never in the NFL record.
+ *   - Any other sport records nothing.
  *   - Each player's projection is stored with the call — what it knew.
  *   - A call this render no longer makes is WITHDRAWN, but only while both players' games are still
  *     to come: after a kickoff the bench check stops offering a swap because the game started, and the
@@ -45,9 +49,17 @@ export type BenchLedgerContext = {
   sport: string
   projectionWeek: { season: string | number; week: number } | null
   sportsWeek: { season: string | number; week: number } | null
+  /**
+   * NBA / NHL / MLB: the period the daily-sport outlook priced the lineup for (`applyDailySportToLineup`). Null in a
+   * categories league or when nothing was priced; `kind: 'day'` in a daily-lineup league.
+   */
+  lineupPeriod?: { kind: 'day' | 'week'; week: number | null; season?: number | null } | null
   /** Saved-roster or alert-preview renders do not show the bench check, so they record nothing. */
   fullRender: boolean
 }
+
+/** The sports whose bench calls are recorded on their own weekly calendar (the daily-sport outlook's period). */
+export const WEEKLY_PERIOD_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
 
 /** PURE. The season and week to record under, or null when this render must record nothing. */
 export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv = process.env): { season: number; week: number } | null {
@@ -55,7 +67,16 @@ export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv 
   if (!ctx.fullRender || !ctx.userId || !ctx.leagueId) return null
   const platform = String(ctx.platform ?? '').trim().toLowerCase()
   if (platform !== 'sleeper' && !(platform !== '' && isNativePlatform(platform))) return null
-  if (String(ctx.sport ?? '').trim().toUpperCase() !== 'NFL') return null
+  const sport = String(ctx.sport ?? '').trim().toUpperCase()
+  if (WEEKLY_PERIOD_SPORTS.has(sport)) {
+    const lp = ctx.lineupPeriod
+    if (!lp || lp.kind !== 'week') return null
+    const season = Number(lp.season)
+    if (lp.season == null || !Number.isInteger(season) || season < 1900) return null
+    if (typeof lp.week !== 'number' || !Number.isInteger(lp.week) || lp.week < 1) return null
+    return { season, week: lp.week }
+  }
+  if (sport !== 'NFL') return null
   const p = ctx.projectionWeek
   const s = ctx.sportsWeek
   if (!p || !s) return null

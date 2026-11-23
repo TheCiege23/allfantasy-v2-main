@@ -74,7 +74,14 @@ export type ChimmyAdvice = Omit<AdviceInput, 'userId' | 'projected'> & { givenAt
 
 export type RecordAdviceResult = 'recorded' | 'unavailable' | 'invalid'
 
-const validWeek = (n: number) => Number.isInteger(n) && n >= 1 && n <= 25
+/**
+ * NFL weeks stop at 25 (regular season plus playoffs). Basketball, hockey and baseball run on their own weekly
+ * calendars of up to ~27 weeks (`dailySportSeasonStarts.ts`) — My Team's bench check records those since 2026-11-23,
+ * so their ceiling is 30. Every other sport keeps the NFL ceiling.
+ */
+const LONG_WEEK_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
+const validWeek = (n: number, sport?: string | null) =>
+  Number.isInteger(n) && n >= 1 && n <= (LONG_WEEK_SPORTS.has(String(sport ?? '').trim().toUpperCase()) ? 30 : 25)
 const validSeason = (n: number) => Number.isInteger(n) && n >= 2000 && n <= 2100
 
 /**
@@ -94,7 +101,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
     !ADVICE_TYPES.includes(input.adviceType) ||
     !ADVICE_SURFACES.includes(input.surface) ||
     !validSeason(input.season) ||
-    !validWeek(input.week) ||
+    !validWeek(input.week, input.sport) ||
     (input.adviceType !== 'add' && !altKey) ||
     altKey === recKey
   ) {

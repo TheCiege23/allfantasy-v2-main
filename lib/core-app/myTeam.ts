@@ -1744,6 +1744,7 @@ async function loadMyTeamData(
         sport,
         projectionWeek,
         sportsWeek,
+        lineupPeriod: lineupPeriod ?? null,
         fullRender: !savedRosterOnly,
       },
       ledgerCalls,
