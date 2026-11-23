@@ -156,7 +156,7 @@ describe('W.1 i18n leak fix still in place', () => {
   })
 
   it('translation source still defines the legacy tab keys', () => {
-    const en = read('lib/i18n/translations.ts')
+    const en = read('lib/i18n/translations-en.ts')
     const es = read('lib/i18n/translations-es-parity.ts')
     expect(en).toMatch(/"draftRoom\.legacy\.queueTab":\s*"Queue"/)
     expect(es).toMatch(/"draftRoom\.legacy\.queueTab":\s*"Cola"/)
