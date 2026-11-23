@@ -246,7 +246,7 @@ export type BenchCheck = {
   starterProjected: number
   /**
    * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
-   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper leagues only, and only once its edge
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper and native leagues only, and only once its edge
    * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
    */
   record?: BenchCallRecord | null
@@ -1706,7 +1706,7 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
-  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper leagues.
+  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper and native leagues.
   const benchCalibration = base.league.bestBall
     ? null
     : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)

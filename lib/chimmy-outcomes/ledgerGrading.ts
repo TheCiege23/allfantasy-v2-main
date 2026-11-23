@@ -3,6 +3,8 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { NATIVE_PLATFORMS } from '@/lib/league/isNativeLeague'
+import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
@@ -111,13 +113,27 @@ type BenchRowSql = {
 
 /** Exported for its fallback test (`__tests__/decision-os/bench-calibration.test.ts`). */
 export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
+  /*
+   * WHOSE WEEKLY SCORES A CALL IS GRADED ON (native NFL leagues since 2026-11-23). A Sleeper league's are the import's,
+   * keyed on its PLATFORM league id. A native league's are our own scoring engine's (`nativePlayerWeeklyScores.ts`):
+   * source 'allfantasy', keyed on OUR `League.id`, because a native league's platformLeagueId is a synthetic string.
+   * Both key the player by the id the roster holds, and a native NFL roster holds Sleeper ids (`rosterIdSpace.ts`), so
+   * the recorded key (`LineupPlayer.sleeperId`, the roster id itself where no crosswalk applies) joins as it is. Each
+   * side reads only its own source, so a native row can never grade a Sleeper call or the reverse.
+   */
+  const native = Prisma.sql`lower(coalesce(l.platform, '')) IN (${Prisma.join([...NATIVE_PLATFORMS].filter(Boolean))})`
+  const scoreOn = (alias: 'r' | 's', key: Prisma.Sql) => Prisma.sql`
+      ${Prisma.raw(alias)}."seasonYear" = a.season AND ${Prisma.raw(alias)}.week = a.week AND ${Prisma.raw(alias)}."playerId" = ${key}
+      AND CASE WHEN ${native}
+        THEN ${Prisma.raw(alias)}."leagueId" = l.id AND ${Prisma.raw(alias)}.source = ${NATIVE_PLAYER_SCORE_SOURCE}
+        ELSE ${Prisma.raw(alias)}."leagueId" = l."platformLeagueId" AND ${Prisma.raw(alias)}.source <> ${NATIVE_PLAYER_SCORE_SOURCE} END`
   const from = Prisma.sql`
     FROM chimmy_advice a
     JOIN leagues l ON l.id = a.league_id
     LEFT JOIN league_player_weekly_scores r
-      ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
+      ON ${scoreOn('r', Prisma.sql`a.rec_player_key`)}
     LEFT JOIN league_player_weekly_scores s
-      ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
+      ON ${scoreOn('s', Prisma.sql`a.alt_player_key`)}
     WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
       AND upper(a.sport) = 'NFL'
       ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`

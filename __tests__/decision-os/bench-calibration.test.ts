@@ -213,3 +213,43 @@ describe('🛑 the bench read survives a database without the projection columns
     expect(sqlOf(db.$queryRaw.mock.calls[1] as unknown[])).toMatch(/s\.points AS alt_pts, a\.sport/)
   })
 })
+
+describe('🛑 native NFL leagues are graded on our own engine\'s weekly scores (2026-11-23)', () => {
+  // The read is `SELECT … ${from}`: the outer template's strings, then the nested `from` fragment's.
+  type Frag = { strings: readonly string[]; values: readonly unknown[] }
+  const fromOf = (call: unknown[]) => call.find((v): v is Frag => Boolean(v && typeof v === 'object' && 'strings' in v)) as Frag
+  const sqlOf = (call: unknown[]) => fromOf(call).strings.join('?')
+  const valuesOf = (call: unknown[]) => fromOf(call).values
+
+  it('both players\' scores join on League.id + source allfantasy for a native league, and on the platform id otherwise', async () => {
+    const { loadBenchRows } = await import('@/lib/chimmy-outcomes/ledgerGrading')
+    const db = { $queryRaw: vi.fn(async () => []) }
+    await loadBenchRows(2026, db as never)
+    const call = db.$queryRaw.mock.calls[0] as unknown[]
+    const text = sqlOf(call).replace(/\s+/g, ' ')
+    for (const alias of ['r', 's']) {
+      expect(text).toContain(`THEN ${alias}."leagueId" = l.id AND ${alias}.source = ?`)
+      expect(text).toContain(`ELSE ${alias}."leagueId" = l."platformLeagueId" AND ${alias}.source <> ? END`)
+    }
+    expect(text).toContain(`r."playerId" = a.rec_player_key`)
+    expect(text).toContain(`s."playerId" = a.alt_player_key`)
+    const values = valuesOf(call)
+    expect(values).toContain('allfantasy')
+    // The native spellings come from the one predicate the app uses, never a local copy — and never ''.
+    for (const p of ['allfantasy', 'af', 'manual', 'native']) expect(values).toContain(p)
+    expect(values).not.toContain('')
+  })
+
+  it('My Team reads the bench record in a native NFL league, not in ESPN or a native NBA league', async () => {
+    const snapshot = { ledger: { benchEdges: { clear: { n: 30, right: 25, wrong: 5, same: 0, wDecided: 30, wRight: 25 } } } }
+    vi.doMock('@/lib/chimmy-outcomes/learningStore', () => ({ readAdviceLearningSnapshot: vi.fn(async () => snapshot) }))
+    vi.resetModules()
+    const { loadBenchCalibration } = await import('@/lib/decision-os/lineup/benchCalibrationStore')
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'allfantasy' })).toMatchObject({ clear: { decided: 30 } })
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'sleeper' })).toMatchObject({ clear: { decided: 30 } })
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'espn' })).toBeNull()
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: '' })).toBeNull()
+    expect(await loadBenchCalibration({ sport: 'NBA', platform: 'allfantasy' })).toBeNull()
+    vi.doUnmock('@/lib/chimmy-outcomes/learningStore')
+  })
+})

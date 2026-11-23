@@ -44,6 +44,21 @@ describe('benchLedgerWeek — when a render may record', () => {
     expect(benchLedgerWeek({ ...CTX, ...(patch as Partial<BenchLedgerContext>) }, {} as NodeJS.ProcessEnv)).toBeNull()
   })
 
+  it.each(['allfantasy', 'af', 'manual', 'native', 'AllFantasy'])(
+    'records in a native NFL league (platform %s) — graded on our own engine\'s weekly scores',
+    (platform) => {
+      expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
+    },
+  )
+
+  it.each([['yahoo'], ['mfl'], ['fleaflicker'], [''], [null]])('records nothing for platform %s (no stored weekly scores, or unknown)', (platform) => {
+    expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+
+  it('records nothing in a native NBA league either', () => {
+    expect(benchLedgerWeek({ ...CTX, platform: 'allfantasy', sport: 'NBA' }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+
   it('ADVICE_LEDGER_MY_TEAM=off turns it off', () => {
     expect(benchLedgerWeek(CTX, { ADVICE_LEDGER_MY_TEAM: 'off' } as NodeJS.ProcessEnv)).toBeNull()
   })

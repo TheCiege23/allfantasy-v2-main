@@ -1,4 +1,5 @@
 import { recordAdvice, withdrawStaleMyTeamAdvice, MY_TEAM_BENCH_SURFACE } from '@/lib/chimmy-advice/adviceStore'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
  * The advice ledger's start/sit half (2026-11-14): My Team's bench check — the app's designated
@@ -13,8 +14,11 @@ import { recordAdvice, withdrawStaleMyTeamAdvice, MY_TEAM_BENCH_SURFACE } from '
  *     saying "toss-up"; grading it as "start X" would grade something never said.
  *   - Only for the week being played: the projection feed's week must equal the real NFL week, or the
  *     call is about a week the screen is not actually showing.
- *   - Sleeper leagues only, like every other receipt: the grade reads the platform's weekly scores,
- *     keyed by the same Sleeper ids the roster uses.
+ *   - Sleeper and native (AllFantasy-hosted) leagues: the grade reads each league's own weekly scores —
+ *     the Sleeper import's, or our scoring engine's for a native league (source 'allfantasy', since
+ *     2026-11-23) — keyed by the same Sleeper ids the roster uses (a native NFL roster holds Sleeper
+ *     ids). ESPN, Yahoo, MFL and Fleaflicker store no weekly player scores, so a call there could never
+ *     be graded and is not recorded. A league with no platform is not recorded either.
  *   - NFL leagues only (2026-11-23). The week recorded is the NFL projection feed's week, and the grade
  *     decides "is the week over" from the NFL schedule. A basketball, hockey or baseball league whose own
  *     week number happened to equal the NFL's was recorded under an NFL week and graded on the NFL clock —
@@ -49,7 +53,8 @@ export type BenchLedgerContext = {
 export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv = process.env): { season: number; week: number } | null {
   if (String(env['ADVICE_LEDGER_MY_TEAM'] ?? '').trim().toLowerCase() === 'off') return null
   if (!ctx.fullRender || !ctx.userId || !ctx.leagueId) return null
-  if (String(ctx.platform ?? '').toLowerCase() !== 'sleeper') return null
+  const platform = String(ctx.platform ?? '').trim().toLowerCase()
+  if (platform !== 'sleeper' && !(platform !== '' && isNativePlatform(platform))) return null
   if (String(ctx.sport ?? '').trim().toUpperCase() !== 'NFL') return null
   const p = ctx.projectionWeek
   const s = ctx.sportsWeek
