@@ -10,6 +10,7 @@ import { getZombieWeekReadiness, type ZombieWeekReadiness } from '@/lib/zombie/m
 import { runWeeklyResolution } from '@/lib/zombie/weeklyResolutionEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { runZombieHousekeeping } from '@/lib/zombie/zombieAutomation'
+import { activateDraftedZombieLeagues } from '@/lib/zombie/activateDraftedZombieLeagues'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
@@ -86,6 +87,17 @@ async function runLegacyAutomationBridge() {
     if (r.status === 'fulfilled') survivorBridge.synced++
     else survivorBridge.failed++
   }
+
+  /*
+   * Start any zombie league that has drafted but is still in setup, BEFORE reading the active ones, so a
+   * league activated here resolves on the same tick. Activation otherwise ran only when someone opened
+   * the league (see activateDraftedZombieLeagues.ts), and a once-failed league waited for a page view.
+   */
+  const zombieActivation = await activateDraftedZombieLeagues().catch((e: unknown) => ({
+    checked: 0,
+    activated: 0,
+    failures: [{ leagueId: '*', error: e instanceof Error ? e.message : String(e) }],
+  }))
 
   const zombieLeagues = await prisma.zombieLeague.findMany({
     where: { status: 'active' },
@@ -169,6 +181,7 @@ async function runLegacyAutomationBridge() {
     matchupsRecalculated: c2cMatchupsRecalculated,
     message: 'Survivor/zombie/C2C automation bridge ran. The scheduled GET also runs the redraft reconciliation sweep; POST with a leagueId or seasonId to reconcile one league on demand.',
     survivorBridge,
+    zombieActivation,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
     zombieWeeksWaiting,
@@ -654,6 +667,7 @@ export async function GET(request: Request) {
         r.survivorSitOuts.failed > 0 ||
         r.survivorNotifications.failed > 0 ||
         r.zombieResolutionFailed > 0 ||
+        r.zombieActivation.failures.length > 0 ||
         r.zombieHousekeepingErrors.length > 0 ||
         r.redraft.failed > 0 ||
         r.redraft.finalizeFailed > 0 ||
@@ -672,6 +686,7 @@ export async function GET(request: Request) {
         survivorSeason: r.survivorSeason,
         survivorSitOuts: r.survivorSitOuts,
         survivorNotifications: r.survivorNotifications,
+        zombieActivation: { ...r.zombieActivation, failures: r.zombieActivation.failures.slice(0, 10) },
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         zombieWeeksWaiting: r.zombieWeeksWaiting.length,
