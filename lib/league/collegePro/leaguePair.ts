@@ -176,6 +176,8 @@ export type PairContext = {
   /** The viewer's team key in each half, or null when unknown. */
   proKey: string | null
   collegeKey: string | null
+  /** Every AllFantasy user who claimed a team in either half, by that half's team key. */
+  owners: Array<{ role: 'pro' | 'college'; key: string; userId: string }>
 }
 
 /**
@@ -216,7 +218,12 @@ export async function loadPairContext(leagueId: string, userId: string): Promise
   let collegeKey = mine(college)
   if (proKey && !collegeKey) collegeKey = map[proKey] ?? null
   if (collegeKey && !proKey) proKey = Object.entries(map).find(([, c]) => c === collegeKey)?.[0] ?? null
-  return { pair, pro, college, proTeams: proTeams.keyed, collegeTeams: collegeTeams.keyed, map, auto, proKey, collegeKey }
+  const owners: PairContext['owners'] = []
+  for (const claim of allClaims) {
+    const key = claim.claimedByUserId ? keyOf(claim) : null
+    if (key && claim.claimedByUserId) owners.push({ role: claim.leagueId === pro.id ? 'pro' : 'college', key, userId: claim.claimedByUserId })
+  }
+  return { pair, pro, college, proTeams: proTeams.keyed, collegeTeams: collegeTeams.keyed, map, auto, proKey, collegeKey, owners }
 }
 
 /**

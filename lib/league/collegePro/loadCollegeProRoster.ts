@@ -4,7 +4,8 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUsers, liveNflState } from '@/lib/sleeper/liveLeagueFeed'
 import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
-import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
+import { buildPipeline, type CollegeProPipeline } from './pipeline'
+import { athleteIdsByFantraxId, collegeSnapshotRoster, latestDraftPicksOnFile, type CollegeDraftSport } from './draftPicksOnFile'
 import { loadCollegeMatchup, loadHeadToHead, type CollegeMatchup, type HeadToHead, type TeamMapEditor } from './headToHead'
 import { fantraxPeriodForWindow } from './teamMatch'
 import { loadNflWeekWindow } from '@/lib/c2c/campusWeeks'
@@ -479,44 +480,16 @@ async function loadPipeline(
   fantraxSnapshotId: string,
   myPlayers: ReadonlyArray<{ id: string; cfbdId?: string | null; name: string }>,
   now: Date,
-  sport: 'NCAAF' | 'NCAAB' = 'NCAAF',
+  sport: CollegeDraftSport = 'NCAAF',
 ): Promise<CollegeProPipeline | null> {
-  const prefix = sport === 'NCAAB' ? 'cbbd:draft-picks:v1:' : 'cfbd:draft-picks:v1:'
-  const thisYear = now.getUTCFullYear()
-  const rows = await prisma.sportsDataCache.findMany({
-    where: { cacheKey: { in: [`${prefix}${thisYear}`, `${prefix}${thisYear - 1}`] } },
-    select: { data: true },
-  })
-  const stored = rows
-    .map((r) => parseStoredDraftPicks(r.data))
-    .filter((x): x is NonNullable<typeof x> => x != null && x.picks.length > 0)
-    .sort((a, b) => b.year - a.year)[0]
+  const stored = await latestDraftPicksOnFile(sport, now)
   if (!stored) return null
 
   // Every college roster in the league: the snapshot holds all teams, tagged by teamName.
-  const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: fantraxSnapshotId }, select: { roster: true } })
-  const fantraxIds = (Array.isArray(snapshot?.roster) ? (snapshot!.roster as unknown[]) : [])
-    .map((r) => String((r as { fantraxId?: unknown; id?: unknown })?.fantraxId ?? (r as { id?: unknown })?.id ?? '').trim())
-    .filter(Boolean)
+  const fantraxIds = (await collegeSnapshotRoster(fantraxSnapshotId)).map((r) => r.fantraxId)
   // Your own players are always looked up, even if an older snapshot's league list misses them.
   for (const p of myPlayers) if (p.id && !fantraxIds.includes(p.id)) fantraxIds.push(p.id)
-  const athleteIdOf = new Map<string, string | null>()
-  if (fantraxIds.length) {
-    const identities = sport === 'NCAAB'
-      ? (await prisma.playerIdentityMap.findMany({
-          where: { sport, fantraxId: { in: fantraxIds }, espnId: { not: null } },
-          select: { fantraxId: true, espnId: true },
-        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.espnId }))
-      : (await prisma.playerIdentityMap.findMany({
-          where: { sport, fantraxId: { in: fantraxIds }, cfbdId: { not: null } },
-          select: { fantraxId: true, cfbdId: true },
-        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.cfbdId }))
-    for (const { fantraxId, athleteId } of identities) {
-      if (!fantraxId || !athleteId) continue
-      const seen = athleteIdOf.get(fantraxId)
-      athleteIdOf.set(fantraxId, seen === undefined || seen === athleteId ? athleteId : null)
-    }
-  }
+  const athleteIdOf = await athleteIdsByFantraxId(sport, fantraxIds)
   const leagueAthleteIds = new Set([...athleteIdOf.values()].filter((v): v is string => !!v))
   return buildPipeline({
     year: stored.year,

@@ -9,6 +9,7 @@ import {
   CollegeProWeek,
 } from '@/components/league/college-pro/CollegeProOneLeague'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -254,6 +255,35 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
         other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true },
       })
     }
+    if (url.includes('/api/league/college-pro-draft') && init?.method === 'PATCH') return json({ ok: true })
+    if (url.includes('/api/league/college-pro-draft')) {
+      // An April 2027 draft night, as the commissioner of Peach Bowl sees it (illustrative picks).
+      const dp = (athleteId: string, name: string, position: string, proTeam: string, overall: number) =>
+        ({ fantraxId: `f${athleteId}`, athleteId, name, position, proTeam, round: Math.ceil(overall / 32), pick: ((overall - 1) % 32) + 1, overall })
+      const mine = { collegeKey: 'ciege', collegeName: 'Ciege82', proKey: '8', proName: '(F) SF TEP', players: [dp('a1', 'Braden Pegan', 'WR', 'NYJ', 14), dp('a2', 'Dante Reno', 'QB', 'LV', 71)] }
+      return json({
+        applies: true, year: 2027, proLabel: 'NFL',
+        pro: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper' },
+        college: { leagueId: 'harness-college', name: 'Cream Bowl' },
+        mine,
+        movingUp: [mine, { collegeKey: 'grind', collegeName: 'Grindingffb', proKey: '11', proName: 'GrindingFFB', players: [dp('a3', 'Kade Morris', 'RB', 'DAL', 22)] },
+          { collegeKey: 'jws', collegeName: 'Jws452', proKey: null, proName: null, players: [dp('a4', 'Tre Holloway', 'TE', 'GB', 90)] }],
+        rookiePool: [
+          { athleteId: 'r1', name: 'Marcus Vance', position: 'EDGE', proTeam: 'CLE', college: 'Ohio State', round: 1, pick: 3, overall: 3 },
+          { athleteId: 'r2', name: 'Eli Whitfield', position: 'WR', proTeam: 'CHI', college: 'LSU', round: 1, pick: 9, overall: 9 },
+          { athleteId: 'r3', name: 'Jonah Pruitt', position: 'RB', proTeam: 'MIA', college: 'Georgia', round: 2, pick: 4, overall: 36 },
+        ],
+        unlinked: 0,
+        canEditChecklist: commish,
+        checklist: commish ? [
+          { id: 'results', title: '2027 NFL draft results are in', detail: '4 players from Cream Bowl were drafted.', state: 'done', manual: false },
+          { id: 'moveUp', title: 'Move 4 drafted players to Peach Bowl (C2C)', detail: "Add each one to his manager's NFL roster on Sleeper. 1 college team has no matching NFL team yet.", state: 'todo', manual: true },
+          { id: 'rookiePool', title: 'Set the rookie draft pool: 3 players', detail: 'Drafted players no college team held. Add them to the rookie draft on Sleeper.', state: 'done', manual: true },
+          { id: 'collegeCleared', title: 'Clear drafted players from Cream Bowl', detail: 'Drop them from their college rosters so those spots open up.', state: 'todo', manual: true },
+          { id: 'rookieDraft', title: 'Schedule the rookie draft', detail: 'It has no start date yet. Set one on Sleeper.', state: 'todo', manual: false },
+        ] : null,
+      })
+    }
     if (url.includes('/chat/moves')) {
       // Peach Bowl's Sleeper moves and Cream Bowl's stored Fantrax roster diffs, one feed.
       const peach = { leagueId: 'harness', name: 'Peach Bowl (C2C)', label: 'NFL' }
@@ -304,6 +334,10 @@ export function CollegeProRosterHarnessClient() {
           <CollegeProOtherHalf leagueId="harness" tab="trades">
             <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own trades screen stays here, unchanged.</p>
           </CollegeProOtherHalf>
+        ) : params?.get('view') === 'draft' ? (
+          <CollegeProDraftPipeline leagueId="harness">
+            <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own draft screen stays here, unchanged.</p>
+          </CollegeProDraftPipeline>
         ) : params?.get('view') === 'activity' ? (
           <LeagueActivityTab leagueId="harness" />
         ) : params?.get('view') === 'standings' ? (
