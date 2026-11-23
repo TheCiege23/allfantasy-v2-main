@@ -371,4 +371,15 @@ describe('the league-intelligence prose cap', () => {
     expect(text).not.toContain('PORTFOLIO-TAIL-SENTINEL')
     expect(text).toContain('…')
   })
+
+  it('🛑 a trimmed prose slice SAYS it was trimmed and by how much (2026-11-23)', () => {
+    // A bare "…" read as the slice's natural end. 1900 x's + "\n" + 23-char tail = 1924; cap 1200 → 724 cut.
+    const text = serializeDecisionOsGroundingForPrompt(packet({ portfolio: present(long('PORTFOLIO-TAIL-SENTINEL')) }), NOW)
+    expect(text).toMatch(/\(truncated: 724 more characters of .* not shown here — ask the matching tool for the rest\)/)
+  })
+
+  it('an untrimmed prose slice carries no truncation note', () => {
+    const text = serializeDecisionOsGroundingForPrompt(packet({ leagueIntelligence: present(long('New Era (11): LAST-TEAM-SENTINEL.')) }), NOW)
+    expect(text).not.toMatch(/\(truncated:/)
+  })
 })

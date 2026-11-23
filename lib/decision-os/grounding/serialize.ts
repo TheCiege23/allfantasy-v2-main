@@ -104,8 +104,15 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   // "available" is what silenced three-brain's saved conclusion — the substance of plan item 6.2.
   if (typeof value === 'string') {
     const cap = MAX_PROSE_BY_SLICE[name] ?? MAX_PROSE
-    const trimmed = value.length > cap ? `${value.slice(0, cap)}…` : value
-    return trimmed.split('\n').map((l) => `    ${l}`)
+    if (value.length <= cap) return value.split('\n').map((l) => `    ${l}`)
+    /*
+     * ⚠ A CUT IS SAID OUT LOUD (hub serialization, 2026-11-23). A bare "…" read as the slice's natural end, so the
+     * model answered from the first `cap` characters as though they were all of it. Same convention as the 8-row
+     * object cap below: name what was left out, and point at the tool that has the rest.
+     */
+    const rows = `${value.slice(0, cap)}…`.split('\n').map((l) => `    ${l}`)
+    rows.push(`    (truncated: ${value.length - cap} more characters of ${name} not shown here — ask the matching tool for the rest)`)
+    return rows
   }
 
   /*
@@ -274,6 +281,17 @@ function renderObject(o: Record<string, unknown>): string[] {
   return rows
 }
 
+/** Non-illegal verdicts shown per decision; the rest are counted and named, never dropped silently. */
+const MAX_VERDICTS_SHOWN = 6
+
+const SEVERITY_RANK: Readonly<Record<string, number>> = { critical: 0, warning: 1, info: 2 }
+
+/** Attention first: anything that is not plainly `legal`, then by severity. Lower sorts earlier. */
+function verdictRank(v: Record<string, unknown>): number {
+  const attention = v.verdict === 'legal' ? 10 : 0
+  return attention + (SEVERITY_RANK[String(v.severity)] ?? 3)
+}
+
 function isDecisionFact(v: unknown): v is Record<string, unknown> {
   if (v == null || typeof v !== 'object' || Array.isArray(v)) return false
   const o = v as Record<string, unknown>
@@ -307,8 +325,25 @@ function renderDecision(o: Record<string, unknown>): string[] {
   )
   const illegal = verdicts.filter((v) => v.verdict === 'illegal')
   for (const v of illegal) rows.push(`    NOT ALLOWED — ${String(v.rule)}: ${String(v.message)}`)
-  const others = verdicts.filter((v) => v.verdict !== 'illegal').slice(0, 3)
-  for (const v of others) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  /*
+   * ⚠ THE REST ARE ORDERED BY ATTENTION AND WHAT IS LEFT OUT IS COUNTED (hub serialization, 2026-11-23). This was
+   * `.slice(0, 3)` in engine order, and commissioner health can emit up to 13 verdicts — so "abandoned teams" or
+   * "missed lineups" could be the ones cut, silently. Now anything that is not `legal` (needs approval, temporarily
+   * blocked) comes before a plain `legal`, critical before warning before info, and a "+N more" line names the
+   * rules not shown — the same convention as the 8-row object cap.
+   */
+  const others = verdicts
+    .filter((v) => v.verdict !== 'illegal')
+    .map((v, i) => ({ v, i }))
+    .sort((a, b) => verdictRank(a.v) - verdictRank(b.v) || a.i - b.i)
+    .map(({ v }) => v)
+  const shownVerdicts = others.slice(0, MAX_VERDICTS_SHOWN)
+  for (const v of shownVerdicts) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  const cutVerdicts = others.slice(MAX_VERDICTS_SHOWN)
+  if (cutVerdicts.length > 0) {
+    const names = cutVerdicts.map((v) => String(v.rule))
+    rows.push(`    (+${cutVerdicts.length} more rule verdict${cutVerdicts.length === 1 ? '' : 's'} not shown here: ${names.slice(0, 8).join(', ')}${names.length > 8 ? ', …' : ''})`)
+  }
 
   const count = typeof o.actionCount === 'number' ? o.actionCount : 0
   const summary = Array.isArray(o.actionSummary) ? (o.actionSummary as unknown[]).filter((x) => typeof x === 'string') : []
