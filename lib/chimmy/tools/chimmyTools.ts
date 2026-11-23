@@ -372,6 +372,15 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_league_health',
+      description:
+        "COMMISSIONERS ONLY. The Commissioner Hub's league-health read for the league in scope: overall status and health score, inactive or abandoned teams, missed lineups, activity, fairness and churn warnings, and what to do about them. Use for 'is anyone inactive in my league', 'is my league healthy', 'who has stopped setting lineups', 'what should I fix as commissioner'. For anyone who is not this league's commissioner (or a co-commissioner) it refuses and says so; never describe league health without it.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_trade_block',
       description:
         "Players on this league's trade block — who is available and which team listed them. Use for 'who is on the block', 'is X available', 'who is shopping players'. Only players managers marked in AllFantasy are visible (Sleeper does not share its own block); the result says so, and your answer must too.",
@@ -1097,6 +1106,39 @@ export async function executeChimmyTool(
         // this refusal — the same path every AF Pro tool's refusal takes.
         if (out.locked && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
         return out.text
+      }
+
+      /*
+       * League health (2026-11-23). Before this tool, these facts reached Chimmy only when a turn was CLASSIFIED
+       * `commissioner` (intentToWant), so "is anyone inactive in my league?" read as anything else got nothing.
+       *
+       * 🛑 THE PERMISSION CHECK IS THE SLICE'S, NOT A SECOND ONE HERE. `loadCommissionerHealthDecisionSlice` runs
+       * `assertLeagueCommissioner(leagueId, userId, 'view')` — the head commissioner, or a co-commissioner with any
+       * scope, the same 'view' need the Commissioner Hub's own handler checks — BEFORE it reads anything, and reads
+       * through Commissioner OS's five-minute snapshot. A second implementation of that rule would be the bug.
+       * The packet's kill switch for this feed is honoured too, so switching it off turns the tool off as well.
+       */
+      case 'get_league_health': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { resolveDecisionOsFeedFlags } = await import('@/lib/decision-os/flags')
+        if (!(await resolveDecisionOsFeedFlags()).enabled('commissionerHealthDecision')) {
+          return 'League health is switched off right now, so nothing was read. Say you cannot check it at the moment; do not say anyone is or is not inactive. The Commissioner Hub shows it.'
+        }
+        const [{ loadCommissionerHealthDecisionSlice }, { renderDecisionFactForPrompt }] = await Promise.all([
+          import('@/lib/decision-os/grounding/decisionBridge'),
+          import('@/lib/decision-os/grounding/serialize'),
+        ])
+        const slice = await loadCommissionerHealthDecisionSlice({ userId: ctx.userId, leagueId: ctx.leagueId })
+        if (slice.present && slice.value) {
+          return [
+            "LEAGUE HEALTH — the Commissioner Hub's health engine, for this league (commissioner view):",
+            ...renderDecisionFactForPrompt(slice.value),
+          ].join('\n')
+        }
+        if (slice.gap?.reason === 'not_entitled') {
+          return "League health is a commissioner view, and this user is not this league's commissioner or a co-commissioner, so NOTHING was read. Say so plainly and suggest they ask their commissioner. Do not say whether anyone is inactive or how healthy the league is."
+        }
+        return `League health could not be read for this league: ${slice.gap?.detail ?? 'no reason was given.'} ${slice.gap?.remedy ?? ''} Do not say the league is healthy or that nobody is inactive — nothing was measured.`.trim()
       }
 
       case 'get_league_trade_activity': {

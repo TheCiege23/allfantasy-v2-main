@@ -292,6 +292,14 @@ function verdictRank(v: Record<string, unknown>): number {
   return attention + (SEVERITY_RANK[String(v.severity)] ?? 3)
 }
 
+/**
+ * One bridged decision as prompt lines — the same rendering the packet gives it, for a Chimmy tool that reads the
+ * slice itself (`get_league_health`, 2026-11-23). Exported so there is one renderer for a decision, never two.
+ */
+export function renderDecisionFactForPrompt(fact: unknown): string[] {
+  return isDecisionFact(fact) ? renderDecision(fact) : []
+}
+
 function isDecisionFact(v: unknown): v is Record<string, unknown> {
   if (v == null || typeof v !== 'object' || Array.isArray(v)) return false
   const o = v as Record<string, unknown>
