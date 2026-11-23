@@ -43,7 +43,7 @@ export type ChimmyDepth = {
  * league-wide trade search, a FAAB bid model) and the cross-conversation memory read.
  */
 /** Gated by their own entitlement inside the tool, not by the Chimmy plan — on the label map for the button only. */
-export const OWN_GATE_CHIMMY_TOOLS: readonly ChimmyProOnlyTool[] = ['get_manager_record']
+export const OWN_GATE_CHIMMY_TOOLS: readonly ChimmyProOnlyTool[] = ['get_manager_record', 'get_player_projection', 'evaluate_trade']
 
 export const PRO_ONLY_CHIMMY_TOOLS = (Object.keys(PRO_ONLY_TOOL_LABEL) as ChimmyProOnlyTool[]).filter(
   (t) => !OWN_GATE_CHIMMY_TOOLS.includes(t),

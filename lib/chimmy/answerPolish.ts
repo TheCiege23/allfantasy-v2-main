@@ -198,6 +198,13 @@ export const PRO_ONLY_TOOL_LABEL = {
    * Room member has Competitive Edge without AF Pro's Chimmy depth.
    */
   get_manager_record: "a leaguemate's full record",
+  /*
+   * AF Intelligence (2026-11-22): these two still RUN for a free plan — the basic answer, the baseline
+   * projection and the letter — and drop the paid part themselves (OWN_GATE_CHIMMY_TOOLS), so the button
+   * names what was left out.
+   */
+  get_player_projection: "AF's own projections",
+  evaluate_trade: 'the full trade breakdown',
 } as const
 
 export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL

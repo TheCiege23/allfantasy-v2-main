@@ -7,6 +7,7 @@ import { calculateScoreFromSportConfig, isScoringStarterSlot } from '@/lib/redra
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
 import { loadDailyLineupView } from '@/lib/redraft/dailyLineupView'
 import type { RosterScorePlayer } from '@/lib/types/liveScoring'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,7 +64,7 @@ export async function GET(
         hasStats: true,
       }))
       .sort((a, b) => b.pts - a.pts)
-    return NextResponse.json({ week, season, rosterId, players, daily })
+    return await afJson(session.user.id, { week, season, rosterId, players, daily })
   }
 
   const players = await prisma.redraftRosterPlayer.findMany({
@@ -116,5 +117,5 @@ export async function GET(
 
   results.sort((a, b) => b.pts - a.pts)
 
-  return NextResponse.json({ week, season, rosterId, players: results })
+  return await afJson(session.user.id, { week, season, rosterId, players: results })
 }

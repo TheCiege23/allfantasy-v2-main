@@ -134,11 +134,14 @@ describe('🛑 the /core page wires it through the gate', () => {
 
   it('resolves the paywall on Draft HQ, loads the edge only through the gate, and hands both to the screen', () => {
     const paywallRead = page.slice(page.indexOf('const corePaywallRead ='), page.indexOf('resolveCorePaywall(userId'))
-    expect(paywallRead).toContain("activeKey === 'draft-hq'")
+    // Since 2026-11-22 the plan is read on EVERY screen (AF Intelligence reaches all of them), so the read
+    // is unconditional — which covers this screen too. A conditional read must still name it.
+    const unconditional = /const corePaywallRead = resolveCorePaywall\(userId/.test(page)
+    expect(unconditional || paywallRead.includes("activeKey === 'draft-hq'")).toBe(true)
     expect(page).toContain("const draftEdgeAccess = activeKey === 'draft-hq' ? (corePaywall?.competitive_edge ?? null) : null")
     expect(page).toMatch(/await loadDraftEdgeForScreen\(\{\s*leagueId: draftHq \? selectedLeagueId : null,\s*access: draftEdgeAccess,/)
     // Multi-line since the 2026-11-13 guide (DraftHq also takes the live board and its cursor).
-    expect(page).toMatch(/<DraftHq\s+data=\{draftHq\}\s+edge=\{draftEdge\}\s+edgeAccess=\{draftEdgeAccess\}/)
+    expect(page).toMatch(/<DraftHq\s+data=\{afGate\(draftHq\)\}\s+edge=\{draftEdge\}\s+edgeAccess=\{draftEdgeAccess\}/)
     // Never the ungated loader straight from the page.
     expect(page).not.toMatch(/\bloadDraftEdge\(/)
   })

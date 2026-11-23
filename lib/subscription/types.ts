@@ -70,6 +70,8 @@ export type SubscriptionFeatureId =
   | 'pro_af_projections'
   | 'pro_snap_analysis'
   | 'pro_autocoach'
+  /** AF Intelligence (owner, 2026-11-22): AF projections, AF ADP, the full trade breakdown and Chimmy's deep answers — AF Pro, AF Commissioner or AF Supreme. */
+  | 'af_intelligence'
   | 'war_room_dynasty_projections'
   | 'war_room_devy_rankings'
   | 'war_room_draft_strategy'

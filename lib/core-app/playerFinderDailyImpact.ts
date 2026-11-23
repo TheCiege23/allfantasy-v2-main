@@ -14,6 +14,7 @@ import { slotForStarterIndex, startingSlots } from './slotEligibility'
 import { countedLineupReplacementIsLegal } from './countedLineupSwap'
 import type { LeagueImpact, ReplacementOption } from './playerImpact'
 import type { LeagueSlot, RecommendedMove } from './playerFinder'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 const DAILY_SPORTS = new Set(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 type Subject = { sport: string; source: string; externalId: string; sleeperId: string | null; name: string; position: string | null; team: string | null; status?: string | null }
@@ -196,6 +197,8 @@ export async function getFinderDailyImpact(
     const outlook = await loadOutlook(prisma, {
       league: { sport: subject.sport, season: league.season, settings: league.settings },
       players: outlookPlayers,
+      // AF Intelligence: a locked viewer's start-over comparison is priced without AF's learned factors.
+      afIntelligence: (await resolveCoreDepth(userId, 'af_intelligence').catch(() => null))?.unlocked === true,
     }).catch(() => null)
     const subjectPoints = outlook?.byKey.get(`roster:${subjectId}`)?.projectedPoints ?? null
     const starterIndex = starters.indexOf(subjectId)

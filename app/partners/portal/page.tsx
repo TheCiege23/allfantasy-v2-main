@@ -6,6 +6,7 @@ import { buildSeoMeta } from '@/lib/seo'
 import { loadPortalView } from '@/lib/partner-portal/workspace'
 import { portalDeps } from '@/lib/partner-portal/workspaceDeps'
 import { Card, StatTile } from '@/components/partners/PartnerSections'
+import { LiveIntelligencePanels } from '@/components/partners/LiveIntelligencePanels'
 import { DemoLink, PortalLeagueTable, PortalNotice, PortalSourcesTable, RecommendationRecord } from '@/components/partners/PortalSections'
 
 /**
@@ -34,6 +35,13 @@ export default async function PartnerPortalPage() {
 
   const view = await loadPortalView({ id: userId, label: session?.user?.name || session?.user?.email || userId }, portalDeps)
   const now = new Date()
+  // The platform-wide live panels (lib/partner-portal/liveIntelligence.ts) — the same numbers /partners shows.
+  const live =
+    view.kind === 'ok'
+      ? await Promise.all([import('@/lib/prisma'), import('@/lib/partner-portal/liveIntelligence')])
+          .then(([{ prisma }, { loadLiveIntelligence }]) => loadLiveIntelligence(prisma as never))
+          .catch(() => null)
+      : null
 
   return (
     <main className="min-h-screen bg-[#050814] px-4 pb-20 pt-12 text-white sm:px-6 lg:px-8">
@@ -113,6 +121,7 @@ export default async function PartnerPortalPage() {
               >
                 <RecommendationRecord record={view.record} unavailable={view.recordUnavailable} />
               </Card>
+              {live ? <LiveIntelligencePanels data={live} /> : null}
             </>
           )
         ) : null}

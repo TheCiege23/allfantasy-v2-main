@@ -158,6 +158,8 @@ export async function loadSideProjections(args: {
    * slots must stay in place as `'0'`: the board pairs the two lineups by index.
    */
   liveLineups?: { you: readonly string[] | null; opponent: readonly string[] | null } | null
+  /** The viewer's AF Intelligence: false prices both sides — and the win odds — without AF's learned factors. */
+  afIntelligence?: boolean
 }): Promise<SideProjections | null> {
   const { leagueId, season, week } = args
   if (!args.yourPlatformUserId || !args.opponentPlatformUserId) return null
@@ -225,7 +227,7 @@ export async function loadSideProjections(args: {
   const leaguePlatform = String(league?.platform ?? '')
   const lookupOf = (id: string) => sleeperLookupId(leaguePlatform, id, sleeperIdByRosterId, league?.sport)
   const lookupIds = [...new Set(rosterIds.map(lookupOf).filter((x): x is string => x != null))]
-  const metrics = await loadLeaguePlayerMetrics({ leagueId, week, rosterIds, limit: rosterIds.length, includeTradeValues: false })
+  const metrics = await loadLeaguePlayerMetrics({ leagueId, week, rosterIds, limit: rosterIds.length, includeTradeValues: false, afIntelligence: args.afIntelligence })
   const pointBoard = metrics?.season === season && metrics.unit === 'fantasy points'
   const byPlayer = new Map((pointBoard ? metrics.rows : []).map((p) => [p.rosterPlayerId, p]))
 

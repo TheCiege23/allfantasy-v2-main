@@ -21,6 +21,7 @@ import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -276,6 +277,8 @@ export async function GET(req: NextRequest) {
         const outlook = await loadDailySportOutlook(prisma, {
           league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
           day: isDayKey(pickedDay) ? pickedDay : null,
+          // Without AF Intelligence, priced without AF's learned factors (the response is gated by afJson too).
+          afIntelligence: (await readAfIntelligenceAccess(sessionUserId)).unlocked,
           players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
         })
         unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)
@@ -388,7 +391,7 @@ export async function GET(req: NextRequest) {
           position: player.position, team: player.team ?? '' }]))
       : undefined
 
-    return NextResponse.json({
+    return await afJson(sessionUserId, {
       source: 'db' as const,
       rosterId: roster.id,
       taxiTenure,
@@ -563,7 +566,7 @@ export async function GET(req: NextRequest) {
   })
 
   if (!matched) {
-    return NextResponse.json({
+    return await afJson(sessionUserId, {
       source: 'sleeper' as const,
       roster: null,
       ownerId: sleeperOwnerId,
@@ -601,7 +604,7 @@ export async function GET(req: NextRequest) {
     },
   }
 
-  return NextResponse.json({
+  return await afJson(sessionUserId, {
     source: 'sleeper' as const,
     roster: rosterPayload,
     ownerId: String(matched.owner_id ?? sleeperOwnerId ?? ''),

@@ -51,7 +51,8 @@ export type DailySportOutlook = {
    * time, opponent, a new team, a return from a layoff — only those that made later games' projections closer in the
    * hold-out check. Absent when none applied; `projectedPoints` is then exactly the form rate × games.
    */
-  afFactors?: { multiplier: number; reasons: string[] }
+  /** `unadjusted` holds the fields before the factors, restored for a viewer without AF Intelligence. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
 }
 
 export type DailySportOutlookResult = {
@@ -91,6 +92,12 @@ export async function loadDailySportOutlook(
     league: { sport: string | null; season: number | null; settings: unknown }
     players: readonly OutlookPlayerInput[]
     now?: Date
+    /**
+     * False for a viewer whose plan does not include AF Intelligence (lib/core-app/afIntelligenceWithhold.ts): the
+     * learned factors are not applied at all, so every number — and every TOTAL a caller sums from them — is the
+     * plain one. Default true.
+     */
+    afIntelligence?: boolean
     /**
      * Daily-lineup leagues: the Eastern day the lineup screen's day picker has selected
      * ('YYYY-MM-DD'). The period is that day — its games and its opponent — and its week. Absent or
@@ -177,7 +184,7 @@ export async function loadDailySportOutlook(
    * weekly one can hold several, so only the factors about the player himself apply (form, playing time, a new team,
    * a return). Never throws: a failed read is no adjustment.
    */
-  const factorTable = await loadFactorTable(db, sport, now).catch(() => null)
+  const factorTable = args.afIntelligence === false ? null : await loadFactorTable(db, sport, now).catch(() => null)
   const nextAtMs = daily && periodDay ? Date.parse(`${periodDay}T23:00:00Z`) : now.getTime()
   const adjustments = factorTable
     ? await liveFactorAdjustments(db, {
@@ -220,7 +227,7 @@ export async function loadDailySportOutlook(
     const adj = adjustments.get(p.key)
     byKey.set(p.key, {
       projectedPoints: base != null && adj ? Math.round(base * adj.multiplier * 100) / 100 : base,
-      ...(adj && base ? { afFactors: { multiplier: adj.multiplier, reasons: adj.reasons } } : {}),
+      ...(adj && base ? { afFactors: { multiplier: adj.multiplier, reasons: adj.reasons, unadjusted: { projectedPoints: base } } } : {}),
       periodGames,
       perGame: f.perGame,
       recentGames: f.recentGames,
