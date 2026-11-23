@@ -82,7 +82,8 @@ export async function renderShareCard(args: {
             ? { backgroundImage: `repeating-linear-gradient(0deg, rgba(255,255,255,0.09) 0px, rgba(255,255,255,0.09) ${px(4)}px, transparent ${px(4)}px, transparent ${px(110)}px)` }
             : {}),
           color: look.text,
-          fontFamily: fonts ? 'Inter' : undefined,
+          // Satori calls .split on fontFamily, so an undefined value crashes the render: omit the key instead.
+          ...(fonts ? { fontFamily: 'Inter' } : {}),
         }}
       >
         {logo}
