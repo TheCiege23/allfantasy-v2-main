@@ -474,7 +474,7 @@ async function removedLeagueKeysFor(userId: string): Promise<Set<string>> {
  * consumers read entry fees and roster positions out of it, and silently dropping those is a worse
  * outcome than the old speed.
  */
-async function readListSettings(ids: string[]): Promise<Map<string, unknown>> {
+export async function readListSettings(ids: string[]): Promise<Map<string, unknown>> {
   try {
     const rows = await prisma.$queryRaw<Array<{ id: string; settings: unknown }>>`
       SELECT id,

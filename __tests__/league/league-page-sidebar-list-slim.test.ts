@@ -68,4 +68,13 @@ describe('toSidebarLeague', () => {
     expect(src).toMatch(/^\s*allLeagues=\{allLeagues\.map\(toSidebarLeague\)\}/m)
     expect(src).not.toMatch(/^\s*allLeagues=\{allLeagues\}/m)
   })
+
+  it('the server reads the list without settings, then settings without identity_mappings', () => {
+    const src = readFileSync(join(process.cwd(), 'app/league/[leagueId]/page.tsx'), 'utf8')
+    const select = src.slice(src.indexOf('const LIST_LEAGUE_SELECT = {'), src.indexOf('} satisfies Prisma.LeagueSelect'))
+    expect(select.length).toBeGreaterThan(50)
+    expect(select).not.toMatch(/\bsettings\b/)
+    expect(src).toMatch(/take: 50,\s*select: LIST_LEAGUE_SELECT,/)
+    expect(src).toMatch(/Promise\.all\(\[loadLeagueSeriesMap\(listIds\), readListSettings\(listIds\)\]\)/)
+  })
 })

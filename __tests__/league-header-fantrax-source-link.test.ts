@@ -34,7 +34,9 @@ const code = (rel: string) =>
 describe('league header source link', () => {
   it('the page resolves the linkable id server-side and hands it to the shell', () => {
     const page = code('app/league/[leagueId]/page.tsx')
-    expect(page).toMatch(/linkableSourceLeagueId\(\s*league\s*,\s*await fantraxSourceLeagueIds\(\[\s*league\s*\]\)\s*\)/)
+    // Read inside the rail batch (2026-11-23), then linked from that result.
+    expect(page).toMatch(/^\s*fantraxSourceLeagueIds\(\[\s*league\s*\]\),\s*$/m)
+    expect(page).toMatch(/linkableSourceLeagueId\(\s*league\s*,\s*fantraxIds\s*\)/)
     expect(page).toMatch(/sourceLinkLeagueId=\{sourceLinkLeagueId\}/)
   })
 
