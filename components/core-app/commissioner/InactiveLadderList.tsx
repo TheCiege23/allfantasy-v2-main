@@ -78,7 +78,7 @@ function LadderRow({ entry }: { entry: LadderEntry }) {
         </details>
       </div>
       <div className="af-ladder-actions">
-        <button type="button" className="af3a-btn" onClick={copy} aria-live="polite">
+        <button type="button" className="af3a-btn af-ladder-copy" onClick={copy} aria-live="polite">
           {state === 'copied' ? t.copied : state === 'failed' ? t.copyFailed : t.copy}
         </button>
         <Link className="af-ladder-link" href={entry.href}>
@@ -93,6 +93,7 @@ export function InactiveLadderList({
   entries,
   limit,
   showTeach = true,
+  showHead = true,
   offSeason = false,
 }: {
   entries: LadderEntry[]
@@ -105,6 +106,8 @@ export function InactiveLadderList({
   /** Rows drawn before "+N more in the Commissioner Hub". Omit to draw every row. */
   limit?: number
   showTeach?: boolean
+  /** False when the caller already titles the list (the Commissioner Hub's fold summary). */
+  showHead?: boolean
 }) {
   const t = useMessages(inactiveLadderMessages)
   const counts = ladderCounts(entries)
@@ -112,10 +115,12 @@ export function InactiveLadderList({
   const hidden = entries.length - shown.length
   return (
     <div className="af-ladder">
-      <p className="af-ladder-head">
-        <b>{t.title}</b>
-        {entries.length > 0 ? <span>{t.summary(counts.replace, counts.warn, counts.nudge)}</span> : null}
-      </p>
+      {showHead ? (
+        <p className="af-ladder-head">
+          <b>{t.title}</b>
+          {entries.length > 0 ? <span>{t.summary(counts.replace, counts.warn, counts.nudge)}</span> : null}
+        </p>
+      ) : null}
       {entries.length === 0 ? (
         <p className="af-ladder-none">{offSeason ? t.noneOffSeason : t.none}</p>
       ) : (
