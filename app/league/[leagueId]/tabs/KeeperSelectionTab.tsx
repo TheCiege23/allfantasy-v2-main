@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { LEAGUE_TYPE_MEDIA } from '@/lib/create-league-v2/theme'
+import './keeper/keeper-surfaces.css'
 
 type SessionRow = {
   id: string
@@ -42,11 +43,28 @@ type EligRow = {
 type KeeperValue = { marketRank: number; pickSlot: number; surplus: number }
 type ValueReport = { available: true; values: Record<string, KeeperValue> } | { available: false; reason: string }
 
-/** "+92 value · market #10, costs pick ~#102" — the keeper value report line for one player. */
+const picks = (n: number) => `${n} ${n === 1 ? 'pick' : 'picks'}`
+
+/**
+ * "Worth 92 picks more than he costs (drafted around pick 10, costs pick 102)" — the keeper value line for one
+ * player, in words (it read "+92 value · market #10, costs pick ~#102" until the 2026-11-22 keeper audit).
+ */
 export function keeperValueLine(v: KeeperValue): string {
-  const head = v.surplus > 0 ? `+${v.surplus} value` : v.surplus === 0 ? 'Even value' : `Worth ${-v.surplus} picks less than his cost`
-  return `${head} · market #${v.marketRank}, costs pick ~#${v.pickSlot}`
+  const head = v.surplus > 0 ? `Worth ${picks(v.surplus)} more than he costs` : v.surplus === 0 ? 'Worth about what he costs' : `Worth ${picks(-v.surplus)} less than he costs`
+  return `${head} (drafted around pick ${v.marketRank}, costs pick ${v.pickSlot})`
 }
+
+/** A submitted keeper's status in words. */
+const RECORD_STATUS: Record<string, string> = {
+  pending: 'Waiting for your commissioner',
+  confirmed: 'Confirmed',
+  approved: 'Confirmed',
+  rejected: 'Rejected by your commissioner',
+  locked: 'Locked in',
+}
+const RECORD_TONE: Record<string, string> = { pending: 'kp-warn', confirmed: 'kp-good', approved: 'kp-good', rejected: 'kp-bad', locked: 'kp-good' }
+const roundPick = (label: string | null, round: number | null) =>
+  (label ?? (round != null ? `Round ${round}` : null))?.replace(/^Round (\d+)$/, 'a round $1 pick') ?? null
 
 /**
  * Why a player could not be kept, in words. The save answered with the engine's own codes
@@ -235,131 +253,116 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
 
   if (loading && !ctx) {
     return (
-      <div className="flex items-center gap-2 px-4 py-8 text-[13px] text-white/50">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading keeper tools…
+      <div className="kp-muted flex items-center gap-2 px-4 py-8 text-[13px]">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading your keepers…
       </div>
     )
   }
 
+  const closed = locked || deadlinePassed
+  const deadlineText = session
+    ? new Date(session.deadline).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : ''
+
   return (
     <div className="space-y-4 px-4 py-4">
-      <div className="overflow-hidden rounded-2xl border border-amber-500/20 bg-[#0a1220]">
-        <div className="relative aspect-[21/9] max-h-[220px] w-full bg-black/40">
+      {/*
+       * The artwork is a banner only. Its title used to sit ON the art as text-white, which light mode turns dark
+       * (keeper audit 2026-11-22); the one headline now sits below it in token colours.
+       */}
+      <div className="kp-card overflow-hidden rounded-2xl" data-testid="keeper-hero-media">
+        <div className="relative aspect-[21/9] max-h-[200px] w-full">
           <video
-            className="h-full w-full object-cover opacity-90"
+            className="h-full w-full object-cover"
             autoPlay
             muted
             loop
             playsInline
+            aria-hidden="true"
             poster={media.fallback}
             src={media.video}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#060a18] via-transparent to-transparent" />
-          <div className="absolute bottom-3 left-4 right-4">
-            <h2 className="text-[18px] font-black text-white drop-shadow-md">Keeper league</h2>
-            <p className="text-[12px] text-white/75 drop-shadow">
-              Declare keepers before the deadline, then finish the draft with locked players off the board.
-            </p>
-          </div>
         </div>
       </div>
 
       <div>
-        <h2 className="text-[15px] font-bold text-white">Keeper declaration</h2>
-        <p className="mt-1 text-[12px] text-white/45">
-          Select up to {maxKeepers} players from your roster. Costs follow your commissioner&apos;s rules
-          (round penalty, salary, etc.).
+        <h2 className="kp-text text-[18px] font-bold">Pick your keepers</h2>
+        <p className="kp-muted mt-1 text-[13px] leading-snug">
+          {!session
+            ? 'Keepers carry over to next season and skip the draft.'
+            : locked
+              ? 'Keepers are locked. These are final for the draft.'
+              : deadlinePassed
+                ? 'The deadline has passed. Your commissioner can still make changes.'
+                : `Pick up to ${maxKeepers} keepers by ${deadlineText}. Each one costs a draft pick.`}
         </p>
       </div>
 
       {!session ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[13px] text-white/55">
-          <AlertCircle className="mb-2 inline h-4 w-4 text-amber-400/90" /> No active declaration window. The
-          commissioner must open a keeper phase for the upcoming season.
+        <div className="kp-card kp-text2 rounded-xl p-4 text-[13px]">
+          <AlertCircle className="kp-warn mb-1 mr-1 inline h-4 w-4" /> The keeper window isn’t open yet. Your commissioner opens it before the draft.
         </div>
       ) : !ctx?.viewerRoster ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-[13px] text-white/55">
-          No roster found for you in this season. If you just joined, wait for the commissioner to assign your
-          team slot.
+        <div className="kp-card kp-text2 rounded-xl p-4 text-[13px]">
+          You don’t have a team in this season yet. If you just joined, your commissioner will assign you one.
         </div>
       ) : (
         <>
-          <div
-            className={`rounded-xl border px-4 py-3 text-[12px] ${
-              locked || deadlinePassed
-                ? 'border-white/10 bg-white/[0.04] text-white/55'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-50/95'
-            }`}
-          >
-            <p>
-              <span className="font-semibold text-white">Status:</span> {locked ? 'Locked' : 'Open'}
-              {locked ? ' — editing disabled' : ` · ${selected.size} of ${maxKeepers} selected`}
+          <div className="kp-card flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl px-4 py-3 text-[13px]">
+            <p className="kp-text font-semibold" data-testid="keeper-picked-count">
+              {selected.size} of {maxKeepers} picked
             </p>
-            <p className="mt-1">
-              Deadline: {new Date(session.deadline).toLocaleString()}
-              {deadlinePassed && !locked ? (
-                <span className="ml-2 text-rose-300/90">(passed — commissioner may still override)</span>
-              ) : null}
-            </p>
-            <p className="mt-1 text-white/55">
-              League progress: {session.teamsSubmitted}/{session.totalTeams} teams submitted
+            <p className="kp-muted">
+              {session.teamsSubmitted} of {session.totalTeams} teams have picked
             </p>
           </div>
 
           {valueReport?.available ? (
-            <p className="text-[11px] text-white/50" data-testid="keeper-value-note">
-              Keeper value: each player&apos;s market rank against the overall pick his keeper costs. Positive means he is worth more than the pick.
+            <p className="kp-muted text-[12px]" data-testid="keeper-value-note">
+              Value compares where a player goes in drafts with the pick he costs to keep.
             </p>
           ) : null}
 
           <div className="space-y-2">
             {players.length === 0 ? (
               // The roster arrives after the window does: say "loading" until it has, not that there is no team.
-              <p className="text-[12px] text-white/45">{loading ? 'Loading your roster…' : 'No players on your roster for this season yet.'}</p>
+              <p className="kp-muted text-[13px]">{loading ? 'Loading your roster…' : 'No players on your roster for this season yet.'}</p>
             ) : (
               players.map((p) => {
                 const e = eligByPlayer.get(p.playerId)
                 const sel = selected.has(p.playerId)
                 const ineligible = e && !e.isEligible
+                const cost = e ? roundPick(e.projectedCost, e.projectedCostRound) : null
+                const value = valueReport?.available ? valueReport.values[p.playerId] : undefined
                 return (
                   <button
                     key={p.playerId}
                     type="button"
-                    disabled={locked || deadlinePassed || Boolean(ineligible)}
+                    disabled={closed || Boolean(ineligible)}
                     aria-pressed={sel}
                     data-testid={`keeper-select-${p.playerId}`}
                     onClick={() => toggle(p.playerId)}
-                    className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
-                      sel
-                        ? 'border-amber-400/50 bg-amber-500/15'
-                        : 'border-white/[0.07] bg-white/[0.02] hover:border-white/15'
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                    // Only an ineligible row is dimmed; a locked window keeps the roster readable (audit item 6).
+                    className={`kp-row flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition ${ineligible ? 'opacity-70' : ''}`}
                   >
-                    <span className="mt-0.5 text-amber-300/90" aria-hidden="true">{sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="inline-block h-4 w-4 rounded border border-white/20" />}</span>
+                    <span className="kp-accent mt-0.5" aria-hidden="true">
+                      {sel ? <CheckCircle2 className="h-4 w-4" /> : <span className="kp-box inline-block h-4 w-4 rounded" />}
+                    </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-semibold text-white">{p.playerName}</span>
-                      <span className="text-[11px] text-white/45">
+                      <span className="kp-text block text-[14px] font-semibold">{p.playerName}</span>
+                      <span className="kp-muted text-[12px]">
                         {p.position}
                         {p.team ? ` · ${p.team}` : ''}
                       </span>
-                      {e?.projectedCost || e?.projectedCostRound != null ? (
-                        <span className="mt-0.5 block text-[11px] text-[#ffb8d1]/80">
-                          Projected cost:{' '}
-                          {e.projectedCost ??
-                            (e.projectedCostRound != null ? `Round ${e.projectedCostRound}` : '—')}
-                        </span>
-                      ) : null}
-                      {valueReport?.available && valueReport.values[p.playerId] ? (
-                        <span
-                          className={`mt-0.5 block text-[11px] ${valueReport.values[p.playerId].surplus > 0 ? 'text-emerald-300/85' : 'text-white/45'}`}
-                          data-testid="keeper-value"
-                        >
-                          {keeperValueLine(valueReport.values[p.playerId])}
+                      {cost ? <span className="kp-text2 mt-0.5 block text-[12px]">Keeping him costs {cost}</span> : null}
+                      {value ? (
+                        <span className={`mt-0.5 block text-[12px] ${value.surplus > 0 ? 'kp-good' : 'kp-muted'}`} data-testid="keeper-value">
+                          {keeperValueLine(value)}
                         </span>
                       ) : null}
                       {ineligible ? (
-                        <span className="mt-1 flex items-center gap-1 text-[11px] text-rose-300/90">
-                          <XCircle className="h-3 w-3" /> {e?.ineligibleReason ?? 'Ineligible'}
+                        <span className="kp-bad mt-1 flex items-center gap-1 text-[12px]">
+                          <XCircle className="h-3 w-3" /> {e?.ineligibleReason ?? 'Can’t be kept'}
                         </span>
                       ) : null}
                     </span>
@@ -370,39 +373,43 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
           </div>
 
           {records.length > 0 ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Submitted</p>
-              <ul className="mt-2 space-y-1 text-[12px] text-white/70">
-                {records.map((r) => (
-                  <li key={r.id}>
-                    {r.playerName ?? r.playerId} — {r.status}
-                    {r.costLabel ? ` · ${r.costLabel}` : r.costRound != null ? ` · R${r.costRound}` : ''}
-                  </li>
-                ))}
+            <div className="kp-card rounded-xl p-3" data-testid="keeper-submitted">
+              <p className="kp-label text-[12px]">Your saved keepers</p>
+              <ul className="mt-2 space-y-1 text-[13px]">
+                {records.map((r) => {
+                  const cost = roundPick(r.costLabel, r.costRound)
+                  return (
+                    <li key={r.id} className="kp-text2">
+                      <span className="kp-text font-semibold">{r.playerName ?? r.playerId}</span>
+                      {cost ? ` · ${cost}` : ''}
+                      {' · '}
+                      <span className={RECORD_TONE[r.status] ?? 'kp-muted'}>{RECORD_STATUS[r.status] ?? r.status.replace(/_/g, ' ')}</span>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           ) : null}
 
-          {!locked && !deadlinePassed ? (
+          {!closed ? (
             <button
               type="button"
               disabled={submitting}
               onClick={() => void submit()}
-              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-amber-500/90 text-[14px] font-bold text-black hover:bg-amber-400 disabled:opacity-50"
+              className="kp-btn-primary inline-flex min-h-[48px] w-full items-center justify-center rounded-xl text-[14px] font-bold disabled:opacity-50"
             >
-              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save keeper declaration'}
+              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Save keepers'}
             </button>
           ) : null}
         </>
       )}
 
-      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] text-white/45">
-        <p className="font-medium text-white/65">Pre-draft picks in draft room</p>
-        <p className="mt-1">
-          For snake draft sessions, you can also set keepers from the live draft room&apos;s Keeper panel before the
-          clock starts.
+      <div className="kp-card rounded-lg p-3 text-[13px]">
+        <p className="kp-text font-semibold">Draft room</p>
+        <p className="kp-muted mt-1">
+          In a snake draft you can also set keepers from the draft room’s Keeper panel before the clock starts.
         </p>
-        <Link href={`/league/${leagueId}?tab=draft`} className="mt-2 inline-block font-semibold text-[#ff9ec0] hover:underline">
+        <Link href={`/league/${leagueId}?tab=draft`} className="kp-accent mt-2 inline-block font-semibold hover:underline">
           Go to draft →
         </Link>
       </div>
