@@ -64,7 +64,9 @@ describe('recordChopReleaseClaim', () => {
 })
 
 describe('the waiver engine records the award', () => {
-  const src = readFileSync(join(process.cwd(), 'lib/waiver-wire/process-engine.ts'), 'utf8')
+  // CRLF -> LF: a Windows checkout (core.autocrlf=true) has \r\n on disk, and the `\n` in the pattern below then
+  // never matches, so the test failed on every Windows run while CI (LF) stayed green.
+  const src = readFileSync(join(process.cwd(), 'lib/waiver-wire/process-engine.ts'), 'utf8').replace(/\r\n/g, '\n')
   it('calls it on an award in a guillotine league, with the FAAB spent, and never lets it fail the award', () => {
     expect(src).toMatch(/^\s*if \(league\.guillotineMode\) \{\n\s*await recordChopReleaseClaim\(\{ leagueId, playerId: addId, rosterId: claim\.rosterId, winningBid: faabSpent \}\)\.catch\(/m)
   })
