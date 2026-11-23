@@ -86,7 +86,8 @@ describe('the committed coach list', () => {
       for (let i = 1; i < mine.length; i++) expect(mine[i - 1]!.to! <= mine[i]!.from, `${sport} ${team} ${mine[i]!.coach}`).toBe(true)
       for (const s of mine) {
         expect(s.from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-        expect(s.source, `${sport} ${team} ${s.coach} source`).toMatch(/^https?:\/\//)
+        // A page address without its scheme (see CoachStintEntry.source).
+        expect(s.source, `${sport} ${team} ${s.coach} source`).toMatch(/^[a-z0-9.-]+\.[a-z]{2,}\/\S*$/i)
       }
       // Today is covered, so a live projection can read a level — except where no one is in charge.
       if (vacant) expect(coachingLevelOn(sport, team, Date.now())).toBeUndefined()
