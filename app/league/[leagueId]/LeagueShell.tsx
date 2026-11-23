@@ -1739,6 +1739,7 @@ export function LeagueShell({
         <NativeLeagueWorkspace
           native={nativeWorkspace}
           sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null}
+          headingBadges={isCollegeProPairable(league.platform) ? <CollegeProPairChip leagueId={league.id} variant="native" /> : null}
           importActions={
             !isAfHostedPlatform(league.platform) ? (
               <ImportedLeagueQuickActions
@@ -2742,8 +2743,12 @@ function LeagueTabRouter({
       return <PirateHome leagueId={leagueId} isCommissioner={isCommissioner} />
     case 'dynasty':
     case 'dynasty_taxi':
-    case 'dynasty_picks':
-      return <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+    case 'dynasty_picks': {
+      const dynastyHome = <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+      // An imported league has no Draft tab in season (`?view=draft` falls back to Matchup), so the paired
+      // college + pro draft pipeline also rides on Draft picks, where its managers already look.
+      return activeTab === 'dynasty_picks' ? oneLeagueDraft(dynastyHome) : dynastyHome
+    }
     case 'devy':
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">

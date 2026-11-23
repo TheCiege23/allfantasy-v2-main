@@ -171,7 +171,8 @@ export function CollegeProStandings({ leagueId, children }: { leagueId: string; 
 }
 
 /** Header: the league this one is half of a franchise with, one tap away. */
-export function CollegeProPairChip({ leagueId }: { leagueId: string }) {
+/** `native`: drawn as an `nl-chip` beside "Synced from Sleeper" in the imported-league header (NativeLeagueWorkspace). */
+export function CollegeProPairChip({ leagueId, variant = 'shell' }: { leagueId: string; variant?: 'shell' | 'native' }) {
   const data = useJson<CollegeProPairLink>(pairUrl(leagueId))
   if (!data || !data.applies) return null
   const body = (
@@ -181,7 +182,9 @@ export function CollegeProPairChip({ leagueId }: { leagueId: string }) {
       <span className="text-white/60">· {data.other.label}</span>
     </>
   )
-  const cls = 'inline-flex min-h-6 items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-400/[0.08] px-2 text-[11px] font-bold text-[var(--badge-text-cyan)]'
+  const cls = variant === 'native'
+    ? 'nl-chip nl-pair-chip inline-flex items-center gap-1'
+    : 'inline-flex min-h-6 items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-400/[0.08] px-2 text-[11px] font-bold text-[var(--badge-text-cyan)]'
   return data.other.canOpen ? (
     <Link href={leagueHref(data.other.leagueId)} className={`${cls} hover:brightness-110`} data-testid="college-pro-pair-chip" title={`Open ${data.other.name}`}>
       {body}
