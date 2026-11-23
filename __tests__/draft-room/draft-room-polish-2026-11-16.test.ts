@@ -88,7 +88,7 @@ describe('No "AI" in draft room copy', () => {
     expect(read('components/app/draft-room/DraftPlayerCard.tsx')).toMatch(/^\s*Chimmy pick\s*$/m)
   })
   it('no draft-room translation value contains the word AI', () => {
-    const en = read('lib/i18n/translations.ts')
+    const en = read('lib/i18n/translations-en.ts')
     const bad = en.split('\n').filter((l) => /^\s*"draftRoom\.[^"]+":\s*".*\bAI\b/.test(l))
     expect(bad).toEqual([])
   })

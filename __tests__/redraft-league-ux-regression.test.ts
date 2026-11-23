@@ -11,7 +11,7 @@ function read(rel: string): string {
 describe('post-merge redraft league UX contracts', () => {
   const leagueShell = read('app/league/[leagueId]/LeagueShell.tsx')
   const leagueTabs = read('app/league/[leagueId]/LeagueTabs.tsx')
-  const translations = read('lib/i18n/translations.ts')
+  const translations = read('lib/i18n/translations-en.ts')
   const appShell = read('app/components/AppShell.tsx')
   const draftResolver = read('app/league/[leagueId]/draft/page.tsx')
   const leagueSettingsModal = read('app/league/[leagueId]/components/LeagueSettingsModal.tsx')
