@@ -26,8 +26,12 @@
 }
 .af-workbook-chart figcaption em { margin-left: auto; text-transform: uppercase; letter-spacing: .1em; }
 
-.af-workbook-plot { position: relative; height: 190px; padding: 18px 6px 32px 34px; overflow-x: auto; }
-.af-workbook-grid { position: absolute; inset: 18px 6px 32px 34px; display: grid; grid-template-rows: repeat(4, 1fr); border-left: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
+/* ⚠ 32px OF HEADROOM, NOT 18. The value sits 7px above its bar and wraps to TWO 11px lines in a narrow
+   column ("8 zombie · 2 human", "5 of 5 devy slots"); `overflow-x: auto` clips vertically too, so on the
+   tallest bar 18px cut the first line clean off and left "human" / "slots" (format hubs, 2026-11-07).
+   The grid's inset moves with it so the gridlines still frame the bars. */
+.af-workbook-plot { position: relative; height: 190px; padding: 32px 6px 32px 34px; overflow-x: auto; }
+.af-workbook-grid { position: absolute; inset: 32px 6px 32px 34px; display: grid; grid-template-rows: repeat(4, 1fr); border-left: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
 .af-workbook-grid i { border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent); }
 .af-workbook-bars { position: relative; z-index: 1; height: 100%; min-width: min-content; display: flex; align-items: flex-end; gap: clamp(8px, 2vw, 18px); }
 .af-workbook-column { position: relative; width: clamp(42px, 7vw, 74px); height: 100%; flex: 1 0 42px; display: flex; align-items: flex-end; justify-content: center; }
