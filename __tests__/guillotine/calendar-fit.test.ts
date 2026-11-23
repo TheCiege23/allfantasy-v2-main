@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { calendarFitMessage, guillotineCalendarFit, planGuillotineChopSchedule } from '@/lib/guillotine/calendarFit'
 
-const NONE = { steps: [], overrides: {}, immunity: 'off' as const }
+const NONE = { steps: [], overrides: {}, immunity: 'off' as const, faab: { mode: 'unchanged' as const, amount: 0 } }
 const nfl = (teamCount: number, over: Partial<Parameters<typeof guillotineCalendarFit>[0]> = {}) => ({
   teamCount, startWeek: 1, endWeek: 18, baseChops: 1, advanced: NONE, threshold: 1, finalPeriods: 0, ...over,
 })

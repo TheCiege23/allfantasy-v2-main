@@ -14,6 +14,7 @@ import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetric
 import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
 import { prisma } from '@/lib/prisma'
 import { searchOpenMarketDevy } from '@/lib/devy/openMarketDevy'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -122,8 +123,8 @@ export async function GET(req: NextRequest) {
       const leagueRow = await loadLeagueForTrade({ leagueId, userId })
       if (!leagueRow) return NextResponse.json({ error: 'League unavailable' }, { status: 404 })
       if (sportParam !== 'ALL' && normalizeToSupportedSport(sportParam) !== leagueRow.sport) return NextResponse.json([])
-      const metrics = await loadLeaguePlayerMetrics({ leagueId, searchName: q, limit: 12 })
-      return NextResponse.json((metrics?.rows ?? []).map(row => ({
+      const metrics = await loadLeaguePlayerMetrics({ leagueId, searchName: q, limit: 12, afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked })
+      return await afJson(userId, (metrics?.rows ?? []).map(row => ({
         kind: 'player', sport: metrics!.sport, playerId: row.rosterPlayerId ?? row.playerId, name: row.playerName,
         position: row.position, team: '', value: row.dynastyTradeValue ?? row.tradeValue,
         valueUnit: row.tradeValueUnit, rank: row.rank, weeklyProjection: row.weekly, source: 'allfantasy',

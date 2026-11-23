@@ -20,6 +20,7 @@ import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
 import { loadWaiverCrowd } from '@/lib/waivers/waiverCrowd'
 import { resolveWaiverClaimWeek } from '@/lib/core-app/waiverClaimWeek'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
   const view = (searchParams?.get('view') ?? '').toLowerCase()
   if (view === 'defense-hub') {
     const payload = await loadDefenseHub({ prisma, leagueId, userId })
-    return NextResponse.json(payload)
+    return await afJson(userId, payload)
   }
   /*
    * ⚠ ALSO BEFORE THE `isIdpLeague` GUARD, AND FOR A STRONGER REASON THAN THE HUB ABOVE.
@@ -106,11 +107,11 @@ export async function GET(req: NextRequest) {
    */
   if (view === 'value-eligibility') {
     const payload = await resolveLeagueValueSurfaces(prisma, leagueId).catch(() => null)
-    return NextResponse.json(payload ?? { hasIdp: false, hasKicker: false, eligible: false })
+    return await afJson(userId, payload ?? { hasIdp: false, hasKicker: false, eligible: false })
   }
   if (view === 'kicker-value') {
     const payload = await loadLeagueKickerValue({ prisma, leagueId })
-    return NextResponse.json(payload ?? { value: null })
+    return await afJson(userId, payload ?? { value: null })
   }
   /*
    * The trade board: every defender in the league and what he is worth HERE, with the team
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest) {
    */
   if (view === 'trade-board') {
     const payload = await loadLeagueDefenderBoard({ prisma, leagueId, userId })
-    return NextResponse.json(payload)
+    return await afJson(userId, payload)
   }
   if (view === 'waiver-board') {
     const lim = Number(searchParams?.get('limit'))
@@ -174,11 +175,11 @@ export async function GET(req: NextRequest) {
       : []
     const season = Number(payload.season)
     const crowd = ids.length && Number.isInteger(season) ? await loadWaiverCrowd(ids, season, new Date(now)).catch(() => null) : null
-    return NextResponse.json(crowd ? { ...payload, crowd } : payload)
+    return await afJson(userId, crowd ? { ...payload, crowd } : payload)
   }
   if (view === 'roster-week') {
     const payload = await loadRosterWeekPoints({ prisma, leagueId, userId })
-    return NextResponse.json(payload)
+    return await afJson(userId, payload)
   }
   if (view === 'player-card') {
     const playerId = searchParams?.get('playerId')?.trim() ?? ''
@@ -191,7 +192,7 @@ export async function GET(req: NextRequest) {
       season:
         Number.isFinite(seasonParam) && seasonParam > 0 ? seasonParam : new Date().getFullYear(),
     })
-    return NextResponse.json(payload)
+    return await afJson(userId, payload)
   }
   if (view === 'idp-matchup') {
     const seasonParam = Number(searchParams?.get('season'))
@@ -203,7 +204,7 @@ export async function GET(req: NextRequest) {
       season: Number.isFinite(seasonParam) && seasonParam > 0 ? seasonParam : undefined,
       week: Number.isFinite(weekParam) && weekParam > 0 ? weekParam : undefined,
     })
-    return NextResponse.json(payload)
+    return await afJson(userId, payload)
   }
 
   const isIdp = await isIdpLeague(leagueId)
@@ -229,7 +230,7 @@ export async function GET(req: NextRequest) {
   }
   const players = q ? out.slice(0, limit) : out
 
-  return NextResponse.json({
+  return await afJson(userId, {
     leagueId,
     pool: poolWaiver ? 'waiver' : 'all',
     count: players.length,

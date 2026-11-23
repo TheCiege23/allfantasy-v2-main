@@ -62,7 +62,10 @@ describe('1 · the page resolves the paywall for the War Room', () => {
   it('includes war-room in the corePaywall read, which Scout’s Competitive Edge depends on', () => {
     const page = readFileSync('app/core/(shell)/[[...screen]]/page.tsx', 'utf8')
     const block = page.slice(page.indexOf('const corePaywallRead ='), page.indexOf('resolveCorePaywall(userId'))
-    expect(block).toContain("activeKey === 'war-room'")
+    // Since 2026-11-22 the plan is read on EVERY screen (AF Intelligence reaches all of them), so the read
+    // is unconditional — which covers this screen too. A conditional read must still name it.
+    const unconditional = /const corePaywallRead = resolveCorePaywall\(userId/.test(page)
+    expect(unconditional || block.includes("activeKey === 'war-room'")).toBe(true)
   })
 })
 

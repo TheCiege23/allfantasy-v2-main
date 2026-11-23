@@ -2627,8 +2627,8 @@ export function TradeCenter(props: {
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
           {serverGrade ? <TradeDecisionSummary grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} visual={result.visualImpact} /> : null}
-          {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
-          {serverGrade ? <TradeValueChart grade={serverGrade} /> : null}
+          {serverGrade?.graded && !depthLocked ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
+          {serverGrade && !depthLocked ? <TradeValueChart grade={serverGrade} /> : null}
           {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{copy(result.visualImpact.reason??'')} {result.visualImpact.rostersStale ? copy('Roster data may be stale; sync before acting.') : ''} {copy('Picks and FAAB are outside the weekly lineup simulation.')}</p></> : null}
           <TradeReactionSettings />
           <TradePackageCost cost={result.visualImpact?.packageCost} />
@@ -2642,7 +2642,7 @@ export function TradeCenter(props: {
             </div>
           ) : null}
           {/* Why the values moved, measured from completed trades — verbatim from the grade, as Chimmy cites it. */}
-          <TradeMarketEvidence grade={serverGrade} copy={copy} />
+          {!depthLocked ? <TradeMarketEvidence grade={serverGrade} copy={copy} /> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
@@ -2653,7 +2653,7 @@ export function TradeCenter(props: {
           ) : null}
           {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved grade')}</Link>{copy(" · ")}{copy('Values saved')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}{copy(".")}</p>
             : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('We couldn’t save this grade. Take a screenshot if you want to keep it.')}</p> : null}
-          {serverGrade?.graded && serverGrade.rosterFit ? (
+          {serverGrade?.graded && serverGrade.rosterFit && !depthLocked ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
               <div className="af-label">{copy(serverGrade.letterBasis === 'your_team' ? 'How it fits your roster · used for your grade' : 'How it fits your roster')} <TopicTip topic="tradeRosterFit" /></div>
               <p>{copy('Value to your team:')} {money(serverGrade.rosterFit.giveValue)} {copy('sent,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}

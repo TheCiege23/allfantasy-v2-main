@@ -13,6 +13,8 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/decision-os/leagueReadAuthorization', () => ({ authorizeLeagueRead: h.access }))
 vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/af-projections/readAfProjections', () => ({ listAfProjections: vi.fn() }))
+// The plan read is the AF Intelligence gate's own test (__tests__/paywall); here the viewer holds it.
+vi.mock('@/lib/core-app/afIntelligenceGate', () => ({ readAfIntelligenceAccess: async () => ({ unlocked: true }), gateAfIntelligence: <T,>(p: T) => p }))
 vi.mock('@/lib/rate-limit', () => ({ rateLimit: () => ({ success: true }), getClientIp: () => 'test' }))
 
 import { GET } from '@/app/api/projections/af/route'

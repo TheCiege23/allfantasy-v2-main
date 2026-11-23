@@ -27,7 +27,7 @@ import type { LineupPlayer } from './myTeam'
  */
 export async function applyDailySportToLineup(
   resolved: Map<string, LineupPlayer>,
-  league: { sport: string; season: number | string | null; settings: unknown; platform: string | null },
+  league: { sport: string; season: number | string | null; settings: unknown; platform: string | null; afIntelligence?: boolean },
   now: Date = new Date(),
 ): Promise<DailyLineupPeriod | null> {
   const sport = String(league.sport ?? '').trim().toUpperCase()
@@ -127,6 +127,8 @@ export async function applyDailySportToLineup(
     league: { sport, season: Number.isInteger(season) ? season : null, settings: league.settings },
     players,
     now,
+    // Without AF Intelligence the lineup and its totals are priced without AF's learned factors.
+    afIntelligence: league.afIntelligence,
   }).catch(() => null)
   if (!outlook) return null
 

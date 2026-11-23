@@ -41,6 +41,7 @@ import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isFantraxNbaCampusLeague } from '@/lib/decision-os/trade/sportPointsValue'
 import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -172,6 +173,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
   const weeklyProjection = async (playerName: string) => {
     const result = await loadLeaguePlayerMetrics({
       leagueId, playerName, week: requestedWeek ? Number(requestedWeek) : null, limit: 2, includeTradeValues: false,
+      // AF Intelligence: a locked viewer compares the plain weekly numbers.
+      afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked,
     }).catch(() => null)
     return {
       week: result?.week ?? null,
@@ -279,7 +282,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
     weekOrPeriod: body.weekOrPeriod ?? null,
   }).catch(() => {})
 
-  return NextResponse.json({
+  return await afJson(userId, {
     ...payload,
     leagueId,
     explanationGate,
