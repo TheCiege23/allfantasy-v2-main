@@ -21,7 +21,8 @@ import {
   upsertSubscriptionPlanForCatalogItem,
 } from "@/lib/subscription/webhookHandlers"
 import { isFullRefund, reverseSubscriptionForPayment } from "@/lib/subscription/paymentReversal"
-import { refuseCheckoutForRestrictedBillingState } from "@/lib/subscription/paidStateRefusal"
+import { cancelAndRefundCheckout, refuseCheckoutForRestrictedBillingState } from "@/lib/subscription/paidStateRefusal"
+import { isSupportGuestCheckoutSession } from "@/lib/monetization/supportGuestCheckout"
 import { lockAccountForCardBillingState } from "@/lib/geo/accountGeoLockServer"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
 import { buildSubscriptionMetaEvent, buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
@@ -434,7 +435,7 @@ async function recordTrialConversion(invoice: Stripe.Invoice, userId: string): P
 
 async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<string | null> {
   const purchaseType = resolveCheckoutPurchaseType(session)
-  const checkoutContext = resolveCheckoutContext(session)
+  let checkoutContext = resolveCheckoutContext(session)
 
   if (!purchaseType) {
     console.warn("[stripe webhook] checkout.session.completed missing purchaseType metadata", {
@@ -480,6 +481,29 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
       await assertClientReferenceSkuWasPaidFor(session, checkoutContext.sku)
     }
 
+    /*
+     * The no-account support checkout (lib/monetization/supportGuestCheckout): there is no
+     * userId yet, so the account comes from the email typed on Stripe's page — found, or made
+     * now. After the paid-state refusal on purpose: a refused card makes no account.
+     */
+    let supportGuestBuyer: import("@/lib/monetization/supportGuestAccount").SupportGuestBuyer | null = null
+    if (!checkoutContext && purchaseType === "subscription" && isSupportGuestCheckoutSession(session)) {
+      const { resolveSupportGuestBuyer, supportGuestDuplicateReason } = await import("@/lib/monetization/supportGuestAccount")
+      const { SUPPORT_GUEST_SKU } = await import("@/lib/monetization/supportGuestCheckout")
+      supportGuestBuyer = await resolveSupportGuestBuyer(session)
+      if (!supportGuestBuyer) {
+        throw new NonRetryableWebhookError("support checkout completed without a buyer email — refusing to grant")
+      }
+      // Someone already paying for this plan who pays again by mistake gets the second charge back.
+      if (!supportGuestBuyer.created && (await supportGuestDuplicateReason(supportGuestBuyer.userId, session))) {
+        await cancelAndRefundCheckout(getStripeClient(), session, "support_duplicate")
+        const { sendSupportWelcomeEmail } = await import("@/lib/monetization/supportGuestEmail")
+        await sendSupportWelcomeEmail(supportGuestBuyer, { checkoutSessionId: session.id, duplicate: true })
+        return "refused_support_duplicate"
+      }
+      checkoutContext = { userId: supportGuestBuyer.userId, sku: SUPPORT_GUEST_SKU, couponCode: null, source: "metadata" }
+    }
+
     if (purchaseType === "subscription") {
       await persistSubscriptionEntitlementFromCheckout(session, checkoutContext)
       if (checkoutContext?.userId) {
@@ -487,6 +511,11 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
       }
       await trackSubscriptionPurchaseFromCheckout(session, checkoutContext)
       await recordPaidConversion(session, checkoutContext)
+      if (supportGuestBuyer) {
+        // After the plan is recorded, so the thank-you page and the email can never run ahead of it.
+        const { sendSupportWelcomeEmail } = await import("@/lib/monetization/supportGuestEmail")
+        await sendSupportWelcomeEmail(supportGuestBuyer, { checkoutSessionId: session.id })
+      }
     } else if (purchaseType === "tokens") {
       await persistTokenPurchaseFromCheckout(session, checkoutContext)
       if (checkoutContext?.userId && session.payment_status === "paid" && (session.amount_total ?? 0) > 0) {
