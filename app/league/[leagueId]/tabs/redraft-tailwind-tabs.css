@@ -65,6 +65,10 @@ html[data-mode='light'] .rdt{--rdt-on-bad:#ffffff}
 .rdt-card{border:1px solid var(--rdt-line2);border-radius:14px;background-color:var(--rdt-surface)}
 .rdt-eyebrow{color:var(--rdt-faint);font:700 11px/1.3 var(--rdt-mono);letter-spacing:.12em;text-transform:uppercase}
 .rdt-eyebrow-accent{color:var(--rdt-accent-text)}
+/* Inside a native redraft league, section titles are sentence-case sans rather than mono caps (2026-11-06),
+ * matching the workspace screens. Scores, War Room and AI Coaching also mount for other formats, which keep
+ * the rule above. */
+.nl-workspace[data-format=redraft] .rdt-eyebrow{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:13px;letter-spacing:0;text-transform:none}
 .rdt-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px}
 .rdt-head h1{margin:2px 0 0;color:var(--rdt-text);font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
 .rdt-head-sub{margin:4px 0 0;color:var(--rdt-muted);font-size:12px}
