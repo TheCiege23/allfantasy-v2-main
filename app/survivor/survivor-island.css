@@ -281,6 +281,7 @@ html[data-mode='light'] .sv-island {
   --sv-cyan-ink: #0e7490;
   --sv-violet-wash: rgba(221, 214, 254, 0.35);
   --sv-amber-wash: rgba(253, 230, 138, 0.3);
+  --sv-stage: #0b0d14;
   color-scheme: light;
 }
 /* The scene banner stays night-time art; its text keeps the light ink it was drawn for. */
@@ -292,6 +293,23 @@ html[data-mode='light'] .sv-island .sv-banner {
   --sv-btn-bg: rgba(14, 16, 24, 0.82);
   --sv-btn-ink: #f1ece4;
   --sv-primary-ink: #1a0f05;
+}
+/*
+  The ceremony pieces — the late-season jury and finale (.svl, late-season.css) and the ballot
+  (.swl-vc, survivor-weekly.css) — are drawn as night scenes with their own palette, and their
+  headings sat straight on the page, white on sand. In light mode they become dark stages, like the
+  banner, with the island's ink reset to light inside them. Nested .svl roots do not stack padding.
+*/
+html[data-mode='light'] .sv-island .svl:not(.svl .svl) {
+  --sv-ink-rgb: 241 236 228;
+  --sv-line-rgb: 255 236 214;
+  background: var(--sv-stage);
+  border-radius: 16px;
+  padding: 16px;
+}
+html[data-mode='light'] .sv-island .swl-vc {
+  --sv-ink-rgb: 241 236 228;
+  --sv-line-rgb: 255 236 214;
 }
 html[data-mode='light'] .sv-island .bg-black\/20,
 html[data-mode='light'] .sv-island .bg-black\/25,
@@ -306,6 +324,9 @@ html[data-mode='light'] .sv-island .text-amber-100\/90,
 html[data-mode='light'] .sv-island .text-amber-200,
 html[data-mode='light'] .sv-island .text-amber-200\/90,
 html[data-mode='light'] .sv-island .text-amber-300,
+html[data-mode='light'] .sv-island .text-amber-100\/80,
+html[data-mode='light'] .sv-island .text-amber-200\/70,
+html[data-mode='light'] .sv-island .text-amber-200\/80,
 html[data-mode='light'] .sv-island .text-\[\#f6d3ae\],
 html[data-mode='light'] .sv-island .text-\[\#f2c46b\] { color: var(--survivor-gold); }
 html[data-mode='light'] .sv-island .text-violet-100,

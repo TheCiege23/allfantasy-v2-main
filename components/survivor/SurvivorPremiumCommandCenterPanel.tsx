@@ -140,6 +140,8 @@ export function SurvivorPremiumCommandCenterPanel({
   return (
     <div className="space-y-6" data-testid="survivor-premium-command-center">
       <WarRoomPanel
+        // On the island page, a solid island panel: the see-through one showed the blurred scene art as a haze.
+        className={tilesOnly ? 'survivor-panel' : undefined}
         title={tilesOnly ? 'Island intel' : 'Premium Survivor command center'}
         subtitle={tilesOnly
           ? 'Reports on your tribe, your rivals and the vote. Tap one to open it.'
