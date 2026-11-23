@@ -50,6 +50,22 @@
 /* Image belongs inside the message area; the composer and message bubbles remain solid and legible. */
 .nl-workspace[data-format=zombie] [data-testid=league-chat-conversation] .af-cm-thread { background:linear-gradient(rgba(4,15,15,.79),rgba(4,15,15,.88)),url('/zombie/workspace/chat-city.webp') center center / cover no-repeat; background-color:#081513 }
 .nl-workspace[data-format=zombie] [data-testid=league-chat-panel] { border-color:rgba(147,202,143,.32)!important; box-shadow:0 18px 50px rgba(0,0,0,.25) }
+
+/* Light mode (2026-11-23): the zombie header and tab content are dark scenes in every mode, so they carry /core's DARK
+ * tokens. Without this, light-mode tokens put near-black text on the dark scene (the decisions card, supplies, rules,
+ * matchup names, the War Room and the "You turned" overlay all vanished). Values: components/core-app/af-core.css .af-core. */
+.nl-workspace[data-format=zombie] .nl-tab-content,
+.nl-league-heading[data-format=zombie] {
+  color-scheme: dark;
+  --surface: #0d1020; --surface2: #0a0c1a; --line: rgba(255,255,255,.07); --line2: rgba(255,255,255,.13);
+  --text: #eef0fa; --text2: #c3c9e6; --muted: #989fc2; --faint: #7d84a8;
+  --accent: #22d3ee; --accent-ink: #04050c; --accent-soft: rgba(34,211,238,.12); --accent-line: rgba(34,211,238,.28);
+  --good: #34d399; --warn: #fbbf24; --bad: #fb5b78;
+  --good-soft: rgba(52,211,153,.12); --warn-soft: rgba(251,191,36,.12); --bad-soft: rgba(251,91,120,.12);
+  --chip: rgba(255,255,255,.05); --chip-line: rgba(255,255,255,.1); --gold: #f6c445; --p-gold-fg: #f6c445;
+  color: var(--text);
+}
+
 @media(max-width:767px) {
   .nl-workspace[data-format=zombie] .nl-tab-content { border-radius:14px; background-size:auto,auto 520px }
   .nl-workspace[data-format=zombie] .nl-zombie-scene { min-height:132px; padding:18px; background-position:center,right,center }

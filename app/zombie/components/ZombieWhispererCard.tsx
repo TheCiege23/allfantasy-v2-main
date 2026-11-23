@@ -48,7 +48,7 @@ export function ZombieWhispererCard({
             <>
               <p className="mt-3 flex items-center gap-2 text-[13px] font-medium text-white/72">
                 <EyeOff className="h-4 w-4 text-white/45" aria-hidden />
-                Identity classified — a Whisperer walks among you.
+                The Whisperer is hidden. Someone in this league is one.
               </p>
               <p className="mt-2 text-[12px] text-white/45">Watch matchups, items, and league chat for tells.</p>
             </>

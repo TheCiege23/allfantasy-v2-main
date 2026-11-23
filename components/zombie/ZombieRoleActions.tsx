@@ -13,6 +13,8 @@ const control = 'min-h-11 rounded-xl border border-emerald-400/30 bg-[#081b18] p
 export function ZombieRoleActions({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
   const [pack, setPack] = useState<Pack | null>(null)
   const [message, setMessage] = useState('')
+  /** A failed first load: said plainly, never the route's raw error text (2026-11-23). */
+  const [loadFailed, setLoadFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [slots, setSlots] = useState<string[]>([])
@@ -26,13 +28,13 @@ export function ZombieRoleActions({ leagueId, onChanged }: { leagueId: string; o
     const result = await response.json()
     if (!response.ok) throw new Error(result.error || 'Could not load role decisions.')
     if (typeof result.supported !== 'boolean' || !Array.isArray(result.workflows)) throw new Error('Role decisions returned an incomplete response. Refresh to retry.')
-    if (!signal?.aborted) setPack(result)
+    if (!signal?.aborted) { setPack(result); setLoadFailed(false) }
   }, [leagueId])
   useEffect(() => {
     const controller = new AbortController()
     generation.current += 1
-    setPack(null); setPreview(null); setSlots([]); setMessage(''); requestId.current = null
-    void load(controller.signal).catch(error => { if (!controller.signal.aborted) setMessage(error.message) })
+    setPack(null); setPreview(null); setSlots([]); setMessage(''); setLoadFailed(false); requestId.current = null
+    void load(controller.signal).catch(() => { if (!controller.signal.aborted) setLoadFailed(true) })
     const timer = setInterval(() => { void load(controller.signal).catch(() => {}) }, 30_000)
     setNominee(''); setReason(''); setVeterans(null); setBusy(false)
     return () => { generation.current += 1; controller.abort(); clearInterval(timer) }
@@ -80,11 +82,14 @@ export function ZombieRoleActions({ leagueId, onChanged }: { leagueId: string; o
     finally { if (version === generation.current) setBusy(false) }
   }
   if (pack && !pack.supported) return null
-  if (!pack && !message) return null
+  if (!pack && !message && !loadFailed) return null
+  // Nothing to decide this week: no card at all, rather than a header over an empty box.
+  if (pack && !message && !pack.workflows.length && !pack.canStartDraw && !pack.canAmbush && pack.correctionHoldFromWeek == null) return null
   const names = new Map(preview?.matches.flatMap(m => [[m.homeRosterId, m.homeName], [m.awayRosterId, m.awayName]] as Array<[string, string]>))
   const locked = new Set(preview?.matches.filter(m => m.locked).flatMap(m => [m.homeRosterId, m.awayRosterId]))
-  return <section aria-label="Zombie combat and role decisions" className="space-y-4 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/70 to-[#090c18] p-4 text-white sm:p-5">
-    <header><h2 className="font-black">Combat &amp; Whisperer command</h2><p className="mt-1 text-sm text-white/65">2025 NFL rules · role choices and matchup control</p></header>
+  return <section aria-label="Your Zombie decisions" className="space-y-4 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-950/70 to-[#090c18] p-4 text-white sm:p-5">
+    <header><h2 className="font-black">Your decisions</h2><p className="mt-1 text-sm text-white/65">Choices only you can make this week.</p></header>
+    {loadFailed && !pack && <p role="status" className="text-sm text-white/75">Your decisions didn’t load. Try again in a moment.</p>}
     {message && <p role="status" aria-live="polite" className="text-sm text-emerald-100">{message}</p>}
     {pack?.correctionHoldFromWeek != null && <p role="alert" className="text-sm text-amber-200">A stat correction from Week {pack.correctionHoldFromWeek} is awaiting commissioner recovery. Combat decisions and ambushes are held.</p>}
     {pack?.canStartDraw && <div className="space-y-3"><p className="text-sm text-white/70">Fill all seats, then run an independent random draw. Veterans receive sequential 24-hour offers; if there are no veterans, every manager is eligible.</p>
@@ -117,6 +122,6 @@ export function ZombieRoleActions({ leagueId, onChanged }: { leagueId: string; o
       <button className={control} disabled={busy} onClick={() => void confirmAmbush()}>{busy ? 'Saving…' : 'Confirm remap · use 1 ambush'}</button>
       <button className={`${control} ml-2`} disabled={busy} onClick={() => { setPreview(null); requestId.current = null }}>Close editor</button>
     </div>}
-    <button className="min-h-11 text-sm text-emerald-200 underline" disabled={busy} onClick={() => { void load().catch(e => setMessage(e.message)) }}>Refresh decisions</button>
+    <button className="min-h-11 text-sm text-emerald-200 underline" disabled={busy} onClick={() => { void load().then(() => setLoadFailed(false)).catch(() => setLoadFailed(true)) }}>Refresh</button>
   </section>
 }

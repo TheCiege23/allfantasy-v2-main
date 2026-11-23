@@ -150,14 +150,12 @@ export function ZombieCommandHero({
 
           <div className="flex w-full flex-col gap-4 lg:max-w-[380px]">
             <div className="w-full">{whispererPanel}</div>
-            <div className="grid grid-cols-2 gap-3">
-              <StatTile label="Survivors" value={String(survivorCount)} hint="Still in the fight" tone="survivor" />
-              <StatTile label="Horde" value={String(hordeCount)} hint="Infected + Whisperer" tone="horde" />
-              <StatTile label="Whisperer" value={String(whispererCount)} hint="Shadow asset" tone="whisperer" />
+            {/* Survivor, Horde and Whisperer counts live in the shell's sidebar (and phone strip); said once (2026-11-23). */}
+            <div className="grid gap-3">
               <StatTile
                 label={isPaid ? 'Pot' : 'Economy'}
                 value={isPaid ? `$${potTotal.toFixed(0)}` : `${potTotal.toFixed(0)} pts`}
-                hint={isPaid ? 'League pot tracker' : 'In-play resources'}
+                hint={isPaid ? 'Tracked here; dues are paid outside AllFantasy' : 'In-play resources'}
                 tone="pot"
               />
             </div>
