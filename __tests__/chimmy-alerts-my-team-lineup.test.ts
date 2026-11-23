@@ -72,6 +72,15 @@ describe('the lineup alerts answer from My Team', () => {
     expect(lineupOptimizationFromMyTeam({ ...(data([], []) as object), projections: { available: false, reason: 'none' } } as never, NOW).status).toBe('unresolved')
   })
 
+  it('names the players whose game has already started, which My Team holds in place or leaves out', () => {
+    const started = player('9', 'WR', 20, { kickoff: new Date('2026-11-22T14:00:00Z') })
+    const out = lineupOptimizationFromMyTeam(data([slot('RB', player('1', 'RB', 6))], [started]), NOW)
+    if (out.status !== 'ready') throw new Error('expected ready')
+    expect(out.lockedPlayers?.map((p) => p.name)).toEqual(['Player 9'])
+    const none = lineupOptimizationFromMyTeam(data([slot('RB', player('1', 'RB', 6))], [player('3', 'RB', 15)]), NOW)
+    expect(none.status === 'ready' && none.lockedPlayers).toBeFalsy()
+  })
+
   it('both scheduled alerts default to My Team\'s optimizer', async () => {
     const { readFileSync } = await import('node:fs')
     for (const f of ['lib/chimmy-alerts/runLineupCheck.ts', 'lib/chimmy-alerts/runSlateLockCheck.ts']) {

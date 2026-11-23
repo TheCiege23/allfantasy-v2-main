@@ -674,6 +674,14 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
               ? (interval === 'month' ? g.supremeMonth : g.supremeYear)(money(value.supreme), money(value.separately))
               : plan.description
           const status = pricingCardStatus(plan.planFamily, account)
+          /*
+           * The exact plan + interval the viewer already pays for (any store). It used to keep its
+           * "Choose AF Pro" button — so right after an App Store purchase the page reloaded looking as if
+           * nothing had happened. It now says so. The SAME plan on the other interval is still a real
+           * purchase (monthly → yearly), so that card keeps a button, worded as the switch it is.
+           */
+          const currentSku = Boolean(sku && account?.heldSkus?.includes(sku))
+          const switchInterval = status === 'yours' && !currentSku
           const kickerKey = KICKER_KEY[plan.planFamily as keyof typeof KICKER_KEY]
           const supremeName = ordered.find((p) => p.planFamily === 'af_supreme')?.name ?? 'AF Supreme'
 
@@ -738,6 +746,10 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                 <p className="af-pr-cta af-prg-included" data-testid={`pricing-included-${plan.planFamily}`}>
                   {g.inYourPlan}
                 </p>
+              ) : currentSku ? (
+                <p className="af-pr-cta af-prg-included" data-testid={`pricing-current-${sku}`}>
+                  ✓ Current plan
+                </p>
               ) : (
                 <>
                   <button
@@ -751,7 +763,9 @@ export function PricingV4({ plans, packs, signedIn = false, account = null, comp
                       ? 'Opening checkout…'
                       : !nativeApp && trialOffer.eligible === true && trialAppliesTo(trialOffer, sku)
                         ? g.trialCta(trialOffer.days)
-                        : `Choose ${plan.name}`}
+                        : switchInterval
+                          ? `Switch to ${interval === 'month' ? 'monthly' : 'yearly'}`
+                          : `Choose ${plan.name}`}
                   </button>
                   {/* The trial's terms, said before the click. Web only; marked for the iOS hide rule too. */}
                   {!nativeApp && price != null && trialAppliesTo(trialOffer, sku) ? (

@@ -24,6 +24,7 @@ const m = vi.hoisted(() => {
     players: vi.fn(),
     persist: vi.fn(),
     notify: vi.fn(async () => ({})),
+    swap: vi.fn(),
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -32,6 +33,11 @@ vi.mock('@/lib/roster-lineup-engine/lineupService', () => ({ persistRosterLineup
 vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({ getNormalizedPlayerData: m.players }))
 vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({ serializeUnifiedPlayerForApi: (r: unknown) => r }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+// The plan / opt-in / commissioner decision is aiSwapPolicy's own suite; here it is an input.
+vi.mock('@/lib/lineup-automation/aiSwapPolicy', async (orig) => ({
+  ...(await orig<typeof import('@/lib/lineup-automation/aiSwapPolicy')>()),
+  aiSwapAllowedForTeam: m.swap,
+}))
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateForLeague: async () => ({ slots: [] }) }))
 vi.mock('@/lib/sport-defaults/LeagueVariantRegistry', () => ({ getFormatTypeForVariant: () => 'standard' }))
 vi.mock('@/lib/league/lineupStarterSlots', () => ({
@@ -41,7 +47,7 @@ vi.mock('@/lib/league/lineupStarterSlots', () => ({
   ],
 }))
 
-import { runAutoBenchByes, setAutoBenchBye, AUTO_BENCH_BYE_ACTION } from '@/lib/lineup-automation/autoBenchByeService'
+import { runAutoBenchByes, runByeStarterSweep, setAutoBenchBye, AUTO_BENCH_BYE_ACTION } from '@/lib/lineup-automation/autoBenchByeService'
 
 const playerData = {
   lineup_sections: { starters: [{ id: 'qb', position: 'QB', slotIndex: 0 }, { id: 'rb-bye', position: 'RB', slotIndex: 1 }], bench: [{ id: 'rb-good', position: 'RB' }], ir: [], taxi: [], devy: [] },
@@ -60,6 +66,8 @@ beforeEach(() => {
     { id: 'rb-good', name: 'Good Back', position: 'RB', projectedPoints: 9, product: { byeWeek: 12 } },
   ])
   m.persist.mockResolvedValue({ ok: true })
+  m.swap.mockResolvedValue({ allowed: true, reason: 'owner_opted_in' })
+  m.prisma.$queryRaw.mockResolvedValue([{ id: 'r1', leagueId: 'L' }])
 })
 
 describe('runAutoBenchByes', () => {
@@ -101,6 +109,80 @@ describe('runAutoBenchByes', () => {
     m.state.league = { ...m.state.league, sport: 'NFL', settings: { current_week: 7 } }
     m.lock.mockResolvedValue({ locked: true, lockedPlayerIds: [] })
     expect((await runAutoBenchByes()).skipped.lineup_locked).toBe(1)
+  })
+})
+
+/*
+ * 🛑 THIS SWITCH WAS FREE (2026-11-23). Benching a starter for a manager is an AI swap: AF Pro / Supreme, the
+ * manager's own switch on, the commissioner's league switch not off (lib/lineup-automation/aiSwapPolicy.ts).
+ */
+describe('runAutoBenchByes needs AI swap', () => {
+  it.each(['owner_not_pro', 'owner_off', 'league_off'])('does nothing when AI swap is not allowed (%s)', async (reason) => {
+    m.swap.mockResolvedValue({ allowed: false, reason })
+    expect((await runAutoBenchByes()).skipped[reason]).toBe(1)
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 THE BYE RULE WAS ONLY CHECKED ON A SAVE. A lineup set at the draft started Kyren Williams in his bye
+ * week in two leagues on 2026-11-22, and unclaimed seats started bye players nobody could move.
+ */
+describe('runByeStarterSweep', () => {
+  const sweepRows = () => {
+    m.prisma.$queryRaw.mockReset()
+    m.prisma.$queryRaw
+      .mockResolvedValueOnce([{ id: 'L' }])
+      .mockResolvedValueOnce([{ rosterId: 'r1', names: ['Bye Back'] }])
+  }
+
+  it('fixes an unclaimed seat, through the lineup engine, and alerts nobody', async () => {
+    sweepRows()
+    m.state.roster = { id: 'r1', platformUserId: 'open-slot-L-3', playerData, settings: {} }
+    const r = await runByeStarterSweep()
+    expect(r).toMatchObject({ leagues: 1, teams: 1, aiSeatsSwapped: 1, managersAlerted: 0 })
+    expect(m.persist.mock.calls[0][0]).toMatchObject({ rosterId: 'r1', source: 'system', actorUserId: 'open-slot-L-3' })
+    expect(m.persist.mock.calls[0][0].automationAudit.metadata.changes).toEqual([{ slot: 'RB', in: 'rb-good', out: 'rb-bye' }])
+    expect(m.notify).not.toHaveBeenCalled()
+  })
+
+  it('fixes a seat marked aiManaged the same way', async () => {
+    sweepRows()
+    m.state.roster = { id: 'r1', platformUserId: 'orphan-test-r1', playerData, settings: { aiManaged: true } }
+    expect((await runByeStarterSweep()).aiSeatsSwapped).toBe(1)
+  })
+
+  it('alerts a manager and moves nothing', async () => {
+    sweepRows()
+    m.state.roster = { id: 'r1', platformUserId: 'owner', playerData, settings: {} }
+    const r = await runByeStarterSweep()
+    expect(r).toMatchObject({ aiSeatsSwapped: 0, managersAlerted: 1 })
+    expect(m.persist).not.toHaveBeenCalled()
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+      userIds: ['owner'], type: 'starter_on_bye', category: 'lineup_alerts',
+      body: expect.stringContaining('Bye Back is on bye in Week 7'),
+      dedupePrefix: 'bye-starter:L:r1:2026:7:Bye Back',
+    }))
+  })
+
+  it('leaves a manager with the bye switch AND AI swap to runAutoBenchByes', async () => {
+    sweepRows()
+    const r = await runByeStarterSweep()
+    expect(r.skipped.owner_auto_bench_on).toBe(1)
+    expect(m.notify).not.toHaveBeenCalled()
+  })
+
+  it('[control] alerts a manager whose bye switch is on but who lacks AI swap', async () => {
+    sweepRows()
+    m.swap.mockResolvedValue({ allowed: false, reason: 'owner_not_pro' })
+    expect((await runByeStarterSweep()).managersAlerted).toBe(1)
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('leaves a team the autopilot runs to that run', async () => {
+    sweepRows()
+    m.state.league = { ...m.state.league, settings: { current_week: 7, af_managed_lineups: { r1: { since: 'x', byUserId: 'c' } } } }
+    expect((await runByeStarterSweep()).skipped.managed_by_autopilot).toBe(1)
   })
 })
 

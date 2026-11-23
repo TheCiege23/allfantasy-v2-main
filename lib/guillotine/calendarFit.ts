@@ -19,7 +19,7 @@
  *
  * Pure: no database, so creation, both editors and tests share one answer.
  */
-import { MAX_CHOPS_PER_WEEK, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
+import { DEFAULT_FAAB_AFTER_CHOP, MAX_CHOPS_PER_WEEK, scheduledChops, type GuillotineAdvanced } from './chopSchedule'
 
 type CalendarFitInput = {
   teamCount: number
@@ -75,7 +75,7 @@ export function calendarFitMessage(input: CalendarFitInput, fit: CalendarFit): s
  * `MAX_CHOPS_PER_WEEK` every week cannot finish — the league cannot be created as asked.
  */
 export function planGuillotineChopSchedule(input: Omit<CalendarFitInput, 'advanced'>): GuillotineAdvanced | null {
-  const base: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off' }
+  const base: GuillotineAdvanced = { steps: [], overrides: {}, immunity: 'off', faab: DEFAULT_FAAB_AFTER_CHOP }
   if (guillotineCalendarFit({ ...input, advanced: base }).fits) return base
   const span = input.endWeek - input.startWeek + 1
   for (let chops = Math.max(2, input.baseChops + 1); chops <= MAX_CHOPS_PER_WEEK; chops += 1) {
@@ -84,7 +84,7 @@ export function planGuillotineChopSchedule(input: Omit<CalendarFitInput, 'advanc
         weeks >= span
           ? [{ fromWeek: input.startWeek, chops }]
           : [{ fromWeek: input.startWeek, chops }, { fromWeek: input.startWeek + weeks, chops: input.baseChops }]
-      const advanced: GuillotineAdvanced = { steps, overrides: {}, immunity: 'off' }
+      const advanced: GuillotineAdvanced = { steps, overrides: {}, immunity: 'off', faab: DEFAULT_FAAB_AFTER_CHOP }
       if (guillotineCalendarFit({ ...input, advanced }).fits) return advanced
     }
   }

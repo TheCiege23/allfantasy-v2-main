@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -928,6 +929,8 @@ export function RosterRow({
             </>
           )}
         </p>
+        {/* Why AF moved this week's number — only when that number is the AF-priced one, only for AF Intelligence viewers. */}
+        <ProjectionFactorLine reasons={resolved.afFactors?.reasons} testId={`roster-factors-${playerId}`} />
       </div>
       <div className="flex shrink-0 items-center gap-2 text-right text-xs text-muted">
         <span className="flex w-[4.5rem] items-center justify-end gap-0.5">
@@ -1499,13 +1502,17 @@ const maxWeekMenu = useMemo(() => {
     })
   }, [dbRosterMeta, resolvedSport, week])
 
+  // A past week is view-only. Otherwise the server's lock decides (`canEditLineup`, per player from the
+  // schedule in every sport); the client's time-of-day guess only stands in when the server sent none.
+  const weekLockBlocks =
+    weekLock?.policy === 'view_only_past' || (dbRosterMeta?.canEditLineup === undefined && Boolean(weekLock?.locked))
   const lineupEditable =
     !isBestBall &&
     !isSleeper &&
     Boolean(dbRosterMeta) &&
     dbRosterMeta?.canEditLineup !== false &&
     Boolean(weekLock) &&
-    !weekLock!.locked
+    !weekLockBlocks
 
   const saveLineup = useCallback(
     async (next: RosterLineupLists, campus?: string[]): Promise<boolean> => {
@@ -1897,7 +1904,7 @@ const maxWeekMenu = useMemo(() => {
         </p>
       ) : null}
 
-      {!isSleeper && weekLock?.locked ? (
+      {!isSleeper && weekLock && weekLockBlocks ? (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
           {weekLock.reason ?? 'Lineup is locked for this week.'}
         </p>

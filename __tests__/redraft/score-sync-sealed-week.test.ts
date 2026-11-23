@@ -32,6 +32,7 @@ const matchesWeek = (w: unknown, week: number): boolean => {
   return (r.gte == null || week >= r.gte) && (r.lte == null || week <= r.lte)
 }
 
+vi.mock('@/lib/zombie/activateDraftedZombieLeagues', () => ({ activateDraftedZombieLeagues: vi.fn(async () => ({ checked: 0, activated: 0, failures: [] })) }))
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 vi.mock('@/lib/adminAuth', () => ({ requireAdminOrBearer: vi.fn() }))
 vi.mock('@/lib/pirate/lineupEvidence', () => ({ capturePirateLineupEvidence: vi.fn() }))

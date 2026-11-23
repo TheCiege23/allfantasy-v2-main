@@ -93,17 +93,50 @@ describe('the rail week boards: a pool of four, not lockstep batches (2026-11-22
     expect([...result.keys()].sort()).toEqual(['L0', 'L1', 'L2', 'L3', 'L4', 'L5'])
   })
 
-  it('says how many boards were rebuilt when building them is slow, and nothing when it is fast', async () => {
+  it('says where the boards came from when loading them is slow, and nothing when it is fast', async () => {
     const { logBoardTiming } = await import('@/lib/af-projections/leagueRosterWeek')
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
     try {
-      logBoardTiming(900, [800, 1, 2])
+      logBoardTiming(900, [{ leagueId: 'A', ms: 800, source: 'built' }])
       expect(info).not.toHaveBeenCalled()
-      logBoardTiming(12_500, [1, 2, 300, 900, 4000])
+      logBoardTiming(12_500, [
+        { leagueId: 'A', ms: 1, source: 'memory' }, { leagueId: 'B', ms: 40, source: 'stored' },
+        { leagueId: 'C', ms: 300, source: 'built' }, { leagueId: 'D', ms: 900, source: 'built' },
+        { leagueId: 'E', ms: 4000, source: 'built' }, { leagueId: 'F', ms: 30, source: 'stale' },
+        { leagueId: 'G', ms: 5, source: 'failed' },
+      ])
       expect(info).toHaveBeenCalledTimes(1)
       const [tag, payload] = info.mock.calls[0] as [string, string]
       expect(tag).toBe('[rail-boards-timing]')
-      expect(JSON.parse(payload)).toEqual({ boards: 5, rebuilt: 3, bound: 4, totalMs: 12_500, slowestMs: 4000, medianRebuildMs: 900 })
+      expect(JSON.parse(payload)).toEqual({
+        boards: 7, built: 3, stored: 1, stale: 1, memory: 1, failed: 1, bound: 4, totalMs: 12_500,
+        slowestMs: 4000, medianBuildMs: 900,
+        slowestLeagues: [{ leagueId: 'E', ms: 4000, source: 'built' }, { leagueId: 'D', ms: 900, source: 'built' }, { leagueId: 'C', ms: 300, source: 'built' }],
+      })
     } finally { info.mockRestore() }
+  })
+})
+
+describe('AF Intelligence on the shared board', () => {
+  const factored = (leagueId: string) => ({
+    leagueId, sport: 'NBA', season: 2026, week: 11, unit: 'fantasy points',
+    rows: [
+      { rosterPlayerId: 's1', weekly: 66, team: 'DEN', availabilityId: 's1', afFactors: { multiplier: 1.1, reasons: ['hot'], unadjusted: { weekly: 60, daily: null } } },
+      { rosterPlayerId: 's2', weekly: 20, team: 'MIA', availabilityId: 's2' },
+    ],
+  })
+
+  it("a plan holder gets AF's number; a locked viewer the one before the factors — from ONE shared board", async () => {
+    metrics.mockImplementation(async ({ leagueId }: { leagueId: string }) => factored(leagueId))
+    const paid = await loadLeagueRosterWeeks(requests())
+    const locked = await loadLeagueRosterWeeks(requests(), { afIntelligence: false })
+    expect(paid.get('L1')?.get('s1')?.points).toBe(66)
+    expect(locked.get('L1')?.get('s1')?.points).toBe(60)
+    // A player the factors never moved is the same number either way.
+    expect(locked.get('L1')?.get('s2')?.points).toBe(20)
+    // The locked read reused the cached board: no second build per league.
+    expect(metrics).toHaveBeenCalledTimes(2)
+    const total = (m: Map<string, { points: number | null }> | undefined) => [...(m?.values() ?? [])].reduce((s, p) => s + (p.points ?? 0), 0)
+    expect(total(locked.get('L1'))).toBe(80)
   })
 })

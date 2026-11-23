@@ -151,6 +151,8 @@ export async function getLeagueScoreboard(args: {
   yourRosterId: string | null
   scoringSettings: Record<string, unknown> | null
   projectionWeek: { season: string; week: number } | null
+  /** The viewer's AF Intelligence: false prices every side without AF's learned factors. Default true. */
+  afIntelligence?: boolean
 }): Promise<LeagueScoreboard | null> {
   const { leagueId, platformLeagueId, seasonYear, week } = args
   if (!platformLeagueId) return null
@@ -244,7 +246,7 @@ export async function getLeagueScoreboard(args: {
   const sport = rosters.find(r => r.league?.sport)?.league?.sport ?? 'NFL'
   const everyStarter = anyScored || (sport === 'NFL' && !hasScoringRules(args.scoringSettings))
     ? [] : [...new Set([...startersBy.values()].flat())]
-  const projections = (await loadLeagueRosterWeeks([{ leagueId, season: seasonYear, week, ids: everyStarter }])).get(leagueId)
+  const projections = (await loadLeagueRosterWeeks([{ leagueId, season: seasonYear, week, ids: everyStarter }], { afIntelligence: args.afIntelligence })).get(leagueId)
 
   function build(rosterId: string, points: number | null): ScoreboardTeam {
     const t = teamBy.get(String(rosterId))

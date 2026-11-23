@@ -222,9 +222,46 @@ export function summarizeGrowth(
   return { days: window.days, funnel, side, whatSells, tokenSales }
 }
 
+/**
+ * The AF Intelligence locks (2026-11-22): AF projections, AF ADP, the full trade grade and player deep dives, and
+ * Chimmy's paid answers. Grouped on the growth page so the paywall's own conversion reads as one line before its rows.
+ */
+export const AF_INTELLIGENCE_SOURCE = /^lock_(af_|trade_depth|player_depth|af_intelligence|chimmy_)/
+
+export type AfIntelligenceConversion = { total: EntrySourceRow; rows: EntrySourceRow[] }
+
+/** The AF Intelligence rows of "what sells", and their sum. PURE. */
+export function afIntelligenceConversion(rows: readonly EntrySourceRow[]): AfIntelligenceConversion {
+  const mine = rows.filter((r) => AF_INTELLIGENCE_SOURCE.test(r.entrySource))
+  const total = mine.reduce<EntrySourceRow>(
+    (t, r) => ({ entrySource: 'af_intelligence_all', viewed: t.viewed + r.viewed, clicked: t.clicked + r.clicked, checkouts: t.checkouts + r.checkouts, trials: t.trials + r.trials, paid: t.paid + r.paid }),
+    { entrySource: 'af_intelligence_all', viewed: 0, clicked: 0, checkouts: 0, trials: 0, paid: 0 },
+  )
+  return { total, rows: [...mine].sort((a, b) => b.paid - a.paid || b.clicked - a.clicked || a.entrySource.localeCompare(b.entrySource)) }
+}
+
+const AF_LOCK_LABEL: Record<string, string> = {
+  lock_af_projections: 'AF projections lock (/projections)',
+  lock_af_projections_my_team: 'AF projections lock (My Team)',
+  lock_af_projections_matchup: 'AF projections lock (Matchup)',
+  lock_af_adp_draft_room: 'AF ADP lock (draft room)',
+  lock_af_adp_mock_draft: 'AF ADP lock (mock draft)',
+  lock_af_intelligence: 'AF projections & ADP lock',
+  lock_chimmy_get_player_projection: "Chimmy: AF's own projections",
+  lock_chimmy_evaluate_trade: 'Chimmy: full trade breakdown',
+  lock_chimmy_get_playoff_outlook: 'Chimmy: playoff simulator',
+  lock_chimmy_find_trade_ideas: 'Chimmy: trade ideas',
+  lock_chimmy_get_faab_bid_plan: 'Chimmy: FAAB bid plans',
+  lock_chimmy_recall_past_chats: 'Chimmy: past chats',
+  lock_chimmy_get_draft_pick_outlook: 'Chimmy: who goes before your pick',
+  lock_chimmy_get_manager_record: "Chimmy: a leaguemate's record",
+  af_intelligence_all: 'All AF Intelligence locks',
+}
+
 /** "lock_player_depth" → "Player depth lock", for the few sources we know; the raw tag otherwise. */
 export function entrySourceLabel(source: string): string {
   if (source === 'unknown') return 'Not tagged yet'
+  if (AF_LOCK_LABEL[source]) return AF_LOCK_LABEL[source]!
   const lock = /^lock_(.+)$/.exec(source)
   if (lock) return `${lock[1]!.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase())} lock`
   const known: Record<string, string> = {

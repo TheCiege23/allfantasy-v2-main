@@ -31,6 +31,7 @@
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { SportBenchLine, SportBenchSport } from './sportBenchRecord'
 import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
 import type { TradeOutcomeLedger } from './tradeOutcomesAll'
 import {
@@ -201,6 +202,12 @@ export type LedgerSnapshot = {
    * `SPORT:kind` (`tradeOutcomesAll.ts`). Absent on a snapshot written before 2026-11-22.
    */
   tradeOutcomes?: TradeOutcomeLedger
+  /**
+   * My Team's bench calls in NBA, NHL and MLB weekly-points leagues, graded on each sport's own calendar and under each
+   * league's scoring (`sportBenchRecord.ts`, 2026-11-23) — one line per sport, never mixed into `bench` (the NFL
+   * record). Absent on a snapshot written before 2026-11-23 and for a sport with no recorded call.
+   */
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -221,6 +228,7 @@ export function foldLedger(input: {
   draftTips?: DraftTipLedger
   autopicks?: Record<string, DraftTipLedger>
   tradeOutcomes?: TradeOutcomeLedger
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -234,6 +242,10 @@ export function foldLedger(input: {
   }
 
   for (const r of input.bench) {
+    // 🛑 NFL only: the week and the "is it over" clock below are the NFL's. A row that names another sport is not
+    // this record's at all — not withdrawn, not pending, not graded (2026-11-23). A row with no sport is an old read.
+    const sport = String(r.sport ?? '').trim().toUpperCase()
+    if (sport && sport !== 'NFL') continue
     if (r.withdrawn) {
       bench.withdrawn++
       continue
@@ -314,6 +326,7 @@ export function foldLedger(input: {
     ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
     ...(input.autopicks && Object.keys(input.autopicks).length > 0 ? { autopicks: input.autopicks } : {}),
     ...(input.tradeOutcomes && Object.keys(input.tradeOutcomes).length > 0 ? { tradeOutcomes: input.tradeOutcomes } : {}),
+    ...(input.sportBench && Object.keys(input.sportBench).length > 0 ? { sportBench: input.sportBench } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -352,7 +365,7 @@ export type LedgerRecordView = {
 
 export type TradeOutcomeView = {
   sport: string
-  kind: 'points' | 'value'
+  kind: 'points' | 'value' | 'categories'
   letters: Array<{ letter: TradeLetter; n: number; net: number; aheadPct: number | null }>
   confidence: TradeLetterCalibration | null
 }
@@ -434,7 +447,7 @@ function tradeOutcomeViews(ledger: TradeOutcomeLedger | undefined): Record<strin
   if (!ledger || typeof ledger !== 'object') return null
   const out: Record<string, TradeOutcomeView> = {}
   for (const [key, b] of Object.entries(ledger)) {
-    if (!b || typeof b !== 'object' || (b.kind !== 'points' && b.kind !== 'value')) continue
+    if (!b || typeof b !== 'object' || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories')) continue
     const letters = TRADE_LETTERS.flatMap((letter) => {
       const t = b.byLetter?.[letter]
       if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.net !== 'number' || !Number.isFinite(t.net)) return []
@@ -507,7 +520,7 @@ function readTradeOutcomeViews(value: unknown): Record<string, TradeOutcomeView>
   const out: Record<string, TradeOutcomeView> = {}
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
     const b = raw as Partial<TradeOutcomeView> | null
-    if (!b || (b.kind !== 'points' && b.kind !== 'value') || typeof b.sport !== 'string' || !Array.isArray(b.letters)) continue
+    if (!b || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories') || typeof b.sport !== 'string' || !Array.isArray(b.letters)) continue
     const letters = b.letters.filter((t) => t && TRADE_LETTERS.includes(t.letter) && typeof t.n === 'number' && typeof t.net === 'number')
     out[key] = { sport: b.sport, kind: b.kind, letters, confidence: readTradeLetterCalibration(b.confidence) }
   }

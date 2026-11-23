@@ -1,3 +1,4 @@
+import type { DraftNoticeResult } from '@/lib/league/collegePro/draftNotices'
 import { prisma } from '@/lib/prisma'
 import { getCbbdDraftPicks, getCbbdTeamRoster, type CbbdDraftPick, type CbbdRosterTeam } from '@/lib/cbbd/cbbdFetch'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
@@ -116,7 +117,7 @@ export function linkCbbdPicks(
 }
 
 export type CbbdDraftPicksRefresh =
-  | { year: number; stored: number; unlinked: number; schools: number }
+  | { year: number; stored: number; unlinked: number; schools: number; notified: DraftNoticeResult | null }
   | { year: number; skipped: string }
   | { year: number; error: string }
 
@@ -157,5 +158,29 @@ export async function refreshCbbdDraftPicks(opts: { now?: Date; deadlineAt?: num
     create: { cacheKey: key, data: data as never, expiresAt },
     update: { data: data as never, expiresAt },
   })
-  return { year, stored: picks.length, unlinked: unlinked.length, schools: rosters.size }
+  const notified = await notifyPairedLeagues('NCAAB', year, existing?.data, picks, now)
+  return { year, stored: picks.length, unlinked: unlinked.length, schools: rosters.size, notified }
+}
+
+/**
+ * After a write: tell paired college + pro leagues about picks this write ADDED (draftNotices.ts).
+ * Never throws — a notice failing must not undo or fail the store that already succeeded.
+ */
+async function notifyPairedLeagues(
+  sport: 'NCAAF' | 'NCAAB',
+  year: number,
+  before: unknown,
+  picks: ReadonlyArray<{ collegeAthleteId: string }>,
+  now: Date,
+): Promise<DraftNoticeResult | null> {
+  const prior = (before as { picks?: unknown } | null)?.picks
+  const previousIds = new Set(
+    (Array.isArray(prior) ? prior : []).map((p) => String((p as { collegeAthleteId?: unknown })?.collegeAthleteId ?? '')).filter(Boolean),
+  )
+  try {
+    const { notifyNewDraftPicks } = await import('@/lib/league/collegePro/draftNotices')
+    return await notifyNewDraftPicks({ sport, year, previousIds, currentIds: picks.map((p) => p.collegeAthleteId), now })
+  } catch {
+    return null
+  }
 }

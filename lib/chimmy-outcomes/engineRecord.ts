@@ -104,7 +104,7 @@ export function letterRecordApplies(input: { sport: string | null | undefined; l
 export type TradeOutcomeRecord = {
   letter: TradeLetter
   sport: string
-  kind: 'points' | 'value'
+  kind: 'points' | 'value' | 'categories'
   n: number
   /** Points: league-scored points a week, graded side minus what it gave. Value: share of the deal's value, in points. */
   net: number
@@ -120,7 +120,7 @@ export function tradeOutcomeRecordFor(
   const sport = String(input.sport ?? '').trim().toUpperCase()
   if (!sport || letterRecordApplies(input)) return null
   const type = String(input.leagueType ?? '').toLowerCase()
-  const kind: 'points' | 'value' = sport === 'NFL' && /dynasty|keeper|devy|c2c|campus|salary_cap|salary-cap|contract/.test(type) ? 'value' : 'points'
+  const kind: 'points' | 'value' | 'categories' = sport === 'NFL' && /dynasty|keeper|devy|c2c|campus|salary_cap|salary-cap|contract/.test(type) ? 'value' : 'points'
   const bucket = view?.tradeOutcomes?.[`${sport}:${kind}`]
   const l = typeof input.letter === 'string' ? input.letter.trim().charAt(0).toUpperCase() : ''
   const row = bucket?.letters.find((t) => t.letter === l)
@@ -207,8 +207,10 @@ export function renderEngineRecordPromptLine(view: LedgerRecordView | null): str
     b.letters.map((t) => {
       const v = letterVerdict(t.letter, t.net)
       const c = tradeLetterConfidence(t.letter, b.confidence)
-      const measure = b.kind === 'value' ? `${signed(t.net)} points of the deal's dynasty value a month or more later` : `${signed(t.net)} league-scored points a week`
-      return `${b.kind === 'value' ? 'dynasty-style leagues' : `${b.sport} leagues`} ${t.letter}: ${measure} (${t.n} deals${t.aheadPct != null ? `, ahead in ${t.aheadPct}%` : ''})` +
+      const measure = b.kind === 'value' ? `${signed(t.net)} points of the deal's dynasty value a month or more later`
+        : b.kind === 'categories' ? `${signed(t.net)} categories won over lost, the league's own categories over the weeks after`
+        : `${signed(t.net)} league-scored points a week`
+      return `${b.kind === 'value' ? 'dynasty-style leagues' : b.kind === 'categories' ? `${b.sport} category leagues` : `${b.sport} leagues`} ${t.letter}: ${measure} (${t.n} deals${t.aheadPct != null ? `, ahead in ${t.aheadPct}%` : ''})` +
         (v === 'held_up' ? ' — has held up' : v === 'not_held_up' ? ' — has NOT held up' : '') +
         (c ? `; how sure: ${c.level} (about ${c.heldPct}% held up, ${c.decided} decided)` : '')
     }),

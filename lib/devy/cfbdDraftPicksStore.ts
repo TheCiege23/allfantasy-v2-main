@@ -1,3 +1,4 @@
+import type { DraftNoticeResult } from '@/lib/league/collegePro/draftNotices'
 import { prisma } from '@/lib/prisma'
 import { getCFBDraftPicksResult } from '@/lib/cfb-player-data'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
@@ -79,7 +80,7 @@ export function toStoredPicks(
 }
 
 export type DraftPicksRefresh =
-  | { year: number; stored: number; droppedWithoutAthleteId: number }
+  | { year: number; stored: number; droppedWithoutAthleteId: number; notified: DraftNoticeResult | null }
   | { year: number; skipped: string }
   | { year: number; error: string }
 
@@ -112,5 +113,29 @@ export async function refreshCfbdDraftPicks(now = new Date()): Promise<DraftPick
     create: { cacheKey: key, data: data as never, expiresAt },
     update: { data: data as never, expiresAt },
   })
-  return { year, stored: picks.length, droppedWithoutAthleteId: res.data.length - picks.length }
+  const notified = await notifyPairedLeagues('NCAAF', year, existing?.data, picks, now)
+  return { year, stored: picks.length, droppedWithoutAthleteId: res.data.length - picks.length, notified }
+}
+
+/**
+ * After a write: tell paired college + pro leagues about picks this write ADDED (draftNotices.ts).
+ * Never throws — a notice failing must not undo or fail the store that already succeeded.
+ */
+async function notifyPairedLeagues(
+  sport: 'NCAAF' | 'NCAAB',
+  year: number,
+  before: unknown,
+  picks: ReadonlyArray<{ collegeAthleteId: string }>,
+  now: Date,
+): Promise<DraftNoticeResult | null> {
+  const prior = (before as { picks?: unknown } | null)?.picks
+  const previousIds = new Set(
+    (Array.isArray(prior) ? prior : []).map((p) => String((p as { collegeAthleteId?: unknown })?.collegeAthleteId ?? '')).filter(Boolean),
+  )
+  try {
+    const { notifyNewDraftPicks } = await import('@/lib/league/collegePro/draftNotices')
+    return await notifyNewDraftPicks({ sport, year, previousIds, currentIds: picks.map((p) => p.collegeAthleteId), now })
+  } catch {
+    return null
+  }
 }

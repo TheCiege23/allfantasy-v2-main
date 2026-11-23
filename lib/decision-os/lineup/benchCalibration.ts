@@ -14,8 +14,9 @@
  * engine's. Only the confidence stated beside the call comes from the record — the owner's rule, the same as the
  * waiver engine's (`decision-os/waiver/calibration.ts`).
  *
- * 🛑 NFL ONLY. The record is graded in each league's own weekly points, and the edge bands are in points: a 4-point edge
- * is a different call in basketball. Only NFL calls are folded, and only NFL calls are given a confidence.
+ * 🛑 EACH SPORT ITS OWN RECORD. The NFL record is banded in points. NBA, NHL and MLB (2026-11-23) are each graded on
+ * their own calendar (`chimmy-outcomes/sportBenchRecord.ts`) and banded by share of the starter's projection (below),
+ * because a 4-point edge is a different call in basketball. No sport's calls ever read another sport's record.
  *
  * 🛑 ONE BAD WEEK MOVES NOTHING. A band says nothing until BENCH_CALIBRATION_MIN_SAMPLE calls in it were decided (a tie
  * decides nothing); its right-rate is shrunk toward a coin flip, worth BENCH_CALIBRATION_PRIOR_WEIGHT calls, and
@@ -47,6 +48,42 @@ export function benchEdgeBand(edge: number): BenchEdgeBand | null {
 
 export const BENCH_EDGE_LABEL: Record<BenchEdgeBand, string> = { narrow: '2–4 points', clear: '4–8 points', wide: '8+ points' }
 
+/*
+ * 🛑 BASKETBALL, HOCKEY AND BASEBALL ARE BANDED BY SHARE, NOT POINTS (2026-11-23). A weekly NBA lineup scores in the
+ * hundreds and an NHL one in the tens, so a 4-point edge means nothing across them. There the band is the edge as a
+ * share of the STARTER's projection — the player the call would bench:
+ *
+ *   narrow  under 10%     clear  10–25%     wide  25%+
+ *
+ * The call is still the engine's: a swap is any edge clearing BENCH_SWAP_POINTS, exactly as before. Only the band the
+ * graded record is read from is scaled. A starter projected at zero (out, or no game) makes any swap `wide`.
+ */
+export type BenchEdgeScale = 'points' | 'share'
+export const BENCH_SHARE_NARROW = 0.1
+export const BENCH_SHARE_CLEAR = 0.25
+
+/** NFL is banded in points; NBA, NHL and MLB by share of the starter's projection; anything else has no record. */
+export function benchEdgeScaleFor(sport: string | null | undefined): BenchEdgeScale | null {
+  const s = String(sport ?? '').trim().toUpperCase()
+  if (s === 'NFL') return 'points'
+  return s === 'NBA' || s === 'NHL' || s === 'MLB' ? 'share' : null
+}
+
+/** The share rule: null under the swap threshold, or when the starter's projection is unknown. */
+export function benchShareBand(edge: number, starterProjected: number | null | undefined): BenchEdgeBand | null {
+  if (typeof edge !== 'number' || !Number.isFinite(edge) || edge < BENCH_EDGE_FLOOR) return null
+  if (typeof starterProjected !== 'number' || !Number.isFinite(starterProjected) || starterProjected < 0) return null
+  if (starterProjected === 0) return 'wide'
+  const share = edge / starterProjected
+  return share < BENCH_SHARE_NARROW ? 'narrow' : share < BENCH_SHARE_CLEAR ? 'clear' : 'wide'
+}
+
+export const BENCH_SHARE_LABEL: Record<BenchEdgeBand, string> = {
+  narrow: "under 10% of the starter's projection",
+  clear: "10–25% of the starter's projection",
+  wide: "25%+ of the starter's projection",
+}
+
 /** Raw and decayed counts for one band. */
 export type BenchEdgeCounts = {
   n: number
@@ -66,9 +103,21 @@ const round4 = (n: number) => Math.round(n * 10_000) / 10_000
 
 /** Graded calls → per-band counts. An edge outside the bands is dropped, never clamped into one. */
 export function foldBenchEdgeBands(calls: readonly GradedBenchCall[]): BenchEdgeLedger {
+  return foldBandedCalls(calls.map((c) => ({ band: benchEdgeBand(c.edge), call: c.call, ageDays: c.ageDays })))
+}
+
+/** A graded basketball / hockey / baseball call: its edge and the starter's projection, both as the call knew them. */
+export type GradedShareBenchCall = { edge: number; starterProjected: number; call: BenchCallGrade; ageDays: number }
+
+/** The share-banded fold — the same counts, decay and shape as the NFL one, only the band rule differs. */
+export function foldBenchShareBands(calls: readonly GradedShareBenchCall[]): BenchEdgeLedger {
+  return foldBandedCalls(calls.map((c) => ({ band: benchShareBand(c.edge, c.starterProjected), call: c.call, ageDays: c.ageDays })))
+}
+
+function foldBandedCalls(calls: ReadonlyArray<{ band: BenchEdgeBand | null; call: BenchCallGrade; ageDays: number }>): BenchEdgeLedger {
   const out: BenchEdgeLedger = {}
   for (const c of calls) {
-    const band = benchEdgeBand(c.edge)
+    const band = c.band
     if (!band || (c.call !== 'right' && c.call !== 'wrong' && c.call !== 'same')) continue
     const b = (out[band] ??= { n: 0, right: 0, wrong: 0, same: 0, wDecided: 0, wRight: 0 })
     b.n += 1
@@ -115,15 +164,24 @@ export function benchCalibrationFrom(bands: BenchEdgeLedger | null | undefined):
 
 export type BenchConfidenceLevel = 'high' | 'medium' | 'low'
 
-/** What the record says about a call of this size. */
-export type BenchCallRecord = { band: BenchEdgeBand; rightPct: number; decided: number; level: BenchConfidenceLevel }
+/** What the record says about a call of this size. `scale` absent = points (every record before 2026-11-23). */
+export type BenchCallRecord = { band: BenchEdgeBand; rightPct: number; decided: number; level: BenchConfidenceLevel; scale?: BenchEdgeScale }
 
-/** The record for a call with this projected edge, or null when its band has none (the call is shown as before). */
-export function benchCallRecord(edge: number, calibration: BenchCalibration | null | undefined): BenchCallRecord | null {
-  const band = benchEdgeBand(edge)
+/**
+ * The record for a call with this projected edge, or null when its band has none (the call is shown as before).
+ * `opts.scale: 'share'` (NBA / NHL / MLB) reads the band by the edge's share of `opts.starterProjected`; the
+ * calibration passed must then be that sport's own.
+ */
+export function benchCallRecord(
+  edge: number,
+  calibration: BenchCalibration | null | undefined,
+  opts?: { scale?: BenchEdgeScale | null; starterProjected?: number | null },
+): BenchCallRecord | null {
+  const share = opts?.scale === 'share'
+  const band = share ? benchShareBand(edge, opts?.starterProjected) : benchEdgeBand(edge)
   const rec = band ? calibration?.[band] : undefined
   if (!band || !rec || !(rec.decided > 0) || !Number.isFinite(rec.rightRate)) return null
   const rightPct = Math.round(rec.rightRate * 100)
   const level: BenchConfidenceLevel = rec.rightRate >= 0.7 ? 'high' : rec.rightRate >= 0.55 ? 'medium' : 'low'
-  return { band, rightPct, decided: rec.decided, level }
+  return { band, rightPct, decided: rec.decided, level, ...(share ? { scale: 'share' as const } : {}) }
 }

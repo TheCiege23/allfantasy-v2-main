@@ -33,6 +33,7 @@ import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { matchStarterSlots } from '@/lib/redraft/nativeDraftRosterTemplate'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { relabelSeasonStarters } from '@/lib/redraft/relabelStarters'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -655,16 +656,30 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    // A replay must not resurrect a drafted player who was later dropped or traded.
-    // Survivor Guillotine permits roster moves immediately after draft finalization.
-    const existingActive = await prisma.redraftRosterPlayer.findFirst({
-      where: {
-        rosterId: mapping.redraftRoster.id,
-        playerId,
-        ...(league.leagueVariant === 'survivor_guillotine' ? {} : { droppedAt: null }),
-      },
-      select: { id: true },
-    })
+    /*
+     * 🛑 A REPLAY MUST NOT RESURRECT A DRAFTED PLAYER WHO WAS LATER DROPPED OR TRADED — IN ANY FORMAT.
+     * Any row for this pick on this season roster, active OR dropped, means the pick was already
+     * materialized; a dropped one means a roster move happened after it. This replay runs on every
+     * post-draft artifact pass (roster and draft-room requests, the draft-room poll), so a filter on
+     * `droppedAt: null` re-created the player every time someone opened the league.
+     *
+     * Measured 2026-11-22, Zombie Chimmy Test (NFL redraft): Kyren Williams dropped for Bhayshul
+     * Tuten at 21:02:55, back on the roster as "drafted" at 21:08:36 — the second the next pass ran.
+     * `33e4a268e` had fixed exactly this for Survivor Guillotine only; the rule was never format-specific.
+     *
+     * ⚠ AND A TRADE LEAVES NO ROW BEHIND: it MOVES the row to the receiving roster (applyRedraftRosterMoves,
+     * tradeSettlement), so the drafting roster has nothing to find. A player active anywhere in this
+     * season is already placed, and re-creating him here puts one player on two teams.
+     */
+    const existingActive =
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { rosterId: mapping.redraftRoster.id, playerId },
+        select: { id: true },
+      })) ??
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { playerId, droppedAt: null, roster: { seasonId: season.id } },
+        select: { id: true },
+      }))
 
     if (existingActive) {
       redraftPlayersAlreadyPresent += 1
@@ -763,6 +778,20 @@ export async function syncCompletedDraftToRedraftSeason(
       })
     })
   }
+
+  /*
+   * Starter labels that fit the league's layout (./relabelStarters.ts): the picks above are written as
+   * each starter's POSITION, so a FLEX starter read as a third RB and the lineup looked illegal. Labels
+   * only — who starts is unchanged. This pass re-runs on roster and draft-room views, so a season
+   * drafted before it heals on its next view. Must not fail draft completion.
+   */
+  await relabelSeasonStarters(prisma, { seasonId: season.id, sport: season.sport || String(session.sportType ?? 'NFL'), leagueSettings: league.settings }).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] starter labels not normalized', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
 
   await ensureScheduleForNewSeason({
     seasonId: season.id,

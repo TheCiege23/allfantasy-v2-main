@@ -33,6 +33,13 @@ vi.mock('@/lib/redraft/lineupLock', async (importOriginal) => {
   }
 })
 
+const factors = vi.hoisted(() => ({ table: null as unknown, tableReads: 0 }))
+vi.mock('@/lib/af-projections/factors/factorTables', () => ({
+  loadFactorTable: vi.fn(async () => { factors.tableReads++; return factors.table }),
+  liveFactorAdjustments: vi.fn(async (_db: unknown, args: { table: unknown; players: Array<{ key: string }> }) =>
+    new Map(args.table ? args.players.filter((p) => p.key === 'r907').map((p) => [p.key, { multiplier: 1.1, reasons: ['hot over his last 3 games +10%'], levels: {} }]) : [])),
+}))
+
 import { applyDailySportOutlook, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 import type { DailySportFormBlob } from '@/lib/projections/dailySportForm'
 
@@ -70,6 +77,8 @@ const blob: DailySportFormBlob = {
 const league = (settings: Record<string, unknown> = {}) => ({ sport: 'NBA', season: 2026, settings })
 
 beforeEach(() => {
+  factors.table = null
+  factors.tableReads = 0
   store.blob = blob
   store.prior = null
   slate.calls.length = 0
@@ -299,5 +308,27 @@ describe('applyDailySportOutlook', () => {
     const [a, b] = applyDailySportOutlook(rows, out)
     expect(a).toMatchObject({ projectedPoints: 60, projectionsSource: 'allfantasy:projection_recent_form', positionRankLabel: 'C1' })
     expect(b).toBe(rows[1])
+  })
+})
+
+describe('AF Intelligence: a locked viewer is priced without the learned factors', () => {
+  const players = [
+    { key: 'r907', lookupId: '907', team: 'Denver Nuggets', injuryStatus: null },
+    { key: 'r74', lookupId: '74', team: 'MIA', injuryStatus: null },
+  ]
+  it('applies the factor for a plan holder (positive control) and records the number before it', async () => {
+    factors.table = { levels: [] }
+    const out = await loadDailySportOutlook(db, { league: league(), players, now: NOW })
+    expect(out.byKey.get('r907')).toMatchObject({ projectedPoints: 66, afFactors: { multiplier: 1.1, unadjusted: { projectedPoints: 60 } } })
+  })
+
+  it('without AF Intelligence reads no table and every number — so every total — is the plain one', async () => {
+    factors.table = { levels: [] }
+    const out = await loadDailySportOutlook(db, { league: league(), players, now: NOW, afIntelligence: false })
+    expect(factors.tableReads).toBe(0)
+    expect(out.byKey.get('r907')).toMatchObject({ projectedPoints: 60 })
+    expect(out.byKey.get('r907')).not.toHaveProperty('afFactors')
+    const total = [...out.byKey.values()].reduce((sum, o) => sum + (o.projectedPoints ?? 0), 0)
+    expect(total).toBe(80)
   })
 })

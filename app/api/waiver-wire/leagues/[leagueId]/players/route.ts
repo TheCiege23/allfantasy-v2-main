@@ -32,6 +32,7 @@ import {
   nhlProspectPoolRow,
   offersNhlProspectFreeAgency,
 } from "@/lib/waiver-wire/nhlProspectFreeAgency"
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -95,14 +96,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     // the route below is exactly what it was.
     const offerProspects = offersNhlProspectFreeAgency(league)
     if (prospectsOnly) {
-      if (!offerProspects || prospectQuery.length < 2) return NextResponse.json({ players: [], rosteredCount: rosteredIds.size })
+      if (!offerProspects || prospectQuery.length < 2) return await afJson(userId, { players: [], rosteredCount: rosteredIds.size })
       const found = await loadNhlProspectFreeAgents(prisma as never, {
         rosteredIds,
         query: prospectQuery,
         limit: NHL_PROSPECT_FA_SEARCH_LIMIT,
       }).catch(() => null)
       const players = (found?.prospects ?? []).map((p) => prospectWireRow(p, String(league.sport)))
-      return NextResponse.json({ players, rosteredCount: rosteredIds.size })
+      return await afJson(userId, { players, rosteredCount: rosteredIds.size })
     }
 
     const pool = await loadLeagueWaiverPlayerPool(league, {
@@ -192,6 +193,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       try {
         const outlook = await loadDailySportOutlook(prisma, {
           league: { sport: String(league.sport), season: league.season ?? null, settings: league.settings },
+          // Without AF Intelligence, priced without AF's learned factors (the response is gated by afJson too).
+          afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked,
           // Keyed by position: `players[i]` is serialized from `available[i]`, whatever id it ends up with.
           players: available.map((p: any, i: number) => ({
             key: String(i),
@@ -223,7 +226,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       const keys = await resolveRosterIdsToKeys(prisma, String(league.sport), column, [...group.keys()]).catch(() => new Map<string, string>())
       for (const [id, key] of keys) for (const i of group.get(id) ?? []) canonical[i] = key
     }))
-    priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
+    // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
+    priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, {
+      canonical: true, afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked })
 
     // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
     // Every sport's points leagues; null for a categories league, and the screen then shows no such figure.
@@ -257,7 +262,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
             const hold = holds.get(p.playerId)
             return hold ? { ...dto, onWaiversUntil: hold.until.toISOString() } : dto
           })
-        return NextResponse.json({
+        return await afJson(userId, {
           players: [...priced, ...rows],
           rosteredCount: rosteredIds.size,
           lastWeek: lastWeekNumber,
@@ -269,7 +274,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
     const rows = isFantraxNbaCampusLeague(String(league.sport), league)
       ? priced.map((row, i) => ({ ...row, afProjectionPlayerId: canonical[i] }))
       : priced
-    return NextResponse.json({ players: rows, rosteredCount: rosteredIds.size, lastWeek: lastWeekNumber })
+    return await afJson(userId, { players: rows, rosteredCount: rosteredIds.size, lastWeek: lastWeekNumber })
   } catch (error) {
     console.error("Failed to fetch waiver wire players:", error)
     return NextResponse.json({ error: "Failed to fetch players" }, { status: 500 })
