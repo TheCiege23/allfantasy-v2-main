@@ -12,6 +12,7 @@ import {
   getLandingImportSports,
 } from '@/components/core-app/screens/landingConnectPlatforms'
 import { LandingDemoTabs } from '@/components/core-app/screens/LandingDemoTabs'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 import { TradeMarketMovers } from '@/components/trade-market/TradeMarketMovers'
 import { LaunchBanner } from '@/components/launch/LaunchBanner'
 import { FORMAT_DEMO_META } from '@/lib/demo-league/formats/registry'
@@ -340,6 +341,7 @@ export function LandingV4({
               {c.hero.ctaDemo}
             </Link>
           </div>
+          <LandingStoreBadges copy={c.hero.stores} lang={lang} />
           {signedIn ? null : (
             <p className="af-lp-have-account">
               {c.hero.haveAccount}{' '}
@@ -764,6 +766,7 @@ export function LandingV4({
         </p>
         {/* Jurisdiction copy is a compliance statement, not decoration — it stays verbatim. */}
         <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
+        <p className="af-lp-footer-compliance" data-testid="landing-store-trademarks">{c.footer.storeTrademarks}</p>
       </footer>
     </div>
   )
