@@ -47,6 +47,7 @@ const FIELDS: Array<{ key: keyof PartnerSettings; label: string; kind?: 'select'
   { key: 'yearlyDiscountMode', label: 'Yearly discount', kind: 'select', options: [['prorated', 'Prorated (3/12)'], ['full_year', 'Full first year']] },
   { key: 'commissionPercent', label: 'Commission (%)' },
   { key: 'commissionBasis', label: 'Commission based on', kind: 'select', options: [['net', 'After fees (net)'], ['gross', 'Before fees (gross)']] },
+  { key: 'storeFeePercent', label: 'App Store / Google Play cut (%)' },
   { key: 'commissionCapMonths', label: 'Months per subscriber (blank = no limit)' },
   { key: 'cashThresholdPaidSubs', label: 'Paid subscribers for cash' },
   { key: 'freeSupremePaidSubs', label: 'Paid subscribers for AF Supreme' },

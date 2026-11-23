@@ -30,6 +30,11 @@ export type PartnerSettings = {
   commissionPercent: number
   /** `net` = after store/processor fees and refunds; `gross` = what the subscriber paid. */
   commissionBasis: CommissionBasis
+  /**
+   * The App Store / Google Play cut, percent, used as the fee on store purchases (the stores do not
+   * report it per sale). 15 = Apple's Small Business Program and every Google subscription.
+   */
+  storeFeePercent: number
   /** Stop paying on a subscriber after this many months of their payments. null = no limit. */
   commissionCapMonths: number | null
   /** Paid subscribers needed before cash commission starts. */
@@ -62,6 +67,7 @@ export const DEFAULT_PARTNER_SETTINGS: PartnerSettings = {
   yearlyDiscountMode: 'prorated',
   commissionPercent: 10,
   commissionBasis: 'net',
+  storeFeePercent: 15,
   commissionCapMonths: null,
   cashThresholdPaidSubs: 10,
   freeSupremePaidSubs: 10,
@@ -80,6 +86,7 @@ const INT_KEYS = [
   'discountPercent',
   'discountMonths',
   'commissionPercent',
+  'storeFeePercent',
   'cashThresholdPaidSubs',
   'freeSupremePaidSubs',
   'freeCommissionerActiveUsers',
@@ -97,6 +104,7 @@ const LIMITS: Record<(typeof INT_KEYS)[number], [number, number]> = {
   discountPercent: [0, 50],
   discountMonths: [1, 12],
   commissionPercent: [0, 30],
+  storeFeePercent: [0, 50],
   cashThresholdPaidSubs: [1, 100_000],
   freeSupremePaidSubs: [1, 100_000],
   freeCommissionerActiveUsers: [1, 100_000],

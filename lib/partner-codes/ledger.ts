@@ -87,27 +87,74 @@ export async function recordPartnerInvoicePaid(stripe: Stripe, invoice: Stripe.I
   const userId = customerId ? await resolveUserIdFromStripeCustomerId(customerId) : null
   if (!userId) return 'no_user'
 
-  const referral = await prisma.partnerReferral.findUnique({
-    where: { userId },
-    include: { partnerCode: { select: { id: true, cashUnlockedAt: true, ownerUserId: true } } },
-  })
+  // Cheap pre-checks before any extra Stripe calls.
+  const referral = await prisma.partnerReferral.findUnique({ where: { userId }, select: { seenPaymentRefs: true } })
   if (!referral) return 'not_referred'
   if (referral.seenPaymentRefs.includes(invoice.id!)) return 'duplicate'
 
-  const settings = await loadPartnerSettings()
   const facts = await chargeFactsForInvoice(stripe, invoice.id!)
-  const paidAt = new Date(((invoice.status_transitions?.paid_at ?? invoice.created) || Date.now() / 1000) * 1000)
-
   const line = invoice.lines?.data?.[0] as unknown as { pricing?: { price_details?: { price?: unknown } }; price?: unknown } | undefined
   const priceId = idOf(line?.pricing?.price_details?.price) ?? idOf(line?.price)
   const plan = priceId ? planForPrice(priceId) : undefined
-  const interval: 'month' | 'year' = plan?.interval === 'year' ? 'year' : 'month'
+  return recordPartnerPayment({
+    userId,
+    source: 'stripe',
+    sourceRef: invoice.id!,
+    paidAt: new Date(((invoice.status_transitions?.paid_at ?? invoice.created) || Date.now() / 1000) * 1000),
+    grossCents: amountPaid,
+    feeCents: facts.feeCents,
+    planFamily: plan?.planFamily ?? null,
+    interval: plan?.interval === 'year' ? 'year' : 'month',
+    platform: 'web',
+    stripe: { customerId, subscriptionId },
+    cardFingerprint: facts.cardFingerprint,
+  })
+}
 
-  // Shared-card check, now that there is a card.
+// ---------------------------------------------------------------------------
+// One payment, any platform
+// ---------------------------------------------------------------------------
+
+export type PartnerPayment = {
+  userId: string
+  source: 'stripe' | 'apple' | 'google'
+  /** Stripe invoice id, Apple transaction id, or Google order id. Also the no-double-pay key. */
+  sourceRef: string
+  paidAt: Date
+  /** What the subscriber was charged. */
+  grossCents: number
+  /** Processor fee (Stripe) or the store's cut (Apple / Google). */
+  feeCents: number
+  planFamily: string | null
+  interval: 'month' | 'year'
+  platform: 'web' | 'ios' | 'android'
+  stripe?: { customerId: string | null; subscriptionId: string }
+  /** Apple original transaction id or the Google purchase-token hash: one subscription across renewals. */
+  storeSubscriptionRef?: string
+  cardFingerprint?: string | null
+}
+
+/**
+ * Count a subscriber's payment and, once their commissioner's cash is on, accrue
+ * commission on it. Every platform comes through here, so refunds, the optional
+ * cap, flagging and the twice-delivered guard behave identically everywhere.
+ */
+export async function recordPartnerPayment(p: PartnerPayment): Promise<string> {
+  if (p.grossCents <= 0) return 'zero_amount'
+  const referral = await prisma.partnerReferral.findUnique({
+    where: { userId: p.userId },
+    include: { partnerCode: { select: { id: true, cashUnlockedAt: true, ownerUserId: true } } },
+  })
+  if (!referral) return 'not_referred'
+  if (referral.seenPaymentRefs.includes(p.sourceRef)) return 'duplicate'
+
+  const settings = await loadPartnerSettings()
+
+  // Shared-card check, once there is a card (web only: the stores never show us one).
   let extraFlags: string[] = []
-  if (facts.cardFingerprint && !referral.cardFingerprint) {
+  if (p.cardFingerprint && !referral.cardFingerprint) {
     const sameCardOnCode = await prisma.partnerReferral.count({
-      where: { partnerCodeId: referral.partnerCodeId, cardFingerprint: facts.cardFingerprint, NOT: { id: referral.id } },
+      where: { partnerCodeId: referral.partnerCodeId, cardFingerprint: p.cardFingerprint, NOT: { id: referral.id } },
     })
     extraFlags = flagReasons({ sameCardOnCode: sameCardOnCode + 1 >= SHARED_CARD_LIMIT ? SHARED_CARD_LIMIT : 0, matchesOwnerCard: false, sameIpLast24h: 0, isDisposableEmail: false, matchesOwnerIp: false })
   }
@@ -117,41 +164,41 @@ export async function recordPartnerInvoicePaid(stripe: Stripe, invoice: Stripe.I
   await prisma.partnerReferral.update({
     where: { id: referral.id },
     data: {
-      seenPaymentRefs: { push: invoice.id! },
+      seenPaymentRefs: { push: p.sourceRef },
       paidInvoiceCount: { increment: 1 },
-      firstPaidAt: referral.firstPaidAt ?? paidAt,
+      firstPaidAt: referral.firstPaidAt ?? p.paidAt,
       currentlyPaying: true,
       churnedAt: null,
-      platform: 'web',
-      plan: plan?.planFamily ?? referral.plan,
-      interval,
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: subscriptionId,
-      cardFingerprint: referral.cardFingerprint ?? facts.cardFingerprint,
+      platform: p.platform,
+      plan: p.planFamily ?? referral.plan,
+      interval: p.interval,
+      ...(p.stripe ? { stripeCustomerId: p.stripe.customerId, stripeSubscriptionId: p.stripe.subscriptionId } : {}),
+      ...(p.storeSubscriptionRef ? { storeOriginalTxnId: p.storeSubscriptionRef } : {}),
+      cardFingerprint: referral.cardFingerprint ?? p.cardFingerprint ?? null,
       flagReasons: flags,
       status: nextStatus,
     },
   })
 
   if (referral.status === 'rejected') return 'rejected'
-  if (!paymentEarnsCommission(paidAt, referral.partnerCode.cashUnlockedAt)) return 'before_cash_unlocked'
+  if (!paymentEarnsCommission(p.paidAt, referral.partnerCode.cashUnlockedAt)) return 'before_cash_unlocked'
   if (!withinCommissionCap(referral.commissionMonths, settings)) return 'past_cap'
 
-  const basis = commissionBasisCents({ grossCents: amountPaid, feeCents: facts.feeCents, refundCents: 0 }, settings)
-  const slices = planAccrual({ interval, basisCents: basis, paidAt, settings })
+  const basis = commissionBasisCents({ grossCents: p.grossCents, feeCents: p.feeCents, refundCents: 0 }, settings)
+  const slices = planAccrual({ interval: p.interval, basisCents: basis, paidAt: p.paidAt, settings })
   if (!slices.length) return 'nothing_to_accrue'
   const now = Date.now()
   await prisma.partnerCommissionEntry.createMany({
     data: slices.map((s) => ({
       partnerCodeId: referral.partnerCodeId,
       referralId: referral.id,
-      source: 'stripe',
-      sourceRef: invoice.id!,
+      source: p.source,
+      sourceRef: p.sourceRef,
       installment: s.installment,
       periodMonth: s.periodMonth,
       earnedAt: s.earnedAt,
-      grossCents: s.installment === 0 ? amountPaid : 0,
-      feeCents: s.installment === 0 ? facts.feeCents : 0,
+      grossCents: s.installment === 0 ? p.grossCents : 0,
+      feeCents: s.installment === 0 ? p.feeCents : 0,
       basisCents: s.installment === 0 ? basis : 0,
       commissionMillicents: s.commissionMillicents,
       status: s.earnedAt.getTime() <= now ? 'accrued' : 'scheduled',
@@ -160,7 +207,7 @@ export async function recordPartnerInvoicePaid(stripe: Stripe, invoice: Stripe.I
   })
   await prisma.partnerReferral.update({
     where: { id: referral.id },
-    data: { commissionMonths: { increment: interval === 'year' ? 12 : 1 } },
+    data: { commissionMonths: { increment: p.interval === 'year' ? 12 : 1 } },
   })
   return 'accrued'
 }
@@ -175,8 +222,8 @@ export async function recordPartnerInvoicePaid(stripe: Stripe, invoice: Stripe.I
  * already undone and applies only the difference — a second partial refund, or
  * the same event twice, never double-reverses.
  */
-async function reverseInvoiceCommission(invoiceId: string, refundRef: string, fraction: number, markReferral: 'refunded' | 'flagged' | null, flag?: string) {
-  const entries = await prisma.partnerCommissionEntry.findMany({ where: { source: 'stripe', sourceRef: invoiceId } })
+export async function reversePaymentCommission(source: 'stripe' | 'apple' | 'google', invoiceId: string, refundRef: string, fraction: number, markReferral: 'refunded' | 'flagged' | null, flag?: string) {
+  const entries = await prisma.partnerCommissionEntry.findMany({ where: { source, sourceRef: invoiceId } })
   if (!entries.length) {
     // No commission was earned on it, but the referral still stops counting.
     if (markReferral) await markReferralForInvoice(invoiceId, markReferral, flag)
@@ -224,7 +271,7 @@ async function reverseInvoiceCommission(invoiceId: string, refundRef: string, fr
   return delta > 0 ? 'reversed' : 'already_reversed'
 }
 
-async function markReferralForInvoice(invoiceId: string, status: 'refunded' | 'flagged', flag?: string) {
+export async function markReferralForInvoice(invoiceId: string, status: 'refunded' | 'flagged', flag?: string) {
   const ref = await prisma.partnerReferral.findFirst({ where: { seenPaymentRefs: { has: invoiceId } } })
   if (!ref) return
   await prisma.partnerReferral.update({
@@ -242,13 +289,13 @@ export async function recordPartnerChargeRefunded(stripe: Stripe, charge: Stripe
   if (!invoiceId) return 'not_invoice'
   const fraction = charge.amount > 0 ? charge.amount_refunded / charge.amount : 0
   // A refund ref that changes with each cumulative amount, so each new partial refund is its own row.
-  return reverseInvoiceCommission(invoiceId, `refund:${charge.id}:${charge.amount_refunded}`, fraction, fraction >= 1 ? 'refunded' : null)
+  return reversePaymentCommission('stripe', invoiceId, `refund:${charge.id}:${charge.amount_refunded}`, fraction, fraction >= 1 ? 'refunded' : null)
 }
 
 export async function recordPartnerDispute(stripe: Stripe, dispute: Stripe.Dispute): Promise<string> {
   const invoiceId = await invoiceIdForPaymentIntent(stripe, idOf(dispute.payment_intent))
   if (!invoiceId) return 'not_invoice'
-  return reverseInvoiceCommission(invoiceId, `dispute:${dispute.id}`, 1, 'refunded', 'chargeback')
+  return reversePaymentCommission('stripe', invoiceId, `dispute:${dispute.id}`, 1, 'refunded', 'chargeback')
 }
 
 export async function recordPartnerSubscriptionEnded(sub: Stripe.Subscription): Promise<string> {
