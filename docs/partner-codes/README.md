@@ -53,6 +53,11 @@ and AF Pro; AF Commissioner covers paid AF Commissioner. AF Legacy is never touc
 
 ### App Store and Google Play subscribers
 
+**The friend discount is web-only** (owner's call, 2026-11-23). Apple ties a custom offer code to ONE
+subscription product, and Google Play promo codes can only be made by hand, so a code cannot give 10% off
+every plan in the apps. Friends get the discount by subscribing on the web through the `/with` link.
+Subscribers who pay in the apps still count on both meters and still earn their commissioner commission.
+
 `lib/partner-codes/storeLedger.ts`. Who brought a subscriber comes from their AllFantasy account (the
 `/with` link at signup, or a typed code), exactly like web, so commissioners earn on app subscribers
 with no store setup. Commission is 10% of what the store pays us: the price paid minus

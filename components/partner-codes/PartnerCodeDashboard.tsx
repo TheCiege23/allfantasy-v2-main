@@ -66,7 +66,7 @@ function Headline({ c, s }: { c: C; s: S }) {
     ? `${s.commissionPercent}% of what your ${n(c.paidSubs)} paid subscribers pay. Statements go out each month after review.`
     : c.freePlan !== 'none'
       ? `You already have ${c.freePlan === 'supreme' ? 'AF Supreme' : 'AF Commissioner'} free. Keep sharing your link.`
-      : `Friends get ${s.discountPercent}% off their first ${s.discountMonths} months with your code.`
+      : `Friends get ${s.discountPercent}% off their first ${s.discountMonths} months when they subscribe on the web with your code.`
   return (
     <div>
       <h1 className="text-[28px] font-extrabold leading-tight tracking-tight sm:text-[32px]">{title}</h1>
@@ -103,7 +103,7 @@ function ClaimCode({ onClaimed, settings }: { onClaimed: () => void; settings: S
   return (
     <section className={`${card} max-w-xl`} aria-labelledby="claim-h">
       <h1 id="claim-h" className="text-[28px] font-extrabold tracking-tight">Make your Partner Code</h1>
-      <p className="mt-1.5 text-[#c7cbe6]">Friends who join with it get {settings.discountPercent}% off their first {settings.discountMonths} months. You unlock free plans, then {settings.commissionPercent}% cash, as your people join.</p>
+      <p className="mt-1.5 text-[#c7cbe6]">Friends who join with it get {settings.discountPercent}% off their first {settings.discountMonths} months on the web. You unlock free plans, then {settings.commissionPercent}% cash, as your people join.</p>
       <label htmlFor="pc-code" className="mt-5 block text-sm font-bold">Your code</label>
       <input
         id="pc-code"
@@ -151,7 +151,7 @@ function CodeCard({ c, s, demo, onChanged }: { c: C; s: S; demo: boolean; onChan
         {!demo ? <button type="button" onClick={() => setEditing((v) => !v)} className={btnGhost}>Change code</button> : null}
       </div>
       {editing ? <ChangeCode current={c.code} onDone={() => { setEditing(false); onChanged() }} /> : null}
-      <p className="text-[13px] text-[#a3a8c9]">Friends get {s.discountPercent}% off their first {s.discountMonths} months. Your old codes keep working if you change it.</p>
+      <p className="text-[13px] text-[#a3a8c9]">Friends get {s.discountPercent}% off their first {s.discountMonths} months on the web. People who subscribe in the iPhone or Android app still count for you. Your old codes keep working if you change it.</p>
     </section>
   )
 }

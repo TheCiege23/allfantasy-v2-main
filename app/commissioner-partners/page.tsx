@@ -33,7 +33,7 @@ export default async function CommissionerPartnersPage() {
           <span className="text-[13px] font-bold uppercase tracking-[0.08em] text-purple-300">Commissioner Partner Program</span>
           <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">Your league already listens to you. Get rewarded for it.</h1>
           <p className="text-lg text-[#c7cbe6]">
-            Make your own code. Friends get {s.discountPercent}% off their first {s.discountMonths} months. You unlock free plans as your people join, then earn {s.commissionPercent}% of what your paid subscribers pay, every month.
+            Make your own code. Friends get {s.discountPercent}% off their first {s.discountMonths} months on the web. You unlock free plans as your people join, then earn {s.commissionPercent}% of what your paid subscribers pay, every month.
           </p>
           <div><Link href="/partner-code" className="inline-flex min-h-11 items-center rounded-xl bg-purple-500 px-5 font-bold text-white hover:bg-purple-400">Get my code</Link></div>
         </section>
@@ -60,6 +60,7 @@ export default async function CommissionerPartnersPage() {
             <li>Cash is {s.commissionPercent}% of what your subscribers pay after payment fees and refunds, starting with payments after you reach {s.cashThresholdPaidSubs} paid subscribers.</li>
             <li>Yearly plans pay you 1/12 each month. Refunds come off your next statement.</li>
             <li>Free plans stay on while you keep that many users.</li>
+            <li>The {s.discountPercent}% off is for subscribing on the web at allfantasy.ai. Friends who subscribe in the iPhone or Android app don't get it, but they still count for you and still earn you cash.</li>
             <li>You can't use your own code. We need a W-9 before we can send cash.</li>
           </ul>
         </section>

@@ -45,5 +45,6 @@ export function isShareFormat(v: string): v is ShareFormatKey {
 export const SHARE_DISCLOSURE = 'I get rewards when you join with my code.'
 
 export function shareMessage(code: string, url: string, discountPercent: number, discountMonths: number): string {
-  return `Join me on AllFantasy. Use my code ${code} for ${discountPercent}% off your first ${discountMonths} months: ${url}\n${SHARE_DISCLOSURE}`
+  // The link opens the web, which is where the discount applies (owner's call 2026-11-23: web-only discount).
+  return `Join me on AllFantasy. Use my code ${code} for ${discountPercent}% off your first ${discountMonths} months when you sign up here: ${url}\n${SHARE_DISCLOSURE}`
 }
