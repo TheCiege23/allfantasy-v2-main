@@ -1,5 +1,6 @@
 'use client'
 
+import { formatCapMoney } from '@/lib/salary-cap/capMoney'
 import { useMemo, useState } from 'react'
 import { SpecialtyActionButton, SpecialtyReplayButton, spStyles } from '@/components/league/specialty/SpecialtyShell'
 import type { SalaryCapSummary } from '@/components/salary-cap/types'
@@ -16,7 +17,7 @@ import s from './salary-specialty.module.css'
  * startup-auction wins), so the action continues to Waivers rather than pretending to file a sealed bid.
  */
 
-const money = (n: number) => `$${(Math.round(n * 10) / 10).toFixed(1)}`
+const money = formatCapMoney
 
 export function SalaryCapBidCheck({
   summary,
