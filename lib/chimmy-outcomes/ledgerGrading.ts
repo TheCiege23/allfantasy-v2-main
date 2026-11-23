@@ -119,7 +119,14 @@ export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly
     LEFT JOIN league_player_weekly_scores s
       ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
     WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
+      AND upper(a.sport) = 'NFL'
       ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`
+  /*
+   * 🛑 NFL ONLY (2026-11-23). `season`/`week` here are NFL weeks and the fold decides "is it over" from the NFL
+   * schedule, so a non-NFL league's call — recorded before the writer was gated on sport, when its own week number
+   * happened to equal the NFL's — was graded on the wrong clock. `sport` is in the original table, so both reads
+   * below can filter on it; `foldLedger` drops such a row too, in case one ever arrives another way.
+   */
   /*
    * What each call knew (2026-11-21), for the bench check's own calibration: the sport, both projections when it was
    * made, and when. ⚠ `rec_projected` / `alt_projected` arrive with `20261115000000_chimmy_advice_ledger_inputs`, and
@@ -135,7 +142,7 @@ export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly
       ${from}`
   } catch {
     rows = await db.$queryRaw<BenchRowSql[]>`
-      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts, a.sport
       ${from}`
   }
   return rows.map((r) => ({

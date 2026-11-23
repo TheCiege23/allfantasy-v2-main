@@ -15,6 +15,11 @@ import { recordAdvice, withdrawStaleMyTeamAdvice, MY_TEAM_BENCH_SURFACE } from '
  *     call is about a week the screen is not actually showing.
  *   - Sleeper leagues only, like every other receipt: the grade reads the platform's weekly scores,
  *     keyed by the same Sleeper ids the roster uses.
+ *   - NFL leagues only (2026-11-23). The week recorded is the NFL projection feed's week, and the grade
+ *     decides "is the week over" from the NFL schedule. A basketball, hockey or baseball league whose own
+ *     week number happened to equal the NFL's was recorded under an NFL week and graded on the NFL clock —
+ *     a call about a different period. Until each sport is graded on its own calendar, nothing else is
+ *     recorded (and the grade ignores any such row already stored: `loadBenchRows`, `foldLedger`).
  *   - Each player's projection is stored with the call — what it knew.
  *   - A call this render no longer makes is WITHDRAWN, but only while both players' games are still
  *     to come: after a kickoff the bench check stops offering a swap because the game started, and the
@@ -45,6 +50,7 @@ export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv 
   if (String(env['ADVICE_LEDGER_MY_TEAM'] ?? '').trim().toLowerCase() === 'off') return null
   if (!ctx.fullRender || !ctx.userId || !ctx.leagueId) return null
   if (String(ctx.platform ?? '').toLowerCase() !== 'sleeper') return null
+  if (String(ctx.sport ?? '').trim().toUpperCase() !== 'NFL') return null
   const p = ctx.projectionWeek
   const s = ctx.sportsWeek
   if (!p || !s) return null

@@ -234,6 +234,10 @@ export function foldLedger(input: {
   }
 
   for (const r of input.bench) {
+    // 🛑 NFL only: the week and the "is it over" clock below are the NFL's. A row that names another sport is not
+    // this record's at all — not withdrawn, not pending, not graded (2026-11-23). A row with no sport is an old read.
+    const sport = String(r.sport ?? '').trim().toUpperCase()
+    if (sport && sport !== 'NFL') continue
     if (r.withdrawn) {
       bench.withdrawn++
       continue

@@ -89,15 +89,27 @@ describe('the ledger folds NFL calls by their edge', () => {
       bench: [
         row({}),
         row({ recPts: 4, altPts: 9 }),
-        row({ sport: 'NBA' }), // another sport: graded in the tally, never banded
+        row({ sport: 'NBA' }), // another sport: not this record's at all (2026-11-23) — neither tallied nor banded
         row({ recProjected: null }), // an old row with no projections
         row({ week: 11 }), // not over yet
         row({ withdrawn: true }),
       ] as never,
     })
-    expect(out.bench).toMatchObject({ right: 3, wrong: 1, pending: 1, withdrawn: 1 })
+    expect(out.bench).toMatchObject({ right: 2, wrong: 1, pending: 1, withdrawn: 1 })
     expect(out.benchEdges?.clear).toMatchObject({ n: 2, right: 1, wrong: 1 })
     expect(Object.keys(out.benchEdges ?? {})).toEqual(['clear'])
+  })
+
+  it('🛑 an NBA call stored under a week number that matches the NFL\'s counts nowhere — not graded, pending or withdrawn', () => {
+    const out = foldLedger({
+      season: 2026, cal, now: NOW, adds: [], trades: noTrades,
+      bench: [row({ sport: 'NBA' }), row({ sport: 'nba', week: 11 }), row({ sport: 'NHL', withdrawn: true }), row({ sport: 'MLB', recPts: 1 })] as never,
+    })
+    expect(out.bench).toEqual({ right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 })
+    expect(out.users).toEqual({})
+    // A row with no sport is an old read and grades as it always did.
+    const old = foldLedger({ season: 2026, cal, now: NOW, adds: [], trades: noTrades, bench: [row({ sport: undefined })] as never })
+    expect(old.bench.right).toBe(1)
   })
 
   it('no banded call, no `benchEdges` key — a snapshot reads as before', () => {
@@ -179,9 +191,25 @@ describe('🛑 the bench read survives a database without the projection columns
       expect.objectContaining({ recPts: 18, altPts: 6, sport: 'NFL', recProjected: 14, altProjected: 9 }),
     ])
     // A database where `20261115000000_chimmy_advice_ledger_inputs` has not run: the wider SELECT fails once.
-    const old = { $queryRaw: vi.fn().mockRejectedValueOnce(new Error('column a.rec_projected does not exist')).mockResolvedValueOnce([base]) }
+    const old = { $queryRaw: vi.fn().mockRejectedValueOnce(new Error('column a.rec_projected does not exist')).mockResolvedValueOnce([{ ...base, sport: 'NFL' }]) }
     const rows = await loadBenchRows(2026, old as never)
     expect(old.$queryRaw).toHaveBeenCalledTimes(2)
-    expect(rows).toEqual([expect.objectContaining({ recPts: 18, altPts: 6, recProjected: null, altProjected: null })])
+    expect(rows).toEqual([expect.objectContaining({ recPts: 18, altPts: 6, sport: 'NFL', recProjected: null, altProjected: null })])
+  })
+
+  it('🛑 both reads ask for NFL rows only, and the fallback still carries the sport', async () => {
+    const { loadBenchRows } = await import('@/lib/chimmy-outcomes/ledgerGrading')
+    const db = { $queryRaw: vi.fn().mockRejectedValueOnce(new Error('column a.rec_projected does not exist')).mockResolvedValueOnce([]) }
+    await loadBenchRows(2026, db as never)
+    const sqlOf = (call: unknown[]) => {
+      const q = call[0] as { strings?: readonly string[] } | readonly string[]
+      return (Array.isArray(q) ? q : (q as { strings: readonly string[] }).strings ?? []).join('?') + JSON.stringify(call.slice(1))
+    }
+    for (const call of db.$queryRaw.mock.calls) {
+      const text = sqlOf(call as unknown[])
+      expect(text).toMatch(/upper\(a\.sport\) = 'NFL'/)
+      expect(text).toMatch(/a\.sport/)
+    }
+    expect(sqlOf(db.$queryRaw.mock.calls[1] as unknown[])).toMatch(/s\.points AS alt_pts, a\.sport/)
   })
 })

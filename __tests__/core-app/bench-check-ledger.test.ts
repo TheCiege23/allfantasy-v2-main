@@ -36,6 +36,9 @@ describe('benchLedgerWeek — when a render may record', () => {
     ['a different season', { sportsWeek: { season: 2025, week: 10 } }],
     ['no week known', { sportsWeek: null }],
     ['not Sleeper (the grade reads Sleeper scores)', { platform: 'espn' }],
+    ['an NBA Sleeper league whose own week number happens to match the NFL\'s', { sport: 'NBA' }],
+    ['an NHL Sleeper league on a matching week', { sport: 'nhl' }],
+    ['a league with no sport', { sport: '' }],
     ['a saved-roster render, which shows no bench check', { fullRender: false }],
   ])('records nothing when %s', (_label, patch) => {
     expect(benchLedgerWeek({ ...CTX, ...(patch as Partial<BenchLedgerContext>) }, {} as NodeJS.ProcessEnv)).toBeNull()
