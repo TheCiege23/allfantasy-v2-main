@@ -10,6 +10,8 @@ import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
 import { isTrustedWebActivity } from '@/lib/platform/isTrustedWebActivity'
 import { useGooglePlayPrices } from '@/lib/monetization/google-play-client'
 import { buildSignupConsentCookie } from '@/lib/auth/signupConsentCookie'
+import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
+import { clearSupportPhone, saveSupportPhone } from '@/lib/monetization/supportPhoneHandoff'
 
 const SKU = 'af_pro_monthly'
 const RETURN_PATH = '/support/welcome'
@@ -37,6 +39,9 @@ export default function SupportMonthlyCard() {
   const [error, setError] = useState<string | null>(null)
   const [inAndroidApp, setInAndroidApp] = useState(false)
   const [backFromGoogle, setBackFromGoogle] = useState(false)
+  // Optional, web only: a number to text a sign-in code to after paying (lib/monetization/supportPhoneHandoff).
+  const [phone, setPhone] = useState('')
+  const [smsConsent, setSmsConsent] = useState(false)
   useEffect(() => {
     setInAndroidApp(isTrustedWebActivity())
     // The tick survives the trip to Google, so nobody is asked to agree twice in a row.
@@ -55,6 +60,8 @@ export default function SupportMonthlyCard() {
   // In the Android app the price shown must be Google Play's own figure, in local currency.
   const priceLabel = inAndroidApp ? (play.prices[SKU] ?? null) : price != null ? `$${price.toFixed(2)}` : null
   const needsGoogleFirst = inAndroidApp && status === 'unauthenticated'
+  // The no-account web checkout is the only path that ends on the page that texts the code.
+  const offersPhone = !inAndroidApp && status !== 'authenticated'
 
   async function accountCheckout() {
     const result = await resolveCheckoutUrl({
@@ -89,6 +96,13 @@ export default function SupportMonthlyCard() {
         await accountCheckout()
         return
       }
+      if (offersPhone && phone.trim()) {
+        if (phone.replace(/\D/g, '').length < 10) throw new Error('Enter your phone number with the area code, or leave it blank.')
+        if (!smsConsent) throw new Error('Tick the text-message box, or leave the phone number blank.')
+        saveSupportPhone(phone.trim())
+      } else {
+        clearSupportPhone()
+      }
       const res = await fetch('/api/monetization/checkout/support-guest', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -96,6 +110,7 @@ export default function SupportMonthlyCard() {
       })
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string; code?: string; message?: string }
       if (res.status === 409 && data.code === 'use_account_checkout') {
+        clearSupportPhone() // the signed-in checkout does not end on the page that texts it
         await accountCheckout()
         return
       }
@@ -130,6 +145,30 @@ export default function SupportMonthlyCard() {
           </p>
         ) : null}
       </div>
+
+      {offersPhone ? (
+        <div className="space-y-2" data-testid="support-monthly-phone">
+          <label className="block text-sm font-semibold" style={{ color: 'var(--text)' }} htmlFor="support-monthly-phone">
+            Phone number <span className="font-normal" style={{ color: 'var(--muted)' }}>(optional)</span>
+          </label>
+          <input
+            id="support-monthly-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="(555) 123-4567"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full rounded-xl px-4 py-3 text-base outline-none"
+            style={{ background: 'var(--panel2, var(--panel))', border: '1px solid var(--border)', color: 'var(--text)' }}
+            data-testid="support-monthly-phone-input"
+          />
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+            After you pay, we&apos;ll text you a code so you can sign in later without a password.
+          </p>
+          {phone.trim() ? <SmsConsentCheckbox id="support-monthly-sms-consent" checked={smsConsent} onChange={setSmsConsent} /> : null}
+        </div>
+      ) : null}
 
       <label className="flex items-start gap-3 cursor-pointer select-none text-sm" style={{ color: 'var(--text)' }}>
         <input

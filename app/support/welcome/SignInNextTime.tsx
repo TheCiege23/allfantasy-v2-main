@@ -8,6 +8,7 @@ import { UnlockIcon } from '@/components/auth/PasskeySignInButton'
 import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { canUsePasskeys, deviceUnlockName } from '@/lib/auth/passkey-client'
 import { checkPhoneCode, startPhoneVerification } from '@/lib/security-settings/PhoneVerificationSettingsService'
+import { takeSupportPhone } from '@/lib/monetization/supportPhoneHandoff'
 
 type Step = 'choose' | 'phone' | 'code' | 'phone-done' | 'passkey' | 'closed'
 
@@ -34,6 +35,10 @@ const input = 'w-full rounded-xl px-4 py-4 text-lg outline-none'
  *   Face ID          a passkey (components/auth/PasskeyOffer), only on a device that can make one.
  *
  * "Not now" just closes it: the emailed sign-in button still works.
+ *
+ * IF THEY TYPED A NUMBER BEFORE PAYING (app/support/SupportMonthlyCard, with the SMS consent box
+ * ticked there), there is no question: the code is texted as the page opens and the only thing
+ * asked is the code. The number is saved only once that code checks out.
  */
 export default function SignInNextTime() {
   const [step, setStep] = useState<Step>('choose')
@@ -43,6 +48,30 @@ export default function SignInNextTime() {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // A number typed before paying: text it straight away and ask only for the code.
+  useEffect(() => {
+    const handoff = takeSupportPhone()
+    if (!handoff) return
+    setPhone(handoff.phone)
+    setConsent(true)
+    setStep('code')
+    void (async () => {
+      const result = await startPhoneVerification(handoff.phone, { smsConsent: true, consentSource: 'support_checkout' }).catch(
+        () => ({ ok: false as const, error: 'NETWORK', rateLimited: false }),
+      )
+      if (result.ok) return
+      // Could not text it: fall back to the number step, with the number filled in and the reason.
+      setStep('phone')
+      setError(
+        result.error === 'PHONE_ALREADY_IN_USE'
+          ? 'That number is already used by another AllFantasy account.'
+          : result.error === 'INVALID_PHONE'
+            ? 'Enter a valid phone number, including the area code.'
+            : "We couldn't text that number. Check it and try again.",
+      )
+    })()
+  }, [])
 
   // After mount: whether this device can use Face ID is only knowable in the browser.
   useEffect(() => {
