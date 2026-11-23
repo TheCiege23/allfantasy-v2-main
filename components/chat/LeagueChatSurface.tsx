@@ -93,6 +93,7 @@ const NAMED_PLATFORMS: Record<string, string> = {
   cbs: 'CBS',
   mfl: 'MyFantasyLeague',
   nfl: 'NFL.com',
+  fantrax: 'Fantrax',
 }
 
 function platformLabel(platform: string | null | undefined): string | null {

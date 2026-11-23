@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import {
+  CollegeProChat,
   CollegeProFranchiseCard,
   CollegeProOtherHalf,
   CollegeProPairChip,
@@ -9,6 +10,7 @@ import {
   CollegeProWeek,
 } from '@/components/league/college-pro/CollegeProOneLeague'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
@@ -251,8 +253,8 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
     if (url.includes('/api/league/college-pro-pair')) {
       return json({
         applies: true, role: 'pro',
-        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true },
-        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true },
+        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'sleeper', sourceLeagueId: '1312978017894563840' })?.href ?? null },
+        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'v2kzedypmm8jp61b' })?.href ?? null },
       })
     }
     if (url.includes('/api/league/college-pro-draft') && init?.method === 'PATCH') return json({ ok: true })
@@ -334,6 +336,10 @@ export function CollegeProRosterHarnessClient() {
           <CollegeProOtherHalf leagueId="harness" tab="trades">
             <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own trades screen stays here, unchanged.</p>
           </CollegeProOtherHalf>
+        ) : params?.get('view') === 'chat' ? (
+          <CollegeProChat leagueId="harness">
+            <p className="m-4 text-sm">fallback</p>
+          </CollegeProChat>
         ) : params?.get('view') === 'draft' ? (
           <CollegeProDraftPipeline leagueId="harness">
             <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own draft screen stays here, unchanged.</p>

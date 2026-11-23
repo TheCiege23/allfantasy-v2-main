@@ -1,6 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { readLeaguePair } from './pairRecord'
 import { resolveCollegeProPair } from './leaguePair'
 
@@ -22,6 +23,11 @@ export type CollegeProHalf = {
   label: string
   /** The viewer can open it in AllFantasy — they have a team, or imported it. */
   canOpen: boolean
+  /**
+   * The league's own page on its platform (Sleeper / Fantrax), where its members actually chat. Null
+   * when we hold no provider league id for it — never the platform's homepage dressed up as the league.
+   */
+  sourceUrl: string | null
 }
 
 export type CollegeProPairLink =
@@ -51,12 +57,31 @@ export async function loadCollegeProPairLink(leagueId: string, userId: string): 
   if (!pair) return { applies: false }
   const rows = await prisma.league.findMany({
     where: { id: { in: [leagueId, pair.otherLeagueId] } },
-    select: { id: true, name: true, platform: true, sport: true },
+    select: { id: true, name: true, platform: true, sport: true, platformLeagueId: true, season: true },
   })
   const self = rows.find((r) => r.id === leagueId)
   const other = rows.find((r) => r.id === pair.otherLeagueId)
   if (!self || !other) return { applies: false }
   const canOpenOther = (await resolveLeagueAccess(other.id, userId).catch(() => null)) != null
+  /*
+   * A Fantrax League row's platformLeagueId is OUR snapshot id, not Fantrax's: Fantrax's own league id
+   * is on the snapshot (`FantraxLeague.sourceLeagueId`). Every other platform's is the row's own.
+   */
+  const fantraxSnapshots = rows.filter((r) => String(r.platform ?? '').toLowerCase() === 'fantrax' && r.platformLeagueId).map((r) => r.platformLeagueId as string)
+  const fantraxSource = new Map(
+    fantraxSnapshots.length
+      ? (await prisma.fantraxLeague.findMany({ where: { id: { in: fantraxSnapshots } }, select: { id: true, sourceLeagueId: true } }).catch(() => [])).map(
+          (f) => [f.id, f.sourceLeagueId] as const,
+        )
+      : [],
+  )
+  const sourceUrlOf = (r: typeof self) => {
+    const fantrax = String(r.platform ?? '').toLowerCase() === 'fantrax'
+    const sourceLeagueId = fantrax ? (r.platformLeagueId ? fantraxSource.get(r.platformLeagueId) ?? null : null) : r.platformLeagueId
+    if (!sourceLeagueId) return null
+    const link = resolveSourceLink({ platform: r.platform, sourceLeagueId, leagueName: r.name, season: r.season })
+    return link && link.destinationType === 'league' ? link.href : null
+  }
   const half = (r: typeof self, canOpen: boolean): CollegeProHalf => ({
     leagueId: r.id,
     name: (r.name ?? '').trim() || 'League',
@@ -64,6 +89,7 @@ export async function loadCollegeProPairLink(leagueId: string, userId: string): 
     sport: String(r.sport ?? ''),
     label: halfLabel(r.sport),
     canOpen,
+    sourceUrl: sourceUrlOf(r),
   })
   return { applies: true, role: pair.role, self: half(self, true), other: half(other, canOpenOther) }
 }
