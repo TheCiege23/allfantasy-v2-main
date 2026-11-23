@@ -57,9 +57,11 @@ describe('Sleeper tabs', () => {
     expect(member.find(t => t.label === 'Settings')?.children.map(c => c.id)).toEqual(['settings'])
   })
 
-  it('a tab nothing places (a format screen such as the Pirate Deck) lands under League, not lost', () => {
-    const groupsWithPirate = buildNativeLeagueNavigation([...CORE, { id: 'pirate', label: 'Pirate Deck' }], true)
-    expect(nativeNavTabFor(groupsWithPirate, 'pirate')?.label).toBe('League')
+  // The Pirate Deck was this example until it got a top tab of its own (2026-11-22); any unplaced format screen still
+  // lands under League (native-league-navigation-pirate.test.ts covers the Deck).
+  it('a tab nothing places (a format screen) lands under League, not lost', () => {
+    const groupsWithFormat = buildNativeLeagueNavigation([...CORE, { id: 'harbor_screen', label: 'Harbor' }], true)
+    expect(nativeNavTabFor(groupsWithFormat, 'harbor_screen')?.label).toBe('League')
   })
 })
 
