@@ -27,7 +27,13 @@ export const ZOMBIE_VIDEO_ASSETS = {
   whispererChosen: '/zombie/videos/whisperer/Whisperer.mp4',
 } as const
 
-type ZombieClip = { url: string; type: 'video' | 'image' }
+type ZombieClip = { url: string; type: 'video' | 'image' | 'card' }
+
+/**
+ * Moments with no video file play as an animated card drawn in the app (`LeagueClipOverlay`), from the
+ * row's own `metadata` (icon, title, detail, anim). The `card:` url is a marker, never fetched.
+ */
+export const ZOMBIE_CARD_MOMENTS = ['mauling', 'bomb_detonated', 'weapon_used', 'weapon_stolen'] as const
 
 /**
  * Default clip for an animation row. Callers may override via metadata; `animationEngine` merges this in.
@@ -45,6 +51,11 @@ export function zombieClipForAnimation(animationType: string): ZombieClip | null
     case 'whisperer_selected':
     case 'whisperer_replaced':
       return { url: ZOMBIE_VIDEO_ASSETS.whispererChosen, type: 'video' }
+    case 'mauling':
+    case 'bomb_detonated':
+    case 'weapon_used':
+    case 'weapon_stolen':
+      return { url: `card:${animationType}`, type: 'card' }
     default:
       return null
   }

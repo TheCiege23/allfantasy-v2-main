@@ -41,13 +41,16 @@ export function LeagueClipOverlayHost({
 
   const onZombie = useCallback(
     (ev: ZombieSseAnimation) => {
-      const { clipUrl, clipType, displayMode } = metaClip(ev.metadata)
+      const { clipUrl, clipType, displayMode, title, detail, icon, anim } = metaClip(ev.metadata)
       if (!clipUrl) return
       enqueue({
         id: ev.id,
         clipUrl,
         clipType,
-        title: zombieTitle(ev),
+        title: title ?? zombieTitle(ev),
+        detail: detail ?? undefined,
+        icon: icon ?? undefined,
+        anim: anim ?? undefined,
         durationMs: typeof ev.durationMs === 'number' ? ev.durationMs : undefined,
         reducedMotion: Boolean(ev.reducedMotion) || reducedMotion,
         displayMode,
