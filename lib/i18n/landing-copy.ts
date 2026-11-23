@@ -100,8 +100,6 @@ type LandingCopy = {
     ctaPrimary: string
     /** Opens the public, anonymized demo league (/demo). No account needed. */
     ctaDemo: string
-    /** "Already have an account?" — followed by the Sign in link. */
-    haveAccount: string
     /** The App Store / Google Play badges under the hero buttons. Store names stay in English. */
     stores: { label: string; appStoreAlt: string; playAlt: string }
     cardTitle: string
@@ -247,7 +245,6 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: `Bring in your leagues from ${platforms}, or create a new one. Free for every league.`,
       ctaPrimary: 'Sign up free',
       ctaDemo: 'Try the demo',
-      haveAccount: 'Already have an account?',
       stores: { label: 'Get the app', appStoreAlt: 'Download on the App Store', playAlt: 'Get it on Google Play' },
       cardTitle: 'Your leagues',
       cardWeek: 'Week 12 · example',
@@ -466,7 +463,6 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       sub: `Trae tus ligas de ${platforms}, o crea una nueva. Gratis para todas tus ligas.`,
       ctaPrimary: 'Regístrate gratis',
       ctaDemo: 'Prueba la demo',
-      haveAccount: '¿Ya tienes cuenta?',
       stores: { label: 'Descarga la app', appStoreAlt: 'Descárgalo en el App Store', playAlt: 'Descargar en Google Play' },
       cardTitle: 'Tus ligas',
       cardWeek: 'Semana 12 · ejemplo',

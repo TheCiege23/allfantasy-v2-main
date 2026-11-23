@@ -341,15 +341,12 @@ export function LandingV4({
               {c.hero.ctaDemo}
             </Link>
           </div>
+          {/*
+            No "Already have an account? Sign in" line here (removed 2026-11-23): the bar's Sign in
+            button is visible at every width, and the bar is not sticky, so on first load the line
+            was the same action twice on one screen.
+          */}
           <LandingStoreBadges copy={c.hero.stores} lang={lang} />
-          {signedIn ? null : (
-            <p className="af-lp-have-account">
-              {c.hero.haveAccount}{' '}
-              <Link href="/login" data-testid="landing-hero-sign-in">
-                {c.nav.signIn}
-              </Link>
-            </p>
-          )}
         </div>
 
         {/*

@@ -1486,22 +1486,6 @@
   width: auto;
 }
 
-/* ── Hero: the returning-user line ── */
-
-.af-lp-have-account {
-  margin: 14px 0 0;
-  font-size: 14px;
-  color: var(--muted);
-}
-.af-core .af-lp-have-account a {
-  font-weight: 800;
-  color: var(--accent);
-  text-decoration: none;
-}
-.af-core .af-lp-have-account a:hover {
-  text-decoration: underline;
-}
-
 /* ── For commissioners: the bold band ── */
 
 .af-lp-commish {
