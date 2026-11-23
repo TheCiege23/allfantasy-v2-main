@@ -10,6 +10,7 @@ import {
   CollegeProWeek,
 } from '@/components/league/college-pro/CollegeProOneLeague'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
@@ -252,8 +253,8 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
     if (url.includes('/api/league/college-pro-pair')) {
       return json({
         applies: true, role: 'pro',
-        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true, sourceUrl: 'https://sleeper.com/leagues/1312978017894563840' },
-        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true, sourceUrl: 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home' },
+        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'sleeper', sourceLeagueId: '1312978017894563840' })?.href ?? null },
+        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'v2kzedypmm8jp61b' })?.href ?? null },
       })
     }
     if (url.includes('/api/league/college-pro-draft') && init?.method === 'PATCH') return json({ ok: true })

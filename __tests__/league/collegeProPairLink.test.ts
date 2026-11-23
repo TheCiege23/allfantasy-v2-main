@@ -23,6 +23,7 @@ vi.mock('@/lib/league/collegePro/leaguePair', () => ({ resolveCollegeProPair: h.
 
 import { loadCollegeProPairLink } from '@/lib/league/collegePro/pairLink'
 import { isCollegeProLeague } from '@/lib/league/collegePro/format'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 
 const pair = (role: 'pro' | 'college', otherLeagueId: string) => ({ collegeProPair: { role, otherLeagueId, linkedByUserId: 'commish', linkedAt: '2026-11-22' } })
 
@@ -62,7 +63,9 @@ describe('the league this one is paired with', () => {
 
   it('a Fantrax half links to Fantrax by Fantrax’s own id, never by our snapshot id', async () => {
     const link = await loadCollegeProPairLink('peach', 'connor')
-    expect(link.applies && link.other.sourceUrl).toBe('https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home')
+    // Built by the same resolver the app uses for every provider link; the id in it is Fantrax's.
+    expect(link.applies && link.other.sourceUrl).toBe(resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'v2kzedypmm8jp61b' })!.href)
+    expect(link.applies && link.other.sourceUrl).toMatch(/\/league\/v2kzedypmm8jp61b\//)
     expect(link.applies && link.other.sourceUrl).not.toContain('snap-cream')
   })
 
