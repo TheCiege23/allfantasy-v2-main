@@ -18,6 +18,7 @@ import { getNativeRailMatchups } from './nativeRailMatchups'
 import { mostHavePlayed } from './liveRailScores'
 import { loadBestBallField, type BestBallFieldRoster } from './bestBallField'
 import { isBestBallLeagueRow } from './leagueBestBall'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -750,6 +751,7 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
 
   const projections = await loadRailProjections({
     sharedAf: true,
+    afIntelligence: await viewerHasAfIntelligence(userId),
     fixtures: fixtures.map((f) => ({
       dbLeagueId: f.you.leagueId,
       season: f.row.seasonYear, week: f.row.week,
@@ -954,6 +956,8 @@ async function loadBestBallFields(
 
 export async function loadRailProjections(args: {
   sharedAf?: boolean
+  /** The viewer's AF Intelligence (lib/core-app/afIntelligenceViewer.ts): false prices the boards without AF's factors. */
+  afIntelligence?: boolean
   fixtures: Array<{ dbLeagueId: string; platformLeagueId: string; rosterIds: string[]; season?: number; week?: number }>
   /* ReadonlyMap, not Map: `Map` is invariant in its value type, so the caller's
      richer `TeamMeta` would not assign to a narrower one. */
@@ -1049,7 +1053,7 @@ export async function loadRailProjections(args: {
       leagueId, season: fixtures.get(leagueId)?.season ?? args.season, week: fixtures.get(leagueId)?.week ?? args.week,
       ids: entries.flatMap(side => side.starters),
     }))
-    const boards = await loadLeagueRosterWeeks(requests)
+    const boards = await loadLeagueRosterWeeks(requests, { afIntelligence: args.afIntelligence })
     const byLeague = new Map<string, SidesForLeague>()
     for (const meta of leagueMeta) {
       const players = boards.get(meta.id)

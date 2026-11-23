@@ -26,6 +26,8 @@ import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/Roster
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
+import { loadAnnualC2CPickPool } from './annualC2CPickEligibility'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
@@ -167,6 +169,7 @@ export const AUTOPICK_WARM_POOL_MIN_UNDRAFTED = 75
 async function loadWarmPoolCandidates(
   leagueId: string,
   draftedNames: Set<string>,
+  minUndrafted = AUTOPICK_WARM_POOL_MIN_UNDRAFTED,
 ): Promise<AutopickFallbackPoolEntry[] | null> {
   // An expired snapshot is still the right pool mid-draft: take it and let the rebuild run behind.
   let snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
@@ -182,7 +185,7 @@ async function loadWarmPoolCandidates(
   }
   const candidates = (payload.entries as ResolvedPoolEntry[]).map(toFallbackPoolEntry)
   const undrafted = candidates.filter((c) => c.playerName && !draftedNames.has(normalizeName(c.playerName))).length
-  if (undrafted < AUTOPICK_WARM_POOL_MIN_UNDRAFTED) return null
+  if (undrafted < minUndrafted) return null
   return candidates
 }
 
@@ -288,7 +291,14 @@ export async function loadAutopickDraftContextForOnClock(
   const settings = (league?.settings as Record<string, unknown>) ?? {}
   const isSuperflex = getIsSuperflexFromSettings(settings)
 
-  let fallbackPoolRaw = await loadFallbackCandidates(leagueId, sport, draftedNames)
+  const annualCombined = draftSession.draftModeLabel === ANNUAL_C2C_DRAFT
+  let fallbackPoolRaw = annualCombined
+    ? (await loadWarmPoolCandidates(leagueId, draftedNames, 1)) ?? []
+    : await loadFallbackCandidates(leagueId, sport, draftedNames)
+  if (annualCombined) {
+    const eligible = await loadAnnualC2CPickPool(leagueId)
+    fallbackPoolRaw = fallbackPoolRaw.filter(entry => eligible(entry) !== null)
+  }
   if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
     const roster = await loadNbaSurvivorRosterEligibility(totalPicks)
     fallbackPoolRaw = fallbackPoolRaw.filter((candidate) =>
@@ -297,7 +307,7 @@ export async function loadAutopickDraftContextForOnClock(
   }
   const fallbackPool = await filterCandidatesForPlayerPool(
     leagueId,
-    (draftSession as { playerPool?: string | null }).playerPool,
+    annualCombined ? 'all' : draftSession.playerPool,
     fallbackPoolRaw.filter((entry) => {
       if (!entry.playerName || !entry.position) return false
       if (draftedNames.has(normalizeName(entry.playerName))) return false

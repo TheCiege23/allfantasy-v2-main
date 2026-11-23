@@ -116,3 +116,27 @@ describe('the rail week boards: a pool of four, not lockstep batches (2026-11-22
     } finally { info.mockRestore() }
   })
 })
+
+describe('AF Intelligence on the shared board', () => {
+  const factored = (leagueId: string) => ({
+    leagueId, sport: 'NBA', season: 2026, week: 11, unit: 'fantasy points',
+    rows: [
+      { rosterPlayerId: 's1', weekly: 66, team: 'DEN', availabilityId: 's1', afFactors: { multiplier: 1.1, reasons: ['hot'], unadjusted: { weekly: 60, daily: null } } },
+      { rosterPlayerId: 's2', weekly: 20, team: 'MIA', availabilityId: 's2' },
+    ],
+  })
+
+  it("a plan holder gets AF's number; a locked viewer the one before the factors — from ONE shared board", async () => {
+    metrics.mockImplementation(async ({ leagueId }: { leagueId: string }) => factored(leagueId))
+    const paid = await loadLeagueRosterWeeks(requests())
+    const locked = await loadLeagueRosterWeeks(requests(), { afIntelligence: false })
+    expect(paid.get('L1')?.get('s1')?.points).toBe(66)
+    expect(locked.get('L1')?.get('s1')?.points).toBe(60)
+    // A player the factors never moved is the same number either way.
+    expect(locked.get('L1')?.get('s2')?.points).toBe(20)
+    // The locked read reused the cached board: no second build per league.
+    expect(metrics).toHaveBeenCalledTimes(2)
+    const total = (m: Map<string, { points: number | null }> | undefined) => [...(m?.values() ?? [])].reduce((s, p) => s + (p.points ?? 0), 0)
+    expect(total(locked.get('L1'))).toBe(80)
+  })
+})

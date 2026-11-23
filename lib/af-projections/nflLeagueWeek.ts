@@ -6,7 +6,7 @@ import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
 import { loadNflSpecialistRates } from './nflSpecialistRates'
-import type { SpecialistRate } from './nflSpecialistRatesModel'
+import { teamDefenseWeekLine, type SpecialistRate } from './nflSpecialistRatesModel'
 
 /** AF's seasonal component rates, scaled to the opportunities in the requested NFL week.
  * Keep both identity spaces so league projections, roster tools and the wire share one line. */
@@ -129,4 +129,36 @@ export function loadAfNflWeek(at: { season: string; week: number }) {
   })
   cache.set(key, { at: now, rows })
   return rows
+}
+
+/**
+ * Team-defense lines for one NFL week, keyed by club code — how rosters key a defense.
+ *
+ * 🛑 THE WEEK POOL ABOVE HAS NO TEAM DEFENSE IN IT, AND NEVER DID: it is built from the AF engine's
+ * season snapshot, which carries none. So every starting D/ST in Chimmy's lineup check read as
+ * unpriced, and the check told managers "San Francisco 49ers (DEF) is starting with no week 11
+ * projection — a bye, ruled out, or released" about defenses playing that day (owner report,
+ * 2026-11-22: two leagues, every defense flagged). The redraft outlook already priced defenses from
+ * these same season rates; the week pricing did not.
+ *
+ * Only ids asked for, and only clubs that play this week: a bye stays unpriced, which is true.
+ */
+export async function loadAfNflDefenseLines(at: { season: string; week: number }, ids: readonly string[]): Promise<Map<string, NflWeekLine>> {
+  const out = new Map<string, NflWeekLine>()
+  const season = Number(at.season)
+  if (!Number.isFinite(season)) return out
+  const specialists = await loadNflSpecialistRates(season)
+  const wanted = [...new Set(ids)].filter((id) => specialists.get(id)?.kind === 'DEF')
+  if (wanted.length === 0) return out
+  const schedule = await loadProjectionSchedule({ sport: 'NFL', season, week: at.week, now: new Date() })
+  for (const id of wanted) {
+    const team = projectionTeamKey('NFL', id)
+    const games = team ? schedule.get(team)?.weekGames : null
+    const line = teamDefenseWeekLine(specialists.get(id), games)
+    if (!line) continue
+    out.set(id, { key: id, playerId: id, name: null, position: 'DEF', team, weekGames: games!, componentStats: line,
+      // No generic number exists for a defense; consumers of this line re-score `componentStats`.
+      projectedPoints: 0, source: 'allfantasy' })
+  }
+  return out
 }

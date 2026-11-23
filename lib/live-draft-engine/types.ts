@@ -168,6 +168,7 @@ export interface DraftPickSnapshot {
   pickEditorEmpty?: boolean
   tradedPickMeta: TradedPickMeta | null
   source: string
+  assetType?: string | null
   pickLabel: string
   /** Auction: winning bid amount. */
   amount?: number | null

@@ -65,6 +65,7 @@ import {
   startingSlotTemplate,
   storedStarterSlotLabels,
 } from './rosterSlots'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -1489,13 +1490,21 @@ async function loadMyTeamData(
 
   // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
   // Before the bye pass and everything else that reads a projection; a no-op for every other sport.
+  /*
+   * AF Intelligence (AF Pro, AF Commissioner, AF Supreme), read once: a locked viewer's lineup, bench check and every
+   * total are priced without AF's learned factors. A failed read is locked, like every /core depth after launch.
+   */
+  const afIntelligenceRead = resolveCoreDepth(userId, 'af_intelligence').then((a) => a.unlocked === true).catch(() => false)
   const lineupPeriod = await timing.read('projections', () =>
-    applyDailySportToLineup(resolved, {
+    (async () => applyDailySportToLineup(resolved, {
       sport,
       season: league.season ?? null,
       settings: league.settings,
       platform: league.platform ?? null,
-    }).catch(() => null),
+      // AF Intelligence (AF Pro, AF Commissioner, AF Supreme): a locked viewer's lineup — and its totals — carry no
+      // learned factor. A failed plan read is treated as locked, like every /core depth after launch.
+      afIntelligence: await afIntelligenceRead,
+    }))().catch(() => null),
   )
 
   /*
@@ -1508,7 +1517,8 @@ async function loadMyTeamData(
   const rosterIdsForMetrics = [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])]
   async function priceLeaguePlayers(ids: string[], players: Map<string, LineupPlayer>) {
     const board = await loadLeaguePlayerMetrics({ leagueId, rosterIds: ids,
-      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length })
+      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length,
+      afIntelligence: await afIntelligenceRead })
     const metricById = new Map(board?.rows.map((r) => [r.rosterPlayerId, r]))
     for (const id of ids) {
       const p = players.get(id)

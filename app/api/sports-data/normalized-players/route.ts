@@ -12,6 +12,7 @@ import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedScoringRules } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveNormalizedPlayerSportsProfiles } from '@/lib/sports-data-normalization'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       players: names.map((name) => ({ name })),
       leagueScoring,
     })
-    return NextResponse.json(batch)
+    return await afJson(userId, batch)
   } catch (e) {
     console.error('[sports-data/normalized-players]', e)
     return NextResponse.json({ error: 'Normalization failed' }, { status: 500 })

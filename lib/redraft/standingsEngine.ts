@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { byeWeekMedianCredits, computeWeeklyMedianResults, isMatchupComplete, medianEligibleRows, readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
 import { extraMatchupResults } from '@/lib/redraft/oddTeamExtraMatchupRules'
+import { countedStandingsMatchups, isPreLeagueMatchup, readPreLeagueWeeksCount } from '@/lib/redraft/preLeagueWeeksRules'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { readTiebreakerOrder, type TiebreakerKey } from '@/lib/standings/tiebreakerOrder'
 import { rankNflRedraftTeamsByTiebreakers } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
@@ -52,10 +53,19 @@ export async function updateStandings(
     })
   }
 
-  const matchups = await prisma.redraftMatchup.findMany({
+  const allMatchups = await prisma.redraftMatchup.findMany({
     where: { seasonId, week: { lte: week } },
     orderBy: [{ week: 'asc' }, { id: 'asc' }],
   })
+  // Weeks played before a late-starting league existed count only when the commissioner says so
+  // (lib/redraft/preLeagueWeeksRules.ts). A failed read of the toggle means "do not count them".
+  const countPreLeague = allMatchups.some(isPreLeagueMatchup)
+    ? await prisma.redraftSeason
+        .findUnique({ where: { id: seasonId }, select: { league: { select: { settings: true } } } })
+        .then((s) => readPreLeagueWeeksCount(s?.league?.settings))
+        .catch(() => false)
+    : false
+  const matchups = countedStandingsMatchups(allMatchups, countPreLeague)
 
   const rotoStats = new Map<string, TeamStatTotals[]>()
   const seenRotoPeriods = new Set<string>()

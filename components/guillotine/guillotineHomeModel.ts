@@ -93,6 +93,24 @@ export function guillotineHeadline(args: {
   return `Week ${week} · You’re ${me.margin.toFixed(1)} points over the cut`
 }
 
+/**
+ * The hub hero's title: this week's verdict for the viewer, or null when they hold no roster in the league. The
+ * hero leads with this rather than the league's name — the workspace banner above already carries the identity.
+ * Short on purpose: it is set in the display face, and "You're … points over the cut" wrapped to a lone "CUT".
+ */
+export function guillotineVerdict(args: { me: ChopLineRow | null; myChoppedWeek: number | null }): string | null {
+  const { me, myChoppedWeek } = args
+  if (myChoppedWeek != null) return `Chopped in week ${myChoppedWeek}`
+  if (!me) return null
+  if (me.tier === 'chop_zone') return 'In the chop zone'
+  return `${me.margin.toFixed(1)} over the cut`
+}
+
+/** "Week 4 of 11" when the league's last chop week is configured and not yet passed; otherwise "Week 4". */
+export function guillotineWeekLabel(week: number, endWeek: number | null | undefined): string {
+  return endWeek != null && endWeek >= week ? `Week ${week} of ${endWeek}` : `Week ${week}`
+}
+
 const TIEBREAK_LABEL: Record<string, string> = {
   season_points: 'Total season points',
   previous_period: 'Last week’s points',
@@ -110,6 +128,31 @@ export function tiebreakLabels(order: readonly string[] | null | undefined, peri
   return (order ?? []).map((s) =>
     s === 'previous_period' && (periodWeeks ?? 1) > 1 ? 'Last period’s points' : TIEBREAK_LABEL[s] ?? s.replace(/_/g, ' '),
   )
+}
+
+/**
+ * The Rules & Settings card, in words. It used to print the stored config verbatim ("Elimination end 11",
+ * `season_points → previous_period`, "— pts"); the tiebreak order uses tiebreakLabels so it reads exactly as the
+ * hub's "Ties are broken by" card on the same page.
+ */
+export function guillotineRuleRows(config: {
+  eliminationStartWeek: number
+  eliminationEndWeek: number | null
+  teamsPerChop: number
+  tiebreakerOrder?: readonly string[] | null
+  dangerMarginPoints: number | null
+}): { label: string; value: string | string[] }[] {
+  const ties = tiebreakLabels(config.tiebreakerOrder)
+  return [
+    { label: 'First chop', value: `Week ${config.eliminationStartWeek}` },
+    { label: 'Last chop', value: config.eliminationEndWeek != null ? `Week ${config.eliminationEndWeek}` : 'No last week set' },
+    { label: 'Chopped each week', value: `${config.teamsPerChop} ${config.teamsPerChop === 1 ? 'team' : 'teams'}` },
+    {
+      label: 'Danger tier',
+      value: config.dangerMarginPoints != null ? `Within ${config.dangerMarginPoints} points of the cut` : 'Not set',
+    },
+    { label: 'Ties are broken by', value: ties.length > 0 ? ties : 'Not set' },
+  ]
 }
 
 /** Tier → the spec's words. Colour is never the only signal; this text always renders. */

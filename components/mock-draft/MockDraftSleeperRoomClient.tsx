@@ -62,6 +62,7 @@ import {
 import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import '@/components/core-app/af-core.css'
 import '@/components/app/draft-room/af-draft-room.css'
+import { AF_ADP_LOCKED_TITLE, AfAdpLockedHeader, afAdpLockOf } from '@/components/app/draft-room/afAdpLock'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -871,6 +872,8 @@ export default function MockDraftSleeperRoomClient({
   const [showDrafted, setShowDrafted] = useState(false)
   const [rookiesOnly, setRookiesOnly] = useState(false)
   const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
+  // AF ADP's lock (components/app/draft-room/afAdpLock.tsx), read off the pool response.
+  const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1566,6 +1569,7 @@ export default function MockDraftSleeperRoomClient({
     if (!response.ok) {
       throw new Error(payload.error ?? 'Could not load player pool.')
     }
+    setAfAdpLock(afAdpLockOf(payload))
 
     const mapped = arrayFromUnknown(payload.entries)
       .map((entry, index): AvailablePlayer | null => {
@@ -2488,15 +2492,21 @@ export default function MockDraftSleeperRoomClient({
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
               {mockCopy.rookiesOnly}
             </label>
-            <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
-              <input
-                type="checkbox"
-                checked={poolSort === 'afAdp'}
-                onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
-                data-testid="mock-draft-sort-af-adp"
-              />
-              {mockCopy.sortBy} <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
-            </label>
+            {afAdpLock ? (
+              <span className="inline-flex items-center gap-2" title={AF_ADP_LOCKED_TITLE}>
+                <AfAdpLockedHeader lock={afAdpLock} label={`${mockCopy.sortBy} ${ADP_LABEL_AF}`} source="lock_af_adp_mock_draft" />
+              </span>
+            ) : (
+              <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
+                <input
+                  type="checkbox"
+                  checked={poolSort === 'afAdp'}
+                  onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
+                  data-testid="mock-draft-sort-af-adp"
+                />
+                {mockCopy.sortBy} <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+              </label>
+            )}
           </div>
         </div>
 
@@ -2581,7 +2591,7 @@ export default function MockDraftSleeperRoomClient({
                     <span
                       className="font-mono text-[11px] font-semibold"
                       style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
-                      title={afAdpCellTitle({
+                      title={afAdpLock && player.afAdp == null ? AF_ADP_LOCKED_TITLE : afAdpCellTitle({
                         hasValue: player.afAdp != null,
                         contributions: player.afAdpContributions ?? null,
                         importedSampleSize: player.afAdpImportedSampleSize ?? null,
@@ -2589,7 +2599,7 @@ export default function MockDraftSleeperRoomClient({
                       })}
                       data-testid={`mock-draft-player-af-adp-${player.id}`}
                     >
-                      AF {player.afAdp != null ? player.afAdp.toFixed(1) : '—'}
+                      AF {player.afAdp != null ? player.afAdp.toFixed(1) : afAdpLock ? '🔒' : '—'}
                     </span>
                   </div>
                 </button>

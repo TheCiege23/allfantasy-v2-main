@@ -190,7 +190,7 @@ function weekScoringMode(settings: unknown, seasonYear: number, week: number): s
   return String(s.scoring_mode ?? record(s.scoringSettings).scoringMode ?? 'points')
 }
 
-type PlayerScore = { playerId: string; points: number; isStarter: boolean }
+type PlayerScore = { playerId: string; points: number; isStarter: boolean; isFinalized?: boolean }
 
 /**
  * What each player counted for in one team's week, or null when the week has not been scored for it.
@@ -221,12 +221,12 @@ async function loadWeekPlayerScores(args: {
           source: NATIVE_PLAYER_SCORE_SOURCE,
           rosterId: { in: [...seatOf.values()] },
         },
-        select: { playerId: true, rosterId: true, points: true, isStarter: true },
+        select: { playerId: true, rosterId: true, points: true, isStarter: true, isFinalized: true },
       })
       .catch(() => [])
     for (const [rosterId, seat] of seatOf) {
       const mine = rows.filter((r) => r.rosterId === seat)
-      if (mine.length) out.set(rosterId, mine.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter })))
+      if (mine.length) out.set(rosterId, mine.map((r) => ({ playerId: r.playerId, points: r.points, isStarter: r.isStarter, isFinalized: r.isFinalized })))
     }
   }
   for (const rosterId of args.redraftRosterIds) {

@@ -18,7 +18,11 @@
 /* ── Shared card ─────────────────────────────────────────────────────── */
 .rdh-card{display:flex;flex-direction:column;gap:14px;min-width:0;padding:22px 24px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--text)}
 .rdh-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
-.rdh-label,.rdh-card .rdh-label{margin:0;letter-spacing:.12em;color:var(--muted);font:700 12px/1.3 var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace);letter-spacing:.12em;text-transform:uppercase}
+/* Card titles are sentence-case sans, not mono caps (2026-11-06): mono caps are kept for data — tags,
+ * the score bug's "Win chance", the playoff line. The shared .nl-card-label gets the same treatment, for
+ * redraft only. */
+.rdh-label,.rdh-card .rdh-label{margin:0;color:var(--muted);font:700 13px/1.3 var(--font-archivo,'Archivo',system-ui,sans-serif);letter-spacing:0}
+.nl-workspace[data-format=redraft] .nl-card-label{font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-size:13px;line-height:1.3;letter-spacing:0;text-transform:none}
 .rdh-card-note{color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
 .rdh-accent-text{color:var(--rd-accent-text,var(--accent))}
 .rdh-mono{font-family:var(--font-jetbrains-mono,'JetBrains Mono',ui-monospace,monospace)}

@@ -289,12 +289,11 @@ export const ZOMBIE_SPORT_CONFIGS: Record<string, ZombieSportConfig> = {
   ncaab: {
     sport: 'ncaab',
     label: 'College Basketball',
-    // Mirrors NBA zombie shape.
-    positions: ['PG', 'SG', 'SF', 'PF', 'C', 'FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX'],
-    rosterSize: 14,
-    starterCount: 10,
-    benchCount: 4,
-    irSlots: 2,
+    positions: ['G', 'G', 'F', 'F', 'C'],
+    rosterSize: 8,
+    starterCount: 5,
+    benchCount: 3,
+    irSlots: 0,
     lineupFrequency: 'daily',
     scoringWindow: 'Daily games; weekly aggregate determines matchup winner',
     lockRule: 'Tip-off locks per player per day',

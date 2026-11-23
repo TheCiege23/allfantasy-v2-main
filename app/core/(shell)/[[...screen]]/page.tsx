@@ -242,7 +242,10 @@ import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
-import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
+import { resolveCorePaywall, resolveCoreDepth } from '@/lib/core-app/corePaywall'
+import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { loadDailyStreak } from '@/lib/core-app/dailyStreakStore'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
@@ -290,6 +293,7 @@ import { CoreScreenArea } from '@/components/core-app/coreNavPending'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { PublishRailScores } from '@/components/core-app/railScores'
+import { createRailGate, openRailGate } from '@/lib/core-app/railAfterCards'
 import { recordCompletedSpan, recordRootDuration, recordRootNumber } from '@/lib/observability/rootTiming'
 import { loopBusyPctSince, markLoop } from '@/lib/observability/loopBusy'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
@@ -1168,8 +1172,16 @@ export default async function AfCorePage({
    * The league-first landing still waits too: it needs the answer before it can redirect.
    *
    * A failure is null and the rail simply renders names and crests, as before.
+   *
+   * 🛑 ON THE CROSS-LEAGUE HOME IT NOW STARTS AFTER THE HOME'S CARDS (2026-11-22, owner's OK). Building the
+   * rail's boards beside the cards held the server at 90–95% busy and slowed every card; see railAfterCards.ts.
+   * Every other screen, and the league-first landing, starts it at once, as before.
    */
-  const railMatchupsRead = timeShell('railMatchups', getRailMatchups(
+  const railGate =
+    activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId && !leagueFirstLanding
+      ? createRailGate()
+      : openRailGate()
+  const railMatchupsRead = railGate.opened.then(() => timeShell('railMatchups', getRailMatchups(
     userId,
     playedLeagues.map((l) => ({
       id: l.id,
@@ -1185,7 +1197,7 @@ export default async function AfCorePage({
           isDynasty: l.isDynasty,
         }) === 'guillotine',
     })),
-  ).catch(() => null))
+  ).catch(() => null)))
   const shellReads = Promise.all([
     timeShell('activity', getCoreActivitySnapshot(
       playedLeagues.map((league) => league.id),
@@ -1743,6 +1755,7 @@ export default async function AfCorePage({
         homeScope,
         favoriteIds,
         weekLineups: null,
+        releaseRailAfter: railGate.releaseAfter,
         weekLineupsRead: railMatchupsRead.then((railMatchups) =>
           railMatchups ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek } : null,
         ),
@@ -1957,7 +1970,7 @@ export default async function AfCorePage({
         it does when the read fails.
       */}
       <Suspense fallback={null}>
-        <RailScoresSlot read={railMatchupsRead} />
+        <RailScoresSlot read={railMatchupsRead} afAccess={resolveCoreDepth(userId, 'af_intelligence', { email: session?.user?.email ?? null }).catch(() => null)} />
       </Suspense>
 
       {/*
@@ -1991,8 +2004,16 @@ async function LeagueDataCoverageSection({ record }: { record: LeagueDataCoverag
 }
 
 /** The rail's matchup scores and week label, published to the shell once the rail's read lands. */
-async function RailScoresSlot({ read }: { read: Promise<Awaited<ReturnType<typeof getRailMatchups>> | null> }) {
-  const railMatchups = await read
+async function RailScoresSlot({
+  read,
+  afAccess,
+}: {
+  read: Promise<Awaited<ReturnType<typeof getRailMatchups>> | null>
+  /** AF Intelligence: the rail's AF projection is withheld from a viewer whose plan does not include it. */
+  afAccess: Promise<CoreDepthAccess | null>
+}) {
+  const [rawRail, access] = await Promise.all([read, afAccess])
+  const railMatchups = afIntelligenceFor(rawRail, access)
   if (!railMatchups) return null
   return (
     <PublishRailScores
@@ -2129,6 +2150,11 @@ type CoreScreenContext = {
    * never waits for it. The cross-league home shows no lineups and skips the wait.
    */
   weekLineupsRead: Promise<WeekLineups | null>
+  /**
+   * Lets the rail's matchup read start once these settle (lib/core-app/railAfterCards.ts). Only the cross-league
+   * home holds a closed gate; everywhere else this is a no-op.
+   */
+  releaseRailAfter: (cards: Promise<unknown>) => void
   /** Home sections switched off in Settings → Home page — lib/core-app/homeSections.ts. */
   hiddenHomeSections: ReadonlySet<HomeSectionId>
   hiddenLeagueSections: LeagueSectionId[]
@@ -2256,15 +2282,13 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
    * got nothing and no error. Found on the live page (2026-10-03), not by a test: the tests handed
    * the access in directly. war-room-visual-guards now pins this list.
    */
-  const corePaywallRead =
-    activeKey === 'players' ||
-    activeKey === 'trades' ||
-    activeKey === 'commissioner' ||
-    activeKey === 'waivers' ||
-    activeKey === 'draft-hq' ||
-    activeKey === 'war-room'
-      ? resolveCorePaywall(userId, { email: viewerEmail, now })
-      : Promise.resolve(null)
+  /*
+   * 2026-11-22: EVERY screen now — AF projections and AF ADP (`af_intelligence`) reach My Team, Matchup,
+   * Your week, Standings, Live and the rest, so a screen without the read would send AF's numbers to a
+   * viewer whose plan does not include them. One plan read, as before; the list above is kept for the
+   * screens whose loaders ALSO skip work for a locked viewer.
+   */
+  const corePaywallRead = resolveCorePaywall(userId, { email: viewerEmail, now })
 
   /*
    * ⚠ THE TRADE CENTER'S TWO READS START HERE, BESIDE THE PAYWALL, not after every await above where
@@ -2660,6 +2684,14 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
     activeKey === 'career' && careerView === 'share' && careerScreen ? toShareCard(careerScreen.data) : null
 
   const corePaywall = await corePaywallRead
+  /*
+   * AF Intelligence (lib/core-app/afIntelligenceWithhold.ts): AF's own projection, its measured factors
+   * and AF ADP leave the server only for AF Pro, AF Commissioner and AF Supreme. Applied to each screen's
+   * data below and to the rail's lineups here, so no screen can forget it.
+   */
+  const afAccess = corePaywall?.af_intelligence ?? null
+  const afGate = <T,>(value: T): T => afIntelligenceFor(value, afAccess)
+  ctx = { ...ctx, weekLineups: afGate(ctx.weekLineups) }
   // Player depth: compare, the trade visual, trade windows and free-agent pickups (AF Pro).
   const playerDepthOpen = corePaywall?.player_depth.unlocked !== false
 
@@ -4659,6 +4691,18 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
       })()
 
   /*
+   * The rail's matchup read waits for these on the cross-league home (lib/core-app/railAfterCards.ts): the heavy
+   * cards the owner reads first — the summary behind Top decisions and the tab badges, Top decisions itself, the
+   * trades card and Since your last visit. Settled is enough; a failed card must not hold the rail back. Anywhere
+   * else the gate is already open and this does nothing.
+   */
+  ctx.releaseRailAfter(
+    homeLoads
+      ? Promise.allSettled([homeLoads.dash34, homeLoads.userOs, homeLoads.trades, homeLoads.brief])
+      : Promise.resolve(),
+  )
+
+  /*
    * ⚠ THE CROSS-LEAGUE DRAFT HQ BOARD reads the same aggregate the home's drafts band does —
    * the home now starts its own copy above, and this screen awaits it here. They are different
    * screens, so it is still one read per render.
@@ -4976,7 +5020,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           tradeDeadline={homeTradeDeadline}
-          lineups={homeLineups}
+          lineups={afGate(homeLineups)}
           /* The rail's row for this league, so the Overview's headline and the rail say the same standing (2026-11-13). */
           rail={ctx.weekLineups?.byLeague[leagueHome.league.id] ?? null}
           /*
@@ -5073,7 +5117,8 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
               with its "Ask Chimmy" button. Best Ball keeps its own actions card: it has no lineup to set.
             */}
             {myTeam.preDraft || myTeam.eliminated || myTeam.completed ? null : myTeam.league.bestBall ? <LineupIntelligenceActions leagueId={myTeam.league.id} leagueName={myTeam.league.name} bestBall /> : null}
-            <MyTeam data={myTeam} />
+            <MyTeam data={afGate(myTeam)} />
+            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_my_team" benefit={language === 'es' ? undefined : "AllFantasy's own projection for every player — the provider line adjusted for form, minutes, rest, opponent and the rest, each one measured on games already played."} /> : null}
           </>
         ) : myTeamLoadFailed ? (
           /* The read failed for a league the user HAS selected — say so, and keep
@@ -5099,7 +5144,8 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
           <>
             {survivorBanner('compact')}
             {chimmyMovesCard}
-            <Matchup data={matchup} />
+            <Matchup data={afGate(matchup)} />
+            {afAccess && !afAccess.unlocked ? <CoreDepthLock access={afAccess} lang={language} source="lock_af_projections_matchup" benefit={language === 'es' ? undefined : "AllFantasy's own projection for every player — the provider line adjusted for form, minutes, rest, opponent and the rest, each one measured on games already played."} /> : null}
           </>
         ) : matchupLoadFailed ? (
           <ScreenLoadError screen={navLabel('matchup')} retryHref={retryHref} language={language} />
@@ -5191,7 +5237,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'waivers' ? (
         waivers ? (
-          <Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
+          <Waivers data={afGate(waivers)} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />
         ) : waiversLoadFailed ? (
           <ScreenLoadError screen={navLabel('waivers')} retryHref={retryHref} language={language} />
         ) : (
@@ -5328,7 +5374,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
               before and after.
             */}
             <DraftHq
-              data={draftHq}
+              data={afGate(draftHq)}
               edge={draftEdge}
               edgeAccess={draftEdgeAccess}
               live={
@@ -5341,7 +5387,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
                     }
                   : null
               }
-              board={draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
+              board={draftBoard?.session.available ? <DraftBoard data={afGate(draftBoard)} /> : null}
             />
             {draftArchiveFirst || !draftArchiveSlot ? null : (
               <details className="af-dh-past" data-testid="draft-hq-past-drafts">
@@ -5579,15 +5625,15 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
         <PlayerFinder
           query={playerQuery}
           sport={playerSport}
-          matches={playerMatches}
-          detail={playerDetail}
+          matches={afGate(playerMatches)}
+          detail={afGate(playerDetail)}
           leagueCount={playerDetail ? finderPlayerLeagueIds.length : homeLeagueIds.length}
           selectedLeagueId={selectedLeagueId}
           shares={playerShares}
           homeSports={finderHomeSports}
           following={playerFollowing}
           followingPlayer={followingOpenPlayer}
-          weeklyMvp={weeklyMvp}
+          weeklyMvp={afGate(weeklyMvp)}
           trendingFreeIn={trendingFreeIn}
           leagueShares={playerLeagueShares}
           pickLeagues={playedLeagues.filter((l) => !playerDetail || String(l.sport ?? 'NFL').toUpperCase() === playerDetail.player.sport).map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
@@ -5597,15 +5643,15 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
           depthChart={depthChart}
           whoStartsHim={whoStartsHim}
           valueTrend={valueTrend}
-          matchupOutlook={matchupOutlook}
-          leagueView={playerLeagueView}
+          matchupOutlook={afGate(matchupOutlook)}
+          leagueView={afGate(playerLeagueView)}
           recent={recentPlayerSearches}
           trendingAdds={trendingAdds}
           tradeVisual={playerTradeVisual}
           presence={playerPresence}
           windows={playerWindows.length > 0 ? playerWindows : null}
           windowsUnread={playerWindowsUnread}
-          compare={playerCompare}
+          compare={afGate(playerCompare)}
           compareRequested={Boolean(vsRef)}
           depthAccess={corePaywall?.player_depth ?? null}
           depth={playerDepth}
@@ -5663,7 +5709,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
                * ranked columns above it are a summary, not a replacement — a
                * manager who wants every game still has one page that lists them.
                */
-              <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
+              <YourWeek data={afGate(weekBoard)} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
             ) : (
               <>
                 <WeekGuide
@@ -5756,7 +5802,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
             data={standings}
             freshness={standingsFreshness}
             view={standingsView}
-            lineups={standingsLineups}
+            lineups={afGate(standingsLineups)}
             odds={standingsOdds}
             efficiency={standingsEfficiency}
             draftOrder={standingsDraftOrder}
@@ -5794,7 +5840,7 @@ async function CoreScreenBodyRender({ ctx }: { ctx: CoreScreenContext }) {
           />
         ) : liveScores ? (
           <LiveScores
-            data={liveScores}
+            data={afGate(liveScores)}
             selectedLeagueId={selectedLeagueId}
             matchupStrip={liveMatchupStrip}
             leagueGames={liveLeagueGames ? { ...liveLeagueGames, weekFinal: liveLeagueWeekFinal } : null}

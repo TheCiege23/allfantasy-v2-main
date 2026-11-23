@@ -9,6 +9,7 @@ import { realManagerName, rosterLabel } from '@/lib/core-app/managerName'
 import { getNativeRailMatchups } from '@/lib/core-app/nativeRailMatchups'
 import { eliminationFormat } from '@/lib/core-app/railMatchupMode'
 import { readEliminationField } from '@/lib/core-app/railMatchups'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       updates[leagueId] = { ...row, updatedAt: now, fieldStanding: row.standing ?? null }
     }
     const unavailable = ids.filter(id => !authorized.some(team => team.league?.id === id) && !native.byLeague[id])
-    if (authorized.length === 0) return NextResponse.json({ updates, unavailable }, { headers })
+    if (authorized.length === 0) return await afJson(session.user.id, { updates, unavailable }, { headers })
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId: { in: authorized.map(team => team.league!.id) } },
       select: { leagueId: true, externalId: true, teamName: true, ownerName: true, avatarUrl: true },
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     const current = currentSleeperWeek(await sleeperRailFeed('state/nfl', 60_000))
     if (!current) {
       if (Object.keys(updates).length > 0) {
-        return NextResponse.json({ updates, unavailable: [...unavailable, ...authorized.map(team => team.league!.id)] }, { headers })
+        return await afJson(session.user.id, { updates, unavailable: [...unavailable, ...authorized.map(team => team.league!.id)] }, { headers })
       }
       return NextResponse.json({ error: 'No active NFL regular-season week' }, { status: 503, headers })
     }
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
         } catch { unavailable.push(league.id) }
       }))
     }
-    return NextResponse.json({ updates, unavailable }, { headers })
+    return await afJson(session.user.id, { updates, unavailable }, { headers })
   } catch {
     return NextResponse.json({ error: 'Scores temporarily unavailable' }, { status: 503, headers })
   }

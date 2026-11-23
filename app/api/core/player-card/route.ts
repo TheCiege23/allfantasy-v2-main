@@ -9,6 +9,7 @@ import { getPlayerCard } from '@/lib/core-app/playerCard'
 import { applyPlayerCardDepth } from '@/lib/core-app/playerCardDepth'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 import { getPlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 /**
  * The player card pop-up's payload — STATE 6 / STATE 7 of the 2026-09-07 design
@@ -80,7 +81,7 @@ export async function GET(req: Request) {
     if (!parsed.data.sleeperId) return NextResponse.json({ error: 'sleeperId is required' }, { status: 400 })
     const impact = await getPlayerLeagueImpact({ userId, rosterPlayerId: parsed.data.sleeperId }).catch(() => null)
     if (!impact) return NextResponse.json({ error: 'Impact unavailable' }, { status: 503 })
-    return NextResponse.json({ impact }, { headers: { 'Cache-Control': 'private, no-store' } })
+    return await afJson(userId, { impact }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
 
   let leagueId: string | null = null
@@ -106,5 +107,5 @@ export async function GET(req: Request) {
 
   if (!card) return NextResponse.json({ error: 'Player not found' }, { status: 404 })
 
-  return NextResponse.json(applyPlayerCardDepth(card, depth), { headers: { 'Cache-Control': 'private, no-store' } })
+  return await afJson(userId, applyPlayerCardDepth(card, depth), { headers: { 'Cache-Control': 'private, no-store' } })
 }

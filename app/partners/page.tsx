@@ -16,6 +16,7 @@ import { ActivityChart } from '@/components/partners/ActivityChart'
 import { DecisionBars } from '@/components/partners/DecisionBars'
 import { PartnerInquiryForm } from '@/components/partners/PartnerInquiryForm'
 import { TradeMarketBars } from '@/components/partners/TradeMarketBars'
+import { LiveIntelligencePanels } from '@/components/partners/LiveIntelligencePanels'
 import { tradeMarketPanelReleased } from '@/lib/partner-portal/tradeMarketRelease'
 import {
   Card,
@@ -62,6 +63,13 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
         .then(async ([{ prisma }, { loadLearnedMarketReport }, { realTradeMarketRows }]) => realTradeMarketRows(await loadLearnedMarketReport(prisma as never)))
         .catch(() => null)
     : null
+  /*
+   * The live panels (2026-11-22): the graded record, projection accuracy and AF ADP movers, from what the scheduled
+   * jobs already store. A failed read shows each panel's "still measuring" line, never sample numbers.
+   */
+  const live = await Promise.all([import('@/lib/prisma'), import('@/lib/partner-portal/liveIntelligence')])
+    .then(([{ prisma }, { loadLiveIntelligence }]) => loadLiveIntelligence(prisma as never))
+    .catch(() => null)
 
   return (
     <main className="min-h-screen bg-[#050814] text-white">
@@ -153,6 +161,8 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
               <TradeMarketBars rows={realTradeMarket ?? DEMO_TRADE_MARKET} />
             </Card>
           ) : null}
+
+          {live ? <LiveIntelligencePanels data={live} /> : null}
 
           <Card title="Data quality" subtitle="How fresh and complete the data is, per source — including where it falls short.">
             <DataQualityTable rows={DEMO_DATA_QUALITY} />

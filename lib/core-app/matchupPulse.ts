@@ -23,6 +23,7 @@ import { weeklyFormat } from './weeklyCapabilities'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { EMPTY_SLOT, forecastMatchup, type ForecastSide } from './matchupForecast'
 import { isBestBallSettings } from './lineupMode'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -737,10 +738,11 @@ export async function getMatchupPulse(
   const everyStarter = [
     ...new Set([...lineups.values()].flatMap((l) => [...l.you, ...l.them]).filter((id) => id !== EMPTY_SLOT)),
   ]
-  const weekPricesP = loadLeagueRosterWeeks(pending.map(p => {
+  // AF Intelligence: a locked viewer's pulse is priced without AF's learned factors.
+  const weekPricesP = viewerHasAfIntelligence(userId).then((afIntelligence) => loadLeagueRosterWeeks(pending.map(p => {
     const lineup = lineups.get(p.leagueId)
     return { leagueId: p.leagueId, season: p.season, week: p.week, ids: [...(lineup?.you ?? []), ...(lineup?.them ?? [])] }
-  }))
+  }), { afIntelligence }))
 
   /*
    * ── 6. Per-player points and game states, read alongside the projections. ──

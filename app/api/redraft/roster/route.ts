@@ -44,6 +44,7 @@ import {
 } from '@/lib/player-identity/rollingInsightsCrosswalk'
 import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from '@/lib/core-app/rosterIdCrosswalk'
 import { BEST_BALL_LINEUP_CODE, BEST_BALL_LINEUP_MESSAGE, lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -565,7 +566,7 @@ export async function GET(req: NextRequest) {
     rosterConfig,
   })
 
-  return NextResponse.json({
+  return await afJson(userId, {
     roster: {
       ...roster,
       players: hydratedPlayers,

@@ -321,7 +321,9 @@
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-art{filter:grayscale(.85) brightness(.8)}
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-line{color:#d2bdb0}
 @media(max-width:767px){
-  .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
+  /* .nl-workspace raises this above the generic phone `.nl-workspace .nl-league-heading{padding-top:0}` further down,
+     which is right for the borderless headings and put this bordered card's title on its top edge. */
+  .nl-workspace .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name h1{font-size:22px;margin:0 0 4px}
   .nl-heading-name .nl-guillotine-line{order:2;font-size:12px;margin:0 0 4px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name>p:not(.nl-guillotine-line){order:2}
@@ -400,3 +402,7 @@
 .nl-synced-bar .nl-synced-open{color:var(--gold)!important;border-color:color-mix(in srgb,var(--gold) 35%,transparent)}
 .nl-heading-name .nl-synced-note{flex-basis:100%;margin:0;font-size:12px;line-height:1.45;color:var(--text2)}
 @media (max-width:767px){.nl-synced-bar .nl-button{min-height:44px}}
+/* Phone, dynasty: the banner is an art-backed CARD (rule above), so it needs a card's padding. The generic phone rules
+   (.nl-league-heading{padding:10px 0 0}, .nl-workspace .nl-league-heading{padding-top:0}) are written for the
+   transparent redraft heading and put this card's title 0px from its top edge. __tests__/dynasty/dynastyBannerPhone.test.ts */
+@media(max-width:767px){.nl-workspace[data-dynasty-background=true] .nl-league-heading{padding:14px}}

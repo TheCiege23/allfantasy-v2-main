@@ -41,6 +41,7 @@ import {
   triggerDraftPoolPrewarmBackground,
   waitForInFlightDraftPoolBuild,
 } from '@/lib/draft-room/ensureDraftPoolReady'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -265,7 +266,7 @@ export async function GET(
         })
         const outward = { ...payload } as DraftPoolResponseBody
         await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
-        const response = NextResponse.json(outward, { status: 200 })
+        const response = await afJson(userId, outward, { status: 200 })
         response.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
         return response
       }
@@ -299,7 +300,7 @@ export async function GET(
         : ({ entries: [] } as DraftPoolResponseBody)
     const outward = { ...payloadBody } as DraftPoolResponseBody
     await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
-    const response = NextResponse.json(outward, { status: cached.status })
+    const response = await afJson(userId, outward, { status: cached.status })
     for (const [header, value] of Object.entries(cached.headers)) {
       response.headers.set(header, value)
     }
@@ -327,7 +328,7 @@ export async function GET(
         console.info('[draft/pool GET] cache hit', { layer: 'db-stale', leagueId, cacheKey, entryCount: stale.entryCount, elapsedMs: Date.now() - routeStartedAt })
         const outward = { ...payload } as DraftPoolResponseBody
         await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
-        const response = NextResponse.json(outward, { status: 200 })
+        const response = await afJson(userId, outward, { status: 200 })
         response.headers.set('Cache-Control', 'private, no-cache')
         return response
       }
@@ -357,7 +358,7 @@ export async function GET(
         console.info('[draft/pool GET] cache hit', { layer: 'joined-prewarm', leagueId, cacheKey, elapsedMs: Date.now() - routeStartedAt })
         const outward = { ...payload } as DraftPoolResponseBody
         await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
-        const response = NextResponse.json(outward, { status: 200 })
+        const response = await afJson(userId, outward, { status: 200 })
         response.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
         return response
       }
@@ -458,7 +459,7 @@ export async function GET(
         : ({ entries: [] } as DraftPoolResponseBody)
     const outward = { ...payloadBody } as DraftPoolResponseBody
     await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
-    const res = NextResponse.json(outward)
+    const res = await afJson(userId, outward)
     res.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
 
     const payloadObj = payload as {
