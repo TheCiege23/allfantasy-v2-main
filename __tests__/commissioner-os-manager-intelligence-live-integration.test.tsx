@@ -11,12 +11,13 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const h = vi.hoisted(() => ({ session: vi.fn(), league: vi.fn(), load: vi.fn(), transport: vi.fn() }))
+const h = vi.hoisted(() => ({ session: vi.fn(), league: vi.fn(), load: vi.fn(), transport: vi.fn(), ready: vi.fn() }))
 vi.mock("next-auth", () => ({ getServerSession: h.session }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("@/lib/commissioner-ui/resolveActiveLeagueId", () => ({ resolveActiveLeagueId: h.league }))
 vi.mock("@/lib/competitive-edge/managerRecordLoader", () => ({ loadLeagueManagerRecords: h.load }))
 vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: h.transport }))
+vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: h.ready }))
 
 import { liveManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/live"
 import { demoManagerDirectory } from "@/lib/commissioner-ui/managers/decision-os-client/demo"
@@ -27,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.session.mockResolvedValue({ user: { id: "u1" } })
   h.league.mockResolvedValue("L1")
+  h.ready.mockResolvedValue(true)
   h.load.mockResolvedValue({ available: true, data: { league: { id: "L1", name: "X", platform: "sleeper" }, viewerTeamExternalId: "demo-mgr-1", records: RECORDS } })
 })
 
@@ -38,6 +40,15 @@ describe("Managers live client", () => {
     expect(r.data!.map((m) => m.managerName)).toEqual(["Priya Natarajan", "Sam Rivera", "Marcus Webb", "Devon Okafor"])
     expect(r.data![0]!.id).toBe("demo-mgr-1")
     expect(h.load).toHaveBeenCalledWith({ leagueId: "L1", userId: "u1", includeViewer: true })
+  })
+
+  it("the owner's switch (commissioner_os_live_ready_managers) turns the screen off, with no read", async () => {
+    h.ready.mockResolvedValue(false)
+    const r = await liveManagerIntelligenceClient.getManagerDirectory()
+    expect(h.ready).toHaveBeenCalledWith("managers")
+    expect(r.data).toBeNull()
+    expect(r.error?.message).toMatch(/switched off/)
+    expect(h.load).not.toHaveBeenCalled()
   })
 
   it("never calls the retired Decision OS route", async () => {
