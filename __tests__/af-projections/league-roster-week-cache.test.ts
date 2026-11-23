@@ -93,17 +93,26 @@ describe('the rail week boards: a pool of four, not lockstep batches (2026-11-22
     expect([...result.keys()].sort()).toEqual(['L0', 'L1', 'L2', 'L3', 'L4', 'L5'])
   })
 
-  it('says how many boards were rebuilt when building them is slow, and nothing when it is fast', async () => {
+  it('says where the boards came from when loading them is slow, and nothing when it is fast', async () => {
     const { logBoardTiming } = await import('@/lib/af-projections/leagueRosterWeek')
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
     try {
-      logBoardTiming(900, [800, 1, 2])
+      logBoardTiming(900, [{ leagueId: 'A', ms: 800, source: 'built' }])
       expect(info).not.toHaveBeenCalled()
-      logBoardTiming(12_500, [1, 2, 300, 900, 4000])
+      logBoardTiming(12_500, [
+        { leagueId: 'A', ms: 1, source: 'memory' }, { leagueId: 'B', ms: 40, source: 'stored' },
+        { leagueId: 'C', ms: 300, source: 'built' }, { leagueId: 'D', ms: 900, source: 'built' },
+        { leagueId: 'E', ms: 4000, source: 'built' }, { leagueId: 'F', ms: 30, source: 'stale' },
+        { leagueId: 'G', ms: 5, source: 'failed' },
+      ])
       expect(info).toHaveBeenCalledTimes(1)
       const [tag, payload] = info.mock.calls[0] as [string, string]
       expect(tag).toBe('[rail-boards-timing]')
-      expect(JSON.parse(payload)).toEqual({ boards: 5, rebuilt: 3, bound: 4, totalMs: 12_500, slowestMs: 4000, medianRebuildMs: 900 })
+      expect(JSON.parse(payload)).toEqual({
+        boards: 7, built: 3, stored: 1, stale: 1, memory: 1, failed: 1, bound: 4, totalMs: 12_500,
+        slowestMs: 4000, medianBuildMs: 900,
+        slowestLeagues: [{ leagueId: 'E', ms: 4000, source: 'built' }, { leagueId: 'D', ms: 900, source: 'built' }, { leagueId: 'C', ms: 300, source: 'built' }],
+      })
     } finally { info.mockRestore() }
   })
 })

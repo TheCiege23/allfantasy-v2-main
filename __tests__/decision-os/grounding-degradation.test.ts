@@ -41,6 +41,25 @@ vi.mock('@/lib/decision-os/grounding/decisionBridge', async (importOriginal) => 
   ...(await importOriginal<object>()),
   loadCommissionerHealthDecisionSlice: vi.fn(async () => null),
 }))
+// The IDP/kicker read — real unless a test makes it hang (the second-hop late-log test below).
+const idpKicker = vi.fn()
+vi.mock('@/lib/decision-os/grounding/idpKickerSlice', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  loadIdpKickerValueSlice: (...a: unknown[]) => idpKicker(...a),
+}))
+// The roster-projection hop — real unless a test overrides it (same second-hop late-log tests).
+let rosterBasisOverride: (() => Promise<unknown>) | null = null
+let priceRosterOverride: (() => Promise<unknown>) | null = null
+vi.mock('@/lib/decision-os/grounding/rosterLeagueProjections', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/decision-os/grounding/rosterLeagueProjections')>()
+  return {
+    ...actual,
+    loadRosterProjectionBasis: (...a: Parameters<typeof actual.loadRosterProjectionBasis>) =>
+      rosterBasisOverride ? rosterBasisOverride() : actual.loadRosterProjectionBasis(...a),
+    priceRosterForLeague: (...a: Parameters<typeof actual.priceRosterForLeague>) =>
+      priceRosterOverride ? priceRosterOverride() : actual.priceRosterForLeague(...a),
+  }
+})
 vi.mock('@/lib/decision-os/import-os', () => ({
   createImportOsLoaders: () => ({ loadAssertions }),
 }))
@@ -853,6 +872,49 @@ describe('🛑 one late read costs ITS slice, never the packet (re-score 2026-11
     expect(late?.ms).toBeGreaterThanOrEqual(PACKET_SLICE_DEADLINE_MS - 50)
     expect(serializeDecisionOsGroundingForPrompt(p)).toMatch(/did not finish in time/)
   }, 10_000)
+
+  it('🛑 a SECOND-HOP read that runs out of time is in the late-slice log too (2026-11-23)', async () => {
+    // IDP/kicker goes through withSliceDeadline, not withinBudget — so it used to be a gap in one prompt and absent
+    // from the log. Its own late gap is kept; only the log learns about it.
+    const { IDP_KICKER_DEADLINE_MS } = await import('@/lib/decision-os/grounding/packet')
+    idpKicker.mockImplementation(never)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, idpKicker: true } })
+    const call = warn.mock.calls.find((c) => c[0] === '[decision-os/packet] slices did not finish in time')
+    warn.mockRestore()
+    expect(call?.[1]).toMatchObject({ slices: ['idpKickerValues'], secondHopDeadlineMs: IDP_KICKER_DEADLINE_MS })
+    expect((call?.[1] as { ms: Record<string, number> }).ms.idpKickerValues).toBeGreaterThanOrEqual(IDP_KICKER_DEADLINE_MS - 50)
+    expect(p.idpKickerValues?.present).toBe(false)
+    expect(p.idpKickerValues?.gap?.detail).toBe('IDP and kicker values did not finish in time for this answer.')
+    // Everything else still arrived.
+    expect(p.marketValues.present).toBe(true)
+  }, 10_000)
+
+  it('🛑 …and so is the roster-projection hop (2026-11-23)', async () => {
+    rosterBasisOverride = async () => ({ ok: true })
+    priceRosterOverride = never
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const p = await buildDecisionOsGroundingPacket(ARGS)
+      const call = warn.mock.calls.find((c) => c[0] === '[decision-os/packet] slices did not finish in time')
+      expect(call?.[1]).toMatchObject({ slices: ['rosterProjections'] })
+      expect(p.rosterProjections?.present).toBe(false)
+      expect(p.rosterProjections?.gap?.detail).toMatch(/did not finish in time/)
+    } finally {
+      warn.mockRestore()
+      rosterBasisOverride = null
+      priceRosterOverride = null
+    }
+  }, 10_000)
+
+  it('a second-hop read that finishes in time is NOT logged as late', async () => {
+    idpKicker.mockResolvedValue({ present: false, value: null, asOf: null, servedFrom: null, confidence: null, conclusive: { ok: true }, gap: { reason: 'not_computed', detail: 'none', remedy: 'none' } })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, idpKicker: true } })
+    const call = warn.mock.calls.find((c) => c[0] === '[decision-os/packet] slices did not finish in time')
+    warn.mockRestore()
+    expect(call).toBeUndefined()
+  })
 
   it('the context engine going late labels all nine of its slices as late — not "the engine did not return"', async () => {
     const { SLICE_LATE_GAP } = await import('@/lib/decision-os/grounding/packet')

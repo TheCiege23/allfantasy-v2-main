@@ -62,7 +62,8 @@ import {
 import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import '@/components/core-app/af-core.css'
 import '@/components/app/draft-room/af-draft-room.css'
-import { AF_ADP_LOCKED_TITLE, AfAdpLockedHeader, afAdpLockOf } from '@/components/app/draft-room/afAdpLock'
+import { AfAdpLockedHeader, afAdpLockedTitle, afAdpLockOf } from '@/components/app/draft-room/afAdpLock'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -874,6 +875,7 @@ export default function MockDraftSleeperRoomClient({
   const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
   // AF ADP's lock (components/app/draft-room/afAdpLock.tsx), read off the pool response.
   const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
+  const afAdpTitle = afAdpLockedTitle(useOptionalLanguage().language)
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -2493,7 +2495,7 @@ export default function MockDraftSleeperRoomClient({
               {mockCopy.rookiesOnly}
             </label>
             {afAdpLock ? (
-              <span className="inline-flex items-center gap-2" title={AF_ADP_LOCKED_TITLE}>
+              <span className="inline-flex items-center gap-2" title={afAdpTitle}>
                 <AfAdpLockedHeader lock={afAdpLock} label={`${mockCopy.sortBy} ${ADP_LABEL_AF}`} source="lock_af_adp_mock_draft" />
               </span>
             ) : (
@@ -2591,7 +2593,7 @@ export default function MockDraftSleeperRoomClient({
                     <span
                       className="font-mono text-[11px] font-semibold"
                       style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
-                      title={afAdpLock && player.afAdp == null ? AF_ADP_LOCKED_TITLE : afAdpCellTitle({
+                      title={afAdpLock && player.afAdp == null ? afAdpTitle : afAdpCellTitle({
                         hasValue: player.afAdp != null,
                         contributions: player.afAdpContributions ?? null,
                         importedSampleSize: player.afAdpImportedSampleSize ?? null,

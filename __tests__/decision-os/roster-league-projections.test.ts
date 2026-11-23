@@ -94,9 +94,10 @@ describe('🛑 foreign roster ids', () => {
 })
 
 describe('refusals', () => {
-  it('a league outside NFL and the board sports is not_requested, with no query', async () => {
+  it('a league outside NFL, NCAAF and the board sports is not_requested, with no query', async () => {
     const loadLeague = vi.fn()
-    const basis = await loadRosterProjectionBasis({ leagueId: 'lg', sport: 'NCAAF' }, deps({ loadLeague }))
+    // NCAAF is priced since 2026-11-23 (roster-season-rate-projections.test.ts); a sport nothing prices stays refused.
+    const basis = await loadRosterProjectionBasis({ leagueId: 'lg', sport: 'WNBA' }, deps({ loadLeague }))
     expect(basis).toMatchObject({ ok: false, gap: { reason: 'not_requested' } })
     expect(loadLeague).not.toHaveBeenCalled()
   })

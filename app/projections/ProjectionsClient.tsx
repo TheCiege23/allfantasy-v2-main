@@ -2,6 +2,7 @@
 
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -187,7 +188,7 @@ export function ProjectionsClient() {
                   access={afLock}
                   lang={language}
                   source="lock_af_projections"
-                  benefit={language === 'es' ? undefined : "AllFantasy's own number for every player — the provider line adjusted for form, minutes, rest, opponent and the rest — plus rest of season. The baseline stays free."}
+                  benefit={coreDepthLockCopy(language).afProjectionsBoardBenefit}
                 />
               </div>
             ) : null}

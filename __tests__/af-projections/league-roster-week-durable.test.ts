@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * The rail's week boards outlive a deploy (lib/af-projections/leagueRosterWeek.ts, 2026-11-22). A board built by
- * another process — or before a deploy — is read back from Postgres instead of rebuilt; one up to 33 minutes old is
+ * another process — or before a deploy — is read back from Postgres instead of rebuilt; one up to three hours old is
  * served at once and rebuilt behind it; an older one is rebuilt first. Who is ruled out is never cached.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -61,7 +61,7 @@ describe('rail week boards kept across deploys', () => {
     expect(metrics).toHaveBeenCalledOnce()
   })
 
-  it('serves a board up to 33 minutes old at once, and rebuilds it behind the view', async () => {
+  it('serves a board past three minutes old at once, and rebuilds it behind the view', async () => {
     stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
     const result = await loadLeagueRosterWeeks(request)
     expect(result.get('L1')?.get('s1')?.points).toBe(12.5)
@@ -100,16 +100,61 @@ describe('rail week boards kept across deploys', () => {
   })
 })
 
-describe('the boards timing line names the slowest leagues', () => {
-  it('lists the three slowest boards by league id, slowest first', async () => {
-    const { logBoardTiming } = await import('@/lib/af-projections/leagueRosterWeek')
+describe('the boards timing line says where each board came from (2026-11-22)', () => {
+  /*
+   * 🛑 TIMING ALONE COULD NOT TELL A STORED BOARD FROM A REBUILT ONE. The first version called anything slower than
+   * 5 ms "rebuilt"; once boards came from Postgres, a stored read is slower than that, and production logged
+   * "47 of 47 rebuilt" for boards that were read, not built. These read the line a real load writes.
+   */
+  async function sourcesOf(run: () => Promise<unknown>) {
+    const { __setBoardTimingThresholdForTests } = await import('@/lib/af-projections/leagueRosterWeek')
+    __setBoardTimingThresholdForTests(0)
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
     try {
-      logBoardTiming(9000, [100, 3700, 260, 2500], [
-        { leagueId: 'A', ms: 100 }, { leagueId: 'B', ms: 3700 }, { leagueId: 'C', ms: 260 }, { leagueId: 'D', ms: 2500 },
-      ])
-      const payload = JSON.parse((info.mock.calls[0] as [string, string])[1])
-      expect(payload.slowestLeagues).toEqual([{ leagueId: 'B', ms: 3700 }, { leagueId: 'D', ms: 2500 }, { leagueId: 'C', ms: 260 }])
-    } finally { info.mockRestore() }
+      await run()
+      const line = info.mock.calls.find(([tag]) => tag === '[rail-boards-timing]') as [string, string] | undefined
+      return JSON.parse(line![1]) as Record<string, number>
+    } finally {
+      info.mockRestore()
+      __setBoardTimingThresholdForTests(1500)
+    }
+  }
+
+  it('a fresh stored board is "stored", not "built"', async () => {
+    stored(12.5, 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
+    expect(line).toMatchObject({ boards: 1, stored: 1, built: 0, stale: 0, memory: 0 })
+  })
+
+  it('a board between 3 minutes and 3 hours old is "stale"', async () => {
+    stored(12.5, ROSTER_WEEK_BOARD_TTL_MS + 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request))
+    expect(line).toMatchObject({ stale: 1, built: 0 })
+    await vi.waitFor(() => expect(tier.write).toHaveBeenCalled())
+  })
+
+  it('a fresh recheck (#4093) builds past every cache and is "built"', async () => {
+    stored(12.5, 60_000)
+    const line = await sourcesOf(() => loadLeagueRosterWeeks(request, { fresh: true }))
+    expect(line).toMatchObject({ built: 1, stored: 0 })
+  })
+
+  it('no board anywhere is "built", and the next call in this process is "memory"', async () => {
+    expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ built: 1, stored: 0 })
+    expect(await sourcesOf(() => loadLeagueRosterWeeks(request))).toMatchObject({ memory: 1, built: 0 })
+  })
+})
+
+describe('the stale window is three hours (owner\'s OK, 2026-11-22)', () => {
+  it('serves a two-hour-old board at once instead of making the view wait for 64 rebuilds', async () => {
+    stored(12.5, 2 * 60 * 60_000)
+    const result = await loadLeagueRosterWeeks(request)
+    expect(result.get('L1')?.get('s1')?.points).toBe(12.5)
+    await vi.waitFor(() => expect(tier.write).toHaveBeenCalledTimes(1))
+  })
+
+  it('still rebuilds first past three hours and three minutes', async () => {
+    stored(12.5, 3 * 60 * 60_000 + ROSTER_WEEK_BOARD_TTL_MS + 60_000)
+    expect((await loadLeagueRosterWeeks(request)).get('L1')?.get('s1')?.points).toBe(20)
   })
 })

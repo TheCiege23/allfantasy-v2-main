@@ -6,7 +6,7 @@ import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type { ChatStartCall } from './tools/chimmyTools'
 import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
-import { BENCH_EDGE_LABEL, benchCallRecord, type BenchCalibration } from '@/lib/decision-os/lineup/benchCalibration'
+import { BENCH_EDGE_LABEL, BENCH_SHARE_LABEL, benchCallRecord, benchEdgeScaleFor, type BenchCalibration } from '@/lib/decision-os/lineup/benchCalibration'
 
 /**
  * ONE START/SIT ANSWER: Chimmy reads My Team's (Lineup OS, 2026-11-16 re-score item 6).
@@ -206,10 +206,14 @@ export async function buildMyTeamLineupContext(
       const calibration = await Promise.resolve()
         .then(() => d.calibration({ sport: data.league.sport ?? null, platform: data.league.platform ?? null }))
         .catch(() => null)
-      const record = benchCallRecord(edge, calibration)
+      const record = benchCallRecord(edge, calibration, {
+        scale: benchEdgeScaleFor(data.league.sport ?? null),
+        starterProjected: typeof only?.outProjected === 'number' ? only.outProjected : null,
+      })
       if (record) {
+        const size = record.scale === 'share' ? BENCH_SHARE_LABEL[record.band] : BENCH_EDGE_LABEL[record.band]
         lines.push(
-          `How My Team's bench calls like this have held up: swaps with an edge of ${BENCH_EDGE_LABEL[record.band]} were right ${record.rightPct}% of ${record.decided} graded calls` +
+          `How My Team's bench calls like this have held up: swaps with an edge of ${size} were right ${record.rightPct}% of ${record.decided} graded calls` +
             (record.level === 'low' ? ' — closer than the projections suggest; say this call is closer than it looks.' : '.') +
             ' Quote these numbers if asked how sure this is; never call the swap certain.',
         )

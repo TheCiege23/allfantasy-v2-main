@@ -9,7 +9,8 @@ import { decisionFormatBlock } from './decisionFormatGate'
 import { compoundDecision, unansweredClausesNote } from './decisionClauses'
 import { buildStartSitScenario, buildWaiverScenario } from './lineupScenarioGrounding'
 import { buildTradeScenario } from './tradeScenarioGrounding'
-import { buildLineupOptimization, singleSwapCall } from './lineupOptimizerGrounding'
+import { singleSwapCall } from './lineupOptimizerGrounding'
+import { myTeamLineupOptimization } from '@/lib/chimmy-alerts/myTeamLineupOptimization'
 import { parseTradeTargetQuestion } from './tradeTargetQuestion'
 import { buildTradeTargetVerdict } from './tradeTargetVerdict'
 import { renderTradeTargetVerdict } from './tradeTargetDecision'
@@ -227,14 +228,23 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
         scenario, sources: [...(imageTrade.question ? ['screenshot_vision'] : []), 'league_rosters', 'league_scoring', kind === 'trade' ? 'trade_engine' : 'weekly_projections'] })
     }
     if (kind === 'lineup') {
-      const result = await buildLineupOptimization({ leagueId: provenLeagueId, userId: args.userId })
-      if (result.status === 'unresolved' && result.reason === 'sport_not_supported') {
-        const { buildBaselineLineupContext } = await import('./lineupOptimizerOtherSports')
-        const baseline = await buildBaselineLineupContext({ leagueId: provenLeagueId, userId: args.userId })
-        return gap('league_scored_weekly_projection_unavailable', baseline,
-          'This is a standard per-game baseline, not a forecast under your league scoring. Check this scoring period\'s games and lineup locks before making changes.')
-      }
-      if (result.status === 'unresolved') return gap(result.reason, result.detail, 'Sync your league and check that weekly projections are available, then retry.')
+      /*
+       * 🛑 MY TEAM'S BEST LINEUP, NOT A SECOND OPTIMIZER (2026-11-23). This lane priced the roster with the weekly-feed
+       * optimizer (`buildLineupOptimization`) and, outside the NFL, a per-game baseline — while My Team, the lineup
+       * tool, the packet slice and the lineup alerts all answer from `optimizeLineup`. The same roster could get one
+       * lineup here and another on the screen. It now reads My Team's own load, for every sport, through the module
+       * the alerts use. Where My Team has no honest best lineup (best ball, an unidentified starter, no projections,
+       * an unpriced starter, nothing left to change), this says so; it never substitutes another engine's numbers.
+       */
+      const result = await myTeamLineupOptimization(provenLeagueId, args.userId)
+      if (result.status === 'unresolved') return gap(result.reason, result.detail, result.reason === 'no_league_projections'
+        ? 'My Team has no projections for this scoring period yet. Sync your league and retry when they are available.'
+        : 'Open My Team to check this lineup; no best lineup was computed.')
+      // `gain` is null exactly when My Team computed no best lineup, so there is no total to show.
+      if (result.gain == null) return gap('my_team_no_best_lineup', result.unpricedStarters.length
+        ? `My Team has no best lineup this week: ${result.unpricedStarters.map(p => p.name).join(', ')} ${result.unpricedStarters.length === 1 ? 'starts but has' : 'start but have'} no projection, so no honest total exists.`
+        : 'My Team has no best lineup this week: no starting seat can still change, or the lineup has no seats.',
+        result.unpricedStarters.length ? 'Check bye weeks, injuries and availability for those starters, then open My Team to set the lineup.' : 'Open My Team to review the lineup.')
       const call = singleSwapCall(result, provenLeagueId)
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'league_scoring', 'weekly_projections'],
         ...(call ? { startCalls: [call] } : {}),

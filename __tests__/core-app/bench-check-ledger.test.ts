@@ -36,9 +36,70 @@ describe('benchLedgerWeek — when a render may record', () => {
     ['a different season', { sportsWeek: { season: 2025, week: 10 } }],
     ['no week known', { sportsWeek: null }],
     ['not Sleeper (the grade reads Sleeper scores)', { platform: 'espn' }],
+    ['an NBA Sleeper league whose own week number happens to match the NFL\'s', { sport: 'NBA' }],
+    ['an NHL Sleeper league on a matching week', { sport: 'nhl' }],
+    ['a league with no sport', { sport: '' }],
     ['a saved-roster render, which shows no bench check', { fullRender: false }],
   ])('records nothing when %s', (_label, patch) => {
     expect(benchLedgerWeek({ ...CTX, ...(patch as Partial<BenchLedgerContext>) }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+
+  it.each(['allfantasy', 'af', 'manual', 'native', 'AllFantasy'])(
+    'records in a native NFL league (platform %s) — graded on our own engine\'s weekly scores',
+    (platform) => {
+      expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
+    },
+  )
+
+  it.each([['yahoo'], ['mfl'], ['fleaflicker'], [''], [null]])('records nothing for platform %s (no stored weekly scores, or unknown)', (platform) => {
+    expect(benchLedgerWeek({ ...CTX, platform }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+
+  it('an NBA league with no priced period records nothing — whatever the NFL week says', () => {
+    expect(benchLedgerWeek({ ...CTX, platform: 'allfantasy', sport: 'NBA' }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+})
+
+describe('benchLedgerWeek — NBA, NHL and MLB record on their own calendar (2026-11-23)', () => {
+  const NBA: BenchLedgerContext = {
+    ...CTX,
+    sport: 'NBA',
+    // The NFL week is 10 and so is nothing else: the call must be filed under the sport's own week 6.
+    lineupPeriod: { kind: 'week', week: 6, season: 2026 },
+  }
+
+  it.each(['NBA', 'NHL', 'MLB'])('%s: records under the week My Team priced, in that sport\'s season', (sport) => {
+    expect(benchLedgerWeek({ ...NBA, sport }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 6 })
+    expect(benchLedgerWeek({ ...NBA, sport, platform: 'allfantasy' }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 6 })
+  })
+
+  it('🛑 never under the NFL week, even when the NFL weeks agree', () => {
+    expect(benchLedgerWeek({ ...NBA, lineupPeriod: { kind: 'week', week: 10, season: 2026 } }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 10 })
+    expect(benchLedgerWeek({ ...NBA, projectionWeek: { season: '2026', week: 3 }, sportsWeek: null }, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 6 })
+  })
+
+  it.each([
+    ['a daily-lineup league (one day priced; the ledger has no day)', { lineupPeriod: { kind: 'day' as const, week: 6, season: 2026 } }],
+    ['a categories league (no period priced)', { lineupPeriod: null }],
+    ['no season on the period', { lineupPeriod: { kind: 'week' as const, week: 6 } }],
+    ['no week on the period', { lineupPeriod: { kind: 'week' as const, week: null, season: 2026 } }],
+    ['ESPN', { platform: 'espn' }],
+    ['a saved-roster render', { fullRender: false }],
+  ])('records nothing for %s', (_label, patch) => {
+    expect(benchLedgerWeek({ ...NBA, ...(patch as Partial<BenchLedgerContext>) }, {} as NodeJS.ProcessEnv)).toBeNull()
+  })
+
+  it('My Team hands the ledger the period it priced', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(`${process.cwd()}/lib/core-app/myTeam.ts`, 'utf8')
+    const call = src.slice(src.indexOf('scheduleBenchCheckLedger(\n'), src.indexOf('ledgerCalls,', src.indexOf('scheduleBenchCheckLedger(\n')))
+    expect(call).toMatch(/lineupPeriod: lineupPeriod \?\? null,/)
+    const daily = readFileSync(`${process.cwd()}/lib/core-app/myTeamDailySport.ts`, 'utf8')
+    expect(daily).toMatch(/season: outlook\.period\.season \?\? null/)
+  })
+
+  it('NCAAB and soccer still record nothing', () => {
+    for (const sport of ['NCAAB', 'SOCCER', 'NCAAF']) expect(benchLedgerWeek({ ...NBA, sport }, {} as NodeJS.ProcessEnv)).toBeNull()
   })
 
   it('ADVICE_LEDGER_MY_TEAM=off turns it off', () => {

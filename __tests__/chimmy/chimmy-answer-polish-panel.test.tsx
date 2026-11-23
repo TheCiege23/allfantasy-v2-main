@@ -208,7 +208,10 @@ describe('AF Pro depth on the panel', () => {
     const turn = await ask('What are my playoff odds?', 'You are 7-3 and two games up on the cut line.')
     const upsell = within(turn).getByTestId('chimmy-pro-upsell')
     expect(upsell.textContent).toContain('AF Pro adds the playoff simulator and trade ideas.')
-    expect(within(upsell).getByRole('link', { name: 'Get AF Pro' }).getAttribute('href')).toBe('/upgrade?plan=af_pro&from=chimmy-pro-tool')
+    // Tracked per tool since 2026-11-22: the first refused tool names the source on the growth page.
+    const href = within(upsell).getByRole('link', { name: 'Get AF Pro' }).getAttribute('href') ?? ''
+    expect(href).toMatch(/^\/upgrade\?plan=pro/)
+    expect(href).toContain('from=lock_chimmy_get_playoff_outlook')
     expect(within(turn).queryByTestId('chimmy-past-chats')).toBeNull()
   })
 

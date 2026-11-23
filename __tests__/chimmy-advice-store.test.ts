@@ -98,6 +98,13 @@ describe('recordAdvice', () => {
     expect($executeRaw).not.toHaveBeenCalled()
   })
 
+  it('a basketball, hockey or baseball week runs past 25 (its own calendar); an NFL week does not', async () => {
+    $executeRaw.mockResolvedValue(1)
+    for (const sport of ['NBA', 'nhl', 'MLB']) expect(await recordAdvice({ ...ADVICE, sport, week: 27 })).toBe('recorded')
+    expect(await recordAdvice({ ...ADVICE, sport: 'NBA', week: 31 })).toBe('invalid')
+    expect(await recordAdvice({ ...ADVICE, sport: 'NFL', week: 26 })).toBe('invalid')
+  })
+
   it('🛑 a missing table is unavailable; any other error propagates', async () => {
     $executeRaw.mockRejectedValue(MISSING_TABLE)
     expect(await recordAdvice(ADVICE)).toBe('unavailable')

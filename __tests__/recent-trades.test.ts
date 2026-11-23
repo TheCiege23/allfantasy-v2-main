@@ -52,6 +52,17 @@ vi.mock('@/lib/decision-os/trade/completedTradeGrade', async (importOriginal) =>
   completedTradeGraderFor,
 }))
 
+/* The stored originals: read once per league by the card, written once per newly priced trade. */
+const { loadFrozenCompletedGrades, saveFrozenCompletedGrades } = vi.hoisted(() => ({
+  loadFrozenCompletedGrades: vi.fn(),
+  saveFrozenCompletedGrades: vi.fn(),
+}))
+vi.mock('@/lib/decision-os/trade/frozenCompletedGrade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/decision-os/trade/frozenCompletedGrade')>()),
+  loadFrozenCompletedGrades,
+  saveFrozenCompletedGrades,
+}))
+
 const { receiptIdForGrade } = vi.hoisted(() => ({ receiptIdForGrade: vi.fn() }))
 vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/decision-os/trade/recordTradeGrade')>()),
@@ -104,6 +115,10 @@ function payload(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  loadFrozenCompletedGrades.mockReset()
+  loadFrozenCompletedGrades.mockResolvedValue(new Map())
+  saveFrozenCompletedGrades.mockReset()
+  saveFrozenCompletedGrades.mockResolvedValue(true)
   receiptIdForGrade.mockReset()
   receiptIdForGrade.mockResolvedValue(null)
   oneGradeForCompletedTrade.mockReset()
@@ -818,5 +833,91 @@ describe('visible trade grades: a pool of four, not lockstep batches (2026-11-22
     const rows = await pending
     expect(peak).toBe(4)
     expect(rows.map((row) => row.id)).toEqual(Array.from({ length: 6 }, (_, index) => `pool-${index}`))
+  })
+})
+
+describe('visible trade grades: stored originals read once per league (2026-11-22)', () => {
+  const tradesIn = (ids: string[]) => {
+    const template = payload().data.trades[0]!
+    cacheFindMany.mockResolvedValue([payload({ trades: ids.map((id, index) => ({
+      ...template, id, createdIso: new Date(NOW.getTime() - (index + 1) * 60_000).toISOString(),
+    })) })])
+  }
+  /** The trades card's timing line, with a clock slow enough that it is always written. */
+  const timingLine = async (run: () => Promise<unknown>) => {
+    let clock = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => (clock += 1000))
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      await run()
+      const call = info.mock.calls.find((c) => c[0] === '[core-trades-timing]')
+      return { line: call ? JSON.parse(String(call[1])) : null, raw: JSON.stringify(info.mock.calls) }
+    } finally {
+      now.mockRestore()
+      info.mockRestore()
+    }
+  }
+  const row = (basis: 'trade_date' | 'first_graded') => ({ v: 2, tradeId: 'tr-1', give: [], get: [], grade: grade(1000, 1600), frozenAt: NOW.toISOString(), basis, pricedAsOf: '2026-08-20', tradeAt: null })
+
+  it('reads the originals for three trades in one league once, and hands them to every grade', async () => {
+    tradesIn(['tr-1', 'tr-2', 'tr-3'])
+    await getRecentTrades(LEAGUES, NOW, 3)
+    expect(loadFrozenCompletedGrades).toHaveBeenCalledTimes(1)
+    expect(loadFrozenCompletedGrades.mock.calls[0]![0]).toBe('af-1')
+    expect([...loadFrozenCompletedGrades.mock.calls[0]![1]].sort()).toEqual(['tr-1', 'tr-2', 'tr-3'])
+    expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(3)
+    for (const call of oneGradeForCompletedTrade.mock.calls) {
+      expect(call[3]).toEqual(expect.objectContaining({ frozen: expect.any(Map), onFreeze: expect.any(Function) }))
+    }
+  })
+
+  it('saves a newly priced original once and shows it; a failed save shows today’s letter instead', async () => {
+    tradesIn(['tr-1'])
+    const today = grade(1000, 1000)
+    oneGradeForCompletedTrade.mockImplementation(async (_l: string, _t: unknown, _s: number, deps: { onFreeze: (r: unknown, c: unknown) => void }) => {
+      deps.onFreeze(row('trade_date'), today)
+      return grade(1000, 1600)
+    })
+    const saved = await timingLine(() => getRecentTrades(LEAGUES, NOW, 3))
+    expect(saveFrozenCompletedGrades).toHaveBeenCalledWith('af-1', [expect.objectContaining({ basis: 'trade_date' })])
+    expect(saved.line.grades).toEqual({ tradeDate: 1 })
+
+    saveFrozenCompletedGrades.mockResolvedValue(false)
+    let failedRows: Awaited<ReturnType<typeof getRecentTrades>> = []
+    const failed = await timingLine(async () => { failedRows = await getRecentTrades(LEAGUES, NOW, 3) })
+    expect(failed.line.grades).toEqual({ saveFailed: 1 })
+
+    // Control: the letter on screen is the original when saved, today's when not — they differ here on purpose.
+    saveFrozenCompletedGrades.mockResolvedValue(true)
+    const savedRows = await getRecentTrades(LEAGUES, NOW, 3)
+    expect(savedRows[0]!.sides[0]!.grade).not.toBe(failedRows[0]!.sides[0]!.grade)
+    oneGradeForCompletedTrade.mockResolvedValue(today)
+    const todayRows = await getRecentTrades(LEAGUES, NOW, 3)
+    expect(failedRows[0]!.sides.map((s) => s.grade)).toEqual(todayRows[0]!.sides.map((s) => s.grade))
+  })
+
+  it('counts stored, first-graded and ungraded trades — the reason as a fixed bucket, never its text', async () => {
+    tradesIn(['tr-1', 'tr-2', 'tr-3', 'tr-4'])
+    loadFrozenCompletedGrades.mockResolvedValue(new Map([['tr-1', row('trade_date')]]))
+    oneGradeForCompletedTrade.mockImplementation(async (_l: string, t: { id: string }, _s: number, deps: { onFreeze: (r: unknown, c: unknown) => void }) => {
+      if (t.id === 'tr-1') return grade(1000, 1600)
+      if (t.id === 'tr-2') { deps.onFreeze(row('first_graded'), grade(1000, 1600)); return grade(1000, 1600) }
+      if (t.id === 'tr-3') return { graded: false, reason: '2 assets have no value on this league’s chart, and a missing asset is not graded as worthless.', basis: null }
+      return { graded: false, kind: 'pirate_steal', reason: 'Private Manager took this from Other Manager.', basis: null }
+    })
+    const { line, raw } = await timingLine(() => getRecentTrades(LEAGUES, NOW, 4))
+    expect(line.grades).toEqual({ stored: 1, firstGraded: 1, 'ungraded:unpriced': 1, 'ungraded:pirateSteal': 1 })
+    expect(line.phases).toHaveProperty('frozen')
+    expect(raw).not.toContain('Private Manager')
+    expect(raw).not.toContain('no value on this league')
+  })
+
+  it('a league whose originals cannot be read grades as before, with nothing stored', async () => {
+    tradesIn(['tr-1'])
+    loadFrozenCompletedGrades.mockRejectedValue(new Error('db down'))
+    oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
+    const rows = await getRecentTrades(LEAGUES, NOW, 3)
+    expect(rows[0]!.verdict).not.toBeNull()
+    expect(oneGradeForCompletedTrade.mock.calls[0]![3].frozen.size).toBe(0)
   })
 })
