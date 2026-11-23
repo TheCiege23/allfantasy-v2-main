@@ -1,6 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
+import { CollegeProStandings, CollegeProWeek } from '@/components/league/college-pro/CollegeProOneLeague'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -206,7 +207,35 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
           rookiePool: { drafted: 257, heldInCollege: 41, unheld: 216 },
           unlinked: 0,
         },
+        collegeMatchup: nba
+          ? { period: 4, me: { name: '#51 Butler Bulldogs', total: 171.3 }, opponent: { name: '#159 Dayton Flyers', total: 158.6 } }
+          : { period: 11, me: { name: 'Ciege82', total: 22.5 }, opponent: { name: 'Connor0488', total: 41.2 } },
         fetchedAt: new Date().toISOString(),
+      }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+    if (url.includes('/api/league/college-pro-standings')) {
+      // Real Peach Bowl / Cream Bowl records, 2026-11-22; you are (F) SF TEP / Ciege82.
+      const r = (w: number, l: number, pf: number) => ({ wins: w, losses: l, ties: 0, pointsFor: pf })
+      const rows = [
+        ['GrindingFFB', 'Grindingffb', r(9, 1, 1543.36), r(8, 2, 1764.38)],
+        ['Connor0488', 'Connor0488', r(10, 0, 1757.22), r(5, 5, 1548.1)],
+        ['Scoresscotty', 'Scorescotty', r(7, 3, 1544.22), r(6, 4, 1826.3)],
+        ['Georgia Bulldogs', 'Georgia Bulldogs', r(5, 5, 1580.56), r(6, 4, 1690.4)],
+        ['(F) SF TEP', 'Ciege82', r(3, 7, 1000.92), r(2, 8, 1511.62)],
+      ].map(([pro, col, pr, cr], i) => {
+        const p = pr as ReturnType<typeof r>, c = cr as ReturnType<typeof r>
+        return {
+          rank: i + 1, proKey: `p${i}`, proName: pro, proRecord: p, collegeKey: `c${i}`, collegeName: col, collegeRecord: c,
+          total: { wins: p.wins + c.wins, losses: p.losses + c.losses, ties: 0, pointsFor: Math.round((p.pointsFor + c.pointsFor) * 100) / 100 },
+          isMine: pro === '(F) SF TEP',
+        }
+      })
+      const body = {
+        applies: true, scoring,
+        pro: { leagueId: 'harness', name: 'Peach Bowl (C2C)', sport: 'NFL' },
+        college: { leagueId: 'harness-college', name: 'Cream Bowl', sport: 'NCAAF' },
+        rows, unmatchedCollege: 0, autoMatched: 5,
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     }
@@ -223,7 +252,17 @@ export function CollegeProRosterHarnessClient() {
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">
-        <CollegeProRoster leagueId="harness" onPlayerClick={() => {}} fallback={<p className="p-4 text-sm">fallback</p>} />
+        {params?.get('view') === 'week' ? (
+          <CollegeProWeek leagueId="harness">
+            <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own matchup screen stays here, unchanged.</p>
+          </CollegeProWeek>
+        ) : params?.get('view') === 'standings' ? (
+          <CollegeProStandings leagueId="harness">
+            <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own standings stay here, unchanged.</p>
+          </CollegeProStandings>
+        ) : (
+          <CollegeProRoster leagueId="harness" onPlayerClick={() => {}} fallback={<p className="p-4 text-sm">fallback</p>} />
+        )}
       </div>
     </div>
   )

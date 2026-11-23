@@ -1,27 +1,19 @@
-import type { NotificationCategoryId } from '@/lib/notification-settings/types'
-
 /**
  * The /core home sections a person can switch off from Settings → Home page (2026-10-24).
  *
- * A user loved the app and said the home was "way too much information". Each switch here turns off
- * ONE visual on the home AND the notifications that come from the same thing — so "off" means the
- * whole topic goes quiet, not just its card.
+ * A user loved the app and said the home was "way too much information". Each switch here hides ONE
+ * visual on the home. It does NOT touch notifications.
+ *
+ * 🛑 IT USED TO, AND THAT SILENTLY COST PEOPLE THEIR GAME-DAY ALERTS (reversed 2026-11-22, owner).
+ * From 2026-10-24 to 2026-11-22 a hidden section also muted its notification categories at send time —
+ * "off means the whole topic goes quiet". In practice people hid cards to declutter the page and lost the
+ * alerts behind them without noticing: the owner's own account had hidden Matchups and Live games and
+ * received ZERO scoring alerts in seven days, while the Notifications tab showed those categories ON.
+ * Two switches for one alert is the trap. Notifications are now decided ONLY in Settings → Notifications;
+ * this list is the home's layout and nothing else. Do not add a `categories` link back to it.
  *
  * WHERE IT IS STORED. `UserProfile.notificationPreferences.hiddenHomeSections`, an array of the ids
- * below. One key drives both halves on purpose: the home reads it when it renders, and every send
- * path reads it through `isCategoryHiddenByHomeSection`. Two stores would drift, and a card that is
- * gone while its alerts still buzz is exactly the confusion this exists to remove.
- *
- * ⚠ IT IS NOT FOLDED INTO `resolveNotificationPreferences`. The Notifications tab saves the RESOLVED
- * object back wholesale, so forcing `enabled: false` there would write those categories off for good
- * — turning the section back on would no longer bring its alerts back. The mute is applied at send
- * time instead, and the stored category switches are never touched.
- *
- * ⚠ OFF MEANS ALL OF IT, INCLUDING ALERTS THAT NEED YOU TO ACT (owner's call, 2026-10-24). The first
- * version kept `draft_alerts` (you are on the clock) and `trade_proposals` (an offer sent TO you) on
- * when their section was hidden; the owner asked for those to go quiet too. Because missing them has
- * a real cost — a missed pick, an offer that expires — the Drafts and League trades rows WARN that
- * they include them (`HomeSectionsSettingsSection`), rather than leaving it to the category list.
+ * below (kept where it always was, so existing choices still hide the same cards).
  */
 
 export type HomeSectionId =
@@ -55,53 +47,47 @@ type HomeSectionDef = {
   group: HomeSectionGroup
   /** The `HomeCardName`s (components/core-app/home/HomeCards.tsx) this switch hides. */
   cards: readonly string[]
-  /** Notification categories muted while the section is hidden. Empty = a visual only. */
-  categories: readonly NotificationCategoryId[]
 }
 
 /** In the order the home draws them, so the Settings list reads top to bottom like the page. */
 export const HOME_SECTIONS: readonly HomeSectionDef[] = [
-  { id: 'streak', group: 'top', cards: ['streak'], categories: [] },
-  { id: 'decisions', group: 'top', cards: ['issues'], categories: [] },
-  { id: 'since-last-visit', group: 'top', cards: ['since-last-visit'], categories: [] },
-  { id: 'live-games', group: 'top', cards: ['game-day'], categories: ['live_game_alerts', 'performance_alerts'] },
-  { id: 'drafts', group: 'top', cards: ['drafts'], categories: ['draft_alerts', 'draft_intel_alerts'] },
-  { id: 'injuries', group: 'top', cards: ['triage'], categories: ['injury_alerts', 'lineup_alerts'] },
-  // League trade news is sent under trade_accept_reject (lib/provider-trades/notifyProviderLeagueTrades.ts);
-  // trade_proposals is an offer sent to YOU — included at the owner's request, and the row warns about it.
+  { id: 'streak', group: 'top', cards: ['streak'] },
+  { id: 'decisions', group: 'top', cards: ['issues'] },
+  { id: 'since-last-visit', group: 'top', cards: ['since-last-visit'] },
+  { id: 'live-games', group: 'top', cards: ['game-day'] },
+  { id: 'drafts', group: 'top', cards: ['drafts'] },
+  { id: 'injuries', group: 'top', cards: ['triage'] },
   {
     id: 'league-trades',
     group: 'top',
     cards: ['trade-band'],
-    categories: ['trade_proposals', 'trade_accept_reject'],
   },
-  { id: 'lock-brief', group: 'top', cards: ['carryover'], categories: [] },
-  { id: 'league-focus', group: 'top', cards: ['user-os'], categories: [] },
-  { id: 'schedule', group: 'top', cards: ['schedule'], categories: [] },
+  { id: 'lock-brief', group: 'top', cards: ['carryover'] },
+  { id: 'league-focus', group: 'top', cards: ['user-os'] },
+  { id: 'schedule', group: 'top', cards: ['schedule'] },
   /*
    * The two guide cards (2026-11-12, owner: the home is "a teaching tool and a notification system").
-   * `commish` draws only for someone who runs a league; neither mutes an alert. Drawn after the bands,
+   * `commish` draws only for someone who runs a league. Drawn after the bands,
    * so they sit after `schedule` here to keep the Settings list in page order.
    */
-  { id: 'commish', group: 'top', cards: ['commish'], categories: [] },
-  { id: 'season-pulse', group: 'top', cards: ['season-pulse'], categories: [] },
+  { id: 'commish', group: 'top', cards: ['commish'] },
+  { id: 'season-pulse', group: 'top', cards: ['season-pulse'] },
   /* The teaching cards (2026-11-12): when waivers run per platform, and what each format means. */
-  { id: 'calendar', group: 'top', cards: ['calendar'], categories: [] },
-  { id: 'formats', group: 'top', cards: ['formats'], categories: [] },
+  { id: 'calendar', group: 'top', cards: ['calendar'] },
+  { id: 'formats', group: 'top', cards: ['formats'] },
   /* The folded "Evaluate a trade" row (owner, 2026-11-06) — a switch since 2026-11-12; see the defaults. */
-  { id: 'trade-evaluator', group: 'top', cards: ['trade-evaluator'], categories: [] },
-  { id: 'routine', group: 'week', cards: ['routine'], categories: ['lineup_reminders'] },
-  { id: 'matchups', group: 'week', cards: ['matchups'], categories: ['matchup_results'] },
-  { id: 'chimmy', group: 'side', cards: ['chimmy'], categories: ['ai_alerts'] },
-  { id: 'career', group: 'side', cards: ['career'], categories: ['career_milestones'] },
-  { id: 'rivals', group: 'side', cards: ['rivals'], categories: [] },
+  { id: 'trade-evaluator', group: 'top', cards: ['trade-evaluator'] },
+  { id: 'routine', group: 'week', cards: ['routine'] },
+  { id: 'matchups', group: 'week', cards: ['matchups'] },
+  { id: 'chimmy', group: 'side', cards: ['chimmy'] },
+  { id: 'career', group: 'side', cards: ['career'] },
+  { id: 'rivals', group: 'side', cards: ['rivals'] },
   {
     id: 'following',
     group: 'more',
     cards: ['following'],
-    categories: ['followed_players', 'followed_teams', 'followed_team_scores'],
   },
-  { id: 'insights', group: 'more', cards: ['portfolio-chart', 'exposure', 'receipts'], categories: [] },
+  { id: 'insights', group: 'more', cards: ['portfolio-chart', 'exposure', 'receipts'] },
 ]
 
 export const HOME_SECTION_GROUPS: readonly HomeSectionGroup[] = ['top', 'week', 'side', 'more']
@@ -109,7 +95,7 @@ export const HOME_SECTION_GROUPS: readonly HomeSectionGroup[] = ['top', 'week', 
 /** The stored key inside `notificationPreferences`. */
 export const HIDDEN_HOME_SECTIONS_KEY = 'hiddenHomeSections'
 
-/** Display choices are separate from explicit topic mutes. Defaults must never mute alerts. */
+/** The default layout's own key, kept apart from a person's saved choices. Layout only — no section mutes alerts. */
 export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
 /*
  * ⚠ THE HOME TRIM, 2026-11-12 (owner's call after a no-league audit of /core). Four more sections
@@ -121,7 +107,7 @@ export const HOME_LAYOUT_HIDDEN_KEY = 'homeLayoutHiddenSections'
  * add it back here on the overlap argument. What a default home leads with now: the streak,
  * decisions, injuries, league trades, the league that needs you, and the league list. Every one is a switch in Settings → Home page, and a person who has
  * saved their own layout keeps it — defaults only apply to a profile with no saved list
- * (`resolveHiddenHomeSections`). Defaults never mute alerts: muting reads the SAVED list only.
+ * (`resolveHiddenHomeSections`). Hiding is layout only: no section, default or saved, mutes an alert.
  *
  * ⚠ AND `league-focus` JOINED THEM LATER THE SAME DAY (owner, the "simplify /core" pass). Its card,
  * "Your team · <one league>", showed one league picked out of many with no reason given, and its
@@ -163,27 +149,6 @@ export function hiddenHomeCards(hidden: ReadonlySet<HomeSectionId>): Set<string>
   const cards = new Set<string>()
   for (const section of HOME_SECTIONS) if (hidden.has(section.id)) for (const c of section.cards) cards.add(c)
   return cards
-}
-
-/** The hidden section that silences this category, or null when none does. */
-export function homeSectionMutingCategory(
-  saved: unknown,
-  category: NotificationCategoryId,
-): HomeSectionId | null {
-  const hidden = readHiddenHomeSections(saved)
-  if (hidden.size === 0) return null
-  for (const section of HOME_SECTIONS) {
-    if (hidden.has(section.id) && section.categories.includes(category)) return section.id
-  }
-  return null
-}
-
-/**
- * Send-time check: is this category silenced because its home section is hidden? Takes the RAW
- * stored `notificationPreferences` — the resolver does not carry this key (see the header).
- */
-export function isCategoryHiddenByHomeSection(saved: unknown, category: NotificationCategoryId): boolean {
-  return homeSectionMutingCategory(saved, category) !== null
 }
 
 /** The next stored list after one switch flips. Kept in `HOME_SECTIONS` order so saves are stable. */

@@ -92,6 +92,28 @@ export function teamNameToAbbrev(name: string | null): string | null {
   return normalizeTeamAbbrev(API_SPORTS_TEAM_MAP[name]) || normalizeTeamAbbrev(name) || null;
 }
 
+/**
+ * The team string stored for an API-Sports row, by sport.
+ *
+ * 🛑 `teamNameToAbbrev` IS AN NFL SHORTENER AND MUST NOT SEE A COLLEGE NAME. It falls through to
+ * `normalizeTeamAbbrev`, which matches NFL cities and nicknames, so college schools named after an
+ * NFL city were stored as that NFL club's code. Measured 2026-11-22 on 2026 NCAAF `SportsGame` rows
+ * (source api_sports): Cincinnati → CIN, Houston → HOU, Miami → MIA, Minnesota → MIN,
+ * Pittsburgh → PIT, Tennessee → TEN, Washington → WAS, Arizona → ARI, Chicago → CHI,
+ * Indianapolis → IND, New England → NE. Every other school was stored by name ("OHIO STATE"),
+ * so the readers that dedupe and attach crests by name could not match these 11, and anything
+ * that resolves a code to an NFL club would read the Bengals for the Bearcats.
+ *
+ * College rows now get the school name in capitals, the same form as every other school.
+ * The NFL path is unchanged.
+ */
+export function apiSportsTeamKey(name: string | null | undefined, sport: string | null | undefined): string | null {
+  if (!name) return null;
+  if (String(sport ?? '').toUpperCase() === 'NFL') return teamNameToAbbrev(name);
+  const upper = name.trim().toUpperCase();
+  return upper || null;
+}
+
 let ipBlockedUntil = 0;
 const IP_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
 
@@ -990,7 +1012,7 @@ export async function syncAPISportsInjuriesToDb(opts?: { season?: string; sport?
     const playerId = playerIdRaw != null ? String(playerIdRaw) : null
     const playerName = (playerNameRaw || '').trim() || `Unknown ${playerId || 'player'}`
     const teamId = teamIdRaw != null ? String(teamIdRaw) : null
-    const team = teamNameToAbbrev(teamNameRaw || null)
+    const team = apiSportsTeamKey(teamNameRaw || null, dbSport)
     /*
      * 🛑 KEYED ON THE PLAYER, NEVER ON ARRAY POSITION.
      *
@@ -1101,7 +1123,7 @@ export async function syncAPISportsTeamsToDb(opts?: { season?: string; sport?: '
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   for (const team of teams) {
-    const abbrev = teamNameToAbbrev(team.name);
+    const abbrev = apiSportsTeamKey(team.name, dbSport);
 
     try {
       await prisma.sportsTeam.upsert({
@@ -1196,8 +1218,8 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
   const expiresAt = new Date(now.getTime() + 60 * 1000);
 
   for (const g of games) {
-    const homeTeam = teamNameToAbbrev(g.teams.home.name) || g.teams.home.name;
-    const awayTeam = teamNameToAbbrev(g.teams.away.name) || g.teams.away.name;
+    const homeTeam = apiSportsTeamKey(g.teams.home.name, dbSport) || g.teams.home.name;
+    const awayTeam = apiSportsTeamKey(g.teams.away.name, dbSport) || g.teams.away.name;
 
     // Guaranteed-to-fail rows are skipped, not attempted. See `isSyncableGameRow`.
     if (!isSyncableGameRow(g)) {
@@ -1330,7 +1352,7 @@ export async function syncAPISportsPlayersToIdentityMap(opts?: { season?: string
         for (const p of players) {
           const normalizedName = normalizePlayerName(p.name);
           const position = normalizePosition(p.position || p.group);
-          const teamAbbrev = teamNameToAbbrev(p.team?.name || team.name);
+          const teamAbbrev = apiSportsTeamKey(p.team?.name || team.name, dbSport);
 
           const candidates = await prisma.playerIdentityMap.findMany({
             where: { normalizedName, sport: dbSport },
@@ -1569,7 +1591,7 @@ export async function syncAPISportsPlayerSeasonStatsToDb(
       teams = fetchedTeams.map((team) => ({
         externalId: String(team.id),
         name: team.name,
-        shortName: teamNameToAbbrev(team.name),
+        shortName: apiSportsTeamKey(team.name, sport),
       }));
     } catch {
       teams = [];
@@ -1600,7 +1622,7 @@ export async function syncAPISportsPlayerSeasonStatsToDb(
       const playerName = String(player.name ?? '').trim();
       const normalizedName = normalizePlayerName(playerName);
       const position = normalizePosition(player.position || player.group);
-      const apiTeam = teamNameToAbbrev(player.team?.name || team.name);
+      const apiTeam = apiSportsTeamKey(player.team?.name || team.name, sport);
 
       summary.playersScanned += 1;
       if (!playerId || !playerName) {
@@ -1792,7 +1814,7 @@ export async function syncAPISportsStandingsToDb(opts?: { season?: string; sport
       skipped++;
       continue;
     }
-    const teamAbbrev = teamNameToAbbrev(s.team.name) || s.team.name;
+    const teamAbbrev = apiSportsTeamKey(s.team.name, dbSport) || s.team.name;
 
     try {
       const cacheKey = `${dbSport}:standings:${currentSeason}:${teamAbbrev}`;
