@@ -200,3 +200,70 @@ describe('🛑 the ledger rebuild carries each sport\'s line beside the NFL reco
     expect(await recomputeLedgerRecord({ now: NOW, db: db as never })).toBeNull()
   })
 })
+
+describe('🛑 a DAILY-lineup call (advice_day, 2026-11-23) is graded on THAT DAY: its games, its lines', () => {
+  /** The day's last game: 7pm Eastern on the queried day (EST in November: Eastern midnight is 05:00Z). */
+  function dbDaily(rows: unknown[], lines: Array<{ playerId: string; gameDate: Date; normalizedStatMap: Record<string, unknown> }>) {
+    return {
+      $queryRaw: vi.fn(async () => rows),
+      sportsGame: {
+        findFirst: vi.fn(async (args: { where: { startTime: { gte: Date; lt: Date } } }) => ({
+          startTime: new Date(args.where.startTime.gte.getTime() + 19 * 3_600_000),
+        })),
+      },
+      playerGameStat: { findMany: vi.fn(async () => lines.map((l) => ({ ...l, sportType: 'NBA', season: 2026 }))) },
+      playerIdentityMap: { findMany: vi.fn(async () => []) },
+    }
+  }
+  const DAY_LINES = [
+    { playerId: 'id-100', gameDate: day(4), normalizedStatMap: { pts: 30 } },
+    { playerId: 'id-100', gameDate: day(5), normalizedStatMap: { pts: 1 } }, // the next day, same week
+    { playerId: 'id-200', gameDate: day(4), normalizedStatMap: { pts: 20 } },
+    { playerId: 'id-200', gameDate: day(3), normalizedStatMap: { pts: 99 } }, // the day before, same week
+  ]
+
+  it('only lines dated that day count — not the rest of its week (which would grade it wrong)', async () => {
+    const out = await gradeSportBench('NBA', { now: NOW, db: dbDaily([call({ day: '2026-11-04' })], DAY_LINES) as never })
+    expect(out?.tally).toMatchObject({ right: 1, wrong: 0, gain: 10 })
+  })
+
+  it('over once that day\'s last game started 12h+ ago, found inside the US Eastern day', async () => {
+    const db = dbDaily([call({ day: '2026-11-04' })], DAY_LINES)
+    // Eastern Nov 4 (EST) = 05:00Z Nov 4 → 05:00Z Nov 5; its last game 00:00Z Nov 5 (7pm ET).
+    const lastStart = Date.UTC(2026, 10, 5, 0)
+    expect((await gradeSportBench('NBA', { now: new Date(lastStart + 11 * 3_600_000), db: db as never }))?.tally).toMatchObject({ pending: 1, right: 0 })
+    expect((await gradeSportBench('NBA', { now: new Date(lastStart + 13 * 3_600_000), db: db as never }))?.tally).toMatchObject({ pending: 0, right: 1 })
+    const where = db.sportsGame.findFirst.mock.calls[0][0].where.startTime
+    expect(where.gte.toISOString()).toBe('2026-11-04T05:00:00.000Z')
+    expect(where.lt.toISOString()).toBe('2026-11-05T05:00:00.000Z')
+  })
+
+  it('two days of one week are two calls, and a weekly call beside them still sums its week', async () => {
+    const out = await gradeSportBench('NBA', {
+      now: NOW,
+      db: dbDaily([call({ day: '2026-11-04' }), call({ day: '2026-11-05' }), call({ day: '' })], DAY_LINES) as never,
+    })
+    // Nov 4: 30 v 20 right (+10). Nov 5: 1 v no line → unscored. The week: 31 v 119 wrong (-88).
+    expect(out?.tally).toMatchObject({ right: 1, wrong: 1, unscored: 1, gain: -78 })
+    expect(out?.graded).toHaveLength(2)
+  })
+
+  it('before the day migration the read falls back to the original SELECT, and every call is weekly', async () => {
+    const db = dbDaily([call()], DAY_LINES)
+    const undefinedColumn = Object.assign(new Error('column a.advice_day does not exist'), { code: 'P2010', meta: { code: '42703' } })
+    db.$queryRaw.mockRejectedValueOnce(undefinedColumn)
+    const out = await gradeSportBench('NBA', { now: NOW, db: db as never })
+    expect(db.$queryRaw).toHaveBeenCalledTimes(2)
+    const sqlOf = (n: number) => (db.$queryRaw.mock.calls[n] as unknown as [readonly string[]])[0].join('?')
+    expect(sqlOf(0)).toContain('a.advice_day AS day')
+    expect(sqlOf(1)).not.toContain('advice_day')
+    // The whole week: 31 v 119.
+    expect(out?.tally).toMatchObject({ wrong: 1, gain: -88 })
+  })
+
+  it('any other read error still propagates (contained per sport by the caller)', async () => {
+    const db = dbDaily([], [])
+    db.$queryRaw.mockRejectedValueOnce(new Error('connection reset'))
+    await expect(gradeSportBench('NBA', { now: NOW, db: db as never })).rejects.toThrow('connection reset')
+  })
+})

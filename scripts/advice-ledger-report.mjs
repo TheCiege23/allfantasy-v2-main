@@ -19,6 +19,9 @@
  * Where the call carries projections (`rec_projected` / `alt_projected`, the ledger migration), it also
  * reports how well the projected gap predicted the real one, and the hit rate by projected gap.
  *
+ * NFL calls only (2026-11-23): the grading below reads NFL weeks and NFL game lines, and since that day
+ * NBA / NHL / MLB bench calls are recorded too — they are graded by lib/chimmy-outcomes/sportBenchGrading.ts.
+ *
  * Counts and points only — no user, league or player identifiers. Prints the database host, never the URL.
  */
 import { PrismaClient } from '@prisma/client'
@@ -71,7 +74,7 @@ try {
           ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
         LEFT JOIN league_player_weekly_scores s
           ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
-        WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}`
+        WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season} AND upper(a.sport) = 'NFL'`
     : await prisma.$queryRaw`
         SELECT a.surface, a.week, a.confidence_pct AS confidence, NULL::float8 AS rec_proj, NULL::float8 AS alt_proj,
                false AS withdrawn,
@@ -82,7 +85,7 @@ try {
           ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
         LEFT JOIN league_player_weekly_scores s
           ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
-        WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}`
+        WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season} AND upper(a.sport) = 'NFL'`
 
   const bySurface = new Map()
   const projBuckets = new Map()
@@ -155,7 +158,7 @@ try {
            (SELECT SUM(p) FROM pts WHERE a.alt_player_key <> '' AND pid = a.alt_player_key AND wk BETWEEN a.week AND a.week + ${ADD_WINDOW - 1}) AS alt_pts,
            a.alt_player_key <> '' AS has_drop
     FROM chimmy_advice a
-    WHERE a.advice_type = 'add' AND a.season = ${season}`
+    WHERE a.advice_type = 'add' AND a.season = ${season} AND upper(a.sport) = 'NFL'`
   const addBy = new Map()
   for (const r of adds) {
     const s = addBy.get(r.surface) ?? { calls: 0, pending: 0, noStats: 0, graded: 0, pts: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, dropMargin: 0 }

@@ -345,3 +345,33 @@ Not probed. Guessing a `filter` value and probing would be the assumption `G-07`
 they run, with an offer open when the capture is taken); (2) the documented value of `FetchTrades.filter`
 for pending offers, or a capture showing `FetchLeagueTransactions` lists a proposed trade; (3) one capture via
 `scripts/probe.sh`, trimmed and with team names replaced, committed with the ledger mapping that reads it.
+
+---
+
+### `G-15` — per-player weekly fantasy points: present in the `FetchRoster` capture, undocumented and unread
+
+**Status: OPEN.** Recorded 2026-11-23, without probing.
+
+Nothing in production stores a Fleaflicker player's points for a week, so `league_player_weekly_scores` has
+no Fleaflicker writer and the bench-check ledger does not record Fleaflicker calls. `FetchLeagueScoreboard`
+is team totals only; `FetchLeagueBoxscore` (per game) is `DISCOVERED`, never captured.
+
+The committed `fixtures/roster.NFL.2021.week1.team1371776.json` (`FetchRoster`, `scoring_period=1`) carries
+`groups[].slots[].leaguePlayer.viewingActualPoints.{value,formatted}` and
+`requestedGames[].pointsActual.{value,formatted}` on START, bench, INJURED and TAXI players alike — including
+bench players, which is what grading needs. `readFleaflickerLineup` reads none of it, and `ENDPOINTS.yaml`
+documents neither field. Not established from the capture:
+
+- That `viewingActualPoints` is the league's own scoring for that period. The fixture is key-union TRIMMED
+  (2 of the team's starters survive, 43.7 points), so it cannot be reconciled with the same team's week-1
+  scoreboard total in `scoreboard.NFL.2021.week1.json` (198.45).
+- Zero follows the omission rule here too: a player who scored nothing has `formatted: "0"` and no `value`
+  (proPlayer 13967). A writer must read absent `value` with `formatted: "0"` as 0 only for a FINISHED period.
+- The production fetch (`fetchFleaflickerTeamRoster`) sends no `scoring_period`, so it serves the CURRENT
+  period; a past week needs the param, and that request is uncaptured for an active season.
+
+**Needed:** one UNTRIMMED `FetchRoster` capture via `scripts/probe.sh` (`roster` endpoint, TEAM_ID env; no credential — `auth.mechanism: none`)
+for a finished period of league 206154, whose starters' `viewingActualPoints` sum is checked against that week's
+scoreboard score; the fields documented in `ENDPOINTS.yaml`; then a writer keyed on Sleeper ids through
+`PlayerIdentityMap.fleaflickerId` (44 of 248 Fleaflicker ids on the production league ARE unrelated Sleeper
+ids — see `sleeperLookupId` — so a raw Fleaflicker id must never be stored where the grader joins on Sleeper ids).

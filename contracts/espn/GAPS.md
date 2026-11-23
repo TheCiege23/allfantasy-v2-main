@@ -236,3 +236,26 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 - **Needed:** which view (or `mTransactions2` filter) returns pending offers and with whose cookies; then one
   capture via `scripts/probe.sh` from a league the owner chooses, with an offer open, redacted with
   `scripts/redact-fantasy.mjs`, committed with the ledger mapping. Not probed.
+
+## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
+
+- `PS-01` OPEN: nothing in production reads an ESPN player's fantasy points for a week, so
+  `league_player_weekly_scores` has no ESPN writer and the bench-check ledger
+  (`lib/core-app/benchCheckLedger.ts`) does not record ESPN calls — they could never be graded.
+  `EspnLeagueFetchService` requests `mMatchup`/`mScoreboard` but parses only team totals
+  (`schedule[].home|away.totalPoints`); `parseEspnRosterEntries` reads ids, slots and names, no points.
+  - What the committed fixture shows, and why it is not enough: `fixtures/fantasy-league.NFL.2026.json`
+    carries `schedule[].home|away.rosterForMatchupPeriod` / `rosterForCurrentScoringPeriod`, each
+    `{ appliedStatTotal, entries[] }` with a per-entry `playerPoolEntry.appliedStatTotal`, on the
+    CURRENT week's sides only. In the trimmed capture (week 9, in progress, `winner: UNDECIDED`) one
+    side keeps 3 entries, all in starting slots, and they sum to the side's `appliedStatTotal` (46.7).
+    Not established: that a BENCH entry is present with its own week points (the bench check grades a
+    benched player — no bench entry survived the trim); that the value is the league's own scoring for
+    that matchup period rather than a single scoring period; and a PAST week's values (`S-01`, declined
+    2026-11-09). `ENDPOINTS.yaml` documents none of these fields.
+  - **Needed:** an untrimmed side of `rosterForMatchupPeriod` from a FINISHED week (bench included),
+    captured via `scripts/probe.sh` from the owner-chosen public league, documented in `ENDPOINTS.yaml`,
+    committed with the writer. A writer must store Sleeper ids (`crosswalkToSleeperIds` +
+    `withTeamDefenseIds`), not ESPN ids: the ledger records the CANONICAL Sleeper id, and ESPN 12483
+    (Matthew Stafford) is Sleeper 12483 (Jack Bech) — see `sleeperLookupId` — so an ESPN-keyed row could
+    grade the wrong player. Not probed.
