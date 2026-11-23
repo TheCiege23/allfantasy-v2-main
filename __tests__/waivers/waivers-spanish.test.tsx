@@ -108,7 +108,6 @@ const ENGLISH = [
   'Why some players',
   'No TE backup',
   'rostered for',
-  'Your priority',
   'A claim sends you',
 ]
 
@@ -130,7 +129,9 @@ describe('"Worth adding" in Spanish', () => {
     expect(text).toContain('Por qué faltan algunos jugadores')
     expect(text).toContain('forma · 3 p')
     expect(text).toContain('Sin suplente de TE')
-    expect(text).toContain('Tu prioridad: #3 de 18.')
+    // 2026-11-23: the line starts at what a claim costs; the Waiver priority tile above says "#3 of 18".
+    expect(text).toContain('Un reclamo te manda al #18.')
+    expect(text).not.toContain('Tu prioridad')
     expect(text).toContain('Los partidos que ya empezaron quedan fijos: 1 jugador de la banca ya no puede entrar y no se muestran 14 agentes libres cuyo partido ya empezó.')
     expect(text).toContain('No se muestran 74 agentes libres')
     expect(text).toContain('No se pudo proyectar a 229 de 422 agentes libres')
