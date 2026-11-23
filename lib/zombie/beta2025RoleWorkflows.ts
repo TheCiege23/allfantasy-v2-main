@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto'
+import { queueAnimationIn } from './animationEngine'
 import type { Prisma, ZombieLeague, ZombieRoleWorkflow } from '@prisma/client'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { prisma } from '@/lib/prisma'
@@ -248,6 +249,9 @@ export async function settleBetaCombat(zombieLeagueId: string, week: number) {
           winnerStatus: winner.status, loserStatus: loser.status, winnerScore: winScore, loserScore: loseScore, margin,
           bashingType: `survivor_bashes_${loser.status.toLowerCase()}`, requiresDecision: Boolean(kind), decisionDeadline: kind ? deadline : null,
           serumAwarded: loser.status === 'Zombie', resolvedAt: kind ? null : new Date() } })
+        // The bashing video, in this transaction so it never plays for a bashing that rolled back.
+        await queueAnimationIn(tx, z.leagueId, week, 'bashing', winnerId,
+          { margin, bashingType: `survivor_bashes_${loser.status.toLowerCase()}`, policy: 'beta_2025' }, undefined, loserId)
       } else {
         await tx.zombieMaulingEvent.create({ data: { id: eventId, leagueId: z.leagueId, week, maulerUserId: winnerId, victimUserId: loserId,
           maulerStatus: winner.status, victimStatus: loser.status, maulerScore: winScore, victimScore: loseScore, margin,

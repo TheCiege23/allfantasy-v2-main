@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { queueAnimationIn } from './animationEngine'
 import { parseZombieSettlementSnapshot } from './weeklySettlementSnapshot'
 import { itemTransaction, lockItemLeague, usesBeta2025Items } from './beta2025ItemService'
 import { planBetaItemSettlement, WEAPON_LABELS, type ItemWeekMatchup } from './beta2025Items'
@@ -15,6 +16,13 @@ export async function reviveBetaTeamInTransaction(tx: Tx, teamId: string, week: 
   const changed = await tx.zombieLeagueTeam.updateMany({ where: { id: team.id, status: 'Zombie' }, data: { status: 'Survivor', revivedAt: new Date(), weekBecameZombie: null, killedByRosterId: null, isWhisperer: false } })
   if (changed.count !== 1) throw new Error('ZOMBIE_ITEMS_REVIVE_ROLE_CHANGED')
   await tx.zombieAuditLog.create({ data: { leagueId: team.leagueId, zombieLeagueId: team.zombieLeagueId, eventType: 'revive', metadata: { policy: 'beta_2025', rosterId: team.rosterId, week, itemIds: serums.map(i => i.id) } } })
+  // The zombie-to-human video, in this transaction so it never plays for a revival that rolled back.
+  // An unclaimed roster has no AllFantasy user to name, so it revives without one.
+  const owner = await tx.roster.findUnique({ where: { id: team.rosterId }, select: { platformUserId: true } })
+  if (owner?.platformUserId) {
+    await queueAnimationIn(tx, team.leagueId, week, 'player_revived', owner.platformUserId,
+      { revive: true, policy: 'beta_2025', serumsUsed: serums.length })
+  }
   return true
 }
 export async function reviveBetaZombie(leagueId: string, userId: string, week: number): Promise<boolean> {
