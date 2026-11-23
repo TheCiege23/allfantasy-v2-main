@@ -98,6 +98,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
+import type { SidebarLeague } from '@/lib/league/clientLeagueSettings'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { mapLeagueTeamsToSlots } from '@/lib/league/map-league-teams-to-slots'
 import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-readiness'
@@ -278,7 +279,7 @@ function weekFromLeagueSettings(settings: unknown): number | null {
 }
 
 function prismaLeagueToUserLeague(
-  l: League,
+  l: SidebarLeague<League>,
   extra?: { draftDate?: string | null; redraftCurrentWeek?: number | null },
 ): UserLeague {
   const sport = normalizeToSupportedSport(String(l.sport)) ?? DEFAULT_SPORT
@@ -324,7 +325,8 @@ export type LeagueShellProps = {
   isCommissioner: boolean
   /** Head commissioner only (reset draft, co-comm management). */
   isHeadCommissioner: boolean
-  allLeagues: League[]
+  /** The viewer's leagues, slimmed to what the sidebar reads (`toSidebarLeague`). */
+  allLeagues: SidebarLeague<League>[]
   /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
   leagueRail?: LeagueRailData | null
   /**
