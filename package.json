@@ -230,6 +230,8 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@sentry/nextjs": "^10.78.0",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.1.0",
     "@tailwindcss/forms": "^0.5.11",
     "@tanstack/react-virtual": "^3.13.23",
     "@testing-library/jest-dom": "^6.9.1",
