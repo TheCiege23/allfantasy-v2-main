@@ -23,8 +23,18 @@ const DEFAULT_CHANNEL: NotificationChannelPrefs = {
 
 const PUSH_AND_IN_APP_ONLY = new Set<NotificationCategoryId>(["direct_messages", "chat_mentions", "league_chat"])
 
+/*
+ * 🛑 `matchup_results` IS NOT ON THIS LIST, AND ITS ABSENCE IS THE FIX (owner's call, 2026-11-22).
+ * It carries the touchdowns, big plays and lead changes of a manager's OWN starters (`live_score_swing`,
+ * lib/live/bigPlayNotifier.ts) plus their matchup's close-game and final alerts. It was added here in the
+ * 2026-11-03 notifications redesign with no recorded reason, and since then scoring alerts reached the
+ * bell but not the phone for everyone who had never opened notification settings. Measured on the
+ * 2026-11-22 1pm slate: 1,685 scoring alerts to 63 managers, 1,649 suppressed `push_off`, 62 of the 63
+ * with no saved choice — the one manager who had saved push ON was the only one whose phone buzzed.
+ * An explicit `push: false` is still honoured; this only changes what an unsaved choice means.
+ */
 const PUSH_DEFAULT_OFF = new Set<NotificationCategoryId>([
-  "live_game_alerts", "followed_team_scores", "matchup_results", "waiver_processing", "ai_alerts", "autocoach",
+  "live_game_alerts", "followed_team_scores", "waiver_processing", "ai_alerts", "autocoach",
 ])
 
 /**

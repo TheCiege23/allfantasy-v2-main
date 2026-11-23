@@ -1,0 +1,1446 @@
+{
+  "observedAt": "2026-11-02T21:06:47.133Z",
+  "target": "verified-production-read-only",
+  "seasons": [
+    2025,
+    2026
+  ],
+  "objective": "Match approved NFL Beta 2025 event frequencies within comparable scoring/roster cohorts",
+  "historicalNFLBenchmark": {
+    "classification": "descriptive_only",
+    "matchups": 360,
+    "decisive": 360,
+    "ties": 0,
+    "leagues": 2,
+    "periods": 18,
+    "threshold": 60,
+    "crossings": 6,
+    "rate": 0.016666666666666666,
+    "margins": {
+      "count": 360,
+      "mean": 20.672555555555558,
+      "median": 17.290000000000003,
+      "p25": 8.05,
+      "p75": 29.015000000000004,
+      "p90": 43.09800000000001,
+      "min": 0.03999999999999204,
+      "max": 76.91999999999999
+    },
+    "weaponRates": null,
+    "limitations": [
+      "Raw imported totals may include external adjustments; base player points are unverified.",
+      "Winner roles and item/serum inventories are not present; this is not an observed combat-event frequency.",
+      "This benchmark does not approve target thresholds or record acceptance."
+    ]
+  },
+  "diagnostics": [
+    {
+      "sport": "NFL",
+      "effectiveCombatThresholds": {
+        "bashing": 60,
+        "mauling": 60
+      },
+      "itemPolicy": {
+        "mode": "beta_2025_exclusive_bands",
+        "bands": [
+          100,
+          105,
+          110,
+          115,
+          120
+        ]
+      },
+      "native": {
+        "rows": 24,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 24,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "provider_unverified": 24,
+            "zombie_profile_mismatch_or_unknown": 24,
+            "base_scores_unverified": 24
+          },
+          "diagnosticRows": 24,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 391,
+      "historicalCohorts": [
+        {
+          "platform": "sleeper",
+          "seasons": [
+            2025,
+            2026
+          ],
+          "leagues": 2,
+          "managerCount": 20,
+          "rosterShape": [
+            "FLEX",
+            "FLEX",
+            "FLEX",
+            "FLEX",
+            "SUPER_FLEX",
+            "BN",
+            "BN",
+            "BN"
+          ],
+          "inputRows": 720,
+          "uniquePairings": 720,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 240,
+          "diagnosticScoreDistribution": {
+            "count": 1440,
+            "mean": 41.57858333333331,
+            "median": 48.239999999999995,
+            "p25": 0,
+            "p75": 67.8,
+            "p90": 80.88600000000004,
+            "min": 0,
+            "max": 121.54
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        },
+        {
+          "platform": "sleeper",
+          "seasons": [
+            2025,
+            2026
+          ],
+          "leagues": 1,
+          "managerCount": 20,
+          "rosterShape": [
+            "QB",
+            "RB",
+            "RB",
+            "WR",
+            "WR",
+            "TE",
+            "FLEX",
+            "FLEX",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN",
+            "BN"
+          ],
+          "inputRows": 344,
+          "uniquePairings": 344,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 120,
+          "diagnosticScoreDistribution": {
+            "count": 688,
+            "mean": 61.22046511627906,
+            "median": 72.31,
+            "p25": 0,
+            "p75": 99.8,
+            "p90": 122.49000000000001,
+            "min": 0,
+            "max": 200.12
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        }
+      ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": null,
+          "rows": 40473,
+          "firstGameDate": "2025-09-04T00:00:00.000Z",
+          "lastGameDate": "2026-01-04T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "sleeper",
+          "rows": 10611,
+          "firstGameDate": "2026-10-01T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": null,
+          "rows": 6944,
+          "firstGameDate": "2026-09-09T00:00:00.000Z",
+          "lastGameDate": "2026-09-28T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2025,
+          "source": "espn_draft_history_v1",
+          "rows": 272
+        },
+        {
+          "season": 2026,
+          "source": "espn",
+          "rows": 169
+        },
+        {
+          "season": 2026,
+          "source": "api_sports",
+          "rows": 321
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights",
+          "rows": 421
+        },
+        {
+          "season": 2025,
+          "source": "api_sports",
+          "rows": 335
+        },
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 334
+        },
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 153
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 327
+        },
+        {
+          "season": 2025,
+          "source": "espn_live",
+          "rows": 1
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {
+          "provider_unverified": 97759,
+          "zombie_profile_mismatch_or_unknown": 97759,
+          "base_scores_unverified": 97759,
+          "finality_unverified": 97735,
+          "lineup_incomplete_or_unknown": 97735
+        },
+        "diagnosticRows": 97759,
+        "unknownZeroPairs": 40509,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "NBA",
+      "effectiveCombatThresholds": {
+        "bashing": 128,
+        "mauling": 211
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 900,
+        "bow": 1050,
+        "axeMargin": 90,
+        "documentedKnife": 900
+      },
+      "native": {
+        "rows": 0,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 0,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [
+        {
+          "platform": "fantrax",
+          "seasons": [
+            2026
+          ],
+          "leagues": 1,
+          "managerCount": 10,
+          "rosterShape": [
+            "C:1",
+            "UTIL:5",
+            "F:2",
+            "G:2",
+            "BN:4"
+          ],
+          "inputRows": 95,
+          "uniquePairings": 95,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 90,
+          "diagnosticScoreDistribution": {
+            "count": 190,
+            "mean": 15.04342105263158,
+            "median": 0,
+            "p25": 0,
+            "p75": 0,
+            "p90": 0,
+            "min": 0,
+            "max": 371
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        }
+      ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 4763,
+          "firstGameDate": "2026-10-03T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 7
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights",
+          "rows": 141
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 1266
+        },
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 1380
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {
+          "finality_unverified": 95,
+          "provider_unverified": 95,
+          "lineup_incomplete_or_unknown": 95,
+          "zombie_profile_mismatch_or_unknown": 95,
+          "base_scores_unverified": 95
+        },
+        "diagnosticRows": 95,
+        "unknownZeroPairs": 90,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "MLB",
+      "effectiveCombatThresholds": {
+        "bashing": 40,
+        "mauling": 65
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 100,
+        "bow": 120,
+        "axeMargin": 20,
+        "documentedKnife": 280
+      },
+      "native": {
+        "rows": 0,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 0,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 73744,
+          "firstGameDate": "2026-03-25T00:00:00.000Z",
+          "lastGameDate": "2026-10-28T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2026,
+          "source": "rolling_insights",
+          "rows": 450
+        },
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 178
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 2471
+        },
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 2915
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {},
+        "diagnosticRows": 0,
+        "unknownZeroPairs": 0,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "NHL",
+      "effectiveCombatThresholds": {
+        "bashing": 8,
+        "mauling": 14
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 100,
+        "bow": 120,
+        "axeMargin": 20,
+        "documentedKnife": 45
+      },
+      "native": {
+        "rows": 8,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 8,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "provider_unverified": 8,
+            "zombie_profile_mismatch_or_unknown": 8,
+            "base_scores_unverified": 8
+          },
+          "diagnosticRows": 8,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [
+        {
+          "platform": "fantrax",
+          "seasons": [
+            2026
+          ],
+          "leagues": 1,
+          "managerCount": 12,
+          "rosterShape": [
+            "D:3",
+            "FLEX_CW:5",
+            "G:2",
+            "BN:6"
+          ],
+          "inputRows": 144,
+          "uniquePairings": 144,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 114,
+          "diagnosticScoreDistribution": {
+            "count": 288,
+            "mean": 24.776562500000004,
+            "median": 0,
+            "p25": 0,
+            "p75": 0,
+            "p90": 131.53500000000003,
+            "min": 0,
+            "max": 196.5
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        }
+      ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 11511,
+          "firstGameDate": "2026-09-21T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 6
+        },
+        {
+          "season": 2025,
+          "source": "rolling_insights",
+          "rows": 18
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 1409
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights",
+          "rows": 44
+        },
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 1498
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {
+          "provider_unverified": 152,
+          "zombie_profile_mismatch_or_unknown": 152,
+          "base_scores_unverified": 152,
+          "finality_unverified": 144,
+          "lineup_incomplete_or_unknown": 144
+        },
+        "diagnosticRows": 152,
+        "unknownZeroPairs": 114,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "NCAAF",
+      "effectiveCombatThresholds": {
+        "bashing": 35,
+        "mauling": 55
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 100,
+        "bow": 120,
+        "axeMargin": 20,
+        "documentedKnife": 130
+      },
+      "native": {
+        "rows": 0,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 0,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [
+        {
+          "platform": "fantrax",
+          "seasons": [
+            2026
+          ],
+          "leagues": 1,
+          "managerCount": 12,
+          "rosterShape": [
+            "RB:2",
+            "QB:1",
+            "TE:1",
+            "SUPER_FLEX:1",
+            "WR:2",
+            "FLEX:3",
+            "BN:25"
+          ],
+          "inputRows": 60,
+          "uniquePairings": 60,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 60,
+          "diagnosticScoreDistribution": {
+            "count": 120,
+            "mean": 0,
+            "median": 0,
+            "p25": 0,
+            "p75": 0,
+            "p90": 0,
+            "min": 0,
+            "max": 0
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        },
+        {
+          "platform": "fantrax",
+          "seasons": [
+            2026
+          ],
+          "leagues": 1,
+          "managerCount": 140,
+          "rosterShape": [],
+          "inputRows": 1692,
+          "uniquePairings": 1692,
+          "duplicateRows": 0,
+          "conflictingPairings": 0,
+          "unknownZeroPairs": 6,
+          "diagnosticScoreDistribution": {
+            "count": 3384,
+            "mean": 98.40387115839272,
+            "median": 92.85,
+            "p25": 64.875,
+            "p75": 125.8,
+            "p90": 161.04000000000005,
+            "min": 0,
+            "max": 285.95
+          },
+          "qualification": "unverified_finality_and_historical_configuration"
+        }
+      ],
+      "rawPlayerGameRows": [
+        {
+          "season": 2026,
+          "source": "cfbd-weekly",
+          "rows": 46815,
+          "firstGameDate": "2026-09-24T00:00:00.000Z",
+          "lastGameDate": "2026-10-31T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": null,
+          "rows": 33638,
+          "firstGameDate": "2026-08-27T00:00:00.000Z",
+          "lastGameDate": "2026-10-03T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 295
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 1610
+        },
+        {
+          "season": 2026,
+          "source": "cfbd",
+          "rows": 3681
+        },
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 1708
+        },
+        {
+          "season": 2026,
+          "source": "api_sports",
+          "rows": 3595
+        },
+        {
+          "season": 2026,
+          "source": "espn",
+          "rows": 608
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {
+          "finality_unverified": 1752,
+          "provider_unverified": 1752,
+          "lineup_incomplete_or_unknown": 1752,
+          "zombie_profile_mismatch_or_unknown": 1752,
+          "base_scores_unverified": 1752
+        },
+        "diagnosticRows": 1752,
+        "unknownZeroPairs": 66,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "NCAAB",
+      "effectiveCombatThresholds": {
+        "bashing": 40,
+        "mauling": 65
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 100,
+        "bow": 120,
+        "axeMargin": 20,
+        "documentedKnife": 280
+      },
+      "native": {
+        "rows": 0,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 0,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": "rolling_insights_live",
+          "rows": 110640,
+          "firstGameDate": "2025-11-02T00:00:00.000Z",
+          "lastGameDate": "2026-04-06T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 18,
+          "firstGameDate": "2026-11-01T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 3000
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 3356
+        },
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 1
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {},
+        "diagnosticRows": 0,
+        "unknownZeroPairs": 0,
+        "scoreDistribution": null
+      }
+    },
+    {
+      "sport": "SOCCER",
+      "effectiveCombatThresholds": {
+        "bashing": 25,
+        "mauling": 40
+      },
+      "itemPolicy": {
+        "mode": "legacy_threshold_and_achievement",
+        "knife": 100,
+        "bow": 120,
+        "axeMargin": 20,
+        "documentedKnife": 70
+      },
+      "native": {
+        "rows": 0,
+        "zombieRows": 0,
+        "completeLineupSnapshots": 0,
+        "coverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        }
+      },
+      "omittedOtherNflCohorts": 0,
+      "historicalCohorts": [],
+      "rawPlayerGameRows": [
+        {
+          "season": 2025,
+          "source": "rolling_insights_live",
+          "rows": 35144,
+          "firstGameDate": "2025-08-15T00:00:00.000Z",
+          "lastGameDate": "2026-05-24T00:00:00.000Z"
+        },
+        {
+          "season": 2026,
+          "source": "rolling_insights_live",
+          "rows": 8063,
+          "firstGameDate": "2026-08-25T00:00:00.000Z",
+          "lastGameDate": "2026-11-01T00:00:00.000Z"
+        }
+      ],
+      "savedCalendars": [
+        {
+          "season": 2025,
+          "source": "thesportsdb",
+          "rows": 380
+        },
+        {
+          "season": 2026,
+          "source": "espn_live",
+          "rows": 88
+        },
+        {
+          "season": 2026,
+          "source": "thesportsdb",
+          "rows": 380
+        },
+        {
+          "season": 2025,
+          "source": "rolling_insights",
+          "rows": 11
+        },
+        {
+          "season": 2025,
+          "source": "api_football",
+          "rows": 380
+        }
+      ],
+      "coverage": {
+        "status": "insufficient_evidence",
+        "coverage": {
+          "matchups": 0,
+          "periods": 0,
+          "leagues": 0,
+          "configurations": 0
+        },
+        "minimums": {
+          "matchups": 60,
+          "periods": 6,
+          "leagues": 3
+        },
+        "blockers": [
+          "insufficient_decisive_matchups",
+          "insufficient_periods",
+          "insufficient_leagues",
+          "one_scoring_and_roster_configuration_required"
+        ],
+        "excludedReasons": {},
+        "diagnosticRows": 0,
+        "unknownZeroPairs": 0,
+        "scoreDistribution": null
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "sport": "NBA",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 95,
+            "provider_unverified": 95,
+            "lineup_incomplete_or_unknown": 95,
+            "zombie_profile_mismatch_or_unknown": 95,
+            "base_scores_unverified": 95
+          },
+          "diagnosticRows": 95,
+          "unknownZeroPairs": 90,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    },
+    {
+      "sport": "MLB",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    },
+    {
+      "sport": "NHL",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "provider_unverified": 152,
+            "zombie_profile_mismatch_or_unknown": 152,
+            "base_scores_unverified": 152,
+            "finality_unverified": 144,
+            "lineup_incomplete_or_unknown": 144
+          },
+          "diagnosticRows": 152,
+          "unknownZeroPairs": 114,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    },
+    {
+      "sport": "NCAAF",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 1752,
+            "provider_unverified": 1752,
+            "lineup_incomplete_or_unknown": 1752,
+            "zombie_profile_mismatch_or_unknown": 1752,
+            "base_scores_unverified": 1752
+          },
+          "diagnosticRows": 1752,
+          "unknownZeroPairs": 66,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    },
+    {
+      "sport": "NCAAB",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    },
+    {
+      "sport": "SOCCER",
+      "analysis": {
+        "status": "insufficient_evidence",
+        "referenceCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {
+            "finality_unverified": 38263,
+            "provider_unverified": 38263,
+            "lineup_incomplete_or_unknown": 38263,
+            "zombie_profile_mismatch_or_unknown": 38263,
+            "base_scores_unverified": 38263
+          },
+          "diagnosticRows": 38263,
+          "unknownZeroPairs": 1352,
+          "scoreDistribution": null
+        },
+        "targetCoverage": {
+          "status": "insufficient_evidence",
+          "coverage": {
+            "matchups": 0,
+            "periods": 0,
+            "leagues": 0,
+            "configurations": 0
+          },
+          "minimums": {
+            "matchups": 60,
+            "periods": 6,
+            "leagues": 3
+          },
+          "blockers": [
+            "insufficient_decisive_matchups",
+            "insufficient_periods",
+            "insufficient_leagues",
+            "one_scoring_and_roster_configuration_required"
+          ],
+          "excludedReasons": {},
+          "diagnosticRows": 0,
+          "unknownZeroPairs": 0,
+          "scoreDistribution": null
+        },
+        "proposal": null
+      }
+    }
+  ],
+  "rulesChanged": false,
+  "acceptanceRecorded": false,
+  "limitations": [
+    "No provider API calls, database writes, draft starts or signoffs.",
+    "Calendars/points alone do not establish finality or completeness.",
+    "Imported current settings do not prove historical scoring or lineup rules.",
+    "No intervals are claimed for dependent team-period observations.",
+    "Legacy non-NFL items require mechanics review before adopting NFL-style score bands."
+  ]
+}
