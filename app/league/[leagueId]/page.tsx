@@ -36,6 +36,7 @@ import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-lin
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
+import { withListLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
@@ -490,7 +491,7 @@ export default async function LeaguePage(
             isOwner={isOwner}
             isCommissioner={isCommissioner}
             isHeadCommissioner={isHeadCommissioner}
-            allLeagues={allLeagues}
+            allLeagues={allLeagues.map(withListLeagueSettings)}
             leagueRail={leagueRail}
             sourceLinkLeagueId={sourceLinkLeagueId}
             userId={userId}
