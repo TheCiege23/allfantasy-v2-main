@@ -33,13 +33,17 @@ const PAGES: Record<Exclude<TournamentHarnessScreen, 'commissioner'>, ComponentT
 export default function TournamentHarnessClient({
   screen,
   commissionerTab,
+  tournamentName,
 }: {
   screen: TournamentHarnessScreen
   /** `?tab=` for the commissioner screen; the real page always opens on the overview. */
   commissionerTab?: string
+  /** `?name=` renames the tournament, e.g. to see the King Buffalo Invitational's "Presented by" strip. */
+  tournamentName?: string
 }) {
+  const shell = tournamentName ? { ...layout.shell, name: tournamentName } : layout.shell
   return (
-    <TournamentUiProvider value={{ ...layout, viewerUserId: HARNESS_USER_ID }}>
+    <TournamentUiProvider value={{ ...layout, shell, viewerUserId: HARNESS_USER_ID }}>
       <div className="af-draft-dark tournament-theme af-tournament-immersive relative min-h-dvh">
         <TournamentChrome>
           {screen === 'commissioner' ? (
