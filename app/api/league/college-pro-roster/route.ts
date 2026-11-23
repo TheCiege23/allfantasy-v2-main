@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissionerAccess } from '@/lib/league/commissionerAccess'
 import { loadCollegeProRoster } from '@/lib/league/collegePro/loadCollegeProRoster'
-import { COLLEGE_PRO_SCORING_KEY, collegeProFormatOf } from '@/lib/league/collegePro/format'
+import { COLLEGE_PRO_SCORING_KEY, isCollegeProLeague } from '@/lib/league/collegePro/format'
 import { COLLEGE_PRO_TEAM_MAP_KEY } from '@/lib/league/collegePro/headToHead'
 import { readTeamMap } from '@/lib/league/collegePro/teamMatch'
 
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const status = (err as { status?: number }).status === 404 ? 404 : 403
     return NextResponse.json({ error: status === 404 ? 'League not found' : 'Only the commissioner can change scoring' }, { status })
   }
-  if (!collegeProFormatOf(league)) {
+  if (!isCollegeProLeague(league)) {
     return NextResponse.json({ error: 'This is not a C2C or Devy league' }, { status: 400 })
   }
 

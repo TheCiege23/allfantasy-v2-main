@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { resolvePairedHalf, type PairedHalf } from '@/lib/core-app/leaguePairing'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { COLLEGE_PRO_TEAM_MAP_KEY } from './headToHead'
+import { COLLEGE_PRO_PAIR_KEY, readLeaguePair, type LeaguePairRecord } from './pairRecord'
 import { confidentTeamMatches, effectiveTeamMap, readTeamMap, type FantraxTeam, type SleeperTeam } from './teamMatch'
 
 /**
@@ -28,25 +29,7 @@ import { confidentTeamMatches, effectiveTeamMap, readTeamMap, type FantraxTeam, 
  * Fantrax's, so the name is the only key the two share.
  */
 
-export const COLLEGE_PRO_PAIR_KEY = 'collegeProPair'
-
-export type LeaguePairRecord = {
-  role: 'pro' | 'college'
-  otherLeagueId: string
-  linkedByUserId: string
-  linkedAt: string
-}
-
-export function readLeaguePair(settings: unknown): LeaguePairRecord | null {
-  const raw = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[COLLEGE_PRO_PAIR_KEY] : null
-  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
-  if (!r) return null
-  const role = r.role === 'pro' || r.role === 'college' ? r.role : null
-  const otherLeagueId = typeof r.otherLeagueId === 'string' && r.otherLeagueId ? r.otherLeagueId : null
-  const linkedByUserId = typeof r.linkedByUserId === 'string' && r.linkedByUserId ? r.linkedByUserId : null
-  if (!role || !otherLeagueId || !linkedByUserId) return null
-  return { role, otherLeagueId, linkedByUserId, linkedAt: typeof r.linkedAt === 'string' ? r.linkedAt : '' }
-}
+export { COLLEGE_PRO_PAIR_KEY, readLeaguePair, type LeaguePairRecord } from './pairRecord'
 
 /**
  * May this user make a pair the league's? The head commissioner of the pro half, or the user who
