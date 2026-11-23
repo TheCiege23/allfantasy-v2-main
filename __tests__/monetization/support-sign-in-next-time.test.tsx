@@ -147,6 +147,14 @@ describe('sign in next time', () => {
       expect((screen.getByTestId('sign-in-next-time-phone-input') as HTMLInputElement).value).toBe('5551234567')
     })
 
+    it('names the reason when the number is outside the US and Canada', async () => {
+      replies['/api/verify/phone/start'] = { status: 400, body: { error: 'PHONE_REGION_NOT_SUPPORTED' } }
+      window.sessionStorage.setItem('af:support-phone', JSON.stringify({ phone: '+18765550123', smsConsent: true }))
+      render(<SignInNextTime />)
+      expect((await screen.findByRole('alert')).textContent).toContain('US and Canadian')
+      expect(screen.getByTestId('sign-in-next-time').getAttribute('data-step')).toBe('phone')
+    })
+
     it('is ignored without the consent that was ticked before paying', async () => {
       window.sessionStorage.setItem('af:support-phone', JSON.stringify({ phone: '5551234567' }))
       render(<SignInNextTime />)

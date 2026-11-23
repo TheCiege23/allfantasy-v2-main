@@ -49,7 +49,7 @@ describe('support card phone box', () => {
 
   it('will not pay on with a number but no consent', async () => {
     render(<SupportMonthlyCard />)
-    fireEvent.change(screen.getByTestId('support-monthly-phone-input'), { target: { value: '(555) 123-4567' } })
+    fireEvent.change(screen.getByTestId('support-monthly-phone-input'), { target: { value: '(201) 555-0123' } })
     agreeAndPay()
     expect((await screen.findByRole('alert')).textContent).toContain('text-message box')
     expect(fetchMock).not.toHaveBeenCalled()
@@ -58,12 +58,22 @@ describe('support card phone box', () => {
 
   it('hands the number to the thank-you page, and does not send it to Stripe', async () => {
     render(<SupportMonthlyCard />)
-    fireEvent.change(screen.getByTestId('support-monthly-phone-input'), { target: { value: '(555) 123-4567' } })
+    fireEvent.change(screen.getByTestId('support-monthly-phone-input'), { target: { value: '(201) 555-0123' } })
     fireEvent.click(document.getElementById('support-monthly-sms-consent')!)
     agreeAndPay()
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(JSON.parse(stored()!)).toEqual({ phone: '(555) 123-4567', smsConsent: true })
+    expect(JSON.parse(stored()!)).toEqual({ phone: '(201) 555-0123', smsConsent: true })
     expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain('555')
+  })
+
+  it('turns away a number we cannot text before paying — +1 is not enough (Jamaica)', async () => {
+    render(<SupportMonthlyCard />)
+    fireEvent.change(screen.getByTestId('support-monthly-phone-input'), { target: { value: '+1 876 555 0123' } })
+    fireEvent.click(document.getElementById('support-monthly-sms-consent')!)
+    agreeAndPay()
+    expect((await screen.findByRole('alert')).textContent).toContain('US and Canadian')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(stored()).toBeNull()
   })
 
   it('refuses a number that is too short', async () => {

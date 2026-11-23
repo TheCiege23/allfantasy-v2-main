@@ -68,7 +68,9 @@ export default function SignInNextTime() {
           ? 'That number is already used by another AllFantasy account.'
           : result.error === 'INVALID_PHONE'
             ? 'Enter a valid phone number, including the area code.'
-            : "We couldn't text that number. Check it and try again.",
+            : result.error === 'PHONE_REGION_NOT_SUPPORTED'
+              ? 'We can only text US and Canadian phone numbers right now.'
+              : "We couldn't text that number. Check it and try again.",
       )
     })()
   }, [])

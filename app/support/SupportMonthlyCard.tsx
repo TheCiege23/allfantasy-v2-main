@@ -12,6 +12,8 @@ import { useGooglePlayPrices } from '@/lib/monetization/google-play-client'
 import { buildSignupConsentCookie } from '@/lib/auth/signupConsentCookie'
 import { SmsConsentCheckbox } from '@/components/legal/SmsConsentCheckbox'
 import { clearSupportPhone, saveSupportPhone } from '@/lib/monetization/supportPhoneHandoff'
+import { normalizePhoneE164 } from '@/lib/phone/e164'
+import { isSmsAllowedNumber } from '@/lib/phone/smsRegion'
 
 const SKU = 'af_pro_monthly'
 const RETURN_PATH = '/support/welcome'
@@ -98,6 +100,11 @@ export default function SupportMonthlyCard() {
       }
       if (offersPhone && phone.trim()) {
         if (phone.replace(/\D/g, '').length < 10) throw new Error('Enter your phone number with the area code, or leave it blank.')
+        // The same rule every texting route applies (lib/phone/smsRegion), asked here so a number we
+        // cannot text is turned away BEFORE paying, not on the thank-you page after.
+        if (!isSmsAllowedNumber(normalizePhoneE164(phone))) {
+          throw new Error('We can only text US and Canadian numbers. Leave the phone number blank to skip it.')
+        }
         if (!smsConsent) throw new Error('Tick the text-message box, or leave the phone number blank.')
         saveSupportPhone(phone.trim())
       } else {
