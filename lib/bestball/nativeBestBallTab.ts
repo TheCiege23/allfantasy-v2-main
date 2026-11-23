@@ -155,6 +155,10 @@ function atSealedPositions(
 }
 
 const RESERVE = new Set(['ir', 'injured_reserve', 'taxi', 'devy', 'reserve'])
+/** Slot types that can never count toward a lineup (IR, taxi, devy, reserve). */
+export function isReserveSlotType(slotType: string | null | undefined): boolean {
+  return RESERVE.has(String(slotType ?? '').toLowerCase())
+}
 
 function positionsOf(position: string): string[] {
   return String(position ?? '')

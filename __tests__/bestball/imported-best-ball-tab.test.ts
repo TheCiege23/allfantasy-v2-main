@@ -113,7 +113,9 @@ describe('the tab and the handler use it only for an imported league with nothin
 
   it('the tab shows the note and does not print "0 counted" on an imported card', () => {
     expect(tab).toContain('data-testid="bestball-imported-note"')
-    expect(tab).toMatch(/data\.source === 'imported' \? null : <div className="text-\[11px\] text-white\/40">\{lineup\.starters\.length\} counted<\/div>/)
+    // The card's own `imported` flag (LineupCard), not the colour classes, which moved to tokens on 2026-11-23.
+    expect(tab).toContain("const imported = data.source === 'imported'")
+    expect(tab).toMatch(/imported \? null : <div className="[^"]*">\{lineup\.starters\.length\} counted<\/div>/)
   })
 })
 
