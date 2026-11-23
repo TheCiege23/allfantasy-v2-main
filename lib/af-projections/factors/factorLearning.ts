@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { describeFactorTable, learnFactors, type LearnedFactorTable } from './factorLearner'
 import { buildFactorObservations, opponentRatios, usageOf, type GameLine } from './factorObservations'
+import { dailyGameContext, loadMlbWeatherLevels } from './dailyGameContext'
 import { contextKey, loadNflGameContext, type GameContextLevels } from './gameContext'
 import { loadInjurySnapshots, nflPeriod, snapshotLevelFor } from './injurySnapshots'
 import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
@@ -97,6 +98,17 @@ export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sp
         const injury = snapshotLevelFor(injuries.get(dayOf(l)), l.playerId, projectionTeamKey(sport, l.team))
         if (injury) l.context = { ...(l.context ?? {}), injury }
       }
+    }
+  }
+  if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') {
+    // The game's own context: the head coach on that day (all three), and MLB's stored pre-game forecast.
+    const dayOf = (l: GameLine) => new Date(l.atMs).toISOString().slice(0, 10)
+    const weather = sport === 'MLB' && 'sportsGame' in db && 'weatherCache' in db
+      ? await loadMlbWeatherLevels(db as never, [...new Set(out.map(dayOf))]).catch(() => new Map<string, string>())
+      : null
+    for (const l of out) {
+      const c = dailyGameContext(sport, l.team, l.atMs, dayOf(l), weather)
+      if (c) l.context = { ...(l.context ?? {}), ...c }
     }
   }
   return out

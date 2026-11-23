@@ -1,5 +1,6 @@
 import { liveFactorAdjustments, loadFactorTable, type FactorAdjustment } from '@/lib/af-projections/factors/factorTables'
 import { loadInjurySnapshots, snapshotLevelFor } from '@/lib/af-projections/factors/injurySnapshots'
+import { dailyGameContext, loadMlbWeatherLevels } from '@/lib/af-projections/factors/dailyGameContext'
 import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 import 'server-only'
 
@@ -193,6 +194,10 @@ export async function loadDailySportOutlook(
   const injurySnapshot = factorTable && daily && periodDay && (sport === 'NBA' || sport === 'NHL') && factorTable.levels.some((l) => l.published && l.factor === 'injury')
     ? (await loadInjurySnapshots(db, sport, [periodDay]).catch(() => new Map())).get(periodDay)
     : undefined
+  // MLB's stored pre-game forecast for the day — only once the table has published a weather level.
+  const mlbWeather = factorTable && daily && periodDay && sport === 'MLB' && factorTable.levels.some((l) => l.published && l.factor === 'weather')
+    ? await loadMlbWeatherLevels(db, [periodDay]).catch(() => null)
+    : null
   const adjustments = factorTable
     ? await liveFactorAdjustments(db, {
         sport,
@@ -208,9 +213,15 @@ export async function loadDailySportOutlook(
             next: daily
               ? (() => {
                   const injury = snapshotLevelFor(injurySnapshot, formId, projectionTeamKey(sport, p.team ?? scored.get(formId)?.team ?? null))
-                  return { atMs: nextAtMs, opponent: (code ? opponentByTeam.get(code)?.opponent : null) ?? null, ...(injury ? { context: { injury } } : {}) }
+                  const game = dailyGameContext(sport, p.team ?? scored.get(formId)?.team ?? null, nextAtMs, periodDay ?? null, mlbWeather)
+                  const context = { ...(game ?? {}), ...(injury ? { injury } : {}) }
+                  return { atMs: nextAtMs, opponent: (code ? opponentByTeam.get(code)?.opponent : null) ?? null, ...(Object.keys(context).length ? { context } : {}) }
                 })()
-              : { atMs: nextAtMs, drop: ['rest', 'opponent'] as const },
+              : (() => {
+                  // A week can hold several games, but one head coach: only the coaching level is known for all of them.
+                  const coaching = dailyGameContext(sport, p.team ?? scored.get(formId)?.team ?? null, nextAtMs, null, null)?.coaching
+                  return { atMs: nextAtMs, drop: ['rest', 'opponent'] as const, ...(coaching ? { context: { coaching } } : {}) }
+                })(),
           }]
         }),
       }).catch(() => new Map<string, FactorAdjustment>())

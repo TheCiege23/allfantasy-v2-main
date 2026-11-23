@@ -30,7 +30,7 @@ export type GameLine = {
   points: number
   /** Playing time this game, when the feed carries it. */
   usage: number | null
-  /** What was known about THIS game before kickoff — Vegas, weather, coaching (`gameContext.ts`). NFL for now. */
+  /** What was known about THIS game before kickoff — Vegas, weather, coaching (`gameContext.ts`, `dailyGameContext.ts`). */
   context?: GameContextLevels
   /** Season and week, for joining that context (weekly sports). */
   season?: number

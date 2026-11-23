@@ -28,7 +28,7 @@ export const FACTOR_LEVELS: Readonly<Record<FactorName, readonly string[]>> = {
   opponent: ['average', 'soft', 'tough'],
   team_change: ['same_team', 'new_team'],
   returning: ['playing', 'returning'],
-  // The game itself, before kickoff (2026-11-22; `gameContext.ts`) — NFL for now.
+  // The game itself, before kickoff (`gameContext.ts`, NFL; `dailyGameContext.ts`, NBA / NHL / MLB coaching and MLB weather).
   vegas: ['average', 'high', 'low'],
   weather: ['normal', 'bad', 'dome'],
   coaching: ['same_coach', 'new_coach'],
