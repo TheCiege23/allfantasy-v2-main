@@ -12,6 +12,8 @@
  * Those swaps say why they are not graded and keep the draft-position read, which is a fact.
  */
 
+import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
+import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { LARGE_LEAGUE_PICK_THRESHOLD } from '@/lib/fantasycalc-profile-capture'
 
 export type DraftPickTradeGrade =
@@ -35,7 +37,7 @@ export const NOT_A_ROOKIE_DRAFT_REASON =
 export function isRookieDraft(session: { draftModeLabel?: string | null; playerPool?: string | null }): boolean {
   const label = String(session.draftModeLabel ?? '').trim().toLowerCase()
   const pool = String(session.playerPool ?? '').trim().toLowerCase()
-  return label === 'rookie' || pool === 'rookies_only'
+  return label === 'rookie' || label === ANNUAL_C2C_DRAFT || pool === 'rookies_only'
 }
 
 /**
@@ -67,15 +69,17 @@ export function draftPickGradeAsset(input: {
   overall: number | null
   slot: number
   teamCount: number
-}): { kind: 'pick'; year: number; round: number; tier: 'early' | 'mid' | 'late'; label: string; overall?: number } {
+  combined?: boolean
+}): Extract<TradeAssetInput, { kind: 'pick' }> {
   const tier = pickTierInRound(input)
   return {
     kind: 'pick',
     year: input.season,
     round: input.round,
     tier,
-    ...(input.teamCount > LARGE_LEAGUE_PICK_THRESHOLD && input.overall != null ? { overall: input.overall } : {}),
-    label: `${input.season} ${tier} round ${input.round}${input.overall != null ? ` (#${input.overall})` : ''}`,
+    ...(input.combined ? { draftSide: 'combined' as const } : {}),
+    ...((input.combined || input.teamCount > LARGE_LEAGUE_PICK_THRESHOLD) && input.overall != null ? { overall: input.overall } : {}),
+    label: `${input.season} ${input.combined ? 'Combined ' : ''}${tier} round ${input.round}${input.overall != null ? ` (#${input.overall})` : ''}`,
   }
 }
 

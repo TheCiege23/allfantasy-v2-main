@@ -1,3 +1,4 @@
+import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
 import { listAutoDraftRosterIds } from './instantAutopick'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
@@ -581,6 +582,7 @@ export async function buildSessionSnapshot(
     ...(pickEditorEmpty ? { pickEditorEmpty: true as const } : {}),
     tradedPickMeta: tradedMeta,
     source: p.source ?? 'user',
+    ...(session.draftModeLabel === ANNUAL_C2C_DRAFT ? { assetType: p.assetType } : {}),
     pickLabel: formatPickLabel(p.overall, teamCount),
     amount: (p as any).amount ?? undefined,
     ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
@@ -825,7 +827,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
     where: { id: session.id, status: 'pre_draft', version: session.version },
     data: {
       ...(ls
-        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' || session.draftModeLabel === ANNUAL_C2C_DRAFT ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
         : {}),
       startedAt: startedAtNow,
       version: { increment: 1 },
