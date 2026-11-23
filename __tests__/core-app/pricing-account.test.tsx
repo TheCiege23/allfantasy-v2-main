@@ -116,3 +116,24 @@ describe('PricingV4 phone header', () => {
     expect(container.querySelector('a[href="/login"]')).toBeNull()
   })
 })
+
+describe('PricingV4 current plan', () => {
+  /*
+   * 2026-11-22: a first App Store purchase of AF Pro reloaded /pricing still reading "Choose AF Pro",
+   * because the held card kept its buy button. The exact SKU held now reads "Current plan".
+   */
+  it('replaces the buy button on the exact SKU held, and leaves the other plans buyable', () => {
+    const account: PricingAccount = { planIds: ['pro'], planName: 'AF Pro', renewsAt: null, tokenBalance: 0, heldSkus: ['af_pro_monthly'] }
+    render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn account={account} />)
+    const pro = cardOf('AF Pro')
+    expect(within(pro).getByTestId('pricing-current-af_pro_monthly').textContent).toContain('Current plan')
+    expect(within(pro).queryByRole('button', { name: /Choose AF Pro/ })).toBeNull()
+    expect(within(cardOf('AF Commissioner')).getByRole('button', { name: /Choose AF Commissioner/ })).toBeTruthy()
+  })
+
+  it('keeps the button when the held SKU is unknown (a failed read)', () => {
+    const account: PricingAccount = { planIds: ['pro'], planName: 'AF Pro', renewsAt: null, tokenBalance: 0 }
+    render(<PricingV4 plans={PLANS} packs={[]} savingsHeadline={null} signedIn account={account} />)
+    expect(screen.queryByTestId('pricing-current-af_pro_monthly')).toBeNull()
+  })
+})
