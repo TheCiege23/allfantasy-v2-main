@@ -8,11 +8,14 @@ const h = vi.hoisted(() => ({
   upsert: vi.fn(async () => ({})),
   draft: vi.fn(),
   roster: vi.fn(),
+  notify: vi.fn(async () => ({ leagues: 0, managers: 0, commissioners: 0 })),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { sportsDataCache: { findUnique: vi.fn(async () => (h.existing ? { data: h.existing } : null)), upsert: h.upsert } },
 }))
 vi.mock('@/lib/cbbd/cbbdFetch', () => ({ getCbbdDraftPicks: h.draft, getCbbdTeamRoster: h.roster }))
+// The paired-league notices are their own suite (collegeProDraftNotices); here only the hand-off is checked.
+vi.mock('@/lib/league/collegePro/draftNotices', () => ({ notifyNewDraftPicks: h.notify }))
 
 import {
   inNbaDraftWindow,
@@ -90,6 +93,9 @@ describe('refreshCbbdDraftPicks', () => {
     const write = h.upsert.mock.calls[0][0] as { where: { cacheKey: string }; create: { data: { picks: unknown[] } } }
     expect(write.where.cacheKey).toBe('cbbd:draft-picks:v1:2026')
     expect(write.create.data.picks).toHaveLength(5)
+    // Nothing was stored before, so all five are new to the notices.
+    expect(h.notify).toHaveBeenCalledWith(expect.objectContaining({ sport: 'NCAAB', year: 2026, previousIds: new Set() }))
+    expect((h.notify.mock.calls.at(-1)?.[0] as { currentIds: string[] }).currentIds).toHaveLength(5)
   })
 
   it('writes nothing when a roster cannot be read, so nobody is reported undrafted by mistake', async () => {
