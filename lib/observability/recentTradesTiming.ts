@@ -1,12 +1,14 @@
 import { recordCompletedSpan } from './rootTiming'
 
-type TradeReadPhase = 'ledger' | 'grade-cache' | 'reconcile' | 'provider' | 'media' | 'frozen' | 'grading'
+type TradeReadPhase = 'ledger' | 'grade-cache' | 'reconcile' | 'provider' | 'media' | 'reuse' | 'frozen' | 'grading'
 
 /**
  * What happened to each visible trade's grade on this read (2026-11-22). Added because the owner's 91-league home
  * re-graded every visible trade on every open — none of their trades had a stored original — and nothing said why.
  *
- * - `stored`        its original was already on record: no pricing at all.
+ * - `reused`        its grade was computed on an earlier open, within the fresh window (`recentTradeGradeCache.ts`).
+ * - `reusedStale`   the same, older than the fresh window: shown, then re-graded after the card.
+ * - `stored`        its original was already on record; today's letter was graded again.
  * - `tradeDate`     priced on its trade date and saved — the next read is `stored`.
  * - `firstGraded`   no record from the trade date, so today's letter was saved as the original.
  * - `saveFailed`    priced, but the save failed: today's letter is shown and the next read prices it again.
@@ -17,7 +19,7 @@ type TradeReadPhase = 'ledger' | 'grade-cache' | 'reconcile' | 'provider' | 'med
  * - `provider`      a provider trade the ledger has not reached, graded from its own assets.
  */
 export type TradeGradeOutcome =
-  | 'stored' | 'tradeDate' | 'firstGraded' | 'saveFailed' | 'unfrozen' | 'failed' | 'provider'
+  | 'reused' | 'reusedStale' | 'stored' | 'tradeDate' | 'firstGraded' | 'saveFailed' | 'unfrozen' | 'failed' | 'provider'
   | `ungraded:${UngradedBucket}`
 
 export type UngradedBucket =

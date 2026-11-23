@@ -18,7 +18,11 @@ import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleep
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { mapWithConcurrency } from '@/lib/concurrency/mapWithConcurrency'
 import { loadFrozenCompletedGrades, saveFrozenCompletedGrades, sleeperTradeKey, type FrozenCompletedGrade } from '@/lib/decision-os/trade/frozenCompletedGrade'
-import { ungradedBucket } from '@/lib/observability/recentTradesTiming'
+import { ungradedBucket, type TradeGradeOutcome } from '@/lib/observability/recentTradesTiming'
+import {
+  coreTradeGradeFingerprint, coreTradeGradeHit, readCoreTradeGrades, writeCoreTradeGrades,
+  type CachedCoreTradeGrade, type CoreTradeGradeHit,
+} from './recentTradeGradeCache'
 
 /**
  * Trades that landed in your leagues recently.
@@ -865,24 +869,34 @@ async function loadRecentTrades(
     return save
   }
   /*
-   * ⚠ THE STORED ORIGINALS, ONE READ PER LEAGUE (2026-11-22). Each visible ledger trade used to read its own
-   * original inside `frozenOriginalFor` — two snapshot reads and a league read per trade, on every open. Same rows,
-   * same filter (`loadFrozenCompletedGrades`); a league whose read fails reads as "nothing stored", as before.
+   * ⚠ REUSED GRADES FIRST (2026-11-23). The owner's 91-league open graded 20 visible trades in 5.0–7.2s although 11
+   * already had their original stored: every open rebuilt each league's grader to show today's letter beside the
+   * original. A trade whose grade was computed within `CORE_TRADE_GRADE_FRESH_MS` is shown as computed; one up to
+   * `CORE_TRADE_GRADE_STALE_MS` old is shown and re-graded after the card is done. See `recentTradeGradeCache.ts`.
    */
-  const ledgerTradeIdsByLeague = new Map<string, string[]>()
+  const ledger: LedgerTrade[] = []
   for (const t of visible) {
     const src = graded.get(`${t.platformLeagueId}:${t.id}`)
-    if (!src) continue
-    const ids = ledgerTradeIdsByLeague.get(t.leagueId) ?? []
-    ids.push(src.id)
-    ledgerTradeIdsByLeague.set(t.leagueId, ids)
+    if (src) ledger.push({ t, src, fp: coreTradeGradeFingerprint(src, currentSeason) })
   }
-  const frozenByLeague = new Map<string, ReadonlyMap<string, FrozenCompletedGrade>>()
-  if (ledgerTradeIdsByLeague.size > 0) {
-    await timing.read('frozen', () => Promise.all([...ledgerTradeIdsByLeague].map(async ([leagueId, ids]) => {
-      frozenByLeague.set(leagueId, await loadFrozenCompletedGrades(leagueId, ids).catch(() => new Map()))
-    })))
+  const reuse = ledger.length > 0
+    ? await timing.read('reuse', () => readCoreTradeGrades(ledger.map((x) => x.t.leagueId), now))
+    : new Map<string, Record<string, CachedCoreTradeGrade>>()
+  const reused = new Map<RecentTrade, CoreTradeGradeHit>()
+  const ledgerOf = new Map<RecentTrade, LedgerTrade>()
+  for (const x of ledger) {
+    ledgerOf.set(x.t, x)
+    const hit = coreTradeGradeHit(reuse.get(x.t.leagueId), x.src.id, x.fp, now)
+    if (hit) reused.set(x.t, hit)
   }
+  /*
+   * ⚠ THE STORED ORIGINALS, ONE READ PER LEAGUE (2026-11-22), for the trades graded now. Each visible ledger trade
+   * used to read its own original inside `frozenOriginalFor` — two snapshot reads and a league read per trade, on
+   * every open. Same rows, same filter (`loadFrozenCompletedGrades`); a failed read is "nothing stored", as before.
+   */
+  const frozenByLeague = await loadFrozenForLedger(ledger.filter((x) => !reused.has(x.t)), timing)
+  const computed = new Map<string, Map<string, CachedCoreTradeGrade>>()
+  const toRefresh: LedgerTrade[] = []
   // Grade only visible trades without changing display order or provider scan limits.
   await timing.read('grading', async () => {
     /*
@@ -904,26 +918,23 @@ async function loadRecentTrades(
           timing.grade('provider')
           return
         }
-        const frozen = frozenByLeague.get(t.leagueId) ?? new Map<string, FrozenCompletedGrade>()
-        const wasStored = frozen.has(sleeperTradeKey(src.id))
-        let freeze: { row: FrozenCompletedGrade; current: TradeGradeView } | null = null
-        let oneGrade: TradeGradeView | null = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason, {
-          frozen,
-          onFreeze: (row, current) => { freeze = { row, current } },
-        }).catch(() => null)
-        /*
-         * A new original is saved before it is shown. A failed save shows TODAY's letter, never an original the table
-         * did not receive — exactly what `frozenOriginalFor` did when each trade read and saved on its own.
-         */
-        const pending = freeze as { row: FrozenCompletedGrade; current: TradeGradeView } | null
-        if (oneGrade && pending) {
-          const saved = await saveFrozenCompletedGrades(t.leagueId, [pending.row])
-          if (!saved) oneGrade = pending.current
-          timing.grade(!saved ? 'saveFailed' : pending.row.v === 2 && pending.row.basis === 'first_graded' ? 'firstGraded' : 'tradeDate')
-        } else if (!oneGrade) timing.grade('failed')
-        else if (wasStored) timing.grade('stored')
-        else if (!oneGrade.graded) timing.grade(`ungraded:${ungradedBucket(oneGrade.reason, 'kind' in oneGrade ? oneGrade.kind : null)}`)
-        else timing.grade('unfrozen')
+        let oneGrade: TradeGradeView | null
+        const hit = reused.get(t)
+        const x = ledgerOf.get(t)!
+        if (hit) {
+          oneGrade = hit.grade
+          timing.grade(hit.stale ? 'reusedStale' : 'reused')
+          if (hit.stale) toRefresh.push(x)
+        } else {
+          const result = await gradeLedgerTrade(t.leagueId, src, currentSeason, frozenByLeague.get(t.leagueId))
+          oneGrade = result.grade
+          timing.grade(result.outcome)
+          if (result.grade && result.cacheable && x.fp) {
+            const league = computed.get(t.leagueId) ?? new Map<string, CachedCoreTradeGrade>()
+            league.set(src.id, { fp: x.fp, at: now.toISOString(), grade: result.grade })
+            computed.set(t.leagueId, league)
+          }
+        }
         t.verdict = gradeOf(src, oneGrade)
         /*
          * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
@@ -1003,5 +1014,84 @@ async function loadRecentTrades(
     })
   })
 
+  /*
+   * After the card: store what was graded now, and re-grade what was served stale so the NEXT open has today's values.
+   * Neither is awaited, so neither costs this card time; both are failure-contained.
+   */
+  for (const [leagueId, fresh] of computed) void writeCoreTradeGrades(leagueId, reuse.get(leagueId), fresh)
+  if (toRefresh.length > 0) void refreshStaleCoreTradeGrades(toRefresh, reuse, currentSeason)
+
   return visible
+}
+
+/** `fp` null: the trade's shape could not be read, so it is graded every time and never cached. */
+type LedgerTrade = { t: RecentTrade; src: GradedTrade; fp: string | null }
+
+async function loadFrozenForLedger(
+  ledger: ReadonlyArray<LedgerTrade>,
+  timing?: ReturnType<typeof recentTradesTiming>,
+): Promise<Map<string, ReadonlyMap<string, FrozenCompletedGrade>>> {
+  const idsByLeague = new Map<string, string[]>()
+  for (const x of ledger) {
+    const ids = idsByLeague.get(x.t.leagueId) ?? []
+    ids.push(x.src.id)
+    idsByLeague.set(x.t.leagueId, ids)
+  }
+  const out = new Map<string, ReadonlyMap<string, FrozenCompletedGrade>>()
+  if (idsByLeague.size === 0) return out
+  const load = () => Promise.all([...idsByLeague].map(async ([leagueId, ids]) => {
+    out.set(leagueId, await loadFrozenCompletedGrades(leagueId, ids).catch(() => new Map()))
+  }))
+  await (timing ? timing.read('frozen', load) : load())
+  return out
+}
+
+/**
+ * THE grade for one ledger trade, and what happened to it. A new original is saved before it is shown; a failed save
+ * shows TODAY's letter, never an original the table did not receive — exactly what `frozenOriginalFor` did when each
+ * trade read and saved on its own. Only a grade that neither failed nor lost its save may be reused.
+ */
+async function gradeLedgerTrade(
+  leagueId: string,
+  src: GradedTrade,
+  currentSeason: number,
+  frozen: ReadonlyMap<string, FrozenCompletedGrade> = new Map(),
+): Promise<{ grade: TradeGradeView | null; outcome: TradeGradeOutcome; cacheable: boolean }> {
+  const wasStored = frozen.has(sleeperTradeKey(src.id))
+  let freeze: { row: FrozenCompletedGrade; current: TradeGradeView } | null = null
+  const grade = await oneGradeForCompletedTrade(leagueId, src, currentSeason, {
+    frozen,
+    onFreeze: (row, current) => { freeze = { row, current } },
+  }).catch(() => null)
+  const pending = freeze as { row: FrozenCompletedGrade; current: TradeGradeView } | null
+  if (!grade) return { grade: null, outcome: 'failed', cacheable: false }
+  if (pending) {
+    if (!(await saveFrozenCompletedGrades(leagueId, [pending.row]))) return { grade: pending.current, outcome: 'saveFailed', cacheable: false }
+    return { grade, outcome: pending.row.v === 2 && pending.row.basis === 'first_graded' ? 'firstGraded' : 'tradeDate', cacheable: true }
+  }
+  if (wasStored) return { grade, outcome: 'stored', cacheable: true }
+  if (!grade.graded) return { grade, outcome: `ungraded:${ungradedBucket(grade.reason, 'kind' in grade ? grade.kind : null)}`, cacheable: true }
+  return { grade, outcome: 'unfrozen', cacheable: true }
+}
+
+/** Re-grade the trades served from a stale entry, two at a time, and store them. Never throws. */
+async function refreshStaleCoreTradeGrades(
+  stale: ReadonlyArray<LedgerTrade>,
+  previous: ReadonlyMap<string, Record<string, CachedCoreTradeGrade>>,
+  currentSeason: number,
+): Promise<void> {
+  try {
+    const frozenByLeague = await loadFrozenForLedger(stale)
+    const fresh = new Map<string, Map<string, CachedCoreTradeGrade>>()
+    await mapWithConcurrency(stale, 2, async (x) => {
+      const result = await gradeLedgerTrade(x.t.leagueId, x.src, currentSeason, frozenByLeague.get(x.t.leagueId))
+      if (!result.grade || !result.cacheable || !x.fp) return
+      const league = fresh.get(x.t.leagueId) ?? new Map<string, CachedCoreTradeGrade>()
+      league.set(x.src.id, { fp: x.fp, at: new Date().toISOString(), grade: result.grade })
+      fresh.set(x.t.leagueId, league)
+    })
+    await Promise.all([...fresh].map(([leagueId, grades]) => writeCoreTradeGrades(leagueId, previous.get(leagueId), grades)))
+  } catch {
+    // The stale grades stay until the window ends; the next open past it grades them itself.
+  }
 }
