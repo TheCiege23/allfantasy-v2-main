@@ -67,24 +67,36 @@ const TEAMS: UserLeagueTeam[] = [
 ]
 
 /** Harness only (app/e2e is 404 in production): the real workspace and League home for an imported league, no database. */
-export default function ImportedLeagueWorkspaceHarnessClient() {
+export default function ImportedLeagueWorkspaceHarnessClient({ member = false }: { member?: boolean }) {
   const [activeTab, setActiveTab] = useState('native_home')
+  const [picked, setPicked] = useState<string | null>(null)
+  /* The member menu's items, with the shell's English copy (lib/i18n/translations.ts league.memberMenu.*); picking one only records it here. */
+  const memberMenu = member
+    ? [
+        { id: 'edit-team', title: 'Edit Team', sub: 'Customize your team' },
+        { id: 'co-owners', title: 'Co-owner Settings', sub: 'Select co-owners to run your team' },
+        { id: 'leave', title: 'Leave League', sub: 'Leave this league.' },
+        { id: 'previous', title: 'Previous Leagues', sub: 'Look at previous leagues' },
+      ].map(item => ({ ...item, onSelect: () => setPicked(item.id) }))
+    : null
   const tabIds = TABS.map(tab => tab.id)
   return (
     <NativeLeagueWorkspace
       native={false}
       sourceLeagueId="e2e-fantrax-league"
       importActions={null}
+      memberMenu={memberMenu}
       league={IMPORTED}
       leagues={[IMPORTED, NATIVE]}
       tabs={TABS}
       activeTab={activeTab}
-      isCommissioner
+      isCommissioner={!member}
       onSelectTab={setActiveTab}
       onOpenSettings={() => setActiveTab('settings')}
       leftPanel={null}
       rightPanel={null}
     >
+      {picked ? <p data-testid="imported-harness-picked">Picked: {picked}</p> : null}
       {activeTab === 'native_home' ? (
         <div className="wn-home-stack">
           <WhatsNextPanel

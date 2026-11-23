@@ -6,8 +6,10 @@ import ImportedLeagueWorkspaceHarnessClient from './ImportedLeagueWorkspaceHarne
  * since 2026-11-22. Production is refused by app/e2e/layout.tsx.
  *
  *   /e2e/imported-league-workspace
+ *   /e2e/imported-league-workspace?role=member   (a non-commissioner member: the gear opens the member menu)
  */
-export default function ImportedLeagueWorkspaceHarnessPage() {
+export default async function ImportedLeagueWorkspaceHarnessPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   if (process.env.NODE_ENV === 'production') notFound()
-  return <ImportedLeagueWorkspaceHarnessClient />
+  const sp = await searchParams
+  return <ImportedLeagueWorkspaceHarnessClient member={sp.role === 'member'} />
 }

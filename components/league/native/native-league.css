@@ -408,3 +408,19 @@
    (.nl-league-heading{padding:10px 0 0}, .nl-workspace .nl-league-heading{padding-top:0}) are written for the
    transparent redraft heading and put this card's title 0px from its top edge. __tests__/dynasty/dynastyBannerPhone.test.ts */
 @media(max-width:767px){.nl-workspace[data-dynasty-background=true] .nl-league-heading{padding:14px}}
+
+/* Imported leagues, members: the gear opens the old header's member menu (2026-11-22). */
+.nl-member-menu-wrap>.nl-button svg:last-child{opacity:.7}
+/* The gear sits inside the menu's wrapper, so the heading's own `>.nl-button` rules are repeated for it. */
+.nl-league-heading[data-format=guillotine] .nl-member-menu-wrap>.nl-button{background:rgba(12,4,5,.6)}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading .nl-member-menu-wrap>.nl-button{background:rgba(8,12,19,.65)}
+@media (max-width:767px){
+  .nl-member-menu-wrap>.nl-button{width:44px;min-height:44px;padding:0}
+  .nl-member-menu-wrap>.nl-button>span,.nl-member-menu-wrap>.nl-button>svg:last-child{display:none}
+}
+.nl-member-menu-wrap{position:relative;display:inline-flex}
+.nl-member-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:60;width:min(calc(100vw - 32px),280px);padding:4px 0;background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+.nl-member-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:44px;padding:10px 12px;text-align:left;background:transparent;border:0;cursor:pointer}
+.nl-member-menu button:hover,.nl-member-menu button:focus-visible{background:var(--chip)}
+.nl-member-menu strong{font-size:13px;font-weight:700;color:var(--text)}
+.nl-member-menu span{font-size:11px;line-height:1.4;color:var(--text2)}
