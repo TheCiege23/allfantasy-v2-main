@@ -1837,8 +1837,11 @@ model ChimmyAdvice {
   /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
   /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
   withdrawnAt   DateTime? @map("withdrawn_at")
+  /// The US Eastern day ('YYYY-MM-DD') a DAILY-lineup league's bench check priced; '' (not NULL, so the unique index
+  /// still dedupes) for every weekly row. `20261123120000_chimmy_advice_day`; the writer checks the column exists.
+  adviceDay     String   @default("") @map("advice_day") @db.VarChar(10)
 
-  @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
+  @@unique([userId, leagueId, season, week, adviceDay, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_day_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
   @@map("chimmy_advice")
 }
