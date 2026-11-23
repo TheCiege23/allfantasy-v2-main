@@ -108,3 +108,25 @@
   .af-ladder-more { display: inline-flex; align-items: center; min-height: 44px; }
   .af-ladder-msg summary { display: flex; align-items: center; min-height: 44px; }
 }
+
+/*
+ * The copy button's own look (2026-11-23). It borrowed `.af3a-btn`, whose rules live in the /core home's
+ * stylesheet only — so on the Commissioner Hub it rendered as large bare text. On the home page
+ * `.af3a-btn` still applies on top of this.
+ */
+.af-ladder-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line2, var(--line));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-ladder-copy:hover { border-color: var(--accent); }
