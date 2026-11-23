@@ -265,3 +265,54 @@ export function CollegeProOtherHalf({ leagueId, tab, children }: { leagueId: str
     </div>
   )
 }
+
+const PLATFORM_NAME: Record<string, string> = { sleeper: 'Sleeper', fantrax: 'Fantrax' }
+
+/**
+ * League Chat, for a paired college + pro league: both halves are imported, and an imported league
+ * never gets an AllFantasy chat room (components/chat/LeagueChatSurface.tsx, build rule 2) — its
+ * managers talk on Sleeper or Fantrax, and a message sent here would never reach them. So the pair
+ * gets one card naming BOTH places its league actually talks, each one tap away, instead of a note
+ * about this half alone.
+ */
+export function CollegeProChat({ leagueId, children }: { leagueId: string; children: ReactNode }) {
+  const data = useJson<CollegeProPairLink>(pairUrl(leagueId))
+  if (!data || !data.applies) return <>{children}</>
+  const halves = data.role === 'pro' ? [data.self, data.other] : [data.other, data.self]
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="college-pro-chat">
+      <section className="max-w-2xl rounded-3xl border border-white/[0.07] bg-white/[0.035] p-5">
+        <h2 className="text-xl font-black text-white">One league, two chats</h2>
+        <p className="mt-2 text-sm leading-6 text-white/60">
+          {halves[0]!.name} and {halves[1]!.name} are one league here, but each still talks on its own platform. Messages
+          sent in AllFantasy wouldn&apos;t reach managers who aren&apos;t on it, so chat stays where your league already is.
+        </p>
+        <ul className="mt-4 space-y-2">
+          {halves.map((h) => {
+            const platform = PLATFORM_NAME[h.platform.toLowerCase()] ?? 'its platform'
+            return (
+              <li key={h.leagueId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.07] px-3 py-2.5" data-testid="college-pro-chat-half">
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-bold uppercase tracking-wide text-white/45">{h.label} · {platform}</span>
+                  <span className="block truncate text-sm font-semibold text-white">{h.name}</span>
+                </span>
+                {h.sourceUrl ? (
+                  <a
+                    href={h.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-lg border border-cyan-300/30 bg-cyan-400/[0.08] px-3 py-1.5 text-xs font-bold text-[var(--badge-text-cyan)] hover:brightness-110"
+                  >
+                    Chat on {platform} ↗
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-xs text-white/45">Chat on {platform}</span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    </div>
+  )
+}

@@ -143,6 +143,7 @@ import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import {
+  CollegeProChat,
   CollegeProFranchiseCard,
   CollegeProOtherHalf,
   CollegeProPairChip,
@@ -2909,7 +2910,7 @@ function LeagueTabRouter({
       return <LeagueActivityTab leagueId={leagueId} />
     case 'news':
       return <LeaguePlayerNewsTab leagueId={leagueId} sport={String(selectedLeague.sport ?? 'NFL')} />
-    case 'league_chat':
+    case 'league_chat': {
       /*
        * 10a. This case used to render a card telling the reader that chat was
        * somewhere else — a tab that, when clicked, pointed at another control.
@@ -2918,22 +2919,27 @@ function LeagueTabRouter({
        * leagues get an explicit "chat lives on your source platform" state
        * rather than an empty room; see LeagueChatSurface for why.
        */
+      const chatSurface = (
+        <LeagueChatSurface
+          leagueId={leagueId}
+          leagueName={selectedLeague.name ?? 'League'}
+          dynastyBackground={usesDynastyBackground(selectedLeague)}
+          dynastyClock={dynastyChatClock}
+          platform={selectedLeague.platform}
+          isCommissioner={isCommissioner}
+          teamCount={selectedLeague.teamCount ?? null}
+          importedLeagueCount={importedLeagueCount}
+          redraftSport={resolveRedraftIdentity(selectedLeague)?.sport ?? null}
+          matchup={leagueRail?.matchups?.[leagueId] ?? null}
+        />
+      )
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-testid="g32-league-chat-tab">
-          <LeagueChatSurface
-            leagueId={leagueId}
-            leagueName={selectedLeague.name ?? 'League'}
-            dynastyBackground={usesDynastyBackground(selectedLeague)}
-            dynastyClock={dynastyChatClock}
-            platform={selectedLeague.platform}
-            isCommissioner={isCommissioner}
-            teamCount={selectedLeague.teamCount ?? null}
-            importedLeagueCount={importedLeagueCount}
-            redraftSport={resolveRedraftIdentity(selectedLeague)?.sport ?? null}
-            matchup={leagueRail?.matchups?.[leagueId] ?? null}
-          />
+          {/* A paired college + pro import: one card naming where both halves talk (CollegeProChat). */}
+          {pairable && !isAfHostedPlatform(selectedLeague.platform) ? <CollegeProChat leagueId={leagueId}>{chatSurface}</CollegeProChat> : chatSurface}
         </div>
       )
+    }
     case 'commissioner':
       return (
         <CommissionerOperationsWorkspace

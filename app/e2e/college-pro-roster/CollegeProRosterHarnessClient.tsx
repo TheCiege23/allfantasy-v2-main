@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import {
+  CollegeProChat,
   CollegeProFranchiseCard,
   CollegeProOtherHalf,
   CollegeProPairChip,
@@ -251,8 +252,8 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
     if (url.includes('/api/league/college-pro-pair')) {
       return json({
         applies: true, role: 'pro',
-        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true },
-        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true },
+        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true, sourceUrl: 'https://sleeper.com/leagues/1312978017894563840' },
+        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true, sourceUrl: 'https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home' },
       })
     }
     if (url.includes('/api/league/college-pro-draft') && init?.method === 'PATCH') return json({ ok: true })
@@ -334,6 +335,10 @@ export function CollegeProRosterHarnessClient() {
           <CollegeProOtherHalf leagueId="harness" tab="trades">
             <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own trades screen stays here, unchanged.</p>
           </CollegeProOtherHalf>
+        ) : params?.get('view') === 'chat' ? (
+          <CollegeProChat leagueId="harness">
+            <p className="m-4 text-sm">fallback</p>
+          </CollegeProChat>
         ) : params?.get('view') === 'draft' ? (
           <CollegeProDraftPipeline leagueId="harness">
             <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own draft screen stays here, unchanged.</p>
