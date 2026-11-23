@@ -184,8 +184,9 @@ describe('<LeagueHome />', () => {
     expect(getByTestId('league-home-standings-all').textContent).toContain('Clasificación completa')
     expect(getByTestId('league-home-deadline-sub').textContent).toBe('Queda 1 semana')
     const steps = document.querySelector('.af-lh-week-summary')!.textContent!
-    for (const es of ['Tus próximos pasos', 'Alineación', 'Revisa tus titulares', 'Planea tu próximo movimiento']) expect(steps).toContain(es)
-    expect(steps).not.toMatch(/Your next steps|Review your starters|Plan your next move/)
+    for (const es of ['Alineación', 'Revisa tus titulares', 'Planea tu próximo movimiento']) expect(steps).toContain(es)
+    // 2026-11-23: no "Your next steps" label over "This week" in either language — the heading says it.
+    expect(steps).not.toMatch(/Tus próximos pasos|Your next steps|Review your starters|Plan your next move/)
   })
 })
 

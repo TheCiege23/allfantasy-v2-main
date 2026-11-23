@@ -625,9 +625,12 @@ export function LeagueHome({
           </span>
         </>
       )}
-      <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
-        {copy('Back to home')} →
-      </Link>
+      {/* In the shell the tab bar and sidebar carry Home, so a second "Back to home" was one more button (2026-11-23). */}
+      {identityInShell ? null : (
+        <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
+          {copy('Back to home')} →
+        </Link>
+      )}
     </>
   )
   const importedActions = !isNativePlatform(league.platform) ? (
@@ -844,7 +847,8 @@ export function LeagueHome({
         {toolsAtFoot ? null : <div className="af-lh-headside">{headActions}</div>}
       </header>
       <section className="af-lho-head" data-testid="league-overview-guide" data-format={elimination ? 'elimination' : 'h2h'}>
-        <span className="af-label">{g.eyebrow}</span>
+        {/* No "League overview" label in the shell (2026-11-23, "crowded"): the Home tab already says where you are. */}
+        {identityInShell ? null : <span className="af-label">{g.eyebrow}</span>}
         <p className="af-display af-lho-title">{headline}</p>
         {/*
           2026-11-14: the intro ("This league at a glance … Official moves are made on Sleeper") and the
@@ -903,7 +907,7 @@ export function LeagueHome({
 
       <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
-          <div><span className="af-label">{g.nextSteps}</span><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
+          <div><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
         </div>
         <div className="af-lh-week-summary-grid" data-cells="2">
