@@ -263,6 +263,8 @@ export type DailySportWireFields = {
   /** Daily-lineup period: that day's opponent and venue, for a row the NFL game context does not cover. */
   periodOpponent?: string | null
   periodHomeAway?: 'home' | 'away' | null
+  /** The learned factors that moved `projectedPoints`; `unadjusted.projectedPoints` is the number before them. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
 }
 
 /**
@@ -283,6 +285,7 @@ export function applyDailySportOutlook<T extends Pick<UnifiedPlayerWireDto, 'id'
       positionRank: o.positionRank,
       positionRankLabel: formatPositionRank(o.positionRank),
       ...(o.opponent !== undefined ? { periodOpponent: o.opponent, periodHomeAway: o.homeAway ?? null } : {}),
+      ...(o.projectedPoints != null && o.afFactors ? { afFactors: o.afFactors } : {}),
     }
   })
 }

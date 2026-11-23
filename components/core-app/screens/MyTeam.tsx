@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 import MyTeamHighlights from '@/components/core-app/MyTeamHighlights'
 import MyTeamRecentClips from '@/components/core-app/highlights/MyTeamRecentClips'
 import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
@@ -536,6 +537,8 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             </span>
           ) : null}
         </div>
+        {/* Why AF moved his weekly number (injury designation, rest, form …) — only for AF Intelligence viewers. */}
+        <ProjectionFactorLine reasons={player.afFactors?.reasons} testId={`my-team-factors-${player.sleeperId}`} />
       </div>
     </div>
   )

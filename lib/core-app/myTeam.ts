@@ -88,6 +88,9 @@ import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
  */
 
 export type LineupPlayer = {
+  /** The learned factors that moved `afProjectedPoints` (weekly), with the numbers before them for a viewer without
+   * AF Intelligence (`afIntelligenceWithhold.ts` restores them). Absent when none applied. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   sleeperId: string
   name: string
   position: string | null
@@ -1532,6 +1535,11 @@ async function loadMyTeamData(
       p.afProjectedPoints = p.ruledOut && !noNbaRoster ? 0 : points
       p.afEngineProjectedPoints = p.afProjectedPoints
       p.projectionSource = points == null ? null : 'allfantasy'
+      // The weekly number is the one the factors moved; a day's number is the plain per-game rate.
+      const before = row?.afFactors?.unadjusted?.weekly
+      p.afFactors = points != null && !p.ruledOut && lineupPeriod?.kind !== 'day' && row?.afFactors && before != null
+        ? { multiplier: row.afFactors.multiplier, reasons: row.afFactors.reasons, unadjusted: { afProjectedPoints: before } }
+        : undefined
     }
   }
   await priceLeaguePlayers(rosterIdsForMetrics, resolved)
