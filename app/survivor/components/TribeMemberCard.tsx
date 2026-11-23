@@ -15,7 +15,8 @@ export function TribeMemberCard({
   name: string
   teamName?: string
   weeklyScore?: number
-  statusVariant: SurvivorStatusBadgeVariant
+  /** null: an ordinary member, no badge (the tribe header says once whether the tribe is at council). */
+  statusVariant: SurvivorStatusBadgeVariant | null
   /** @deprecated The avatar ring now follows the weekly status (immune gold, out dim). */
   ringClass?: string
   publicAdvantage?: string | null
@@ -42,23 +43,26 @@ export function TribeMemberCard({
           <SurvivorAvatar name={name} size={48} imageUrl={avatarUrl ?? null} status={survivorAvatarStatus({ immune, out })} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className={clsx('truncate text-[13px] font-semibold', out ? 'text-white/45 line-through' : 'text-white')}>{name}</p>
+          <p className={clsx('truncate text-[13px] font-semibold', out ? 'text-white/45 line-through' : 'text-white')} title={name}>{name}</p>
+          {/* Under the name, not beside it: beside, a score cut names to "Cie…" on a phone. */}
+          {weeklyScore != null ? (
+            <p className="font-mono text-[15px] font-semibold tabular-nums text-[var(--survivor-torch)]">{weeklyScore.toFixed(1)}</p>
+          ) : null}
           {teamName ? (
             <p className="truncate text-[11px] text-[var(--survivor-text-dim)]">{teamName}</p>
           ) : null}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <SurvivorStatusBadge variant={statusVariant} />
-            {out ? <SurvivorOutChip week={outWeek} /> : null}
-            {publicAdvantage ? (
-              <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">
-                {publicAdvantage}
-              </span>
-            ) : null}
-          </div>
+          {statusVariant || out || publicAdvantage ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {statusVariant ? <SurvivorStatusBadge variant={statusVariant} /> : null}
+              {out ? <SurvivorOutChip week={outWeek} /> : null}
+              {publicAdvantage ? (
+                <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">
+                  {publicAdvantage}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <p className="font-mono text-lg font-semibold tabular-nums text-[var(--survivor-torch)]">
-          {weeklyScore != null ? weeklyScore.toFixed(1) : '—'}
-        </p>
       </div>
     </div>
   )

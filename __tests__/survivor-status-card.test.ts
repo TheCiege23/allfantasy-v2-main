@@ -22,12 +22,29 @@ describe('buildSurvivorStatusCard', () => {
     expect(buildSurvivorStatusCard({ season: { ...season(), userState: null }, canVote: false, canSubmitChallenge: false, base: '/s', now })).toBeNull()
   })
 
-  it('at Tribal Council: at risk, the deadline, and vote plus idol actions', () => {
+  it('at Tribal Council: at risk, the deadline once, and only the idol action (the banner above carries the vote button)', () => {
     const c = card(season({ activeCouncil: { id: 'c', week: 6, status: 'voting_open', attendingTribeId: 't1', voteDeadlineAt: '2026-10-21T00:00:00Z' } }, { idolIds: ['i1'] }), { canVote: true })
     expect(c.tone).toBe('risk')
     expect(c.headline).toBe('Your tribe is at Tribal Council')
     expect(c.facts).toEqual([{ label: 'Tribe', value: 'Tala' }, { label: 'Idols', value: 'You hold 1' }, { label: 'Votes close', value: '00:00 (in 12h 0m)' }])
-    expect(c.actions.map(a => a.label)).toEqual(['Vote now', 'Play an idol'])
+    // The deadline is a fact; the sentence above it must not say it again.
+    expect(c.detail).not.toContain('00:00')
+    expect(c.actions.map(a => a.label)).toEqual(['Play an idol'])
+  })
+
+  it('a council whose deadline has passed says the votes are in, never "under a minute"', () => {
+    const c = card(season({ activeCouncil: { id: 'c', week: 6, status: 'voting_open', attendingTribeId: 't1', voteDeadlineAt: '2026-10-20T08:00:00Z' } }, { idolIds: ['i1'] }), { canVote: true })
+    expect(c.headline).toBe('Your tribe is at Tribal Council')
+    expect(c.detail).toMatch(/Voting has closed/)
+    expect(c.facts).toContainEqual({ label: 'Votes closed', value: '08:00' })
+    expect(JSON.stringify(c)).not.toMatch(/under a minute|Vote now/)
+    expect(c.actions).toEqual([])
+  })
+
+  it('a challenge whose lock time has passed is not offered', () => {
+    const c = card(season({ currentChallenge: { id: 'ch', week: 6, status: 'open', locksAt: '2026-10-20T11:00:00Z' } }), { canSubmitChallenge: true })
+    expect(c.headline).toBe('Nothing to do right now')
+    expect(c.actions).toEqual([])
   })
 
   it('another tribe at council: safe this week', () => {

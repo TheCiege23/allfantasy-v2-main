@@ -7,19 +7,9 @@ import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { WeeklyCallCard } from '@/app/survivor/components/WeeklyCallCard'
 import { RealGameChallengeCard } from '@/app/survivor/components/RealGameChallengeCard'
 import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
+import { islandDeadlineLabel } from '@/lib/survivor/survivorIslandView'
 
 type PastChallenge = { id: string; week: number; title: string; scope: string; status: string; challengeType: string; resultSummary: string | null }
-
-function formatDurationMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '0m'
-  const s = Math.floor(ms / 1000)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}h ${m}m ${sec}s`
-  if (m > 0) return `${m}m ${sec}s`
-  return `${sec}s`
-}
 
 function parseDeadlineMs(raw: string | null | undefined): number | null {
   if (!raw) return null
@@ -54,15 +44,19 @@ export default function SurvivorChallengesPage() {
   const automatic = ch?.submissionMode === 'automatic'
 
   const end = parseDeadlineMs(ch?.locksAt ?? ch?.lockAt ?? null)
-  const remaining = end ? end - now : null
+  // Taking answers only while open AND before the lock: a closed challenge is "This week's challenge",
+  // never "Active challenge … 0m remaining".
+  const live = ch?.status === 'open' && (end == null || end > now)
 
   const stateChip = useMemo(() => {
     const st = ch?.status ?? '—'
+    if (st === 'open' && !live) return { label: 'LOCKED', cls: 'bg-white/10 text-white/45' }
     if (st === 'open') return { label: 'OPEN', cls: 'sv-chip-torch' }
+    if (st === 'closed') return { label: 'CLOSED', cls: 'bg-white/10 text-white/45' }
     if (st === 'locked') return { label: 'LOCKED', cls: 'bg-white/10 text-white/45' }
     if (st === 'graded' || st === 'complete') return { label: 'COMPLETE', cls: 'bg-[rgba(242,196,107,0.12)] text-[#f2c46b]' }
     return { label: String(st).toUpperCase(), cls: 'bg-amber-500/15 text-amber-100' }
-  }, [ch?.status])
+  }, [ch?.status, live])
 
   const submitWhere =
     ch?.submissionMode === 'private_chimmy'
@@ -77,7 +71,7 @@ export default function SurvivorChallengesPage() {
         className="survivor-panel rounded-2xl sv-torch-bar p-4 md:p-6"
         style={{ borderLeftColor: 'var(--survivor-torch)' }}
       >
-        <p className="sv-eyebrow">Active challenge</p>
+        <p className="sv-eyebrow">{live ? 'Open challenge' : 'This week’s challenge'}</p>
         {ch ? (
           <>
             <h1 className="sv-h mt-2 text-xl md:text-2xl">{ch.title ?? 'Island challenge'}</h1>
@@ -106,20 +100,20 @@ export default function SurvivorChallengesPage() {
               <p className="mt-2 text-[11px] text-white/45">✓ Tribal immunity may hinge on this result.</p>
             </div>
 
-            {end ? (
+            {end && live ? (
               <div className="mt-4">
                 <p className="sv-kicker text-[11px]">Deadline</p>
                 <time
                   dateTime={new Date(end).toISOString()}
                   className="mt-1 block font-mono text-lg tabular-nums text-[var(--survivor-torch)]"
                 >
-                  ⏱ {remaining != null ? formatDurationMs(remaining) : '—'} remaining
+                  ⏱ {islandDeadlineLabel(end, now)}
                 </time>
                 <p className="text-[12px] text-white/50">Submissions lock at kickoff or the time your league sets.</p>
               </div>
             ) : null}
 
-            {!automatic && ch.status !== 'open' ? (
+            {!automatic && !live ? (
               <p className="mt-6 text-[13px] text-[#f6d3ae]">Submissions are closed for this challenge.</p>
             ) : null}
           </>

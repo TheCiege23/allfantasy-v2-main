@@ -16,7 +16,8 @@ export function EpisodeCard({
   title: string
   challengeLabel?: string
   challengeLine: string
-  tribalLine: string
+  /** null: the episode has no Tribal scene, so the card shows no Tribal line. */
+  tribalLine: string | null
   twistsLine?: string
   recap?: string
 }) {
@@ -43,10 +44,12 @@ export function EpisodeCard({
           <span className="text-[var(--survivor-text-dim)]">{challengeLabel} · </span>
           {challengeLine}
         </li>
-        <li>
-          <span className="text-[var(--survivor-text-dim)]">Tribal · </span>
-          {tribalLine}
-        </li>
+        {tribalLine ? (
+          <li>
+            <span className="text-[var(--survivor-text-dim)]">Tribal · </span>
+            {tribalLine}
+          </li>
+        ) : null}
         {twistsLine ? (
           <li>
             <span className="text-[var(--survivor-text-dim)]">Twists · </span>

@@ -2,7 +2,7 @@
 
 import { LeagueFormatFaqLink } from '@/components/league/LeagueFormatFaqLink'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
@@ -18,6 +18,7 @@ import { CommissionerToolsTab } from '@/components/league/CommissionerToolsTab'
 import { SurvivorFormatTab } from '@/components/league/SurvivorFormatTab'
 import { getLeagueTypeMedia } from '@/lib/league-media/leagueTypeMedia'
 import { legacyBackdropScene } from '@/lib/survivor/survivorLegacyIsland'
+import { islandSeasonLabel } from '@/lib/survivor/survivorIslandView'
 import '@/app/survivor/survivor-island.css'
 
 function pathActive(pathname: string, href: string, isHome?: boolean) {
@@ -25,7 +26,8 @@ function pathActive(pathname: string, href: string, isHome?: boolean) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function badgeForPlayerState(p: SurvivorUiPlayerState): SurvivorStatusBadgeVariant {
+/** null for an ordinary active player: "SAFE" here contradicted a tribe sitting at Tribal Council. */
+function badgeForPlayerState(p: SurvivorUiPlayerState): SurvivorStatusBadgeVariant | null {
   switch (p) {
     case 'immune':
       return 'immune'
@@ -38,7 +40,7 @@ function badgeForPlayerState(p: SurvivorUiPlayerState): SurvivorStatusBadgeVaria
     case 'eliminated':
       return 'eliminated'
     default:
-      return 'safe'
+      return null
   }
 }
 
@@ -52,6 +54,11 @@ function SurvivorAppShellInner({
   const pathname = usePathname() ?? ''
   const ctx = useSurvivorUi()
   const [expanded, setExpanded] = useState(false)
+  // A wide screen opens the rail with its labels: icons alone (and a lone "C" for the player) read as
+  // a broken menu at 1440. The toggle still collapses it.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 1280px)').matches) setExpanded(true)
+  }, [])
   const [moreOpen, setMoreOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -152,10 +159,13 @@ function SurvivorAppShellInner({
       {/* Top bar — mobile + desktop */}
       <header className="sv-topbar sticky top-0 z-40 flex items-center gap-2 border-b px-3 py-2 md:pl-[72px]">
         <div className="min-w-0 flex-1">
-          <p className="sv-topbar-league truncate text-[11px] uppercase">
+          {/* Title case and no wide tracking: in caps with 0.16em spacing "Island of Champions" cut off at "ISLAND OF CHA…" on a phone. */}
+          <p className="sv-topbar-league truncate text-[13px]" title={ctx.leagueName}>
             {ctx.leagueName}
           </p>
-          <p className="truncate text-[13px] font-semibold text-white">Survivor · Season</p>
+          <p className="truncate text-[12px] text-white/70" data-testid="survivor-topbar-season">
+            {islandSeasonLabel({ sport: ctx.leagueSport, week: ctx.currentWeek, phase: ctx.leaguePhase })}
+          </p>
         </div>
         <LeagueFormatFaqLink league={{ leagueType: 'survivor' }} className="text-white" />
         <NotificationBell leagueId={leagueId} season={ctx.season} />
@@ -265,7 +275,8 @@ function SurvivorAppShellInner({
             expanded ? 'md:pl-[220px]' : 'md:pl-16',
           )}
         >
-          {children}
+          {/* A reading width: at 1440 single cards ran ~1,300px wide with their text on one long line. */}
+          <div className="mx-auto w-full max-w-[1180px]">{children}</div>
         </main>
       </div>
 
@@ -369,17 +380,18 @@ function SurvivorAppShellInner({
         )}
       >
         <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/25 p-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sv-accent-soft)] text-xs font-bold text-[var(--survivor-torch)]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--sv-accent-soft)] text-xs font-bold text-[var(--survivor-torch)]" title={displayName} aria-label={`You: ${displayName}`}>
             {displayName.slice(0, 1)}
           </div>
-          <div className="min-w-0 flex-1 overflow-hidden lg:block">
-            <p className="truncate text-[11px] font-semibold text-white lg:text-[12px]">{displayName}</p>
-            <div className="hidden lg:block">
-              <SurvivorStatusBadge variant={badgeForPlayerState(ctx.playerState)} className="mt-1 scale-90" />
+          {/* Collapsed, the 64px rail has room for the avatar only; the name squeezed beside it read as a stray letter. */}
+          {expanded ? (
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="truncate text-[12px] font-semibold text-white">{displayName}</p>
+              {badgeForPlayerState(ctx.playerState) ? <SurvivorStatusBadge variant={badgeForPlayerState(ctx.playerState)!} className="mt-1 scale-90" /> : null}
             </div>
-          </div>
-          {ctx.isCommissioner ? (
-            <span className="hidden text-[11px] font-bold uppercase text-amber-300 lg:inline">ADM</span>
+          ) : null}
+          {expanded && ctx.isCommissioner ? (
+            <span className="text-[11px] font-bold uppercase text-amber-300">ADM</span>
           ) : null}
         </div>
       </div>
@@ -424,14 +436,22 @@ export function SurvivorAppShell({
     <SurvivorUiProvider leagueId={leagueId}>
       <SurvivorAppShellInner leagueId={leagueId}>{children}</SurvivorAppShellInner>
       <SimulateLeagueButton leagueId={leagueId} />
-      <LeagueIntroVideoModal
-        leagueId={leagueId}
-        leagueType="survivor"
-        leagueName="Survivor League"
-        videoSrc={media.introVideo}
-        posterSrc={media.thumbnail}
-        onDismiss={() => {}}
-      />
+      <SurvivorIntro leagueId={leagueId} videoSrc={media.introVideo} posterSrc={media.thumbnail} />
     </SurvivorUiProvider>
+  )
+}
+
+/** Inside the provider so the intro can welcome the league by its own name, not "Survivor League". */
+function SurvivorIntro({ leagueId, videoSrc, posterSrc }: { leagueId: string; videoSrc: string; posterSrc?: string }) {
+  const ctx = useSurvivorUi()
+  return (
+    <LeagueIntroVideoModal
+      leagueId={leagueId}
+      leagueType="survivor"
+      leagueName={ctx.leagueName}
+      videoSrc={videoSrc}
+      posterSrc={posterSrc}
+      onDismiss={() => {}}
+    />
   )
 }
