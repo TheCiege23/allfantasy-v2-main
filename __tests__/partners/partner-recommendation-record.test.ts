@@ -26,6 +26,8 @@ function sent(call: unknown[]): Prisma.Sql {
 function routeQueries(bench: unknown[], adds: unknown[]) {
   h.queryRaw.mockImplementation(async (...call: unknown[]) => {
     const q = sent(call).sql
+    // NBA / NHL / MLB bench calls (sportBenchGrading.ts, 2026-11-23): none recorded here.
+    if (q.includes('a.given_at >=')) return []
     if (q.includes('"SportsGame"')) {
       // Weeks 1–10 are over; week 11 kicks off after NOW.
       return Array.from({ length: 11 }, (_, i) => ({ week: i + 1, first: kick(i + 1), last: new Date(kick(i + 1).getTime() + 86_400_000) }))
@@ -56,9 +58,13 @@ describe('recomputeLedgerForLeagues', () => {
     expect(ledger).toMatchObject({ season: 2026, throughWeek: 10, bench: { right: 1, wrong: 1, pending: 1 }, pickups: { graded: 1, startable: 1 } })
     expect(ledger!.users).toEqual({})
 
-    const advice = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const all = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const sportReads = all.filter((s) => s.sql.includes('a.given_at >='))
+    const advice = all.filter((s) => !s.sql.includes('a.given_at >='))
     expect(advice).toHaveLength(2)
-    for (const s of advice) {
+    // One per other sport, each scoped the same way.
+    expect(sportReads).toHaveLength(3)
+    for (const s of [...advice, ...sportReads]) {
       expect(s.sql).toMatch(/league_id = ANY\(\?::text\[\]\)/)
       expect(s.values).toContainEqual(['L1', 'L2'])
     }
@@ -67,10 +73,13 @@ describe('recomputeLedgerForLeagues', () => {
   it('the platform-wide rebuild is unscoped, exactly as before', async () => {
     routeQueries([], [])
     await recomputeLedgerRecord({ now: NOW })
-    const advice = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const all = h.queryRaw.mock.calls.map(sent).filter((s) => s.sql.includes('chimmy_advice'))
+    const advice = all.filter((s) => !s.sql.includes('a.given_at >='))
     // Bench calls, the panel's pickups, and the waiver engine's scored #1 claims (its own calibration, 2026-11-20).
     expect(advice).toHaveLength(3)
-    for (const s of advice) expect(s.sql).not.toContain('ANY(')
+    // Plus one read per other sport's bench calls (2026-11-23).
+    expect(all.length - advice.length).toBe(3)
+    for (const s of all) expect(s.sql).not.toContain('ANY(')
   })
 
   it('no leagues reads nothing', async () => {

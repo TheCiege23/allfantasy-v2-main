@@ -31,6 +31,7 @@
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { SportBenchLine, SportBenchSport } from './sportBenchRecord'
 import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
 import type { TradeOutcomeLedger } from './tradeOutcomesAll'
 import {
@@ -201,6 +202,12 @@ export type LedgerSnapshot = {
    * `SPORT:kind` (`tradeOutcomesAll.ts`). Absent on a snapshot written before 2026-11-22.
    */
   tradeOutcomes?: TradeOutcomeLedger
+  /**
+   * My Team's bench calls in NBA, NHL and MLB weekly-points leagues, graded on each sport's own calendar and under each
+   * league's scoring (`sportBenchRecord.ts`, 2026-11-23) — one line per sport, never mixed into `bench` (the NFL
+   * record). Absent on a snapshot written before 2026-11-23 and for a sport with no recorded call.
+   */
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -221,6 +228,7 @@ export function foldLedger(input: {
   draftTips?: DraftTipLedger
   autopicks?: Record<string, DraftTipLedger>
   tradeOutcomes?: TradeOutcomeLedger
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -318,6 +326,7 @@ export function foldLedger(input: {
     ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
     ...(input.autopicks && Object.keys(input.autopicks).length > 0 ? { autopicks: input.autopicks } : {}),
     ...(input.tradeOutcomes && Object.keys(input.tradeOutcomes).length > 0 ? { tradeOutcomes: input.tradeOutcomes } : {}),
+    ...(input.sportBench && Object.keys(input.sportBench).length > 0 ? { sportBench: input.sportBench } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }

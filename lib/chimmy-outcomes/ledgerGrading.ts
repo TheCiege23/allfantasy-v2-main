@@ -485,12 +485,44 @@ async function part<T>(fn: () => Promise<T>, empty: T): Promise<T> {
  * The whole ledger for the current NFL season. Null when the schedule carries no regular-season weeks
  * for it — then nothing can be proven over, and nothing is written.
  */
+/**
+ * NBA, NHL and MLB bench calls, each sport on its own calendar (`sportBenchGrading.ts`). Each sport is contained there,
+ * and the whole read here: a failure costs only these lines, never the NFL record beside them. The graded calls stay
+ * here; the snapshot keeps only each sport's tally.
+ */
+async function sportBenchLines(now: Date, db: Db, leagueIds?: readonly string[]): Promise<NonNullable<LedgerSnapshot['sportBench']>> {
+  return import('./sportBenchGrading')
+    .then(({ gradeAllSportBench }) => gradeAllSportBench({ now, db, leagueIds }))
+    .then((bySport) => Object.fromEntries(Object.entries(bySport).map(([sport, line]) => [sport, { tally: line!.tally }])))
+    .catch((err: unknown) => {
+      console.warn('[ledgerGrading] sport bench grading failed', err instanceof Error ? err.message : err)
+      return {}
+    })
+}
+
+/**
+ * The NFL offseason is most of baseball's season and the end of basketball's and hockey's: with no NFL weeks to grade,
+ * the snapshot still carries the other sports' bench lines, and nothing else. Null when there are none either.
+ */
+function offseasonSnapshot(season: number, sportBench: NonNullable<LedgerSnapshot['sportBench']>): LedgerSnapshot | null {
+  if (Object.keys(sportBench).length === 0) return null
+  return {
+    season,
+    throughWeek: 0,
+    bench: { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 },
+    pickups: { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 },
+    trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 },
+    sportBench,
+    users: {},
+  }
+}
+
 export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}): Promise<LedgerSnapshot | null> {
   const now = opts.now ?? new Date()
   const db = opts.db ?? prisma
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
-  if (cal.size === 0) return null
+  if (cal.size === 0) return offseasonSnapshot(season, await sportBenchLines(now, db))
   const noTrades: GradedTrades = { tally: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, letters: {} }
   const [bench, adds, graded, commissionerGraded, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
@@ -526,6 +558,7 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
       return {}
     })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
+  const sportBench = await sportBenchLines(now, db)
   return foldLedger({
     season,
     cal,
@@ -540,6 +573,7 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     draftTips,
     autopicks,
     tradeOutcomes,
+    sportBench,
   })
 }
 
@@ -562,12 +596,16 @@ export async function recomputeLedgerForLeagues(
   const db = opts.db ?? prisma
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
-  if (cal.size === 0) return null
+  if (cal.size === 0) {
+    const off = offseasonSnapshot(season, await sportBenchLines(now, db, leagueIds))
+    return off ? { ...off, users: {} } : null
+  }
   const [bench, adds, tradeOutcomes] = await Promise.all([
     part(() => loadBenchRows(season, db, leagueIds), [] as BenchRow[]),
     part(() => loadAddRows(season, db, leagueIds), [] as AddRow[]),
     part(() => import('./tradeOutcomesAll').then(({ gradeAllTradeOutcomes }) => gradeAllTradeOutcomes({ now, db, nflCal: cal, nflSeason: season, leagueIds })), {}),
   ])
-  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, tradeOutcomes })
+  const sportBench = await sportBenchLines(now, db, leagueIds)
+  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, tradeOutcomes, sportBench })
   return { ...folded, users: {} }
 }
