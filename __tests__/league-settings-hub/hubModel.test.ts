@@ -31,6 +31,21 @@ describe('resolveHubKind', () => {
   })
 })
 
+describe('buildGeneralGroups — "Count Weeks Before the Draft" (late-start leagues)', () => {
+  const toggleOf = (league: Record<string, unknown>) => {
+    const rows = buildGeneralGroups({ league }, 'zombie').flatMap((g) => g.rows) as Array<{ key: string; value: string | null; toggle?: { field: string; on: boolean } }>
+    return rows.find((r) => r.key === 'preLeague')
+  }
+  it('🛑 is on League Setup — the screen a native league opens — once past weeks are loaded, OFF by default', () => {
+    expect(toggleOf({ preLeagueWeekCount: 10 })?.toggle).toEqual({ field: 'preLeagueWeeksCount', on: false })
+    expect(toggleOf({ preLeagueWeekCount: 10, preLeagueWeeksCount: true })?.toggle).toEqual({ field: 'preLeagueWeeksCount', on: true })
+  })
+  it('[control] a league that started on week 1 has no such row', () => {
+    expect(toggleOf({})).toBeUndefined()
+    expect(toggleOf({ preLeagueWeekCount: 0, preLeagueWeeksCount: true })).toBeUndefined()
+  })
+})
+
 describe('buildGeneralGroups', () => {
   const payload = {
     league: { teamCount: 12, sport: 'NFL', season: 2026, tradeDeadlineWeek: 11, tradeReviewHours: 24, draftPickTrading: false, preventBenchDrops: true, irSlots: 2, irAllowOut: true, irAllowDoubtful: true, playoffTeams: 6, playoffStartWeek: 15 },

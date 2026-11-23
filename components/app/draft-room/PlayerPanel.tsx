@@ -4,7 +4,7 @@ import { canDisplayAiAdp } from '@/lib/draft-room/adpPresentation'
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { ProgressiveDraftPlayerList } from './ProgressiveDraftPlayerList'
-import { Check, Search, User, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Search, Plus, GitCompare, LayoutGrid, Rows3, SlidersHorizontal, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage, useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
@@ -163,6 +163,7 @@ export type PlayerPanelProps = {
   devyConfig?: { enabled: boolean; devyRounds: number[] }
   /** C2C: when enabled, show College/Pro filter and college/pro round hint */
   c2cConfig?: { enabled: boolean; collegeRounds: number[] }
+  combinedAnnualDraft?: boolean
   /** Current draft round (for devy/C2C round hints) */
   currentRound?: number
   /** When 'IDP', position filter includes Offense, DL, LB, DB, DE, DT, CB, S, IDP FLEX */
@@ -400,6 +401,7 @@ function PlayerPanelInner({
   onNominate,
   devyConfig,
   c2cConfig,
+  combinedAnnualDraft = false,
   currentRound,
   formatType,
   selectedPlayerTarget = null,
@@ -484,8 +486,8 @@ function PlayerPanelInner({
    */
   const [watchlistKeys, setWatchlistKeys] = useState<Set<string>>(new Set())
   const isDevyRound = Boolean(devyConfig?.enabled && !c2cConfig?.enabled && currentRound != null && devyConfig.devyRounds?.includes(currentRound))
-  const isCollegeRound = Boolean(c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
-  const isProRound = Boolean(c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
+  const isCollegeRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && c2cConfig.collegeRounds?.includes(currentRound))
+  const isProRound = Boolean(!combinedAnnualDraft && c2cConfig?.enabled && currentRound != null && !c2cConfig.collegeRounds?.includes(currentRound))
   const showPoolFilter = Boolean(devyConfig?.enabled || c2cConfig?.enabled)
   const hasAiOverlaySignals = Boolean(aiOverlaySignals && Object.keys(aiOverlaySignals).length > 0)
 
@@ -739,7 +741,7 @@ function PlayerPanelInner({
   const selectedIsWatchlisted = selectedPlayer ? watchlistKeys.has(watchKeyFor(selectedPlayer)) : false
 
   useEffect(() => {
-    if (!showPoolFilter || currentRound == null) return
+    if (!showPoolFilter || currentRound == null || combinedAnnualDraft) return
     if (c2cConfig?.enabled) {
       setPoolFilter(isCollegeRound ? 'College' : 'Pro')
       return
@@ -747,7 +749,7 @@ function PlayerPanelInner({
     if (devyConfig?.enabled) {
       setPoolFilter(isDevyRound ? 'Devy' : 'Pro')
     }
-  }, [showPoolFilter, currentRound, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
+  }, [showPoolFilter, currentRound, combinedAnnualDraft, c2cConfig?.enabled, devyConfig?.enabled, isCollegeRound, isDevyRound])
 
   useEffect(() => {
     if (!selectedPlayerTarget?.name) return
@@ -893,7 +895,7 @@ function PlayerPanelInner({
       >
         <div data-testid="draft-player-toolbar" className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
-            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 ${SKIN_CONTROL} ${
+            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 touch-manipulation transition duration-150 focus-within:ring-2 focus-within:ring-white/25 md:max-w-[280px] ${SKIN_CONTROL} ${
               rs ? 'min-w-[150px]' : ''
             }`}
           >
@@ -909,7 +911,7 @@ function PlayerPanelInner({
               data-testid="draft-player-search-input"
             />
           </div>
-          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100 md:hidden"
+          <button type="button" className="draft-filter-toggle rounded-lg border border-white/15 px-3 text-sm text-cyan-100"
             data-testid="draft-mobile-filters-toggle" aria-expanded={filtersOpen} aria-controls={`draft-player-more-filters ${filterRegionId}`}
             aria-label={`Filters, ${filtered.length} players`}
             onClick={() => setFiltersOpen(open => !open)}>
@@ -1073,7 +1075,7 @@ function PlayerPanelInner({
           </div>
         )}
 
-        <div data-testid="draft-player-more-filter-rows" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden md:block'}><div data-testid="draft-extra-player-filters">
+        <div data-testid="draft-player-more-filter-rows" data-expanded={filtersOpen} id={filterRegionId} className={filtersOpen ? 'block' : 'hidden'}><div data-testid="draft-extra-player-filters">
         <div
           className="flex flex-wrap items-center gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 sm:px-3"
         >
@@ -1145,15 +1147,7 @@ function PlayerPanelInner({
               Chimmy overlays
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setShowRosterView((v) => !v)}
-            data-testid="draft-toggle-roster-view"
-            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition"
-          >
-            <User className="h-3.5 w-3.5" />
-            {showRosterView ? 'Pool' : 'My roster'}
-          </button>
+          {/* "My roster" was removed here (2026-11-19): the My team tab is the one roster view. */}
         </div>
         <div
           className="flex flex-wrap items-center justify-between gap-1 border-b border-white/[0.06] bg-[#0d1424] px-2 py-1 text-[11px] text-white/60"

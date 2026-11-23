@@ -223,7 +223,7 @@ function setEarliestForDay(byTeamDay: Map<string, Map<string, Date>>, team: stri
  */
 export async function buildWeekKickoffMap(
   prisma: PrismaClient,
-  args: { sport: string; season: number; week: number },
+  args: { sport: string; season: number; week: number; scoringWindow?: { start: Date; end: Date } },
 ): Promise<WeekKickoffs> {
   const warnings: string[] = []
   const byTeam = new Map<string, Date>()
@@ -335,8 +335,8 @@ export async function buildWeekKickoffMap(
    */
   if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
-    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
-    const window = resolveDailySportWeekWindow(sport, args.season, args.week)
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
+    const window = args.scoringWindow ?? resolveDailySportWeekWindow(sport, args.season, args.week)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -401,9 +401,9 @@ export async function buildWeekKickoffMap(
     !RI_SCHEDULE_SLATE_SPORTS.includes(sport)
   ) {
     // Prime a schedule-derived opener for a season past the curated table (dynasty year 2+).
-    await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
+    if (!args.scoringWindow) await ensureDailySportSeasonStart(sport, args.season, { db: prisma })
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
-    const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
+    const window = args.scoringWindow ?? (seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null)
     if (!window) {
       warnings.push(`${sport} season ${args.season} has no recorded opener; lineup locks fall open (no player locked).`)
       return { byTeam, firstKickoff, warnings }
@@ -593,11 +593,18 @@ async function loadLockContext(
 ): Promise<LockContext> {
   const settings = readLineupLockSettings(args.leagueSettings, args.sport)
   const { mode, manualLockedWeeks, overrides } = settings
+  const leagueSettings = args.leagueSettings as { survivorGuillotine?: { scoringWindow?: { period?: number; startsAt?: string; endsAt?: string } } } | null
+  const configured = leagueSettings?.survivorGuillotine?.scoringWindow
+  const startsAt = configured?.startsAt ? new Date(configured.startsAt) : null
+  const endsAt = configured?.endsAt ? new Date(configured.endsAt) : null
+  const start = startsAt && Number.isFinite(startsAt.getTime()) ? easternCalendarDay(startsAt) : null
+  const end = endsAt && Number.isFinite(endsAt.getTime()) ? easternCalendarDay(new Date(endsAt.getTime() - 1)) : null
+  const scoringWindow = configured?.period === args.week && start && end && end >= start ? { start, end: new Date(end.getTime() + 86400000) } : undefined
   // manual mode needs no schedule; kickoff-based modes do.
   const schedule: WeekKickoffs =
     mode === 'manual'
       ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
-      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week, scoringWindow })
   const kickoffs: WeekKickoffs = settings.warnings.length
     ? { ...schedule, warnings: [...settings.warnings, ...schedule.warnings] }
     : schedule

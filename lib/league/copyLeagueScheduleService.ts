@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
 import { weekHasStarted } from '@/lib/schedule-runtime/scheduleRegeneration'
 import { withCustomWeek, type CustomPair } from '@/lib/schedule-runtime/customWeeks'
-import { readCopyLeague, COPY_LEAGUE_SETTINGS_KEY } from './copyLeague'
+import { copyLeagueHasRealSchedule, readCopyLeague, COPY_LEAGUE_SETTINGS_KEY } from './copyLeague'
 import { planRealSchedule, realWeeksFromGames, type CopyTeam, type RealSchedulePlan } from './copyLeagueSchedule'
 
 type Refusal = { ok: false; status: number; code: string; message: string }
@@ -38,8 +38,11 @@ async function load(seasonId: string, now: Date): Promise<Loaded | Refusal> {
   })
   if (!season) return { ok: false, status: 404, code: 'SEASON_NOT_FOUND', message: 'Season not found.' }
   const copy = readCopyLeague(season.league.settings, season.league.sport)
-  if (!copy.enabled || copy.sport !== 'NFL') {
+  if (!copy.enabled) {
     return { ok: false, status: 409, code: 'NOT_A_COPY_LEAGUE', message: 'Turn on copy league first (AllFantasy options).' }
+  }
+  if (!copyLeagueHasRealSchedule(copy.sport)) {
+    return { ok: false, status: 409, code: 'NO_REAL_SCHEDULE', message: 'The real schedule is for NFL copy leagues. Your teams still have their real names and logos.' }
   }
 
   // League team → this season's roster, the link the commissioner rename uses (Roster.id = LeagueTeam.externalId).

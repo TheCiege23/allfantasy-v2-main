@@ -15,6 +15,11 @@ import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbabilit
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
+import { buildNativeMatchupCenterPayload } from './nativeMatchupCenter'
+import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
+import { getMatchupData } from '@/lib/core-app/matchup'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { matchupCenterFromMatchupData } from '@/lib/matchup-center/importedMatchupCenter'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -79,15 +84,16 @@ function slotAiInsight(pts: number, proj: number, injury: string | null, hasReal
   return null
 }
 
-function weekFromSettings(settings: unknown): number {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
+/** The week the league's settings state, or null when they state none (never a guessed 1). */
+function weekFromSettings(settings: unknown): number | null {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
   const w = (settings as Record<string, unknown>).currentWeek ?? (settings as Record<string, unknown>).current_week
   if (typeof w === 'number' && Number.isFinite(w)) return Math.max(1, Math.floor(w))
   if (typeof w === 'string') {
     const n = parseInt(w, 10)
-    return Number.isFinite(n) ? Math.max(1, n) : 1
+    return Number.isFinite(n) ? Math.max(1, n) : null
   }
-  return 1
+  return null
 }
 
 function recordWinPct(w: number, l: number, t: number): number {
@@ -123,6 +129,8 @@ export async function buildMatchupCenterPayload(params: {
   viewerUserId: string
   season?: number
   week?: number
+  /** A league that plays more than one game a week: which of the viewer's games to show (1-based). */
+  game?: number
 }): Promise<MatchupCenterPayload | { error: string; status: number; code?: string }> {
   const league = await prisma.league.findFirst({
     where: { id: params.leagueId },
@@ -134,6 +142,8 @@ export async function buildMatchupCenterPayload(params: {
       leagueVariant: true,
       userId: true,
       platform: true,
+      platformLeagueId: true,
+      playoffWeeksPerRound: true,
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
@@ -150,8 +160,57 @@ export async function buildMatchupCenterPayload(params: {
     return { error: 'Forbidden', status: 403 }
   }
 
+  /*
+   * 🛑 A LEAGUE THAT PLAYS HERE IS READ FROM ITS OWN SEASON. Its schedule and scores live in
+   * `RedraftMatchup` and its bracket in `RedraftPlayoffMatchup`; the `teamWeekResult` rows read below
+   * are never written for it on a schedule, so this tab showed "No opponent" and 0.0 for a league with
+   * a scored week (lib/matchup-center/nativeMatchupModel.ts). Null means it has no season yet.
+   */
+  const native = await buildNativeMatchupCenterPayload({
+    league,
+    viewerUserId: params.viewerUserId,
+    season: params.season,
+    week: params.week,
+    game: params.game,
+  })
+  if (native) return native
+
+  /*
+   * 🛑 AN IMPORTED LEAGUE'S WEEK LIVES IN `WeeklyMatchup`, NOT `TeamWeekResult` (found live 2026-11-23).
+   * Nothing writes `TeamWeekResult` for an imported league, so the read below answered "No opponent, 0.0"
+   * for every Sleeper, Fantrax and ESPN league while the dashboard strip showed the real game. Read the
+   * same stored week the core Matchup screen reads; fall through only when it has no head-to-head on file.
+   */
+  if (league.platformLeagueId && !isNativePlatform(league.platform)) {
+    const data = await getMatchupData(params.leagueId, params.viewerUserId, params.week ?? null, null, params.game ?? null).catch(() => null)
+    const imported = data
+      ? matchupCenterFromMatchupData(data, {
+          leagueId: params.leagueId,
+          sport: String(league.sport),
+          season: params.season ?? league.season,
+          conceptOverlay: league.leagueVariant ? `Format: ${league.leagueVariant}` : null,
+        })
+      : null
+    if (imported) {
+      return applyMatchupCommandCenterMeta({
+        ...imported,
+        insights: buildMatchupInsightsBlock({ left: imported.left, right: imported.right, sport: String(league.sport) }),
+      })
+    }
+  }
+
   const season = params.season ?? league.season
-  const week = params.week ?? weekFromSettings(league.settings)
+  /*
+   * 🛑 "NO WEEK GIVEN" WAS WEEK 1 (2026-11-19). An imported Fantrax league states no current week in its settings, so
+   * this tab opened on week 1 in week 11 while My Team showed week 11. The week the league is actually in is the one
+   * every core screen uses (`resolveCurrentWeekForLeague`: the earliest unplayed week of its schedule); 1 is the last
+   * resort, for a league with no schedule on file at all.
+   */
+  const week =
+    params.week ??
+    weekFromSettings(league.settings) ??
+    (league.platformLeagueId ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week : null) ??
+    1
 
   /*
    * ⚠ `Roster.platformUserId` IS THE PLATFORM'S ID, NOT OURS, ON AN IMPORTED
@@ -345,6 +404,7 @@ export async function buildMatchupCenterPayload(params: {
   // AF's own projection beside the provider's, in this league's scoring. Empty when the engine has
   // nothing for the week — the UI then shows no AF line rather than a substitute.
   const afByPlayer = await loadMatchupAfProjections({
+    leagueId: league.id,
     playerIds: [...myStarters, ...oppStarters].map((p) => p.id),
     season,
     week,
@@ -352,7 +412,11 @@ export async function buildMatchupCenterPayload(params: {
     platform: league.platform ?? null,
     leagueSettings: league.settings,
   })
-  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => ({ ...slot, afProjectedPoints: afByPlayer.get(slot.playerId) ?? null })
+  const withAf = (slot: MatchupPlayerSlot): MatchupPlayerSlot => {
+    const forecast = afByPlayer.get(slot.playerId)
+    return { ...slot, projectedPoints: forecast ?? slot.currentPoints, hasRealProjection: forecast != null,
+      afProjectedPoints: forecast ?? null, aiInsight: slotAiInsight(slot.currentPoints, forecast ?? slot.currentPoints, slot.injuryStatus, forecast != null) }
+  }
 
   const leftSlots = myStarters.map((r) => withAf(toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming')))
   const rightSlots = oppStarters.map((r) => withAf(toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming')))

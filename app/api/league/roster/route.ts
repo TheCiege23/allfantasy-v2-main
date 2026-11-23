@@ -1,3 +1,4 @@
+import { leagueRosterForecasts } from '@/lib/af-projections/leagueRosterForecasts'
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -20,6 +21,7 @@ import { isDailyFormSport } from '@/lib/projections/dailySportForm'
 import { applyDailySportOutlook, isDayKey, loadDailySportOutlook } from '@/lib/projections/dailySportOutlook'
 import { loadTaxiTenureView, type TaxiTenureView } from '@/lib/taxi/taxiMaxYears'
 import { isDynastyFamilyLeague } from '@/lib/redraft/offseason/dynastyFamily'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -275,6 +277,8 @@ export async function GET(req: NextRequest) {
         const outlook = await loadDailySportOutlook(prisma, {
           league: { sport: leagueSport, season: league.season ?? null, settings: league.settings },
           day: isDayKey(pickedDay) ? pickedDay : null,
+          // Without AF Intelligence, priced without AF's learned factors (the response is gated by afJson too).
+          afIntelligence: (await readAfIntelligenceAccess(sessionUserId)).unlocked,
           players: unifiedRoster.map((r) => ({ key: r.id, lookupId: r.id, team: r.team, injuryStatus: r.injuryStatus })),
         })
         unifiedRoster = applyDailySportOutlook(unifiedRoster, outlook)
@@ -282,6 +286,28 @@ export async function GET(req: NextRequest) {
         console.warn('[league/roster] daily-sport outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
       }
     }
+
+    // NFL: the week's projection, opponent, kickoff, opponent rank against the position, headshot and
+    // crest, from stored rows (lib/redraft/nflRosterOutlook.ts). No-op for other sports and id spaces.
+    if (String(leagueSport).toUpperCase() === 'NFL' && unifiedRoster.length > 0) {
+      try {
+        const { loadNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlook')
+        const { applyNflRosterOutlook } = await import('@/lib/redraft/nflRosterOutlookModel')
+        const outlook = await loadNflRosterOutlook(prisma, {
+          league: { id: leagueId, sport: leagueSport, season: league.season ?? null, platform: league.platform ?? null, settings: league.settings },
+          players: unifiedRoster.map((r) => ({ id: r.id, team: r.team ?? null, position: r.position ?? null })),
+        })
+        unifiedRoster = applyNflRosterOutlook(unifiedRoster, outlook)
+      } catch (e) {
+        console.warn('[league/roster] nfl outlook failed', { leagueId, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+
+    const selectedDay = searchParams?.get('day')
+    unifiedRoster = await leagueRosterForecasts(unifiedRoster, { ...league, id: leagueId, sport: leagueSport,
+      season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null,
+      // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
+      afIntelligence: (await readAfIntelligenceAccess(sessionUserId)).unlocked })
 
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
@@ -357,7 +383,17 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({
+    // Survivor's canonical roster already contains provider-backed player metadata. Preserve it
+    // when optional normalized enrichment is unavailable or has no row for a native player.
+    const nativePlayerFallback = leagueVariant === 'survivor_guillotine' && roster.redraftRosterId
+      ? Object.fromEntries((await prisma.redraftRosterPlayer.findMany({
+          where: { rosterId: roster.redraftRosterId, droppedAt: null, roster: { leagueId } },
+          select: { playerId: true, playerName: true, position: true, team: true },
+        })).map(player => [player.playerId, { id: player.playerId, name: player.playerName,
+          position: player.position, team: player.team ?? '' }]))
+      : undefined
+
+    return await afJson(sessionUserId, {
       source: 'db' as const,
       rosterId: roster.id,
       taxiTenure,
@@ -368,6 +404,7 @@ export async function GET(req: NextRequest) {
       campus,
       roster: roster.playerData,
       unifiedRoster,
+      nativePlayerFallback,
       faabRemaining: roster.faabRemaining,
       waiverPriority: roster.waiverPriority ?? null,
       sport: leagueSport,
@@ -531,7 +568,7 @@ export async function GET(req: NextRequest) {
   })
 
   if (!matched) {
-    return NextResponse.json({
+    return await afJson(sessionUserId, {
       source: 'sleeper' as const,
       roster: null,
       ownerId: sleeperOwnerId,
@@ -569,7 +606,7 @@ export async function GET(req: NextRequest) {
     },
   }
 
-  return NextResponse.json({
+  return await afJson(sessionUserId, {
     source: 'sleeper' as const,
     roster: rosterPayload,
     ownerId: String(matched.owner_id ?? sleeperOwnerId ?? ''),

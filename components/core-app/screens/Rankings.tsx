@@ -33,6 +33,8 @@ import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButt
 import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
 import AfRankingsPage from '@/components/rankings/AfRankingsClient'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { RankingsMoreNote } from '@/components/core-app/rankings/RankingsMoreNote'
 
 /**
  * Rankings — handoff 14a, rebuilt around three separate scopes.
@@ -344,8 +346,6 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         under it (RankingsYouRow) says how it moved, with Why and Ask Chimmy. Its "My portfolio" button
         repeated the tab above it. A manager not on the board is told so by the headline.
       */}
-      {g.rivals.length > 0 ? <RivalsCard g={g} /> : null}
-
       {/*
         Tablet and desktop: when a row is being explained, the board and the explanation sit side by
         side, so "why" never pushes the board off screen. Phone: stacked, explanation first.
@@ -447,6 +447,18 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         ) : null}
       </section>
       </div>
+
+      {/*
+        2026-11-20 — "More detail" (owner: the core site is confusing). The board and your row lead the
+        page. "Next to pass" sat above the board and repeated the gap the headline already gives ("4.4
+        behind @alpha"), so it moved, unchanged, into the one fold under the board. How the board is
+        scored stays in the board's own foot (RankingsBoardFoot), next to the "of N" it explains.
+      */}
+      {g.rivals.length > 0 ? (
+        <MoreDetail note={<RankingsMoreNote which="community" />} testId="rk-more">
+          <RivalsCard g={g} />
+        </MoreDetail>
+      ) : null}
     </>
   )
 }
@@ -738,50 +750,6 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
       </div>
 
       <section className="af-rk-card">
-        <p className="af-rk-eyebrow">Where my score comes from</p>
-        {s.score == null ? (
-          <p className="af-rk-empty">No league-season in this view has a result yet, so there is nothing to score.</p>
-        ) : (
-          <ComponentBars score={s} />
-        )}
-      </section>
-
-      <section className="af-rk-card">
-        <p className="af-rk-eyebrow">Trends</p>
-        <div className="af-rk-trends">
-          <TrendLine
-            title="7-day rank"
-            invert
-            points={p.daily.map((d) => ({ label: d.label, value: d.rank }))}
-            format={(n) => String(n)}
-            empty={p.trackingSince ? 'No daily snapshot in the last week includes you.' : 'Daily snapshots have not started yet.'}
-          />
-          <TrendLine
-            title="Weekly rank"
-            invert
-            points={p.weekly.map((d) => ({ label: `Week of ${d.label}`, value: d.rank }))}
-            format={(n) => String(n)}
-            empty={p.trackingSince ? `Weekly points start ${fmtDay(p.trackingSince)}; none recorded yet.` : 'Weekly snapshots have not started yet.'}
-          />
-          <TrendLine
-            title="Score by season"
-            points={p.seasons.map((t) => ({ label: `${t.season} (${t.record})`, value: t.seasonScore }))}
-            empty="No season has a result yet."
-          />
-          <TrendLine
-            title="Career score"
-            points={p.seasons.map((t) => ({ label: `Through ${t.season}`, value: t.careerScore }))}
-            empty="No season has a result yet."
-          />
-        </div>
-        <p className="af-rk-note">
-          Season and career lines are computed from your league-seasons. Daily and weekly lines come only from
-          snapshots taken at the time{p.trackingSince ? `, kept since ${fmtDay(p.trackingSince)}` : ''} — they are never
-          rebuilt after the fact.
-        </p>
-      </section>
-
-      <section className="af-rk-card">
         <p className="af-rk-eyebrow">
           My league-seasons <TopicTip topic="scoringIndex" />
           <span className="af-rk-spacer" />
@@ -818,7 +786,58 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
         </p>
       </section>
 
-      <Ladder tiers={data.ladder} />
+      {/*
+        2026-11-20 — "More detail". My portfolio leads with my score, my level and my league-seasons. How
+        the score is built (the component table), the trend lines and the level ladder moved, unchanged,
+        into the one fold at the bottom.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="portfolio" />} testId="rk-more">
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">Where my score comes from</p>
+          {s.score == null ? (
+            <p className="af-rk-empty">No league-season in this view has a result yet, so there is nothing to score.</p>
+          ) : (
+            <ComponentBars score={s} />
+          )}
+        </section>
+
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">Trends</p>
+          <div className="af-rk-trends">
+            <TrendLine
+              title="7-day rank"
+              invert
+              points={p.daily.map((d) => ({ label: d.label, value: d.rank }))}
+              format={(n) => String(n)}
+              empty={p.trackingSince ? 'No daily snapshot in the last week includes you.' : 'Daily snapshots have not started yet.'}
+            />
+            <TrendLine
+              title="Weekly rank"
+              invert
+              points={p.weekly.map((d) => ({ label: `Week of ${d.label}`, value: d.rank }))}
+              format={(n) => String(n)}
+              empty={p.trackingSince ? `Weekly points start ${fmtDay(p.trackingSince)}; none recorded yet.` : 'Weekly snapshots have not started yet.'}
+            />
+            <TrendLine
+              title="Score by season"
+              points={p.seasons.map((t) => ({ label: `${t.season} (${t.record})`, value: t.seasonScore }))}
+              empty="No season has a result yet."
+            />
+            <TrendLine
+              title="Career score"
+              points={p.seasons.map((t) => ({ label: `Through ${t.season}`, value: t.careerScore }))}
+              empty="No season has a result yet."
+            />
+          </div>
+          <p className="af-rk-note">
+            Season and career lines are computed from your league-seasons. Daily and weekly lines come only from
+            snapshots taken at the time{p.trackingSince ? `, kept since ${fmtDay(p.trackingSince)}` : ''} — they are never
+            rebuilt after the fact.
+          </p>
+        </section>
+
+        <Ladder tiers={data.ladder} />
+      </MoreDetail>
     </>
   )
 }
@@ -923,11 +942,17 @@ function LeagueBody({ league }: { league: LeagueView }) {
           </div>
         </div>
       )}
-      <LeaguePowerCard league={league} />
-      <p className="af-rk-fresh">
-        <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
-        {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
-      </p>
+      {/*
+        2026-11-20 — "More detail". The standings are the page. The stored power score and the sync line
+        moved, unchanged, into the one fold at the foot of the card.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="league" />} testId="rk-more">
+        <LeaguePowerCard league={league} />
+        <p className="af-rk-fresh">
+          <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
+          {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
+        </p>
+      </MoreDetail>
     </section>
   )
 }
@@ -1209,7 +1234,14 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
         ) : null}
       </section>
 
-      <ClassMethodCard />
+      {/*
+        2026-11-20 — "More detail". Your Class, your rated weeks (the "you" bar jumps to them) and the
+        board stay on screen; how Class is rated moved, unchanged, into the one fold at the bottom. The
+        empty state keeps it in its card — there it is the only thing to read.
+      */}
+      <MoreDetail note={<RankingsMoreNote which="class" />} testId="rk-more">
+        <ClassMethodCard />
+      </MoreDetail>
     </>
   )
 }

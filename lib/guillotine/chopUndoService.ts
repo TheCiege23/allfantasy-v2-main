@@ -12,6 +12,7 @@ import { claimedPlayerIds } from './choppedReleases'
 import {
   CHOP_UNDO_BLOCKER_MESSAGES,
   chopUndoBlockers,
+  faabResetReturnPlan,
   faabReturnPlan,
   validateChopInstead,
   type ChopUndoBlocker,
@@ -96,7 +97,7 @@ async function loadContext(leagueId: string, db: Db = prisma): Promise<ChopConte
 async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoBlocker[]> {
   const { gSeason, week, choppedAt } = ctx
   const redraftIds = [...ctx.redraftByEngine.values()]
-  const [laterChop, claimsProcessed, claimed, droppedByTeam, faabEvent] = await Promise.all([
+  const [laterChop, claimsProcessed, claimed, droppedByTeam, faabEvent, faabReset] = await Promise.all([
     gSeason && week != null
       ? db.guillotineElimination.findFirst({ where: { seasonId: gSeason.id, scoringPeriod: { gt: week } }, select: { scoringPeriod: true } })
       : null,
@@ -114,6 +115,7 @@ async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoB
         })
       : [],
     week != null ? findFaabSplit(ctx.leagueId, week, choppedAt, db) : null,
+    week != null ? findFaabReset(ctx.leagueId, week, choppedAt, db) : null,
   ])
   const listed = new Set(ctx.releases.map((r) => r.eliminatedRosterId))
   const teamsWithoutReleaseRecord = (droppedByTeam as Array<{ rosterId: string }>).filter((row) => !listed.has(row.rosterId)).length
@@ -128,7 +130,21 @@ async function blockersFor(ctx: ChopContext, db: Db = prisma): Promise<ChopUndoB
     teamsWithoutReleaseRecord,
     unmatchedTeams: ctx.choppedRosterIds.filter((id) => !ctx.redraftByEngine.has(id)).length,
     faabSplitWithoutShares: faabReturnPlan(faabEvent, ctx.choppedRosterIds) == null,
+    faabResetWithoutChanges: faabResetReturnPlan(faabReset?.metadata ?? null) == null,
   })
+}
+
+/** The week's "FAAB after a chop" event (./faabAfterChop.ts), written in the chop's own run. */
+async function findFaabReset(leagueId: string, week: number, choppedAt: Date | null, db: Db) {
+  if (!choppedAt) return null
+  const row = await db.guillotineEventLog.findFirst({
+    where: { leagueId, eventType: 'faab_after_chop', createdAt: { gte: new Date(choppedAt.getTime() - 60_000) }, metadata: { path: ['weekOrPeriod'], equals: week } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, metadata: true },
+  })
+  if (!row) return null
+  const metadata = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata) ? (row.metadata as Record<string, unknown>) : {}
+  return { id: row.id, metadata }
 }
 
 async function findFaabSplit(leagueId: string, week: number, choppedAt: Date | null, db: Db) {
@@ -305,6 +321,21 @@ async function applyUndo(tx: Prisma.TransactionClient, ctx: ChopContext, userId:
           data: { status: 'denied', processedAt: new Date(), denialReason: 'The commissioner undid the chop, so this player is back on his team.' },
         })
       : { count: 0 }
+
+  // FAAB after a chop (top up / reset): undone FIRST, the reverse of the order the chop applied them. Each survivor
+  // goes back to its balance before the chop — only if it is still exactly what the chop set (a spend since would make
+  // "before" a guess). The marker is deleted so chopping the week again applies the rule again.
+  const reset = await findFaabReset(leagueId, week, ctx.choppedAt, tx)
+  if (reset) {
+    const resetPlan = faabResetReturnPlan(reset.metadata)
+    if (!resetPlan) throw new UndoRefused(CHOP_UNDO_BLOCKER_MESSAGES.faab_reset_unknown)
+    for (const [rosterId, { before, after }] of resetPlan) {
+      const put = await tx.roster.updateMany({ where: { id: rosterId, faabRemaining: after }, data: { faabRemaining: before } })
+      if (put.count !== 1) throw new UndoRefused(CHOP_UNDO_BLOCKER_MESSAGES.waivers_ran)
+    }
+    if (resetPlan.size) await copyGenericFaabToRedraft(tx, [...resetPlan.keys()])
+    await tx.guillotineEventLog.delete({ where: { id: reset.id } })
+  }
 
   // FAAB split to the survivors: each gives its share back, each chopped team gets back what it gave.
   const plan = faabReturnPlan(await findFaabSplit(leagueId, week, ctx.choppedAt, tx), choppedRosterIds)!

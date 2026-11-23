@@ -108,7 +108,8 @@ export async function computeKeeperEligibility(
         ineligibleReason = 'max_years_reached'
       }
 
-      if (isEligible && league.keeperWaiverAllowed === false && p.acquisitionType === 'waiver') {
+      // "Drafted players only" covers every pickup: a free-agent add was let through where a waiver claim was not.
+      if (isEligible && league.keeperWaiverAllowed === false && (p.acquisitionType === 'waiver' || p.acquisitionType === 'free_agent')) {
         isEligible = false
         ineligibleReason = 'not_drafted'
       }

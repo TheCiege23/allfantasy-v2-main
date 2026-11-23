@@ -1,6 +1,7 @@
 /**
  * Copy leagues, part 1 — who is which real team (docs/league-page/COPY_LEAGUES_DESIGN.md; owner decisions
- * 2026-11-18: NFL only, any size, managers pick, the real name replaces theirs and comes back when let go).
+ * 2026-11-18: any size, managers pick, the real name replaces theirs and comes back when let go). NFL first;
+ * NBA, NHL and MLB since 2026-11-19, from ESPN team-list captures (see copy-league-team-tables.test.ts).
  */
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -49,6 +50,7 @@ vi.mock('@/server/services/auditService', () => ({ logAction: async () => ({}) }
 
 import {
   changeCopyTeam,
+  copyLeagueHasRealSchedule,
   copyLeagueTeams,
   disableCopyLeague,
   readCopyLeague,
@@ -68,21 +70,50 @@ const rows = [
 ]
 
 describe('the real teams', () => {
-  it('NFL has all 32, by name, each with a crest; other sports wait for a verified table', () => {
+  it('NFL has all 32, by name, each with a crest; a sport without a verified table has none', () => {
     const nfl = copyLeagueTeams('NFL')
     expect(nfl).toHaveLength(32)
     expect(nfl[0]!.name).toBe('Arizona Cardinals')
     expect(nfl.find((t) => t.code === 'BUF')).toMatchObject({ name: 'Buffalo Bills' })
     expect(nfl.every((t) => typeof t.logo === 'string' && t.logo.startsWith('https://'))).toBe(true)
-    expect(copyLeagueTeams('NBA')).toEqual([])
+    expect(copyLeagueTeams('SOCCER')).toEqual([])
+    expect(copyLeagueTeams('NCAAF')).toEqual([])
     expect(copyLeagueTeams(null)).toEqual([])
   })
 
-  it('reads back what it wrote, drops unknown codes, and is never on outside the NFL', () => {
+  it('NBA has 30, NHL 32 and MLB 30, by name, each with its own crest, in any letter case', () => {
+    const nba = copyLeagueTeams('NBA')
+    const nhl = copyLeagueTeams('nhl')
+    const mlb = copyLeagueTeams('MLB')
+    expect([nba.length, nhl.length, mlb.length]).toEqual([30, 32, 30])
+    expect(nba[0]!.name).toBe('Atlanta Hawks')
+    expect(nhl.find((t) => t.code === 'UTAH')).toEqual({ code: 'UTAH', name: 'Utah Mammoth', logo: 'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png', logoDark: 'https://a.espncdn.com/i/teamlogos/nhl/500-dark/utah.png' })
+    expect(mlb.find((t) => t.code === 'ATH')).toMatchObject({ name: 'Athletics' })
+    expect(mlb.find((t) => t.code === 'CHW')).toMatchObject({ name: 'Chicago White Sox', logo: 'https://a.espncdn.com/i/teamlogos/mlb/500/chw.png' })
+    for (const list of [nba, nhl, mlb]) {
+      expect(new Set(list.map((t) => t.code)).size).toBe(list.length)
+      expect(list.map((t) => t.name)).toEqual([...list.map((t) => t.name)].sort((a, b) => a.localeCompare(b)))
+    }
+    // Teams that moved or were renamed are not offered.
+    expect(nhl.some((t) => t.name.includes('Coyotes'))).toBe(false)
+    expect(mlb.some((t) => t.name.includes('Oakland'))).toBe(false)
+    // A caller cannot change the table through what it was handed.
+    nba[0]!.name = 'changed'
+    expect(copyLeagueTeams('NBA')[0]!.name).toBe('Atlanta Hawks')
+  })
+
+  it('reads back what it wrote, drops unknown codes, and is never on without a team table', () => {
     const s = withCopyLeague({ other: 1 }, on({ t1: 'BUF', t2: 'XYZ' }, { t1: { teamName: 'Ghost', avatarUrl: null } }))
     expect(s.other).toBe(1)
     expect(readCopyLeague(s, 'NFL')).toEqual({ enabled: true, sport: 'NFL', teams: { t1: 'BUF' }, previous: { t1: { teamName: 'Ghost', avatarUrl: null } } })
-    expect(readCopyLeague(s, 'NBA').enabled).toBe(false)
+    expect(readCopyLeague(s, 'SOCCER').enabled).toBe(false)
+    // An NBA league reads only NBA codes.
+    const nba = withCopyLeague({}, { enabled: true, sport: 'NBA', teams: { t1: 'GS', t2: 'BUF' }, previous: {} })
+    expect(readCopyLeague(nba, 'NBA')).toMatchObject({ enabled: true, sport: 'NBA', teams: { t1: 'GS' } })
+  })
+
+  it('only NFL takes the real schedule', () => {
+    expect(['NFL', 'nfl', 'NBA', 'NHL', 'MLB', null].map(copyLeagueHasRealSchedule)).toEqual([true, true, false, false, false, false])
   })
 })
 
@@ -161,15 +192,32 @@ describe('the service', () => {
     expect((await readCopyLeagueForViewer('L1', 'ana'))?.locked).toBe(true)
   })
 
-  it('only the commissioner turns it on or off, or assigns; an imported league and a non-NFL league are refused', async () => {
+  it('only the commissioner turns it on or off, or assigns; an imported league and a sport with no team table are refused', async () => {
     expect(await changeCopyLeague('L1', 'ana', { action: 'disable' })).toMatchObject({ ok: false, code: 'COMMISSIONER_ONLY' })
     expect(await changeCopyLeague('L1', 'ana', { action: 'assign', leagueTeamId: 't2', code: 'BUF' })).toMatchObject({ ok: false, code: 'COMMISSIONER_ONLY' })
     db.league!.platform = 'sleeper'
     expect(await changeCopyLeague('L1', 'boss', { action: 'enable' })).toMatchObject({ ok: false, code: 'IMPORTED_LEAGUE' })
     db.league!.platform = 'manual'
-    db.league!.sport = 'NBA'
-    expect(await changeCopyLeague('L1', 'boss', { action: 'enable' })).toMatchObject({ ok: false, code: 'SPORT_UNSUPPORTED' })
+    db.league!.sport = 'SOCCER'
+    expect(await changeCopyLeague('L1', 'boss', { action: 'enable' })).toMatchObject({
+      ok: false,
+      code: 'SPORT_UNSUPPORTED',
+      message: 'Copy leagues are available for NFL, NBA, NHL and MLB leagues.',
+    })
     expect((await readCopyLeagueForViewer('L1', 'boss'))?.available).toBe(false)
+  })
+
+  it('an NHL league: turn it on, a manager takes a real NHL team, its name and crest are written, and an NFL code is refused', async () => {
+    db.league!.sport = 'NHL'
+    expect(await changeCopyLeague('L1', 'boss', { action: 'enable' })).toEqual({ ok: true })
+    const before = await readCopyLeagueForViewer('L1', 'ana')
+    expect(before).toMatchObject({ available: true, enabled: true, sport: 'NHL' })
+    expect(before!.catalog).toHaveLength(32)
+    expect(await changeCopyLeague('L1', 'ana', { action: 'pick', code: 'BUF' })).toEqual({ ok: true }) // Buffalo Sabres
+    expect(await changeCopyLeague('L1', 'ana', { action: 'pick', code: 'KC' })).toMatchObject({ ok: false, code: 'UNKNOWN_TEAM' })
+    const ana = db.teams.find((t) => t.claimedByUserId === 'ana')!
+    expect(ana).toMatchObject({ teamName: 'Buffalo Sabres', avatarUrl: 'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png' })
+    expect(db.rosterWrites.at(-1)!.data).toEqual({ teamName: 'Buffalo Sabres', avatarUrl: 'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png' })
   })
 
   it('a manager with no team cannot take one', async () => {
@@ -181,19 +229,23 @@ describe('where it shows', () => {
   it('the AllFantasy options list it for NFL leagues, with how many teams have a real team', () => {
     expect(afOptionsSummary('redraft', 12, 'NFL')).toBe('Copy league')
     expect(afOptionsSummary('keeper', 12, 'NFL')).toBe('Copy league · Keeper rules')
-    expect(afOptionsSummary('redraft', 12, 'NBA')).toBeNull()
+    expect(afOptionsSummary('redraft', 12, 'NBA')).toBe('Copy league')
+    expect(afOptionsSummary('redraft', 12, 'SOCCER')).toBeNull()
     const row = buildAfOptions({ league: { sport: 'NFL', teamCount: 12 }, settingsSnapshot: { copy_league: { enabled: true, teams: { a: 'BUF', b: 'MIA' } } } }, 'redraft', 'L1')
       .find((o) => o.key === 'copyLeague')
     expect(row).toMatchObject({ value: '2 of 12 teams have a real team', panel: 'af-options' })
     expect(hubText('es', row!.value)).toBe('2 de 12 equipos tienen un equipo real')
-    expect(hubText('es', row!.description)).not.toBe(row!.description)
+    expect(hubText('es', row!.description)).toBe('Cada mánager toma un equipo real de la NFL, y su nombre y logo pasan a ser los del equipo.')
+    const mlb = buildAfOptions({ league: { sport: 'MLB', teamCount: 10 }, settingsSnapshot: {} }, 'redraft', 'L1').find((o) => o.key === 'copyLeague')
+    expect(mlb).toMatchObject({ description: 'Every manager takes a real MLB team, and its name and logo become the team’s own.', value: 'Copy league is off' })
+    expect(hubText('es', mlb!.description)).toBe('Cada mánager toma un equipo real de la MLB, y su nombre y logo pasan a ser los del equipo.')
   })
 })
 
 const fetchMock = vi.fn()
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
 const view = (over: Record<string, unknown> = {}) => ({
-  available: true, enabled: true, locked: false, canManage: false, myLeagueTeamId: 't1',
+  available: true, enabled: true, sport: 'NFL', locked: false, canManage: false, myLeagueTeamId: 't1',
   teams: [
     { leagueTeamId: 't1', teamName: 'Ghost Protocol', ownerName: 'Ana', code: null },
     { leagueTeamId: 't2', teamName: 'Buffalo Bills', ownerName: 'Ben', code: 'BUF' },
@@ -245,6 +297,38 @@ describe('the panel', () => {
     fireEvent.change(select, { target: { value: 'BUF' } })
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual({ action: 'assign', leagueTeamId: 't1', code: 'BUF' })
+  })
+
+  it('an NBA league names the NBA and lists NBA teams with their crests', async () => {
+    const nba = view({
+      sport: 'NBA',
+      teams: [
+        { leagueTeamId: 't1', teamName: 'Ghost Protocol', ownerName: 'Ana', code: null },
+        { leagueTeamId: 't2', teamName: 'Golden State Warriors', ownerName: 'Ben', code: 'GS' },
+      ],
+      catalog: copyLeagueTeams('NBA'),
+    })
+    fetchMock.mockResolvedValueOnce(reply(200, nba))
+    render(<CopyLeaguePanel leagueId="L1" mode="mine" />)
+    const section = await screen.findByTestId('copy-league-mine')
+    expect(section.textContent).toContain('take a real NBA team')
+    expect(section.textContent).not.toContain('NFL')
+    const select = screen.getByTestId('copy-league-pick') as HTMLSelectElement
+    expect(select.options).toHaveLength(31)
+    expect([...select.options].find((o) => o.value === 'GS')).toMatchObject({ disabled: true, textContent: 'Golden State Warriors (taken by Ben)' })
+    cleanup()
+    fetchMock.mockResolvedValueOnce(reply(200, { ...nba, canManage: true }))
+    render(<CopyLeaguePanel leagueId="L1" mode="commissioner" />)
+    expect((await screen.findByTestId('copy-league-commissioner')).textContent).toContain('takes a real NBA team')
+    const crest = screen.getAllByTestId('copy-league-row')[1]!.querySelector('img')!
+    // The panel is dark in every theme, so it draws ESPN's dark-background crest.
+    expect(crest.getAttribute('src')).toBe('https://a.espncdn.com/i/teamlogos/nba/500-dark/gs.png')
+    // If that file fails, the default crest is tried; if that fails too, the crest is hidden.
+    fireEvent.error(crest)
+    expect(crest.getAttribute('src')).toBe('https://a.espncdn.com/i/teamlogos/nba/500/gs.png')
+    expect(crest.style.visibility).toBe('')
+    fireEvent.error(crest)
+    expect(crest.style.visibility).toBe('hidden')
   })
 
   it('a manager who is not a commissioner gets no commissioner panel', async () => {

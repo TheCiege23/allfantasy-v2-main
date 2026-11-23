@@ -28,6 +28,8 @@ type InviteInfo = {
   inviteLink: string
   teamCount: number
   claimedCount: number
+  /** Who is already here (lib/league/managersHere.ts). */
+  managersHere: Array<{ name: string; teamName: string | null; you: boolean }>
   /** Native guillotine only: seats the remaining season supports and what a not-full draft does. */
   guillotineSeats: GuillotineSeatSummary | null
 }
@@ -69,6 +71,7 @@ export function LeagueInvitePanel({
             inviteLink: String(d.inviteLink),
             teamCount: Number(d.claim?.teamCount ?? 0),
             claimedCount: Number(d.claim?.claimedCount ?? 0),
+            managersHere: Array.isArray(d.claim?.managersHere) ? d.claim.managersHere.filter((m: unknown) => m && typeof (m as { name?: unknown }).name === 'string') : [],
             guillotineSeats: d.guillotineSeats && typeof d.guillotineSeats === 'object' ? (d.guillotineSeats as GuillotineSeatSummary) : null,
           })
         } else {
@@ -151,6 +154,19 @@ export function LeagueInvitePanel({
           ) : (
             <p className="af-inv-note af-inv-note--done">Every team is claimed.</p>
           )}
+          {info.managersHere.length > 0 ? (
+            <div className="af-inv-here" data-testid="league-managers-here">
+              <p className="af-inv-here-h">Already here</p>
+              <ul className="af-inv-here-list">
+                {info.managersHere.map((m, i) => (
+                  <li key={`${m.name}-${m.teamName ?? ''}-${i}`} className="af-inv-here-row" data-you={m.you}>
+                    <span className="af-inv-here-name">{m.name}{m.you ? ' (you)' : ''}</span>
+                    {m.teamName && m.teamName !== m.name ? <span className="af-inv-here-team">{m.teamName}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {info.guillotineSeats ? (
             <p className="af-inv-note" data-testid="guillotine-seat-line">
               {formatGuillotineSeatLine(info.guillotineSeats)}

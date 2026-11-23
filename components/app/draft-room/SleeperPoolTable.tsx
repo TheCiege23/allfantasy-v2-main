@@ -47,6 +47,7 @@ import { AF_BLUE, afAdpCellTitle, aiAdpCellTitle, systemAdpCellTitle } from '@/l
 import { formatSurvival, survivalProbability, survivalTone } from '@/lib/draft-room/draftPulse'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { DraftPlayerLabelBadge } from './DraftPlayerLabelBadge'
+import { AfAdpLockedCell, AfAdpLockedHeader, useAfAdpLock } from './afAdpLock'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -215,6 +216,7 @@ function SleeperRow(props: SleeperRowProps) {
   const adpDisplay = p.adp != null ? p.adp.toFixed(1) : '—'
   const aiAdpDisplay = p.aiAdp != null ? p.aiAdp.toFixed(1) : '—'
   const afAdpDisplay = p.afAdp != null && Number.isFinite(Number(p.afAdp)) ? Number(p.afAdp).toFixed(1) : '—'
+  const afAdpLocked = useAfAdpLock() != null && p.afAdp == null
   const byeDisplay = p.byeWeek != null ? String(p.byeWeek) : '—'
 
   const tipFor = (columnKey: string, statLabel: string, rawValue: number | null | undefined): string =>
@@ -422,6 +424,13 @@ function SleeperRow(props: SleeperRowProps) {
         )
       }
       case 'afAdp':
+        if (afAdpLocked) {
+          return (
+            <Cell key={col.key} width={col.width} align="right">
+              <AfAdpLockedCell />
+            </Cell>
+          )
+        }
         return (
           <Cell key={col.key} width={col.width} align="right">
             <span
@@ -657,9 +666,16 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
 
   const leftAtPickLabel = leftAtPick?.label ?? null
   const leftAtOverall = leftAtPick?.overall ?? null
+  // AF ADP shows once any player in the pool has one; a column of dashes is hidden.
+  const afAdpLock = useAfAdpLock()
+  // A locked viewer keeps the column — locked, with its upgrade link — rather than losing it silently.
+  const hasAfAdp = useMemo(
+    () => afAdpLock != null || filtered.some((p) => p.afAdp != null && Number.isFinite(Number(p.afAdp))),
+    [filtered, afAdpLock],
+  )
   const layout = useMemo(
-    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel }),
-    [draftSport, statColumnOptions, leftAtPickLabel],
+    () => buildSleeperPoolTableLayout(draftSport, statColumnOptions, { leftAtPickLabel, hideAfAdp: !hasAfAdp }),
+    [draftSport, statColumnOptions, leftAtPickLabel, hasAfAdp],
   )
 
   const statByKey = useMemo(() => new Map(layout.statDefs.map((d) => [d.key, d])), [layout.statDefs])
@@ -700,6 +716,14 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
           const sortable = Boolean(onSortChange) && sortKeyForColumn(col.key, draftSport) != null
 
           const indicator = isActiveSort ? (ariaSort === 'ascending' ? '▲' : '▼') : null
+
+          if (col.key === 'afAdp' && afAdpLock) {
+            return (
+              <Cell key={col.key} width={col.width} align={col.align}>
+                <AfAdpLockedHeader lock={afAdpLock} label={col.label} source="lock_af_adp_draft_room" />
+              </Cell>
+            )
+          }
 
           if (sortable) {
             const sortHint = isActiveSort

@@ -4,8 +4,6 @@ import {
   readActivityMix,
   readAllTimeRecords,
   readManagerActivity,
-  readFingerprintAxisMax,
-  readManagerFingerprints,
   readMargins,
   readSeasonPoints,
   readSeasonPointTotals,
@@ -231,9 +229,7 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
       transactionWeeks,
       managerCounts,
       activityMix,
-      fingerprints,
       allTimeRecords,
-      fingerprintAxisMax,
     ] = await Promise.all([
       season == null ? [] : panel('pointsForAgainst', () => readSeasonPoints(leagueId, season), []),
       season == null ? [] : panel('scoringDistribution', () => readSeasonPointsForDistribution(leagueId, season), []),
@@ -242,9 +238,7 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
       panel('transactionsByWeek', () => readTransactionsByWeek(leagueId), []),
       panel('managerActivity', () => readManagerActivity(leagueId, days), []),
       panel('activityMix', () => readActivityMix(leagueId), []),
-      panel('managerFingerprints', () => readManagerFingerprints(leagueId), []),
       panel('allTimeRecords', () => readAllTimeRecords(leagueId), []),
-      panel('fingerprintAxisMax', () => readFingerprintAxisMax(), null),
     ])
 
     return {
@@ -260,9 +254,10 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
         priorActionsPerWeek: round(m.priorCount / weeks, 2),
       })),
       activityMix: activityMix.map((a) => ({ label: humaniseActivityType(a.activityType), count: a.count })),
-      managerFingerprints: fingerprints,
-      // Null unless there is something to scale — the radar is not rendered without fingerprints.
-      fingerprintAxisMax: fingerprints.length ? fingerprintAxisMax : null,
+      // The fingerprint radar read the personality profiles (retired 2026-11-19, re-score build item 10). It
+      // was already empty for every league; the platform-wide max query behind it is gone too.
+      managerFingerprints: [],
+      fingerprintAxisMax: null,
       allTimeRecords,
     }
   } catch {

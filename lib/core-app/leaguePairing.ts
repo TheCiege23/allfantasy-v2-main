@@ -176,7 +176,18 @@ async function membershipKeyFor(
 export async function resolvePairedHalf(
   leagueId: string,
   ownerUserId: string,
-  options?: { includeOperationalSummary?: boolean; leagueContext?: LeagueContext | null },
+  options?: {
+    includeOperationalSummary?: boolean
+    leagueContext?: LeagueContext | null
+    /**
+     * Describe the pair for SOMEONE ELSE than the link's owner: a manager in a league-wide pair
+     * (lib/league/collegePro/leaguePair.ts). The link, its leagues and their data stay the owner's;
+     * only the team picked in each half changes. `teamFor` returns that half's team identity for the
+     * viewer — a Fantrax team NAME, or a League team's `externalId` — or null when the viewer has no
+     * known team there, which is reported as unmatched, never filled with the owner's team.
+     */
+    viewer?: { userId: string; teamFor: (member: { role: string; platform: string; leagueId: string }) => string | null }
+  },
 ): Promise<PairedHalf | null> {
   const includeOperationalSummary = options?.includeOperationalSummary ?? true
   const leagueContext = leagueContextFor(leagueId, ownerUserId, options?.leagueContext)
@@ -245,6 +256,10 @@ export async function resolvePairedHalf(
   }): Promise<FranchiseSide> => {
     const platform = String(member.platform ?? '').toLowerCase()
     const role = member.role as FranchiseRole
+    const viewer = options?.viewer ?? null
+    const viewerId = viewer?.userId ?? ownerUserId
+    const viewerTeam = viewer ? viewer.teamFor(member) : null
+    const UNMATCHED = "we couldn't tell which team is yours in this league yet"
 
     if (platform === 'fantrax') {
       const snap = await prisma.fantraxLeague.findUnique({
@@ -286,7 +301,15 @@ export async function resolvePairedHalf(
             .filter(Boolean),
         ),
       ).sort((a, b) => a.localeCompare(b))
-      const requestedTeam = String(member.teamExternalId ?? snap?.userTeam ?? '').trim()
+      /*
+       * ⚠ AN EMPTY teamExternalId MEANS "NOT SET", NOT "THE TEAM NAMED ''". The Peach Bowl / Cream Bowl
+       * link was written with '' on both members (production, 2026-11-21), and `??` only falls back on
+       * null, so the snapshot's own userTeam was never reached: no team matched, and the college half
+       * read as a roster nobody owns. Blank falls back exactly as null does.
+       */
+      const requestedTeam = viewer
+        ? String(viewerTeam ?? '').trim()
+        : String(member.teamExternalId?.trim() || snap?.userTeam || '').trim()
       const selectedTeam = teamNames.find((name) => name.toLowerCase() === requestedTeam.toLowerCase()) ?? requestedTeam
       const userTeam = selectedTeam.toLowerCase()
       const teamOf = (r: unknown): string => {
@@ -307,12 +330,15 @@ export async function resolvePairedHalf(
         allRows == null
           ? null
           : !rowsCarryTeams
-            ? allRows
+            ? /* An older snapshot holds only its IMPORTER's roster — never someone else's to show. */
+              viewer
+              ? null
+              : allRows
             : userTeam
               ? allRows.filter((r) => teamOf(r) === userTeam)
               : null
       const claimedTeam = mirror ? await prisma.leagueTeam.findFirst({
-        where: { leagueId: mirror.id, claimedByUserId: ownerUserId },
+        where: { leagueId: mirror.id, claimedByUserId: viewerId },
         select: { avatarUrl: true },
       }) : null
       return {
@@ -346,10 +372,14 @@ export async function resolvePairedHalf(
         unavailableReason:
           snap == null
             ? 'the linked Fantrax league no longer exists'
-            : allRows == null
+            : viewer && !rowsCarryTeams
+              ? UNMATCHED
+              : allRows == null
               ? 'this Fantrax snapshot holds no roster — re-run the import'
               : rowsCarryTeams && !userTeam
-                ? 'this Fantrax snapshot does not record which team is yours — re-run the import'
+                ? viewer
+                  ? UNMATCHED
+                  : 'this Fantrax snapshot does not record which team is yours — re-run the import'
                 : mine && mine.length > 0
                   ? null
                 : `no players are filed under “${selectedTeam || 'your selected team'}” in this snapshot — choose the correct team or re-run the import`,
@@ -394,10 +424,13 @@ export async function resolvePairedHalf(
       : []
     /* An explicit hub mapping wins. The claimed team remains the automatic
        default, so existing connections need no setup step. */
-    const team =
-      teams.find((candidate) => candidate.externalId === member.teamExternalId) ??
-      teams.find((candidate) => candidate.claimedByUserId === ownerUserId) ??
-      null
+    const team = viewer
+      ? (viewerTeam ? teams.find((candidate) => candidate.externalId === viewerTeam) : null) ??
+        teams.find((candidate) => candidate.claimedByUserId === viewerId) ??
+        null
+      : teams.find((candidate) => candidate.externalId === member.teamExternalId) ??
+        teams.find((candidate) => candidate.claimedByUserId === ownerUserId) ??
+        null
     /*
      * ⚠ `Roster.platformUserId` CARRIES TWO ID SPACES, AND THE VIEWER'S OWN TEAM
      * IS THE ONE THAT USES THE OTHER ONE.
@@ -421,7 +454,7 @@ export async function resolvePairedHalf(
      * into the newly selected identity.
      */
     const rosterKeys = [
-      team?.claimedByUserId === ownerUserId ? ownerUserId : null,
+      team?.claimedByUserId === viewerId ? viewerId : null,
       team?.platformUserId,
       team?.externalId,
     ].filter(
@@ -485,9 +518,11 @@ export async function resolvePairedHalf(
       unavailableReason:
         lg == null
           ? 'the linked league no longer exists'
-          : players == null
-            ? 'no roster is on file for your team'
-            : null,
+          : viewer && !team
+            ? UNMATCHED
+            : players == null
+              ? 'no roster is on file for your team'
+              : null,
       sync: {
         lastSyncedAt: lg?.lastSyncedAt ?? null,
         stale: !lg?.lastSyncedAt || Date.now() - lg.lastSyncedAt.getTime() > 24 * 60 * 60 * 1000,

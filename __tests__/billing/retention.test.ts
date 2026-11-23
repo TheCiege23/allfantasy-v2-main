@@ -125,7 +125,8 @@ describe('the webhook half', () => {
   })
 
   it('the webhook calls each at the right moment', () => {
-    const src = readFileSync('app/api/stripe/webhook/route.ts', 'utf8')
+    // LF-normalised: a Windows checkout (core.autocrlf=true) has CRLF, and the pattern below matches "\n".
+    const src = readFileSync('app/api/stripe/webhook/route.ts', 'utf8').replace(/\r\n/g, '\n')
     expect(src).toMatch(/await markSubscriptionPastDue\(invoice, userId\)\n\s+await syncUserProfileFromSubscriptions\(userId\)\n[^\n]*\n\s+await onPaymentFailed\(invoice, userId\)/)
     expect(src).toMatch(/await markSubscriptionAsExpired\(deletedSub, userId\)[\s\S]{0,200}await onSubscriptionCanceled\(deletedSub, userId\)/)
     // Read the status BEFORE the refresh overwrites it with `active`.

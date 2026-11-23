@@ -121,7 +121,7 @@ function n(x: unknown): number | null {
 function floorScore(p: ResolvedPlayerStats): number | null {
   const vol = n(p.projection?.volatility)
   const inj = n(p.injury?.riskScore)
-  const proj = n(p.internalProjectionPoints) ?? n(p.projection?.value)
+  const proj = projectionMedianPoints(p)
   if (proj == null && vol == null && inj == null) return null
   const volPenalty = vol != null ? -Math.min(vol, 50) * 0.4 : 0
   const injPenalty = inj != null ? -inj * 0.6 : 0
@@ -132,7 +132,7 @@ function floorScore(p: ResolvedPlayerStats): number | null {
 /** Proxy "upside" = trend + projection ceiling proxy (value + inverse rank). */
 function upsideScore(p: ResolvedPlayerStats): number | null {
   const trend = n(p.projection?.trend30Day)
-  const proj = n(p.internalProjectionPoints) ?? n(p.projection?.value)
+  const proj = projectionMedianPoints(p)
   const vol = n(p.projection?.volatility)
   if (proj == null && trend == null) return null
   const trendBoost = trend != null ? trend * 0.45 : 0
@@ -185,8 +185,8 @@ function applyStrategyToWinner(
 }
 
 function buildDeltas(a: ResolvedPlayerStats, b: ResolvedPlayerStats): StartVsDeterministicDeltas {
-  const pa = n(a.internalProjectionPoints) ?? n(a.projection?.value)
-  const pb = n(b.internalProjectionPoints) ?? n(b.projection?.value)
+  const pa = projectionMedianPoints(a)
+  const pb = projectionMedianPoints(b)
   const fa = floorScore(a)
   const fb = floorScore(b)
   const ua = upsideScore(a)
@@ -216,8 +216,8 @@ function buildDeltas(a: ResolvedPlayerStats, b: ResolvedPlayerStats): StartVsDet
 
 function collectMissing(a: ResolvedPlayerStats, b: ResolvedPlayerStats): string[] {
   const m: string[] = []
-  if (!a.projection && !a.internalProjectionPoints) m.push('Player A: limited projection data')
-  if (!b.projection && !b.internalProjectionPoints) m.push('Player B: limited projection data')
+  if (projectionMedianPoints(a) == null) m.push('Player A: limited projection data')
+  if (projectionMedianPoints(b) == null) m.push('Player B: limited projection data')
   if (a.injury?.source === 'none' && !a.injury?.note) m.push('Player A: injury feed sparse')
   if (b.injury?.source === 'none' && !b.injury?.note) m.push('Player B: injury feed sparse')
   return m
@@ -240,7 +240,9 @@ function newsFlags(a: ResolvedPlayerStats, b: ResolvedPlayerStats): string[] {
 }
 
 function projectionMedianPoints(p: ResolvedPlayerStats): number | null {
-  return n(p.internalProjectionPoints) ?? n(p.projection?.value)
+  return p.leagueWeeklyProjection !== undefined
+    ? n(p.leagueWeeklyProjection)
+    : n(p.internalProjectionPoints) ?? n(p.projection?.value)
 }
 
 /** Higher = easier upcoming opponent context (inverse of schedule difficulty). */

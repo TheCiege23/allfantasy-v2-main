@@ -7,7 +7,12 @@ import { describe, expect, it } from 'vitest'
  * pinned, with an opaque background so scrolled columns cannot show through it.
  */
 
-const css = (f: string) => readFileSync(resolve(__dirname, '../../components/core-app', f), 'utf8')
+/*
+ * Line endings normalised: the selectors below are matched with "\n", and a Windows checkout
+ * (core.autocrlf=true) stores these files with CRLF, so every case failed there while CI (Linux)
+ * passed — a red test on every local run that said nothing about the CSS (2026-11-20).
+ */
+const css = (f: string) => readFileSync(resolve(__dirname, '../../components/core-app', f), 'utf8').replace(/\r\n/g, '\n')
 
 /** The declaration block for an exact selector list, as written. */
 function rule(source: string, selectors: string): string {

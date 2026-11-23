@@ -5,6 +5,7 @@ import {
   DEMO_DECISIONS,
   DEMO_LEAGUES,
   DEMO_PLATFORM,
+  DEMO_TRADE_MARKET,
   DEMO_WEEKS,
   PARTNER_API_ENDPOINTS,
   findDemoLeague,
@@ -14,6 +15,9 @@ import {
 import { ActivityChart } from '@/components/partners/ActivityChart'
 import { DecisionBars } from '@/components/partners/DecisionBars'
 import { PartnerInquiryForm } from '@/components/partners/PartnerInquiryForm'
+import { TradeMarketBars } from '@/components/partners/TradeMarketBars'
+import { LiveIntelligencePanels } from '@/components/partners/LiveIntelligencePanels'
+import { tradeMarketPanelReleased } from '@/lib/partner-portal/tradeMarketRelease'
 import {
   Card,
   DataQualityTable,
@@ -47,6 +51,25 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
   const selected = findDemoLeague(leagueParam)
   const summary = summarizeTenant(DEMO_LEAGUES)
   const leagues = leaguesByAttention(DEMO_LEAGUES)
+  const showTradeMarket = await import('@/lib/prisma')
+    .then(({ prisma }) => tradeMarketPanelReleased(prisma as never))
+    .catch(() => false)
+  /*
+   * The real learned market when it has published numbers (`lib/partner-portal/realTradeMarket.ts`); the sample only
+   * when it has none. Read only when the panel is released, so a hidden panel costs nothing.
+   */
+  const realTradeMarket = showTradeMarket
+    ? await Promise.all([import('@/lib/prisma'), import('@/lib/trade-market/learnedMarketReport'), import('@/lib/partner-portal/realTradeMarket')])
+        .then(async ([{ prisma }, { loadLearnedMarketReport }, { realTradeMarketRows }]) => realTradeMarketRows(await loadLearnedMarketReport(prisma as never)))
+        .catch(() => null)
+    : null
+  /*
+   * The live panels (2026-11-22): the graded record, projection accuracy and AF ADP movers, from what the scheduled
+   * jobs already store. A failed read shows each panel's "still measuring" line, never sample numbers.
+   */
+  const live = await Promise.all([import('@/lib/prisma'), import('@/lib/partner-portal/liveIntelligence')])
+    .then(([{ prisma }, { loadLiveIntelligence }]) => loadLiveIntelligence(prisma as never))
+    .catch(() => null)
 
   return (
     <main className="min-h-screen bg-[#050814] text-white">
@@ -115,7 +138,31 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             subtitle="Every recommendation is logged when it is shown, when a manager acts on it, and when its outcome is known."
           >
             <DecisionBars rows={DEMO_DECISIONS} />
+            <p className="mt-4 text-xs text-white/60">
+              These bars are sample data. AllFantasy&apos;s own graded record, misses included, is public:{' '}
+              <Link href="/track-record" className="font-semibold text-cyan-300 hover:underline">
+                see the track record
+              </Link>
+              .
+            </p>
           </Card>
+
+          {/* Shown only once the daily hold-out check says the learned numbers hold (lib/partner-portal/tradeMarketRelease.ts). */}
+          {showTradeMarket ? (
+            <Card
+              id="trade-market"
+              title="What your managers actually pay in trades"
+              subtitle={
+                realTradeMarket
+                  ? 'Live, not sample data: measured daily from completed trades in AllFantasy-connected leagues, against the standard value chart. On your own leagues it is measured from your trades. Trade grades use a number only once enough trades stand behind it.'
+                  : 'Measured from completed trades in your leagues, against the standard value chart. Trade grades use a number only once enough trades stand behind it.'
+              }
+            >
+              <TradeMarketBars rows={realTradeMarket ?? DEMO_TRADE_MARKET} />
+            </Card>
+          ) : null}
+
+          {live ? <LiveIntelligencePanels data={live} /> : null}
 
           <Card title="Data quality" subtitle="How fresh and complete the data is, per source — including where it falls short.">
             <DataQualityTable rows={DEMO_DATA_QUALITY} />

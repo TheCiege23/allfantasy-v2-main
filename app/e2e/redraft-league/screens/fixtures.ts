@@ -6,6 +6,8 @@
  * Each sport carries its own slot template, positions, cadence (weekly vs daily) and waiver type, so a
  * capture shows the sport differences the screens must handle — not seven copies of NFL.
  */
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+
 export type HarnessSport = 'NFL' | 'NBA' | 'NHL' | 'MLB' | 'NCAAF' | 'NCAAB' | 'SOCCER'
 export type HarnessStage = 'season' | 'playoffs'
 
@@ -109,6 +111,21 @@ function unified(sport: HarnessSport, p: Player, bench: boolean) {
     periodOpponent: p.opponent,
     periodHomeAway: bench ? 'away' : 'home',
     positionRankLabel: SPORTS[sport].daily ? `${p.position}${3 + (p.name.length % 20)}` : null,
+    // NFL: what lib/redraft/nflRosterOutlook.ts stamps — crest, kickoff and the opponent's rank against the position.
+    ...(sport === 'NFL'
+      ? {
+          teamLogoUrl: teamLogoUrl('NFL', p.team),
+          periodKickoffIso: p.off ? null : '2026-11-22T18:00:00.000Z',
+          teamByeWeek: 5 + (p.team.length + p.name.length) % 9,
+          periodWeather: p.off ? null : [
+            { indoors: true, symbol: '⌂', conditionLabel: 'Indoors', temperatureF: null, windSpeedMph: null, precipChancePct: null },
+            { indoors: false, symbol: '☀', conditionLabel: 'Clear', temperatureF: 54, windSpeedMph: 6, precipChancePct: 5 },
+            { indoors: false, symbol: '☔', conditionLabel: 'Rain', temperatureF: 47, windSpeedMph: 11, precipChancePct: 70 },
+            null,
+          ][p.name.length % 4],
+          opponentRank: p.off || !p.opponent ? null : { rank: 1 + ((p.name.length * 7 + p.position.length * 5) % 32), of: 32, position: p.position, allowedPerGame: 17.4, games: 10 },
+        }
+      : {}),
   }
 }
 
@@ -160,7 +177,18 @@ export function rosterResponse(sport: HarnessSport) {
 const sumPts = (ps: Player[]) => Math.round(ps.reduce((s, p) => s + p.points, 0) * 10) / 10
 const sumProj = (ps: Player[]) => Math.round(ps.reduce((s, p) => s + p.projected, 0) * 10) / 10
 function slot(p: Player) {
-  return { playerId: p.id, name: p.name, position: p.position, team: p.team, opponent: p.opponent, headshotUrl: null, currentPoints: p.points, projectedPoints: p.projected, hasRealProjection: true, injuryStatus: p.injury, newsBlurb: null, weatherSummary: null, gameStatus: p.status, gameLabel: p.label, aiInsight: null }
+  return { playerId: p.id, name: p.name, position: p.position, team: p.team, opponent: p.opponent, headshotUrl: null, currentPoints: p.points, projectedPoints: p.projected, hasRealProjection: true, injuryStatus: p.injury, newsBlurb: null, weatherSummary: null, gameStatus: p.status, gameLabel: p.label, aiInsight: null,
+    // NFL: what server/services/nativeMatchupCenter.ts stamps from lib/redraft/nflRosterOutlook.ts.
+    ...(p.id.startsWith('nfl-') && !p.off
+      ? {
+          afProjectedPoints: p.projected,
+          outlook: {
+            homeAway: p.name.length % 2 ? 'home' : 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', teamLogoUrl: teamLogoUrl('NFL', p.team), byeWeek: 5 + (p.team.length + p.name.length) % 9,
+            opponentRank: p.opponent ? { rank: 1 + ((p.name.length * 7 + p.position.length * 5) % 32), of: 32, position: p.position, allowedPerGame: 17.4, games: 10 } : null,
+            weather: p.name.length % 3 ? { indoors: false, symbol: '☀', conditionLabel: 'Clear', temperatureF: 54, windSpeedMph: 6, precipChancePct: 5 } : null,
+          },
+        }
+      : {}) }
 }
 
 /** `/api/leagues/[id]/matchup-center`. Slot `position` is the SLOT label (what the screen pills). */
@@ -297,5 +325,25 @@ export function tradesResponse(sport: HarnessSport) {
     historyTrades: [
       { id: 'h1', direction: 'complete', partnerName: MANAGERS[2], proposerName: MANAGERS[1], receiverName: MANAGERS[2], timestamp: new Date(now - 6 * 86_400_000).toISOString(), sent: [asset(teamPlayers(sport, 1).starters[4])], received: [asset(teamPlayers(sport, 2).starters[5])], status: 'accepted' },
     ],
+  }
+}
+
+/** `/api/leagues/[id]/guillotine/summary` — a guillotine league in week 4: nine alive, three chopped. */
+export function guillotineSummaryResponse() {
+  const alive = MANAGERS.slice(0, 9)
+  const week = [142.6, 131.2, 127.9, 118.4, 109.7, 101.3, 96.8, 92.1, 84.5]
+  const season = [498.2, 471.0, 455.6, 462.3, 430.9, 441.7, 402.5, 415.0, 389.4]
+  const line = week[week.length - 1]
+  return {
+    weekOrPeriod: 4,
+    myRosterId: 'r-6',
+    dangerTiers: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, tier: i === 8 ? 'chop_zone' : week[i] - line <= 15 ? 'danger' : 'safe', pointsFromChopZone: Math.round((week[i] - line) * 10) / 10 })),
+    survivalStandings: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, rank: i + 1, seasonPointsCumul: season[i] })),
+    chopWatch: { live: true, week: 4, chopCount: 1, chopLine: line },
+    home: {
+      season: 2026, scores: Object.fromEntries(alive.map((_, i) => [`r-${i}`, week[i]])), teamCount: 12, aliveCount: 9, chopLabel: 'Wed 9:00 AM',
+      chopped: [{ rosterId: 'r-9', name: MANAGERS[9], week: 3, points: 78.2 }, { rosterId: 'r-10', name: MANAGERS[10], week: 2, points: 81.9 }, { rosterId: 'r-11', name: MANAGERS[11], week: 1, points: 66.4 }],
+    },
+    config: { eliminationStartWeek: 1, eliminationEndWeek: 11 },
   }
 }

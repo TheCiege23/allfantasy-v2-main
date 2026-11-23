@@ -35,7 +35,9 @@ function useCountdown(targetIso: string | null): string | null {
     return () => window.clearInterval(id)
   }, [target])
   if (!Number.isFinite(target)) return null
-  const left = Math.max(0, Math.floor((target - now) / 1000))
+  const left = Math.floor((target - now) / 1000)
+  // ⚠ Past the deadline there is no countdown: a frozen 00:00:00 read as "closing right now" for days.
+  if (left <= 0) return null
   const days = Math.floor(left / 86400)
   const pad = (n: number) => String(n).padStart(2, '0')
   const clock = `${pad(Math.floor((left % 86400) / 3600))}:${pad(Math.floor((left % 3600) / 60))}`
@@ -122,7 +124,8 @@ export function SurvivorVoteCast({
   const canVote = Boolean(open && view?.you.isEligibleVoter && !view?.you.isSafeFromVote)
   const canChange = Boolean(canVote && view?.you.voteChangeAllowed && !view?.you.voteLocked)
   const votesIn = view?.votesIn ?? null
-  const idol = (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
+  // Past the deadline an idol can no longer be played, so its "Play it before votes close" prompt is hidden.
+  const idol = deadlinePassed ? null : (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
   const idolDef = idol ? idolDefinition(idol.powerType) : null
   const idolName = idolDef?.name ?? null
   const week = view?.week ?? null
@@ -190,12 +193,17 @@ export function SurvivorVoteCast({
     <header className="swl-vc-head">
       <Link className="swl-vc-back" href={backHref} aria-label="Back">‹</Link>
       <div className="swl-vc-title">
-        <h1>Cast your vote</h1>
+        <h1>{deadlinePassed ? 'The votes are in' : 'Cast your vote'}</h1>
         <span className="swl-t2 swl-vc-dtitle">{headerSub}</span>
         {clock && <span className="swl-vc-mclock">{tribeName ? `Tribe ${tribeName} · ` : ''}closes in <span className="swl-gold swl-num">{clock}</span></span>}
       </div>
       {clock && <div className="swl-vc-clock" role="timer" aria-live="off"><span className="swl-lbl">Votes close in</span><span className="swl-num">{clock}</span></div>}
     </header>
+
+    {/* A div, not a p: `.swl-vc p { margin: 0 }` strips the alert's side margins and it runs edge to edge. */}
+    {deadlinePassed && <div role="status" className="swl-vc-alert" style={{ marginTop: 16 }} data-testid="survivor-vote-closed">
+      Voting has closed. {view?.you.hasVoted ? 'Your vote is in. ' : ''}The host reads the votes next.
+    </div>}
 
     {error && <p role="alert" className="swl-vc-alert" style={{ marginTop: 16 }}>{error}</p>}
 

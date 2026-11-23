@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const m = vi.hoisted(() => {
-  const state = { settings: {} as Record<string, unknown>, platform: 'allfantasy', ownerHasPlan: true }
+  const state = { settings: {} as Record<string, unknown>, platform: 'allfantasy', ownerHasPlan: true, owner: { email: 'someone@example.com', username: 'someone' } as { email: string; username: string } | null }
   const tx = {
     $queryRaw: vi.fn(async () => []),
     league: {
@@ -23,6 +23,7 @@ const m = vi.hoisted(() => {
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
       league: { findUnique: vi.fn(async () => ({ platform: state.platform, settings: state.settings, userId: 'league-owner' })) },
       roster: { findFirst: vi.fn() },
+      appUser: { findUnique: vi.fn(async () => state.owner) },
     },
     elevated: vi.fn(async () => true),
     log: vi.fn(async () => ({ id: 'a' })),
@@ -60,8 +61,56 @@ beforeEach(() => {
   m.state.settings = { other: 1 }
   m.state.platform = 'allfantasy'
   m.state.ownerHasPlan = true
+  m.state.owner = { email: 'someone@example.com', username: 'someone' }
+  m.prisma.appUser.findUnique.mockImplementation(async () => m.state.owner)
   m.elevated.mockResolvedValue(true)
   m.prisma.roster.findFirst.mockResolvedValue({ id: 'r1' })
+})
+
+describe('how many teams Chimmy may run', () => {
+  const hand = async (n: number) => {
+    const results = []
+    for (let i = 1; i <= n; i++) {
+      m.prisma.roster.findFirst.mockResolvedValueOnce({ id: `r${i}` })
+      results.push(await setChimmyAutopilot('L', 'commish', `r${i}`, undefined))
+    }
+    return results
+  }
+
+  it('an ordinary league stops at 4', async () => {
+    const results = await hand(5)
+    expect(results.slice(0, 4).every((r) => r.ok)).toBe(true)
+    expect(results[4]).toMatchObject({ ok: false, status: 409, error: expect.stringContaining('up to 4 teams') })
+    expect(autopilotRosterIds(readManagedLineups(m.state.settings))).toHaveLength(4)
+  })
+
+  it('a league a site admin owns can be filled: all 12 seats of a survivor test league', async () => {
+    m.state.owner = { email: 'founder@example.com', username: 'TheCiege26' }
+    const results = await hand(12)
+    expect(results.every((r) => r.ok)).toBe(true)
+    expect(autopilotRosterIds(readManagedLineups(m.state.settings))).toHaveLength(12)
+  })
+
+  it('and Chimmy plays all of them there, whatever the plan says', async () => {
+    const { autopilotEntitled } = await import('@/lib/inactive-manager/inactiveManagerService')
+    m.state.ownerHasPlan = false
+    expect(await autopilotEntitled('league-owner')).toBe(false)
+    m.state.owner = { email: 'founder@example.com', username: 'TheCiege26' }
+    expect(await autopilotEntitled('league-owner')).toBe(true)
+  })
+
+  it('a site admin who is only the one clicking, in someone else\'s league, gets the ordinary limit', async () => {
+    // The owner lookup is by the LEAGUE owner; the acting user is never consulted.
+    const results = await hand(5)
+    expect(results[4]).toMatchObject({ ok: false, status: 409 })
+    expect(m.prisma.appUser.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'league-owner' } }))
+  })
+
+  it('an account that cannot be read falls back to the ordinary limit', async () => {
+    m.prisma.appUser.findUnique.mockRejectedValue(new Error('db down'))
+    const results = await hand(5)
+    expect(results[4]).toMatchObject({ ok: false, status: 409 })
+  })
 })
 
 describe('setChimmyAutopilot', () => {

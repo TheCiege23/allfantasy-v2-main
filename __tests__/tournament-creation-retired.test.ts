@@ -9,78 +9,40 @@ import {
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 
-// Tournament Mode was retired from active CREATION on 2026-07-23. Everything
-// here asserts that new tournaments cannot be made while existing ones stay
-// fully readable — the two halves of the Phase 1 product ruling.
+// Tournament Mode was retired from CREATION on 2026-07-23 and brought back by the owner on
+// 2026-11-22. The policy module stays (retiring a concept again is one line), so this file pins
+// both halves: tournaments can be created, and the mechanism still answers correctly.
 
-describe('retired concepts — policy module', () => {
-  it('rejects tournament with the stable reason code', () => {
-    const r = checkRetiredConcept('tournament')
-    expect(r).not.toBeNull()
-    expect(r!.code).toBe('TOURNAMENT_CREATION_DISABLED')
-    expect(RETIRED_CONCEPT_REASON_CODES.tournament).toBe('TOURNAMENT_CREATION_DISABLED')
+describe('Tournament Mode can be created again', () => {
+  it('🛑 the policy no longer refuses tournament, in any spelling', () => {
+    for (const raw of ['tournament', 'TOURNAMENT', '  tournament  ', '\ttournament\n', 'ToUrNaMeNt']) {
+      const normalized = normalizeConceptToFormat(raw)
+      expect(normalized?.formatId).toBe('tournament')
+      expect(checkRetiredConcept(normalized?.formatId), raw).toBeNull()
+      expect(isRetiredConcept(normalized?.formatId), raw).toBe(false)
+      expect(isRetiredRawConcept(raw), raw).toBe(false)
+    }
   })
 
-  it('exposes a user-safe message that does not leak internals', () => {
-    const msg = checkRetiredConcept('tournament')!.message
-    expect(msg).toMatch(/no longer available/i)
-    // Must reassure that existing data still works — this is the honest half.
-    expect(msg).toMatch(/existing/i)
-    expect(msg).not.toMatch(/prisma|stack|undefined|null/i)
-  })
-
-  it('does not retire any currently supported concept', () => {
+  it('no supported concept is retired', () => {
     for (const concept of [
       'redraft', 'dynasty', 'keeper', 'best_ball', 'guillotine',
-      'survivor', 'devy', 'c2c', 'zombie', 'salary_cap', 'big_brother',
+      'survivor', 'devy', 'c2c', 'zombie', 'salary_cap', 'big_brother', 'tournament',
     ]) {
-      expect(isRetiredConcept(concept)).toBe(false)
+      expect(isRetiredConcept(concept), concept).toBe(false)
     }
   })
 })
 
-describe('retired concepts — bypass resistance', () => {
-  // The guard runs on the NORMALISED format id, so every spelling that
-  // normalizeConceptToFormat folds into `tournament` is covered by construction.
-  const spellings = [
-    'tournament',
-    'TOURNAMENT',
-    'Tournament',
-    '  tournament  ',
-    '\ttournament\n',
-    'ToUrNaMeNt',
-  ]
-
-  for (const raw of spellings) {
-    it(`blocks creation for input ${JSON.stringify(raw)}`, () => {
-      const normalized = normalizeConceptToFormat(raw)
-      expect(normalized?.formatId).toBe('tournament')
-      expect(isRetiredConcept(normalized?.formatId)).toBe(true)
-    })
-  }
-
-  it('raw-string helper folds case and whitespace too', () => {
-    expect(isRetiredRawConcept('  TOURNAMENT ')).toBe(true)
-    expect(isRetiredRawConcept('redraft')).toBe(false)
-  })
-
+describe('the policy mechanism is kept for the next time', () => {
   it('ignores empty and nullish input rather than throwing', () => {
     for (const v of [null, undefined, '', '   ']) {
       expect(isRetiredConcept(v as string | null | undefined)).toBe(false)
     }
   })
 
-  it('does not accidentally retire a concept whose name merely contains "tournament"', () => {
-    // best_ball contestStructure === 'tournament' is a different axis entirely,
-    // and the Brackets feature has its own tournament tables. Guard is exact-match.
-    expect(isRetiredConcept('best_ball')).toBe(false)
-    expect(isRetiredConcept('tournament_bracket')).toBe(false)
-    expect(isRetiredConcept('playoff_tournament')).toBe(false)
-  })
-})
-
-describe('retired concepts — error type', () => {
-  it('carries the code and a 400 status for route translation', () => {
+  it('keeps the stable reason code and the error type routes translate', () => {
+    expect(RETIRED_CONCEPT_REASON_CODES.tournament).toBe('TOURNAMENT_CREATION_DISABLED')
     const err = new RetiredConceptError('TOURNAMENT_CREATION_DISABLED', 'nope')
     expect(err).toBeInstanceOf(Error)
     expect(err.name).toBe('RetiredConceptError')
@@ -89,20 +51,19 @@ describe('retired concepts — error type', () => {
   })
 })
 
-describe('read compatibility is preserved', () => {
-  it('still normalises tournament so existing leagues keep resolving', () => {
-    // Critical: the concept map must NOT lose `tournament`, or historical
-    // tournaments and imports would stop resolving. Retirement is creation-only.
+describe('existing tournaments keep resolving', () => {
+  it('still normalises tournament', () => {
     expect(normalizeConceptToFormat('tournament')?.formatId).toBe('tournament')
     expect(normalizeConceptToFormat('TOURNAMENT')?.formatId).toBe('tournament')
   })
 })
 
-describe('creation UI no longer offers Tournament', () => {
-  it('the concept catalog has no tournament entry', () => {
+describe('where a tournament is created', () => {
+  it('not on the single-league create form: a tournament is several leagues and has its own screen', () => {
+    // The form sends one league to POST /api/leagues; a card there produced a request with no
+    // concept. Tournaments are created at /tournament/create and /tournament-hub/new.
     const ids = LEAGUE_CREATE_OPTIONS_CATALOG_V1.concepts.map((c) => c.id)
     expect(ids).not.toContain('tournament')
-    // Sanity: the catalog is still populated, so an empty list can't fake a pass.
     expect(ids.length).toBeGreaterThan(3)
     expect(ids).toContain('redraft')
   })

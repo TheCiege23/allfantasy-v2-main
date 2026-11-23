@@ -2,6 +2,7 @@ import type { ApiFetchParams, ApiProvider } from '@/lib/workers/api-config'
 import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 import { toApiChainSport } from '@/lib/workers/api-config'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
+import { cfbdFetch as fetchCountingQuota } from '@/lib/cfbd-quota'
 
 
 function currentSeason(): string {
@@ -21,7 +22,7 @@ async function cfbdFetch<T>(path: string, params?: Record<string, string>): Prom
     if (value) url.searchParams.set(param, value)
   })
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchCountingQuota(url.toString(), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${key}`,

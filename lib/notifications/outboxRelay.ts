@@ -46,7 +46,6 @@ import { resolveNotificationPreferences } from "@/lib/notification-settings/Noti
 import { decidePush } from "./pushGate"
 import { quietHoursSuppression } from "./quietHours"
 import { isCategoryAllowedForLeague } from "./leagueOverrides"
-import { isCategoryHiddenByHomeSection } from '@/lib/core-app/homeSections'
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { pushTagFor } from "./pushTag"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
@@ -166,10 +165,6 @@ async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; erro
       return { outcome: 'skipped', error: 'in-app notifications muted' }
     }
     if (row.channel !== 'in_app') {
-      // Hidden from the home in Settings → Home page after this row was queued.
-      if (isCategoryHiddenByHomeSection(profile.notificationPreferences, category)) {
-        return { outcome: 'skipped', error: 'home section hidden' }
-      }
       const quiet = quietHoursSuppression(prefs.quietHours, new Date(), metadata.severity === 'high' ? 'high' : 'medium', profile.timezone)
       if (quiet.push) return { outcome: 'skipped', error: 'quiet hours; retained in app' }
     }

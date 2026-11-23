@@ -252,7 +252,7 @@ describe('Draft OS recommendation in the draft context', () => {
 
   it("gives Chimmy Draft OS's pick for the viewer's own roster, from the room's engine", async () => {
     const out = await buildDraftContext('lg1', 'app-user-1')
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1', planForOwnTurn: true })
     expect(mocks.computeDraftRecommendation).toHaveBeenCalledWith({ marker: 'engine-input' })
     expect(out).toContain('DRAFT DECISION for THIS USER')
     expect(out).toContain('the same decision their draft room')
@@ -290,6 +290,16 @@ describe('Draft OS recommendation in the draft context', () => {
     expect(out).not.toContain('DRAFT DECISION')
   })
 
+  it('a caller-shortened budget (the grounding packet’s) drops the pick line and keeps the board', async () => {
+    mocks.buildDraftDecisionContext.mockImplementation(() => new Promise(() => {}))
+    const started = Date.now()
+    const out = await buildDraftContext('lg1', 'app-user-1', { draftOsBudgetMs: 20 })
+    // Well under the default DRAFT_OS_BUDGET_MS (2,500 ms): the caller's budget, not the default, ended the wait.
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(out).toContain('ON THE CLOCK: Manager 3')
+    expect(out).not.toContain('DRAFT DECISION')
+  })
+
   it('gives up after its time budget instead of holding the chat turn', async () => {
     const lines = await buildDraftOsRecommendationLines('lg1', 'roster-1', {
       buildContext: () => new Promise(() => {}),
@@ -311,6 +321,19 @@ describe('Draft OS recommendation in the draft context', () => {
     expect(out).toContain('The room would REFUSE Bijan Robinson')
     expect(out).toContain('Do NOT tell them to take Bijan Robinson')
     expect(mocks.fit).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'lg1', rosterId: 'roster-1', newPickPosition: 'RB' }))
+  })
+
+  it('names an AF ADP move this week for a plan holder, with its number — and says nothing for a free plan', async () => {
+    const readAfAdp = async () => ({ entries: [
+      { playerName: 'Bijan Robinson', position: 'RB', adp: 2.4, sampleSize: 140, sevenDayTrend: 0.4 },
+      { playerName: 'CeeDee Lamb', position: 'WR', adp: 7.8, sampleSize: 120, sevenDayTrend: 3.2 },
+    ] })
+    const paid = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1', readAfAdp, hasAfIntelligence: async () => true }))!.join('\n')
+    expect(paid).toContain('CeeDee Lamb is going 3.2 picks earlier than a week ago (AF ADP 7.8, 120 drafts)')
+    // A 0.4-pick wobble is not news.
+    expect(paid).not.toMatch(/Bijan Robinson is going/)
+    const free = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1', readAfAdp, hasAfIntelligence: async () => false }))!.join('\n')
+    expect(free).not.toContain('AF ADP this week')
   })
 
   it('says "queue", not "draft", when it is not this user\'s turn', async () => {
@@ -426,7 +449,7 @@ describe("the viewer's side of a live draft", () => {
     expect(out).toContain('THIS USER drafts at slot 2; their next pick is 2.03 (3 picks away).')
     expect(mocks.managersAhead).toHaveBeenCalledWith({ leagueId: 'lg1', userId: 'app-user-1', viewerSlot: 2 })
     // Draft OS still takes the AF roster id.
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me', planForOwnTurn: true })
   })
 
   it('lists the picks filed under their Sleeper user id, and what they still have no starter at', async () => {

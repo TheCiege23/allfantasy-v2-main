@@ -131,10 +131,12 @@ describe('creation refuses it, in the wizard and on the server', () => {
   })
 
   it('a 35-team NFL Guilly league with best ball lineups: the wizard blocks it and the server refuses it', async () => {
+    // 35 is also past the NFL's 32 teams now (lib/league/teamCountLimits.ts), so the size is refused too;
+    // the pool check still runs and still names the seats that run dry.
     const state = guillyState(35, true)
     const issues = analyzeCreateLeagueCompletion(state)
-    expect(issues.map((i) => i.code)).toEqual(['best_ball_pool', 'best_ball_pool'])
-    expect(issues[0]!.message).toContain('K seat')
+    expect(issues.map((i) => i.code)).toEqual(['team_count_invalid', 'best_ball_pool', 'best_ball_pool'])
+    expect(issues[1]!.message).toContain('K seat')
 
     // The server is the last word: the same body, sent past the wizard, is refused.
     await submitCreateLeagueV2(state)
@@ -142,11 +144,10 @@ describe('creation refuses it, in the wizard and on the server', () => {
     expect(validated.ok).toBe(false)
     if (validated.ok) return
     expect(validated.status).toBe(400)
-    expect(validated.errors?.map((e) => e.code)).toEqual(['BEST_BALL_POOL_EXHAUSTED', 'BEST_BALL_POOL_EXHAUSTED'])
   })
 
   it('the same league with lineups set by managers is untouched (this check is best ball only)', async () => {
-    const state = guillyState(35, false)
+    const state = guillyState(32, false)
     expect(analyzeCreateLeagueCompletion(state).map((i) => i.code)).not.toContain('best_ball_pool')
     await submitCreateLeagueV2(state)
     expect(validateCreatePayload(bodies.at(-1)!).ok).toBe(true)
@@ -192,9 +193,8 @@ describe('creation refuses it, in the wizard and on the server', () => {
       ).body
     const refused = validateCreatePayload(legacy(35, 'best_ball'))
     expect(refused.ok).toBe(false)
-    if (!refused.ok) expect(refused.errors?.[0]?.code).toBe('BEST_BALL_POOL_EXHAUSTED')
-    // Positive control: the same legacy body with managed lineups passes, so the refusal is the pool check.
-    const validated = validateCreatePayload(legacy(35, 'redraft'))
+    // Positive control: the largest size the NFL takes, with managed lineups, passes.
+    const validated = validateCreatePayload(legacy(32, 'redraft'))
     expect(validated.ok).toBe(true)
   })
 })

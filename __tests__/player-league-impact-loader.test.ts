@@ -339,6 +339,8 @@ describe('loadMatchupSides', () => {
       week: 2,
       yourPlatformUserId: USER,
       opponentPlatformUserId: 'opp-A',
+      // No AF Intelligence plan is held in this test, so the sides are priced without AF's factors.
+      afIntelligence: false,
     })
   })
 
@@ -369,6 +371,8 @@ describe('loadMatchupSides', () => {
       week: 2,
       yourPlatformUserId: USER,
       opponentPlatformUserId: 'orphan-sleeper-2',
+      // No AF Intelligence plan is held in this test, so the sides are priced without AF's factors.
+      afIntelligence: false,
     })
   })
 

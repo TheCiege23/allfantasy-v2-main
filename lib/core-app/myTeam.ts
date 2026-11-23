@@ -29,9 +29,12 @@ import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
+import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
+import { benchCallRecord, benchEdgeScaleFor, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds } from './lineupCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap, withNewestKickoffs } from './nextGameMap'
 import { collegeFixturesByPlayerTeam } from './collegeNextGame'
@@ -41,6 +44,7 @@ import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { identityGapNote } from './identityGap'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { lookupNcaafProjections } from './ncaafProjections'
 import { applyDailySportToLineup, type DailyLineupPeriod } from './myTeamDailySport'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
@@ -61,6 +65,7 @@ import {
   startingSlotTemplate,
   storedStarterSlotLabels,
 } from './rosterSlots'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -83,6 +88,9 @@ import {
  */
 
 export type LineupPlayer = {
+  /** The learned factors that moved `afProjectedPoints` (weekly), with the numbers before them for a viewer without
+   * AF Intelligence (`afIntelligenceWithhold.ts` restores them). Absent when none applied. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   sleeperId: string
   name: string
   position: string | null
@@ -204,6 +212,7 @@ export type LineupPlayer = {
    * daily-lineup league (an off day), `week` in a weekly one (an idle week). Absent when the slate is
    * unknown or the sport is football, which is not the same as "he plays" (myTeamDailySport.ts).
    */
+  periodGames?: number | null
   noGamePeriod?: 'day' | 'week'
   latestCollegeBoxScore?: { date: string; stats: Array<{ key: string; value: number }> }
   /**
@@ -235,6 +244,12 @@ export type BenchCheck = {
   benchProjected: number
   starterName: string
   starterProjected: number
+  /**
+   * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, Sleeper and native NFL / NBA / NHL / MLB leagues only, and only once its edge
+   * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
+   */
+  record?: BenchCallRecord | null
 }
 
 export type LineupSlot = {
@@ -579,7 +594,15 @@ async function resolvePlayers(
    * name-only bridge, then to the descriptive-id parse, then to an honest
    * "could not identify" — none of which this removes.
    */
-  const playerCrosswalk = await crosswalkToSleeperIds(platform, sport, ids).catch(
+  /*
+   * 🛑 FANTRAX NFL GOES THROUGH THE SAME BRIDGE AS THE MATCHUP BOARD. Production 2026-11-21: every
+   * starter of a Fantrax NFL team read "no game found for this week" and the lock read "no week 11
+   * game found for any of your starters yet", while /core/matchup showed the same players' kickoffs.
+   * The shared crosswalk has no Fantrax entry, so nothing here reached the Sleeper-keyed joins below
+   * (fixture, injury, weather). `lineupCrosswalkToSleeperIds` reads the registry's `fantraxId` for
+   * NFL and is the shared crosswalk for everything else.
+   */
+  const playerCrosswalk = await lineupCrosswalkToSleeperIds(platform, sport, ids).catch(
     () => new Map<string, string>(),
   )
   /*
@@ -902,8 +925,18 @@ async function resolvePlayers(
     const players = await fantraxPlayersRead
     for (const player of players) {
       if (player.name === `Player ${player.id}`) continue
-      const existing = out.get(player.id)
-      out.set(player.id, existing ? { ...existing, imageUrl: player.imageUrl ?? existing.imageUrl, logoUrl: player.logoUrl } : {
+      /*
+       * A translated player keeps ONE entry, edited in place. The bye and scoring passes below find
+       * him by his Sleeper id and the lineup finds him by his Fantrax id; a copy here would leave
+       * the bye flag on an entry the lineup never reads. Only an id the bridge translated counts.
+       */
+      const existing = sleeperIdByRosterId.has(player.id) ? out.get(player.id) : undefined
+      if (existing) {
+        existing.imageUrl = player.imageUrl ?? existing.imageUrl
+        existing.logoUrl = player.logoUrl
+        continue
+      }
+      out.set(player.id, {
         sleeperId: player.id, name: player.name, position: player.position, team: player.team,
         sport, imageUrl: player.imageUrl, logoUrl: player.logoUrl, gameContext: null, kickoff: null,
         preseason: false, venue: null, injuryStatus: null, ruledOut: false, projectedPoints: null,
@@ -1460,13 +1493,21 @@ async function loadMyTeamData(
 
   // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
   // Before the bye pass and everything else that reads a projection; a no-op for every other sport.
+  /*
+   * AF Intelligence (AF Pro, AF Commissioner, AF Supreme), read once: a locked viewer's lineup, bench check and every
+   * total are priced without AF's learned factors. A failed read is locked, like every /core depth after launch.
+   */
+  const afIntelligenceRead = resolveCoreDepth(userId, 'af_intelligence').then((a) => a.unlocked === true).catch(() => false)
   const lineupPeriod = await timing.read('projections', () =>
-    applyDailySportToLineup(resolved, {
+    (async () => applyDailySportToLineup(resolved, {
       sport,
       season: league.season ?? null,
       settings: league.settings,
       platform: league.platform ?? null,
-    }).catch(() => null),
+      // AF Intelligence (AF Pro, AF Commissioner, AF Supreme): a locked viewer's lineup — and its totals — carry no
+      // learned factor. A failed plan read is treated as locked, like every /core depth after launch.
+      afIntelligence: await afIntelligenceRead,
+    }))().catch(() => null),
   )
 
   /*
@@ -1476,6 +1517,32 @@ async function loadMyTeamData(
    * could be recommended to replace him. The totals below were already moved after it for the
    * same reason; the bench check was left behind.
    */
+  const rosterIdsForMetrics = [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])]
+  async function priceLeaguePlayers(ids: string[], players: Map<string, LineupPlayer>) {
+    const board = await loadLeaguePlayerMetrics({ leagueId, rosterIds: ids,
+      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length,
+      afIntelligence: await afIntelligenceRead })
+    const metricById = new Map(board?.rows.map((r) => [r.rosterPlayerId, r]))
+    for (const id of ids) {
+      const p = players.get(id)
+      if (!p) continue
+      const row = metricById.get(id)
+      const noNbaRoster = row?.weeklyUnavailableReason === 'no_nba_roster'
+      const total = lineupPeriod?.kind === 'day'
+        ? (p.periodGames != null && row ? Math.round(p.periodGames * row.perGame * 100) / 100 : null)
+        : row?.weekly ?? null
+      const points = board?.unit === 'fantasy points' && !noNbaRoster ? total : null
+      p.afProjectedPoints = p.ruledOut && !noNbaRoster ? 0 : points
+      p.afEngineProjectedPoints = p.afProjectedPoints
+      p.projectionSource = points == null ? null : 'allfantasy'
+      // The weekly number is the one the factors moved; a day's number is the plain per-game rate.
+      const before = row?.afFactors?.unadjusted?.weekly
+      p.afFactors = points != null && !p.ruledOut && lineupPeriod?.kind !== 'day' && row?.afFactors && before != null
+        ? { multiplier: row.afFactors.multiplier, reasons: row.afFactors.reasons, unadjusted: { afProjectedPoints: before } }
+        : undefined
+    }
+  }
+  await priceLeaguePlayers(rosterIdsForMetrics, resolved)
   const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
 
   // Who has already played — started beside the two passes above (`gameDaysRead`).
@@ -1639,15 +1706,22 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
+  // The bench check's own graded record, by the size of a swap's edge. Null outside Sleeper and native NFL / NBA / NHL / MLB leagues.
+  const benchCalibration = base.league.bestBall
+    ? null
+    : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)
   for (const c of benchCandidates) {
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
+    const swap = c.gap >= BENCH_SWAP_POINTS
+    const record = swap ? benchCallRecord(c.gap, benchCalibration, { scale: benchEdgeScaleFor(sport), starterProjected: c.starterProj }) : null
     checkBySlot.set(c.slotIndex, {
-      verdict: c.gap >= BENCH_SWAP_POINTS ? 'swap' : 'close',
+      verdict: swap ? 'swap' : 'close',
       benchName: c.bench.name,
       benchProjected: c.benchProj,
       starterName: c.starter.name,
       starterProjected: c.starterProj,
+      ...(record ? { record } : {}),
     })
     if (c.gap >= BENCH_SWAP_POINTS) {
       ledgerCalls.push({
@@ -1670,6 +1744,7 @@ async function loadMyTeamData(
         sport,
         projectionWeek,
         sportsWeek,
+        lineupPeriod: lineupPeriod ?? null,
         fullRender: !savedRosterOnly,
       },
       ledgerCalls,
@@ -1758,7 +1833,10 @@ async function loadMyTeamData(
       missing.length > 0
         ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''), league.platformLeagueId)
         : new Map<string, LineupPlayer>()
-    if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
+    if (extra.size > 0) {
+      await priceLeaguePlayers(missing, extra)
+      await zeroByeWeekPlayers(extra, sport, sportsWeek)
+    }
     // The opponent's starters get the same game-day read yours did, so the forecast knows who has played.
     if (extra.size > 0) {
       const days = await readLineupGameDay({

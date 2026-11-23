@@ -67,6 +67,10 @@ export const AF_OWNED_LEAGUE_SETTINGS_KEYS = [
   'devy_league_config', // execute-league-settings-patch — devy has no platform counterpart
   'c2cImport', // lib/league-import/c2cMultiSourceCommit.ts — links the college + pro sources
   'c2cTaxiLockMode', // /api/c2c/settings
+  'collegeProScoring', // lib/league/collegePro/format.ts — separate vs combined college + pro points (commissioner)
+  'collegeProTeamMap', // lib/league/collegePro/headToHead.ts — Sleeper roster id -> Fantrax team id, confirmed by the commissioner
+  'collegeProPair', // lib/league/collegePro/leaguePair.ts — this league's other half, so every member sees one league
+  'collegeProDraftChecklist', // lib/league/collegePro/draftChecklist.ts — the commissioner's ticked offseason steps, per draft year
 
   // ── Notifications, feed and automation preferences ────────────────────────
   'leagueNotificationPrefs', // NotificationsSettingsPanel settingsMerge

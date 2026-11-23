@@ -20,7 +20,7 @@ export * from './rules'
 export * from './decision'
 export * from './parity'
 export * from './waiverCardAdapter'
-export * from './outcome'
+// The waiver claim's outcome is graded by the advice ledger (lib/chimmy-outcomes/ledgerGrading.ts), not by a hook here.
 
 export interface RunWaiverClaimInput {
   worldInput: WaiverWorldInput

@@ -21,6 +21,9 @@ const spanish: Record<string, string> = {
   Matchup: 'Enfrentamiento',
   Match: 'Partido',
   Team: 'Equipo',
+  // The /core league tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, 2026-11-19).
+  Trade: 'Intercambios',
+  'Sections of this tab': 'Secciones de esta pestaña',
   Trades: 'Intercambios',
   Waivers: 'Agentes libres',
   // The league tab strip's 'Moves' had no entry, so Spanish readers saw it in English.
@@ -483,6 +486,9 @@ const spanish: Record<string, string> = {
   "Win": 'Victoria',
   "Loss": 'Derrota',
   "Tie": 'Empate',
+  "Ahead": 'Por delante',
+  "AllFantasy estimate": 'Estimación de AllFantasy',
+  "Behind": 'Por detrás',
   "Opponent not identified": 'Rival no identificado',
   'Your week, every matchup': 'Tu semana, todos los enfrentamientos',
   'No matchups are on file for this week.': 'No hay enfrentamientos registrados para esta semana.',
@@ -1470,8 +1476,21 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // A manager's record on a platform whose history is not counted per manager yet (2026-11-16,
   // lib/competitive-edge/providerManagerHistory.ts).
   [/^(.+) trades aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los intercambios de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
+  // Fantrax trades from the commissioner's uploaded trade history (lib/competitive-edge/providerManagerHistory.ts).
+  [/^No Fantrax trade history has been uploaded for this league yet\. The commissioner adds it under Commissioner → Trades and draft archive\.$/, () => 'Aún no se ha subido el historial de intercambios de Fantrax de esta liga. El comisionado lo agrega en Comisionado → Intercambios y archivo de drafts.'],
+  [/^The uploaded Fantrax trades could not be matched to this league’s managers\.$/, () => 'Los intercambios de Fantrax subidos no se pudieron asociar a los mánagers de esta liga.'],
+  [/^This league has no Fantrax league id on file\.$/, () => 'Esta liga no tiene registrado un id de liga de Fantrax.'],
+  [/^Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not\.$/, () => 'Solo se cuentan los intercambios del archivo de Fantrax subido; los hechos desde la última subida no.'],
   [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
   [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
+  // ESPN / MFL / Yahoo drafts credited to each season's owner (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^No (.+) draft picks have been imported for this league yet\.$/, (m) => `Todavía no se importaron selecciones del draft de ${m[1]} para esta liga.`],
+  [/^(.+) draft picks are on file, but who owned each team in those seasons wasn't recorded\.$/, (m) => `Hay selecciones del draft de ${m[1]} registradas, pero no quedó registrado quién manejaba cada equipo en esas temporadas.`],
+  // Yahoo trades from its historical backfill (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^Yahoo's season-by-season history hasn't been imported for this league yet, so its trades can't be counted per manager\.$/, () => 'El historial por temporada de Yahoo todavía no se importó para esta liga, así que sus intercambios no se pueden contar por mánager.'],
+  [/^Draft picks moved in Yahoo trades aren't stored in the imported transactions, so these counts are players only\.$/, () => 'Las selecciones del draft intercambiadas en Yahoo no se guardan en las transacciones importadas, así que estos conteos son solo de jugadores.'],
+  [/^Some Yahoo trades from (.+) were imported without the players each team got, so they aren't counted until the league's transactions are imported again\.$/, (m) => `Algunos intercambios de Yahoo de ${m[1]} se importaron sin los jugadores que recibió cada equipo, así que no se cuentan hasta que se vuelvan a importar las transacciones de la liga.`],
+  [/^In (.+), some teams' managers weren't recorded, so their side of a trade isn't credited to anyone\.$/, (m) => `En ${m[1]}, no quedaron registrados los mánagers de algunos equipos, así que su lado del intercambio no se le atribuye a nadie.`],
   [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
   [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [

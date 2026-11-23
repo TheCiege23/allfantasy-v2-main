@@ -16,7 +16,7 @@ import { fillLineup, DEFAULT_SLOT_ELIGIBILITY, type ImpactPlayer } from '@/lib/d
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { afEngineForLeague, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
+import { afEngineForLeague } from '@/lib/core-app/playerProjections'
 import type { AfEngineCarryInput } from '@/lib/core-app/afEngineCarry'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { RosterIdsUnreadable, ScenarioWeek } from './tradeScenarioTypes'
@@ -35,7 +35,7 @@ import { enrichLineupAvailability, lineupDesignation, unavailableForLineup, type
  * the Trade Center uses, and compares it with the lineup the platform currently has set.
  *
  * ── SAME BASIS AS EVERY OTHER CHIMMY LINEUP NUMBER ─────────────────────────────────────────────
- * `leagueWeekBasis` + `priceLeagueWeek` + `fillLineup`: the vendor's weekly component line re-scored
+ * `leagueWeekBasis` + `priceLeagueWeek` + `fillLineup`: the AF weekly component line re-scored
  * by `computeLeagueProjectedPoints`. A league this cannot price is REFUSED by name (NFL only, rules
  * required), never priced generically — the standing decision from the league-view scoring audit.
  *
@@ -92,6 +92,7 @@ export type LineupOptimization =
   | { status: 'unresolved'; reason: LineupOptimizationUnresolvedReason; detail: string }
   | {
       status: 'ready'
+      projectionSource?: 'allfantasy'
       week: ScenarioWeek
       /** The best lineup, in the league's declared slot order. */
       best: { points: number; slots: Array<{ slot: string; player: OptimizerPlayer }> }
@@ -160,16 +161,6 @@ const defaultDeps: LineupOptimizerDeps = {
   resolveWorld: resolveCanonicalWorld,
   loadPlayers: async (sport, ids) => enrichLineupAvailability(sport, await resolveNames(normalizeToSupportedSport(sport), ids, MAX_ROSTER_IDS)),
   checkLocks: checkStartedGames,
-  loadAfWeek: async ({ week, ids }) => {
-    const [engine, providers] = await Promise.all([
-      lookupAfEngineProjections(ids, week),
-      lookupProjections(ids, week),
-    ])
-    return {
-      engine,
-      generic: new Map([...providers].map(([id, p]) => [id, p.projectedPoints])),
-    }
-  },
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -340,6 +331,7 @@ export async function buildLineupOptimization(
 
   return {
     status: 'ready',
+    ...(deps.loadAfWeek ? {} : { projectionSource: 'allfantasy' as const }),
     week: basis.week,
     best: {
       points: bestPoints,
@@ -445,6 +437,7 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
      * Said once, up front, whenever any AF figure appears: which number the maths used, and that AF
      * is a second opinion — so the model can quote both without re-ranking the lineup by AF.
      */
+    r.projectionSource === 'allfantasy' ? '- Player projections, lineup totals and swaps use the AF weekly scores for this league.' :
     [...r.best.slots.map((s) => s.player), ...r.bench, ...r.startInstead, ...r.benchInstead, ...r.current.starters].some((p) => p.af != null)
       ? `- Each player shows the provider (Sleeper) projection first, then "AF": AllFantasy's own projection engine for the same week under the same rules. The best lineup, every total and every swap are computed from the FIRST number only. Quote AF as a second opinion — worth mentioning when it disagrees — but never re-rank the lineup or change a recommendation by it.`
       : null,

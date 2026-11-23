@@ -1,0 +1,34 @@
+/*
+ * Best Ball's pink identity for the league tab (BestBallTab) and its War Room panel (BestBallWarRoomPanel).
+ *
+ * ⚠ Colour comes from tokens only. The tab used hard-coded pinks and yellows (#ffb8d1, #ffd7e5, #fde68a…)
+ * drawn for a dark page; in light mode every score, slot tag and the selected view washed out on white
+ * (audit 2026-11-23). Everything else uses the workspace's own tokens (--text, --muted, --surface, --line,
+ * --good/--warn/--bad, from components/core-app/af-core.css), which already switch with the mode.
+ */
+.bb-tab,
+.bb-panel {
+  --bb-accent: #ff8ab5;
+  --bb-accent-soft: rgba(255, 61, 129, 0.14);
+  --bb-accent-line: rgba(255, 61, 129, 0.34);
+}
+html[data-mode='light'] .bb-tab,
+html[data-mode='light'] .bb-panel {
+  --bb-accent: #b0185a;
+  --bb-accent-soft: rgba(176, 24, 90, 0.08);
+  --bb-accent-line: rgba(176, 24, 90, 0.32);
+}
+
+/* A score, a total, "Your team". */
+.bb-tab .bb-accent,
+.bb-panel .bb-accent { color: var(--bb-accent); }
+
+/* The selected view button. */
+.bb-tab .bb-chip-on { background: var(--bb-accent-soft); color: var(--bb-accent); box-shadow: inset 0 0 0 1px var(--bb-accent-line); }
+
+/* A position or slot tag. */
+.bb-tab .bb-slot { background: var(--bb-accent-soft); color: var(--bb-accent); }
+
+/* Your own team's card, row or grid line. */
+.bb-tab .bb-mine { border-color: var(--bb-accent-line); background: var(--bb-accent-soft); }
+.bb-tab tr.bb-mine th { background: var(--surface); }

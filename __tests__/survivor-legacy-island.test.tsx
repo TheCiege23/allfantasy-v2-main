@@ -74,11 +74,12 @@ describe('legacy Survivor island look', () => {
     const css = readFileSync(resolve(process.cwd(), 'app/survivor/survivor-island.css'), 'utf8')
     expect(css).toMatch(/prefers-reduced-motion: reduce/)
     expect(css).toContain('Cinzel')
-    // Every rule is scoped under the shell root, so nothing leaks into the rest of the app.
+    // Every rule is scoped under the shell root, so nothing leaks into the rest of the app. The light-mode
+    // rules lead with the mode attribute and are still under the root.
     const selectors = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/^\s*[^@{}\s][^{}]*\{/gm) ?? []
     for (const sel of selectors) {
       if (/^\s*(\d+%|from\b|to\b)/.test(sel)) continue
-      for (const part of sel.replace(/\{$/, '').split(',')) expect(part.trim()).toMatch(/^\.sv-island/)
+      for (const part of sel.replace(/\{$/, '').split(',')) expect(part.trim()).toMatch(/^(?:html\[data-mode='light'\] )?\.sv-island/)
     }
     const pages = ['page.tsx', 'tribal/page.tsx', 'exile/page.tsx', 'jury/page.tsx', 'challenges/page.tsx', 'tribe/page.tsx', 'episodes/page.tsx', 'rules/page.tsx', 'chat/page.tsx', 'chimmy/page.tsx', 'SurvivorAppShell.tsx']
     for (const p of pages) {

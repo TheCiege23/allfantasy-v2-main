@@ -67,6 +67,8 @@
 /* /core's `.af-chip`: a pill, 700. */
 .nl-chip{display:inline-flex;align-items:center;min-height:23px;padding:4px 10px;border:1px solid var(--chip-line);border-radius:999px;background:var(--chip);font-size:11px;font-weight:700;white-space:nowrap}
 .nl-accent{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+/* The other half of a paired college + pro league. Not .nl-accent: phones hide that one (the hosted badge), and this is a link. */
+.nl-pair-chip{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .nl-gold{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 30%,transparent)}
 .nl-sport-week{font:11px var(--font-jetbrains-mono,'JetBrains Mono',monospace);color:var(--faint);white-space:nowrap}
 .nl-content{overflow:auto;min-height:0;padding:24px;scrollbar-gutter:stable;flex:1}
@@ -321,7 +323,9 @@
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-art{filter:grayscale(.85) brightness(.8)}
 .nl-workspace[data-guillotine-mood=eliminated] .nl-guillotine-line{color:#d2bdb0}
 @media(max-width:767px){
-  .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
+  /* .nl-workspace raises this above the generic phone `.nl-workspace .nl-league-heading{padding-top:0}` further down,
+     which is right for the borderless headings and put this bordered card's title on its top edge. */
+  .nl-workspace .nl-league-heading[data-format=guillotine]{padding:14px;border:1px solid rgba(255,122,69,.34);border-radius:12px;margin-bottom:16px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name h1{font-size:22px;margin:0 0 4px}
   .nl-heading-name .nl-guillotine-line{order:2;font-size:12px;margin:0 0 4px}
   .nl-league-heading[data-format=guillotine] .nl-heading-name>p:not(.nl-guillotine-line){order:2}
@@ -384,3 +388,45 @@
 .nl-workspace[data-dynasty-background=true] .nl-league-heading>.nl-button{background:rgba(8,12,19,.65)}
 /* Season clock pill — "Year N · YYYY", Archivo condensed, gold-soft on a gold wash (AA on the heading). */
 .nl-workspace[data-dynasty-background=true] .nl-dyn-clock{color:var(--dyn-gold-soft,#F3D79F);background:color-mix(in srgb,var(--dyn-gold,#D4A24C) 16%,transparent);border-color:color-mix(in srgb,var(--dyn-gold,#D4A24C) 42%,transparent);font-family:var(--font-archivo,'Archivo',system-ui,sans-serif);font-stretch:75%;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+/* Sub-tabs of the open top tab (Sleeper's six, lib/league/nativeLeagueNavigation.ts): one row of pills above the
+   screen, scrolling sideways on a phone rather than wrapping. Top level on purpose, not inside any @media. */
+.nl-subtabs{display:flex;gap:8px;overflow-x:auto;margin:0 0 16px;padding-bottom:2px;scrollbar-width:none}
+.nl-subtabs::-webkit-scrollbar{display:none}
+.nl-subtabs button{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:999px;color:var(--text2);font-size:13px;font-weight:700;white-space:nowrap}
+.nl-subtabs button:hover{background:var(--chip)}
+.nl-subtabs button[aria-current=page]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.nl-subtabs .nl-nav-count{margin-left:0}
+@media (max-width:767px){.nl-subtabs button{min-height:44px}}
+
+/* Imported leagues in the same workspace (2026-11-22): where the league lives, under its name. */
+.nl-synced-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.nl-synced-bar .nl-synced-open{color:var(--gold)!important;border-color:color-mix(in srgb,var(--gold) 35%,transparent)}
+.nl-heading-name .nl-synced-note{flex-basis:100%;margin:0;font-size:12px;line-height:1.45;color:var(--text2)}
+@media (max-width:767px){.nl-synced-bar .nl-button{min-height:44px}}
+/* Phone, dynasty: the banner is an art-backed CARD (rule above), so it needs a card's padding. The generic phone rules
+   (.nl-league-heading{padding:10px 0 0}, .nl-workspace .nl-league-heading{padding-top:0}) are written for the
+   transparent redraft heading and put this card's title 0px from its top edge. __tests__/dynasty/dynastyBannerPhone.test.ts */
+@media(max-width:767px){.nl-workspace[data-dynasty-background=true] .nl-league-heading{padding:14px}}
+
+/* Imported leagues, members: the gear opens the old header's member menu (2026-11-22). */
+.nl-member-menu-wrap>.nl-button svg:last-child{opacity:.7}
+/* The gear sits inside the menu's wrapper, so the heading's own `>.nl-button` rules are repeated for it. */
+.nl-league-heading[data-format=guillotine] .nl-member-menu-wrap>.nl-button{background:rgba(12,4,5,.6)}
+.nl-workspace[data-dynasty-background=true] .nl-league-heading .nl-member-menu-wrap>.nl-button{background:rgba(8,12,19,.65)}
+@media (max-width:767px){
+  .nl-member-menu-wrap>.nl-button{width:44px;min-height:44px;padding:0}
+  .nl-member-menu-wrap>.nl-button>span,.nl-member-menu-wrap>.nl-button>svg:last-child{display:none}
+}
+.nl-member-menu-wrap{position:relative;display:inline-flex}
+.nl-member-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:60;width:min(calc(100vw - 32px),280px);padding:4px 0;background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+.nl-member-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:44px;padding:10px 12px;text-align:left;background:transparent;border:0;cursor:pointer}
+.nl-member-menu button:hover,.nl-member-menu button:focus-visible{background:var(--chip)}
+.nl-member-menu strong{font-size:13px;font-weight:700;color:var(--text)}
+.nl-member-menu span{font-size:11px;line-height:1.4;color:var(--text2)}
+
+/* Imported devy leagues: the old header's NFL / Taxi / Devy counts, under the league name (2026-11-22). */
+.nl-heading-name .nl-devy-counts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:8px 0 0;font-size:12px;font-weight:600;color:var(--text2)}
+.nl-devy-counts>span{display:inline-flex;align-items:center;gap:6px}
+.nl-devy-dot{width:6px;height:6px;border-radius:999px}
+.nl-devy-sep{margin-right:2px;opacity:.4}

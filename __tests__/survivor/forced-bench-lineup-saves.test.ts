@@ -34,7 +34,7 @@ const h = vi.hoisted(() => {
           { playerId: 'p2', playerName: 'P2', position: 'PG', team: 'NYK', sport: 'NBA', slotType: 'BN', isLocked: false, injuryStatus: null, byeWeek: null },
           { playerId: 'p3', playerName: 'P3', position: 'PG', team: 'LAL', sport: 'NBA', slotType: 'IR', isLocked: false, injuryStatus: 'OUT', byeWeek: null },
         ],
-        season: { season: 2026, sport: 'NBA', currentWeek: 1, totalWeeks: 20 },
+        season: { season: 2026, sport: 'NBA', currentWeek: 3, totalWeeks: 20 },
       })),
     },
     sportsInjury: { findMany: vi.fn(async () => []) },

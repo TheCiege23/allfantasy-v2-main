@@ -15,6 +15,7 @@ import type { SubscriptionFeatureId, SubscriptionPlanId } from "@/lib/subscripti
 type EntitlementsApiResponse = {
   entitlement?: EntitlementSnapshot
   isAdminBypassAccount?: boolean
+  heldSkus?: string[]
 }
 
 export type EntitlementsState = {
@@ -34,6 +35,8 @@ export type EntitlementsState = {
    * balance widget already discloses its own synthetic value.
    */
   isAdminBypassAccount: boolean
+  /** Live subscription SKUs (e.g. `af_pro_monthly`), any store. Empty until loaded or on a failed read. */
+  heldSkus: string[]
 }
 
 const INITIAL_STATE: EntitlementsState = {
@@ -46,11 +49,13 @@ const INITIAL_STATE: EntitlementsState = {
   hasSupreme: false,
   hasAnyPaid: false,
   isAdminBypassAccount: false,
+  heldSkus: [],
 }
 
 function computeFlags(
   snap: EntitlementSnapshot,
-  isAdminBypassAccount: boolean
+  isAdminBypassAccount: boolean,
+  heldSkus: string[] = []
 ): Omit<EntitlementsState, "loading" | "error"> {
   const plans = snap.plans ?? []
   const isActive = isActiveOrGraceStatus(snap.status)
@@ -64,6 +69,7 @@ function computeFlags(
     hasSupreme: isActive && plans.includes("supreme"),
     hasAnyPaid: isActive && plans.length > 0,
     isAdminBypassAccount,
+    heldSkus,
   }
 }
 
@@ -88,7 +94,7 @@ export function useEntitlements() {
         return
       }
       setState({
-        ...computeFlags(snap, isAdminBypassAccount),
+        ...computeFlags(snap, isAdminBypassAccount, Array.isArray(data.heldSkus) ? data.heldSkus : []),
         loading: false,
         error: null,
       })

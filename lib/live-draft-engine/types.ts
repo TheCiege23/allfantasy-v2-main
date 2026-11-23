@@ -121,6 +121,8 @@ export interface DraftSessionSnapshot {
   pausedByUserId?: string | null
   /** Whether picks are allowed during the overnight auto-pause window. Client uses this to show/hide the pick panel. Server enforcement added in Commit 4. */
   allowPicksDuringOvernightPause?: boolean
+  /** Every roster that picks by itself right now (Chimmy-run, or "Auto-pick me" on). The board marks these AUTO. */
+  autoDraftRosterIds?: string[]
   /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
   viewerAutopick?: {
     enabled: boolean
@@ -166,11 +168,14 @@ export interface DraftPickSnapshot {
   pickEditorEmpty?: boolean
   tradedPickMeta: TradedPickMeta | null
   source: string
+  assetType?: string | null
   pickLabel: string
   /** Auction: winning bid amount. */
   amount?: number | null
   /** Market ADP when the pick was made (`pickMetadata.adpAtPick`); absent on older picks. */
   adpAtPick?: number | null
+  /** Why the clock picked this player (`pickMetadata.autopick.reason`); absent on a pick a person made. */
+  autoPickReason?: string | null
   createdAt: string
 }
 

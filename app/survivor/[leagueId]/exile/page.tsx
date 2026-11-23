@@ -48,10 +48,7 @@ export default function SurvivorExilePage() {
 
   return (
     <div
-      className="relative min-h-[75vh] px-3 pb-28 pt-4 md:px-6 md:pb-10"
-      style={{
-        background: 'linear-gradient(180deg, rgba(12, 8, 24, 0.55) 0%, rgba(7, 8, 13, 0.82) 320px, var(--survivor-bg) 520px)',
-      }}
+      className="sv-exile-wash relative min-h-[75vh] px-3 pb-28 pt-4 md:px-6 md:pb-10"
     >
       <div
         className="pointer-events-none fixed inset-x-0 bottom-0 h-32 opacity-40 motion-safe:[animation:survivor-fog-shift_18s_linear_infinite]"
@@ -62,7 +59,7 @@ export default function SurvivorExilePage() {
 
       <header className="relative">
         <p className="sv-kicker text-[12px] !text-violet-200">🏚 Exile Island</p>
-        <h1 className="sv-h mt-1 text-2xl uppercase md:text-3xl">Isolation · Grind · Return</h1>
+        <h1 className="sv-h mt-1 text-2xl md:text-3xl">{isExile ? 'Earn your way back' : 'Where voted-out players fight back'}</h1>
         <p className="mt-2 text-[13px] text-white/50" data-testid="survivor-exile-headcount">
           {secrecy.showCount ? exileHeadcountLine(secrecy.count ?? 0, weekLabel) : `Who is on Exile is secret · Week ${weekLabel}`}
         </p>
@@ -75,10 +72,20 @@ export default function SurvivorExilePage() {
       ) : null}
 
       {viewerSummary ? (
-        <section className="relative mt-6 survivor-panel rounded-2xl p-5">
-          <p className="text-[14px] text-white/75">The main island only sees a summary.</p>
-          <p className="mt-2 text-[12px] text-white/45">
-            {secrecy.showCount ? 'Token math and exile challenges stay private to exiles.' : 'In this league nobody outside Exile knows who is there. Token math and exile challenges stay private to exiles.'}
+        <section className="relative mt-6 survivor-panel rounded-2xl p-5" data-testid="survivor-exile-explainer">
+          {/* A player who is not on Exile used to get one line here and an empty page. Say how Exile works. */}
+          <h2 className="sv-h text-[15px]">How Exile works</h2>
+          <ol className="mt-3 space-y-2 text-[13px] text-white/80">
+            <li>1. A player voted out at Tribal Council goes to Exile instead of leaving the game.</li>
+            <li>2. Exiles keep playing each week and earn tokens by scoring well.</li>
+            <li>
+              3. {data?.returnRules?.enabled
+                ? `In week ${data.returnRules.week}, ${data.returnRules.slots === 1 ? 'the exile' : `up to ${data.returnRules.slots} exiles`} with ${data.returnRules.tokensRequired}+ tokens can return to the game.`
+                : 'Enough tokens can buy a way back into the game, when the commissioner opens a return.'}
+            </li>
+          </ol>
+          <p className="mt-3 text-[12px] text-white/60">
+            {secrecy.showCount ? 'Token totals and Exile challenges stay private to the exiles.' : 'In this league nobody outside Exile knows who is there. Token totals and Exile challenges stay private to the exiles.'}
           </p>
         </section>
       ) : null}

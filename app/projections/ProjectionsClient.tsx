@@ -1,5 +1,9 @@
 'use client'
 
+import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Search } from 'lucide-react'
@@ -32,6 +36,7 @@ const POSITIONS: Record<SportFilter, string[]> = {
 type Source = 'af' | 'market'
 
 export function ProjectionsClient() {
+  const { language } = useOptionalLanguage()
   const [sport, setSport] = useState<SportFilter>('NFL')
   const [position, setPosition] = useState('All')
   const [search, setSearch] = useState('')
@@ -45,6 +50,8 @@ export function ProjectionsClient() {
   const [afSeason, setAfSeason] = useState<number | null>(null)
   const [afLoading, setAfLoading] = useState(false)
   const [afFailed, setAfFailed] = useState(false)
+  // Set when the viewer's plan does not include AF Intelligence: the rows then carry the baseline only.
+  const [afLock, setAfLock] = useState<CoreDepthAccess | null>(null)
 
   useEffect(() => {
     if (source !== 'af') return
@@ -60,6 +67,7 @@ export function ProjectionsClient() {
         if (ac.signal.aborted) return
         setAfRows(Array.isArray(j?.rows) ? j.rows : [])
         setAfSeason(typeof j?.season === 'number' ? j.season : null)
+        setAfLock(j?.afIntelligenceLock && typeof j.afIntelligenceLock === 'object' ? (j.afIntelligenceLock as CoreDepthAccess) : null)
       })
       .catch(() => {
         if (ac.signal.aborted) return
@@ -174,6 +182,16 @@ export function ProjectionsClient() {
         {/* ── AF engine ─────────────────────────────────────────────────────────────────── */}
         {source === 'af' ? (
           <>
+            {afLock ? (
+              <div className="mb-3">
+                <CoreDepthLock
+                  access={afLock}
+                  lang={language}
+                  source="lock_af_projections"
+                  benefit={coreDepthLockCopy(language).afProjectionsBoardBenefit}
+                />
+              </div>
+            ) : null}
             <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-white/20">
               <span className="flex-1">
                 Player{afSeason != null ? <span className="ml-1.5 normal-case text-white/25">{afSeason} season</span> : null}

@@ -8,7 +8,7 @@ import { importSleeperSurvivalById } from '@/lib/league-import/sleeper/importSur
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
-import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
+import { isDynastyForWrite, leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -18,6 +18,9 @@ import type { ImportWarningRecord } from '@/lib/league-import/types'
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import { hasIdpRosterSlot } from './idpRosterSlots'
 import { IMPORT_CO_COMMISSIONERS_KEY, importCoCommissionerIds } from '@/lib/league/tournamentCoCommissioners'
+import { notifyCommissionerOfJoin, notifyLeagueMatesOfJoin } from '@/lib/league-join/notifyCommissionerOfJoin'
+import { joinExistingLeagueAsLeagueMate, otherAccountsCopy } from './joinExistingLeagueAsLeagueMate'
+import { equivalentPlatformLeagueIds, platformLeagueIdWhere } from './samePlatformLeague'
 import { isYahooSnapshotYahooSettings } from './yahoo/snapshot/yahooSnapshotModel'
 import type {
   CanonicalImportBundle,
@@ -28,6 +31,12 @@ import type {
 } from './types'
 
 export class ImportedLeagueConflictError extends Error {}
+
+/**
+ * Another account already holds this league, and this importer could not be placed in it (the provider
+ * did not vouch for them). No second copy is made; they join through the commissioner's invite link.
+ */
+export class ImportedLeagueAlreadyHereError extends Error {}
 
 /**
  * The user previously DELETED this league and has not confirmed they want it
@@ -92,6 +101,11 @@ export interface PersistImportedLeagueOptions {
    * already imported, as a co-commissioner, instead of creating a duplicate copy of it.
    */
   importerIsProvenCommissioner?: boolean
+  /**
+   * Refuse to create this league when another account already holds it and this importer could not be
+   * placed in it. Set by the import route; other callers (a commissioner's own tools) keep creating.
+   */
+  refuseSecondCopy?: boolean
 }
 
 export interface PersistImportedLeagueResult {
@@ -109,6 +123,8 @@ export interface PersistImportedLeagueResult {
    * recognised as an existing member of a league that was already on AllFantasy.
    */
   joinedExisting: boolean
+  /** How a team-less league mate joined an existing copy; unset for a team claim or a commissioner. */
+  joinedAs?: 'co_owner' | 'viewer'
   /**
    * Post-create steps that did not complete.
    *
@@ -860,7 +876,8 @@ export async function claimExistingLeagueForMember(args: {
     where: {
       userId: { not: userId },
       platform: provider,
-      platformLeagueId,
+      // The same provider league under any id it is stored by (Fantrax: see samePlatformLeague.ts).
+      platformLeagueId: await platformLeagueIdWhere(provider, platformLeagueId),
       season: seasonYear,
     },
     // Oldest first: with several copies already present, always the same one, never an arbitrary pick.
@@ -992,7 +1009,7 @@ export async function joinExistingLeagueAsCoCommissioner(args: {
 }): Promise<PersistImportedLeagueResult | null> {
   const { userId, provider, platformLeagueId, seasonYear } = args
   const otherLeague = await (prisma as any).league.findFirst({
-    where: { userId: { not: userId }, platform: provider, platformLeagueId, season: seasonYear },
+    where: { userId: { not: userId }, platform: provider, platformLeagueId: await platformLeagueIdWhere(provider, platformLeagueId), season: seasonYear },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, sport: true },
   })
@@ -1032,7 +1049,7 @@ export async function persistImportedLeagueFromNormalization(
       ? normalized.league.season
       : new Date().getFullYear()
 
-  const existing = await (prisma as any).league.findFirst({
+  const exact = await (prisma as any).league.findFirst({
     where: {
       userId,
       platform: provider,
@@ -1040,6 +1057,18 @@ export async function persistImportedLeagueFromNormalization(
       season: seasonYear,
     },
   })
+  /*
+   * The same account importing the same Fantrax league again (a different "which team is yours?"
+   * choice makes a new snapshot, so a new id) refreshes its league instead of adding a copy. The
+   * exact id wins when it exists; otherwise the oldest league stored under a sibling id.
+   */
+  const siblingIds = exact ? [] : (await equivalentPlatformLeagueIds(provider, platformLeagueId)).filter((id) => id !== platformLeagueId)
+  const existing = exact ?? (siblingIds.length
+    ? await (prisma as any).league.findFirst({
+        where: { userId, platform: provider, platformLeagueId: { in: siblingIds }, season: seasonYear },
+        orderBy: { createdAt: 'asc' },
+      })
+    : null)
 
   if (existing && !allowUpdateExisting) {
     throw new ImportedLeagueConflictError('This league already exists in your account')
@@ -1131,6 +1160,20 @@ export async function persistImportedLeagueFromNormalization(
       } catch (err) {
         console.warn('[ImportedLeagueCommitService] calculateAndSaveRank (join) non-fatal:', err)
       }
+      /*
+       * A league mate who imports a league already here joins that copy — and used to arrive in
+       * silence. Tell the commissioner and the managers already in it, once (`existed` is a repeat
+       * click by someone who had already joined). Never awaited: the join stands whatever these do.
+       */
+      if (!joined.existed) {
+        const joinedLeagueId = joined.league.id
+        void notifyCommissionerOfJoin({ leagueId: joinedLeagueId, joinerUserId: userId }).catch((err) => {
+          console.warn('[ImportedLeagueCommitService] commissioner join alert failed:', err instanceof Error ? err.message : err)
+        })
+        void notifyLeagueMatesOfJoin({ leagueId: joinedLeagueId, joinerUserId: userId }).catch((err) => {
+          console.warn('[ImportedLeagueCommitService] league mates join alert failed:', err instanceof Error ? err.message : err)
+        })
+      }
       return joined
     }
   }
@@ -1139,6 +1182,40 @@ export async function persistImportedLeagueFromNormalization(
   if (!existing && options.importerIsProvenCommissioner) {
     const joinedAsCo = await joinExistingLeagueAsCoCommissioner({ userId, provider, platformLeagueId, seasonYear })
     if (joinedAsCo) return joinedAsCo
+  }
+
+  /*
+   * Everyone sees the same copy (owner's rule, 2026-11-21). A league mate the provider vouches for who
+   * has no team of their own joins the copy that is already here: on the team they co-own, or as a
+   * viewer (lib/league-import/joinExistingLeagueAsLeagueMate.ts). Someone the provider cannot vouch
+   * for gets no second copy either: the caller that asks for it is refused and pointed at the invite.
+   */
+  if (!existing) {
+    if (options.importerSourceManagerId) {
+      const mate = await joinExistingLeagueAsLeagueMate({
+        userId, provider, platformLeagueId, seasonYear,
+        sourceManagerId: options.importerSourceManagerId,
+        rosters: normalized.rosters,
+      })
+      if (mate) {
+        if (!mate.alreadyJoined) {
+          void notifyCommissionerOfJoin({ leagueId: mate.leagueId, joinerUserId: userId }).catch(() => {})
+          void notifyLeagueMatesOfJoin({ leagueId: mate.leagueId, joinerUserId: userId }).catch(() => {})
+        }
+        return {
+          league: { id: mate.leagueId, name: mate.name, sport: mate.sport },
+          historicalBackfill: null,
+          existed: mate.alreadyJoined,
+          joinedExisting: true,
+          joinedAs: mate.joinedAs,
+          incompleteSteps: [],
+        }
+      }
+    } else if (options.refuseSecondCopy && await otherAccountsCopy({ userId, provider, platformLeagueId, seasonYear })) {
+      throw new ImportedLeagueAlreadyHereError(
+        'This league is already on AllFantasy. Ask its commissioner for the league invite link to join it.',
+      )
+    }
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)
@@ -1184,7 +1261,8 @@ export async function persistImportedLeagueFromNormalization(
     platformLeagueId,
     leagueSize: normalized.league.leagueSize,
     scoring: normalized.league.scoring ?? undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; see `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings: existing?.settings }),
     sport: resolvedSport,
     season: seasonYear,
     // Phase OS-C5: previously omitted entirely — `League.status` has no DB default, so every

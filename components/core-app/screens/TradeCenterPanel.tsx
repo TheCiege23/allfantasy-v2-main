@@ -28,6 +28,10 @@ import { TradeInbox, nativeItemsToAssets, toPickedAssets, type NativeTradeItem }
 import { useMessages } from '@/components/i18n/useMessages'
 import { tradeCenterPanelMessages } from '@/lib/core-app/messages/tradeCenterPanel'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
+import { adviceRecordMessages } from '@/lib/core-app/messages/adviceRecord'
+import { EvidenceLine } from '@/components/core-app/primitives'
+import { letterRecordApplies, tradeLetterRecord, tradeOutcomeRecordFor } from '@/lib/chimmy-outcomes/engineRecord'
+import { useAdviceRecord } from '@/components/core-app/useAdviceRecord'
 
 type PanelAsset = Pick<LeagueTradeAsset, 'id' | 'label' | 'sublabel' | 'headshotUrl'> & { pick?: LeagueTradeAsset['pick']; idol?: boolean }
 
@@ -177,8 +181,13 @@ export function TradeCenterPanel(props: {
   onChanged?: () => void
   importedHistory?: readonly TradeRecord[]
   initialTab?: TradeCenterTab
+  /** The league's sport: a letter's graded record is shown only for NFL redraft grades (engineRecord.ts). */
+  sport?: string | null
 }) {
   const m = useMessages(tradeCenterPanelMessages)
+  const rm = useMessages(adviceRecordMessages)
+  // Every sport: the NFL redraft record and the other sports' and league types' records come in one view.
+  const adviceRecord = useAdviceRecord(true)
   const { leagueId, reloadToken = 0, onChanged, onLoad, onCounter } = props
   const [data, setData] = useState<PanelData | null>(null)
   const [state, setState] = useState<'loading' | 'idle' | 'failed'>('loading')
@@ -423,6 +432,11 @@ export function TradeCenterPanel(props: {
     const err = actionError?.tradeId === t.id ? actionError.message : null
     const pending = String(t.status ?? '') === 'pending'
     const grade = t.leagueGrade && t.leagueGradeSide !== 'proposer' && t.leagueGrade.graded ? t.leagueGrade : null
+    /* How deals graded this letter have actually scored — only beside a grade of the kind the ledger grades. */
+    const letterRecord =
+      grade && letterRecordApplies({ sport: props.sport, leagueType: grade.leagueType?.type }) ? tradeLetterRecord(adviceRecord, grade.letter) : null
+    /* Any other sport or league type: its own record, graded on its own measure (2026-11-22). */
+    const outcomeRecord = grade && !letterRecord ? tradeOutcomeRecordFor(adviceRecord, { sport: props.sport, leagueType: grade.leagueType?.type, letter: grade.letter }) : null
 
     /*
      * Who receives what from whom: an asset in side X's `assets` left X; the side whose `received` holds the
@@ -438,6 +452,48 @@ export function TradeCenterPanel(props: {
           {left ? <> · <span aria-hidden>⏱ </span>{m.endsIn(left)}</> : null}
         </p>
         {grade ? <p className="af-tcp-grade" data-letter={grade.letter}>{m.gradeLine(grade.letter, grade.getValue.toLocaleString(getAppIntlLocale()), grade.giveValue.toLocaleString(getAppIntlLocale()))}</p> : null}
+        {outcomeRecord ? (
+          <EvidenceLine
+            className="af-tcp-grade-evidence"
+            label={rm.recordLabel}
+            tone={outcomeRecord.verdict === 'not_held_up' || outcomeRecord.confidence?.level === 'low' ? 'low' : undefined}
+            lines={[
+              {
+                text: rm.tradeOutcomeRecord(outcomeRecord.kind, outcomeRecord.sport, outcomeRecord.letter, outcomeRecord.n, outcomeRecord.net, outcomeRecord.aheadPct, outcomeRecord.verdict),
+                testId: 'tcp-grade-outcome-record',
+                data: { verdict: outcomeRecord.verdict, kind: outcomeRecord.kind },
+              },
+              outcomeRecord.confidence
+                ? {
+                    text: rm.tradeConfidence(outcomeRecord.confidence.letter, outcomeRecord.confidence.level, outcomeRecord.confidence.heldPct, outcomeRecord.confidence.decided),
+                    testId: 'tcp-grade-outcome-confidence',
+                    data: { level: outcomeRecord.confidence.level },
+                  }
+                : null,
+            ]}
+          />
+        ) : null}
+        {letterRecord ? (
+          <EvidenceLine
+            className="af-tcp-grade-evidence"
+            label={rm.recordLabel}
+            tone={letterRecord.verdict === 'not_held_up' || letterRecord.confidence?.level === 'low' ? 'low' : undefined}
+            lines={[
+              {
+                text: rm.tradeRecord(letterRecord.letter, letterRecord.n, letterRecord.netPerWeek, letterRecord.aheadPct, letterRecord.verdict),
+                testId: 'tcp-grade-record',
+                data: { verdict: letterRecord.verdict },
+              },
+              letterRecord.confidence
+                ? {
+                    text: rm.tradeConfidence(letterRecord.confidence.letter, letterRecord.confidence.level, letterRecord.confidence.heldPct, letterRecord.confidence.decided),
+                    testId: 'tcp-grade-confidence',
+                    data: { level: letterRecord.confidence.level },
+                  }
+                : null,
+            ]}
+          />
+        ) : null}
         {sides.map((s) => {
           const standing = teamStanding(t, s.rosterId, proposerId)
           return (

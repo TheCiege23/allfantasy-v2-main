@@ -146,9 +146,13 @@ type DraftBoardCellProps = {
  * `ai` stays sky — distinct from both, and mutually exclusive with `user` on a given cell anyway.
  */
 function highlightClass(tone: PickHighlightTone | undefined): string {
-  if (tone === 'user')
-    return 'ring-1 ring-cyan-400/60 border-cyan-400/50 shadow-[0_4px_24px_rgba(34,211,238,0.24)]'
-  if (tone === 'ai') return 'ring-1 ring-sky-400/55 border-sky-400/45 shadow-[0_4px_26px_rgba(56,189,248,0.26)]'
+  // Gold = your picks, matching the legend. It was a cyan ring beside a cyan on-the-clock ring
+  // and a sky ring on Chimmy-run teams: three near-identical blues for three meanings.
+  // A white ring set off by a dark gap: tiles are coloured by POSITION (WR yellow, RB green...),
+  // so any coloured ring vanishes on one of them. Measured: gold on a WR tile could not be seen.
+  if (tone === 'user') return 'ring-2 ring-white ring-offset-2 ring-offset-[#0b1428]'
+  // Chimmy-run teams are marked AUTO in their column header; a fourth ring colour only added noise.
+  if (tone === 'ai') return ''
   return ''
 }
 
@@ -302,7 +306,7 @@ function DraftBoardCellInner({
           ? 'bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--af-league-accent,#22d3ee)_28%,transparent),#0d1020_62%)] ring-2 ring-[color:var(--af-league-accent,#67e8f9)]'
           : isEmpty
             ? 'bg-[#2a2f45]'
-            : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300' : ''} ${highlightClass(pickHighlight)}`
+            : `${positionHex ? '' : 'bg-[#3a4160]'} ${isRecentPick ? 'ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#0b1428]' : ''} ${highlightClass(pickHighlight)}`
       }`}
       style={openPlayer ? { ...tileStyle, cursor: 'pointer' } : tileStyle}
       data-overall={pick.overall}

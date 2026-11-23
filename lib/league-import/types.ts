@@ -134,6 +134,8 @@ export interface NormalizedLeagueSettings {
 export interface NormalizedRoster {
   source_team_id: string
   source_manager_id: string
+  /** Provider manager ids that share this team with its owner (Sleeper `co_owners`). */
+  co_owner_ids?: string[]
   owner_name: string
   team_name: string
   avatar_url: string | null
@@ -275,6 +277,11 @@ export interface NormalizedTransaction {
   drops?: Record<string, string>
   roster_ids: string[]
   draft_picks?: unknown[]
+  /**
+   * FAAB moved between rosters in a TRADE, when the provider stated it (`sleeperTradeWaiverBudget`). Absent = not read.
+   * Only Sleeper fills it today.
+   */
+  waiver_budget?: Array<{ sender: string; receiver: string; amount: number }>
   /**
    * Scoring week the transaction belongs to, stamped from the FETCH LOOP rather than read off the
    * payload. Sleeper's transactions endpoint is per-week (`/league/{id}/transactions/{week}`), so

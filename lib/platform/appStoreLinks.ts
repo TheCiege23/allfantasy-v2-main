@@ -1,10 +1,8 @@
 /**
- * Public store listings for the AllFantasy apps.
+ * Public store listings for the AllFantasy apps, in one import for the store badges.
  *
- * App Store id 6815778932 is the listing for bundle `ai.allfantasy.app`, read from Apple's public
- * lookup (itunes.apple.com/lookup?bundleId=ai.allfantasy.app) on 2026-11-23. No country segment, so
- * Apple sends each visitor to their own storefront.
+ * Re-exports only: the App Store listing is defined in lib/platform/iosAppStore.ts and the Google Play
+ * listing in lib/platform/androidApp.ts. Do not define a URL here — a second copy is how two links drift.
  */
+export { APP_STORE_URL } from '@/lib/platform/iosAppStore'
 export { PLAY_STORE_URL } from '@/lib/platform/androidApp'
-
-export const APP_STORE_URL = 'https://apps.apple.com/app/allfantasy/id6815778932'

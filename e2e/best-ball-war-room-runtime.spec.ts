@@ -211,9 +211,11 @@ test.describe('@db Best Ball War Room runtime', () => {
     await waitForAction(page, 'risk', async () => { await page.getByTestId('best-ball-war-room-tool-risk').click() })
     await rendered(page.getByTestId('best-ball-war-room-risk-result'))
 
-    // Waivers/trades buttons are disabled (draft-only) — truthful, not dead.
-    await expect(page.getByTestId('best-ball-war-room-tool-waivers')).toBeDisabled()
-    await expect(page.getByTestId('best-ball-war-room-tool-trade-analyze')).toBeDisabled()
+    // A draft-only league has no Waivers or trade tools at all (2026-11-23): greyed-out buttons beside two
+    // notes saying they were off told a manager the same thing three times. The rules line says it once.
+    await expect(page.getByTestId('best-ball-war-room-tool-waivers')).toHaveCount(0)
+    await expect(page.getByTestId('best-ball-war-room-tool-trade-analyze')).toHaveCount(0)
+    await expect(page.getByTestId('best-ball-war-room-tool-trade-find')).toHaveCount(0)
 
     await page.getByTestId('best-ball-war-room-ask-input').fill('What position am I weak at and do I have upside?')
     const askResponse = await waitForAction(page, 'ask', async () => { await page.getByTestId('best-ball-war-room-ask-submit').click() })

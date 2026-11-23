@@ -83,9 +83,7 @@ const FALLBACK_REASON: Record<DefenseHubState, { title: string; body: string }> 
   },
   ids_unreadable: {
     title: FOREIGN_IDS_UNREADABLE,
-    body:
-      'Your roster is imported, but until its players can be matched there is no defender here ' +
-      'we could name or price — so none is shown, rather than the wrong one.',
+    body: 'Your roster is imported, but we can’t match its players to ours yet, so we can’t show or price your defenders.',
   },
   no_projection_history: {
     title: 'No scored games on file yet',
@@ -290,12 +288,15 @@ function Kickers({ data }: { data: DefenseHubPayload }) {
           <div className="font-mono text-[17px] font-black text-[var(--text)]">
             {data.kickerValue.value?.toLocaleString()}
           </div>
-          <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
-            each · replacement about K{data.kickerValue.replacementRank}
-          </div>
+          <div className="text-[12px] text-[var(--muted)]">{m.kickerEach}</div>
         </div>
 
-        <p className="mt-2 text-[11px] leading-[1.5] text-[var(--muted)]">{data.kickerValue.basis}</p>
+        {/*
+          The plain reason, not the loader's `basis` ("year-over-year Spearman -0.455… the startable population
+          spans only 1.55x… replacement is about K13"), which is the measurement, not an explanation. The
+          rule it carries is unchanged: one value for every kicker, never a ranking (2026-11-23).
+        */}
+        <p className="mt-2 text-[12px] leading-[1.5] text-[var(--muted)]">{m.kickerWhy}</p>
 
         <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--line)] pt-3">
           {data.kickers.map((k) => (
@@ -317,36 +318,51 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
       <div className="af-dfh-section-head">
         <Label>{m.yourDefenders}</Label>
       </div>
+      {/*
+        ⚠ ON A PHONE THIS TABLE USED TO BE 680px WIDE INSIDE A 358px CARD: Last week, Vs. free agent, Pos rank
+        and Value sat off the right edge behind a sideways scroll nothing pointed to (audit 2026-11-23). Below
+        `sm` the table is Player · Proj · Value, and the other numbers ride on a line under the name.
+      */}
       <div className="af-dh-card af-dh-table af-dfh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
-        <table className="w-full min-w-[680px] text-left">
+        <table className="w-full text-left sm:min-w-[680px]">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">{m.colPlayer}</th>
-              <th className="px-2 py-3">{m.colPos}</th>
+              <th className="hidden px-2 py-3 sm:table-cell">{m.colPos}</th>
               <th className="af-dh-proj-head px-2 py-3 text-right text-[var(--accent)]">{m.colProj}</th>
-              <th className="px-2 py-3 text-right">{m.colLastWeek}</th>
-              <th className="px-2 py-3 text-right">
+              <th className="hidden px-2 py-3 text-right sm:table-cell">{m.colLastWeek}</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell">
                 <abbr title={m.vorpTip} className="no-underline">
                   {m.colVorp}
                 </abbr>
               </th>
-              <th className="px-2 py-3 text-right">{m.colPosRank}</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell">{m.colPosRank}</th>
               <th className="px-4 py-3 text-right">{m.colValue}</th>
             </tr>
           </thead>
           <tbody>
-            {data.defenders.map((d) => (
+            {data.defenders.map((d) => {
+              const rankLabel = d.positionRank != null && (d.positionGroup ?? d.position) ? `${d.positionGroup ?? d.position}${d.positionRank}` : null
+              const facts = [
+                d.position ? (rankLabel ? `${d.position} · ${rankLabel}` : d.position) : rankLabel,
+                d.lastWeek?.scored ? m.factLastWeek(d.lastWeek.points.toFixed(1)) : null,
+                d.vorp != null ? m.factVorp(`${d.vorp > 0 ? '+' : ''}${d.vorp.toFixed(1)}`) : null,
+              ].filter(Boolean)
+              return (
               <tr key={d.sleeperId} className="border-b border-[var(--line)] last:border-0">
                 <td className="px-4 py-3" colSpan={d.reason ? 7 : 1}>
                   <div className="text-[13px] font-extrabold">{d.name}</div>
                   <div className="font-mono text-[11px] text-[var(--faint)]">{d.team ?? '—'}</div>
+                  {!d.reason && facts.length ? (
+                    <div className="mt-1 text-[12px] text-[var(--text2)] sm:hidden" data-testid="defense-hub-row-facts">{facts.join(' · ')}</div>
+                  ) : null}
                   {d.reason && (
-                    <div className="mt-1.5 text-[11px] font-semibold text-[var(--warn)]">{d.reason}</div>
+                    <div className="mt-1.5 whitespace-normal text-[12px] font-semibold text-[var(--warn)]">{d.reason}</div>
                   )}
                 </td>
                 {!d.reason && (
                   <>
-                    <td className="px-2 py-3 font-mono text-[11px] text-[var(--text2)]">
+                    <td className="hidden px-2 py-3 font-mono text-[11px] text-[var(--text2)] sm:table-cell">
                       {d.position ? (
                         /* A hook for the redraft chip; the IDP group (DL/LB/DB) is the job, whatever the spelling. */
                         <span className="af-dh-pos" data-dh-group={(d.positionGroup ?? d.position).toUpperCase()}>
@@ -356,7 +372,8 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                         <Dash />
                       )}
                     </td>
-                    <td className="af-dh-proj px-2 py-3 text-right font-mono text-[14px] font-extrabold text-[var(--good)]">
+                    {/* Plain text: every projection was painted "good" green, so the colour said nothing. */}
+                    <td className="af-dh-proj px-2 py-3 text-right font-mono text-[14px] font-extrabold text-[var(--text)]">
                       {d.projection != null ? d.projection.toFixed(1) : <Dash />}
                     </td>
                     {/*
@@ -365,7 +382,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                       either as zero tells a manager his starter blanked.
                     */}
                     <td
-                      className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]"
+                      className="hidden px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)] sm:table-cell"
                       title={
                         d.lastWeek && !d.lastWeek.scored
                           ? d.lastWeek.reason === 'no_game'
@@ -378,14 +395,14 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                     >
                       {d.lastWeek?.scored ? d.lastWeek.points.toFixed(1) : <Dash />}
                     </td>
-                    <td className="px-2 py-3 text-right font-mono text-[12px]">
+                    <td className="hidden px-2 py-3 text-right font-mono text-[12px] sm:table-cell">
                       {d.vorp != null ? (
                         `${d.vorp > 0 ? '+' : ''}${d.vorp.toFixed(1)}`
                       ) : (
                         <Dash />
                       )}
                     </td>
-                    <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
+                    <td className="hidden px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)] sm:table-cell">
                       {/*
                         Against the GROUP, never `d.position` — the rank is computed per
                         DL/LB/DB, and pairing it with a raw spelling printed `Cornerback80`
@@ -418,7 +435,8 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                   </>
                 )}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -445,10 +463,17 @@ function PlayTable({ data }: { data: DefenseHubPayload }) {
   if (data.snaps.length === 0) return null
   const roleOf = new Map(data.roles.map((r) => [r.sleeperId, r]))
   return (
-    <section className="af-dfh-section" data-section="play">
-      <Label>{m.playTitle}</Label>
-      <div className="af-dh-card af-dfh-table overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
-        <table className="w-full min-w-[560px] text-left" data-testid="defense-hub-play">
+    /*
+     * Folded (2026-11-23): it lists your defenders a second time, straight after the table that lists them
+     * first, and on a phone the two together ran past 3,000px. Open it when you want the snap counts.
+     */
+    <details className="af-dfh-section group rounded-[13px] border border-[var(--line)] bg-[var(--surface)]" data-section="play">
+      <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 text-[14px] font-bold text-[var(--text)]">
+        <span>{m.playTitle}</span>
+        <span aria-hidden className="text-[var(--faint)] group-open:rotate-180">▾</span>
+      </summary>
+      <div className="af-dh-card af-dfh-table overflow-x-auto border-t border-[var(--line)]">
+        <table className="w-full text-left sm:min-w-[560px]" data-testid="defense-hub-play">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">{m.colPlayer}</th>
@@ -501,7 +526,7 @@ function PlayTable({ data }: { data: DefenseHubPayload }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </details>
   )
 }
 
@@ -510,9 +535,13 @@ function Tendencies({ data }: { data: DefenseHubPayload }) {
   if (data.tendencies.length === 0) return null
 
   return (
-    <section className="af-dfh-section" data-section="tendencies">
-      <Label>{m.tendencies}</Label>
-      <div className="flex flex-col gap-3">
+    // Folded (2026-11-23): one card per NFL team you roster, at the end of an already long page.
+    <details className="af-dfh-section group rounded-[13px] border border-[var(--line)] bg-[var(--surface)]" data-section="tendencies">
+      <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 text-[14px] font-bold text-[var(--text)]">
+        <span>{m.tendencies}</span>
+        <span aria-hidden className="text-[var(--faint)] group-open:rotate-180">▾</span>
+      </summary>
+      <div className="flex flex-col gap-3 border-t border-[var(--line)] p-3">
         {data.tendencies.map(({ team, tendency: t }) => (
           <div key={team} className="af-dh-card rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-4">
             <div className="mb-3 flex items-baseline gap-2">
@@ -533,7 +562,7 @@ function Tendencies({ data }: { data: DefenseHubPayload }) {
           </div>
         ))}
       </div>
-    </section>
+    </details>
   )
 }
 
@@ -567,7 +596,8 @@ function Stat({ label, value }: { label: string; value: string | null }) {
       <div className="font-mono text-[16px] font-extrabold leading-none">
         {value ?? <Dash />}
       </div>
-      <div className="mt-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
+      {/* Sentence case: the labels are now plain phrases ("of plays against them were passes"). */}
+      <div className="mt-1.5 text-[12px] leading-snug text-[var(--muted)]">
         {label}
       </div>
     </div>

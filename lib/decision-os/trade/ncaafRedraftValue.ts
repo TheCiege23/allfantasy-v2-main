@@ -39,7 +39,7 @@ export type NcaafRosteredPlayer = {
 }
 
 /** Per-game points under this league's rules, for one player. */
-export type NcaafPerGame = { perGame: number; position: string | null }
+export type NcaafPerGame = { perGame: number; position: string | null; tradeMarket?: { percent: number; trades: number } }
 
 /** The best free agent at one position: who, and his per-game points under this league's rules. */
 export type NcaafReplacement = { name: string; perGame: number }
@@ -122,7 +122,7 @@ function priceSide(
     }
     // Below the best free agent is worth nothing more than the free agent: he can be picked up instead.
     const overPerGame = Math.max(0, line.perGame - replacement.perGame)
-    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks })
+    priced.push({ name: player.name, value: overPerGame * ctx.window.weeks * (1 + (line.tradeMarket?.percent ?? 0) / 100) })
   }
   return { priced }
 }

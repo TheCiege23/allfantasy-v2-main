@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import * as Sentry from '@sentry/nextjs'
 import { isNewVersionReady, reloadOntoNewVersion } from '@/lib/core-app/deployGuard'
 import { musicBus } from '@/components/app-music/musicBus'
+import { hasUnsavedWork } from '@/lib/core-app/unsavedWork'
 
 function musicLoaded(): boolean {
   const { yt, appleNow } = musicBus.getSnapshot()
@@ -78,7 +79,7 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
      * whose "Try again" cannot fix it. Not while music is loaded: a reload would cut it off, and
      * the panel's button is there for when they choose to.
      */
-    void reloadOntoNewVersion({ canInterrupt: () => !musicLoaded() }).catch(() => {})
+    void reloadOntoNewVersion({ canInterrupt: () => !musicLoaded() && !hasUnsavedWork() }).catch(() => {})
   }
 
   render() {

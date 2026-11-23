@@ -3,12 +3,13 @@
  * Creates tournament parent, conferences, batch of feeder leagues, round records, and invite distribution.
  */
 
+import { ensureLeagueSettingsRow } from '@/lib/draft-defaults/ensureLeagueSettingsRow'
 import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { buildLeagueInviteUrl } from '@/lib/viral-loop'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { RetiredConceptError, checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
-import { DEFAULT_TOURNAMENT_SETTINGS, TOURNAMENT_LEAGUE_VARIANT } from './constants'
+import { DEFAULT_TOURNAMENT_SETTINGS, TOURNAMENT_LEAGUE_DRAFT_READY, TOURNAMENT_LEAGUE_VARIANT } from './constants'
 import { generateLeagueNames, getConferenceDisplayNames, generateInviteCode } from './LeagueNamingService'
 import type { CreateTournamentInput, TournamentSettings, InviteDistributionItem } from './types'
 import {
@@ -225,6 +226,7 @@ export async function createTournament(input: CreateTournamentInput): Promise<{
           phase: 'qualification',
         },
         syncStatus: 'manual',
+        ...TOURNAMENT_LEAGUE_DRAFT_READY,
       },
     })
     leagueIds.push(league.id)
@@ -234,6 +236,9 @@ export async function createTournament(input: CreateTournamentInput): Promise<{
     } catch (err) {
       console.warn('[tournament-mode] Bootstrap non-fatal for league', league.id, err)
     }
+    await ensureLeagueSettingsRow(league.id).catch((error) =>
+      console.warn('[tournament] Draft settings row non-fatal', league.id, error),
+    )
 
     const orderInConference = i < perConference ? i : i - perConference
     await prisma.legacyTournamentLeague.create({

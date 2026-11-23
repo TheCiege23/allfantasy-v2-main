@@ -18,6 +18,8 @@
  *   GuillotineWaiverRelease rows                         deleted — the players are no longer released
  *   pending waiver claims on those players               denied, with the reason
  *   FAAB split to the survivors (when the league splits) taken back from each survivor, returned to its team
+ *   FAAB after a chop (top up / reset survivors)        each survivor back to its balance before the chop, and the
+ *                                                       once-per-week marker deleted so a re-chop applies it again
  *   Roster.playerData emptied by the release             restored from the snapshot, or rebuilt
  *   GuillotinePeriodScore                                kept — the week was played
  *   chat posts and alerts already sent                   kept — a new post and alerts say it was undone
@@ -46,6 +48,7 @@ export type ChopUndoBlocker =
   | 'no_release_record'
   | 'unmatched_team'
   | 'faab_unknown'
+  | 'faab_reset_unknown'
 
 export const CHOP_UNDO_BLOCKER_MESSAGES: Record<ChopUndoBlocker, string> = {
   imported_league: 'This league is chopped by its provider, so the chop can only be changed there.',
@@ -58,6 +61,7 @@ export const CHOP_UNDO_BLOCKER_MESSAGES: Record<ChopUndoBlocker, string> = {
   no_release_record: 'The released players were not recorded for this chop, so they cannot be put back safely.',
   unmatched_team: 'A chopped team could not be matched to its roster, so it cannot be restored safely.',
   faab_unknown: 'The chopped teams’ FAAB was split without a record of each team’s share, so it cannot be returned exactly.',
+  faab_reset_unknown: 'The survivors’ FAAB was reset or topped up without a record of each team’s balance, so it cannot be put back exactly.',
 }
 
 export type ChopUndoFacts = {
@@ -78,6 +82,8 @@ export type ChopUndoFacts = {
   unmatchedTeams: number
   /** A FAAB split happened for more than one chopped team and did not record each team's share. */
   faabSplitWithoutShares: boolean
+  /** A "FAAB after a chop" top-up or reset ran for this week and its per-team changes cannot be read. */
+  faabResetWithoutChanges?: boolean
 }
 
 /** Everything that stops this chop being undone, in the order a commissioner should read them. */
@@ -93,6 +99,7 @@ export function chopUndoBlockers(f: ChopUndoFacts): ChopUndoBlocker[] {
   if (f.unmatchedTeams > 0) out.push('unmatched_team')
   if (f.teamsWithoutReleaseRecord > 0) out.push('no_release_record')
   if (f.faabSplitWithoutShares) out.push('faab_unknown')
+  if (f.faabResetWithoutChanges) out.push('faab_reset_unknown')
   return out
 }
 
@@ -136,4 +143,26 @@ export function faabReturnPlan(
     toChopped = new Map(pool > 0 ? [[choppedRosterIds[0]!, pool]] : [])
   }
   return { fromSurvivors, toChopped }
+}
+
+/**
+ * Undoing a "FAAB after a chop" top-up or reset (./faabAfterChop.ts): each survivor's balance before and after, from
+ * the `faab_after_chop` event the chop wrote. Rosters the rule did not move are left out. No event: nothing to undo
+ * (an empty plan). An event whose changes cannot be read: null — undo refuses rather than guess a balance. Pure.
+ */
+export function faabResetReturnPlan(event: { changes?: unknown } | null): Map<string, { before: number | null; after: number }> | null {
+  // `before` is null for a roster that had no budget (FAAB off for it) — it goes back to none.
+  const plan = new Map<string, { before: number | null; after: number }>()
+  if (!event) return plan
+  if (!Array.isArray(event.changes)) return null
+  for (const c of event.changes) {
+    const row = c && typeof c === 'object' ? (c as Record<string, unknown>) : null
+    const rosterId = typeof row?.rosterId === 'string' ? row.rosterId : null
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+    const before = row?.before === null ? null : num(row?.before)
+    const after = num(row?.after)
+    if (!rosterId || after == null || (before == null && row?.before !== null)) return null
+    if (before !== after) plan.set(rosterId, { before, after })
+  }
+  return plan
 }

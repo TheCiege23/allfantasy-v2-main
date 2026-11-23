@@ -28,7 +28,8 @@ function mockFetch() {
 
 const openChallenge = {
   id: 'c1', week: 9, title: 'SNF total', question: 'Guess the combined score.', kind: 'game_total_closest', scope: 'tribe', status: 'open',
-  opensAt: '2026-11-01T14:00:00Z', locksAt: '2026-11-02T01:00:00Z', inputKind: 'number', options: [], prizeText: '$20 FAAB per player',
+  // Locks far in the future: a lock time that has already passed hides the answer form (see island-visual-upgrade-ui).
+  opensAt: '2026-11-01T14:00:00Z', locksAt: '2099-11-02T01:00:00Z', inputKind: 'number', options: [], prizeText: '$20 FAAB per player',
   wager: null, uniqueAnswers: true, sealed: false, mine: null, answers: null, resultSummary: null, myResult: null,
 }
 

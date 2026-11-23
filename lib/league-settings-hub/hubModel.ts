@@ -254,6 +254,17 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
   if (l.medianGame != null) {
     setup.push({ key: 'median', label: 'League Median Game', description: 'Every team also plays the weekly median score', value: yesNo(l.medianGame), toggle: { field: 'medianGame', on: l.medianGame === true } })
   }
+  // A league drafted mid-season: do the weeks played before the draft count? (lib/redraft/preLeagueWeeksRules.ts)
+  // Only once those weeks are loaded. The settings GET carries both fields (commissioner-league-patch.ts).
+  if ((num(l.preLeagueWeekCount) ?? 0) > 0) {
+    setup.push({
+      key: 'preLeague',
+      label: 'Count Weeks Before the Draft',
+      description: 'Weeks played before this league drafted. Off: for viewing only. On: they count toward every record, including the league median',
+      value: yesNo(l.preLeagueWeeksCount === true),
+      toggle: { field: 'preLeagueWeeksCount', on: l.preLeagueWeeksCount === true },
+    })
+  }
 
   const deadline = num(l.tradeDeadlineWeek)
   const trade: HubRow[] = [
@@ -459,7 +470,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
   const out: HubAfOption[] = []
   const teamCount = num(l.teamCount) ?? num(l.leagueSize)
 
-  // Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): NFL leagues hosted on AllFantasy.
+  // Copy league (docs/league-page/COPY_LEAGUES_DESIGN.md): NFL, NBA, NHL and MLB leagues hosted on AllFantasy.
   const sport = str(l.sport)
   if (copyLeagueAvailable(sport)) {
     const copy = readCopyLeague(snap, sport)
@@ -467,7 +478,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
     out.push({
       key: 'copyLeague',
       label: 'Copy league',
-      description: 'Every manager takes a real NFL team, and its name and logo become the team’s own.',
+      description: `Every manager takes a real ${copy.sport} team, and its name and logo become the team’s own.`,
       value: copy.enabled ? (teamCount != null ? `${picked} of ${teamCount} teams have a real team` : 'Copy league is on') : 'Copy league is off',
       panel: 'af-options',
     })
@@ -513,7 +524,7 @@ export function buildAfOptions(p: HubSettingsPayload, kind: HubKind, leagueId: s
     out.push({
       key: 'rookieOrder',
       label: 'Rookie draft order',
-      description: ro?.enabled === true
+      description: ro?.enabled !== false
         ? 'Set automatically when the regular season ends. Playoff teams go by seed; the champion picks last.'
         : 'Not set automatically. The commissioner sets next season’s order.',
       value: reverseMaxPf ? 'Reverse max points for' : 'Worst to first',

@@ -340,3 +340,111 @@ MID or FWD), fantasyPoints, appearances, and clubMatches over the same period. I
 rostered players and free agents. Pass the league ID and file for a dry run, then append --apply
 to save. The grader checks the current scoring digest, season and roster coverage on every read.
 The ordinary partial projection remains the fallback while a matching export is unavailable.
+
+## F-18 — College school codes are Fantrax's own, not ours — **CAPTURED 2026-11-19**
+
+`getPlayerIds?sport=NCAAB` and `?sport=CFB` are now captured (`fixtures/ncaab-player-ids.json`,
+`fixtures/cfb-player-ids.json`) via `scripts/probe.sh --player-ids <NCAAB|CFB>`: one sample row per team
+code plus the row and position counts, so the fixtures record each sport's whole school-code vocabulary.
+Same id-keyed `{ fantraxId, name: "Last, First", team, position }` shape as the pro maps; every sport also
+carries team rows (`position: "Tm"` and, in CFB, `DST`/`ST`/`TmD`/`TO`/`TQB`/`TK`).
+
+**The codes are Fantrax's, mixed case (`AzSt`, `ChaSo`, `PRINC`, `KAN`, `MIA-O`).** For NCAAB, 191 of the
+365 school codes match no `SportsTeam.shortName` (PRIN, KU, M-OH…), which is why 2,805 players at those
+schools never linked. `ncaabFantraxIdentityPlan.ts` now learns such a code only from three or more already-linked
+players who agree on the school, as the NCAAF matcher already did (124 CFB codes verified that way).
+
+**CFB positions are Fantrax's labels, not the registry's.** CB/S vs DB, OLB vs LB, DE vs EDGE, DL vs DE all
+occur for one player at one school; `ncaafFantraxIdentityPlan.ts` compares position GROUPS. Offensive
+labels stay exact.
+
+## F-19 — Transaction History is a logged-in page with a CSV download — **CAPTURED 2026-11-21**
+
+F-13 still holds for the public `fxea` API: it has no transactions endpoint. Completed claims, drops and
+trades are on the logged-in website, at `/fantasy/league/<leagueId>/transactions/history`, with three
+tabs (Claim/Drop, Trade, Lineup). Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-transaction-history-download.json`.
+
+- The page loads through `POST /fxpa/req` with `msgs[].method = getTransactionDetailsHistory` and
+  `data.view` of `CLAIM_DROP` or `TRADE`. Its response body was not captured.
+- "Download all as CSV" opens `GET /fxpa/downloadTransactionHistory` with `view`, `team=ALL`,
+  `positionOrGroup=ALL`, `pageNumber=1`, `adminMode=false`, `includeDeleted=false`, `executedOnly=true`.
+  Same family as `/fxpa/downloadTeamRosterStats`, which the browser connector already uses
+  (`tools/fantrax-browser-connector`).
+- The Claim/Drop CSV is `Player, Team, Position, Type, Team, Bid, Date (EST), Week`. Two columns are
+  named `Team` (NFL club, then fantasy team). `Type` is `Claim` or `Drop`. **There is no player id**, so
+  a row has to be matched by name, club and position, as the Trade CSV already is.
+- One download returned every row the page listed across its four pages (78 rows), not only page 1.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the download answers without a login. The score download answers `WARNING_NOT_LOGGED_IN`.
+- The download with `view=TRADE` and `view=LINEUP`. The Trade CSV's columns are known from a user
+  upload (`fantraxTradeHistoryCsv.ts`); its request parameters are assumed to match and were not seen.
+- **Why the export started in week 10 of an 11-week season** (earliest row Nov 12). A retention window,
+  a default date filter, or this league's own history would each explain it. Until that is known, an
+  import of this file must not be described as the league's whole history.
+- Whether `getTransactionDetailsHistory` returns player ids. If it does, it is the better source.
+
+Fantrax also sends each member alerts (push and email) for "Any trade has been executed" and "A player
+is successfully claimed", listed under My Team Settings → Notifications, with a history page at
+`/notification/all`. No trade or claim alert was seen, so their wording is unknown.
+
+## F-20 — Team logos are on the logged-in site: `getFantasyTeams` — **CAPTURED 2026-11-22**
+
+F-14 still holds for the public `fxea` API: no picture field. The logged-in website lists every team
+with a logo. Captured in the league owner's own Chrome with their consent:
+`fixtures/2026-fantasy-teams-request.json`.
+
+- `POST /fxpa/req?leagueId=<id>` with the single message `getFantasyTeams` answers
+  `responses[0].data.fantasyTeams`: one `{ id, name, shortName, logoUrl128, logoUrl256, logoId,
+  commissioner }` per team. All 34 teams of the captured league had a logo.
+- The request carries no token: `Accept: application/json`, `Content-Type: text/plain`, the login
+  cookie, and a body of `msgs`, `uiv`, `refUrl`, `dt`, `at`, `tz`, `v`.
+- The logo files are public. `https://fantraximg.com/logos/<xxx>/tmLogo_<logoId>_128.webp` (and
+  `_256`) answered 200 `image/webp` with no cookie. Teams without an upload use stock icons under
+  `fantraximg.com/assets/images/icons/fantasyteams/`.
+- `id` is Fantrax's team id. Our `LeagueTeam.externalId` is the import's own id, so a logo is matched
+  to a team by NAME (`teamIndex`), as trades and claims are.
+
+**Still unknown, and not to be guessed:**
+
+- Whether the request works without a login, with an out-of-date `v`, or when sent by a browser
+  extension rather than the site's own page. The connector has not been run in a browser.
+- The managers' names. A team's roster page sends `getTeamRosterInfo`, whose response has
+  `teamHeadingInfo.owners`; only its shape was seen, and it is one request per team.
+
+## F-21 — A rostered player missing from `getPlayerIds` has no name anywhere in the API (recorded 2026-11-22, no probe)
+
+Road To Glory NCAA Basketball rosters `06qaj` (F/C, RESERVE, #51 Butler Bulldogs). The snapshot refreshed
+2026-11-22 18:10 UTC, after the refresh switched to the league's own directory (`c3c3014ffa`), and the
+roster row still carries `name: null`, `team: null`. No `PlayerIdentityMap` row holds that `fantraxId`.
+
+What the contract says about other places a name could come from:
+- `getLeagueInfo.playerInfo` carries `eligiblePos` / `status` only, never a name (`cfb-league-2026.json`).
+- `getTeamRosters` items carry an id, position and status, not a name.
+
+So a player absent from `getPlayerIds?sport=NCAAB` cannot be named from the `fxea` API at all, and
+matching by name is ruled out. The page shows `Player 06qaj`.
+
+**Unknown:** why the directory omits a rostered id. Most likely the directory lists only players
+Fantrax currently tracks (a transfer, a departure, or a player off the active list), but that is a
+guess. **To resolve:** `scripts/probe.sh --player-ids NCAAB` and check whether `06qaj` is present; if
+not, the logged-in player page on Fantrax is the only other source, which the import does not read.
+
+## F-22 — Pending trade offers have no known source (recorded 2026-11-23, no probe)
+
+The provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's pending-trade
+block read Sleeper only. Fantrax cannot be added from what is committed:
+
+- The public `fxea` API has no transactions endpoint (F-13), so it has no pending offers either.
+- The logged-in Transaction History download (F-19) was captured with `executedOnly=true`, so it lists
+  completed moves. Whether `executedOnly=false`, `view=TRADE`, or `getTransactionDetailsHistory` lists
+  offers that are proposed and not yet accepted is unknown. Fantrax's site also has a trade-offers page,
+  whose request was never captured.
+- Every candidate needs the member's Fantrax login, so a scheduled sweep could not read it server-side
+  without storing that login, which the import does not do.
+
+**Needed:** a capture, in a member's own browser with their consent, of the request that lists their
+pending trade offers and its response, trimmed with `scripts/redact-capture.mjs` and committed with the
+mapping that reads it, and a decision on how a sweep would hold the login. Not probed.

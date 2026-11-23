@@ -5,7 +5,9 @@ import {
   parseFantraxTradeHistoryCsv,
   readCsvRows,
   stripFantraxStandingPrefix,
+  WRONG_EXPORT_ERROR,
 } from '@/lib/league-import/fantrax/fantraxTradeHistoryCsv'
+import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
  * Fantrax "Transaction History → Trade" export. The shape (columns, pick and budget lines, the "#N " prefix, a Week
@@ -123,6 +125,19 @@ describe('parseFantraxTradeHistoryCsv', () => {
     const r = parseFantraxTradeHistoryCsv('"Player","Team","Position","Status"\n"A","KC","RB","Active"')
     expect(r.ok).toBe(false)
     expect((r as { error: string }).error).toContain('From, To, Date (EST)')
+  })
+
+  it('says a Claims/Drops export is the wrong file, and where to get the right one', () => {
+    // The Claims/Drops export has every required column but From and To.
+    const r = parseFantraxTradeHistoryCsv('"Player","Team","Position","Date (EST)","Week"\n"A","KC","RB","Sun Jul 5, 2026, 1:05PM","1"')
+    expect(r).toEqual({ ok: false, error: WRONG_EXPORT_ERROR })
+    expect(WRONG_EXPORT_ERROR).toMatch(/Claims\/Drops/)
+    expect(WRONG_EXPORT_ERROR).toMatch(/choose Trades/)
+    expect(WRONG_EXPORT_ERROR).not.toMatch(/missing column/)
+    expect(hubCopy(WRONG_EXPORT_ERROR, 'es')).not.toBe(WRONG_EXPORT_ERROR)
+    // Only that exact shape: one of the two missing, or a third, still lists the columns.
+    const oneMissing = parseFantraxTradeHistoryCsv('"Player","Team","Position","From","Date (EST)"\n"A","KC","RB","X","d"')
+    expect((oneMissing as { error: string }).error).toMatch(/missing column: To\.$/)
   })
 })
 

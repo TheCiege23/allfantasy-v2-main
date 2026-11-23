@@ -1,3 +1,4 @@
+import { applyLegacyWaiverToCanonical, mirrorCanonicalRosters } from '@/lib/redraft/legacyWaiverBridge'
 import { prisma } from '@/lib/prisma'
 import { getEffectiveLeagueWaiverSettings } from './settings-service'
 import {
@@ -28,6 +29,7 @@ import { redraftHolderOtherThan } from './redraftRosterHolder'
 import { planRedraftRosterMoveWrites } from '@/lib/league-runtime/redraftRosterMoveSync'
 import { guillotineClaimsCutoff } from '@/lib/guillotine/blindWaiverCutoff'
 import { guillotineChopPendingForWaivers } from '@/lib/guillotine/chopBeforeWaivers'
+import { recordChopReleaseClaim } from '@/lib/guillotine/choppedReleases'
 import { loadWaiverRunPhaseGate } from './season-phase-gate'
 import { DROPPER_RECLAIM_MESSAGE, droppedPlayerHoldPolicy, loadDroppedPlayerHolds, maxHoldHours, type DroppedPlayerHold } from './dropped-player-waivers'
 import { copyGenericFaabToRedraft } from '@/lib/league/faabMirror'
@@ -183,6 +185,10 @@ async function processWaiverClaimsForLeagueLocked(
   ])
 
   if (!league) return []
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const cutoff = (league.settings as { survivorGuillotine?: { waiversNotBefore?: string } } | null)?.survivorGuillotine?.waiversNotBefore
+    if (cutoff && (!Number.isFinite(Date.parse(cutoff)) || Date.now() < Date.parse(cutoff))) return []
+  }
   // 🛑 A Guilly week's chop lands BEFORE the run that follows it (lib/guillotine/chopBeforeWaivers.ts):
   // run first and the doomed team wins claims while bids on its players fail. Nothing is touched — every
   // claim stays pending for the first run after the chop. A commissioner's manual run is exempt, as from
@@ -520,30 +526,6 @@ async function processWaiverClaimsForLeagueLocked(
       priorityAfter = newWaiverPriority
     }
 
-    const survivorGuillotineWrites: Array<Promise<unknown>> = []
-    if (league.leagueVariant === 'survivor_guillotine') {
-      const linked = await prisma.roster.findUnique({ where: { id: claim.rosterId }, select: { redraftRosterId: true } })
-      const player = await prisma.player.findUnique({ where: { id: addId }, select: {
-        name: true, position: true, team: true, sport: true } })
-      if (!player) {
-        await pushFail('Survivor Guilly claim needs a known player.')
-        continue
-      }
-      if (!linked?.redraftRosterId && await prisma.redraftSeason.count({ where: { leagueId } })) {
-        await pushFail('Survivor Guilly roster needs its redraft link reconciled before waivers.')
-        continue
-      }
-      if (linked?.redraftRosterId) {
-        if (dropId) survivorGuillotineWrites.push(prisma.redraftRosterPlayer.updateMany({ where: {
-          rosterId: linked.redraftRosterId, playerId: dropId, droppedAt: null }, data: { droppedAt: new Date() } }))
-        survivorGuillotineWrites.push(prisma.redraftRosterPlayer.create({ data: { rosterId: linked.redraftRosterId,
-          playerId: addId, playerName: player.name, position: player.position, team: player.team,
-          sport: player.sport, slotType: 'bench', acquisitionType: 'waiver' } }))
-        if (faabSpent != null) survivorGuillotineWrites.push(prisma.redraftRoster.update({ where: { id: linked.redraftRosterId },
-          data: { faabBalance: { decrement: faabSpent } } }))
-      }
-    }
-
     /*
      * Native scoring reads `RedraftRosterPlayer`, not `playerData` — without this an awarded
      * player never scores and the dropped one keeps scoring. Survivor Guillotine writes its own
@@ -561,12 +543,12 @@ async function processWaiverClaimsForLeagueLocked(
           playerDataByRoster: new Map([[claim.rosterId, newPlayerData]]),
         })
 
-    await (prisma as any).$transaction([
-      (prisma as any).waiverClaim.update({
+    const settlementWrites = (db: any) => [
+      db.waiverClaim.update({
         where: claimSnapshotWhere(claim),
         data: { status: 'processed', processedAt: new Date(), resultMessage: 'Awarded' },
       }),
-      (prisma as any).roster.update({
+      db.roster.update({
         // Compare-and-set (`isRosterSnapshotConflict`): written only if the roster is still what this run
         // read. An instant add, a FAAB trade or a Guilly chop's FAAB split in between leaves the claim
         // pending for the next run instead of being overwritten.
@@ -577,7 +559,7 @@ async function processWaiverClaimsForLeagueLocked(
           ...(newWaiverPriority != null && { waiverPriority: newWaiverPriority }),
         },
       }),
-      (prisma as any).waiverTransaction.create({
+      db.waiverTransaction.create({
         data: {
           leagueId,
           sportType: league.sport ?? null,
@@ -591,13 +573,41 @@ async function processWaiverClaimsForLeagueLocked(
           waiverPriorityAfter: priorityAfter ?? null,
         },
       }),
-      ...survivorGuillotineWrites,
-      ...redraftMoveWrites,
-    ])
+    ]
+
+
+    if (league.leagueVariant === 'survivor_guillotine') {
+      try {
+        await prisma.$transaction(async tx => {
+          const origin = (claim.metadata as { originRedraftClaimId?: string } | null)?.originRedraftClaimId
+          if (origin) {
+            const source = await tx.redraftWaiverClaim.updateMany({ where: { id: origin, status: 'pending' }, data: { status: 'approved', processedAt: new Date() } })
+            if (source.count !== 1) throw new Error('Source scoring claim changed before settlement.')
+          }
+          await applyLegacyWaiverToCanonical(tx, { leagueId, rosterId: claim.rosterId, addPlayerId: addId, dropPlayerId: dropId, faabSpent, claimId: claim.id, originRedraftClaimId: origin, priorityAfter: priorityAfter ?? undefined })
+          for (const write of settlementWrites(tx)) await write
+          const linked = await tx.roster.findFirst({ where: { id: claim.rosterId, leagueId }, select: { redraftRosterId: true } })
+          if (linked?.redraftRosterId) await mirrorCanonicalRosters(tx, [linked.redraftRosterId])
+        })
+      } catch (error) {
+        if (isClaimSnapshotConflict(error) || isRosterSnapshotConflict(error)) throw error
+        await pushFail(error instanceof Error ? error.message : 'Native waiver settlement failed; no roster changes were applied.')
+        continue
+      }
+    } else {
+      await (prisma as any).$transaction([...settlementWrites(prisma), ...redraftMoveWrites])
+    }
 
     // Survivor Guilly wrote faabBalance itself, above; every other native league copies it across.
     if (faabSpent != null && league.leagueVariant !== 'survivor_guillotine') {
       await copyGenericFaabToRedraft(prisma, [claim.rosterId])
+    }
+
+    // A Guilly award on a chopped team's player: record who won him and the bid. Never fails the award.
+    if (league.guillotineMode) {
+      await recordChopReleaseClaim({ leagueId, playerId: addId, rosterId: claim.rosterId, winningBid: faabSpent }).catch((error) => {
+        console.error('[waiver-process] chop release claim not recorded', { leagueId, claimId: claim.id, error: error instanceof Error ? error.message : String(error) })
+      })
     }
 
     rosteredByPlayer.set(addId, claim.rosterId)

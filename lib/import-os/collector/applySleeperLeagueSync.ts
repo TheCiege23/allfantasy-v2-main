@@ -35,6 +35,7 @@ import {
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { isDynastyForWrite } from '@/lib/league-import/leagueTypeWrite'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -202,7 +203,9 @@ async function applyLeagueState(
     scoringPresetId: refreshedScoringPresetId,
     status: normalized.league.status ?? undefined,
     leagueSize: typeof normalized.league.leagueSize === 'number' ? normalized.league.leagueSize : undefined,
-    isDynasty: normalized.league.isDynasty,
+    // A person's confirmed dynasty type keeps the flag on; without this every sync rewrote Fantrax's
+    // `false` over it (Fantrax cannot say dynasty). See `isDynastyForWrite`.
+    isDynasty: isDynastyForWrite({ providerIsDynasty: normalized.league.isDynasty, existingSettings }),
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (rosterPositions ?? undefined) as Prisma.InputJsonValue | undefined,
     settings: mergedSettings as Prisma.InputJsonValue,
@@ -623,6 +626,17 @@ async function applyTradedPicks(
     const res = await persistTradedPicks(leagueId, picks)
     out.imported += res.written
     out.rejected += res.skipped
+    /*
+     * ⚠ A PICK THE SAVE LEFT ALONE IS IN NEITHER COUNT ABOVE. The save does not update a pick
+     * AllFantasy has settled (an in-app trade moved it, or it has been used or forfeited): that
+     * is not a write and not a refusal. Without this line a protected pick is invisible in the
+     * run record, and "the guard held" reads the same as "the provider sent fewer picks".
+     */
+    if (res.leftAlone > 0) {
+      out.notes.push(
+        `traded_picks: ${res.leftAlone} pick(s) left as stored (settled in AllFantasy: traded in the app, used or forfeited)`,
+      )
+    }
   }
   /*
    * The one erasure this scope performs, and only on a positive statement: a provider that

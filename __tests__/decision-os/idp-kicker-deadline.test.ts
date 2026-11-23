@@ -38,6 +38,21 @@ describe('withSliceDeadline', () => {
     expect(r.present).toBe(false)
   })
 
+  it('calls onLate when — and only when — the deadline wins (the late-slice log, 2026-11-23)', async () => {
+    const onLate = vi.fn()
+    await withSliceDeadline(1000, Promise.resolve(present), undefined, onLate)
+    await withSliceDeadline(1000, Promise.reject(new Error('db down')), undefined, onLate)
+    expect(onLate).not.toHaveBeenCalled()
+    await withSliceDeadline(0, new Promise<GroundedSlice<ValueLookup[]>>(() => {}), undefined, onLate)
+    expect(onLate).toHaveBeenCalledTimes(1)
+    vi.useFakeTimers()
+    const out = withSliceDeadline(50, new Promise<GroundedSlice<ValueLookup[]>>(() => {}), undefined, onLate)
+    vi.advanceTimersByTime(60)
+    await out
+    vi.useRealTimers()
+    expect(onLate).toHaveBeenCalledTimes(2)
+  })
+
   it('the deadline sits under the chat route’s 3,000 ms packet ceiling', () => {
     expect(IDP_KICKER_DEADLINE_MS).toBeLessThan(3000)
   })

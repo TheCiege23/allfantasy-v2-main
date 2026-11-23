@@ -47,6 +47,7 @@ export function TournamentControlDashboard({
   const { formatInTimezone } = useUserTimezone()
   const [data, setData] = useState<ControlData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiType, setAiType] = useState<string>('standings_analysis')
@@ -70,13 +71,18 @@ export function TournamentControlDashboard({
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/control`, { cache: 'no-store' })
-      if (!res.ok) throw new Error('Failed to load')
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(typeof j?.error === 'string' && j.error ? j.error : 'The league controls could not be loaded.')
+      }
       const json = await res.json()
       setData(json)
-    } catch {
+    } catch (e) {
       setData(null)
+      setLoadError(e instanceof Error && e.message ? e.message : 'The league controls could not be loaded.')
     } finally {
       setLoading(false)
     }
@@ -116,10 +122,28 @@ export function TournamentControlDashboard({
     // Could add toast
   }
 
-  if (loading || !data) {
+  // A failed load used to fall through to "Loading…" forever: `!data` was true after any 401/403/404/500 and nothing
+  // said so (tournament gaps audit item 2, 2026-11-09). Now it says what went wrong and offers a retry.
+  if (loading) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/60">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-white/60" role="status">
         Loading…
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-center" role="alert" data-testid="tournament-control-load-error">
+        <p className="text-sm font-semibold text-rose-100">League controls didn’t load</p>
+        <p className="mt-1 text-sm text-rose-100/75">{loadError ?? 'The league controls could not be loaded.'}</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/15"
+        >
+          <RefreshCw className="h-3.5 w-3.5" /> Try again
+        </button>
       </div>
     )
   }
@@ -494,12 +518,20 @@ export function TournamentControlDashboard({
               setCondensing(true)
               setCondenseResult(null)
               try {
-                const res = await fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ advancementPerLeague: count }),
-                })
-                const json = await res.json()
+                const send = (confirmEarly: boolean) =>
+                  fetch(`/api/tournament/${encodeURIComponent(tournamentId)}/advance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ advancementPerLeague: count, ...(confirmEarly ? { confirmEarly: true } : {}) }),
+                  })
+                let res = await send(false)
+                let json = await res.json()
+                // The round still has weeks to play: the server says so, and the commissioner decides.
+                if (res.status === 409 && json?.canConfirm === true) {
+                  if (!confirm(`${json.error}\n\nCut the round now anyway?`)) return
+                  res = await send(true)
+                  json = await res.json()
+                }
                 if (res.ok) {
                   setCondenseResult(`Round ${json.newRoundIndex} created (${json.phase}). ${json.advanced} advanced, ${json.eliminated} eliminated. ${json.leagueIds?.length ?? 0} new league(s).`)
                   load()

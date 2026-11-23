@@ -1,4 +1,4 @@
-import { readConfirmedLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { readConfirmedLeagueConcept, readConfirmedPirateBase } from '@/lib/league/leagueConceptOptions'
 
 /**
  * Whether an import may write `League.leagueType`, and what value.
@@ -71,4 +71,35 @@ export function leagueTypeForUpdate(args: {
   if (args.existing && args.leagueTypeConfident !== true) return undefined
 
   return column
+}
+
+/** Confirmed concepts whose base format keeps rosters year to year (see `leagueTypeColumnFor`). */
+const DYNASTY_BASE_CONCEPTS = new Set(['dynasty', 'devy', 'c2c', 'efl'])
+
+/**
+ * The `League.isDynasty` value an import or a scheduled sync should write.
+ *
+ * 🛑 A PERSON'S "THIS IS A DYNASTY LEAGUE" MUST NOT BE UNDONE BY A PROVIDER THAT CANNOT SAY.
+ * Fantrax's league info carries no dynasty or keeper flag (contracts/fantrax/GAPS.md F-06), so its
+ * mapper always reports `isDynasty: false`. Confirming the league type wrote `leagueType: 'dynasty'`
+ * but left this column alone, and the sync rewrote `false` every 30 minutes. Measured 2026-11-19:
+ * all 9 Fantrax leagues a person had confirmed as dynasty had `isDynasty = false` — so trade grades
+ * priced them as redraft and Chimmy refused to grade any trade with a pick in it.
+ *
+ * It only ever turns the flag ON. A provider that says dynasty keeps saying it; a confirmed redraft
+ * answer does not override a provider's dynasty fact here, because the column has readers (pick
+ * values, historical backfill) that should follow the host platform when the two disagree that way.
+ */
+export function isDynastyForWrite<T extends boolean | null | undefined>(args: {
+  providerIsDynasty: T
+  existingSettings: unknown
+}): T | true {
+  if (args.providerIsDynasty === true) return true
+  const confirmed = readConfirmedLeagueConcept(args.existingSettings)
+  if (confirmed == null) return args.providerIsDynasty
+  if (confirmed === 'pirate') {
+    // Same fallback as `leagueTypeColumnFor`: a Pirate league with no stated base is dynasty.
+    return (readConfirmedPirateBase(args.existingSettings) ?? 'dynasty') === 'dynasty' ? true : args.providerIsDynasty
+  }
+  return DYNASTY_BASE_CONCEPTS.has(confirmed) ? true : args.providerIsDynasty
 }

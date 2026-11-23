@@ -1,4 +1,6 @@
+import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
 import { isOfflineDraft } from '@/lib/live-draft-engine/offlineDraft'
+import { listAutoDraftRosterIds } from './instantAutopick'
 import { zombieRenewalDraftReadiness } from '@/lib/zombie/zombieRenewalDraftReadiness'
 import { completeSeasonDraftWithOutcome } from '@/lib/tournament/seasonDraftCompletion'
 import { attachSurvivorTribeBadges } from '@/lib/survivor/survivorDraftTribeBadges'
@@ -63,6 +65,14 @@ function adpAtPickFromMetadata(meta: unknown): number | null {
   if (!meta || typeof meta !== 'object') return null
   const v = (meta as { adpAtPick?: unknown }).adpAtPick
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
+
+/** `pickMetadata.autopick.reason`: why the clock picked this player, when it did. */
+function autoPickReasonFromMetadata(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null
+  const auto = (meta as { autopick?: unknown }).autopick
+  const reason = auto && typeof auto === 'object' ? (auto as { reason?: unknown }).reason : null
+  return typeof reason === 'string' && reason.trim() ? reason.trim() : null
 }
 
 /**
@@ -424,6 +434,12 @@ export async function getOrCreateDraftSession(leagueId: string): Promise<{
     alphabeticalSort = ls.alphabeticalSort
   }
 
+  if (league.leagueVariant === 'survivor_guillotine') {
+    const settings = league.settings as { draft_rounds?: unknown; survivorGuillotine?: { rosterExpansionState?: unknown } } | null
+    const configuredRounds = Number(settings?.draft_rounds)
+    if (settings?.survivorGuillotine?.rosterExpansionState && Number.isInteger(configuredRounds) && configuredRounds >= 1 && configuredRounds <= 50) rounds = configuredRounds
+  }
+
   const slotOrder = await buildSlotOrderForLeague(leagueId)
 
   session = await (prisma as any).draftSession.create({
@@ -566,10 +582,14 @@ export async function buildSessionSnapshot(
     ...(pickEditorEmpty ? { pickEditorEmpty: true as const } : {}),
     tradedPickMeta: tradedMeta,
     source: p.source ?? 'user',
+    ...(session.draftModeLabel === ANNUAL_C2C_DRAFT ? { assetType: p.assetType } : {}),
     pickLabel: formatPickLabel(p.overall, teamCount),
     amount: (p as any).amount ?? undefined,
     ...(adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) != null
       ? { adpAtPick: adpAtPickFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
+      : {}),
+    ...(autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata)
+      ? { autoPickReason: autoPickReasonFromMetadata((p as { pickMetadata?: unknown }).pickMetadata) }
       : {}),
     createdAt: p.createdAt.toISOString(),
     }
@@ -729,6 +749,10 @@ export async function buildSessionSnapshot(
     viewerAutopick: viewerUserId
       ? await getViewerAutopickPreference(session.id, viewerUserId)
       : null,
+    autoDraftRosterIds:
+      session.status === 'completed'
+        ? []
+        : await listAutoDraftRosterIds({ leagueId, draftSessionId: session.id }).catch(() => []),
     currentUserRosterId: viewerUserId
       ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
       : undefined,
@@ -803,7 +827,7 @@ async function startDraftSessionCore(leagueId: string): Promise<StartDraftSessio
     where: { id: session.id, status: 'pre_draft', version: session.version },
     data: {
       ...(ls
-        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
+        ? { aiAutoPick: ls.aiAutoPick, cpuAutoPick: ls.cpuAutoPick, playerPool: session.draftModeLabel === 'rookie' || session.draftModeLabel === ANNUAL_C2C_DRAFT ? session.playerPool : ls.playerPool, alphabeticalSort: ls.alphabeticalSort }
         : {}),
       startedAt: startedAtNow,
       version: { increment: 1 },
@@ -1375,7 +1399,11 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     }
 
     await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
-    const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
+    // A Devy / C2C league's pro draft opens its college draft (lib/draft-defaults/startupCollegeDraft.ts);
+    // the season waits for the college draft, so the league's lifecycle does not move yet.
+    const { openStartupCollegeDraftInTransaction } = await import('@/lib/draft-defaults/startupCollegeDraft')
+    const collegeDraftId = await openStartupCollegeDraftInTransaction(tx as never, leagueId, session as never)
+    const lifecycle = collegeDraftId ? null : await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
     return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
   })
 

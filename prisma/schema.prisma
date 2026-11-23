@@ -1837,8 +1837,11 @@ model ChimmyAdvice {
   /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
   /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
   withdrawnAt   DateTime? @map("withdrawn_at")
+  /// The US Eastern day ('YYYY-MM-DD') a DAILY-lineup league's bench check priced; '' (not NULL, so the unique index
+  /// still dedupes) for every weekly row. `20261123120000_chimmy_advice_day`; the writer checks the column exists.
+  adviceDay     String   @default("") @map("advice_day") @db.VarChar(10)
 
-  @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
+  @@unique([userId, leagueId, season, week, adviceDay, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_day_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
   @@map("chimmy_advice")
 }
@@ -2050,6 +2053,8 @@ model LeagueTrade {
   performanceData   Json?
   platform          String             @default("sleeper")
   playerAgeData     Json?
+  /// The situation around the trade when the live sync first saw it: league settings, both rosters just before, records, FAAB (`lib/trade-market/tradeContextSnapshot.ts`). Null for trades seen only by a backfill.
+  contextSnapshot   Json?
   sport             String             @default("nfl")
   history           LeagueTradeHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
 
@@ -2525,6 +2530,27 @@ model TradeBlockEntry {
   @@index([sleeperLeagueId, isActive, updatedAt(sort: Desc)], map: "idx_trade_block_league_active")
   @@index([sleeperLeagueId, rosterId], map: "idx_trade_block_roster")
   @@map("trade_block_entries")
+}
+
+/// One stretch in which the commissioner's manager table called a NATIVE league's manager inactive
+/// (lib/commissioner-hub/inactiveFlagLedger.ts, 2026-11-20), graded two weeks later: did the manager do
+/// something of their own again (`came_back`) or not (`stayed_away`). A stretch is keyed by the last action
+/// it was idle FROM, so a manager who returns and goes quiet again opens a new row, and re-showing the same
+/// flag writes nothing. Counts only leave the server (the advice record); rows name a roster, never a person.
+model CommissionerInactiveFlag {
+  id           String    @id @default(cuid())
+  leagueId     String
+  rosterId     String
+  /// The manager's own last action when the flag was raised — the stretch's key.
+  lastActionAt DateTime  @db.Timestamptz(6)
+  flaggedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  /// `came_back` | `stayed_away`; null until two weeks have passed.
+  outcome      String?   @db.VarChar(16)
+  gradedAt     DateTime? @db.Timestamptz(6)
+
+  @@unique([leagueId, rosterId, lastActionAt])
+  @@index([outcome, flaggedAt])
+  @@map("commissioner_inactive_flags")
 }
 
 /// A manager's "I want this player" mark: the AF crest on the league page's Propose grid and trade
@@ -4067,6 +4093,7 @@ model AppUser {
   mockDraftRoomsCreated                    MockDraftRoom[]                        @relation("MockDraftRoomCreator")
   mockDrafts                               MockDraft[]
   passwordResetTokens                      PasswordResetToken[]
+  passkeys                                 AuthPasskey[]
   platformBlockedBy                        PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocked")
   platformBlockedUsers                     PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocker")
   platformChatMessages                     PlatformChatMessage[]                  @relation("PlatformChatMessageSender")
@@ -6297,6 +6324,30 @@ model EmailVerifyToken {
 
   @@index([userId])
   @@map("email_verify_tokens")
+}
+
+/// A passkey: sign in with Face ID, Touch ID, a fingerprint or Windows Hello (lib/auth/passkeys.ts).
+/// The private key never leaves the person's device; this row holds only the public half.
+model AuthPasskey {
+  id           String    @id @default(uuid())
+  userId       String
+  /// The credential id the browser reports, base64url.
+  credentialId String    @unique
+  publicKey    Bytes
+  /// Signature counter. Synced passkeys (iCloud, Google) always report 0.
+  counter      BigInt    @default(0)
+  transports   String[]
+  /// "singleDevice" or "multiDevice" (synced to the person's other devices).
+  deviceType   String
+  backedUp     Boolean   @default(false)
+  /// What the person sees in settings, e.g. "iPhone" — from the device that made it.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  user         AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_passkeys")
 }
 
 model PasswordResetToken {

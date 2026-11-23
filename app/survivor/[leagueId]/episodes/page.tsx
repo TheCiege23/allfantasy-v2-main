@@ -6,6 +6,7 @@ import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { EpisodeCard } from '@/app/survivor/components/EpisodeCard'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import type { SurvivorEpisode } from '@/lib/survivor/survivorEpisode'
+import { islandEpisodeTribalLine } from '@/lib/survivor/survivorIslandView'
 
 /** The season so far, one episode per week, from the recaps the island has already posted. */
 export default function SurvivorEpisodesPage() {
@@ -32,6 +33,8 @@ export default function SurvivorEpisodesPage() {
   }, [leagueId])
 
   const scene = (episode: SurvivorEpisode, label: string) => episode.scenes.find(s => s.label === label)?.text
+  const council = ctx.season?.activeCouncil
+  const openCouncilWeek = council?.status === 'voting_open' ? council.week ?? ctx.currentWeek ?? null : null
 
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10" data-testid="survivor-episodes-page">
@@ -73,10 +76,11 @@ export default function SurvivorEpisodesPage() {
             week={episode.week}
             title={episode.title}
             challengeLabel={scene(episode, 'The scores') ? 'Scores' : 'Challenge'}
-            challengeLine={scene(episode, 'The scores') ?? scene(episode, 'The challenge') ?? 'Scores are in.'}
-            tribalLine={scene(episode, 'Tribal Council') ?? 'Nobody went home this week.'}
+            challengeLine={scene(episode, 'The scores') ?? scene(episode, 'The challenge') ?? scene(episode, 'Challenge') ?? 'Scores are in.'}
+            // ⚠ No Tribal scene is not "nobody went home": this week's vote may still be open.
+            tribalLine={islandEpisodeTribalLine(episode, { openCouncilWeek })}
             twistsLine={scene(episode, 'Twist')}
-            recap={episode.scenes.filter(s => !['The scores', 'Tribal Council', 'Twist'].includes(s.label)).map(s => `${s.label}: ${s.text}`).join('\n') || undefined}
+            recap={episode.scenes.filter(s => !['The scores', 'The challenge', 'Challenge', 'Tribal Council', 'Tribal', 'Twist'].includes(s.label)).map(s => `${s.label}: ${s.text}`).join('\n') || undefined}
           />
         ))}
       </div>

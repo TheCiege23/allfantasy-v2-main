@@ -7,19 +7,41 @@
  * (the commissioner can still assign). Taking a team replaces the team's name and avatar with the real
  * team's; the manager's own name and avatar are kept and come back if the team is let go.
  *
- * NFL only for now: its team table (lib/team-abbrev, 32 clubs with full names) and crests
- * (lib/core-app/teamLogo) are verified. The NBA/NHL/MLB static lists carry abbreviations only and are
- * partly out of date, so those sports wait for a verified table (`copyLeagueTeams` returns [] for them).
+ * NFL, NBA, NHL and MLB. NFL's team table is lib/team-abbrev (32 clubs with full names) with crests from
+ * lib/core-app/teamLogo; the other three are ./copyLeagueTeamTables.ts, generated from ESPN team-list
+ * captures. Any other sport has no verified table, and `copyLeagueTeams` returns [] for it.
+ *
+ * Only NFL also gets the real schedule (part 2, ./copyLeagueScheduleService.ts): an NBA, NHL or MLB team
+ * plays 3–4 games in a fantasy week, so "its real opponent this week" has no single answer.
  *
  * Stored in `League.settings.copy_league` (AllFantasy-owned, no migration):
  *   { enabled, sport, teams: { [leagueTeamId]: code }, previous: { [leagueTeamId]: { teamName, avatarUrl } } }
  */
 import { getAllCanonicalTeams } from '@/lib/team-abbrev'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { COPY_LEAGUE_MLB_TEAMS, COPY_LEAGUE_NBA_TEAMS, COPY_LEAGUE_NHL_TEAMS } from './copyLeagueTeamTables'
 
 export const COPY_LEAGUE_SETTINGS_KEY = 'copy_league'
 
-export type CopyLeagueTeam = { code: string; name: string; logo: string | null }
+/**
+ * `logo` is ESPN's default crest: it is what a team's avatar becomes, because avatars are drawn in light and
+ * dark themes alike. `logoDark` is ESPN's crest for a dark background (`/500-dark/`), which keeps navy and
+ * black crests (Yankees, Maple Leafs, Raiders) visible; use it only where the surface is always dark.
+ */
+export type CopyLeagueTeam = { code: string; name: string; logo: string | null; logoDark: string | null }
+/** A row of ./copyLeagueTeamTables.ts: the dark crest is derived, not stored. */
+export type CopyLeagueTableTeam = Omit<CopyLeagueTeam, 'logoDark'>
+
+const ESPN_DEFAULT_CREST = /^https:\/\/a\.espncdn\.com\/i\/teamlogos\/(nfl|nba|nhl|mlb)\/500\/[a-z]+\.png$/
+
+/**
+ * ESPN's dark-background crest for a default crest URL, or null for anything else. Every team in
+ * contracts/espn/fixtures/teams.{NFL,NBA,NHL,MLB}.json has its dark crest at the default crest's path with
+ * `/500/` → `/500-dark/` (pinned by __tests__/league/copy-league-team-tables.test.ts).
+ */
+export function darkCrestUrl(logo: string | null | undefined): string | null {
+  return logo && ESPN_DEFAULT_CREST.test(logo) ? logo.replace('/500/', '/500-dark/') : null
+}
 
 export type CopyLeagueState = {
   enabled: boolean
@@ -30,16 +52,29 @@ export type CopyLeagueState = {
   previous: Record<string, { teamName: string; avatarUrl: string | null }>
 }
 
+const OTHER_SPORTS: Record<string, readonly CopyLeagueTableTeam[]> = {
+  NBA: COPY_LEAGUE_NBA_TEAMS,
+  NHL: COPY_LEAGUE_NHL_TEAMS,
+  MLB: COPY_LEAGUE_MLB_TEAMS,
+}
+
 /** The real teams a copy league in this sport can take, by name. Empty for a sport without a verified table. */
 export function copyLeagueTeams(sport: string | null | undefined): CopyLeagueTeam[] {
-  if (String(sport ?? '').toUpperCase() !== 'NFL') return []
-  return getAllCanonicalTeams()
-    .map((t) => ({ code: t.abbrev, name: t.fullName, logo: teamLogoUrl('NFL', t.abbrev) }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const s = String(sport ?? '').toUpperCase()
+  const rows: CopyLeagueTableTeam[] =
+    s === 'NFL'
+      ? getAllCanonicalTeams().map((t) => ({ code: t.abbrev, name: t.fullName, logo: teamLogoUrl('NFL', t.abbrev) }))
+      : (OTHER_SPORTS[s] ?? []).map((t) => ({ ...t }))
+  return rows.map((t) => ({ ...t, logoDark: darkCrestUrl(t.logo) })).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function copyLeagueAvailable(sport: string | null | undefined): boolean {
   return copyLeagueTeams(sport).length > 0
+}
+
+/** Only an NFL copy league can take the real schedule; NBA, NHL and MLB get name and logo only. */
+export function copyLeagueHasRealSchedule(sport: string | null | undefined): boolean {
+  return String(sport ?? '').toUpperCase() === 'NFL'
 }
 
 function obj(v: unknown): Record<string, unknown> | null {

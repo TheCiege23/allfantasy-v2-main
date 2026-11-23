@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveHiddenHomeSections, isCategoryHiddenByHomeSection, DEFAULT_HIDDEN_HOME_SECTIONS } from '@/lib/core-app/homeSections'
+import { resolveHiddenHomeSections, DEFAULT_HIDDEN_HOME_SECTIONS } from '@/lib/core-app/homeSections'
 import { resolveLeagueHomeHrefFromListRow } from '@/lib/dashboard/league-list-destination'
 import { leagueEntryHref } from '@/lib/league/leagueEntryHref'
 import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
@@ -16,18 +16,14 @@ vi.mock('@/components/i18n/LanguageProviderClient', async (load) => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('shared core layout', () => {
-  it('defaults to the reference layout without silencing draft, score or weekly alerts', () => {
+  it('defaults to the reference layout', () => {
     expect([...resolveHiddenHomeSections(null)]).toEqual(DEFAULT_HIDDEN_HOME_SECTIONS)
-    for (const category of ['draft_alerts', 'matchup_results', 'lineup_reminders', 'live_game_alerts'] as const) {
-      expect(isCategoryHiddenByHomeSection({}, category)).toBe(false)
-    }
   })
   it('preserves existing choices, including show everything, and keeps display overrides independent', () => {
     expect([...resolveHiddenHomeSections({ hiddenHomeSections: [] })]).toEqual([])
     expect([...resolveHiddenHomeSections({ hiddenHomeSections: ['career'] })]).toEqual(['career'])
     const prefs = { hiddenHomeSections: ['drafts'], homeLayoutHiddenSections: ['career'] }
     expect([...resolveHiddenHomeSections(prefs)]).toEqual(['career'])
-    expect(isCategoryHiddenByHomeSection(prefs, 'draft_alerts')).toBe(true)
   })
 })
 

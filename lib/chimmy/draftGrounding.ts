@@ -80,6 +80,10 @@ export async function buildDraftOsRecommendationLines(
     snapshot?: PickDecisionDeps['snapshot']
     validateRosterFit?: PickDecisionDeps['validateRosterFit']
     budgetMs?: number
+    /** AF ADP's week, for the ranked players (lib/adp/readSnapshotForLeague.ts). Injectable for tests. */
+    readAfAdp?: (leagueId: string) => Promise<{ entries: ReadonlyArray<{ playerName: string; position: string; adp: number; sampleSize: number; sevenDayTrend: number | null }> } | null>
+    /** Does the asker's plan include AF Intelligence (AF ADP is part of it)? Injectable for tests. */
+    hasAfIntelligence?: (userId: string) => Promise<boolean>
   } = {},
 ): Promise<string[] | null> {
   let outcome: Awaited<ReturnType<typeof decideDraftPickForRoster>> | null
@@ -135,8 +139,47 @@ export async function buildDraftOsRecommendationLines(
   if (top.adpIsReal === false) {
     lines.push('Market ADP is missing for this player, so do not describe the pick as a reach or a value against ADP.')
   }
+  const adpWeek = await afAdpWeekLine(leagueId, deps.userId ?? '', decision.recommended_actions.slice(0, 1 + ALTERNATIVES), deps).catch(() => null)
+  if (adpWeek) lines.push(adpWeek)
   lines.push('Present this as a recommendation the user can take or leave; they make the pick.')
   return lines
+}
+
+/** A move this small in a week is noise, not news. */
+export const AF_ADP_TREND_MIN_PICKS = 1.5
+const AF_ADP_TREND_MIN_DRAFTS = 5
+
+/**
+ * How the ranked players' AF ADP moved this week, measured from real drafts (lib/adp/recomputeAllFantasyAdp.ts) — so
+ * Chimmy can say "he is going 6 picks earlier than last week" with the number behind it. AF ADP is AF Intelligence
+ * (AF Pro, AF Commissioner, AF Supreme): for any other plan, no line. Null when nothing moved enough to mention.
+ */
+async function afAdpWeekLine(
+  leagueId: string,
+  userId: string,
+  ranked: ReadonlyArray<{ playerName: string; position: string }>,
+  deps: {
+    readAfAdp?: (leagueId: string) => Promise<{ entries: ReadonlyArray<{ playerName: string; position: string; adp: number; sampleSize: number; sevenDayTrend: number | null }> } | null>
+    hasAfIntelligence?: (userId: string) => Promise<boolean>
+  },
+): Promise<string | null> {
+  if (!userId || ranked.length === 0) return null
+  const hasAf = deps.hasAfIntelligence ?? (async (id: string) => (await import('@/lib/core-app/afIntelligenceViewer')).viewerHasAfIntelligence(id))
+  if (!(await hasAf(userId))) return null
+  const read = deps.readAfAdp ?? (async (id: string) => (await import('@/lib/adp/readSnapshotForLeague')).readAllFantasyAdpForLeague(id))
+  const board = await read(leagueId)
+  if (!board?.entries.length) return null
+  const key = (name: string, pos: string) => `${name.trim().toLowerCase()}|${pos.trim().toUpperCase()}`
+  const byKey = new Map(board.entries.map((e) => [key(e.playerName, e.position), e]))
+  const moves = ranked.flatMap((p) => {
+    const e = byKey.get(key(p.playerName, p.position))
+    if (!e || e.sevenDayTrend == null || e.sampleSize < AF_ADP_TREND_MIN_DRAFTS || Math.abs(e.sevenDayTrend) < AF_ADP_TREND_MIN_PICKS) return []
+    // sevenDayTrend = last week's pick minus this week's: positive is going EARLIER.
+    const picks = Math.abs(Math.round(e.sevenDayTrend * 10) / 10)
+    return [`${p.playerName} is going ${picks} picks ${e.sevenDayTrend > 0 ? 'earlier' : 'later'} than a week ago (AF ADP ${Math.round(e.adp * 10) / 10}, ${e.sampleSize} drafts)`]
+  })
+  if (moves.length === 0) return null
+  return `AF ADP this week, measured from real drafts in leagues like this one: ${moves.join('; ')}. Mention a move only if it bears on the pick, with its number; do not predict where he goes next.`
 }
 
 /** Enough to establish where the board is without flooding the prompt. */
@@ -227,7 +270,16 @@ async function auctionAdviceWithin(leagueId: string, rosterId: string): Promise<
  * Draft state for the league in scope. Returns null when the league has no draft
  * session at all, so the prompt gains no empty section.
  */
-export async function buildDraftContext(leagueId: string, userId: string): Promise<string | null> {
+export async function buildDraftContext(
+  leagueId: string,
+  userId: string,
+  /**
+   * `draftOsBudgetMs` shortens the pick decision's budget (DRAFT_OS_BUDGET_MS) — the grounding packet passes one so the
+   * whole board fits its own deadline. Past it the board is returned without the pick lines, which is this file's own
+   * honest fallback ("answers from board state alone"); the draft tools still run the full budget.
+   */
+  opts: { draftOsBudgetMs?: number } = {},
+): Promise<string | null> {
   if (!leagueId || !userId) return null
 
   let session: SessionRow | null
@@ -504,7 +556,10 @@ export async function buildDraftContext(leagueId: string, userId: string): Promi
    * viewer would be advised from someone else's roster.
    */
   if (mine && viewerRosterId && !isAuction && !paused && nextOverall <= totalPicks) {
-    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId, { userId })
+    const draftOsLines = await buildDraftOsRecommendationLines(leagueId, viewerRosterId, {
+      userId,
+      ...(opts.draftOsBudgetMs != null ? { budgetMs: opts.draftOsBudgetMs } : {}),
+    })
     if (draftOsLines) lines.push(...draftOsLines)
   }
 

@@ -75,6 +75,7 @@ async function executeImmediateAddDropLocked(
     dropPlayerId,
     faabBid: null,
     claimMetadata: { source: 'free_agent_immediate' },
+    freeAgent: true,
     ...(opts.offseasonFreeAgency ? { offseasonFreeAgency: true } : {}),
   })
 

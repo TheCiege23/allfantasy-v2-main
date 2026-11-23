@@ -7,7 +7,7 @@ import { LeagueClipOverlayHost } from '@/components/league/LeagueClipOverlayHost
 import { SurvivorFirstEntryModal } from '@/components/survivor/SurvivorFirstEntryModal'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeCard } from '@/app/survivor/components/TribeCard'
-import { SurvivorStatusBadge } from '@/app/survivor/components/SurvivorStatusBadge'
+import { islandExileCountLine, islandHeroCopy, islandTribeTotals } from '@/lib/survivor/survivorIslandView'
 import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
 import { SurvivorHubBanner } from '@/app/survivor/components/SurvivorHubBanner'
 import { legacyIslandScene } from '@/lib/survivor/survivorLegacyIsland'
@@ -16,17 +16,6 @@ import { buildSurvivorStatusCard } from '@/lib/survivor/survivorStatusCard'
 import { SurvivorChallengeBoardCard } from '@/components/survivor/SurvivorChallengeBoardCard'
 import { SurvivorStateCard } from '@/components/survivor/core/SurvivorStateCard'
 import { SvkSkeleton } from '@/components/survivor/core/SurvivorKit'
-
-function formatDurationMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return 'Soon'
-  const s = Math.floor(ms / 1000)
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h ${m}m`
-  if (h > 0) return `${h}h ${m}m`
-  return `${Math.max(1, m)}m`
-}
 
 function parseDeadlineMs(raw: string | null | undefined): number | null {
   if (!raw) return null
@@ -70,72 +59,28 @@ export default function SurvivorIslandHomePage() {
   const voteEnd = parseDeadlineMs(council?.voteDeadlineAt ?? council?.votingDeadline ?? null)
   const challengeEnd = parseDeadlineMs(ch?.locksAt ?? ch?.lockAt ?? null)
   const scoresByUser = new Map((ctx.season?.weeklyScores ?? []).map(score => [score.userId, score]))
-  const tribeTotals = new Map<string, number>()
-  for (const score of ctx.season?.weeklyScores ?? []) {
-    if (score.tribeId && score.countedTowardTribeTotal) tribeTotals.set(score.tribeId, (tribeTotals.get(score.tribeId) ?? 0) + score.finalScore)
-  }
+  const tribeTotals = islandTribeTotals(ctx.season?.weeklyScores ?? [])
 
-  const { heroTitle, heroSubtext } = useMemo(() => {
-    if (council?.status === 'voting_open' && voteEnd) {
-      return {
-        heroTitle: `Council vote closes in ${formatDurationMs(voteEnd - now)}`,
-        heroSubtext: 'Votes are private until the host reads them. Cast yours with @Chimmy.',
-      }
-    }
-    if (council?.status === 'voting_open') {
-      return {
-        heroTitle: 'The elimination vote is open',
-        heroSubtext: 'The tribe is on the beach. Seal your vote before the deadline.',
-      }
-    }
-    if (ch?.status === 'open' && challengeEnd) {
-      return {
-        heroTitle: `Challenge closes in ${formatDurationMs(challengeEnd - now)}`,
-        heroSubtext: ch.description || ch.instructions || 'Submit where your commissioner instructed — tribe chat or @Chimmy.',
-      }
-    }
-    if (ch?.status === 'open') {
-      return {
-        heroTitle: 'This week’s challenge is open',
-        heroSubtext: 'Points and immunity are on the line this week.',
-      }
-    }
-    if (phase === 'merge') {
-      return {
-        heroTitle: 'Merge week',
-        heroSubtext: 'Buffs drop. From here on, immunity is earned as an individual.',
-      }
-    }
-    return {
-      heroTitle: 'This week on the island',
-      heroSubtext: 'Watch the league feed for swaps, exile twists, and ceremony beats from the host.',
-    }
-  }, [council?.status, ch?.description, ch?.instructions, ch?.status, challengeEnd, now, phase, voteEnd])
+  // The banner names what is happening; the status card below carries the deadline as a fact, once.
+  const hero = useMemo(() => islandHeroCopy({
+    councilStatus: council?.status,
+    voteEnd,
+    challengeStatus: ch?.status,
+    challengeEnd,
+    phase,
+    now,
+    challengeText: ch?.description || ch?.instructions,
+  }), [council?.status, ch?.description, ch?.instructions, ch?.status, challengeEnd, now, phase, voteEnd])
 
   const statusCard = buildSurvivorStatusCard({ season: ctx.season, canVote: ctx.canVote, canSubmitChallenge: ctx.canSubmitChallenge, base, now })
 
   const primaryAction = phase === 'pre_draft' || phase === 'drafting'
     ? { href: `/league/${leagueId}/draft`, label: 'Open draft board' }
     : council?.status === 'voting_open'
-      ? { href: `${base}/tribal`, label: ctx.canVote ? 'Cast your vote' : 'View council' }
-      : ch?.status === 'open'
+      ? { href: `${base}/tribal`, label: ctx.canVote && !hero.voteClosed ? 'Cast your vote' : 'View council' }
+      : ch?.status === 'open' && !hero.challengeClosed
         ? { href: `${base}/challenges`, label: 'Open challenge' }
         : { href: `${base}/tribe`, label: 'View tribe standings' }
-
-  const headerBadgeVariant =
-    ctx.playerState === 'immune'
-      ? 'immune'
-      : ctx.playerState === 'exile'
-        ? 'exiled'
-        : ctx.playerState === 'jury'
-          ? 'jury'
-          : ctx.playerState === 'finalist'
-            ? 'finalist'
-            : ctx.playerState === 'eliminated'
-              ? 'eliminated'
-              : ctx.canVote
-                ? 'vulnerable'
-                : 'safe'
 
   /*
    * ⚠ NO SEASON YET MEANS "WAIT" OR "IT FAILED", NEVER "PRE-DRAFT". Until /api/survivor/season answers,
@@ -188,16 +133,19 @@ export default function SurvivorIslandHomePage() {
         sport={ctx.leagueSport}
         week={ctx.currentWeek}
         phase={phase}
-        headline={heroTitle}
-        description={heroSubtext}
+        headline={hero.title}
+        description={hero.subtext}
         primaryAction={primaryAction}
         secondaryAction={{ href: `/league/${leagueId}`, label: 'League dashboard' }}
       />
-      <div className="survivor-panel mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75">
-        {us ? <SurvivorStatusBadge variant={headerBadgeVariant} /> : null}
-        <span>{us?.displayName ?? 'Your island'}{us?.hasImmunityThisWeek ? ' · Immune this week' : ''}{ctx.hasActiveIdol ? ' · Private advantage held' : ''}</span>
-        {ctx.isCommissioner ? <Link href={`${base}/commissioner`} className="sv-link ml-auto">Commissioner hub</Link> : null}
-      </div>
+      {/*
+        The strip that sat here repeated the status card below — a "VULNERABLE" badge and "Private
+        advantage held" over a card saying "Your tribe is at Tribal Council" and "Idols: You hold 1".
+        Only the commissioner's link survives.
+      */}
+      {ctx.isCommissioner ? (
+        <div className="mt-3 flex justify-end text-[13px]"><Link href={`${base}/commissioner`} className="sv-link">Commissioner hub →</Link></div>
+      ) : null}
       {statusCard && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorStatusCard card={statusCard} /> : null}
 
       {/* Tribes or individual */}
@@ -212,7 +160,7 @@ export default function SurvivorIslandHomePage() {
               <p className="mt-1">The tribe board will show members and weekly scores once rosters are finalized.</p>
               <Link href={`/league/${leagueId}/draft`} className="sv-link mt-3 inline-block">Open draft board</Link>
             </div>
-          ) : <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-4">
+          ) : <div className={`flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible ${tribes.length >= 4 ? 'lg:grid-cols-4' : tribes.length === 3 ? 'lg:grid-cols-3' : ''}`}>
             {tribes.map((t) => {
               const n = playersByTribe.get(t.id)?.length ?? t.members?.length ?? 0
               const attending = council?.attendingTribeId === t.id && council?.status === 'voting_open'
@@ -297,22 +245,8 @@ export default function SurvivorIslandHomePage() {
       </section>
 
       {/* Commissioner challenges and the manager's own rewards (choose a tribemate / steal target). */}
-      {leagueId && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorChallengeBoardCard leagueId={leagueId} /> : null}
-
-      {/* Host message */}
-      <section className="mt-6 survivor-panel rounded-2xl p-4">
-        <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--survivor-torch)_20%,transparent)] text-lg">
-            🔥
-          </div>
-          <div>
-            <p className="sv-kicker text-[11px]">Chimmy</p>
-            <p className="mt-1 text-[13px] text-white/75">
-              The host posts ceremony beats here. Tune into League Chat for the full feed.
-            </p>
-          </div>
-        </div>
-      </section>
+      {/* Open commissioner challenges only, two at most; results and rewards live on the Challenges page. */}
+      {leagueId && phase !== 'pre_draft' && phase !== 'drafting' ? <SurvivorChallengeBoardCard leagueId={leagueId} compact allHref={`${base}/challenges`} /> : null}
 
       {/* Exile / jury modules */}
       {ctx.season?.exileStatus?.isActive ? (
@@ -321,7 +255,7 @@ export default function SurvivorIslandHomePage() {
           <p className="mt-2 text-[13px] text-white/70">
             {ctx.season.exileMembershipHidden === true && ctx.playerState !== 'exile'
               ? 'Who is on Exile is secret in this league · Return path follows commissioner rules.'
-              : `${(ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length} players on Exile · Return path follows commissioner rules.`}
+              : `${islandExileCountLine((ctx.season.players ?? []).filter((p) => p.playerState === 'exile').length)} · Return path follows commissioner rules.`}
           </p>
           <Link href={`${base}/exile`} className="mt-2 inline-block text-[12px] text-violet-300">
             Open Exile →

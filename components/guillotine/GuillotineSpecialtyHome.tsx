@@ -31,7 +31,8 @@ import {
 import type { GuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import {
   buildChopLine,
-  guillotineHeadline,
+  guillotineVerdict,
+  guillotineWeekLabel,
   ordinal,
   tiebreakLabels,
   tierLabel,
@@ -46,13 +47,19 @@ interface GuillotineSpecialtySummary {
   myRosterId?: string | null
   myEscapes?: { weekOrPeriod: number; margin: number }[]
   home?: GuillotineHomeExtras | null
-  config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null; periodWeeks?: number } | null
+  config?: { tiebreakerOrder: string[]; teamsPerChop: number; dangerMarginPoints: number | null; eliminationEndWeek?: number | null; periodWeeks?: number } | null
   /** Set when the chop line is this week's live one, by the chop's own rules (lib/guillotine/chopWatch.ts). */
   chopWatch?: { live: true; week: number; chopCount: number; chopLine: number | null } | null
 }
 
 const asset = (f: string) => specialtyAsset('guillotine', f)
 const TONE: Record<ChopLineRow['tier'], SpecialtyTone> = { safe: 'safe', danger: 'danger', chop_zone: 'zone' }
+/** Tier text: the shell's tone tokens, dark literal as fallback (light mode sets them for Guilly). */
+const TONE_TEXT: Record<ChopLineRow['tier'], string> = {
+  safe: 'var(--sp-safe, #7fe0a6)',
+  danger: 'var(--sp-danger, #ffc46b)',
+  chop_zone: 'var(--sp-zone, #ff9a8a)',
+}
 const BAR: Record<ChopLineRow['tier'], string> = {
   safe: 'linear-gradient(90deg,#1f7a4a,#3abe78)',
   danger: 'linear-gradient(90deg,#8a5a1c,#ffc46b)',
@@ -78,11 +85,10 @@ function Avatar({ id, name, size = 34 }: { id: string; name: string; size?: numb
 
 export function GuillotineSpecialtyHome({
   leagueId,
-  sport,
-  leagueName,
   summary,
 }: {
   leagueId: string
+  /** Not shown here: the workspace banner above carries the sport, season, name and team count (one header, not two). */
   sport: string
   leagueName?: string | null
   summary: GuillotineSpecialtySummary
@@ -95,15 +101,10 @@ export function GuillotineSpecialtyHome({
     [summary.dangerTiers, summary.myRosterId, home?.scores],
   )
   const myChopped = home?.chopped.find((c) => c.rosterId === summary.myRosterId) ?? null
-  const headline = guillotineHeadline({ week, me: line.me, alive: line.alive, myChoppedWeek: myChopped?.week ?? null })
-  const title = leagueName?.trim() || 'Guilly League'
+  // The hero says what only it can — this week — and leaves the league's identity to the workspace banner.
+  const verdict = guillotineVerdict({ me: line.me, myChoppedWeek: myChopped?.week ?? null })
+  const weekLabel = guillotineWeekLabel(week, summary.config?.eliminationEndWeek)
   const alive = home?.aliveCount ?? line.alive
-  const chips = [
-    sport.toUpperCase(),
-    ...(home?.season ? [String(home.season)] : []),
-    'Guilly',
-    home ? `${home.teamCount} teams · ${alive} alive` : `${alive} alive`,
-  ]
   const lineupHref = leagueHref(leagueId, { view: 'team' })
   const waiversHref = leagueHref(leagueId, { view: 'players' })
   const chopCaption = home?.chopLabel ? `After stat corrections · ${home.chopLabel}` : 'After stat corrections'
@@ -136,7 +137,7 @@ export function GuillotineSpecialtyHome({
   const meTone = me?.tier ?? 'safe'
 
   return (
-    <SpecialtyShell format="guillotine" testId="guillotine-specialty-home">
+    <SpecialtyShell format="guillotine" className={gl.home} testId="guillotine-specialty-home">
       {/* ---------- desktop / tablet ---------- */}
       <div className={gl.desktopOnly}>
         <SpecialtyHero
@@ -144,13 +145,18 @@ export function GuillotineSpecialtyHome({
           bannerSrc={asset('banner.svg')}
           emblemSrc={asset('emblem.svg')}
           emblemAlt="Guilly league crest"
-          chips={chips}
-          title={title}
-          headline={headline}
+          chips={[]}
+          title={verdict ?? weekLabel}
+          headline={verdict ? weekLabel : undefined}
           blurb="One league-wide points race. The lowest score each week is chopped and that roster drops to waivers. Last team standing wins."
           actions={[
-            { label: 'Set lineup', href: lineupHref, primary: true, testId: 'guillotine-hero-lineup' },
-            { label: 'Waivers', href: waiversHref, testId: 'guillotine-hero-waivers' },
+            // A chopped manager has no roster to set and cannot bid: neither button is offered.
+            ...(myChopped
+              ? []
+              : [
+                  { label: 'Set lineup', href: lineupHref, primary: true, testId: 'guillotine-hero-lineup' },
+                  { label: 'Waivers', href: waiversHref, testId: 'guillotine-hero-waivers' },
+                ]),
             ...(home?.lastChop ? [{ label: 'See the chop', href: '#guillotine-chop', testId: 'guillotine-hero-chop' }] : []),
           ]}
           clock={<SpecialtyCountdown label="Chop locks in" target={home?.nextChopAt} caption={chopCaption} />}
@@ -198,7 +204,7 @@ export function GuillotineSpecialtyHome({
                           r.tier === 'chop_zone'
                             ? { background: 'rgba(224,64,46,.1)', borderColor: 'rgba(224,64,46,.45)' }
                             : r.isMe
-                              ? { background: '#151a28', borderColor: 'rgba(159,176,220,.35)' }
+                              ? { background: 'var(--gl-me-row, #151a28)', borderColor: 'var(--gl-me-line, rgba(159,176,220,.35))' }
                               : undefined
                         }
                       >
@@ -211,7 +217,7 @@ export function GuillotineSpecialtyHome({
                         <span className={`${sp.num} ${gl.pts}`}>{fmt(r.points)}</span>
                         <span
                           className={`${sp.num} ${gl.delta}`}
-                          style={{ color: r.tier === 'chop_zone' ? '#ff9a8a' : r.tier === 'danger' ? '#ffc46b' : '#7fe0a6' }}
+                          style={{ color: TONE_TEXT[r.tier] }}
                         >
                           {r.tier === 'chop_zone' ? 'CUT' : `+${fmt(r.margin)}`}
                         </span>
@@ -246,6 +252,8 @@ export function GuillotineSpecialtyHome({
               ) : null}
             </SpecialtyCard>
           }
+          // Below 1048px the rail drops under the main column; spread its cards across the width there (Devy's fix).
+          railClassName={gl.railWide}
           rail={
             <>
               <SpecialtyCard
@@ -257,7 +265,7 @@ export function GuillotineSpecialtyHome({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={asset(meTone === 'safe' ? 'icon-safe.svg' : 'icon-zone.svg')} alt="" aria-hidden style={{ width: 44, height: 44 }} />
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span className={sp.lbl} style={{ color: meTone === 'safe' ? '#7fe0a6' : meTone === 'danger' ? '#ffc46b' : '#ff9a8a' }}>
+                    <span className={sp.lbl} style={{ color: TONE_TEXT[meTone] }}>
                       Your survival · week {week}
                     </span>
                     <span
@@ -290,29 +298,17 @@ export function GuillotineSpecialtyHome({
 
       {/* ---------- phone ---------- */}
       <div className={`${gl.phoneOnly} ${gl.phone}`} data-testid="guillotine-phone-home">
-        <div className={gl.phoneHead}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={gl.bg} src={asset('banner.svg')} alt="" aria-hidden />
-          <div className={gl.veil} />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={gl.emblem} src={asset('emblem.svg')} alt="Guilly league crest" />
-          <div className={gl.phoneHeadText}>
-            <h2 className={`${gl.big} ${gl.phoneTitle}`}>{title}</h2>
-            <span className={sp.t2}>
-              Week {week} · {alive} alive
-            </span>
-          </div>
-        </div>
-        <SpecialtyCountdown label="Chop locks in" target={home?.nextChopAt} caption={chopCaption} />
+        <SpecialtyCountdown label={`${weekLabel} · Chop locks in`} target={home?.nextChopAt} caption={chopCaption} />
         {me ? (
           <div
             className={`${sp.card} ${gl.phoneStatus}`}
             style={{ borderColor: me.tier === 'safe' ? 'rgba(58,190,120,.35)' : me.tier === 'danger' ? 'rgba(255,196,107,.35)' : 'rgba(224,64,46,.45)' }}
           >
-            <span className={sp.lbl} style={{ color: me.tier === 'safe' ? '#7fe0a6' : me.tier === 'danger' ? '#ffc46b' : '#ff9a8a' }}>
+            <span className={sp.lbl} style={{ color: TONE_TEXT[me.tier] }}>
               {me.tier === 'safe' ? 'You’re safe right now' : me.tier === 'danger' ? 'You’re in the danger tier' : 'You’re in the chop zone'}
             </span>
-            <span className={`${gl.big} ${gl.phoneMargin}`} style={me.tier === 'chop_zone' ? { color: '#ffb0a4' } : undefined}>
+            {/* The margin takes its tier's colour: a manager in the danger tier was shown a "safe" green +5.3 (2026-11-23). */}
+            <span className={`${gl.big} ${gl.phoneMargin} ${me.tier === 'chop_zone' ? gl.phoneMarginZone : me.tier === 'danger' ? gl.phoneMarginDanger : ''}`}>
               {me.tier === 'chop_zone' ? 'CUT' : `+${fmt(me.margin)}`}
             </span>
             <span className={sp.t2}>
@@ -330,11 +326,19 @@ export function GuillotineSpecialtyHome({
             .reverse()
             .slice(0, 4)
             .map((r) => (
-              <li key={r.rosterId} className={sp.row} style={r.tier === 'chop_zone' ? { borderColor: 'rgba(224,64,46,.45)' } : undefined}>
+              <li
+                key={r.rosterId}
+                className={sp.row}
+                data-testid="guillotine-zone-row"
+                style={r.tier === 'chop_zone' ? { borderColor: 'rgba(224,64,46,.45)' } : undefined}
+              >
                 <Avatar id={r.rosterId} name={r.name} />
-                <span className={gl.name} style={{ flex: 1 }}>{r.isMe ? 'You' : r.name}</span>
+                {/* The tier tag sits under the name: beside it, it took 86px of a 306px row and truncated the name. */}
+                <span className={gl.who} data-testid="guillotine-zone-who">
+                  <span className={gl.name}>{r.isMe ? 'You' : r.name}</span>
+                  <SpecialtyTag tone={TONE[r.tier]}>{tierLabel(r.tier)}</SpecialtyTag>
+                </span>
                 <span className={`${sp.num} ${gl.pts}`}>{fmt(r.points)}</span>
-                <SpecialtyTag tone={TONE[r.tier]}>{tierLabel(r.tier)}</SpecialtyTag>
               </li>
             ))}
         </ul>
@@ -344,9 +348,12 @@ export function GuillotineSpecialtyHome({
               Watch the chop
             </a>
           ) : null}
-          <Link className={`${sp.btn} ${home?.lastChop ? '' : sp.btnP}`} href={lineupHref}>
-            Set lineup
-          </Link>
+          {/* A chopped team has no lineup to set; the desktop hero already left this out. */}
+          {myChopped ? null : (
+            <Link className={`${sp.btn} ${home?.lastChop ? '' : sp.btnP}`} href={lineupHref}>
+              Set lineup
+            </Link>
+          )}
         </div>
       </div>
 
@@ -397,7 +404,7 @@ export function GuillotineChopMoment({
   return (
     <section
       id="guillotine-chop"
-      className={`${sp.card} ${sp.pad} ${done ? gl.chopped : ''}`}
+      className={`${sp.card} ${sp.pad} ${sp.stayDark} ${done ? gl.chopped : ''}`}
       style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(224,64,46,.14), transparent 60%), #0b0d14', gap: 16 }}
       data-testid="guillotine-chop-moment"
       data-state={done ? 'chopped' : 'armed'}

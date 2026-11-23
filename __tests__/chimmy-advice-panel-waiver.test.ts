@@ -101,6 +101,17 @@ describe('recordPanelWaiverAdvice', () => {
     expect(recordAdvice).not.toHaveBeenCalled()
   })
 
+  it('records the engine’s raw score only when the league is in the calibration scope, and the weekly run under its own surface', async () => {
+    target.mockResolvedValue(ok)
+    const { recordPanelWaiverAdvice, recordTopWaiverClaim } = await import('@/lib/chimmy-advice/panelWaiverAdvice')
+    await recordPanelWaiverAdvice({ userId: 'u1', leagueId: 'lg', claims: [claim({ compositeScore: 83.6 })] }, {} as NodeJS.ProcessEnv)
+    expect(recordAdvice).toHaveBeenLastCalledWith(expect.objectContaining({ surface: 'waiver_panel', confidencePct: null }))
+    await recordPanelWaiverAdvice({ userId: 'u1', leagueId: 'lg', claims: [claim({ compositeScore: 83.6 })], scored: true }, {} as NodeJS.ProcessEnv)
+    expect(recordAdvice).toHaveBeenLastCalledWith(expect.objectContaining({ surface: 'waiver_panel', confidencePct: 84 }))
+    await recordTopWaiverClaim({ userId: 'u1', leagueId: 'lg', claims: [claim({ compositeScore: 61 })], scored: true, surface: 'waiver_engine' }, {} as NodeJS.ProcessEnv)
+    expect(recordAdvice).toHaveBeenLastCalledWith(expect.objectContaining({ surface: 'waiver_engine', confidencePct: 61 }))
+  })
+
   it('no claim, or the kill switch, records nothing', async () => {
     const { recordPanelWaiverAdvice } = await import('@/lib/chimmy-advice/panelWaiverAdvice')
     expect(await recordPanelWaiverAdvice({ userId: 'u1', leagueId: 'lg', claims: [] }, {} as NodeJS.ProcessEnv)).toBe('no_claim')

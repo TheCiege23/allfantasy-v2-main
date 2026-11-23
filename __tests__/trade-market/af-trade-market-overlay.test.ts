@@ -267,7 +267,8 @@ describe('the scheduled writer', () => {
     })
     const writeLineup = vi.fn(async () => {})
     const r = await runScheduledMarketRecalc({} as never, { now: NOW, recalc: recalc as never, writeLineup })
-    expect(recalc.mock.calls.map((c) => (c[1] as { sinceSeason: number }).sinceSeason)).toEqual([2026, 2024])
+    // Then the structural pass for picks, posture and need (every season from 2020) — its lineup table is not used.
+    expect(recalc.mock.calls.map((c) => (c[1] as { sinceSeason: number }).sinceSeason)).toEqual([2026, 2024, 2020])
     expect((recalc.mock.calls[1]![1] as { skipBooks: Set<string> }).skipBooks.size).toBe(4)
     expect(r.books).toHaveLength(4)
     expect(writeLineup.mock.calls[0]![1]).toMatchObject({ sinceSeason: 2024 })

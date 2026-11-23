@@ -79,6 +79,8 @@ export type SurvivorCommissionerDashboardResult =
         emoji: ReturnType<typeof extractLeadingTribeIcon>
         /** Members carry the manager behind the roster so the host can move them by name. */
         members: Array<Awaited<ReturnType<typeof getTribesWithMembers>>[number]['members'][number] & { userId: string | null; displayName: string | null }>
+        /** Members still in the game. `members` keeps the voted-out too: their tribe row is history. */
+        inGameCount: number
       }>
       tribeRedraw: Awaited<ReturnType<typeof getPendingTribeRedraw>>
       /** The weekly to-do list: usually "nothing needed". */
@@ -139,6 +141,10 @@ export async function buildSurvivorCommissionerDashboard(
   const nbaSeason = typeof fullSeasonPlan.season === 'number' ? fullSeasonPlan.season : new Date().getFullYear()
 
   const week = await resolveSurvivorCurrentWeek(leagueId, null)
+  const outOfGameCount = await prisma.survivorPlayer
+    .findMany({ where: { leagueId }, select: { playerState: true } })
+    .then((cast) => (cast.length ? cast.filter((p) => p.playerState !== 'active' && p.playerState !== 'survivor_winner').length : null))
+    .catch(() => null)
 
   const [
     config,
@@ -209,6 +215,7 @@ export async function buildSurvivorCommissionerDashboard(
       userId: castByRoster.get(member.rosterId)?.userId ?? null,
       displayName: castByRoster.get(member.rosterId)?.displayName ?? null,
     })),
+    inGameCount: tribe.members.filter(member => !eliminatedIds.has(member.rosterId)).length,
   }))
 
   const afPlan = resolveAfPlanFromEntitlement(entitlementSnapshot.plans, entitlementSnapshot.status)
@@ -323,7 +330,12 @@ export async function buildSurvivorCommissionerDashboard(
     juryCount: jury.length,
     merged,
     rosterCount,
-    eliminatedCount: eliminatedIds.size,
+    /*
+     * `eliminatedIds` holds each voted-out manager under BOTH roster ids (the league roster and its
+     * season roster) so either can be looked up. Its size is therefore twice the head count: one
+     * manager voted out read "10 active, 2 eliminated" of 12. Count the people, not the ids.
+     */
+    eliminatedCount: outOfGameCount ?? eliminatedIds.size,
     auditTail: auditTail.map(entry => ({ eventType: entry.eventType, createdAt: entry.createdAt, metadata: {} })),
     privacy: {
       commissionerParticipationMode: access.settings.commissionerParticipationMode,

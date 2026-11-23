@@ -28,7 +28,14 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { listSendableLeagueIds } from '@/lib/commissioner/broadcastAccess'
-import { buildCommissionerHealthSnapshot, loadCommissionerHealthCounts } from '@/lib/commissioner-hub/commissionerHubHealth'
+import {
+  buildCommissionerHealthSnapshot,
+  loadCommissionerHealthCounts,
+  nativeActionRosters,
+  withOwnerActionClock,
+} from '@/lib/commissioner-hub/commissionerHubHealth'
+import { loadOwnerLastActions } from '@/lib/commissioner-hub/ownerLastAction'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getRivalryBoard } from '@/lib/rivalry-engine/rivalryBoard'
 import { CommissionerIntelligenceHub } from '@/components/commissioner-intelligence/CommissionerIntelligenceHub'
@@ -92,7 +99,7 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           lockAllMoves: true,
           lastSyncedAt: true,
           platform: true,
-          rosters: { select: { id: true, platformUserId: true, playerData: true, updatedAt: true, settings: true } },
+          rosters: { select: { id: true, platformUserId: true, managerUserId: true, redraftRosterId: true, playerData: true, updatedAt: true, settings: true } },
         },
       })
       .catch(() => null)
@@ -133,7 +140,11 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
       const counts = await loadCommissionerHealthCounts([leagueId], new Date(Date.now() - 7 * 86_400_000))
         .then((m) => m.get(leagueId))
         .catch(() => undefined)
-      const snapshot = buildCommissionerHealthSnapshot({ league, source: 'database', ...(counts ? { counts } : {}) })
+      // The "N inactive" tile reads the manager's own last action in a native league — the same clock as the
+      // table below it (lib/commissioner-hub/ownerLastAction.ts), or the two disagree on one screen.
+      const ownAction = await loadOwnerLastActions(nativeActionRosters([league])).catch(() => null)
+      const [clocked] = withOwnerActionClock([league], ownAction)
+      const snapshot = buildCommissionerHealthSnapshot({ league: clocked ?? league, source: 'database', ...(counts ? { counts } : {}) })
 
       /*
        * ⚠ A LOW-CONFIDENCE SNAPSHOT PUBLISHES NO SCORE. `dataConfidence: 'low'`
@@ -283,6 +294,7 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           signals={signals}
           interventions={interventions}
           managers={managerHealth.rows}
+          nativeLeague={isNativePlatform(league.platform)}
           rivalries={rivalryBoard.rows}
           seasonsCovered={rivalryBoard.seasonsCovered}
           audit={auditRows.map((a) => ({

@@ -56,6 +56,11 @@ type SleeperPoolTableLayoutExtras = {
    * AF ADP with each player's estimated chance of still being on the board there.
    */
   leftAtPickLabel?: string | null
+  /**
+   * Leave the AF ADP column out. Until AllFantasy has drafts to blend for this pool, every cell is a
+   * dash: a whole column of "—" said nothing and cost 66px of the player table.
+   */
+  hideAfAdp?: boolean
 }
 
 export function buildSleeperPoolTableLayout(
@@ -96,15 +101,20 @@ export function buildSleeperPoolTableLayout(
      * already contains our own drafts, plus imported-league drafts and the market, so showing both
      * would be the same evidence twice. `aiAdp` stays on the row for Chimmy, Intel and sorting.
      */
-    {
-      key: 'afAdp',
-      label: 'AF ADP',
-      width: 66,
-      align: 'right',
-      title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts',
-      statLabel: 'AF ADP',
-    },
   ]
+
+  if (!extras?.hideAfAdp) {
+    base.push(
+      {
+        key: 'afAdp',
+        label: 'AF ADP',
+        width: 66,
+        align: 'right',
+        title: 'AllFantasy ADP — market ADP blended with imported-league and AllFantasy drafts',
+        statLabel: 'AF ADP',
+      },
+    )
+  }
 
   if (extras?.leftAtPickLabel) {
     base.push({

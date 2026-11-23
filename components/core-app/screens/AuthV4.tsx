@@ -22,6 +22,10 @@ import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialP
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
+import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
+import AppleNativeSignInButton from '@/components/auth/AppleNativeSignInButton'
+import PasskeySignInButton from '@/components/auth/PasskeySignInButton'
+import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
 import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 
 /**
@@ -270,8 +274,15 @@ function OAuthGrid({
  * text a code (it only does so for a number on a verified account, and answers the same
  * either way); step two hands the code to the `phone-code` next-auth provider.
  */
-function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; onUsePassword: () => void }) {
-  const router = useRouter()
+function PhoneCodeSignIn({
+  callbackUrl,
+  onUsePassword,
+  onSignedIn,
+}: {
+  callbackUrl: string
+  onUsePassword: () => void
+  onSignedIn: () => Promise<void>
+}) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [sentTo, setSentTo] = useState<string | null>(null)
@@ -328,7 +339,7 @@ function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; 
             : resolveLoginErrorMessage(result.error),
         )
       } else {
-        router.replace(callbackUrl)
+        await onSignedIn()
       }
     } catch {
       setError('Something went wrong signing in. Please try again.')
@@ -422,7 +433,24 @@ function PhoneCodeSignIn({ callbackUrl, onUsePassword }: { callbackUrl: string; 
 
 function SignIn({ callbackUrl }: { callbackUrl: string }) {
   useReferralClickFromUrl()
+  const router = useRouter()
   const [method, setMethod] = useState<'password' | 'code'>('password')
+  const [offerPasskey, setOfferPasskey] = useState(false)
+
+  // After a password or text-code sign-in: offer Face ID / a fingerprint for next time, once, on a
+  // device that can do it (components/auth/PasskeyOffer). Otherwise straight on.
+  async function afterSignIn() {
+    if (await shouldOfferPasskey()) setOfferPasskey(true)
+    else router.replace(callbackUrl)
+  }
+
+  if (offerPasskey) {
+    return (
+      <div className="af-au-card">
+        <PasskeyOffer onDone={() => router.replace(callbackUrl)} />
+      </div>
+    )
+  }
 
   return (
     <div className="af-au-card">
@@ -433,10 +461,16 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {/* iOS app only: the social grid is hidden there, so this is the one-tap way in. */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} />
+
+      {/* Face ID / fingerprint / Windows Hello, on a device that can (not the iOS app yet). */}
+      <PasskeySignInButton callbackUrl={callbackUrl} />
+
       {method === 'code' ? (
-        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} />
+        <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} onSignedIn={afterSignIn} />
       ) : (
-        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} />
+        <PasswordSignIn callbackUrl={callbackUrl} onUseCode={() => setMethod('code')} onSignedIn={afterSignIn} />
       )}
 
       <DevBypassSignIn callbackUrl={callbackUrl} />
@@ -446,8 +480,15 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
   )
 }
 
-function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUseCode: () => void }) {
-  const router = useRouter()
+function PasswordSignIn({
+  callbackUrl,
+  onUseCode,
+  onSignedIn,
+}: {
+  callbackUrl: string
+  onUseCode: () => void
+  onSignedIn: () => Promise<void>
+}) {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -473,7 +514,7 @@ function PasswordSignIn({ callbackUrl, onUseCode }: { callbackUrl: string; onUse
         // live login rather than inventing its own.
         setError(resolveLoginErrorMessage(result.error))
       } else {
-        router.replace(callbackUrl)
+        await onSignedIn()
       }
     } catch {
       setError('Something went wrong signing in. Please try again.')
@@ -817,6 +858,9 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {/* iOS app only: one tap, no username or password (the social grid is hidden there). */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} showTerms />
+
       <OAuthGrid
         callbackUrl={callbackUrl}
         lead
@@ -977,7 +1021,7 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return <>
-    {callbackUrl.startsWith('/brackets/leagues/') ? <AndroidBracketAppOption /> : null}
+    {callbackUrl.startsWith('/brackets/leagues/') ? <><AndroidBracketAppOption /><IosBracketAppOption /></> : null}
     {mode === 'signin' ? <SignIn callbackUrl={callbackUrl} /> : <SignUp callbackUrl={callbackUrl} />}
   </>
 }

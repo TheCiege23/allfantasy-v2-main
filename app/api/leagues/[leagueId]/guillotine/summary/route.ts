@@ -27,11 +27,11 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
-import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
-import { describeSchedule } from '@/lib/guillotine/chopSchedule'
+import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
@@ -118,12 +118,13 @@ export async function GET(
     return 'error' in preview ? NextResponse.json(preview, { status: 409 }) : NextResponse.json(preview)
   }
 
-  // No `?week=` means "the current week" — it used to mean week 1, all season.
+  // No `?week=` means the week being PLAYED: the one after the last settled chop (guillotineLiveWeek).
+  // It used to mean week 1 all season, then the last chopped week all season.
   const config = await getGuillotineConfig(leagueId)
   const weekParam = req.nextUrl.searchParams?.get('week')
   const weekOrPeriod = weekParam
     ? Math.max(1, parseInt(weekParam, 10)) || 1
-    : await resolveGuillotineCurrentWeek(leagueId, config)
+    : await resolveGuillotineLiveWeek(leagueId, config)
 
   const [summary, myEscapes, myRosterId, home, advanced, watch] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
@@ -286,8 +287,13 @@ export async function PATCH(
     const before = await bestEffort(() => readGuillotineAdvanced(leagueId))
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
-      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
-      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : ('message' in saved && saved.message) || saved.error
+      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : saved.error === 'faab_conflict' ? 409 : 400
+      const message =
+        saved.error === 'not_entitled'
+          ? 'Chop schedules, immunity and FAAB after a chop are part of AF Commissioner.'
+          : saved.error === 'bad_faab'
+            ? `FAAB after a chop must be a whole dollar amount up to ${MAX_FAAB_AMOUNT}.`
+            : ('message' in saved && saved.message) || saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }
     if (before) {

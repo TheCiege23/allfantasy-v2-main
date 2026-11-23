@@ -17,6 +17,7 @@ import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { getRosteredMarket } from './rosteredMarket'
 import { boardPlayerValue, isBoardValueSport, loadLeagueValueBoard, type BoardPlayerValue } from '@/lib/sport-values/leagueValueBoard'
+import { loadLeaguePlayerMetrics, type LeaguePlayerMetric, type LeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
 import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
@@ -459,6 +460,8 @@ export type PlayerCardData = {
   injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
+  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue' | 'afFactors'>
+    & Pick<LeaguePlayerMetrics, 'week' | 'unit'>
   /**
    * Whether the signed-in reader follows him across every league (2026-09-14).
    *
@@ -1836,7 +1839,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   } as const
   const lookup = await anchorLookupFor(req)
   if (!lookup) return null
-  const anchor = await prisma.sportsPlayer
+  const byGivenId = await prisma.sportsPlayer
     .findFirst({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
@@ -1848,6 +1851,23 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       select,
     })
     .catch(() => null)
+
+  /*
+   * 🛑 A LEAGUE'S FREE-AGENT LIST IDENTIFIES A PLAYER BY HIS `SportsPlayer` ROW ID, NOT A SLEEPER ID
+   * (app/api/waiver-wire/leagues/[leagueId]/players/route.ts: "a pool row's `player_id` is a
+   * SportsPlayer UUID"). The card was opened from that list with the row id in the Sleeper-id slot,
+   * matched nobody, and answered 404: "This player's card could not be loaded" on every free agent
+   * (production, 2026-11-22). A row id is not numeric, so it can never be mistaken for a Sleeper id;
+   * when the id given finds no one it is tried as the row it names, in the same sport.
+   */
+  const givenId = 'sleeperId' in lookup ? lookup.sleeperId : lookup.externalId
+  const anchor =
+    byGivenId ??
+    (/^\d+$/.test(givenId)
+      ? null
+      : await prisma.sportsPlayer
+          .findFirst({ where: { id: givenId, sport: { equals: sport, mode: 'insensitive' } }, select })
+          .catch(() => null))
 
   if (!anchor) return null
 
@@ -1924,9 +1944,13 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
    * beside everything else. The id tried first is the one the league's rosters speak (Sleeper's NBA id,
    * or a native league's Rolling Insights id); the board falls back to his name only when no id matches.
    */
+  const leagueMatches = String(leagueBookRow?.sport ?? '').trim().toUpperCase() === sportKey
+  const leagueValueBoard = req.leagueId && leagueMatches && isBoardValueSport(sportKey)
+    ? loadLeagueValueBoard(req.leagueId)
+    : undefined
   const boardValuePromise: Promise<SectionState<PlayerCardBoardValue> | null> =
-    req.leagueId && isBoardValueSport(sportKey) && String(leagueBookRow?.sport ?? '').trim().toUpperCase() === sportKey
-      ? loadLeagueValueBoard(req.leagueId)
+    leagueValueBoard
+      ? leagueValueBoard
           .then((b) =>
             boardPlayerValue(b, {
               playerId: player.sleeperId ?? (player.source === 'rolling_insights' ? player.externalId : null),
@@ -1936,6 +1960,12 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           )
           .catch(() => unavailable('This league’s value board could not be read just now.'))
       : Promise.resolve(null)
+  const afLeagueMetricsPromise = req.leagueId && req.userId && leagueMatches
+    ? loadLeaguePlayerMetrics({
+      leagueId: req.leagueId, playerName: player.name, limit: 2,
+      valueBoard: leagueValueBoard,
+    }).catch(() => null)
+    : Promise.resolve(null)
 
   // prettier-ignore
   const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future, afEngine] = await Promise.all([
@@ -1998,6 +2028,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   ])
 
   const boardValue = await boardValuePromise
+  const afMetrics = await afLeagueMetricsPromise
+  const afRow = afMetrics?.rows.length === 1 ? afMetrics.rows[0] : null
 
   const own = ownershipBoard && player.sleeperId ? ownershipBoard.byPlayerId.get(player.sleeperId) : undefined
   const ownership: SectionState<PlayerCardOwnership> = !nflCard
@@ -2143,6 +2175,16 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         unavailable('No record of when this sport was last checked.'),
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league: league && boardValue ? { ...league, boardValue } : league,
+    ...(afRow && afMetrics ? {
+      afLeagueProjection: {
+        rank: afRow.rank, positionRank: afRow.positionRank, perGame: afRow.perGame,
+        weekly: afRow.weekly, fullSeason: afRow.fullSeason, fullSeasonBasis: afRow.fullSeasonBasis, restOfSeason: afRow.restOfSeason,
+        week: afMetrics.week, unit: afMetrics.unit,
+        tradeValue: afRow.tradeValue, tradeValueUnit: afRow.tradeValueUnit, dynastyTradeValue: afRow.dynastyTradeValue,
+        // Why `weekly` moved (its `unadjusted.weekly` lets the response gate revert it for a viewer without the plan).
+        ...(afRow.afFactors ? { afFactors: afRow.afFactors } : {}),
+      },
+    } : {}),
     ...(follow ? { follow } : {}),
     ...(dynastyMarker ? { dynastyMarker } : {}),
   }

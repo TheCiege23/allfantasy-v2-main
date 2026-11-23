@@ -161,29 +161,33 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
   against the app first; every sentence in it is a claim the reviewer can test.
 
   ```
-  AllFantasy is a companion for season-long fantasy sports leagues people
-  already play on Sleeper, ESPN and Fantrax. It imports those leagues read-only
-  and shows lineup, matchup, waiver and trade analysis in one place. There is no
-  gambling, no betting and no real-money contests in the app.
+  AllFantasy is a home for season-long fantasy sports leagues. People import
+  the leagues they already play on Sleeper, ESPN, Fantrax, MFL and Fleaflicker
+  (read-only), or create a new league, and see lineup, matchup, waiver and
+  trade analysis in one place. There is no gambling, no betting and no
+  real-money contests in the app.
 
   SIGN-IN: use the demo account above (email and password). The demo account
   already has imported leagues, so every tab has real data.
 
   PURCHASES: subscriptions (AF Pro, AF Commissioner, AF Supreme, AF Legacy)
-  and token packs are sold in the app with Apple In-App Purchase: Tools >
-  Account > Plans, or Tools > Account > Tokens. Prices shown are Apple's. The
+  and token packs are sold in the app with Apple In-App Purchase: More (bottom
+  bar) > Manage > Plans & tokens. Token packs are one tap further, under
+  "Tokens and what they buy" on that screen. Prices shown are Apple's. The
   same products are sold on our website through Stripe; either purchase unlocks
   the same signed-in account (guideline 3.1.3(b)). Restore Purchases and Manage
-  Subscriptions are on the Plans screen.
+  Subscriptions are on the Plans & tokens screen.
 
-  ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
-  deletion". Deletion is immediate and permanent after typing DELETE to confirm.
+  ACCOUNT DELETION: More (bottom bar) > Manage > Settings > Account > "Start
+  account deletion". Deletion is immediate and permanent after typing DELETE to
+  confirm. A subscriber is told there that an App Store subscription must be
+  cancelled in iPhone Settings, since Apple does not let us cancel it.
 
   USER CONTENT: every chat — league, draft and mock-draft, bracket and World Cup
   pool chats, and direct messages. Press and hold a message, or tap its "..." button, to Report
   it or Block its sender; blocked users' messages are hidden. Offensive
   language is filtered, and reports are reviewed within 24 hours (Terms of
-  Service, section 11).
+  Service, section 9.4).
 
   TRACKING: the app does not track users. Ad and analytics pixels used on our
   website do not load inside the app.

@@ -326,6 +326,29 @@ export async function GET(request: Request) {
   }
 
   /*
+   * Starters on bye in every hosted weekly league (lib/lineup-automation/autoBenchByeService.ts
+   * runByeStarterSweep): an AI-managed or unclaimed seat is fixed, a manager is alerted. The bye rule was
+   * only ever checked on a save, so a lineup set at the draft started a bye player unchallenged.
+   */
+  let byeStarterSweep: unknown = null
+  try {
+    const { runByeStarterSweep } = await import('@/lib/lineup-automation/autoBenchByeService')
+    byeStarterSweep = await withSyncJobRun(
+      { jobName: 'cron-bye-starter-sweep', trigger: 'cron' },
+      () => runByeStarterSweep(),
+      (r) => ({
+        rowsRead: r.teams,
+        rowsWritten: r.aiSeatsSwapped,
+        errors: r.failures.map((f) => `${f.leagueId}${f.rosterId ? `/${f.rosterId}` : ''}: ${f.error}`),
+        metadata: { leagues: r.leagues, managersAlerted: r.managersAlerted, skipped: r.skipped },
+      }),
+    )
+  } catch (e) {
+    console.error('[redraft/waiver-process] bye starter sweep failed', e)
+    byeStarterSweep = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  /*
    * "Auto-switch injured starters" (lib/lineup-automation/autoSwitchInjuredService): the commissioner's
    * per-team switch on Member Settings. Hourly, swap a starter at or past the chosen injury level for the
    * best healthy bench player, inside the chosen window before his game, while the owner has Pro.
@@ -481,7 +504,7 @@ export async function GET(request: Request) {
   }
 
   /*
-   * Chimmy autopilot (AF Commissioner): teams on autopilot claim a free agent for a starting slot
+   * Chimmy autopilot (AF Pro / AF Supreme): teams on autopilot claim a free agent for a starting slot
    * nobody healthy on the roster can fill. Before the waiver window below, so a claim made now can be
    * processed in the same run. Guarded and on its own job identity, like the sweeps above.
    */
@@ -644,5 +667,5 @@ export async function GET(request: Request) {
     exileRollover = { error: error instanceof Error ? error.message : 'Exile rollover failed.' }
   }
 
-  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
+  return NextResponse.json({ ...out, tradeExpiry, deadlineExpiry, tradeReviews, autoHandovers, tradeAutoApprovals, aiManagerSeatRepair, inactiveLineups, autoBenchByes, byeStarterSweep, autoSwitchInjured, fillEmptyStarters, lineupSnapshots, sleeperLineupSnapshots, espnLineupSnapshots, taxiDeadlines, automationRecaps, autopilotWaivers, eliminatedLineups, rookieOrderRounds, irAutoMove, orphanAuctions, taxiSteals, exileRollover })
 }

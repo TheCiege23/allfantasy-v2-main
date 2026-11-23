@@ -56,7 +56,8 @@ export const waiverSettingsSource: OsFactSource<WaiverLeagueOsArgs, WaiverLeague
   level: 'league',
   ttlMs: 6 * HOURS,
   scopeKey: (a) => a.leagueId,
-  sport: () => 'NFL',
+  // Every sport's facts land here, so 'ALL' (2026-11-20): this column labels a row for audit and pruning only.
+  sport: () => 'ALL',
   derive: (a) => loadWaiverLeagueFacts(a.leagueId).catch(() => null),
 }
 
@@ -72,7 +73,8 @@ export const waiverResourceSource: OsFactSource<WaiverOsArgs, WaiverWorldFacts> 
   level: 'user',
   ttlMs: 5 * MINUTES,
   scopeKey: (a) => `${a.userId}:${a.leagueId}`,
-  sport: () => 'NFL',
+  // Every sport's facts land here, so 'ALL' (2026-11-20): this column labels a row for audit and pruning only.
+  sport: () => 'ALL',
   derive: deriveWorldFacts,
 }
 

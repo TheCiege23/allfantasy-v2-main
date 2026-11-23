@@ -12,6 +12,7 @@ import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerDa
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { matchupContextFromUnifiedWire } from '@/lib/player-data/adapters/matchupPlayerAdapter'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
       if (!sourceGate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: sourceGate.status })
       const imported = await loadFantraxNativePresentation(sourceSeason)
       const matchup = imported?.matchups.find(row => row.id === matchupId)
-      return matchup ? NextResponse.json({ matchup, source: 'fantrax', readOnly: true }) : NextResponse.json({ error: 'Not found' }, { status: 404 })
+      return matchup ? await afJson(userId, { matchup, source: 'fantrax', readOnly: true }) : NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
     if (!m) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const gate = await assertLeagueMember(m.leagueId, userId)
@@ -92,7 +93,7 @@ export async function GET(req: NextRequest) {
             rosterIds: [m.homeRosterId, m.awayRosterId].filter((id): id is string => Boolean(id)),
           })
         : null
-    return NextResponse.json({ matchup: m, canonicalNflMatchup, unifiedNflMatchupPlayers })
+    return await afJson(userId, { matchup: m, canonicalNflMatchup, unifiedNflMatchupPlayers })
   }
 
   if (seasonId && week != null) {

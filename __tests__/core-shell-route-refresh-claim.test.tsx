@@ -59,15 +59,23 @@ function Shell({ children }: { children?: React.ReactNode }) {
   )
 }
 
+/* The shell rebuilds only when /api/core/league-version moves (core-shell-change-only-refresh.test.tsx).
+   These tests are about WHO refreshes, so the data changes on every check. */
+let versionN = 0
+const fetchMock = vi.fn(async () => new Response(JSON.stringify({ version: `v${++versionN}` }), { status: 200 }))
+const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
 beforeEach(() => {
   vi.useFakeTimers()
   nav.router.refresh.mockClear()
+  vi.stubGlobal('fetch', fetchMock)
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
 })
 
 afterEach(() => {
   // Unmount even when an assertion threw, so a held claim cannot leak into the next test.
   cleanup()
+  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 
@@ -86,9 +94,9 @@ describe('routeRefreshClaim', () => {
 })
 
 describe('the shell poll and the matchup board', () => {
-  it('the shell refreshes on the game-day cadence when nothing claims the route', () => {
+  it('the shell refreshes on the game-day cadence when nothing claims the route', async () => {
     const { unmount } = render(<Shell />)
-    act(() => void vi.advanceTimersByTime(20_000))
+    await tick(20_000)
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()
   })
@@ -171,7 +179,7 @@ describe('the shell poll and the matchup board', () => {
     unmount()
   })
 
-  it('the shell resumes when the board unmounts', () => {
+  it('the shell resumes when the board unmounts', async () => {
     const { rerender, unmount } = render(
       <Shell>
         <MatchupPulseRefresh inPlay />
@@ -187,7 +195,7 @@ describe('the shell poll and the matchup board', () => {
     expect(routeRefreshClaimed()).toBe(true)
     rerender(<Shell />)
     expect(routeRefreshClaimed()).toBe(false)
-    act(() => void vi.advanceTimersByTime(20_000))
+    await tick(20_000)
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
     unmount()
   })
@@ -195,14 +203,14 @@ describe('the shell poll and the matchup board', () => {
 
 
 describe('resume and reconnect route recovery',()=>{
- it('refreshes once on resume, preserves the route owner and ignores hidden tabs',()=>{
-  render(<Shell />);act(()=>void vi.advanceTimersByTime(1000))
+ it('refreshes once on resume, preserves the route owner and ignores hidden tabs',async()=>{
+  render(<Shell />);await tick(1000)
   Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'})
-  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).not.toHaveBeenCalled()
+  await act(async()=>{window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)});expect(nav.router.refresh).not.toHaveBeenCalled()
   Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'visible'})
-  act(()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'))})
+  await act(async()=>{document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)})
   expect(nav.router.refresh).toHaveBeenCalledTimes(1)
-  const release=claimRouteRefresh();act(()=>void vi.advanceTimersByTime(1000))
-  act(()=>window.dispatchEvent(new Event('online')));expect(nav.router.refresh).toHaveBeenCalledTimes(1);release()
+  const release=claimRouteRefresh();await tick(1000)
+  await act(async()=>{window.dispatchEvent(new Event('online'));await vi.advanceTimersByTimeAsync(0)});expect(nav.router.refresh).toHaveBeenCalledTimes(1);release()
  })
 })

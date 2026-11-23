@@ -81,6 +81,15 @@ export type PlayerCardCopy = {
   // insight
   basedOn: (basis: string) => string
   // tiles
+  afRank: string
+  afTrade: string
+  afWeek: (week: number | null) => string
+  afFullSeason: string
+  afRemaining: string
+  afPerGame: string
+  afStandardSeason: string
+  afPoints: string
+  afCategory: string
   leaguePrice: string
   leaguePriceSub: (mode: string, numQbs: number, teams: number) => string
   /** A league-value-board sport (NBA first): his value on the league's own board. */

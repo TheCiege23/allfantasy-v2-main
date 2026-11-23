@@ -4,6 +4,7 @@ import Link from 'next/link'
 import posthog from 'posthog-js'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { IMPORT_SEARCH_MIN_ROWS, matchesImportSearch } from '@/lib/league-import/importListSearch'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
  * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
@@ -38,6 +39,7 @@ import { EspnLeagueCheck, type EspnLeagueCheckStatus } from '@/components/core-a
 import { EspnTeamCodeVerify } from '@/components/core-app/import/EspnTeamCodeVerify'
 import { ImportGuide } from '@/components/core-app/import/ImportGuide'
 import { ImportInviteCard } from '@/components/core-app/import/ImportInviteCard'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
@@ -279,6 +281,8 @@ type Phase =
        * theirs was imported, and the league was not new.
        */
       joinedExisting: boolean
+      /** A team-less league mate: co-owner of a shared team, or a viewer. Null for a team claim. */
+      joinedAs?: 'co_owner' | 'viewer' | null
     }
 
 interface PreviewTeam {
@@ -991,6 +995,12 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Search boxes for the two long lists. Each clears when its list is replaced. */
+  const [leagueSearch, setLeagueSearch] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
+  useEffect(() => setLeagueSearch(''), [leagues])
+  const previewSourceId = phase.k === 'preview' ? phase.sourceId : null
+  useEffect(() => setTeamSearch(''), [previewSourceId])
   /* The step an unverified account was refused at, or null. Cleared by any other outcome. */
   const [verifyGate, setVerifyGate] = useState<VerifyResume | null>(null)
   /*
@@ -1490,6 +1500,7 @@ export function ImportV4({
         league_existed?: boolean
         skipped?: boolean
         joinedExisting?: boolean
+        joinedAs?: 'co_owner' | 'viewer' | null
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -1532,6 +1543,7 @@ export function ImportV4({
            still reports existed:true, because the league does still exist. */
         skipped: Boolean(data?.skipped),
         joinedExisting: Boolean(data?.joinedExisting),
+        joinedAs: data?.joinedAs === 'co_owner' || data?.joinedAs === 'viewer' ? data.joinedAs : null,
       })
     },
     // `leagues` is read for the deleted-league confirmation; see importOneLeague.
@@ -2410,8 +2422,27 @@ export function ImportV4({
             </p>
           ) : null}
 
+          {leagues.length >= IMPORT_SEARCH_MIN_ROWS ? (
+            <div className="af-im-field af-im-list-search">
+              <input
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                value={leagueSearch}
+                onChange={(e) => setLeagueSearch(e.target.value)}
+                placeholder={rowsAreTeams ? 'Search by team name' : 'Search by league name'}
+                aria-label={rowsAreTeams ? 'Search teams' : 'Search leagues'}
+                data-testid="import-league-search"
+              />
+            </div>
+          ) : null}
+          {leagueSearch.trim() && !leagues.some((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])) ? (
+            <p className="af-im-field-help" role="status" data-testid="import-league-search-empty">
+              Nothing matches &ldquo;{leagueSearch.trim()}&rdquo;. Check the spelling or clear the search.
+            </p>
+          ) : null}
           <ul className="af-im-league-list">
-            {leagues.map((l) => {
+            {leagues.filter((l) => matchesImportSearch(leagueSearch, [l.name, l.season, l.sport])).map((l) => {
               /*
                * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
                * DOING. It marked the one row being previewed or committed while the
@@ -3276,6 +3307,43 @@ export function ImportV4({
         </details>
       ) : null}
 
+      {/*
+        What an import cannot bring, and where it goes instead. Fantrax's API has no completed-trade
+        feed and lists future picks for rounds 1-4 only, so both arrive through the commissioner's
+        trade-history upload — which lives on a different screen that nothing here pointed to.
+
+        ⚠ IT NAMES THE EXPORT, BECAUSE THE WRONG ONE IS ONE CLICK AWAY. Fantrax's Transactions page
+        offers Trades and Claims/Drops side by side and downloads either under a near-identical file
+        name. The Claims/Drops file is refused by the uploader ("missing columns: From, To"), which
+        reads as the upload being broken rather than as the wrong file.
+      */}
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">After importing: add trades and later-round picks</summary>
+          <div className="af-im-fx-after">
+            <p>
+              Fantrax does not share completed trades, or future draft picks past round 4. A
+              commissioner can add both for an NFL league:
+            </p>
+            <ol>
+              <li>
+                On Fantrax, open Transactions &rarr; History, choose <strong>Trades</strong> (not
+                Claims/Drops) and download the CSV.
+              </li>
+              <li>
+                Here, open the league&rsquo;s Commissioner screen and go to &ldquo;Trades and draft
+                archive&rdquo;.
+              </li>
+              <li>
+                Choose &ldquo;Upload trade history CSV&rdquo; and pick the file with{' '}
+                <strong>Trade</strong> in its name.
+              </li>
+            </ol>
+            <p>Uploading the same file again does not add a trade twice.</p>
+          </div>
+        </details>
+      ) : null}
+
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
         <section className="af-im-card af-im-card--attest" ref={outcomeRef}>
@@ -3468,8 +3536,28 @@ export function ImportV4({
                   </>
                 )}
               </p>
+              {phase.teams.length >= IMPORT_SEARCH_MIN_ROWS ? (
+                <div className="af-im-field af-im-list-search">
+                  <input
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                    placeholder="Search by team or manager name"
+                    aria-label="Search teams"
+                    data-testid="import-preview-team-search"
+                  />
+                </div>
+              ) : null}
+              {teamSearch.trim() && !phase.teams.some((t) => matchesImportSearch(teamSearch, [t.teamName, t.ownerName])) ? (
+                <p className="af-im-field-help" role="status" data-testid="import-preview-team-search-empty">
+                  No team matches &ldquo;{teamSearch.trim()}&rdquo;. Try the manager&rsquo;s name, or clear the search.
+                </p>
+              ) : null}
               <ul className="af-im-league-list">
-                {phase.teams.map((t) => {
+                {/* The picked team stays on screen whatever is typed, so the choice is never hidden. */}
+                {phase.teams.filter((t) => phase.claimTeamId === t.teamId || matchesImportSearch(teamSearch, [t.teamName, t.ownerName])).map((t) => {
                   const picked = phase.claimTeamId === t.teamId
                   /* A commissioner's team is claimable only with proof — the server refuses it too. */
                   const locked = previewImportState(provider, phase).espnMember && t.commissionerTeam === true
@@ -3632,7 +3720,11 @@ export function ImportV4({
             issue={doneIssue}
             noteText={
               phase.joinedExisting
-                ? `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
+                ? phase.joinedAs === 'co_owner'
+                  ? `${phase.leagueName} was already on AllFantasy. You've been added to the team you share, as its co-owner. Nothing was changed on ${providerLabel}.`
+                  : phase.joinedAs === 'viewer'
+                    ? `${phase.leagueName} was already on AllFantasy. You don't have a team in it right now, so you've been added as a viewer: you can follow the league and its chat. Nothing was changed on ${providerLabel}.`
+                    : `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
                 : phase.skipped
                   ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
                   : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
@@ -3725,6 +3817,16 @@ export function ImportV4({
           sourceId={phase.sourceId}
           leagueName={phase.leagueName}
         />
+      ) : null}
+
+      {/*
+        Someone who just joined a league already here: who else made it over, and the league's invite
+        link to bring the rest (owner's ask, 2026-11-21). The panel names the managers already in it.
+      */}
+      {phase.k === 'done' && phase.leagueId && phase.joinedExisting ? (
+        <section className="af-im-card" data-testid="import-joined-league-mates">
+          <LeagueInvitePanel leagueId={phase.leagueId} leagueName={phase.leagueName} />
+        </section>
       ) : null}
 
       {/* ── Static result frame, design preview only ────────────────── */}

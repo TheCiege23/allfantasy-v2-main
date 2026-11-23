@@ -27,7 +27,7 @@
  */
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
-export type CoreDepth = 'player_depth' | 'trade_depth' | 'commissioner_depth' | 'competitive_edge'
+export type CoreDepth = 'player_depth' | 'trade_depth' | 'commissioner_depth' | 'competitive_edge' | 'af_intelligence'
 
 export type CoreDepthSpec = {
   /** The plan feature that unlocks it — resolved through the entitlement matrix, not by plan name. */
@@ -40,14 +40,19 @@ export type CoreDepthSpec = {
 }
 
 export const CORE_DEPTH: Record<CoreDepth, CoreDepthSpec> = {
+  /*
+   * 2026-11-22 (owner): player and trade depth open on `af_intelligence` — AF Pro, AF Commissioner or
+   * AF Supreme — rather than the single-plan Pro keys, so a Commissioner subscriber is not shown a lock
+   * over the same OS answers. The lock still advertises AF Pro, the cheapest plan that opens it.
+   */
   player_depth: {
-    featureId: 'player_ai_recommendations',
+    featureId: 'af_intelligence',
     planName: 'AF Pro',
     label: 'Player deep dives',
     upgradePath: '/upgrade?plan=pro',
   },
   trade_depth: {
-    featureId: 'trade_analyzer',
+    featureId: 'af_intelligence',
     planName: 'AF Pro',
     label: 'The full trade breakdown',
     upgradePath: '/upgrade?plan=pro',
@@ -68,6 +73,17 @@ export const CORE_DEPTH: Record<CoreDepth, CoreDepthSpec> = {
     featureId: 'manager_psychology',
     planName: 'AF Pro',
     label: 'Competitive Edge',
+    upgradePath: '/upgrade?plan=pro',
+  },
+  /*
+   * AF's own numbers: the projection engine (and the factors it learned), AF ADP. A locked viewer is
+   * sent the provider projection and the provider ADP — lib/core-app/afIntelligenceWithhold.ts strips
+   * the AF fields on the server, so the lock is not a client-only gate.
+   */
+  af_intelligence: {
+    featureId: 'af_intelligence',
+    planName: 'AF Pro',
+    label: 'AF projections and AF ADP',
     upgradePath: '/upgrade?plan=pro',
   },
 }

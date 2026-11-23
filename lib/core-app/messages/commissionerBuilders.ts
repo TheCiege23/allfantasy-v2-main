@@ -70,7 +70,7 @@ export const commissionerBuildersMessages = defineMessages({
     historyTradeNoteImported: 'Imported trades recorded in the league warehouse. Provider history may be incomplete.',
     historyDraftUnread: 'Some draft records or corrections could not be read.',
     historyDraftNote:
-      'Only connected live draft sessions and native redraft drafts on file are shown. A session year is inferred from its date; missing provider seasons are not reconstructed.',
+      'Drafts run on AllFantasy are listed here pick by pick; imported drafts open in the draft archive. A session year is inferred from its date; missing provider seasons are not reconstructed.',
 
     // formatCards.ts — shared actions.
     formatOpenCommand: 'Open command',
@@ -189,7 +189,7 @@ export const commissionerBuildersMessages = defineMessages({
       'Intercambios importados registrados en el almacén de la liga. El historial del proveedor puede estar incompleto.',
     historyDraftUnread: 'No se pudieron leer algunos registros o correcciones del draft.',
     historyDraftNote:
-      'Solo se muestran las sesiones de draft en vivo conectadas y los drafts de redraft de AllFantasy registrados. El año de una sesión se deduce de su fecha; las temporadas que faltan del proveedor no se reconstruyen.',
+      'Los drafts hechos en AllFantasy se muestran aquí selección por selección; los drafts importados se abren en el archivo de drafts. El año de una sesión se deduce de su fecha; las temporadas que faltan del proveedor no se reconstruyen.',
 
     formatOpenCommand: 'Abrir el mando',
     formatOpenStandings: 'Abrir la clasificación',

@@ -101,7 +101,6 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     commissionerIntelligence: absent('not_requested'),
     leagueIntelligence: absent('not_requested'),
     portfolio: absent('not_requested'),
-    savedAnalysis: absent('not_requested'),
     gaps: [],
     meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
     ...over,
@@ -142,17 +141,17 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(baseline).not.toMatch(/13\.1 pts, week/)
   })
 
-  it('emits the four prose slices VERBATIM — they are already prompt-ready', () => {
-    // These are GroundedSlice<string>. `sliceLine` reduced each to the word "available", which is
-    // what silenced three-brain's saved conclusion — the entire substance of plan item 6.2.
+  it('emits the prose slices VERBATIM — they are already prompt-ready', () => {
+    // These are GroundedSlice<string>. `sliceLine` once reduced each to the word "available", which silenced
+    // whatever the prose said. (The saved three-brain slice this first pinned was retired 2026-11-19.)
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
-        savedAnalysis: present('Answer: hold. Model agreement: unanimous.'),
+        portfolio: present('You are 2-1 across your three leagues this week.'),
         leagueIntelligence: present('This league trades heavily in-season.'),
       }),
       NOW,
     )
-    expect(text).toContain('Answer: hold. Model agreement: unanimous.')
+    expect(text).toContain('You are 2-1 across your three leagues this week.')
     expect(text).toContain('This league trades heavily in-season.')
   })
 
@@ -347,7 +346,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
 describe('a missing slice degrades, it does not throw', () => {
   it('renders every other slice when one is absent from the packet entirely', () => {
     const p = packet({ marketValues: present([marketValue('Malik Nabers', 6420, 12)]) })
-    delete (p as Record<string, unknown>).savedAnalysis
+    delete (p as Record<string, unknown>).portfolio
     delete (p as Record<string, unknown>).leagueIntelligence
     const text = serializeDecisionOsGroundingForPrompt(p, NOW)
     expect(text).toContain('Malik Nabers')   // the surviving slices still render
@@ -368,8 +367,19 @@ describe('the league-intelligence prose cap', () => {
   })
 
   it('still trims every other prose slice at 1200', () => {
-    const text = serializeDecisionOsGroundingForPrompt(packet({ savedAnalysis: present(long('SAVED-TAIL-SENTINEL')) }), NOW)
-    expect(text).not.toContain('SAVED-TAIL-SENTINEL')
+    const text = serializeDecisionOsGroundingForPrompt(packet({ portfolio: present(long('PORTFOLIO-TAIL-SENTINEL')) }), NOW)
+    expect(text).not.toContain('PORTFOLIO-TAIL-SENTINEL')
     expect(text).toContain('…')
+  })
+
+  it('🛑 a trimmed prose slice SAYS it was trimmed and by how much (2026-11-23)', () => {
+    // A bare "…" read as the slice's natural end. 1900 x's + "\n" + 23-char tail = 1924; cap 1200 → 724 cut.
+    const text = serializeDecisionOsGroundingForPrompt(packet({ portfolio: present(long('PORTFOLIO-TAIL-SENTINEL')) }), NOW)
+    expect(text).toMatch(/\(truncated: 724 more characters of .* not shown here — ask the matching tool for the rest\)/)
+  })
+
+  it('an untrimmed prose slice carries no truncation note', () => {
+    const text = serializeDecisionOsGroundingForPrompt(packet({ leagueIntelligence: present(long('New Era (11): LAST-TEAM-SENTINEL.')) }), NOW)
+    expect(text).not.toMatch(/\(truncated:/)
   })
 })

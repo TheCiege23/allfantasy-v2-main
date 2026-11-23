@@ -10,6 +10,11 @@ import { POSITION_COLORS } from '@/lib/league-labels/catalog'
  *
  * Reads `/api/app/leagues/[leagueId]/chat/moves` (Postgres only, the same feed league chat draws its
  * move cards from), never the provider. Colours come from the league type's skin (`--lsk-*`).
+ *
+ * Half of a paired college + pro league asks for `scope=franchise` and gets BOTH leagues' moves in one
+ * feed; each card then names its league, and a second row of filters picks one league or both.
+ * A Fantrax move is read off two roster snapshots (`inferred`), so its card says "Roster change" or
+ * "Looks like a trade" rather than a kind Fantrax never reported.
  */
 type Filter = 'all' | 'trade' | 'waiver' | 'roster_move'
 const FILTERS: { id: Filter; label: string }[] = [
@@ -19,6 +24,8 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'roster_move', label: 'Free agents' },
 ]
 const KIND_LABEL: Record<LeagueMove['kind'], string> = { trade: 'Trade · Completed', waiver: 'Waiver claim', roster_move: 'Free agent' }
+const INFERRED_LABEL: Record<LeagueMove['kind'], string> = { trade: 'Looks like a trade', waiver: 'Roster change', roster_move: 'Roster change' }
+type MoveLeague = NonNullable<LeagueMove['league']>
 
 const T = {
   text: 'var(--lsk-text, #fff)',
@@ -110,15 +117,20 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
   const [moves, setMoves] = useState<LeagueMove[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
+  const [leagues, setLeagues] = useState<MoveLeague[]>([])
+  const [leagueFilter, setLeagueFilter] = useState<string>('all')
 
   useEffect(() => {
     let cancelled = false
     setMoves(null)
     setFailed(false)
-    fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat/moves`, { credentials: 'same-origin', cache: 'no-store' })
+    fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat/moves?scope=franchise`, { credentials: 'same-origin', cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((json: { moves?: LeagueMove[] }) => {
-        if (!cancelled) setMoves(Array.isArray(json.moves) ? json.moves : [])
+      .then((json: { moves?: LeagueMove[]; leagues?: MoveLeague[] }) => {
+        if (cancelled) return
+        setMoves(Array.isArray(json.moves) ? json.moves : [])
+        setLeagues(Array.isArray(json.leagues) && json.leagues.length > 1 ? json.leagues : [])
+        setLeagueFilter('all')
       })
       .catch(() => {
         if (!cancelled) setFailed(true)
@@ -129,7 +141,9 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
   }, [leagueId])
 
   const groups = useMemo(() => {
-    const shown = (moves ?? []).filter((m) => filter === 'all' || m.kind === filter)
+    const shown = (moves ?? []).filter(
+      (m) => (filter === 'all' || m.kind === filter) && (leagueFilter === 'all' || m.league?.leagueId === leagueFilter),
+    )
     const now = Date.now()
     const out: { title: string; items: LeagueMove[] }[] = []
     for (const m of shown) {
@@ -139,16 +153,43 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
       else out.push({ title, items: [m] })
     }
     return out
-  }, [moves, filter])
+  }, [moves, filter, leagueFilter])
 
-  const count = (f: Filter) => (moves ?? []).filter((m) => f === 'all' || m.kind === f).length
+  const inLeague = (m: LeagueMove) => leagueFilter === 'all' || m.league?.leagueId === leagueFilter
+  const count = (f: Filter) => (moves ?? []).filter((m) => (f === 'all' || m.kind === f) && inLeague(m)).length
+  const paired = leagues.length > 1
+  // A Fantrax add may be a waiver claim or a pickup — the roster diff cannot tell — so once any card is
+  // inferred, the third filter is named for what it holds rather than "Free agents".
+  const filterLabel = (f: (typeof FILTERS)[number]) => (f.id === 'roster_move' && (moves ?? []).some((m) => m.inferred) ? 'Roster moves' : f.label)
 
   return (
     <section className="flex flex-col gap-4 px-4 py-5 sm:px-5" aria-labelledby="league-activity-title" data-testid="league-activity-tab">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="league-activity-title" className="m-0 text-[24px] font-extrabold" style={{ color: T.text }}>Activity</h2>
-        <span className="text-[14px]" style={{ color: T.muted }}>Every completed move in the last 30 days, newest first</span>
+        <span className="text-[14px]" style={{ color: T.muted }}>
+          {paired ? `Every move in ${leagues.map((l) => l.name).join(' and ')}, last 30 days` : 'Every completed move in the last 30 days, newest first'}
+        </span>
       </div>
+
+      {paired ? (
+        <div role="group" aria-label="Filter by league" className="flex flex-wrap gap-2" data-testid="league-activity-league-filter">
+          {[{ id: 'all', text: 'Both leagues' }, ...leagues.map((l) => ({ id: l.leagueId, text: `${l.label} · ${l.name}` }))].map((o) => {
+            const on = leagueFilter === o.id
+            return (
+              <button
+                key={o.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setLeagueFilter(o.id)}
+                className="min-h-[40px] rounded-full border px-4 text-[14px] font-bold"
+                style={on ? { background: T.surface2, color: T.text, borderColor: T.text2 } : { background: 'transparent', color: T.text2, borderColor: T.line }}
+              >
+                {o.text}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       <div role="group" aria-label="Filter activity" className="flex flex-wrap gap-2">
         {FILTERS.map((f) => {
@@ -166,7 +207,7 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
                   : { background: 'transparent', color: T.text2, borderColor: T.line }
               }
             >
-              {f.label} <span className="opacity-75">{moves ? count(f.id) : ''}</span>
+              {filterLabel(f)} <span className="opacity-75">{moves ? count(f.id) : ''}</span>
             </button>
           )
         })}
@@ -203,12 +244,13 @@ export function LeagueActivityTab({ leagueId }: { leagueId: string }) {
                     <span className="min-w-0">
                       <span className="block truncate text-[15px] font-bold" style={{ color: T.text }}>{who}</span>
                       <span className="block text-[13px]" style={{ color: T.muted }}>
+                        {paired && m.league ? <span data-testid="league-activity-item-league">{m.league.label} · {m.league.name} · </span> : null}
                         {when(m.occurredAt)}
                         {m.bid != null ? ` · $${m.bid} bid` : ''}
                       </span>
                     </span>
                     <span className="ml-auto shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-bold" style={{ borderColor: tagColor, color: tagColor }}>
-                      {KIND_LABEL[m.kind]}
+                      {m.inferred ? INFERRED_LABEL[m.kind] : KIND_LABEL[m.kind]}
                     </span>
                   </div>
                   {m.kind === 'trade' ? (

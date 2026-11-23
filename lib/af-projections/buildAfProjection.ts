@@ -182,7 +182,7 @@ export interface BuildProjectionInput {
   recencyHalfLife?: number
 }
 
-const DEFAULT_MIN_GAMES = 2
+export const MIN_PROJECTION_GAMES = 2
 
 /**
  * Returns a projection or a typed refusal. Never throws for missing data — absent inputs are
@@ -201,7 +201,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     }
   }
 
-  const minGames = input.minGamesPlayed ?? DEFAULT_MIN_GAMES
+  const minGames = input.minGamesPlayed ?? MIN_PROJECTION_GAMES
   if (aggregate.gamesPlayed < minGames) {
     return {
       ok: false,
@@ -255,7 +255,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
 
   if (idpRules) {
     idpWeekly = scoreIdpWeekly(input.weeklyRaw ?? [], idpRules, input.recencyHalfLife ?? 4)
-    const seasonExtract = extractIdpComponents(aggregate.components, 'ri_season')
+    const seasonExtract = extractIdpComponents(aggregate.components, 'ri_season', aggregate.gamesPlayed)
     const seasonScored = scoreIdpComponents({ ...seasonExtract, rules: idpRules })
     if (seasonScored && seasonScored.points !== 0) {
       // The season aggregate is a full-season TOTAL, so both the points and the component

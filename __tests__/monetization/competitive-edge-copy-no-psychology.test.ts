@@ -24,7 +24,7 @@ describe('manager_psychology entitlement — the id stays, the copy says Competi
 
   it('keeps its key and plans (positive control)', () => {
     expect(ent.key).toBe('manager_psychology')
-    expect([...ent.requiredPlan]).toEqual(['af_pro', 'af_war_room', 'af_supreme'])
+    expect([...ent.requiredPlan]).toEqual(['af_pro', 'af_commissioner', 'af_war_room', 'af_supreme'])
     expect(ent.highlightParam).toBe('manager_psychology')
   })
 

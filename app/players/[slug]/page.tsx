@@ -12,6 +12,7 @@ import { getOgImageUrl } from '@/lib/seo/SocialShareMetadataService'
 import Link from 'next/link'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import type { UserLeague } from '@/app/dashboard/types'
+import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
 
 /**
  * `/players/{slug}` — the public, indexable Player Finder surface.
@@ -216,9 +217,13 @@ export default async function PublicPlayerPage({ params }: Params) {
     ? await resolveCoreDepth(userId, 'player_depth', { email: session?.user?.email ?? null })
     : null
 
-  const detail = await getPlayerDetail(identity.playerReference, leagueIds, userId, {
-    includeMoves: playerDepth?.unlocked !== false,
-  }).catch(() => null)
+  // AF Intelligence: AF's own projection only for AF Pro, AF Commissioner and AF Supreme (and signed-in).
+  const detail = afIntelligenceFor(
+    await getPlayerDetail(identity.playerReference, leagueIds, userId, {
+      includeMoves: playerDepth?.unlocked !== false,
+    }).catch(() => null),
+    await resolveCoreDepth(userId, 'af_intelligence').catch(() => null),
+  )
   if (!detail) notFound()
 
   const descriptor = [detail.player.position, detail.player.team].filter(Boolean).join(' · ')

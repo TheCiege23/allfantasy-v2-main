@@ -97,6 +97,22 @@ const EMPTY: RosterPlayerIdentity = {
   imageUrl: null,
 }
 
+/**
+ * A registry name as a reader expects to see it.
+ *
+ * The registry stores some names title-cased word by word, so production showed "Jaxon Smith-njigba" and
+ * "James Cook Iii" (2026-11-20). Only two things are changed, both unambiguous: the letter after a hyphen is
+ * capitalised, and a trailing generational numeral (II to V) is upper-cased. Nothing else is touched - a name
+ * that is already right comes back unchanged, and no spelling is guessed.
+ */
+export function tidyRegistryName(raw: string | null | undefined): string | null {
+  const name = String(raw ?? '').trim()
+  if (!name) return null
+  return name
+    .replace(/-(\p{Ll})/gu, (_, letter: string) => `-${letter.toUpperCase()}`)
+    .replace(/ (Ii|Iii|Iv|V)$/u, (_, numeral: string) => ` ${numeral.toUpperCase()}`)
+}
+
 function cleanIds(rawIds: readonly unknown[]): string[] {
   return [...new Set(rawIds.map((id) => String(id ?? '').trim()).filter(Boolean))]
 }
@@ -151,7 +167,7 @@ export async function resolveFantraxIdentities(
     const id = row.fantraxId?.trim()
     if (!id || counts.get(id) !== 1) continue
     out.set(id, {
-      name: row.canonicalName?.trim() || null,
+      name: tidyRegistryName(row.canonicalName),
       position: row.position?.trim() || null,
       team: row.currentTeam?.trim() || null,
       rollingInsightsId: row.rollingInsightsId ?? null,

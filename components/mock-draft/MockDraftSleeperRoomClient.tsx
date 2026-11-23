@@ -29,6 +29,15 @@ import { LanguageFallbackBoundary } from '@/components/i18n/LanguageProviderClie
 import { mockDraftRoomMessages } from '@/lib/core-app/messages/mockDraftRoom'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { ResultsRosterPanel, type ResultsRosterPanelPick, type ResultsRosterPanelTeam } from '@/components/app/draft-room/ResultsRosterPanel'
+import { sportHasByeWeeks } from '@/lib/draft-room/rosterSlotOrder'
+import { useWeekGames } from '@/components/app/draft-room/useWeekGames'
+import {
+  buildSleeperPoolStatColumnDefs,
+  formatDraftStatDisplay,
+  getStatValueForDraftPlayer,
+  type DraftStatPlayerSource,
+} from '@/lib/draft-room/draftSportStatColumns'
 import { mockPlayerAssetUrls } from '@/lib/mock-draft/mockPlayerAssets'
 import { parseAfAdpContributions, sortByAfAdp, type MockPoolSort } from '@/lib/mock-draft/mockAfAdpSort'
 import { ADP_LABEL_AF, AF_BLUE, TOOLTIP_AF_ADP, afAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
@@ -53,6 +62,8 @@ import {
 import type { DraftPickSnapshot } from '@/lib/live-draft-engine/types'
 import '@/components/core-app/af-core.css'
 import '@/components/app/draft-room/af-draft-room.css'
+import { AfAdpLockedHeader, afAdpLockedTitle, afAdpLockOf } from '@/components/app/draft-room/afAdpLock'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -247,6 +258,14 @@ interface AvailablePlayer {
   tier: number
   posRank: string
   isRookie: boolean
+  /* Football bye week from the pool feed (Phase 7). Optional so an older saved mock still restores. */
+  byeWeek?: number | null
+  /*
+   * The live room's season stat columns (lib/mock-draft/mockPoolSeasonStats.ts): `display.stats` and,
+   * in football, the season splits. Optional, so a mock saved before them restores with dashes.
+   */
+  display?: { stats?: Record<string, number> | null } | null
+  nflDraftProjectionSplits?: DraftStatPlayerSource['nflDraftProjectionSplits']
   /* Optional so a mock saved before headshots existed still restores. */
   headshotUrl?: string | null
   teamLogoUrl?: string | null
@@ -302,6 +321,80 @@ const SPEED_OPTIONS: Array<{ value: DraftSpeed; label: string }> = [
 
 const FOOTBALL_SCORING_OPTIONS: DraftScoring[] = ['PPR', 'Half PPR', 'Standard']
 const GENERIC_SCORING_OPTIONS: DraftScoring[] = ['Points', 'Categories', 'Standard']
+
+/** Only the numeric stats survive into the saved mock: the columns read numbers and nothing else. */
+function numericStatsFromUnknown(value: unknown): Record<string, number> | null {
+  const record = recordFromUnknown(value)
+  if (!record) return null
+  const out: Record<string, number> = {}
+  for (const [key, v] of Object.entries(record)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v
+  }
+  return Object.keys(out).length ? out : null
+}
+
+/** NFL offense: points and average, then the two columns that describe the position. */
+const NFL_MOCK_STAT_KEYS: Record<string, readonly string[]> = {
+  QB: ['pts', 'avg', 'pa_yds', 'pa_td'],
+  RB: ['pts', 'avg', 'ru_yds', 'ru_td'],
+  WR: ['pts', 'avg', 'rec', 'rec_yds'],
+  TE: ['pts', 'avg', 'rec', 'rec_yds'],
+  // Team defenses: fantasy points per game (scored game by game, nflTeamDefenseSeason.ts), then the counting stats.
+  DEF: ['avg', 'dst_sack', 'dst_int', 'dst_pa'],
+  DST: ['avg', 'dst_sack', 'dst_int', 'dst_pa'],
+}
+
+/**
+ * College football: each position's own season stats (mockPoolSeasonStats.ts reads them), with the
+ * NFL mock's labels. A WR's line is catches and yards, not passing.
+ */
+const NCAAF_MOCK_STAT_KEYS: Record<string, ReadonlyArray<readonly [key: string, label: string]>> = {
+  QB: [['pass_yds', 'PA YDS'], ['pass_td', 'PA TD'], ['rush_yds', 'RU YDS'], ['rush_td', 'RU TD']],
+  RB: [['rush_yds', 'RU YDS'], ['rush_td', 'RU TD'], ['rec', 'REC'], ['rec_yds', 'REC YDS']],
+  WR: [['rec', 'REC'], ['rec_yds', 'REC YDS'], ['rec_td', 'REC TD'], ['rush_yds', 'RU YDS']],
+  TE: [['rec', 'REC'], ['rec_yds', 'REC YDS'], ['rec_td', 'REC TD']],
+}
+
+/**
+ * Up to four of the live room's stat columns (its pool table's own set) for one pool row, by sport
+ * and position — a pitcher gets pitching columns, a goalie goalie ones, a receiver catches and yards.
+ * A missing value is a dash, never a guess.
+ */
+export function mockPoolStatCells(player: Pick<AvailablePlayer, 'position' | 'display' | 'nflDraftProjectionSplits' | 'adp'>, sport: string) {
+  const defs = buildSleeperPoolStatColumnDefs(sport, { position: player.position })
+  const upperSport = String(sport).toUpperCase()
+  const position = String(player.position).toUpperCase()
+  const college = upperSport === 'NCAAF' ? NCAAF_MOCK_STAT_KEYS[position] : undefined
+  const wanted = upperSport === 'NFL' ? NFL_MOCK_STAT_KEYS[position] : undefined
+  const picked = college
+    ? college.flatMap(([key, label]) => defs.filter((d) => d.key === key).map((d) => ({ ...d, label })))
+    : wanted
+      ? wanted.flatMap((key) => defs.filter((d) => d.key === key))
+      : defs
+  return picked
+    .slice(0, 4)
+    .map((column) => ({
+      key: column.key,
+      label: column.label,
+      value: formatDraftStatDisplay(getStatValueForDraftPlayer(player as DraftStatPlayerSource, column), column),
+    }))
+}
+
+/**
+ * The phone pool row's stat line: two stats, short labels, so it fits beside the Draft and Queue
+ * buttons on a 390px screen without being cut off. Football leads with points per game (a season
+ * total says less in a draft) and then the position's main stat; other sports take their first two
+ * stats that have a value. Missing values are skipped, never shown as dashes or guessed.
+ */
+export function mockPoolPhoneStatLine(
+  player: Pick<AvailablePlayer, 'position' | 'display' | 'nflDraftProjectionSplits' | 'adp'>,
+  sport: string,
+): string | null {
+  const isNfl = String(sport).toUpperCase() === 'NFL'
+  const cells = mockPoolStatCells(player, sport).filter((cell) => cell.value !== '—' && !(isNfl && cell.key === 'pts'))
+  const line = cells.slice(0, 2).map((cell) => `${cell.label} ${cell.value}`).join(' · ')
+  return line || null
+}
 
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -390,6 +483,17 @@ function getRosterSlots(settings: DraftSettings): string[] {
         ? ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF']
         : ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF']
   }
+}
+
+/** The mock's flat slot list ("QB", "RB", "RB", …, "BN") as the counts the shared roster panel reads. */
+export function mockStarterSlotCounts(slots: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const slot of slots) {
+    const key = String(slot ?? '').trim().toUpperCase()
+    if (!key || key === 'BN' || key === 'BENCH' || key === 'IR' || key === 'TAXI') continue
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+  return counts
 }
 
 function slotSupportsPosition(slot: string, position: string): boolean {
@@ -769,6 +873,9 @@ export default function MockDraftSleeperRoomClient({
   const [showDrafted, setShowDrafted] = useState(false)
   const [rookiesOnly, setRookiesOnly] = useState(false)
   const [poolSort, setPoolSort] = useState<MockPoolSort>('adp')
+  // AF ADP's lock (components/app/draft-room/afAdpLock.tsx), read off the pool response.
+  const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
+  const afAdpTitle = afAdpLockedTitle(useOptionalLanguage().language)
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -924,11 +1031,14 @@ export default function MockDraftSleeperRoomClient({
    * An open mock has no league, so no chip.
    */
   const leagueConceptForMock = leaguePayload ? leagueAccentFor(leaguePayload.leagueConcept ?? null, { isDynasty: leaguePayload.isDynasty }).concept : null
+  /** NBA / NHL / MLB: games this week per team for the "My team" panel (football shows BYE). */
+  const rosterWeekGames = useWeekGames(draftState?.settings.sport ?? null)
   const signatureByOverall = useMemo(
     () => tileSignatureChipsByOverall(
       leagueConceptForMock,
       draftState?.picks ?? [],
-      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id })),
+      // Mock rows keep age at the top level; their `display` holds only stats, which the chips never read.
+      (draftState?.availablePlayers ?? []).map((player) => ({ ...player, playerId: player.id, display: null })),
     ),
     [leagueConceptForMock, draftState?.picks, draftState?.availablePlayers],
   )
@@ -1461,6 +1571,7 @@ export default function MockDraftSleeperRoomClient({
     if (!response.ok) {
       throw new Error(payload.error ?? 'Could not load player pool.')
     }
+    setAfAdpLock(afAdpLockOf(payload))
 
     const mapped = arrayFromUnknown(payload.entries)
       .map((entry, index): AvailablePlayer | null => {
@@ -1500,6 +1611,10 @@ export default function MockDraftSleeperRoomClient({
           tier: Math.max(1, Math.ceil((index + 1) / 12)),
           posRank: `${position}${index + 1}`,
           isRookie: raw.isRookie === true,
+          byeWeek: numberFromUnknown(raw.byeWeek) ?? numberFromUnknown(raw.bye),
+          display: { stats: numericStatsFromUnknown(recordFromUnknown(raw.display)?.stats) },
+          nflDraftProjectionSplits:
+            (recordFromUnknown(raw.nflDraftProjectionSplits) as DraftStatPlayerSource['nflDraftProjectionSplits']) ?? null,
           age: numberFromUnknown(raw.age),
           classYearLabel: stringFromUnknown(raw.classYearLabel),
           poolType: stringFromUnknown(raw.poolType),
@@ -1826,11 +1941,6 @@ export default function MockDraftSleeperRoomClient({
     }
     setRoundOneQueue((queue) => (queue[0]?.id.startsWith('mock-r1-you-') ? [queue[0], item] : [item]))
   }, [draftState])
-
-  const currentRosterSlots = useMemo(
-    () => (draftState && onTheClockTeam ? assignRosterSlots(onTheClockTeam.picks, draftState.settings) : []),
-    [draftState, onTheClockTeam],
-  )
 
   const availableFilters = useMemo(() => {
     if (!draftState) return ['All']
@@ -2258,6 +2368,7 @@ export default function MockDraftSleeperRoomClient({
     />
 
     const sport = draftState.settings.sport
+    const byeById = new Map(draftState.availablePlayers.map((player) => [player.id, player.byeWeek ?? null] as const))
     const pickOrNominate = (player: AvailablePlayer) => {
       if (draftedIds.has(player.id) || !isUserTurn) return
       // Auction: your turn is a nomination.
@@ -2383,15 +2494,21 @@ export default function MockDraftSleeperRoomClient({
               <input type="checkbox" checked={rookiesOnly} onChange={(event) => setRookiesOnly(event.target.checked)} />
               {mockCopy.rookiesOnly}
             </label>
-            <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
-              <input
-                type="checkbox"
-                checked={poolSort === 'afAdp'}
-                onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
-                data-testid="mock-draft-sort-af-adp"
-              />
-              {mockCopy.sortBy} <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
-            </label>
+            {afAdpLock ? (
+              <span className="inline-flex items-center gap-2" title={afAdpTitle}>
+                <AfAdpLockedHeader lock={afAdpLock} label={`${mockCopy.sortBy} ${ADP_LABEL_AF}`} source="lock_af_adp_mock_draft" />
+              </span>
+            ) : (
+              <label className="inline-flex items-center gap-2" title={TOOLTIP_AF_ADP}>
+                <input
+                  type="checkbox"
+                  checked={poolSort === 'afAdp'}
+                  onChange={(event) => setPoolSort(event.target.checked ? 'afAdp' : 'adp')}
+                  data-testid="mock-draft-sort-af-adp"
+                />
+                {mockCopy.sortBy} <span style={{ color: AF_BLUE }}>{ADP_LABEL_AF}</span>
+              </label>
+            )}
           </div>
         </div>
 
@@ -2401,7 +2518,7 @@ export default function MockDraftSleeperRoomClient({
             const queued = queue.includes(player.id) && !drafted
             const auction = Boolean(draftState.auction)
             return (
-              <div key={player.id} className="flex items-center gap-1.5 border-b border-white/[0.04] py-1" data-testid={`mock-draft-pool-row-${player.id}`}>
+              <div key={player.id} className="flex flex-wrap items-center gap-x-1.5 border-b border-white/[0.04] py-1" data-testid={`mock-draft-pool-row-${player.id}`}>
                 <button
                   type="button"
                   disabled={drafted || !isUserTurn}
@@ -2451,12 +2568,24 @@ export default function MockDraftSleeperRoomClient({
                     <div className="truncate text-xs font-semibold text-white/90">{player.name}</div>
                     <div className="text-[11px] text-white/45">
                       {player.team || 'FA'} · {player.posRank}
+                      {sportHasByeWeeks(sport) && player.byeWeek != null ? (
+                        <span data-testid={`mock-draft-player-bye-${player.id}`}> · BYE {player.byeWeek}</span>
+                      ) : null}
                     </div>
                   </div>
                   {queued ? (
                     <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">{mockCopy.queued}</span>
                   ) : null}
                   {player.injuryStatus ? <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span> : null}
+                  {/* Laptop and tablet: the sport's stat columns, each with its own label. */}
+                  <div className="hidden shrink-0 items-center gap-3 md:flex" data-testid={`mock-draft-player-stats-${player.id}`}>
+                    {mockPoolStatCells(player, sport).map((cell) => (
+                      <div key={cell.key} className="flex min-w-11 flex-col items-end leading-tight">
+                        <span className="whitespace-nowrap text-[11px] uppercase tracking-wide text-white/40">{cell.label}</span>
+                        <span className="font-mono text-[12px] text-white/85">{cell.value}</span>
+                      </div>
+                    ))}
+                  </div>
                   <div className="flex shrink-0 flex-col items-end leading-tight">
                     <span className="font-mono text-[11px] text-white/45" title={systemAdpCellTitle(player.adp != null)} data-testid={`mock-draft-player-adp-${player.id}`}>
                       {player.adp?.toFixed(1) ?? '—'}
@@ -2464,7 +2593,7 @@ export default function MockDraftSleeperRoomClient({
                     <span
                       className="font-mono text-[11px] font-semibold"
                       style={player.afAdp != null ? { color: AF_BLUE } : { color: 'rgba(255,255,255,0.3)' }}
-                      title={afAdpCellTitle({
+                      title={afAdpLock && player.afAdp == null ? afAdpTitle : afAdpCellTitle({
                         hasValue: player.afAdp != null,
                         contributions: player.afAdpContributions ?? null,
                         importedSampleSize: player.afAdpImportedSampleSize ?? null,
@@ -2472,10 +2601,25 @@ export default function MockDraftSleeperRoomClient({
                       })}
                       data-testid={`mock-draft-player-af-adp-${player.id}`}
                     >
-                      AF {player.afAdp != null ? player.afAdp.toFixed(1) : '—'}
+                      AF {player.afAdp != null ? player.afAdp.toFixed(1) : afAdpLock ? '🔒' : '—'}
                     </span>
                   </div>
                 </button>
+                {/*
+                 * Phones: the stat line gets a row of its own under the player. Beside the Draft and
+                 * Queue buttons the name column is ~75px, too narrow for any stat line to fit.
+                 */}
+                {(() => {
+                  const line = mockPoolPhoneStatLine(player, sport)
+                  return line ? (
+                    <div
+                      className="basis-full truncate pb-0.5 pl-1 text-[11px] text-white/60 md:hidden"
+                      data-testid={`mock-draft-player-stats-line-${player.id}`}
+                    >
+                      {line}
+                    </div>
+                  ) : null
+                })()}
               </div>
             )
           })}
@@ -2483,28 +2627,43 @@ export default function MockDraftSleeperRoomClient({
       </div>
     )
 
+    /*
+     * Phase 7 (2026-11-19): the mock's roster is the live room's "My team" panel — plain slot names
+     * in the sport's own order, BN for the bench, the pick each player went at, his bye in football,
+     * and a team picker. The old list had no bench, so every pick past the starting slots vanished.
+     */
+    const mockStarterSlots = mockStarterSlotCounts(getRosterSlots(draftState.settings))
+    const mockStarterTotal = Object.values(mockStarterSlots).reduce((sum, n) => sum + n, 0)
     const rosterList = (
-      <div className="h-full min-h-0 overflow-y-auto bg-[#0c0c1e] p-3" data-testid="mock-draft-roster-panel">
-        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">
-          {onTheClockTeam?.isUser || !onTheClockTeam ? mockCopy.yourRoster : mockCopy.teamRoster(onTheClockTeam.managerName)}
-        </div>
-        <div className="mt-3 space-y-1">
-          {getRosterSlots(draftState.settings).map((slot, index) => (
-            <div key={`${slot}-${index}`} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2 py-1.5">
-              <span className="w-12 rounded px-1 py-0.5 text-center text-[11px] font-black" style={positionChipStyle(slot, sport)}>
-                {slot}
-              </span>
-              {currentRosterSlots[index] ? (
-                <>
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-white/80">{currentRosterSlots[index]?.playerName}</span>
-                  <span className="text-[11px] text-white/40">{currentRosterSlots[index]?.team}</span>
-                </>
-              ) : (
-                <span className="text-[11px] italic text-white/30">{mockCopy.empty}</span>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="h-full min-h-0 overflow-hidden" data-testid="mock-draft-roster-panel">
+        <ResultsRosterPanel
+          teams={draftState.teams.map(
+            (team): ResultsRosterPanelTeam => ({
+              rosterId: String(team.slot),
+              displayName: team.managerName,
+              isCurrentUser: team.isUser,
+              isAi: team.isAI,
+            }),
+          )}
+          picks={draftState.picks.map(
+            (pick): ResultsRosterPanelPick => ({
+              rosterId: String(pick.slot),
+              playerName: pick.playerName,
+              position: pick.position,
+              team: pick.team || null,
+              overall: pick.overall,
+              byeWeek: byeById.get(pick.playerId) ?? null,
+              pickLabel: draftState.auction ? null : mockPickLabel(pick.overall, draftState.settings.teamCount),
+              imageUrl: pick.headshotUrl ?? null,
+            }),
+          )}
+          currentUserRosterId={String(draftState.teams.find((team) => team.isUser)?.slot ?? '') || null}
+          starterSlots={mockStarterSlots}
+          benchSlots={Math.max(0, draftState.settings.rounds - mockStarterTotal)}
+          sport={sport}
+          weekGames={rosterWeekGames}
+          testIdBase="mock-draft-roster"
+        />
       </div>
     )
 

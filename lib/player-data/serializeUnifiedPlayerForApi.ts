@@ -29,6 +29,8 @@ import {
 } from '@/lib/player-data/nflRedraftLiveScoringContext'
 
 export type UnifiedPlayerWireDto = {
+  /** The learned factors that moved `projectedPoints` (added by the league pricing passes; stripped by the AF Intelligence gate). */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   id: string
   /**
    * Waiver wire only: a recently dropped player is on waivers until this ISO time
@@ -97,6 +99,16 @@ export type UnifiedPlayerWireDto = {
    */
   periodOpponent?: string | null
   periodHomeAway?: 'home' | 'away' | null
+  /**
+   * NFL leagues that play here: the week's kickoff, the opponent's rank against the player's position
+   * and the opponent's crest, stamped by the roster route (lib/redraft/nflRosterOutlook.ts).
+   */
+  periodKickoffIso?: string | null
+  opponentRank?: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  opponentLogoUrl?: string | null
+  /** NFL: the club's bye week, and the cached forecast at this week's game. */
+  teamByeWeek?: number | null
+  periodWeather?: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 
 export type { ProviderFallbackDiagnostics }

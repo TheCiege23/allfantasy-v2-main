@@ -36,16 +36,18 @@ function footballWeeklyLock(now: Date): LineupLockResult {
   const hour = et.getHours()
   const minute = et.getMinutes()
 
-  if (day >= 3 && day <= 6) {
-    return { locked: false, policy: 'football_weekly' }
-  }
-
+  // 🛑 THIS CHECK USED TO SIT BELOW THE WED–SAT "UNLOCKED" RETURN AND COULD NEVER RUN (2026-11-23).
+  // Only a fallback now: a known schedule locks each player at his own kickoff (lineupLockService.ts).
   if (day === 4 && (hour > 20 || (hour === 20 && minute >= 15))) {
     return {
       locked: true,
       reason: 'Thursday night lineup is locked after kickoff (approx. 8:15 PM ET).',
       policy: 'football_weekly',
     }
+  }
+
+  if (day >= 3 && day <= 6) {
+    return { locked: false, policy: 'football_weekly' }
   }
 
   if (day === 0 && hour < 13) {

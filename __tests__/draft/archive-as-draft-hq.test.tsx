@@ -78,6 +78,20 @@ describe('the archive as Draft HQ', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Drafting on Sleeper · 2 picks made')
   })
 
+  it('a draft imported without its format or status says what is on file, never "unknown"', () => {
+    // Staging 2026-11-19: a Fantrax draft read "Draft status: unknown" over "2026 · NFL · unknown".
+    const d = detail()
+    const bare = { ...d, choice: { ...d.choice, key: 'legacy:NFL:2026', format: 'unknown', status: 'unknown' } } as ArchiveDetail
+    const view = render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('2026 draft on Fantrax · 2 picks on file')
+    expect(document.querySelector('.af-archive-hq-sub')?.textContent).toBe('2026 · NFL')
+    expect(document.body.textContent).not.toMatch(/unknown/i)
+    view.unmount()
+    h.language = 'es'
+    render(<DraftArchive {...props} detail={bare} asDraftHq platformName="Fantrax" />)
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft de 2026 en Fantrax · 2 selecciones registradas')
+  })
+
   it('with no draft open it is still titled Draft HQ', () => {
     render(<DraftArchive {...props} detail={null} asDraftHq />)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Draft HQ')

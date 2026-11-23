@@ -12,6 +12,11 @@ export type PricingAccount = {
   renewsAt: string | null
   /** Spendable tokens; null when the read did not return one. */
   tokenBalance: number | null
+  /**
+   * SKUs of the live subscriptions (e.g. `af_pro_monthly`), any store. The card for exactly that SKU
+   * reads "Current plan" instead of offering it again. Absent/empty when unread.
+   */
+  heldSkus?: string[]
   /** Tokens spent per week, net of refunds, oldest first (lib/tokens/weeklyTokenSpend.ts); null when unread. */
   weeklySpend?: { weekStart: string; spent: number }[] | null
 }

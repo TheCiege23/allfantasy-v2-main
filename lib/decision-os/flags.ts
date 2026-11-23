@@ -59,7 +59,6 @@ export type DecisionOsFeed =
   | 'commissionerIntelligence'
   | 'leagueIntelligence'
   | 'portfolio'
-  | 'savedAnalysis'
   /**
    * The commissioner health decision bridged from Pipeline A (R2.3).
    *
@@ -90,6 +89,32 @@ export type DecisionOsFeed =
    * rest of the packet, with a stated gap.
    */
   | 'waiverDecision'
+  /*
+   * THE FIVE SLICES THE 2026-11-20 +10% PUSH ADDED, each with its own switch (hub re-score, operability). Each one
+   * does real work per turn — a My Team load, a value board, up to three trade grades, a draft decision, a league's
+   * manager records — so an operator must be able to shed any one of them without a deploy and without losing
+   * the others. Killed, the slice is a `disabled` gap and the matching Chimmy tool still answers.
+   */
+  /** My Team's best lineup on lineup questions (`lib/chimmy/myTeamLineupGrounding.ts`). */
+  | 'myTeamLineup'
+  /** NBA/MLB/NHL roster values on the league's board. Also off whenever `marketValues` is. */
+  | 'rosterBoardValues'
+  /** The graded trades waiting on the asker, on trade questions. */
+  | 'pendingTrades'
+  /** The draft board and Draft OS's pick, on draft questions. */
+  | 'draftBoard'
+  /** Leaguemates' records (Competitive Edge), on manager questions. */
+  | 'managerRecords'
+  /*
+   * 🛑 TWO SLICES WITH NO SWITCH OF THEIR OWN (2026-11-20 re-score). Both stopped only when the whole `projections`
+   * feed was killed, so "every packet slice has its own kill switch" was false for them. Each does its own reads —
+   * the roster priced under the league's own rules, and AllFantasy's league player metrics — so each is sheddable
+   * alone now. Both still stop with `projections`, which they are built on.
+   */
+  /** The asker's roster priced under this league's scoring (`grounding/rosterLeagueProjections.ts`). */
+  | 'rosterProjections'
+  /** AllFantasy's league player metrics (`lib/af-projections/leaguePlayerMetrics.ts`). */
+  | 'leaguePlayerMetrics'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -101,11 +126,17 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'commissionerIntelligence',
   'leagueIntelligence',
   'portfolio',
-  'savedAnalysis',
   'commissionerHealthDecision',
   'idpKickerValues',
   'rosterValueGrade',
   'waiverDecision',
+  'myTeamLineup',
+  'rosterBoardValues',
+  'pendingTrades',
+  'draftBoard',
+  'managerRecords',
+  'rosterProjections',
+  'leaguePlayerMetrics',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

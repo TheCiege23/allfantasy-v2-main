@@ -1,7 +1,10 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { crosswalkToSleeperIds, sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
+import { lineupCrosswalkToSleeperIds, lineupRegistryNames, type LineupRegistryName } from './lineupCrosswalk'
+import { ownPointsByPlayer } from './matchupOwnPoints'
+import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import {
   composePlayerIdentities,
   type ComposedPlayerIdentity,
@@ -213,6 +216,12 @@ export type MatchupPlayerCell = {
    * stats are imported daily after the games, so a Sunday line appears the next morning.
    */
   statLine?: string | null
+  /**
+   * AllFantasy's own estimate of what he scored, from that same stored stat line under this league's
+   * rules (lib/core-app/matchupOwnPoints.ts). Only when the platform's own per-player scores are not on
+   * file, only for a final game, and never copied into `actual`.
+   */
+  ownPoints?: number | null
 }
 
 export type MatchupSlot = {
@@ -890,10 +899,17 @@ async function buildMatchupData(
    * one lookup would silently break the score join.
    */
   const playerCrosswalk = scoreIds.length
-    ? await timer.time('crosswalk', crosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
+    ? await timer.time('crosswalk', lineupCrosswalkToSleeperIds(league.platform, sport, scoreIds).catch(
         () => new Map<string, string>(),
       ))
     : new Map<string, string>()
+  /* A Fantrax starter the crosswalk could not translate is still named, from the registry (see lineupCrosswalk.ts). */
+  const untranslatedIds = scoreIds.filter((id) => !playerCrosswalk.has(id))
+  const registryNames = untranslatedIds.length
+    ? await timer.time('registryNames', lineupRegistryNames(league.platform, sport, untranslatedIds, platformLeagueId).catch(
+        () => new Map<string, LineupRegistryName>(),
+      ))
+    : new Map<string, LineupRegistryName>()
   /* ⚠ ESPN D/ST ids (`-16002` is BUF) are not in the player crosswalk; the id alone names the club. */
   const sleeperIdByRosterId = String(sport ?? 'NFL').toUpperCase() === 'NFL'
     ? withTeamDefenseIds(league.platform, playerCrosswalk, scoreIds.map((playerId) => ({ playerId })))
@@ -931,7 +947,7 @@ async function buildMatchupData(
       ? prisma.playerGameStat
           .findMany({
             where: { sportType: 'NFL', source: 'sleeper', season: latest.seasonYear, weekOrRound: latest.week, playerId: { in: lookupIds } },
-            select: { playerId: true, statPayload: true },
+            select: { playerId: true, statPayload: true, normalizedStatMap: true },
           })
           .catch(() => [])
       : Promise.resolve([]))
@@ -982,6 +998,13 @@ async function buildMatchupData(
     const line = nflStatLine(row.statPayload)
     if (line && !statLineBy.has(row.playerId)) statLineBy.set(row.playerId, line)
   }
+  /*
+   * With no platform score on file for anyone, price those same lines under this league's rules. Shown
+   * beside the box score as an estimate; `actual`, the live totals and the win probability are untouched.
+   */
+  const ownPointsBy = scoreRows.length === 0
+    ? ownPointsByPlayer(statRows, extractScoringSettings(league.settings))
+    : new Map<string, number>()
   /*
    * Each club's game THIS week — kickoff and opponent — from the same rows the states come from.
    * Regular-season fixtures only (an untyped live-writer row may be a preseason reading), earliest
@@ -1129,11 +1152,13 @@ async function buildMatchupData(
     entry: { playerId: string; unavailable?: Unavailable | null },
     sleeperId: string | null,
     team: string | null | undefined,
-  ): { result: GameResult | null; statLine: string | null } => {
-    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null }
+  ): { result: GameResult | null; statLine: string | null; ownPoints: number | null } => {
+    if (gameStateOf(entry) !== 'final') return { result: null, statLine: null, ownPoints: null }
     return {
       result: resultOf(normalizeTeamAbbrev(team)),
       statLine: sleeperId ? statLineBy.get(sleeperId) ?? null : null,
+      // Not in a league whose scoring type we refuse to price: its projections are withheld for the same reason.
+      ownPoints: sleeperId && !withholdPointsProjections ? ownPointsBy.get(sleeperId) ?? null : null,
     }
   }
   const cellFor = (
@@ -1187,6 +1212,8 @@ async function buildMatchupData(
       }
     }
     const identity = identityBy.get(entry.playerId)
+    // Name, position and club only: with no Sleeper id there is no headshot, injury status or box score to attach.
+    const registry = identity ? undefined : registryNames.get(entry.playerId)
     return {
       playerId: entry.playerId,
       /*
@@ -1196,15 +1223,15 @@ async function buildMatchupData(
        * roster id.
        */
       sleeperId: identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null,
-      name: identity?.name ?? null,
-      position: displayPosition(identity?.position),
+      name: identity?.name ?? registry?.name ?? null,
+      position: displayPosition(identity?.position ?? registry?.position),
       /*
        * ⚠ NORMALISED, BECAUSE THE CREST LOOKUP UPPERCASES WHAT IT IS GIVEN AND
        * DOES NOT NORMALISE. `SportsPlayer.team` holds "Kansas City Chiefs" on 32
        * distinct values in production; `teamLogoUrl` would hand
        * "KANSAS CITY CHIEFS" to the CDN resolver and get nothing back.
        */
-      team: normalizeTeamAbbrev(identity?.team),
+      team: normalizeTeamAbbrev(identity?.team ?? registry?.team),
       sport,
       // Already vetted by `asHeadshotUrl` when the identity was composed.
       imageUrl: identity?.imageUrl ?? null,
@@ -1218,8 +1245,8 @@ async function buildMatchupData(
       injury: !entry.unavailable && identity
         ? atRisk[sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) ?? ''] ?? null
         : null,
-      ...fixtureOf(normalizeTeamAbbrev(identity?.team)),
-      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team),
+      ...fixtureOf(normalizeTeamAbbrev(identity?.team ?? registry?.team)),
+      ...finalLines(entry, identity ? sleeperLookupId(league.platform, entry.playerId, sleeperIdByRosterId, sport) : null, identity?.team ?? registry?.team),
     }
   }
 

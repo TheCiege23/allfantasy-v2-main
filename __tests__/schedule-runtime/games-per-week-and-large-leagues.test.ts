@@ -150,6 +150,13 @@ describe('standings over a multi-game season', () => {
     expect(state.standings.every((row) => row.wins + row.losses + row.ties === 105)).toBe(true)
     // The strongest team wins every game.
     expect(state.standings[0]).toMatchObject({ rosterId: 'r036', wins: 105, losses: 0 })
+    // Points For is the team's weekly score once a week (135 x 21 weeks), not once per game: counted
+    // per game it read five times the real total.
+    expect(state.standings[0]!.pointsFor).toBe(135 * 21)
+    expect(state.standings.every((row) => row.pointsFor === strength.get(row.rosterId)! * 21)).toBe(true)
+    // Points Against is each week's average opponent score, so it sits on the same scale: every
+    // opponent scores between 100 and 135, and so does each of a team's 21 weekly averages.
+    expect(state.standings.every((row) => row.pointsAgainst >= 100 * 21 && row.pointsAgainst <= 135 * 21)).toBe(true)
 
     const withMedian = buildCanonicalScheduleRuntimeState({ ...input, gamesPerWeek: 5, medianGame: true })
     // One extra result per week, not one per game: 105 + 21.

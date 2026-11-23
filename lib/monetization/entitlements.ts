@@ -30,7 +30,9 @@ export const ENTITLEMENTS = {
     // War Room is not a superset of Pro, so naming Pro alone would have locked
     // out every War Room subscriber for a feature that is squarely draft- and
     // trade-room intelligence.
-    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    // AF Commissioner added 2026-11-22 (owner: "all high level functions … covered by AF Pro, Supreme or
+    // Commissioner").
+    requiredPlan: ['af_pro', 'af_commissioner', 'af_war_room', 'af_supreme'],
     // AF Pro: the broadest plan that includes it. `/pricing` was a grid with nothing picked out.
     upgradeUrl: '/pro',
     upgradeLabel: 'Unlock Competitive Edge',
@@ -191,10 +193,10 @@ export const ENTITLEMENTS = {
     key: 'commissioner_chimmy_autopilot',
     label: 'Chimmy Autopilot',
     description:
-      'Chimmy runs a team whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Requires AF Commissioner subscription.',
-    requiredPlan: ['af_commissioner', 'af_supreme'],
-    upgradeUrl: '/commissioner-upgrade',
-    upgradeLabel: 'Get AF Commissioner',
+      'Chimmy runs a team — drafting for it and managing it — whose manager has left or gone quiet, playing like a dynasty owner until someone takes over. Part of AF Pro and AF Supreme (owner decision 2026-11-22; it was AF Commissioner).',
+    requiredPlan: ['af_pro', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
     highlightParam: 'chimmy_autopilot',
   },
   commissioner_integrity_monitoring: {
@@ -278,6 +280,23 @@ export const ENTITLEMENTS = {
     requiredPlan: ['af_pro', 'af_supreme'],
     upgradeUrl: '/pro',
     upgradeLabel: 'Get AF Pro',
+  },
+  /*
+   * AF INTELLIGENCE (owner's decision, 2026-11-22): "all high level functions that come from Chimmy and
+   * the OS system should be covered by AF Pro, Supreme or Commissioner". ONE key for all three plans, so
+   * no surface has to remember the list: AF projections (the engine's number and its measured factors),
+   * AF ADP, the full trade breakdown and player deep dives (CORE_DEPTH), and Chimmy's deep answers.
+   * Not in the plan matrix on purpose — the matrix accepts exactly one plan.
+   */
+  af_intelligence: {
+    key: 'af_intelligence',
+    label: 'AF projections, AF ADP and the full answers',
+    description:
+      "AllFantasy's own projections and ADP, every trade grade's full breakdown, player deep dives and Chimmy's complete answers. Included with AF Pro, AF Commissioner and AF Supreme.",
+    requiredPlan: ['af_pro', 'af_commissioner', 'af_supreme'],
+    upgradeUrl: '/pro',
+    upgradeLabel: 'Get AF Pro',
+    highlightParam: 'af_intelligence',
   },
   pro_af_projections: {
     key: 'pro_af_projections',
@@ -399,12 +418,13 @@ export const HIGHLIGHT_TO_PLAN_FAMILY: Record<string, SubscriptionPlanFamily> = 
   start_sit: 'af_pro',
   matchup: 'af_pro',
   af_projections: 'af_pro',
+  af_intelligence: 'af_pro',
   autocoach: 'af_pro',
   dynasty_projections: 'af_war_room',
   draft_strategy: 'af_war_room',
   manager_psychology: 'af_pro',
   dispersal_draft: 'af_commissioner',
   integrity_monitoring: 'af_commissioner',
-  chimmy_autopilot: 'af_commissioner',
+  chimmy_autopilot: 'af_pro',
   commissioner_waiver_ai: 'af_commissioner',
 }

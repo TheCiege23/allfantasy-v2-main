@@ -56,7 +56,23 @@ function shell(props: Record<string, unknown> = {}) {
   fireEvent.click(getByRole('button', { name: 'More' }))
   const more = Array.from(document.querySelectorAll('.af-mobile-more a')).map((a) => a.getAttribute('href') ?? '')
   const hrefs = groups.flatMap((g) => g.hrefs)
-  return { container, groups, hrefs, more, reachable: [...hrefs, ...more] }
+  // Inside a league the rail is Sleeper's tabs; the open tab's screens are the links above the screen.
+  const tabs = Array.from(rail.querySelectorAll('[data-league-tab]')).map((a) => a.getAttribute('data-league-tab') ?? '')
+  const subtabs = Array.from(container.querySelectorAll('[data-testid=af-subtabs] a')).map((a) => a.getAttribute('href') ?? '')
+  return { container, groups, hrefs, tabs, subtabs, more, reachable: [...hrefs, ...more] }
+}
+
+/**
+ * Every league screen reachable inside a league: the rail's tabs, plus each tab's screens as the strip shows them.
+ * One screen per tab is opened so every strip is drawn.
+ */
+function leagueReach(props: Record<string, unknown> = {}): string[] {
+  const out = new Set<string>()
+  for (const active of ['home', 'my-team', 'matchup', 'live', 'trades', 'league-settings']) {
+    const { hrefs, subtabs } = shell({ ...props, active })
+    for (const h of [...hrefs, ...subtabs]) out.add(h)
+  }
+  return [...out]
 }
 
 /** The /core path a tab-row key opens; '' is the league's own home. */
@@ -101,10 +117,10 @@ describe('the league gates, shared by the rail and the tab row', () => {
 })
 
 describe('the rail, grouped by job', () => {
-  it('inside a league: This week · League · Plan ahead, then one All leagues row', () => {
-    const { groups } = shell()
-    const headings = groups.map((g) => g.heading).filter(Boolean)
-    expect(headings).toEqual(['This week', 'League', 'Plan ahead'])
+  it('inside a league: the Sleeper tabs, then one All leagues row', () => {
+    const { groups, tabs } = shell()
+    expect(tabs).toEqual(['matchup', 'team', 'league', 'trade', 'settings'])
+    expect(groups.map((g) => g.heading).filter(Boolean)).toEqual([])
     expect(groups.at(-1)!.hrefs).toEqual(['/core?view=all&scope=all'])
   })
 
@@ -115,29 +131,29 @@ describe('the rail, grouped by job', () => {
     expect(groups.flatMap((g) => g.hrefs)).not.toContain('/core?view=all&scope=all')
   })
 
-  it('puts each league view in its group, carrying the league', () => {
-    const { groups } = shell()
-    const group = (h: string) => groups.find((g) => g.heading === h)!.hrefs
-    expect(group('This week')).toEqual(['/core/my-team?league=l1', '/core/matchup?league=l1', '/core/live?league=l1', '/core/waivers?league=l1'])
+  it('puts each league view under its tab, carrying the league', () => {
+    // Each tab links to its first screen; the strip above a tab's screen lists all of them.
+    expect(shell().groups[0]!.hrefs).toEqual(['/core/matchup?league=l1', '/core/my-team?league=l1', '/core?league=l1', '/core/trades?league=l1', '/core/league-settings?league=l1'])
+    expect(shell({ active: 'live' }).subtabs).toEqual(['/core/matchup?league=l1', '/core/live?league=l1', '/core/schedule?league=l1', '/core/war-room?league=l1'])
+    expect(shell({ active: 'waivers' }).subtabs).toEqual(['/core/my-team?league=l1', '/core/waivers?league=l1', '/core/players?league=l1'])
+    expect(shell({ active: 'standings' }).subtabs).toEqual(['/core?league=l1', '/core/standings?league=l1', '/core/draft-hq?league=l1'])
     // No Moves (2026-11-14): it folded into Trades.
-    expect(group('League')).toEqual(['/core/standings?league=l1', '/core/schedule?league=l1', '/core/trades?league=l1', '/core/league-settings?league=l1'])
-    expect(group('Plan ahead')).toContain('/core/season-outlook?league=l1')
-    expect(group('Plan ahead')).toContain('/core/draft-hq?league=l1')
+    expect(shell({ active: 'trades' }).subtabs).toEqual(['/core/trades?league=l1', '/core/season-outlook?league=l1'])
   })
 
-  it('shows Defense Hub under Plan ahead for an IDP league only', () => {
-    expect(shell({ hasIdpDefense: true }).hrefs).toContain('/core/defense-hub?league=l1')
-    expect(shell({ hasIdpDefense: false }).hrefs.some((h) => h.startsWith('/core/defense-hub'))).toBe(false)
+  it('shows Defense Hub under Team for an IDP league only', () => {
+    expect(shell({ hasIdpDefense: true, active: 'my-team' }).subtabs).toContain('/core/defense-hub?league=l1')
+    expect(leagueReach({ hasIdpDefense: false }).some((h) => h.startsWith('/core/defense-hub'))).toBe(false)
     expect(navSectionFor('defense-hub')).toBe('plan')
   })
 
-  it('adds a Commish group only for someone who runs a league', () => {
-    expect(shell().groups.some((g) => g.heading === 'Commish')).toBe(false)
-    expect(shell({ commissionerCount: 2 }).groups.find((g) => g.heading === 'Commish')?.hrefs).toEqual(['/core/commissioner?league=l1'])
+  it('adds Commissioner under Settings only for someone who runs a league', () => {
+    expect(leagueReach().some((h) => h.startsWith('/core/commissioner'))).toBe(false)
+    expect(shell({ commissionerCount: 2, active: 'league-settings' }).subtabs).toEqual(['/core/league-settings?league=l1', '/core/commissioner?league=l1'])
   })
 
   it('applies the shared gates in the rail too — Draft HQ included', () => {
-    const { hrefs } = shell({ leagueHasScoredWeek: false, importCapabilities: { trades: false, draft: false } })
+    const hrefs = leagueReach({ leagueHasScoredWeek: false, importCapabilities: { trades: false, draft: false } })
     for (const key of ['matchup', 'standings', 'season-outlook', 'trades', 'draft-hq']) {
       expect(hrefs.some((h) => h.startsWith(`/core/${key}`))).toBe(false)
     }
@@ -158,7 +174,7 @@ describe('the rail, grouped by job', () => {
     expect(hrefs).toContain('/core/week')
     expect(hrefs).toContain('/core/season-outlook')
     // ...and every one of them is back once a league is held.
-    const held = shell().hrefs
+    const held = leagueReach()
     for (const key of ['my-team', 'waivers', 'matchup', 'standings', 'war-room']) {
       expect(held).toContain(`/core/${key}?league=l1`)
     }

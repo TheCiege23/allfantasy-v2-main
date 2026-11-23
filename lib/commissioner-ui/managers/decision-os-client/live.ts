@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
 import type { CommissionerErrorContract } from '../../contracts'
 import type { ManagerIntelligenceClient } from './types'
@@ -20,6 +21,14 @@ function unavailable(message: string, retryable: boolean): CommissionerErrorCont
 export const liveManagerIntelligenceClient: ManagerIntelligenceClient = {
   async getManagerDirectory() {
     const timestamp = new Date().toISOString()
+    /*
+     * The owner's switch (`commissioner_os_live_ready_managers`, 2026-11-23): the row existed and nothing read it,
+     * so turning it off did nothing. It is a kill switch, not staging — the screen works whenever the row is true,
+     * and an environment with no row at all shows this message instead of the records.
+     */
+    if (!(await isLiveReady('managers'))) {
+      return { data: null, error: unavailable('The Managers screen is switched off.', false), source: 'live', timestamp }
+    }
     const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string } } | null
     const userId = session?.user?.id
     const leagueId = userId ? await resolveActiveLeagueId().catch(() => null) : null

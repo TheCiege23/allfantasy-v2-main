@@ -559,9 +559,10 @@
   .af-nt-handoff { align-self: flex-start; margin-left: 17px; }
 }
 
+/* 2026-11-20: the settings fold is the page's "More detail" (MoreDetail.tsx) at the foot, so its
+   link sits inside the fold's body rather than straight under the <details>. */
 .af-nt-settings { margin-bottom: 16px; }
-.af-nt-settings > summary { margin-bottom: 6px; }
-.af-nt-settings > a { display: inline-block; margin-bottom: 12px; }
+.af-nt-settings .af-md-body > a { display: inline-block; margin-bottom: 12px; }
 .af-nt-settings summary, .af-nt-row-menu summary, .af-nt-header-menu summary { cursor: pointer; }
 .af-nt-row-menu summary, .af-nt-header-menu summary {
   display: grid;

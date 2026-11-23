@@ -1,4 +1,6 @@
 import { isCanonicalLeagueRules, renderLeagueRules } from './leagueRulesText'
+import { isImportAssertions, renderImportAssertions } from './importAssertionsText'
+import { isMatchupSlice, isRosterSlice, isStandingsSlice, renderMatchupSlice, renderRosterSlice, renderStandingsSlice } from './contextSliceText'
 import type { DecisionOsGroundingPacket, GroundedSlice } from './packet'
 
 /**
@@ -50,6 +52,21 @@ const MAX_ITEMS = 8
 const ROSTER_PROJECTIONS_SLICE = "Your roster this week (this league's scoring)"
 const MAX_ITEMS_BY_SLICE: Readonly<Record<string, number>> = { [ROSTER_PROJECTIONS_SLICE]: 30 }
 
+/** My Team's best lineup — the lineup tool's own text, whole: a lineup cut short reads as complete. */
+const MY_TEAM_LINEUP_SLICE = 'Best lineup (My Team)'
+
+/** The trades waiting on the asker, each graded — the trade tool's own text, whole: an inbox cut short reads as complete. */
+const PENDING_TRADES_SLICE = 'Trades waiting on you (graded)'
+
+/** The draft and Draft OS's pick for the asker — the draft board tool's own text, whole. */
+const DRAFT_BOARD_SLICE = 'The draft (board and your pick)'
+
+/** Every leaguemate's record, facts only — the manager-record tool's own text, whole: a cut list reads as everyone. */
+const MANAGER_RECORDS_SLICE = 'Leaguemates’ records (facts only)'
+
+/** NBA/MLB/NHL: the asker's roster on the league's value board — whole, for the same reason. */
+const ROSTER_BOARD_VALUES_SLICE = 'Your roster values (this league\'s board)'
+
 /** Trim a prose slice so one long saved analysis cannot crowd out every other fact. */
 const MAX_PROSE = 1200
 
@@ -63,7 +80,7 @@ const MAX_PROSE = 1200
  */
 // Measured 2026-09-28: a 22-team survivor league with long team names is ~1,960 characters before
 // the values, trade-ledger and history lines (~500-600 more). 3200 leaves room; 2600 did not.
-const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200 }
+const MAX_PROSE_BY_SLICE: Readonly<Record<string, number>> = { 'League intelligence': 3200, [MY_TEAM_LINEUP_SLICE]: 3200, [PENDING_TRADES_SLICE]: 4000, [DRAFT_BOARD_SLICE]: 4000, [MANAGER_RECORDS_SLICE]: 3600, [ROSTER_BOARD_VALUES_SLICE]: 3600 }
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10)
@@ -87,8 +104,15 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   // "available" is what silenced three-brain's saved conclusion — the substance of plan item 6.2.
   if (typeof value === 'string') {
     const cap = MAX_PROSE_BY_SLICE[name] ?? MAX_PROSE
-    const trimmed = value.length > cap ? `${value.slice(0, cap)}…` : value
-    return trimmed.split('\n').map((l) => `    ${l}`)
+    if (value.length <= cap) return value.split('\n').map((l) => `    ${l}`)
+    /*
+     * ⚠ A CUT IS SAID OUT LOUD (hub serialization, 2026-11-23). A bare "…" read as the slice's natural end, so the
+     * model answered from the first `cap` characters as though they were all of it. Same convention as the 8-row
+     * object cap below: name what was left out, and point at the tool that has the rest.
+     */
+    const rows = `${value.slice(0, cap)}…`.split('\n').map((l) => `    ${l}`)
+    rows.push(`    (truncated: ${value.length - cap} more characters of ${name} not shown here — ask the matching tool for the rest)`)
+    return rows
   }
 
   /*
@@ -107,6 +131,21 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
    * Chimmy guessed PPR, the trade deadline and the FAAB budget (2026-11-16 re-score item 5).
    */
   if (isCanonicalLeagueRules(value)) return renderLeagueRules(value)
+
+  /*
+   * The import assertions, field by field. Same reason as the rules above: through `renderObject` the 8-row cap
+   * kept the two timestamps and cut parity, coverage and the incomplete scopes (2026-11-20 re-score push).
+   */
+  if (isImportAssertions(value)) return renderImportAssertions(value)
+
+  /*
+   * The three most-asked context slices, field by field (hub serialization, 2026-11-20). Through `renderObject` the
+   * roster printed "starters: 10 items (not itemised here)", the standings "rows: 12 items", and the matchup was cut
+   * after 8 fields. Keyed on the slice name AND the shape, so an unexpected payload still falls through.
+   */
+  if (name === 'Matchup' && isMatchupSlice(value)) return renderMatchupSlice(value)
+  if (name === 'Roster' && isRosterSlice(value)) return renderRosterSlice(value)
+  if (name === 'Standings' && isStandingsSlice(value)) return renderStandingsSlice(value)
 
   /*
    * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
@@ -138,10 +177,16 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   const cap = MAX_ITEMS_BY_SLICE[name] ?? MAX_ITEMS
   const rows: string[] = []
   if (name === ROSTER_PROJECTIONS_SLICE) {
-    const first = value[0] as { week?: unknown; season?: unknown } | null
+    const first = value[0] as { week?: unknown; season?: unknown; basis?: unknown; rateSource?: unknown } | null
     const when = typeof first?.week === 'number' ? `Week ${first.week}${first.season ? ` ${String(first.season)}` : ''}` : 'This week'
     rows.push(
-      `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
+      first?.basis === 'season_rate' && first.rateSource === 'season_projection'
+        ? // NCAAF (2026-11-23): AllFantasy's season projection under this league's rules — My Team's number.
+          `    ${when}, scored under this league's own rules from AllFantasy's season projections: each player's per-game projection under this league's points, times his games this week where the schedule is known — the same numbers My Team shows. A season rate, NOT a game-by-game forecast. For anyone on this list, quote THIS number, not the canonical Projections row. Injuries are not applied here.`
+        : first?.basis === 'season_rate'
+        ? // NBA / NHL / MLB / NCAAB / soccer (2026-11-20): the league value board's per-game rate, the numbers My Team and the Trade Center use.
+          `    ${when}, priced on this league's own value board: each player's per-game rate under this league's points, times his games this week where the schedule is known — the same per-game numbers My Team, the Trade Center and the value answer use. A season rate, NOT a game-by-game forecast: rest days and changed roles are not in it, and a daily league's My Team prices one day. For anyone on this list, quote THIS number, not the canonical Projections row. Injuries are not applied here.`
+        : `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
     )
   }
   for (const item of ordered.slice(0, cap)) {
@@ -186,9 +231,18 @@ const SKIP_KEYS = new Set(['leagueId', 'teamId', 'yourTeamId', 'opponentTeamId',
  */
 function renderObject(o: Record<string, unknown>): string[] {
   const rows: string[] = []
+  /*
+   * 🛑 A FIELD PAST THE CAP IS NAMED, NEVER SILENTLY DROPPED (hub serialization, 2026-11-20). The cap stopped the loop
+   * and said nothing, which is how the import slice's parity and coverage, and the matchup's playoff fields, went
+   * missing without a trace. The model is now told which fields exist but are not shown, so it can call the tool.
+   */
+  const dropped: string[] = []
   for (const [k, v] of Object.entries(o)) {
-    if (rows.length >= MAX_ITEMS) break
     if (SKIP_KEYS.has(k) || v == null) continue
+    if (rows.length >= MAX_ITEMS) {
+      dropped.push(k)
+      continue
+    }
 
     if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
       rows.push(`    ${k}: ${typeof v === 'number' ? fmt(v) : String(v)}`)
@@ -221,7 +275,29 @@ function renderObject(o: Record<string, unknown>): string[] {
     // ⚠ PRESENT, NOT SUMMARISED. See the header: descending is what makes a dump possible.
     rows.push(`    ${k}: present`)
   }
+  if (dropped.length) {
+    rows.push(`    (+${dropped.length} more field${dropped.length === 1 ? '' : 's'} not shown here: ${dropped.slice(0, 8).join(', ')}${dropped.length > 8 ? ', …' : ''} — ask the matching tool for them)`)
+  }
   return rows
+}
+
+/** Non-illegal verdicts shown per decision; the rest are counted and named, never dropped silently. */
+const MAX_VERDICTS_SHOWN = 6
+
+const SEVERITY_RANK: Readonly<Record<string, number>> = { critical: 0, warning: 1, info: 2 }
+
+/** Attention first: anything that is not plainly `legal`, then by severity. Lower sorts earlier. */
+function verdictRank(v: Record<string, unknown>): number {
+  const attention = v.verdict === 'legal' ? 10 : 0
+  return attention + (SEVERITY_RANK[String(v.severity)] ?? 3)
+}
+
+/**
+ * One bridged decision as prompt lines — the same rendering the packet gives it, for a Chimmy tool that reads the
+ * slice itself (`get_league_health`, 2026-11-23). Exported so there is one renderer for a decision, never two.
+ */
+export function renderDecisionFactForPrompt(fact: unknown): string[] {
+  return isDecisionFact(fact) ? renderDecision(fact) : []
 }
 
 function isDecisionFact(v: unknown): v is Record<string, unknown> {
@@ -257,8 +333,25 @@ function renderDecision(o: Record<string, unknown>): string[] {
   )
   const illegal = verdicts.filter((v) => v.verdict === 'illegal')
   for (const v of illegal) rows.push(`    NOT ALLOWED — ${String(v.rule)}: ${String(v.message)}`)
-  const others = verdicts.filter((v) => v.verdict !== 'illegal').slice(0, 3)
-  for (const v of others) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  /*
+   * ⚠ THE REST ARE ORDERED BY ATTENTION AND WHAT IS LEFT OUT IS COUNTED (hub serialization, 2026-11-23). This was
+   * `.slice(0, 3)` in engine order, and commissioner health can emit up to 13 verdicts — so "abandoned teams" or
+   * "missed lineups" could be the ones cut, silently. Now anything that is not `legal` (needs approval, temporarily
+   * blocked) comes before a plain `legal`, critical before warning before info, and a "+N more" line names the
+   * rules not shown — the same convention as the 8-row object cap.
+   */
+  const others = verdicts
+    .filter((v) => v.verdict !== 'illegal')
+    .map((v, i) => ({ v, i }))
+    .sort((a, b) => verdictRank(a.v) - verdictRank(b.v) || a.i - b.i)
+    .map(({ v }) => v)
+  const shownVerdicts = others.slice(0, MAX_VERDICTS_SHOWN)
+  for (const v of shownVerdicts) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  const cutVerdicts = others.slice(MAX_VERDICTS_SHOWN)
+  if (cutVerdicts.length > 0) {
+    const names = cutVerdicts.map((v) => String(v.rule))
+    rows.push(`    (+${cutVerdicts.length} more rule verdict${cutVerdicts.length === 1 ? '' : 's'} not shown here: ${names.slice(0, 8).join(', ')}${names.length > 8 ? ', …' : ''})`)
+  }
 
   const count = typeof o.actionCount === 'number' ? o.actionCount : 0
   const summary = Array.isArray(o.actionSummary) ? (o.actionSummary as unknown[]).filter((x) => typeof x === 'string') : []
@@ -291,6 +384,17 @@ function renderDecision(o: Record<string, unknown>): string[] {
 function renderItem(item: unknown): string | null {
   if (item == null || typeof item !== 'object') return null
   const o = item as Record<string, unknown>
+  if (typeof o.metricUnit === 'string' && typeof o.perGame === 'number') {
+    return [
+      `${String(o.playerName)} (#${String(o.rank)} overall, #${String(o.positionRank)} ${String(o.position)})`,
+      `${o.perGame.toFixed(2)} ${o.metricUnit} per game`,
+      typeof o.weekly === 'number' ? `${o.weekly.toFixed(2)} for week ${String(o.metricWeek)}` : null,
+      typeof o.fullSeason === 'number' ? `${o.fullSeason.toFixed(2)} full season${o.fullSeasonBasis === 'standard_season' ? ' based on standard season length' : ''}` : null,
+      typeof o.restOfSeason === 'number' ? `${o.restOfSeason.toFixed(2)} rest of season` : null,
+      typeof o.tradeValue === 'number' ? `AF trade value ${o.tradeValue.toFixed(2)} ${String(o.tradeValueUnit ?? '')}`.trim() : null,
+      typeof o.dynastyTradeValue === 'number' ? `AF dynasty trade value ${o.dynastyTradeValue.toFixed(2)}` : null,
+    ].filter(Boolean).join(' · ')
+  }
 
   /*
    * RosterLeagueProjection — the asker's roster under THIS league's scoring (`rosterLeagueProjections.ts`).
@@ -300,6 +404,19 @@ function renderItem(item: unknown): string | null {
   if (o.leagueScored === true && (o.slot === 'starter' || o.slot === 'bench')) {
     const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : 'unidentified player'
     const pos = o.position ? ` (${String(o.position)})` : ''
+    if (o.basis === 'season_rate') {
+      // A per-game rate, and this week's total only when the games are known. A null is said in words, never 0.
+      const rate = typeof o.perGame === 'number'
+        ? `${fmt(o.perGame)} pts/game`
+        : o.rateSource === 'season_projection' ? 'no AllFantasy season projection (NOT zero)' : 'not on this league’s value board (NOT zero)'
+      const week =
+        typeof o.perGame !== 'number'
+          ? ''
+          : typeof o.points === 'number' && typeof o.weekGames === 'number'
+            ? ` · ${String(o.weekGames)} game${o.weekGames === 1 ? '' : 's'} this week → ${fmt(o.points)} pts`
+            : ' · this week’s games not known'
+      return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${rate}${week}`
+    }
     const pts = typeof o.points === 'number' ? `${fmt(o.points)} pts` : 'no projection line this week (NOT zero)'
     return `${o.slot === 'starter' ? 'starter' : 'bench'}: ${who}${pos} ${pts}`
   }
@@ -336,8 +453,10 @@ function renderItem(item: unknown): string | null {
    * dropping the points, which are the entire reason a projection is in the packet. An existing
    * test caught it; the branches are ordered least-specific-last for exactly this reason.
    */
-  if (typeof o.playerId === 'string' && typeof o.points !== 'number' && ('playerName' in o || 'position' in o)) {
-    const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : null
+  if (typeof o.playerId === 'string' && typeof o.points !== 'number' && ('playerName' in o || 'name' in o || 'position' in o)) {
+    // `RosterPlayerLite` carries `name`, not `playerName` (2026-11-20): reading only `playerName` dropped every one.
+    const who =
+      typeof o.playerName === 'string' && o.playerName ? o.playerName : typeof o.name === 'string' && o.name ? o.name : null
     if (!who) return null
     return o.position ? `${who} (${String(o.position)})` : who
   }
@@ -523,9 +642,41 @@ export function collapseGapsByCause(
   return order.map((k) => byCause.get(k) as { slices: string[]; reason: string; detail: string; remedy: string })
 }
 
+/**
+ * THE FACTS THAT ANSWER EACH KIND OF QUESTION, by the slice names above (Decision OS hub, assembly, 2026-11-20).
+ *
+ * 🛑 THE PACKET WAS ASSEMBLED IN ONE FIXED ORDER WHATEVER WAS ASKED. A trade question's graded offers sat behind import
+ * state, the rules, the market table and two projection blocks; a standings question found the table at the very end,
+ * after nine other slices. Nothing was dropped — every slice still renders, whole — but the slice the router
+ * requested FOR this question was buried in the slices every question gets. These lead now, in this order, under a
+ * line naming them; everything else follows in the usual order.
+ *
+ * ⚠ ONLY SLICES THAT RENDERED ARE NAMED. An absent slice is a gap and stays in the gap block, so the line never claims
+ * a fact the packet does not hold.
+ */
+export const ANSWERING_SLICES_BY_INTENT: Readonly<Record<string, readonly string[]>> = {
+  start_sit: [MY_TEAM_LINEUP_SLICE, ROSTER_PROJECTIONS_SLICE, 'Matchup'],
+  matchup: ['Matchup', ROSTER_PROJECTIONS_SLICE],
+  trade: [PENDING_TRADES_SLICE, ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  waiver: ['Waiver decision'],
+  draft: [DRAFT_BOARD_SLICE],
+  player_value: ['Roster value grade', ROSTER_BOARD_VALUES_SLICE, 'Market player values'],
+  commissioner: ['Commissioner health decision', 'Commissioner intelligence', 'League rules'],
+  manager_psychology: [MANAGER_RECORDS_SLICE],
+  league_strength: ['Standings', 'Rankings', 'League difficulty'],
+}
+
+export interface SerializeGroundingOptions {
+  /** The turn's intent (`classifyChimmyTurn`), so the slices that answer it lead. Omitted = the usual order. */
+  intent?: string | null
+  /** That intent's label ("Trade analysis"), named on the lead line. */
+  intentLabel?: string | null
+}
+
 export function serializeDecisionOsGroundingForPrompt(
   packet: DecisionOsGroundingPacket,
   now: number = Date.now(),
+  options: SerializeGroundingOptions = {},
 ): string {
   const lines: string[] = []
 
@@ -535,16 +686,37 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    ...(packet.leaguePlayerMetrics?.present && packet.leaguePlayerMetrics.value
+      ? [[
+          'AF league player metrics',
+          {
+            ...packet.leaguePlayerMetrics,
+            value: packet.leaguePlayerMetrics.value.rows.map((row) => ({
+              ...row,
+              metricUnit: packet.leaguePlayerMetrics?.value?.unit,
+              metricWeek: packet.leaguePlayerMetrics?.value?.week,
+            })),
+          } as GroundedSlice<unknown>,
+        ] as [string, GroundedSlice<unknown>]]
+      : []),
     /*
      * The asker's roster under this league's scoring — the number My Team shows. Named so the model prefers it over
      * the canonical rows above for anyone on this roster.
      */
     [ROSTER_PROJECTIONS_SLICE, packet.rosterProjections as GroundedSlice<unknown>],
+    // On lineup questions: the same best lineup the My Team screen and the lineup tool give (2026-11-20).
+    [MY_TEAM_LINEUP_SLICE, packet.myTeamLineup as GroundedSlice<unknown>],
+    // On trade questions: the offers waiting on the asker with the one engine's grade — the trade tool's text (2026-11-20).
+    [PENDING_TRADES_SLICE, packet.pendingTrades as GroundedSlice<unknown>],
+    // On draft questions: the board and Draft OS's pick — the draft board tool's text (2026-11-20).
+    [DRAFT_BOARD_SLICE, packet.draftBoard as GroundedSlice<unknown>],
+    // On manager questions, Competitive Edge only: every leaguemate's record, facts only (2026-11-20).
+    [MANAGER_RECORDS_SLICE, packet.managerRecords as GroundedSlice<unknown>],
+    // NBA/MLB/NHL: the roster priced on the league's own board, the trade grade's price (2026-11-20).
+    [ROSTER_BOARD_VALUES_SLICE, packet.rosterBoardValues as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
-    // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
-    ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
     /*
      * R2 — decisions bridged from the live engines (waiver, commissioner health).
      *
@@ -602,7 +774,19 @@ export function serializeDecisionOsGroundingForPrompt(
    * empty set for that, making the ordering a no-op rather than an error.
    */
   const onRoster = rosterPlayerKeys(packet.contextFacts?.roster)
-  const available = slices.flatMap(([n, s]) => sliceLine(n, s, now, onRoster))
+  const rendered = slices.map(([n, s]) => [n, sliceLine(n, s, now, onRoster)] as const)
+  const answering = (options.intent ? ANSWERING_SLICES_BY_INTENT[options.intent] ?? [] : []).filter((name) =>
+    rendered.some(([n, l]) => n === name && l.length > 0),
+  )
+  const available =
+    answering.length === 0
+      ? rendered.flatMap(([, l]) => l)
+      : [
+          `  (${options.intentLabel ? `This question: ${options.intentLabel}. ` : ''}` +
+            `What answers it is listed first: ${answering.join('; ')}.)`,
+          ...answering.flatMap((name) => rendered.find(([n]) => n === name)?.[1] ?? []),
+          ...rendered.filter(([n]) => !answering.includes(n)).flatMap(([, l]) => l),
+        ]
 
   if (available.length > 0) {
     lines.push('WHAT IS AVAILABLE:')

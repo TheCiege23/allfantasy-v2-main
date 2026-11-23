@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider"
 import { PHProvider, PostHogUserIdentifier } from "@/components/providers/PostHogProvider"
 import { GeoRefusalWatcher } from "@/components/geo/GeoRefusalWatcher"
 import { AdOptOutSync } from "@/components/privacy/AdOptOutSync"
+import { AppOpenPing } from "@/components/analytics/AppOpenPing"
 
 export function AppProviders({
   children,
@@ -25,6 +26,8 @@ export function AppProviders({
           <GeoRefusalWatcher />
           {/* Carries a "Do Not Sell or Share" choice to every browser the person signs in on. */}
           <AdOptOutSync />
+          {/* One "app opened" row a day per device, for the people counts on /admin/apps. */}
+          <AppOpenPing />
           <ThemeProvider>{children}</ThemeProvider>
         </SessionAppProvider>
       </LanguageProviderClient>

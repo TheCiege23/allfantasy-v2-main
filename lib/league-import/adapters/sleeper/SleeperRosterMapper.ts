@@ -63,6 +63,7 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
       return {
         source_team_id: String(roster.roster_id),
         source_manager_id: ownerId,
+        co_owner_ids: Array.isArray(roster.co_owners) ? roster.co_owners.filter((id): id is string => typeof id === 'string' && id.length > 0) : [],
         owner_name: displayName,
         team_name: platformTeamName || displayName,
         avatar_url: avatarUrl,

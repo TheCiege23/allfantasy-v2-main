@@ -690,6 +690,16 @@
 
 /* ── Discovered leagues ──────────────────────────────────────────────── */
 
+/* Search above a long list of leagues or teams. */
+.af-im-list-search {
+  margin: 0 0 10px;
+}
+.af-im-list-search input {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px; /* below 16px iOS zooms the page on focus */
+}
+
 .af-im-league-list {
   list-style: none;
   margin: 0;
@@ -2007,6 +2017,29 @@
 }
 .af-im-fx-disclosure > summary.af-im-fx-link::-webkit-details-marker {
   display: none;
+}
+/* The "after importing" steps inside a disclosure: body copy and a numbered list. */
+.af-im-fx-after {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-im-fx-after p {
+  margin: 0 0 8px;
+}
+.af-im-fx-after p:last-child {
+  margin-bottom: 0;
+}
+.af-im-fx-after ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+  list-style: decimal;
+}
+.af-im-fx-after li + li {
+  margin-top: 4px;
+}
+.af-im-fx-after strong {
+  color: var(--text);
 }
 .af-im-fx-disclosure > summary.af-im-fx-link::after {
   content: '+';

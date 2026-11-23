@@ -2,6 +2,8 @@
  * Shared types for the league hub Matchup tab + `/api/leagues/[leagueId]/matchup-center`.
  */
 
+import type { NativeMatchupExtras } from './nativeMatchupModel'
+
 export type MatchupGameStatus = 'upcoming' | 'live' | 'final' | 'unknown'
 
 export type MatchupPlayerSlot = {
@@ -24,6 +26,23 @@ export type MatchupPlayerSlot = {
   gameLabel: string
   /** Start/sit or edge hint — AI/decision layer; never overrides official scoring. */
   aiInsight: string | null
+  /**
+   * NFL leagues that play here: the week around the player, from stored rows
+   * (lib/redraft/nflRosterOutlook.ts). Absent for other sports and for imported leagues.
+   */
+  outlook?: MatchupSlotOutlook | null
+}
+
+export type MatchupSlotOutlook = {
+  homeAway: 'home' | 'away' | null
+  kickoffTimeIso: string | null
+  /** The opponent's rank against the player's position: 1st allows the fewest points. */
+  opponentRank: { rank: number; of: number; position: string; allowedPerGame: number; games: number } | null
+  teamLogoUrl: string | null
+  byeWeek: number | null
+  /** A team defense only: Sleeper's projection in its standard scoring, shown labelled where the AF engine has none. Never summed into a side's AF total. */
+  providerProjection?: { points: number; source: 'sleeper' } | null
+  weather: { indoors: boolean; symbol: string; conditionLabel: string | null; temperatureF: number | null; windSpeedMph: number | null; precipChancePct: number | null } | null
 }
 
 export type MatchupSidePayload = {
@@ -76,4 +95,6 @@ export type MatchupCenterPayload = {
   partialData: boolean
   /** Client poll interval when matchup is live (ms). */
   refreshIntervalMs: number
+  /** Only for a league that plays on AllFantasy, read from its own season (nativeMatchupModel.ts). */
+  native?: NativeMatchupExtras
 }

@@ -1,0 +1,71 @@
+/* Pirate Deck identity (2026-11-22, pirate audit). `.pr` scopes PirateHome and the Pirate rules editor.
+ *
+ * Both were inline Tailwind in hard-coded DARK colours (bg-[#081625], text-white, text-slate-*, amber-300). In
+ * light mode app/globals.css `!important`-rewrites the text-white and text-slate utilities to dark ink but leaves the navy panels,
+ * so the whole deck rendered dark on dark. Every colour here is a `--pr-*` token:
+ *   - from /core (--text, --surface…) when a /core palette is in scope, which already flips per mode;
+ *   - otherwise a literal for the active mode.
+ *
+ * ⚠ LIGHT IS NOT DARK INVERTED. Gold #fbbf24 reads well on navy and at ~1.7:1 on white, so light mode uses
+ *   #8a5a00 (≈5.9:1 on white, white ink on it ≈5.9:1).
+ * ⚠ Nothing in a `.pr` subtree may use the text-white, text-slate or bg-[#hex] utilities: globals.css rewrites some.
+ * ⚠ The banner keeps a dark scrim in BOTH modes, so its text is --pr-on-art (light) in both.
+ * ⚠ No @media blocks in this file. If one is ever needed: ONE top-level block per band, at the END. */
+
+.pr{
+  --pr-gold:#fbbf24;--pr-gold-ink:#1a1203;--pr-gold-soft:rgba(251,191,36,.12);--pr-gold-line:rgba(251,191,36,.45);
+  --pr-text:var(--text,#eef0fa);--pr-text2:var(--text2,#c3c9e6);--pr-muted:var(--muted,#989fc2);
+  --pr-surface:var(--surface,#0d1020);--pr-surface2:var(--surface2,#0a0c1a);--pr-field:var(--bg,#06070f);
+  --pr-line:var(--line,rgba(255,255,255,.07));--pr-line2:var(--line2,rgba(255,255,255,.13));
+  --pr-accent:var(--accent,#22d3ee);--pr-good:var(--good,#34d399);--pr-warn:var(--warn,#fbbf24);--pr-bad:var(--bad,#fb5b78);
+  --pr-on-art:#f8fafc;--pr-gold-on-art:#fbbf24;--pr-scrim:rgba(3,16,30,.86);
+  color:var(--pr-text);
+}
+html[data-mode='light'] .pr{
+  --pr-gold:#8a5a00;--pr-gold-ink:#ffffff;--pr-gold-soft:rgba(138,90,0,.09);--pr-gold-line:rgba(138,90,0,.4);
+  --pr-text:var(--text,#0b1020);--pr-text2:var(--text2,#333c5c);--pr-muted:var(--muted,#484f69);
+  --pr-surface:var(--surface,#ffffff);--pr-surface2:var(--surface2,#eef1f9);--pr-field:var(--bg,#f4f6fc);
+  --pr-line:var(--line,rgba(11,16,32,.09));--pr-line2:var(--line2,rgba(11,16,32,.16));
+  --pr-accent:var(--accent,#096d8e);--pr-good:var(--good,#097352);--pr-warn:var(--warn,#8d5905);--pr-bad:var(--bad,#ba2c4b);
+}
+
+/* Text. Two classes so a link carrying one beats the workspace's `.af-core a` / `.nl-workspace a` colour. */
+.pr .pr-text,.pr.pr-text{color:var(--pr-text)}
+.pr .pr-text2,.pr.pr-text2{color:var(--pr-text2)}
+.pr .pr-muted,.pr.pr-muted{color:var(--pr-muted)}
+.pr .pr-gold,.pr.pr-gold{color:var(--pr-gold)}
+.pr .pr-accent,.pr.pr-accent{color:var(--pr-accent)}
+.pr .pr-good{color:var(--pr-good)}
+.pr .pr-warn{color:var(--pr-warn)}
+.pr .pr-bad{color:var(--pr-bad)}
+
+/* Grounds */
+.pr .pr-card{background:var(--pr-surface);border:1px solid var(--pr-line2)}
+.pr .pr-well{background:var(--pr-surface2);border:1px solid var(--pr-line)}
+.pr .pr-note{background:var(--pr-gold-soft);border:1px solid var(--pr-gold-line);color:var(--pr-text)}
+.pr .pr-alert{background:color-mix(in srgb,var(--pr-bad) 10%,transparent);border:1px solid color-mix(in srgb,var(--pr-bad) 40%,transparent);color:var(--pr-text)}
+.pr .pr-ok{background:color-mix(in srgb,var(--pr-good) 10%,transparent);border:1px solid color-mix(in srgb,var(--pr-good) 40%,transparent);color:var(--pr-text)}
+.pr .pr-field{background:var(--pr-field);border:1px solid var(--pr-line2);color:var(--pr-text)}
+.pr .pr-field::placeholder{color:var(--pr-muted)}
+.pr .pr-field:focus{outline:none;border-color:var(--pr-gold)}
+
+/* Buttons */
+.pr .pr-btn-gold{background:var(--pr-gold);color:var(--pr-gold-ink);border:1px solid var(--pr-gold)}
+.pr .pr-btn-gold:hover:not(:disabled){filter:brightness(1.07)}
+.pr .pr-btn{background:transparent;border:1px solid var(--pr-line2);color:var(--pr-text)}
+.pr .pr-btn:hover:not(:disabled){border-color:var(--pr-gold-line);background:var(--pr-gold-soft)}
+.pr .pr-btn-good{background:color-mix(in srgb,var(--pr-good) 14%,transparent);border:1px solid color-mix(in srgb,var(--pr-good) 50%,transparent);color:var(--pr-good)}
+.pr .pr-btn-bad{background:color-mix(in srgb,var(--pr-bad) 10%,transparent);border:1px solid color-mix(in srgb,var(--pr-bad) 45%,transparent);color:var(--pr-bad)}
+.pr a.pr-link.pr-link{color:var(--pr-gold);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+
+/* A lockable roster row */
+.pr .pr-row{background:var(--pr-surface2);border:1px solid var(--pr-line);color:var(--pr-text)}
+.pr .pr-row:hover:not(:disabled){border-color:var(--pr-line2)}
+.pr .pr-row[aria-pressed='true']{background:var(--pr-gold-soft);border-color:var(--pr-gold-line)}
+.pr .pr-lock{background:var(--pr-line);color:var(--pr-muted)}
+.pr .pr-row[aria-pressed='true'] .pr-lock{background:var(--pr-gold);color:var(--pr-gold-ink)}
+
+/* The banner: art under a dark scrim in both modes */
+.pr .pr-banner{background-color:var(--pr-surface2);background-image:linear-gradient(90deg,var(--pr-scrim),color-mix(in srgb,var(--pr-scrim) 55%,transparent)),url('/images/league-types/pirate-hero.png');background-size:cover;background-position:center 55%;color:var(--pr-on-art);border:1px solid var(--pr-gold-line)}
+.pr .pr-banner .pr-on-art{color:var(--pr-on-art)}
+.pr .pr-banner .pr-banner-gold{color:var(--pr-gold-on-art)}

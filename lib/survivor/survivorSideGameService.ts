@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 /**
  * Exile Island and the side games — every action a castaway or the commissioner takes, and the
  * views the screens read. Rules: survivorSideGameRules.ts. Ledger: survivorSideGameLedger.ts.
@@ -787,7 +788,8 @@ export async function loadSideGameReportData(leagueId: string, week: number, now
     else poolOut++
   }
   const chimmy = new Map<string, { tokenPoolPicks: number; poolPicked: boolean; auctionBids: number }>()
-  for (const c of castaways.filter((x) => x.userId.startsWith('orphan-'))) {
+  // Every seat with no person behind it, a hosted league's `open-slot-…` included (see isSeatPlaceholderUserId).
+  for (const c of castaways.filter((x) => isSeatPlaceholderUserId(x.userId))) {
     chimmy.set(c.userId, {
       tokenPoolPicks: state.tokenPool.get(c.userId)?.picks.filter((p) => p.week === week).length ?? 0,
       poolPicked: Boolean(state.pool.get(c.userId)?.picks.some((p) => p.week === week)),

@@ -29,6 +29,8 @@ if (enabled) {
 
 const edges = vi.hoisted(() => ({
   lastKickoff: new Map<number, string>(),
+  /** The week the sport is on, as the season-week service would say it (the manual run asks it). */
+  fantasyWeek: 2,
   dispatched: [] as Array<{ type: string; userIds: string[]; title: string; dedupePrefix?: string }>,
 }))
 
@@ -40,6 +42,11 @@ vi.mock('@/lib/redraft/weekFinalizer', async (orig) => ({
     finalized: true,
     slate: { lastStartTime: edges.lastKickoff.get(week) ?? null },
   })),
+}))
+vi.mock('@/lib/season-week', async (orig) => ({
+  ...(await orig<typeof import('@/lib/season-week')>()),
+  // The sport's calendar is an edge: it reads the game slate. Only the manual run asks it here.
+  resolveSeasonWeekForRedraftSeason: vi.fn(async () => ({ ok: true, phase: 'regular', fantasyWeek: edges.fantasyWeek, sportWeekComplete: false })),
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({
   dispatchNotification: vi.fn(async (p: { type: string; userIds: string[]; title: string; dedupePrefix?: string }) => {
@@ -310,6 +317,28 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
     expect(chop).toMatchObject({ eliminatedTeamName: 'Daggers', wasTiebreaker: true })
   })
 
+  describe('the commissioner’s manual run (lib/specialty-automation/handlers/guillotineHandler.ts)', () => {
+    it('🛑 chops a week that is ready, through the same driver the score sync uses', async () => {
+      // It used to call the engine with no period end time, which reads as "before the stat correction
+      // cutoff": every manual run answered "no chop", and no period score was ever written for it.
+      const lg = await league()
+      edges.fantasyWeek = 2
+      const out = await runGuillotineHandler({ leagueId: lg.leagueId, week: 1, season: SEASON, trigger: 'onManualRun' } as never)
+      const after = await state(lg)
+      expect(after.choppedByWeek).toEqual({ Blades: 1 })
+      expect(after.emptied).toEqual(['Blades'])
+      expect(after.eliminations).toHaveLength(1)
+      expect(out.summary).toBe('Guilly: 1 chop(s) in week 1.')
+      expect(out.actions).toHaveLength(1)
+      expect(await prisma.guillotinePeriodScore.count({ where: { leagueId: lg.leagueId, weekOrPeriod: 1 } })).toBe(lg.rosters.length)
+
+      // Pressed again: the week is done, nothing more is chopped, and the next week is still being played.
+      const again = await runGuillotineHandler({ leagueId: lg.leagueId, week: 1, season: SEASON, trigger: 'onManualRun' } as never)
+      expect(again.summary).toContain('Week 2 is still being played')
+      expect((await state(lg)).eliminations).toHaveLength(1)
+    })
+  })
+
   describe('an imported league is never chopped here (lib/guillotine/importedLeagueGuard.ts)', () => {
     // Week 1's scores on file and its last game long final: everything the engine needs to chop someone.
     // Blades is the low score, so an engine that ran would chop Blades.
@@ -464,6 +493,35 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
 
       expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1 })).toMatchObject({ ok: true })
       expect(await faab()).toEqual({ Axes: 90, Blades: 90, Cleavers: 90, Daggers: 90 })
+    })
+
+    it('puts back a FAAB reset to each survivor, and a re-chop applies it again (owner, 2026-11-22)', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'set', amount: 100 } } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      const faab = async () =>
+        Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      const markers = () => prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_after_chop' } })
+      // Blades is chopped and keeps its 90; every survivor is reset to 100.
+      expect(await faab()).toEqual({ Axes: 100, Blades: 90, Cleavers: 100, Daggers: 100 })
+      expect(await markers()).toBe(1)
+
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1, chopInstead: [lg.byName('Daggers').rosterId] })).toMatchObject({ ok: true })
+      // Every survivor back to 90, then the re-chop of Daggers applies the reset afresh to the new survivors.
+      expect(await faab()).toEqual({ Axes: 100, Blades: 100, Cleavers: 100, Daggers: 90 })
+      expect(await markers()).toBe(1)
+    })
+
+    it('puts back a FAAB reset on a plain undo', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'add', amount: 25 } } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      const faab = async () =>
+        Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      expect(await faab()).toEqual({ Axes: 115, Blades: 90, Cleavers: 115, Daggers: 115 })
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1 })).toMatchObject({ ok: true })
+      expect(await faab()).toEqual({ Axes: 90, Blades: 90, Cleavers: 90, Daggers: 90 })
+      expect(await prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_after_chop' } })).toBe(0)
     })
 
     it('refuses once a waiver run has processed claims since the chop, and changes nothing', async () => {

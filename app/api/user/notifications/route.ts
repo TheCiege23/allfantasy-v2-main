@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { franchiseLeagueIds } from '@/lib/league/collegePro/franchiseScope'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
@@ -106,7 +107,10 @@ export async function PATCH(req: NextRequest) {
     if (body.leagueId !== undefined && (typeof body.leagueId !== 'string' || !body.leagueId.trim())) {
       return NextResponse.json({ error: 'leagueId must be a nonempty string' }, { status: 400 })
     }
-    const scope = typeof body.leagueId === 'string' ? { leagueId: body.leagueId.trim() } : {}
+    // A league scope covers its whole franchise (both halves of a paired college + pro league), the same
+    // scope the notifications screen lists, so "mark all read" there clears what it showed.
+    const scopeIds = typeof body.leagueId === 'string' ? await franchiseLeagueIds(body.leagueId.trim()).catch(() => [body.leagueId!.trim()]) : null
+    const scope = scopeIds ? { leagueId: scopeIds.length === 1 ? scopeIds[0]! : { in: scopeIds } } : {}
     const userId = session.user.id
     const now = new Date()
 

@@ -101,3 +101,36 @@ export function mergeRotation(args: {
 
   return { leagueIds: chosen, fromStarved, fromDemand }
 }
+
+/**
+ * The leagues this rotation can actually refresh, least recently refreshed first.
+ *
+ * 🛑 THE QUEUE USED TO BE READ STRAIGHT FROM `dynasty_backfill_status`, WHICH OUTLIVES ITS LEAGUE.
+ * That table has no foreign key to `leagues`, so deleting a league leaves its status row behind,
+ * and a row nothing refreshes only gets older. Measured on production 2026-11-20: 93 such rows
+ * held the front of the oldest-first queue, filled all 15 reserved slots on every fire and were
+ * then dropped by the league lookup, so each fire refreshed 10 leagues instead of 25 and always
+ * the same most recently viewed ones. The cron reported `success` throughout (rows read 10,
+ * written 10), which is why it ran that way for four weeks.
+ *
+ * So the order is built from the leagues that exist, and the status rows only supply a date.
+ * A league with no status row has never been refreshed and goes first.
+ *
+ * @param olderThan when given, only leagues last refreshed before it (or never) are returned.
+ */
+export function orderByStaleness(args: {
+  eligibleLeagueIds: readonly string[]
+  refreshedAtByLeagueId: ReadonlyMap<string, Date>
+  olderThan?: Date
+}): Array<{ leagueId: string; updatedAt: Date | null }> {
+  const seen = new Set<string>()
+  const rows: Array<{ leagueId: string; updatedAt: Date | null }> = []
+  for (const leagueId of args.eligibleLeagueIds) {
+    if (seen.has(leagueId)) continue
+    seen.add(leagueId)
+    const updatedAt = args.refreshedAtByLeagueId.get(leagueId) ?? null
+    if (args.olderThan && updatedAt && updatedAt.getTime() >= args.olderThan.getTime()) continue
+    rows.push({ leagueId, updatedAt })
+  }
+  return rows.sort((a, b) => (a.updatedAt?.getTime() ?? -Infinity) - (b.updatedAt?.getTime() ?? -Infinity))
+}

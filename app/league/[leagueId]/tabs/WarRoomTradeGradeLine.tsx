@@ -16,7 +16,8 @@ export function WarRoomTradeGradeLine({ grade, testId }: { grade: SuggestionGrad
    */
   if (!grade || !grade.graded) {
     return (
-      <p data-testid={`${testId}-withheld`} className="text-amber-200/85">
+      // --warn, not amber-200: pale amber on a light panel was unreadable (keeper audit 2026-11-22).
+      <p data-testid={`${testId}-withheld`} className="text-[color:var(--warn)]">
         Not graded: {grade ? grade.reason : WAR_ROOM_NO_GRADE_REASON}
       </p>
     )

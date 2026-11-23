@@ -1,5 +1,6 @@
 'use client'
 
+import { contractStatusLabel, formatCapMoney, yearsLeftIncludingThisSeason } from '@/lib/salary-cap/capMoney'
 import { FileText, ArrowLeft } from 'lucide-react'
 import type { SalaryCapSummary } from './types'
 
@@ -10,19 +11,22 @@ export function ContractsPage({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const contracts = summary.contracts
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
@@ -52,9 +56,9 @@ export function ContractsPage({
                       {c.playerName ?? c.playerId}
                     </td>
                     <td className="py-2 pr-2 text-white/70">{c.position ?? '—'}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums text-white/80">${c.salary}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums text-white/80">{formatCapMoney(c.salary)}</td>
                     <td className="py-2 pr-2 text-right tabular-nums text-white/80">
-                      {c.yearsRemaining}
+                      {yearsLeftIncludingThisSeason(c)}
                     </td>
                     <td className="py-2 pr-2 text-white/60 text-xs">
                       {c.source.replace(/_/g, ' ')}
@@ -69,7 +73,7 @@ export function ContractsPage({
                               : 'bg-white/10 text-white/70'
                         }`}
                       >
-                        {c.status}
+                        {contractStatusLabel(c.status)}
                       </span>
                     </td>
                   </tr>

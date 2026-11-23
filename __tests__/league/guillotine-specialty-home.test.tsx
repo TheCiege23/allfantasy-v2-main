@@ -128,9 +128,11 @@ describe('GuillotineSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Guilly League 26').length).toBeGreaterThan(0)
-    expect(screen.getByText('14 teams · 3 alive')).toBeTruthy()
-    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5 · You’re 35.9 points over the cut')
+    // One header, not two: the workspace banner carries the name and team count, so the hero leads with the week.
+    expect(screen.queryByText('Guilly League 26')).toBeNull()
+    expect(screen.queryByText('14 teams · 3 alive')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('35.9 over the cut')
+    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
     expect(screen.getByTestId('guillotine-row-chop_zone').textContent).toContain('92.7')
     expect(screen.getByTestId('guillotine-cut-line').textContent).toBe('CUT LINE · 92.7')
     expect(screen.getByTestId('guillotine-your-survival').textContent).toContain('You’re 1st of 3. The cut is at 92.7.')
@@ -139,5 +141,35 @@ describe('GuillotineSpecialtyHome', () => {
     expect(screen.getByTestId('guillotine-chop-moment')).toBeTruthy()
     // Projected has no data source yet: present, honest, and not clickable.
     expect((screen.getByRole('button', { name: 'Projected' }) as HTMLButtonElement).disabled).toBe(true)
+    // A manager still alive is offered both hero actions.
+    expect(screen.getByTestId('guillotine-hero-lineup')).toBeTruthy()
+    expect(screen.getByTestId('guillotine-hero-waivers')).toBeTruthy()
+  })
+
+  it('a chopped manager is not offered Set lineup or Waivers in the hero', () => {
+    render(
+      <GuillotineSpecialtyHome
+        leagueId="L1"
+        sport="NFL"
+        leagueName="Guilly League 26"
+        summary={{
+          weekOrPeriod: 5,
+          dangerTiers: tiers,
+          myRosterId: 'x',
+          config: { tiebreakerOrder: ['season_points'], teamsPerChop: 1, dangerMarginPoints: 12 },
+          home: {
+            season: 2026, scores, teamCount: 14, aliveCount: 3,
+            chopped: [{ rosterId: 'x', name: 'Open Team 3', week: 1, points: 71.2 }],
+            nextChopAt: null, chopLabel: null, nextWaiversAt: null, waiverLabel: null, lastChop,
+          },
+        }}
+      />,
+    )
+    // One header: the verdict leads the hero, the week sits under it.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Chopped in week 1')
+    expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 5')
+    expect(screen.queryByTestId('guillotine-hero-lineup')).toBeNull()
+    expect(screen.queryByTestId('guillotine-hero-waivers')).toBeNull()
+    expect(screen.getByTestId('guillotine-hero-chop')).toBeTruthy()
   })
 })

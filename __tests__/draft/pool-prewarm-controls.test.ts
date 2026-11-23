@@ -875,10 +875,13 @@ describe('Invariant 22c: DraftTopBar menu — handler calls', () => {
     const block = topBarSrc.slice(resyncIdx - 300, resyncIdx + 50)
     expect(block).toContain('onResync()')
   })
-  it('Edit Draft Settings calls onOpenDraftRoomSettings', () => {
-    const editSettingsIdx = topBarSrc.indexOf('data-testid="draft-topbar-league-draft-settings"')
-    const block = topBarSrc.slice(editSettingsIdx - 400, editSettingsIdx + 50)
-    expect(block).toContain('onOpenDraftRoomSettings()')
+  it('the settings gear opens onOpenDraftRoomSettings (it replaced the menu entry, 2026-11-19)', () => {
+    const gearIdx = topBarSrc.indexOf('data-testid="draft-topbar-settings"')
+    expect(gearIdx).toBeGreaterThan(-1)
+    const block = topBarSrc.slice(gearIdx - 400, gearIdx + 50)
+    expect(block).toContain('onClick={onOpenDraftRoomSettings}')
+    // The menu keeps only the link fallback, for pages that pass an href and no gear handler.
+    expect(topBarSrc).toContain('{onOpenDraftRoomSettings ? null : leagueDraftSettingsHref ? (')
   })
   it('Big Screen Mode is conditional on bigScreenHref', () => {
     const bigScreenIdx = topBarSrc.indexOf('data-testid="draft-topbar-big-screen"')

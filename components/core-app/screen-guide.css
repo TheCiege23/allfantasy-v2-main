@@ -1,0 +1,222 @@
+/*
+ * The per-screen guide strip (ScreenGuide.tsx) and the "How AllFantasy works" sheet (HowItWorks.tsx).
+ * Theme tokens only (af-core.css), so light, dark and the AF modes all follow. Every touch target is
+ * at least 44px and no type is below the 11px floor the /core gates hold.
+ */
+
+/* ── The strip ─────────────────────────────────────────────────────────────── */
+.af-sg {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-sg[data-open='true'] { border-color: var(--accent-line); }
+.af-sg-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text2);
+  background: transparent;
+  font: 600 13px/1.35 var(--font-archivo, Archivo), system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.af-sg-line:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-sg-mark {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font: 900 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+}
+.af-sg-label { flex: 0 0 auto; color: var(--text); font-weight: 800; }
+.af-sg-what {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Open, the sentence wraps: it is the lead of the panel, not a teaser. */
+.af-sg[data-open='true'] .af-sg-what { color: var(--text2); white-space: normal; }
+.af-sg-toggle { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+
+.af-sg-panel { padding: 0 14px 14px 46px; }
+.af-sg-can-title {
+  margin: 2px 0 6px;
+  color: var(--accent);
+  font: 750 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.af-sg-can { margin: 0; padding: 0 0 0 18px; list-style: disc; color: var(--text2); font-size: 13px; line-height: 1.55; }
+.af-sg-can li + li { margin-top: 2px; }
+.af-sg-start { margin: 10px 0 0; color: var(--text2); font-size: 13px; line-height: 1.5; }
+.af-sg-start b { color: var(--text); }
+.af-sg-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.af-sg-actions button {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  color: var(--text2);
+  background: var(--chip);
+  font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-sg-actions .af-sg-primary { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+
+@media (max-width: 720px) {
+  .af-sg-label { display: none; }
+  .af-sg-panel { padding-left: 14px; }
+  .af-sg-actions button { flex: 1 1 auto; }
+}
+
+/* ── The top-bar trigger ───────────────────────────────────────────────────── */
+.af-hiw-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  color: var(--text2);
+  background: var(--chip);
+  font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-hiw-trigger > span[aria-hidden] {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font-weight: 900;
+}
+.af-hiw-trigger:hover { border-color: var(--accent-line); color: var(--text); }
+@media (max-width: 980px) {
+  .af-hiw-trigger { padding: 0; justify-content: center; }
+  .af-hiw-trigger-label { display: none; }
+}
+/*
+ * Not in the phone top bar: crest, scope pill, data menu and search already fill a ~370px row (the
+ * overflow reported 2026-10-30). On a phone the sheet opens from the strip's "How every page works".
+ */
+@media (max-width: 720px) {
+  .af-hiw-trigger { display: none; }
+}
+
+/* ── The sheet ─────────────────────────────────────────────────────────────── */
+.af-hiw {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--accent-line);
+  border-radius: 18px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .45);
+}
+.af-hiw::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
+.af-hiw-body { padding: 20px 22px 22px; }
+.af-hiw-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.af-hiw-head h2 { margin: 6px 0 0; font: 900 22px/1.15 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -.02em; }
+.af-hiw-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+}
+.af-hiw-intro { margin: 6px 0 16px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.af-hiw h3 {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font: 750 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.af-hiw-start {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chip);
+}
+.af-hiw-start ol { margin: 8px 0 0; padding-left: 20px; list-style: decimal; color: var(--text2); font-size: 14px; line-height: 1.6; }
+.af-hiw-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 16px;
+  border-radius: 10px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font: 800 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-hiw-group { margin-top: 18px; }
+.af-hiw-sub { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.af-hiw-group ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.af-hiw-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-hiw-row > div { display: grid; gap: 2px; min-width: 0; }
+.af-hiw-row strong { font: 800 14px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif; }
+.af-hiw-row span { color: var(--text2); font-size: 13px; line-height: 1.45; }
+.af-hiw-row a {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--chip);
+  font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-hiw-row a:hover { border-color: var(--accent); color: var(--accent); }
+.af-hiw-needs { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-style: normal; }
+.af-hiw-chimmy { margin-top: 20px; padding: 14px 16px; border: 1px solid var(--accent-line); border-radius: 14px; }
+.af-hiw-chimmy p { margin: 6px 0 0; color: var(--text2); font-size: 14px; line-height: 1.55; }
+.af-hiw-help { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
+.af-hiw-help a { color: var(--accent); font-weight: 800; }
+
+@media (max-width: 720px) {
+  .af-hiw {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: 18px 18px 0 0;
+  }
+  .af-hiw-body { padding: 16px 16px 24px; }
+  .af-hiw-row { align-items: flex-start; }
+}

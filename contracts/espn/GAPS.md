@@ -13,6 +13,16 @@ Append here instead of probing. Status: `UNVERIFIED · PROBE_PENDING · RESOLVED
 | `R-05` | `headshot` is **omitted**, not null, when ESPN has no photo; the derived CDN URL then **404s** | 40/49 athletes carry it; all 40 load; all 9 without it 404 at `.../mens-college-basketball/players/full/{id}.png`. So the field is authoritative — no point constructing URLs for athletes that lack it. |
 | `R-06` | `jersey` is a **string** | `"5"`, `"55"`. `SportsPlayer.number` is an int. |
 
+## Resolved by probe, 2026-11-19 — NBA, NHL and MLB team lists, do NOT re-test
+
+| ID | Finding | Evidence |
+|---|---|---|
+| `R-07` | `teams?limit=1000` returns every club: NBA **30**, NHL **32**, MLB **30**, all `isActive`, none `isAllStar` | `fixtures/teams.{NBA,NHL,MLB}.json`, committed untrimmed; counts in `ENDPOINTS.yaml` `teams.measured_2026_11_19` |
+| `R-08` | The list is current: NHL has **Utah Mammoth** (`UTAH`) and no Arizona; MLB has **Athletics** (`ATH`, no city) and no Oakland | Same fixtures. `lib/sport-teams/SportTeamMetadataRegistry.ts` listed NHL `ARI` and MLB `OAK` until 2026-11-19; it now builds its NBA, MLB and NHL lists from these captures (via `lib/league/copyLeagueTeamTables.ts`), keeping the codes providers send (`CWS`), and `__tests__/sport-teams/team-registry-current.test.ts` pins it |
+| `R-09` | Each team's default 500px crest is `teamlogos/<sport>/500/<abbreviation lower-case>.png`; the White Sox are `CHW`/`chw.png` (Rolling Insights and the registry say `CWS`) | `logos[]` with `rel` `default`, for all 92 teams. Crests from this CDN were already in use for every sport's team logo; no new image-rights question (compare `E-05`, which is about player headshots) |
+| `R-10` | NFL `teams?limit=1000` returns all **32** clubs; Washington is `WSH`/`wsh.png`, and `lib/sport-teams/SportTeamMetadataRegistry.ts` built `was.png`. Both files load from the CDN (checked 2026-11-19), so nothing was broken; the key is now `wsh` to match the capture | `fixtures/teams.NFL.json`, committed untrimmed; `__tests__/league/copy-league-team-tables.test.ts` checks every NFL crest the app builds against it |
+| `R-11` | Every team in the four captures has a dark-background crest, `rel` `["full","dark"]`, at the default crest's path with `/500/` → `/500-dark/` | `fixtures/teams.{NFL,NBA,NHL,MLB}.json`; `darkCrestUrl` in `lib/league/copyLeague.ts` |
+
 ## Measured against our data, 2026-10-01 (read-only, no provider calls)
 
 | ID | Finding |
@@ -196,3 +206,56 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
   - Fumble recoveries (96) = Sleeper `fum_rec` + `def_st_fum_rec`; return TDs score as sums at equal weight.
   - ⚠ A shutout has NO `pts_allow` key in Sleeper's weekly rows (zeros are omitted). Reading only rows that
     carry the key dropped exactly the 10 shutouts of 2024–25 and failed the 0-points bucket for no real reason.
+
+
+## Knockout / total-points league with no schedule, 2026-11-20 — recorded without probing
+
+- `KO-01` OPEN, ASK BEFORE PROBING: an ESPN NFL league in a knockout (guillotine) format has no weekly
+  scores stored, so its Guilly tab has nothing to show. Measured on production, read-only: the league
+  syncs daily (`syncStatus: synced`, 18 rosters of 15 players), and its matchup sync state
+  (`SportsDataCache` key `external_matchup_sync:espn:<leagueId>:2026`) reads `status: synced,
+  weeksWritten: 0, weeksUnchanged: 0, soloRowsWritten: 0` in NFL week 11. Per the note on that counter in
+  `lib/import-os/collector/externalMatchupParity.ts`, all three at zero means ESPN served NO schedule
+  entries for this league, paired or solo; unpaired entries would have landed as solo rows. It is the
+  only one of 10 in-season ESPN leagues with no `WeeklyMatchup` rows.
+  - What is not known: where ESPN carries each team's points per week for a league with no schedule
+    (a standings or team view, or per-period team totals), and that view's shape.
+    `fixtures/fantasy-league.NFL.2026.json` is a head-to-head league and cannot answer it.
+  - Not probed. Resolving it needs a capture of this league format through `scripts/probe.sh`, committed
+    as a fixture in the same change, and the owner's go-ahead.
+
+## Pending trade offers, 2026-11-23 — recorded without probing
+
+- `T-03` OPEN: no committed endpoint or fixture lists ESPN trade offers that are PROPOSED and not yet
+  accepted, so the provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's
+  pending-trade block stay Sleeper-only for ESPN. `fantasy-league.NFL.2026.json`'s `mTransactions2` held 8
+  executed roster moves and no trade. `kona_league_communication` answers 401 without cookies even for a
+  public league (`T-01`). A pending offer is most likely visible only to the teams involved, which would
+  mean the reading member's `espn_s2`/`SWID` cookies and one read per user, not one per league. That is
+  unconfirmed.
+- **Needed:** which view (or `mTransactions2` filter) returns pending offers and with whose cookies; then one
+  capture via `scripts/probe.sh` from a league the owner chooses, with an offer open, redacted with
+  `scripts/redact-fantasy.mjs`, committed with the ledger mapping. Not probed.
+
+## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
+
+- `PS-01` OPEN: nothing in production reads an ESPN player's fantasy points for a week, so
+  `league_player_weekly_scores` has no ESPN writer and the bench-check ledger
+  (`lib/core-app/benchCheckLedger.ts`) does not record ESPN calls — they could never be graded.
+  `EspnLeagueFetchService` requests `mMatchup`/`mScoreboard` but parses only team totals
+  (`schedule[].home|away.totalPoints`); `parseEspnRosterEntries` reads ids, slots and names, no points.
+  - What the committed fixture shows, and why it is not enough: `fixtures/fantasy-league.NFL.2026.json`
+    carries `schedule[].home|away.rosterForMatchupPeriod` / `rosterForCurrentScoringPeriod`, each
+    `{ appliedStatTotal, entries[] }` with a per-entry `playerPoolEntry.appliedStatTotal`, on the
+    CURRENT week's sides only. In the trimmed capture (week 9, in progress, `winner: UNDECIDED`) one
+    side keeps 3 entries, all in starting slots, and they sum to the side's `appliedStatTotal` (46.7).
+    Not established: that a BENCH entry is present with its own week points (the bench check grades a
+    benched player — no bench entry survived the trim); that the value is the league's own scoring for
+    that matchup period rather than a single scoring period; and a PAST week's values (`S-01`, declined
+    2026-11-09). `ENDPOINTS.yaml` documents none of these fields.
+  - **Needed:** an untrimmed side of `rosterForMatchupPeriod` from a FINISHED week (bench included),
+    captured via `scripts/probe.sh` from the owner-chosen public league, documented in `ENDPOINTS.yaml`,
+    committed with the writer. A writer must store Sleeper ids (`crosswalkToSleeperIds` +
+    `withTeamDefenseIds`), not ESPN ids: the ledger records the CANONICAL Sleeper id, and ESPN 12483
+    (Matthew Stafford) is Sleeper 12483 (Jack Bech) — see `sleeperLookupId` — so an ESPN-keyed row could
+    grade the wrong player. Not probed.

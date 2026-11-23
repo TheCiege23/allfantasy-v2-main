@@ -49,5 +49,9 @@ describe('the draft team strip', () => {
     expect(screen.getAllByText('kingbuffalo').length).toBeGreaterThan(0)
     expect(screen.getAllByText(OPEN_SEAT_LABEL).length).toBeGreaterThan(0)
     expect(screen.queryByText('Unknown')).toBeNull()
+    // The empty seat's avatar is a plain icon, not the initials of "Open seat"; a real manager keeps theirs.
+    expect(screen.getAllByTestId('draft-strip-open-seat-icon')).toHaveLength(1)
+    expect(screen.queryByText('OS')).toBeNull()
+    expect(screen.getByText('K')).toBeTruthy()
   })
 })

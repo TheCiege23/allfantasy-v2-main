@@ -191,6 +191,9 @@ const MISSION_CONTROL_ES: Record<string, string> = {
   Unavailable: 'No disponible',
   // the Mission Control loader's manager callout when nothing is flagged
   'Active and engaged': 'Activo y participativo',
+  // Manager highlights (lib/commissioner-mission-control/managerHighlightReads.ts), keyed by its fixed callouts.
+  'No trade, claim or roster move in 14 days': 'Ningún intercambio, reclamo ni cambio de plantilla en 14 días',
+  'Activity has slowed': 'Su actividad ha bajado',
 }
 
 /** One of Mission Control's own fixed strings. */

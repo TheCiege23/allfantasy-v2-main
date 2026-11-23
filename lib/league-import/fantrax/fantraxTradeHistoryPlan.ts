@@ -29,6 +29,9 @@
  * Pure (no I/O).
  */
 import { nflPositionGroups, nflTeamCode, fantraxNflNameKey } from '@/lib/player-identity/nflFantraxIdentityPlan'
+import { proTeamCode, proRolesAgree } from '@/lib/player-identity/proFantraxIdentityPlan'
+import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
+import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizePlayerName } from '@/lib/team-abbrev'
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import { normalizeFantraxTeamName } from './fantraxTeamIds'
@@ -62,7 +65,15 @@ export function nflSeasonForTradeDate(at: Date): number {
   return month <= 2 ? year - 1 : year
 }
 
-function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
+export function seasonForFantraxTrade(sport: SupportedSport, date: Date): number {
+  if (sport === 'NFL' || sport === 'NCAAF') return nflSeasonForTradeDate(date)
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(date)
+  const year = Number(day.find((p) => p.type === 'year')?.value)
+  const month = Number(day.find((p) => p.type === 'month')?.value)
+  return sport === 'MLB' || month >= 7 ? year : year - 1
+}
+
+export function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
   const exact = new Map<string, FantraxLeagueTeamRef[]>()
   const stripped = new Map<string, FantraxLeagueTeamRef[]>()
   const add = (m: Map<string, FantraxLeagueTeamRef[]>, key: string, t: FantraxLeagueTeamRef) => {
@@ -81,7 +92,7 @@ function teamIndex(teams: readonly FantraxLeagueTeamRef[]) {
   }
 }
 
-function playerIndex(rows: readonly FantraxIdentityRow[]) {
+export function playerIndex(rows: readonly FantraxIdentityRow[], sport: SupportedSport) {
   const byName = new Map<string, FantraxIdentityRow[]>()
   for (const row of rows) {
     const key = normalizePlayerName(row.canonicalName ?? '')
@@ -90,6 +101,22 @@ function playerIndex(rows: readonly FantraxIdentityRow[]) {
   return (name: string, proTeam: string | null, position: string | null): string | { problem: string } => {
     const label = [name, proTeam, position].filter(Boolean).join(' ')
     let candidates = byName.get(fantraxNflNameKey(name)) ?? []
+    if (sport !== 'NFL') {
+      const teamKey = (team: string | null) => sport === 'NCAAB' || sport === 'NCAAF'
+        ? cfbdScheduleTeamKeys(team).exact : proTeamCode(sport, team) ?? normalizePlayerName(team ?? '')
+      if (proTeam) {
+        const expected = teamKey(proTeam)
+        candidates = candidates.filter((row) => expected && teamKey(row.currentTeam) === expected)
+      }
+      if (sport === 'NCAAF') {
+        const roles = nflPositionGroups(position)
+        if (roles.size) candidates = candidates.filter(row => [...nflPositionGroups(row.position)].some(role => roles.has(role)))
+      } else {
+        candidates = candidates.filter(row => proRolesAgree(sport === 'NCAAB' ? 'NBA' : sport, position, row.position))
+      }
+      const unique = new Set(candidates.map((row) => row.fantraxId))
+      return unique.size === 1 ? [...unique][0]! : { problem: label + ' has no unique verified Fantrax identity in this sport.' }
+    }
     const team = nflTeamCode(proTeam)
     if (team) candidates = candidates.filter((row) => nflTeamCode(row.currentTeam) === team)
     const roles = nflPositionGroups(position)
@@ -106,9 +133,11 @@ export function planFantraxTradeHistoryImport(args: {
   identities: readonly FantraxIdentityRow[]
   /** Overrides `nflSeasonForTradeDate` for every trade — for an export the caller knows to be one season. */
   season?: number
+  sport?: SupportedSport
 }): FantraxTradeHistoryPlan {
   const teamOf = teamIndex(args.teams)
-  const playerOf = playerIndex(args.identities)
+  const sport = args.sport ?? 'NFL'
+  const playerOf = playerIndex(args.identities, sport)
   const rosterIdToOwner = new Map<string, string>()
   for (const t of args.teams) if (t.platformUserId?.trim()) rosterIdToOwner.set(t.externalId, t.platformUserId.trim())
 
@@ -162,7 +191,7 @@ export function planFantraxTradeHistoryImport(args: {
       teams: trade.teams,
       fact: {
         transactionId: trade.transactionId,
-        season: args.season ?? nflSeasonForTradeDate(trade.tradeDate),
+        season: args.season ?? seasonForFantraxTrade(sport, trade.tradeDate),
         week: trade.week ?? 0,
         rosterIds: trade.teams.map((label) => rosterOf.get(label)!),
         adds: Object.keys(adds).length ? adds : null,
