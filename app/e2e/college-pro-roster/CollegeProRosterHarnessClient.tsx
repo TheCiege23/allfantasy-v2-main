@@ -10,6 +10,10 @@ import {
   CollegeProWeek,
 } from '@/components/league/college-pro/CollegeProOneLeague'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { LeagueActivityFeedCard } from '@/components/league/native/LeagueActivityFeedCard'
+import '@/components/core-app/af-core.css'
+import '@/components/core-app/af-core-shell.css'
+import '@/components/league/native/native-league.css'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
@@ -286,6 +290,10 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
         ] : null,
       })
     }
+    // Home's activity card also reads league chat and shared activity; neither has anything in this fixture.
+    if (url.includes('/api/league/chat?') || url.includes('/api/shared/activity')) {
+      return Promise.resolve(new Response(JSON.stringify({ messages: [], items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
     if (url.includes('/chat/moves')) {
       // Peach Bowl's Sleeper moves and Cream Bowl's stored Fantrax roster diffs, one feed.
       const peach = { leagueId: 'harness', name: 'Peach Bowl (C2C)', label: 'NFL' }
@@ -325,6 +333,16 @@ export function CollegeProRosterHarnessClient() {
           <div className="flex flex-wrap items-center gap-2 p-4">
             <span className="text-lg font-extrabold">Peach Bowl (C2C)</span>
             <CollegeProPairChip leagueId="harness" />
+          </div>
+        ) : params?.get('view') === 'imported' ? (
+          // The imported-league header's badge row and Home's activity card, in the workspace's own styles.
+          <div className="af-core nl-workspace" style={{ display: 'block', minHeight: 0, padding: 16 }}>
+            <div className="nl-badges" style={{ marginBottom: 16 }}>
+              <span className="nl-chip nl-gold">Synced from Sleeper</span>
+              <span className="nl-chip nl-gold">Commissioner</span>
+              <CollegeProPairChip leagueId="harness" variant="native" />
+            </div>
+            <LeagueActivityFeedCard leagueId="harness" imported />
           </div>
         ) : params?.get('view') === 'home' ? (
           <div className="p-4">

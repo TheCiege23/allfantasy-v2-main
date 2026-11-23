@@ -85,6 +85,39 @@ describe('the card', () => {
     expect(feed).toHaveLength(1)
   })
 
+  // 2026-11-23, live on Peach Bowl: the Activity tab listed 15 moves across Peach Bowl and Cream Bowl while
+  // this card, reading the hosted-league table, said "No trades or moves yet".
+  const fantraxMove = {
+    id: 'fx-1', kind: 'roster_move', occurredAt: '2026-11-18T08:08:00.000Z', teamName: 'Jws452', managerName: null, avatarUrl: null,
+    involvedTeams: ['Jws452'], adds: [{ id: 'p1', name: 'Chris Lawson', position: 'WR', team: 'Wash', imageUrl: null, to: null }], drops: [], bid: null, picks: [],
+    inferred: true, league: { leagueId: 'C', name: 'Cream Bowl', label: 'College' },
+  }
+  const fantraxTrade = {
+    ...fantraxMove, id: 'fx-2', kind: 'trade', occurredAt: '2026-11-19T08:00:00.000Z', involvedTeams: ['Heat', 'Rockets'],
+    drops: [{ id: 'p2', name: 'Rudy Gobert', position: 'C', team: 'MIN', imageUrl: null, to: null }],
+  }
+
+  it('an imported league reads the franchise moves the Activity tab reads, not the hosted-league table', async () => {
+    const calls = stub({ '/api/league/chat': { messages: [], viewerUserId: 'u1' }, '/api/shared/activity': { items: [] }, '/chat/moves': { moves: [fantraxMove, fantraxTrade] }, '/activity': [move('a', '2026-10-13T00:00:00.000Z')] })
+    const feed = await loadActivityFeed('L 1', { imported: true })
+    expect(calls.map((c) => c.url)).toContain('/api/app/leagues/L%201/chat/moves?scope=franchise')
+    expect(calls.some((c) => c.url === '/api/leagues/L%201/activity')).toBe(false)
+    expect(feed!.map((i) => [i.label, i.title, i.detail])).toEqual([
+      ['Looks like a trade', 'Heat ⇄ Rockets', 'College · Cream Bowl'],
+      ['Roster change', 'Jws452', 'College · Cream Bowl'],
+    ])
+    expect(feed![1].lines).toEqual([{ verb: 'add', name: 'Chris Lawson', meta: 'WR · Wash' }])
+  })
+
+  it('the card shows those moves under their Activity-tab labels', async () => {
+    stub({ '/api/league/chat': { messages: [], viewerUserId: 'u1' }, '/api/shared/activity': { items: [] }, '/chat/moves': { moves: [fantraxMove] } })
+    render(<LeagueActivityFeedCard leagueId="L1" imported />)
+    const list = await screen.findByTestId('league-activity-list')
+    expect(within(list).getByText('Roster change')).toBeTruthy()
+    expect(within(list).getByText('Chris Lawson')).toBeTruthy()
+    expect(screen.queryByTestId('league-activity-empty')).toBeNull()
+  })
+
   it('reacting posts to the chat message and shows it straight away; a failed save is rolled back', async () => {
     const calls = stub({ '/api/league/chat': { messages: [chopMsg], viewerUserId: 'u1' }, '/api/shared/activity': { items: [] }, '/activity': [] })
     render(<LeagueActivityFeedCard leagueId="L1" onOpenChat={vi.fn()} />)
