@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isRoadToGloryStagingLeague } from '@/lib/core-app/commissionerQa'
 import { readAwardSheetToken } from '@/lib/league-chat/awardSheetToken'
-import { fetchRoadToGloryNflSnapshot } from '@/lib/league-import/fantrax/roadToGloryNfl'
+import { fetchRoadToGloryNflSnapshot } from '@/lib/league-import/fantrax/roadToGloryResults'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 

@@ -4,23 +4,28 @@ import { fetchFantraxScheduleWithScores, getFantraxLeagueInfo, getFantraxStandin
 
 const ROAD_TO_GLORY_NFL_ID = 'tau9a8fomvmq84sx'
 
-export async function fetchRoadToGloryNflSnapshot(now = new Date()) {
+export function fetchRoadToGloryNflSnapshot() {
+  return fetchRoadToGlorySnapshot(ROAD_TO_GLORY_NFL_ID)
+}
+
+export async function fetchRoadToGlorySnapshot(sourceId: string, now = new Date()) {
   const [league, records] = await Promise.all([
-    getFantraxLeagueInfo(ROAD_TO_GLORY_NFL_ID, { excludePlayerInfo: true }),
-    getFantraxStandings(ROAD_TO_GLORY_NFL_ID),
+    getFantraxLeagueInfo(sourceId, { excludePlayerInfo: true }),
+    getFantraxStandings(sourceId),
   ])
   if (!league.ok || !records.ok) throw new Error('Fantrax league or standings unavailable.')
   const info = league.data
   const season = Number(info.seasonYear)
   const teamCount = Object.keys(info.teamInfo).length
   const teamIds = new Set(records.data.map(row => row.teamId))
-  if (season !== 2026 || !teamCount || teamIds.size !== teamCount || records.data.length !== teamCount ||
+  if (!Number.isInteger(season) || season < 2000 || !info.leagueName?.trim() || !teamCount ||
+      teamIds.size !== teamCount || records.data.length !== teamCount ||
       records.data.some(row => !info.teamInfo[row.teamId] || !row.teamName || !row.rank)) {
-    throw new Error('Unexpected Road To Glory NFL standings.')
+    throw new Error('Unexpected Road To Glory standings.')
   }
 
   // The public scoring feed also carries separately managed consolation brackets.
-  const schedule = await fetchFantraxScheduleWithScores(ROAD_TO_GLORY_NFL_ID, info, { now, includeUnscheduled: false })
+  const schedule = await fetchFantraxScheduleWithScores(sourceId, info, { now, includeUnscheduled: false })
   if (!schedule.position || schedule.periodsFailed) throw new Error('Fantrax scoring periods unavailable.')
   const standings = records.data.map(row => ({
     rosterId: row.teamId,
@@ -54,6 +59,6 @@ export async function fetchRoadToGloryNflSnapshot(now = new Date()) {
     })
   }
   return {
-    sourceLeagueId: ROAD_TO_GLORY_NFL_ID, league: info.leagueName, season, fetchedAt: new Date().toISOString(), standings, weeks,
+    sourceLeagueId: sourceId, league: info.leagueName.trim(), season, fetchedAt: new Date().toISOString(), standings, weeks,
   }
 }

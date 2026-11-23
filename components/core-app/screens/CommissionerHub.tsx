@@ -77,8 +77,10 @@ import { healthRingPct } from '@/lib/core-app/redraftCoreRace'
 import { HubFold } from '@/components/core-app/commissioner/HubFold'
 import { HubFoldOpener } from '@/components/core-app/commissioner/HubFoldOpener'
 import { isAfcPilotLeague } from '@/lib/afc-championships/staging'
-import { isRoadToGloryStagingLeague } from '@/lib/core-app/commissionerQa'
+import { isCommissionerQaEnvironment, isRoadToGloryStagingLeague } from '@/lib/core-app/commissionerQa'
 import { CommissionerLeagueResults } from '@/components/core-app/commissioner/CommissionerLeagueResults'
+import { CommissionerRoadToGloryResults } from '@/components/core-app/commissioner/CommissionerRoadToGloryResults'
+import { roadToGloryLeagueForSource } from '@/lib/league-import/fantrax/roadToGloryLeagues'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -170,6 +172,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
   }
 
   const { league, role, tiles, settings, access, unread, disputes, publicStandings, art } = data
+  const roadToGlorySource = isCommissionerQaEnvironment() && league.platform === 'fantrax' &&
+    (role === 'commissioner' || role === 'co_commissioner') ? roadToGloryLeagueForSource(league.platformLeagueId) : undefined
   const now = new Date()
   // Commissioner depth (AF Commissioner). Locked, the loader skipped the waiver read and the export.
   const depth = data.depth ?? null
@@ -320,12 +324,16 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         />
       ) : null}
       {(data.role === 'commissioner' || data.role === 'co_commissioner') && isRoadToGloryStagingLeague(league.id) ? (
-        <CommissionerLeagueResults
-          endpoint={`/api/commissioner/leagues/${encodeURIComponent(league.id)}/road-to-glory-nfl`}
-          title="Road To Glory NFL" provider="Fantrax"
-          sourceUrl="https://www.fantrax.com/fantasy/league/tau9a8fomvmq84sx/home"
-        />
+        <>
+          <CommissionerLeagueResults
+            endpoint={`/api/commissioner/leagues/${encodeURIComponent(league.id)}/road-to-glory-nfl`}
+            title="Road To Glory NFL" provider="Fantrax"
+            sourceUrl="https://www.fantrax.com/fantasy/league/tau9a8fomvmq84sx/home"
+          />
+          <CommissionerRoadToGloryResults leagueId={league.id} />
+        </>
       ) : null}
+      {roadToGlorySource ? <CommissionerRoadToGloryResults leagueId={league.id} source={roadToGlorySource} /> : null}
 
       {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
