@@ -1,4 +1,5 @@
-import { recordAdvice, withdrawStaleMyTeamAdvice, MY_TEAM_BENCH_SURFACE } from '@/lib/chimmy-advice/adviceStore'
+import { hasAdviceDayColumn, recordAdvice, withdrawStaleMyTeamAdvice, MY_TEAM_BENCH_SURFACE } from '@/lib/chimmy-advice/adviceStore'
+import { isAdviceDay } from '@/lib/chimmy-advice/adviceDay'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
@@ -23,10 +24,12 @@ import { isNativePlatform } from '@/lib/league/isNativeLeague'
  *   - NBA, NHL and MLB (2026-11-23): the week recorded is the one My Team PRICED the call for — the
  *     daily-sport outlook's period (`myTeamDailySport.ts`), on that sport's own calendar and season —
  *     never the NFL week. Before this a basketball league whose week number happened to equal the NFL's
- *     was recorded under an NFL week. Only a WEEKLY-lineup POINTS league records: a categories league has
- *     no period (no points to grade), and a daily-lineup league prices one DAY, which the ledger has no
- *     column for — recording it under its week would merge seven different calls into one row, so a
- *     daily-lineup call is not recorded. Graded per sport (`sportBenchGrading.ts`), never in the NFL record.
+ *     was recorded under an NFL week. Only a POINTS league records: a categories league has no period (no
+ *     points to grade). Graded per sport (`sportBenchGrading.ts`), never in the NFL record.
+ *   - A DAILY-lineup league (2026-11-23) prices one DAY. Its call is recorded under that day's week AND the
+ *     day (`advice_day`, part of the unique key) — but only once `20261123120000_chimmy_advice_day` is
+ *     applied. Before that it is not recorded at all (and nothing is withdrawn): filed under its week alone
+ *     it would merge up to seven different calls into one row. Graded on that day's games.
  *   - Any other sport records nothing.
  *   - Each player's projection is stored with the call — what it knew.
  *   - A call this render no longer makes is WITHDRAWN, but only while both players' games are still
@@ -53,7 +56,7 @@ export type BenchLedgerContext = {
    * NBA / NHL / MLB: the period the daily-sport outlook priced the lineup for (`applyDailySportToLineup`). Null in a
    * categories league or when nothing was priced; `kind: 'day'` in a daily-lineup league.
    */
-  lineupPeriod?: { kind: 'day' | 'week'; week: number | null; season?: number | null } | null
+  lineupPeriod?: { kind: 'day' | 'week'; week: number | null; season?: number | null; day?: string | null } | null
   /** Saved-roster or alert-preview renders do not show the bench check, so they record nothing. */
   fullRender: boolean
 }
@@ -61,8 +64,14 @@ export type BenchLedgerContext = {
 /** The sports whose bench calls are recorded on their own weekly calendar (the daily-sport outlook's period). */
 export const WEEKLY_PERIOD_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
 
-/** PURE. The season and week to record under, or null when this render must record nothing. */
-export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv = process.env): { season: number; week: number } | null {
+/**
+ * PURE. The season and week to record under — plus the day, in a daily-lineup league — or null when this render must
+ * record nothing. A `day` result still records nothing until the day column exists (`scheduleBenchCheckLedger`).
+ */
+export function benchLedgerWeek(
+  ctx: BenchLedgerContext,
+  env: NodeJS.ProcessEnv = process.env,
+): { season: number; week: number; day?: string } | null {
   if (String(env['ADVICE_LEDGER_MY_TEAM'] ?? '').trim().toLowerCase() === 'off') return null
   if (!ctx.fullRender || !ctx.userId || !ctx.leagueId) return null
   const platform = String(ctx.platform ?? '').trim().toLowerCase()
@@ -70,10 +79,11 @@ export function benchLedgerWeek(ctx: BenchLedgerContext, env: NodeJS.ProcessEnv 
   const sport = String(ctx.sport ?? '').trim().toUpperCase()
   if (WEEKLY_PERIOD_SPORTS.has(sport)) {
     const lp = ctx.lineupPeriod
-    if (!lp || lp.kind !== 'week') return null
+    if (!lp || (lp.kind !== 'week' && lp.kind !== 'day')) return null
     const season = Number(lp.season)
     if (lp.season == null || !Number.isInteger(season) || season < 1900) return null
     if (typeof lp.week !== 'number' || !Number.isInteger(lp.week) || lp.week < 1) return null
+    if (lp.kind === 'day') return isAdviceDay(lp.day) ? { season, week: lp.week, day: lp.day } : null
     return { season, week: lp.week }
   }
   if (sport !== 'NFL') return null
@@ -98,6 +108,9 @@ export function scheduleBenchCheckLedger(
   const at = benchLedgerWeek(ctx)
   if (!at) return
   void (async () => {
+    // 🛑 A day's call waits for the day column: before it, today's behaviour exactly — nothing recorded or withdrawn.
+    if (at.day && !(await hasAdviceDayColumn())) return
+    const day = at.day ? { day: at.day } : {}
     for (const c of calls) {
       await recordAdvice({
         userId: ctx.userId,
@@ -112,6 +125,7 @@ export function scheduleBenchCheckLedger(
         slot: c.slot,
         confidencePct: null,
         projected: { rec: c.rec.projected, alt: c.alt.projected },
+        ...day,
       })
     }
     await withdrawStaleMyTeamAdvice({
@@ -121,6 +135,7 @@ export function scheduleBenchCheckLedger(
       week: at.week,
       keep: calls.map((c) => ({ rec: c.rec.key, alt: c.alt.key })),
       openPlayerKeys,
+      ...day,
     })
   })().catch((err) => {
     console.warn('[advice-ledger] My Team bench check not recorded', err instanceof Error ? err.message : err)

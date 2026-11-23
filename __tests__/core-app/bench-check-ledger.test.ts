@@ -8,9 +8,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const recordAdvice = vi.hoisted(() => vi.fn(async () => 'recorded'))
 const withdrawStaleMyTeamAdvice = vi.hoisted(() => vi.fn(async () => 0))
+const hasAdviceDayColumn = vi.hoisted(() => vi.fn(async () => false))
 vi.mock('@/lib/chimmy-advice/adviceStore', () => ({
   recordAdvice,
   withdrawStaleMyTeamAdvice,
+  hasAdviceDayColumn,
   MY_TEAM_BENCH_SURFACE: 'my_team_bench',
 }))
 
@@ -79,7 +81,8 @@ describe('benchLedgerWeek — NBA, NHL and MLB record on their own calendar (202
   })
 
   it.each([
-    ['a daily-lineup league (one day priced; the ledger has no day)', { lineupPeriod: { kind: 'day' as const, week: 6, season: 2026 } }],
+    ['a daily-lineup period that names no day', { lineupPeriod: { kind: 'day' as const, week: 6, season: 2026 } }],
+    ['a daily-lineup period whose day is malformed', { lineupPeriod: { kind: 'day' as const, week: 6, season: 2026, day: '2026-13-01' } }],
     ['a categories league (no period priced)', { lineupPeriod: null }],
     ['no season on the period', { lineupPeriod: { kind: 'week' as const, week: 6 } }],
     ['no week on the period', { lineupPeriod: { kind: 'week' as const, week: null, season: 2026 } }],
@@ -162,5 +165,58 @@ describe('scheduleBenchCheckLedger — what it sends', () => {
     await flush()
     expect(recordAdvice).not.toHaveBeenCalled()
     expect(withdrawStaleMyTeamAdvice).not.toHaveBeenCalled()
+  })
+})
+
+describe('🛑 daily-lineup leagues (2026-11-23): recorded per DAY, and only once the day column exists', () => {
+  const DAILY: BenchLedgerContext = {
+    ...CTX,
+    sport: 'NHL',
+    platform: 'allfantasy',
+    lineupPeriod: { kind: 'day', week: 7, season: 2026, day: '2026-11-20' },
+  }
+  const SWAP = [{ slot: 'C', rec: { key: '1', name: 'Bench Guy', projected: 6.1 }, alt: { key: '2', name: 'Starter Guy', projected: 3.4 } }]
+  const flush = () => new Promise((r) => setTimeout(r, 0))
+  beforeEach(() => {
+    recordAdvice.mockClear()
+    withdrawStaleMyTeamAdvice.mockClear()
+    hasAdviceDayColumn.mockReset()
+  })
+
+  it('the period it records under: the day\'s own week and season, plus the day', () => {
+    expect(benchLedgerWeek(DAILY, {} as NodeJS.ProcessEnv)).toEqual({ season: 2026, week: 7, day: '2026-11-20' })
+  })
+
+  it('🛑 before the migration: exactly today — nothing recorded, nothing withdrawn', async () => {
+    hasAdviceDayColumn.mockResolvedValue(false)
+    scheduleBenchCheckLedger(DAILY, SWAP, ['1', '2'])
+    await flush()
+    await flush()
+    expect(hasAdviceDayColumn).toHaveBeenCalled()
+    expect(recordAdvice).not.toHaveBeenCalled()
+    expect(withdrawStaleMyTeamAdvice).not.toHaveBeenCalled()
+  })
+
+  it('after the migration: each swap recorded under its week AND day, and the withdraw scoped to that day', async () => {
+    hasAdviceDayColumn.mockResolvedValue(true)
+    scheduleBenchCheckLedger(DAILY, SWAP, ['1', '2'])
+    await flush()
+    await flush()
+    expect(recordAdvice).toHaveBeenCalledWith(
+      expect.objectContaining({ sport: 'NHL', season: 2026, week: 7, day: '2026-11-20', projected: { rec: 6.1, alt: 3.4 } }),
+    )
+    expect(withdrawStaleMyTeamAdvice).toHaveBeenCalledWith({
+      userId: 'u1', leagueId: 'lg', season: 2026, week: 7, day: '2026-11-20',
+      keep: [{ rec: '1', alt: '2' }],
+      openPlayerKeys: ['1', '2'],
+    })
+  })
+
+  it('a weekly league never asks about the day column and never sends a day', async () => {
+    scheduleBenchCheckLedger({ ...DAILY, lineupPeriod: { kind: 'week', week: 7, season: 2026 } }, SWAP, ['1', '2'])
+    await flush()
+    await flush()
+    expect(hasAdviceDayColumn).not.toHaveBeenCalled()
+    expect(recordAdvice.mock.calls[0]?.[0]).not.toHaveProperty('day')
   })
 })
