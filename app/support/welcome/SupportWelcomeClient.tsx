@@ -105,7 +105,7 @@ export default function SupportWelcomeClient() {
             </p>
             {guest && view === 'done' ? (
               <div className="p-4 rounded-xl text-sm" style={{ background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--muted2)' }}>
-                We emailed you a sign-in button for later. You never need a password.
+                We emailed you your username and password, plus a button that signs you straight in.
               </div>
             ) : null}
             {/* Signed in just now with no password: how to get back in later without the email

@@ -6,6 +6,7 @@
  */
 import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import bcrypt from "bcryptjs"
 
 type User = { id: string; email: string; username: string; displayName: string | null; emailVerified: Date | null; avatarUrl: null }
 type Tok = { identifier: string; token: string; expires: Date }
@@ -121,12 +122,16 @@ describe("buildSupportGuestCheckoutParams", () => {
 })
 
 describe("resolveSupportGuestBuyer", () => {
-  it("makes a new account with no password, an automatic username and a claim for this checkout", async () => {
+  it("makes a new account with a generated password, an automatic username and a claim for this checkout", async () => {
     const { resolveSupportGuestBuyer, supportCheckoutState } = await import("@/lib/monetization/supportGuestAccount")
     const buyer = await resolveSupportGuestBuyer(session("Linda@Example.com"))
     expect(buyer).toMatchObject({ email: "linda@example.com", created: true })
     expect(db.users).toHaveLength(1)
-    expect(db.users[0].passwordHash).toBeNull()
+    // Readable, no look-alike characters, and only its hash is stored.
+    expect(buyer!.initialPassword).toMatch(/^[a-hj-km-np-z2-9]{4}-[a-hj-km-np-z2-9]{4}-[a-hj-km-np-z2-9]{4}$/)
+    expect(db.users[0].passwordHash).not.toContain(buyer!.initialPassword)
+    expect(await bcrypt.compare(buyer!.initialPassword!, db.users[0].passwordHash)).toBe(true)
+    expect(await bcrypt.compare("wrong-pass-word", db.users[0].passwordHash)).toBe(false)
     expect(db.users[0].displayName).toBe("Linda")
     expect(db.users[0].username).toMatch(/^linda/)
     expect(profile.ensure).toHaveBeenCalledWith(expect.objectContaining({ userId: buyer!.userId, ageConfirmed: true }))
@@ -137,8 +142,25 @@ describe("resolveSupportGuestBuyer", () => {
     const { resolveSupportGuestBuyer } = await import("@/lib/monetization/supportGuestAccount")
     const first = await resolveSupportGuestBuyer(session("linda@example.com"))
     const second = await resolveSupportGuestBuyer(session("linda@example.com"))
-    expect(second).toEqual(first)
+    // Same account, still "new" — but the password exists only on the pass that made it.
+    const { initialPassword, ...rest } = first!
+    expect(initialPassword).toBeTruthy()
+    expect(second).toEqual(rest)
     expect(db.users).toHaveLength(1)
+  })
+
+  it("never sets or returns a password for an EXISTING account", async () => {
+    db.users.push({ id: "owner", email: "owner@example.com", username: "owner", displayName: "Owner", emailVerified: new Date(), avatarUrl: null, passwordHash: "theirs" })
+    const { resolveSupportGuestBuyer } = await import("@/lib/monetization/supportGuestAccount")
+    const buyer = await resolveSupportGuestBuyer(session("owner@example.com"))
+    expect(buyer?.initialPassword).toBeUndefined()
+    expect(db.users[0].passwordHash).toBe("theirs")
+  })
+
+  it("gives every account its own password", async () => {
+    const { generateSupportPassword } = await import("@/lib/monetization/supportGuestAccount")
+    const seen = new Set(Array.from({ length: 200 }, () => generateSupportPassword()))
+    expect(seen.size).toBe(200)
   })
 
   it("🛑 an EXISTING account gets the payment but NO claim — the paying browser cannot sign into it", async () => {
@@ -253,11 +275,24 @@ describe("buildSupportWelcomeEmail", () => {
     expect(html).toContain("Choose one here")
   })
 
-  it("🛑 never contains a password", async () => {
+  it("shows a NEW account's password, and says where to change it", async () => {
     const { buildSupportWelcomeEmail } = await import("@/lib/monetization/supportGuestEmail")
-    const { html } = buildSupportWelcomeEmail(base)
-    expect(html).not.toMatch(/password\s*:/i)
-    expect(html).not.toMatch(/temporary password/i)
+    const { html } = buildSupportWelcomeEmail({ ...base, buyer: { ...base.buyer, initialPassword: "kq7m-x3vr-p9tz" } })
+    expect(html).toContain("Your password")
+    expect(html).toContain("kq7m-x3vr-p9tz")
+    expect(html).toContain("Settings → Security")
+    expect(html).toContain("Forgot it later?")
+    expect(html).not.toContain("Prefer a password?")
+  })
+
+  it("🛑 shows no password when there is none to show, nor on the double-payment email", async () => {
+    const { buildSupportWelcomeEmail } = await import("@/lib/monetization/supportGuestEmail")
+    const none = buildSupportWelcomeEmail(base).html
+    expect(none).not.toContain("Your password")
+    expect(none).toContain("Prefer a password?")
+    const withPw = { ...base.buyer, initialPassword: "kq7m-x3vr-p9tz" }
+    expect(buildSupportWelcomeEmail({ ...base, buyer: withPw, duplicate: true }).html).not.toContain("kq7m-x3vr-p9tz")
+    expect(buildSupportWelcomeEmail({ ...base, buyer: { ...withPw, created: false } }).html).not.toContain("kq7m-x3vr-p9tz")
   })
 
   it("escapes what it shows", async () => {

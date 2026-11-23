@@ -17,6 +17,8 @@
  * who knows your address into your account for $9.99.
  */
 import "server-only"
+import { randomBytes } from "node:crypto"
+import bcrypt from "bcryptjs"
 import type Stripe from "stripe"
 
 import { prisma } from "@/lib/prisma"
@@ -43,6 +45,23 @@ export type SupportGuestBuyer = {
   username: string
   /** True only when THIS checkout made the account. */
   created: boolean
+  /**
+   * The password this checkout just gave a NEW account, in the clear, for the welcome email
+   * ONLY — the owner's call (2026-11-23), so a supporter has something to write down. Present only
+   * on the pass that created the account: it is never stored, never logged, and a webhook retry
+   * cannot recover it (the email then offers "choose a password" instead).
+   */
+  initialPassword?: string
+}
+
+// No 0/o, 1/l/i: an older supporter copies this off a phone screen onto paper and back.
+const PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+/** "kq7m-x3vr-p9tz": 12 random characters (~59 bits) in groups of four, easy to read aloud. */
+export function generateSupportPassword(): string {
+  const bytes = randomBytes(12)
+  const chars = Array.from(bytes, (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length])
+  return [0, 4, 8].map((i) => chars.slice(i, i + 4).join("")).join("-")
 }
 
 /** The email Stripe collected, trimmed and lowercased, or null. */
@@ -93,11 +112,14 @@ export async function resolveSupportGuestBuyer(session: Stripe.Checkout.Session)
   // First name only on screen; the username is the fallback.
   const displayName = name ? name.split(/\s+/)[0]!.slice(0, 40) : username
 
+  const initialPassword = generateSupportPassword()
+  const passwordHash = await bcrypt.hash(initialPassword, 12)
+
   let user: { id: string; username: string }
   try {
     user = await prisma.$transaction(async (tx) => {
       const created = await tx.appUser.create({
-        data: { email, username, displayName, passwordHash: null },
+        data: { email, username, displayName, passwordHash },
         select: { id: true, username: true },
       })
       // The claim token is written WITH the account, so "the account exists" and "this checkout
@@ -126,7 +148,7 @@ export async function resolveSupportGuestBuyer(session: Stripe.Checkout.Session)
     ageConfirmed: supportGuestAgeConfirmed(session),
   })
 
-  return { userId: user.id, email, username: user.username, created: true }
+  return { userId: user.id, email, username: user.username, created: true, initialPassword }
 }
 
 /**

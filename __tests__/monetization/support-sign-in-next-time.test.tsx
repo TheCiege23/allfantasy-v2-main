@@ -40,6 +40,7 @@ beforeEach(() => {
   }
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
+  window.sessionStorage.clear()
 })
 afterEach(() => {
   cleanup()
@@ -118,5 +119,40 @@ describe('sign in next time', () => {
     fireEvent.click(screen.getByTestId('sign-in-next-time-skip'))
     expect(screen.queryByTestId('sign-in-next-time')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  describe('a number typed before paying', () => {
+    it('is texted as the page opens, and only the code is asked for', async () => {
+      window.sessionStorage.setItem('af:support-phone', JSON.stringify({ phone: '(555) 123-4567', smsConsent: true }))
+      render(<SignInNextTime />)
+      expect(screen.getByTestId('sign-in-next-time').getAttribute('data-step')).toBe('code')
+      expect(screen.queryByText('How do you want to sign in next time?')).toBeNull()
+      await waitFor(() =>
+        expect(bodyOf('/api/verify/phone/start')).toEqual({ phone: '+15551234567', smsConsent: true, consentSource: 'support_checkout' }),
+      )
+      expect(window.sessionStorage.getItem('af:support-phone')).toBeNull()
+
+      fireEvent.change(screen.getByTestId('sign-in-next-time-code'), { target: { value: '123456' } })
+      fireEvent.click(screen.getByTestId('sign-in-next-time-confirm'))
+      await screen.findByTestId('sign-in-next-time-done')
+      expect(bodyOf('/api/verify/phone/check')).toEqual({ phone: '+15551234567', code: '123456' })
+    })
+
+    it('falls back to the number step, filled in, when it cannot be texted', async () => {
+      replies['/api/verify/phone/start'] = { status: 409, body: { error: 'PHONE_ALREADY_IN_USE' } }
+      window.sessionStorage.setItem('af:support-phone', JSON.stringify({ phone: '5551234567', smsConsent: true }))
+      render(<SignInNextTime />)
+      expect((await screen.findByRole('alert')).textContent).toContain('already used by another AllFantasy account')
+      expect(screen.getByTestId('sign-in-next-time').getAttribute('data-step')).toBe('phone')
+      expect((screen.getByTestId('sign-in-next-time-phone-input') as HTMLInputElement).value).toBe('5551234567')
+    })
+
+    it('is ignored without the consent that was ticked before paying', async () => {
+      window.sessionStorage.setItem('af:support-phone', JSON.stringify({ phone: '5551234567' }))
+      render(<SignInNextTime />)
+      expect(screen.getByText('How do you want to sign in next time?')).toBeTruthy()
+      await Promise.resolve()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
   })
 })

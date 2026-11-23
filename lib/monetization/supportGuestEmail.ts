@@ -7,20 +7,25 @@ import { createSupportSignInLinkToken, type SupportGuestBuyer } from "@/lib/mone
  * The welcome email's subject and HTML. Pure, so the copy is testable.
  *
  * It names the account's sign-in details (email and username — either works on the sign-in
- * page) so a supporter can sign in on their own later. 🛑 IT NEVER CONTAINS A PASSWORD: these
- * accounts have none, and a password sent by email sits readable in an inbox forever. The
- * "choose a password" link goes to the normal forgot-password page, which mails a fresh,
- * short-lived reset link to the inbox itself — so the link in THIS email never expires and
- * proves nothing on its own.
+ * page) so a supporter can sign in on their own later.
+ *
+ * ⚠ A NEW ACCOUNT'S PASSWORD IS IN IT, BY THE OWNER'S DECISION (2026-11-23). Supporters who don't
+ * play want something to write down, as most sites give them. The trade-off was weighed then: the
+ * password sits readable in the inbox, but anyone who can read that inbox can already reset it.
+ * Only `buyer.initialPassword` is ever shown — set on the one webhook pass that MADE the account,
+ * never stored. Without it (an existing account, or a retry that cannot recover it) the email
+ * offers "choose a password" instead, which goes to the normal forgot-password page.
  */
 export function buildSupportWelcomeEmail(input: {
-  buyer: Pick<SupportGuestBuyer, "email" | "username" | "created">
+  buyer: Pick<SupportGuestBuyer, "email" | "username" | "created" | "initialPassword">
   signInUrl: string
   setPasswordUrl: string
   duplicate?: boolean
   buildHtml?: typeof buildVerificationEmailHtml
 }): { subject: string; html: string } {
   const { buyer, duplicate } = input
+  // Never on the double-payment email: that is someone else's existing account.
+  const password = !duplicate && buyer.created && buyer.initialPassword ? buyer.initialPassword : null
   const greeting = duplicate
     ? "Thank you! This email already pays for AllFantasy Pro, so we did not charge you twice — the new payment has been refunded in full."
     : buyer.created
@@ -32,12 +37,16 @@ export function buildSupportWelcomeEmail(input: {
     details: [
       { label: "Sign in with", value: buyer.email },
       { label: "Your username", value: buyer.username },
+      ...(password ? [{ label: "Your password", value: password }] : []),
     ],
     verifyUrl: input.signInUrl,
     buttonLabel: "Sign in to AllFantasy",
-    secondaryLink: { label: "Prefer a password? Choose one here", url: input.setPasswordUrl },
-    footerNote:
-      "The sign-in button works once. You can also sign in any time with your email and a password you choose. To cancel your monthly support, sign in and open Settings → Billing, or email support@allfantasy.ai.",
+    secondaryLink: password
+      ? { label: "Forgot it later? Choose a new one here", url: input.setPasswordUrl }
+      : { label: "Prefer a password? Choose one here", url: input.setPasswordUrl },
+    footerNote: password
+      ? "Keep this email: you can sign in any time with your email or username and the password above, and change the password in Settings → Security. The button signs you in once. To cancel your monthly support, sign in and open Settings → Billing, or email support@allfantasy.ai."
+      : "The sign-in button works once. You can also sign in any time with your email and a password you choose. To cancel your monthly support, sign in and open Settings → Billing, or email support@allfantasy.ai.",
   })
   return { subject: duplicate ? "You're already supporting AllFantasy" : "Thank you for supporting AllFantasy", html }
 }
