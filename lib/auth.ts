@@ -349,6 +349,23 @@ const providers: NextAuthOptions["providers"] = [
     },
   }),
   /*
+   * The no-account support checkout's two one-time ways in (lib/monetization/supportGuestAccount):
+   * `claim` — the thank-you page, holding the Checkout Session id, for an account that checkout
+   * just MADE; `link` — the emailed sign-in button. Each token is single-use and stored hashed.
+   */
+  CredentialsProvider({
+    id: "support-link",
+    name: "Support sign-in link",
+    credentials: {
+      kind: { label: "Kind", type: "text" },
+      token: { label: "Token", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizeSupportToken } = await import("@/lib/monetization/supportGuestAccount");
+      return authorizeSupportToken(credentials?.kind, credentials?.token);
+    },
+  }),
+  /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *
    * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing
