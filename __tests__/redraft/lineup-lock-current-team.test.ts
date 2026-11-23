@@ -96,11 +96,11 @@ beforeEach(() => {
   h.sportsPlayers = [sleeperRow('100', 'Traded To Miami', 'Miami Dolphins'), sleeperRow('200', 'Released', null)]
 })
 
-async function patchMoves(playerIds: string[]) {
+async function patchMoves(playerIds: string[], week = 6) {
   const res = await PATCH(
     createMockNextRequest('http://localhost/api/redraft/roster', {
       method: 'PATCH',
-      body: { rosterId: 'r1', week: 6, moves: playerIds.map((playerId) => ({ playerId, toSlot: 'BN' })) },
+      body: { rosterId: 'r1', week, moves: playerIds.map((playerId) => ({ playerId, toSlot: 'BN' })) },
     }),
   )
   const body = (await res.json()) as { validation?: { issues?: Array<{ code: string; playerId?: string }> } }
@@ -114,6 +114,20 @@ describe('lineup lock reads the CURRENT team, not the stored snapshot', () => {
 
   it('a player Sleeper lists with no team is not locked by his stale club', async () => {
     expect(await patchMoves(['200'])).toEqual([])
+  })
+
+  /*
+   * 🛑 A WEEK AHEAD OF THE SEASON'S SKIPPED THE LOCK (2026-11-23). The PATCH writes the CURRENT slot
+   * types, and next week has no started games, so naming it moved a player whose game was under way.
+   */
+  it('🛑 a save that names a FUTURE week is still locked by this week\'s games', async () => {
+    vi.mocked(prisma.sportsGame.findMany).mockImplementation((async (args: { where?: { week?: number } }) =>
+      args?.where?.week === 6 ? h.games : []) as never)
+    try {
+      expect(await patchMoves(['300'], 7)).toEqual(['300'])
+    } finally {
+      vi.mocked(prisma.sportsGame.findMany).mockImplementation((async () => h.games) as never)
+    }
   })
 
   it('no Sleeper row: the stored team still locks him', async () => {

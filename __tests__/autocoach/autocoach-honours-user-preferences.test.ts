@@ -22,6 +22,12 @@ const mocks = vi.hoisted(() => ({
   playerData: null as unknown,
   swapLogs: [] as Array<{ playerOutId: string; playerInId: string }>,
   pickCalls: [] as Array<{ playerOut: string; bench: string[] }>,
+  aiSwapOn: true,
+}))
+
+// AI swap is off until the subscriber turns it on (lib/lineup-automation/aiSwapPolicy.ts).
+vi.mock('@/lib/lineup-automation/aiSwapPolicy', () => ({
+  readAiSwapPreference: async () => ({ on: mocks.aiSwapOn, decided: true }),
 }))
 
 const POSITIONS: Record<string, string> = { qb1: 'QB', qb2: 'QB', rb1: 'RB', rb2: 'RB' }
@@ -131,6 +137,7 @@ beforeEach(() => {
   mocks.playerData = lineup()
   mocks.swapLogs = []
   mocks.pickCalls = []
+  mocks.aiSwapOn = true
 })
 
 describe('autoCoachSkipReason (pure)', () => {
@@ -150,6 +157,12 @@ describe('runAutoCoachForLeague', () => {
       { playerOutId: 'qb1', playerInId: 'qb2' },
       { playerOutId: 'rb1', playerInId: 'rb2' },
     ])
+  })
+
+  it('swaps nothing for a Pro subscriber who has not turned AI swap on', async () => {
+    mocks.aiSwapOn = false
+    await runAutoCoachForLeague('L1')
+    expect(mocks.swapLogs).toEqual([])
   })
 
   it('leaves an EXCLUDED starter in place, and still fixes the other slot', async () => {

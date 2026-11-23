@@ -19,6 +19,7 @@ import { prisma } from '@/lib/prisma'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { logAction } from '@/server/services/auditService'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { aiSwapAllowedForTeam } from './aiSwapPolicy'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
@@ -99,8 +100,10 @@ export async function readMyAutoSwitch(leagueId: string, userId: string, rosterI
 export type AutoSwitchSetResult = { ok: true; setting: AutoSwitchInjuredSetting | null } | { ok: false; status: number; error: string }
 
 /**
- * Set the switch for one team. A commissioner or co-commissioner may turn it on, change it, or turn it
- * off. The team's owner may only turn it off. Written under the roster row lock, so a concurrent change
+ * Set the switch for one team. The team's OWNER turns it on, changes it, or turns it off; a commissioner
+ * or co-commissioner may only turn it off (owner's rule, 2026-11-23: AI swap is the subscriber's choice,
+ * and the commissioner's say is the league-wide off switch, `League.autoCoachEnabled`). It still runs
+ * only for an AF Pro / Supreme owner who has turned AI swap on (lib/lineup-automation/aiSwapPolicy.ts). Written under the roster row lock, so a concurrent change
  * to the team's other settings is not lost.
  */
 export async function setAutoSwitchInjured(leagueId: string, actorUserId: string, rosterId: unknown, input: unknown): Promise<AutoSwitchSetResult> {
@@ -115,8 +118,8 @@ export async function setAutoSwitchInjured(leagueId: string, actorUserId: string
 
   const commissioner = await isElevatedCommissioner(leagueId, actorUserId)
   const isOwner = isRosterManagedBy(roster, actorUserId)
-  if (!commissioner && !(isOwner && !parsed.on)) {
-    return { ok: false, status: 403, error: isOwner ? 'Only the commissioner can turn this on. You can turn it off.' : 'Commissioner only.' }
+  if (!isOwner && !(commissioner && !parsed.on)) {
+    return { ok: false, status: 403, error: commissioner ? 'Only the team’s manager can turn this on. You can turn it off.' : 'Only the team’s manager can change this.' }
   }
   if (parsed.on && !roster.platformUserId) return { ok: false, status: 409, error: 'This team has no manager to run it for.' }
 
@@ -203,8 +206,10 @@ export async function runAutoSwitchInjured(opts?: { limit?: number; deadline?: n
         skip('new_owner_or_off')
         continue
       }
-      if (!(await ownerHasAutoSwitchPlan(roster.platformUserId))) {
-        skip('owner_not_pro')
+      // Plan, the owner's own AI swap switch, and the commissioner's league-wide switch (aiSwapPolicy.ts).
+      const swap = await aiSwapAllowedForTeam({ roster, league })
+      if (!swap.allowed) {
+        skip(swap.reason)
         continue
       }
       const now = clock()

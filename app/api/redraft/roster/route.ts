@@ -659,7 +659,11 @@ export async function PATCH(req: NextRequest) {
   })) as RedraftRosterRouteRow | null
   if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const week = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
+  // 🛑 NEVER A WEEK AHEAD OF THE SEASON'S. This writes the CURRENT slot types, and a future week has no
+  // started games, so `week: 13` moved week 12's started players with no lock at all (2026-11-23).
+  const requestedWeek = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
+  const currentWeek = Number(roster.season.currentWeek)
+  const week = Number.isFinite(currentWeek) && currentWeek >= 1 ? Math.min(requestedWeek, Math.floor(currentWeek)) : requestedWeek
   const injuryHydrated = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
   // Enforce lineup locks (G1): stamp derived isLocked from the schedule BEFORE
   // applying moves, so a player whose game has kicked off cannot be moved.
