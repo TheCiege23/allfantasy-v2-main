@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getLeagueActivity, type ActivityPlayer } from '@/lib/core-app/leagueActivity'
 import { LEAGUE_MOVES_WINDOW_DAYS, type LeagueMove, type LeagueMovePlayer } from '@/lib/league-chat/leagueMoves'
+import { fantraxLeagueMoves } from '@/lib/league/collegePro/fantraxActivity'
+import { halfLabel, pairedLeagueFor } from '@/lib/league/collegePro/pairLink'
 
 /**
  * GET /api/app/leagues/[leagueId]/chat/moves — the league's recent transactions, for the cards league
@@ -25,17 +27,12 @@ const player = (p: ActivityPlayer): LeagueMovePlayer => ({
   to: p.to ?? null,
 })
 
-export async function GET(_req: Request, props: { params: Promise<{ leagueId: string }> }) {
-  const { leagueId } = await props.params
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if ((await resolveLeagueAccess(leagueId, userId)) == null) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
+/** One league's moves in the window, newest first: the activity table, plus a Fantrax league's stored roster diffs. */
+async function movesForLeague(leagueId: string, since: number): Promise<LeagueMove[]> {
   const league = await prisma.league
     .findUnique({ where: { id: leagueId }, select: { platform: true, platformLeagueId: true, sport: true } })
     .catch(() => null)
-  if (!league) return NextResponse.json({ moves: [] })
+  if (!league) return []
 
   const activity = await getLeagueActivity({
     leagueId,
@@ -44,7 +41,6 @@ export async function GET(_req: Request, props: { params: Promise<{ leagueId: st
     sport: league.sport,
     limit: LIMIT,
   })
-  const since = Date.now() - LEAGUE_MOVES_WINDOW_DAYS * 86_400_000
   const moves: LeagueMove[] = (activity?.items ?? [])
     .filter((i) => i.occurredAt.getTime() >= since)
     .map((i) => ({
@@ -60,5 +56,46 @@ export async function GET(_req: Request, props: { params: Promise<{ leagueId: st
       bid: i.bid,
       picks: i.picks,
     }))
-  return NextResponse.json({ moves })
+  // Fantrax publishes no transactions, so the activity table has none for it (fantraxActivity.ts).
+  if (String(league.platform ?? '').toLowerCase() === 'fantrax' && league.platformLeagueId) {
+    moves.push(...(await fantraxLeagueMoves(league.platformLeagueId, { since }).catch(() => [])))
+  }
+  return moves
+}
+
+const newestFirst = (a: LeagueMove, b: LeagueMove) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)
+
+/**
+ * `?scope=franchise` (the Activity tab): for half of a paired college + pro league, BOTH halves' moves
+ * in one feed, each tagged with the league it happened in, so the two leagues read as one. League chat
+ * omits it and keeps its own league's moves only.
+ */
+export async function GET(req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const { leagueId } = await props.params
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if ((await resolveLeagueAccess(leagueId, userId)) == null) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const since = Date.now() - LEAGUE_MOVES_WINDOW_DAYS * 86_400_000
+  const franchise = new URL(req.url).searchParams.get('scope') === 'franchise'
+  const pair = franchise ? await pairedLeagueFor(leagueId, userId).catch(() => null) : null
+  if (!pair) return NextResponse.json({ moves: (await movesForLeague(leagueId, since)).sort(newestFirst).slice(0, LIMIT) })
+
+  const [own, other, rows] = await Promise.all([
+    movesForLeague(leagueId, since),
+    movesForLeague(pair.otherLeagueId, since),
+    prisma.league.findMany({ where: { id: { in: [leagueId, pair.otherLeagueId] } }, select: { id: true, name: true, sport: true } }),
+  ])
+  const tag = (id: string) => {
+    const r = rows.find((x) => x.id === id)
+    return { leagueId: id, name: (r?.name ?? '').trim() || 'League', label: halfLabel(r?.sport) }
+  }
+  const moves = [
+    ...own.map((m) => ({ ...m, league: tag(leagueId) })),
+    ...other.map((m) => ({ ...m, league: tag(pair.otherLeagueId) })),
+  ]
+    .sort(newestFirst)
+    .slice(0, LIMIT * 2)
+  return NextResponse.json({ moves, leagues: [tag(leagueId), tag(pair.otherLeagueId)] })
 }

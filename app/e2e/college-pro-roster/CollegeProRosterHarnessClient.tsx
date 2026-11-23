@@ -1,7 +1,14 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { CollegeProStandings, CollegeProWeek } from '@/components/league/college-pro/CollegeProOneLeague'
+import {
+  CollegeProFranchiseCard,
+  CollegeProOtherHalf,
+  CollegeProPairChip,
+  CollegeProStandings,
+  CollegeProWeek,
+} from '@/components/league/college-pro/CollegeProOneLeague'
+import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -239,6 +246,32 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     }
+    const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    if (url.includes('/api/league/college-pro-pair')) {
+      return json({
+        applies: true, role: 'pro',
+        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true },
+        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true },
+      })
+    }
+    if (url.includes('/chat/moves')) {
+      // Peach Bowl's Sleeper moves and Cream Bowl's stored Fantrax roster diffs, one feed.
+      const peach = { leagueId: 'harness', name: 'Peach Bowl (C2C)', label: 'NFL' }
+      const cream = { leagueId: 'harness-college', name: 'Cream Bowl', label: 'College' }
+      const hrs = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+      const pl = (id: string, name: string, position: string, team: string, to: string | null = null) => ({ id, name, position, team, imageUrl: null, to })
+      return json({
+        leagues: [peach, cream],
+        moves: [
+          { id: 'm1', kind: 'waiver', occurredAt: hrs(5), teamName: 'Connor0488', managerName: 'Connor0488', avatarUrl: null, involvedTeams: ['Connor0488'],
+            adds: [pl('a1', 'Tyler Allgeier', 'RB', 'ATL', 'Connor0488')], drops: [pl('d1', 'Zach Ertz', 'TE', 'WAS')], bid: 14, picks: [], league: peach },
+          { id: 'm2', kind: 'roster_move', occurredAt: hrs(30), teamName: 'Jws452', managerName: null, avatarUrl: null, involvedTeams: ['Jws452'],
+            adds: [pl('a2', 'Braden Pegan', 'WR', 'Utah', 'Jws452')], drops: [pl('d2', 'Dante Reno', 'QB', 'Florida')], bid: null, picks: [], inferred: true, league: cream },
+          { id: 'm3', kind: 'trade', occurredAt: hrs(60), teamName: 'GrindingFFB', managerName: 'GrindingFFB', avatarUrl: null, involvedTeams: ['GrindingFFB', 'Scoresscotty'],
+            adds: [pl('a3', 'Jaylen Waddle', 'WR', 'MIA', 'GrindingFFB'), pl('a4', 'Kyren Williams', 'RB', 'LAR', 'Scoresscotty')], drops: [], bid: null, picks: [], league: peach },
+        ],
+      })
+    }
     return real(input, init)
   }
 }
@@ -256,6 +289,23 @@ export function CollegeProRosterHarnessClient() {
           <CollegeProWeek leagueId="harness">
             <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own matchup screen stays here, unchanged.</p>
           </CollegeProWeek>
+        ) : params?.get('view') === 'header' ? (
+          <div className="flex flex-wrap items-center gap-2 p-4">
+            <span className="text-lg font-extrabold">Peach Bowl (C2C)</span>
+            <CollegeProPairChip leagueId="harness" />
+          </div>
+        ) : params?.get('view') === 'home' ? (
+          <div className="p-4">
+            <CollegeProFranchiseCard leagueId="harness">
+              <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own home stays here, unchanged.</p>
+            </CollegeProFranchiseCard>
+          </div>
+        ) : params?.get('view') === 'trades' ? (
+          <CollegeProOtherHalf leagueId="harness" tab="trades">
+            <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own trades screen stays here, unchanged.</p>
+          </CollegeProOtherHalf>
+        ) : params?.get('view') === 'activity' ? (
+          <LeagueActivityTab leagueId="harness" />
         ) : params?.get('view') === 'standings' ? (
           <CollegeProStandings leagueId="harness">
             <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own standings stay here, unchanged.</p>
