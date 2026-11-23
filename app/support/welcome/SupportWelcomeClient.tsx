@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import { signIn, useSession } from 'next-auth/react'
 import { Heart, Loader2, Mail } from 'lucide-react'
 
+import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
+
 type View = 'waiting' | 'done' | 'check_email' | 'slow'
 
 const POLL_MS = 2000
@@ -25,6 +27,18 @@ export default function SupportWelcomeClient() {
   // True once this page has handled a no-account checkout: only those get the sign-in email.
   const [guest, setGuest] = useState(false)
   const started = useRef(false)
+  // Signed in just now with no password: offer Face ID / a fingerprint so getting back in later is one tap.
+  const [offerPasskey, setOfferPasskey] = useState(false)
+  useEffect(() => {
+    if (!guest || view !== 'done') return
+    let live = true
+    void shouldOfferPasskey().then((yes) => {
+      if (live && yes) setOfferPasskey(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [guest, view])
 
   useEffect(() => {
     if (status === 'loading' || started.current) return
@@ -104,6 +118,11 @@ export default function SupportWelcomeClient() {
             {guest && view === 'done' ? (
               <div className="p-4 rounded-xl text-sm" style={{ background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--muted2)' }}>
                 We emailed you a sign-in button for later. You never need a password.
+              </div>
+            ) : null}
+            {offerPasskey ? (
+              <div className="p-5 rounded-xl" style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}>
+                <PasskeyOffer compact onDone={() => setOfferPasskey(false)} />
               </div>
             ) : null}
             <Link

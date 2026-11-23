@@ -384,6 +384,25 @@ const providers: NextAuthOptions["providers"] = [
     },
   }),
   /*
+   * Sign in with a passkey — Face ID, Touch ID, a fingerprint, Windows Hello. `response` is the
+   * browser's signed answer to a challenge from /api/auth/passkey/signin/options; it is checked
+   * against the public key saved when the person added the passkey (lib/auth/passkeys.ts).
+   */
+  CredentialsProvider({
+    id: "passkey",
+    name: "Passkey",
+    credentials: {
+      response: { label: "Passkey response", type: "text" },
+    },
+    async authorize(credentials, req) {
+      const { authorizePasskey } = await import("@/lib/auth/passkeys");
+      const headers = (req?.headers ?? {}) as Record<string, string | undefined>;
+      // Used only outside production (passkeyConfig): a dev box's own origin.
+      const origin = headers.origin ?? (headers.host ? `http://${headers.host}` : null);
+      return authorizePasskey(credentials?.response, origin);
+    },
+  }),
+  /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *
    * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing

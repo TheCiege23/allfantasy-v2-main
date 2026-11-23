@@ -4090,6 +4090,7 @@ model AppUser {
   mockDraftRoomsCreated                    MockDraftRoom[]                        @relation("MockDraftRoomCreator")
   mockDrafts                               MockDraft[]
   passwordResetTokens                      PasswordResetToken[]
+  passkeys                                 AuthPasskey[]
   platformBlockedBy                        PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocked")
   platformBlockedUsers                     PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocker")
   platformChatMessages                     PlatformChatMessage[]                  @relation("PlatformChatMessageSender")
@@ -6320,6 +6321,30 @@ model EmailVerifyToken {
 
   @@index([userId])
   @@map("email_verify_tokens")
+}
+
+/// A passkey: sign in with Face ID, Touch ID, a fingerprint or Windows Hello (lib/auth/passkeys.ts).
+/// The private key never leaves the person's device; this row holds only the public half.
+model AuthPasskey {
+  id           String    @id @default(uuid())
+  userId       String
+  /// The credential id the browser reports, base64url.
+  credentialId String    @unique
+  publicKey    Bytes
+  /// Signature counter. Synced passkeys (iCloud, Google) always report 0.
+  counter      BigInt    @default(0)
+  transports   String[]
+  /// "singleDevice" or "multiDevice" (synced to the person's other devices).
+  deviceType   String
+  backedUp     Boolean   @default(false)
+  /// What the person sees in settings, e.g. "iPhone" — from the device that made it.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  user         AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_passkeys")
 }
 
 model PasswordResetToken {
