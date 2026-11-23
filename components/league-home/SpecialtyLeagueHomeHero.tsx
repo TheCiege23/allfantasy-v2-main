@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Crown, LayoutGrid, MessageSquare, Settings, Shield, Trophy, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { leagueTabSportEmoji } from '@/app/league/[leagueId]/LeagueTabs'
-import { KingBuffaloPresentedBy } from '@/components/tournament/KingBuffaloPresentedBy'
+import { KingBuffaloPresentedBy, isKingBuffaloTournament } from '@/components/tournament/KingBuffaloPresentedBy'
 import type { BigBrotherSummary } from '@/components/big-brother/types'
 
 export type TournamentHeroContext = {
@@ -333,11 +333,13 @@ export function SpecialtyLeagueHomeHero({
       )}
 
       <div className="relative flex h-full min-h-[inherit] flex-col px-4 py-4 md:px-6 md:py-6">
-        <div className="pointer-events-none absolute right-3 top-3 md:right-5 md:top-4">
-          <div className="pointer-events-auto scale-90 md:scale-100">
-            <KingBuffaloPresentedBy variant="compact" />
+        {isKingBuffaloTournament(tournamentContext?.tournamentName) ? (
+          <div className="pointer-events-none absolute right-3 top-3 md:right-5 md:top-4">
+            <div className="pointer-events-auto scale-90 md:scale-100">
+              <KingBuffaloPresentedBy tournamentName={tournamentContext?.tournamentName} variant="compact" />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="flex flex-1 flex-col gap-4 pr-0 pt-10 md:flex-row md:items-stretch md:gap-6 md:pt-2 md:pr-44">
           {/* Left column */}

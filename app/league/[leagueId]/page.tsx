@@ -36,6 +36,9 @@ import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-lin
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
+import { toSidebarLeague } from '@/lib/league/clientLeagueSettings'
+import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 export const dynamic = 'force-dynamic'
 
@@ -460,7 +463,8 @@ export default async function LeaguePage(
         readUrgencyLeagueIds(userId).catch(() => null),
       ])
       const leagueRail = {
-        matchups: railMatchups?.byLeague ?? {},
+        // AF Intelligence: the rail's AF projection only for AF Pro, AF Commissioner and AF Supreme.
+        matchups: afIntelligenceFor(railMatchups?.byLeague ?? {}, await resolveCoreDepth(userId, 'af_intelligence').catch(() => null)),
         records: railRecords,
         favoriteIds: railPrefs?.favorites ?? [],
         order: railPrefs?.order ?? [],
@@ -487,7 +491,7 @@ export default async function LeaguePage(
             isOwner={isOwner}
             isCommissioner={isCommissioner}
             isHeadCommissioner={isHeadCommissioner}
-            allLeagues={allLeagues}
+            allLeagues={allLeagues.map(toSidebarLeague)}
             leagueRail={leagueRail}
             sourceLinkLeagueId={sourceLinkLeagueId}
             userId={userId}

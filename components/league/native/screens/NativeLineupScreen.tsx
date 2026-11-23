@@ -95,7 +95,7 @@ type DbRoster = {
   dailyLineups?: DailyLineupView | null
   slotLimits?: { bench?: number | null; ir?: number | null; taxi?: number | null } | null
   /** Per-player locks from the server's lock context (kickoff, daily-lineup schedule locks). */
-  lineupLock?: { lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
+  lineupLock?: { locked?: boolean; reason?: string | null; lockedPlayerIds?: string[] | null; perPlayerReasons?: Record<string, string> | null } | null
   irRules?: IrRules | null
   /**
    * Dynasty taxi tenure (lib/taxi/taxiMaxYears.ts): the league's max seasons on the squad (null is no
@@ -402,7 +402,11 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
   // Daily leagues: the day being looked at. Only today is edited; a save applies to today and every later day.
   const viewDay: DailyLineupDay | null = daily ? daily.days.find((d) => d.day === (pickedDay ?? daily.today)) ?? daily.days.find((d) => d.status === 'today') ?? null : null
   const viewingOtherDay = Boolean(viewDay && viewDay.status !== 'today')
-  const editable = Boolean(data?.rosterId && lists && data.canEditLineup !== false && weekLock && !weekLock.locked && !viewingOtherDay)
+  // The server's lock (resolveFullLineupLockContext) is the rule: per player, from the schedule, in every
+  // sport. The time-of-day guess below is only for a payload without one — re-applying it locked every
+  // player from Sunday 1 PM ET, so a Sunday-night starter could not be swapped before his game.
+  const lineupOpen = typeof data?.lineupLock?.locked === 'boolean' ? !data.lineupLock.locked : Boolean(weekLock && !weekLock.locked)
+  const editable = Boolean(data?.rosterId && lists && data.canEditLineup !== false && lineupOpen && !viewingOtherDay)
   const serverLocked = useMemo(() => new Set(data?.lineupLock?.lockedPlayerIds ?? []), [data])
   const locked = useCallback((id: string) => serverLocked.has(id) || isGameLocked(players[id], now), [serverLocked, players, now])
   const lockReason = useCallback(
@@ -674,7 +678,7 @@ export function NativeLineupScreen({ league, userTeam, onSelectTab }: { league: 
       : viewDay && viewDay.status === 'future'
         ? `Your lineup carries forward to ${dayLabel(viewDay.day)}. Changes you make today apply to every remaining day this week.`
         : !editable
-          ? weekLock?.reason ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
+          ? (typeof data.lineupLock?.locked === 'boolean' ? data.lineupLock.reason : weekLock?.reason) ?? data.lineupLockHelp ?? 'Lineup changes are closed right now.'
           : daily
             ? `Daily lineup: each player locks when his game starts today. Changes apply today${lastDay ? ` through ${dayLabel(lastDay)}` : ''}. ${TAP_HELP}`
             : `${data.lineupLockHelp ?? 'Each game locks at kickoff.'} ${TAP_HELP}`

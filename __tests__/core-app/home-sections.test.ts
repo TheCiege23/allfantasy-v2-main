@@ -36,13 +36,10 @@ vi.mock('@/lib/notifications/smsDailyCap', () => ({ reserveSmsToday: m.cap }))
 import {
   HOME_SECTIONS,
   hiddenHomeCards,
-  homeSectionMutingCategory,
-  isCategoryHiddenByHomeSection,
   readHiddenHomeSections,
   toggleHomeSection,
 } from '@/lib/core-app/homeSections'
 import { HOME_CARD_GROUPS } from '@/lib/core-app/homeCardOrder'
-import { NOTIFICATION_CATEGORY_IDS } from '@/lib/notification-settings/types'
 import { decidePush } from '@/lib/notifications/pushGate'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { translations } from '@/lib/i18n/translations'
@@ -68,29 +65,8 @@ describe('the section map', () => {
     for (const card of Object.values(HOME_CARD_GROUPS).flat()) expect(all, card).toContain(card)
   })
 
-  it('maps only real categories, each to one section', () => {
-    const seen = new Map<string, string>()
-    for (const section of HOME_SECTIONS) {
-      for (const c of section.categories) {
-        expect(NOTIFICATION_CATEGORY_IDS).toContain(c)
-        expect(seen.get(c), `${c} mapped twice`).toBeUndefined()
-        seen.set(c, section.id)
-      }
-    }
-  })
-
-  it('off means all of it: hiding Drafts / League trades also stops on-the-clock and offer alerts (owner, 2026-10-24)', () => {
-    expect(homeSectionMutingCategory({ hiddenHomeSections: ['drafts'] }, 'draft_alerts')).toBe('drafts')
-    expect(homeSectionMutingCategory({ hiddenHomeSections: ['league-trades'] }, 'trade_proposals')).toBe('league-trades')
-    // Shown again, they come back.
-    expect(isCategoryHiddenByHomeSection({ hiddenHomeSections: [] }, 'draft_alerts')).toBe(false)
-  })
-
-  it('never silences messages or commissioner alerts — no home section owns them', () => {
-    const everything = { hiddenHomeSections: HOME_SECTIONS.map((s) => s.id) }
-    expect(isCategoryHiddenByHomeSection(everything, 'direct_messages')).toBe(false)
-    expect(isCategoryHiddenByHomeSection(everything, 'commissioner_alerts')).toBe(false)
-    expect(isCategoryHiddenByHomeSection(everything, 'system_account')).toBe(false)
+  it('🛑 a section is layout only — it carries no notification categories (owner, 2026-11-22)', () => {
+    for (const section of HOME_SECTIONS) expect(Object.keys(section).sort(), section.id).toEqual(['cards', 'group', 'id'])
   })
 
   it('reads only known ids from a stored list, and nothing from a malformed one', () => {
@@ -109,9 +85,6 @@ describe('the section map', () => {
     hidden = new Set(toggleHomeSection(hidden, 'streak', false))
     expect([...hidden]).toEqual(['streak', 'rivals'])
     expect(toggleHomeSection(hidden, 'streak', true)).toEqual(['rivals'])
-    expect(homeSectionMutingCategory({ hiddenHomeSections: ['league-trades'] }, 'trade_accept_reject')).toBe(
-      'league-trades',
-    )
   })
 
   it('has English and Spanish copy for every section', () => {
@@ -126,10 +99,15 @@ describe('the section map', () => {
   })
 })
 
-describe('a hidden section stops its notifications at send time', () => {
+/*
+ * 🛑 Until 2026-11-22 a hidden section ALSO muted its alerts at send time. The owner's own account had
+ * hidden Matchups and Live games to tidy the page and received zero scoring alerts for a week while the
+ * Notifications tab showed them ON. Hiding a card must never change what is sent.
+ */
+describe('a hidden section never stops a notification', () => {
   const prefs = (hidden: string[]) => ({
     globalEnabled: true,
-    categories: { trade_accept_reject: { ...ON }, trade_proposals: { ...ON } },
+    categories: { trade_accept_reject: { ...ON }, trade_proposals: { ...ON }, matchup_results: { ...ON }, live_game_alerts: { ...ON } },
     hiddenHomeSections: hidden,
   })
   const profile = (np: unknown) => ({
@@ -140,7 +118,7 @@ describe('a hidden section stops its notifications at send time', () => {
     notificationPreferences: np,
     emailSubscription: { unsubscribedAt: null },
   })
-  const send = (category: 'trade_accept_reject' | 'trade_proposals') =>
+  const send = (category: 'trade_accept_reject' | 'trade_proposals' | 'matchup_results' | 'live_game_alerts') =>
     dispatchNotification({
       userIds: ['u1'],
       leagueId: 'L',
@@ -162,37 +140,32 @@ describe('a hidden section stops its notifications at send time', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it('suppresses bell, email and push for the hidden section’s category', async () => {
-    m.profile.mockResolvedValue(profile(prefs(['league-trades'])))
-    await send('trade_accept_reject')
+  it('🛑 the owner\'s case: Matchups and Live games hidden, scoring alerts still reach bell, email and phone', async () => {
+    m.profile.mockResolvedValue(profile(prefs(['matchups', 'live-games'])))
+    await send('matchup_results')
+    expect(m.store).toHaveBeenCalledTimes(1)
+    expect(m.email).toHaveBeenCalledTimes(1)
+    expect(m.push).toHaveBeenCalledTimes(1)
+    await send('live_game_alerts')
+    expect(m.store).toHaveBeenCalledTimes(2)
+  })
+
+  it('every section hidden: a trade offer sent to you still arrives (it was muted with League trades before)', async () => {
+    m.profile.mockResolvedValue(profile(prefs(HOME_SECTIONS.map((section) => section.id))))
+    await send('trade_proposals')
+    expect(m.store).toHaveBeenCalledTimes(1)
+    expect(m.push).toHaveBeenCalledTimes(1)
+  })
+
+  it('the push gate allows it too, for pushes sent outside the dispatcher', () => {
+    const input = { category: 'matchup_results' as const, leagueId: 'L', severity: 'high' as const }
+    expect(decidePush(prefs(HOME_SECTIONS.map((section) => section.id)), input)).toEqual({ allowed: true })
+  })
+
+  it('[control] the Notifications switch still decides: category off means nothing is sent', async () => {
+    m.profile.mockResolvedValue(profile({ ...prefs([]), categories: { matchup_results: { ...ON, enabled: false } } }))
+    await send('matchup_results')
     expect(m.store).not.toHaveBeenCalled()
-    expect(m.email).not.toHaveBeenCalled()
     expect(m.push).not.toHaveBeenCalled()
-    expect(m.receipt.mock.calls[0][0].channels.inApp).toMatchObject({ status: 'suppressed', reason: 'home_section_hidden' })
-  })
-
-  it('a trade OFFER sent to you is silenced too while League trades is hidden (owner, 2026-10-24)', async () => {
-    m.profile.mockResolvedValue(profile(prefs(['league-trades'])))
-    await send('trade_proposals')
-    expect(m.store).not.toHaveBeenCalled()
-    expect(m.receipt.mock.calls[0][0].channels.inApp).toMatchObject({ status: 'suppressed', reason: 'home_section_hidden' })
-  })
-
-  it('…and not while some other section is hidden', async () => {
-    m.profile.mockResolvedValue(profile(prefs(['rivals'])))
-    await send('trade_proposals')
-    expect(m.store).toHaveBeenCalledTimes(1)
-  })
-
-  it('positive control: the same alert goes out once the section is shown again', async () => {
-    m.profile.mockResolvedValue(profile(prefs([])))
-    await send('trade_accept_reject')
-    expect(m.store).toHaveBeenCalledTimes(1)
-  })
-
-  it('the push gate refuses it too, for pushes sent outside the dispatcher', () => {
-    const input = { category: 'trade_accept_reject' as const, leagueId: 'L', severity: 'medium' as const }
-    expect(decidePush(prefs(['league-trades']), input)).toEqual({ allowed: false, reason: 'home_section_hidden' })
-    expect(decidePush(prefs([]), input)).toEqual({ allowed: true })
   })
 })

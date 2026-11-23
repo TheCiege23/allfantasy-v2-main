@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getServerSessionMock = vi.fn()
 const rosterFindFirstMock = vi.fn()
@@ -40,6 +40,17 @@ vi.mock('@/lib/player-trend', () => ({
 }))
 
 describe('Chimmy action validation route contracts', () => {
+  /*
+   * Load the three routes once, under their own generous timeout. Their first import transforms a large module graph:
+   * ~21s on a warm Windows cache and over the 30s test timeout on a cold one, so the FIRST test failed on a timeout
+   * that had nothing to do with what it asserts. The tests below then import from the module cache.
+   */
+  beforeAll(async () => {
+    await import('@/app/api/leagues/roster/save/route')
+    await import('@/app/api/waiver-wire/leagues/[leagueId]/claims/route')
+    await import('@/app/api/trade/propose/route')
+  }, 240_000)
+
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })

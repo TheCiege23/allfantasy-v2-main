@@ -431,3 +431,20 @@ matching by name is ruled out. The page shows `Player 06qaj`.
 Fantrax currently tracks (a transfer, a departure, or a player off the active list), but that is a
 guess. **To resolve:** `scripts/probe.sh --player-ids NCAAB` and check whether `06qaj` is present; if
 not, the logged-in player page on Fantrax is the only other source, which the import does not read.
+
+## F-22 — Pending trade offers have no known source (recorded 2026-11-23, no probe)
+
+The provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's pending-trade
+block read Sleeper only. Fantrax cannot be added from what is committed:
+
+- The public `fxea` API has no transactions endpoint (F-13), so it has no pending offers either.
+- The logged-in Transaction History download (F-19) was captured with `executedOnly=true`, so it lists
+  completed moves. Whether `executedOnly=false`, `view=TRADE`, or `getTransactionDetailsHistory` lists
+  offers that are proposed and not yet accepted is unknown. Fantrax's site also has a trade-offers page,
+  whose request was never captured.
+- Every candidate needs the member's Fantrax login, so a scheduled sweep could not read it server-side
+  without storing that login, which the import does not do.
+
+**Needed:** a capture, in a member's own browser with their consent, of the request that lists their
+pending trade offers and its response, trimmed with `scripts/redact-capture.mjs` and committed with the
+mapping that reads it, and a decision on how a sweep would hold the login. Not probed.

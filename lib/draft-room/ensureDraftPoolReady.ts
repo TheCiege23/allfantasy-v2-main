@@ -21,6 +21,7 @@ import { rosterFingerprintFromEligible } from '@/lib/draft-room/draft-pool-eligi
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { getApiCached } from '@/lib/api-performance'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 
 export type EnsureDraftPoolReadyResult =
   | { ok: true; source: 'db-cache' | 'memory-cache' | 'rebuilt' }
@@ -138,9 +139,16 @@ export async function resolveDraftPoolCacheContext(
 }> {
   const effectiveLeagueTemplate =
     options?.effectiveLeagueTemplate ?? (await getEffectiveLeagueRosterTemplate(leagueId))
-  // A two-draft Devy / C2C startup offers a different pool in each draft, and this cache is per
-  // league: the college draft must not be served the pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
-  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + (await startupDraftPhaseSuffix(leagueId))
+  const draft = await prisma.draftSession?.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, draftModeLabel: true },
+  })
+  // An annual combined C2C draft gets its own pool per session; a two-draft Devy / C2C startup offers a
+  // different pool in each draft, and this cache is per league: the college draft must not be served the
+  // pro draft's board (lib/draft-defaults/startupCollegeDraft.ts).
+  const scope = draft?.draftModeLabel === ANNUAL_C2C_DRAFT ? `:${draft.id}` : ''
+  const rosterFp = resolveRosterFingerprint(effectiveLeagueTemplate) + scope + (await startupDraftPhaseSuffix(leagueId))
   return {
     effectiveLeagueTemplate,
     rosterFp,

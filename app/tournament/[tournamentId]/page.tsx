@@ -14,7 +14,7 @@ import { LeagueIdentityCard } from '@/app/tournament/components/LeagueIdentityCa
 import { RoundProgressBar } from '@/app/tournament/components/RoundProgressBar'
 import { ForumPostCard } from '@/app/tournament/components/ForumPostCard'
 import { MiniCommissionerHub } from '@/app/tournament/[tournamentId]/components/MiniCommissionerHub'
-import { KingBuffaloPresentedBy } from '@/components/tournament/KingBuffaloPresentedBy'
+import { KingBuffaloPresentedBy, isKingBuffaloTournament } from '@/components/tournament/KingBuffaloPresentedBy'
 import { CommissionerHubHeader } from '@/components/commissioner-hub/CommissionerHubHeader'
 import {
   CommissionerFeederGrid,
@@ -305,9 +305,9 @@ export default function TournamentHomePage() {
           </div>
         </div>
         <div className="mt-4 flex flex-col items-stretch gap-2 md:mt-0 md:items-end">
-          {hubKind === 'legacy' ? (
+          {hubKind === 'legacy' && isKingBuffaloTournament(shell.name) ? (
             <div className="w-full max-w-xs md:self-end">
-              <KingBuffaloPresentedBy variant="compact" />
+              <KingBuffaloPresentedBy tournamentName={shell.name} variant="compact" />
             </div>
           ) : null}
           <span className="self-start rounded-full bg-white/10 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-cyan-200 md:self-end">

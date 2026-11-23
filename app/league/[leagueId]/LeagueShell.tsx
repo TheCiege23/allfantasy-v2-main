@@ -27,7 +27,7 @@ import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
 import { readChosenPlayoffStartWeek } from '@/lib/playoff-settings/resolvePlayoffStartWeek'
@@ -98,6 +98,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { League, LeagueInvite, LeagueTeam } from '@prisma/client'
+import type { SidebarLeague } from '@/lib/league/clientLeagueSettings'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { mapLeagueTeamsToSlots } from '@/lib/league/map-league-teams-to-slots'
 import { countAssignedManagers, leagueLifecycleLabel } from '@/lib/league/setup-readiness'
@@ -142,7 +143,16 @@ import { LegacyHome } from '@/components/decide/LegacyHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
-import { collegeProFormatOf } from '@/lib/league/collegePro/format'
+import {
+  CollegeProChat,
+  CollegeProFranchiseCard,
+  CollegeProOtherHalf,
+  CollegeProPairChip,
+  CollegeProStandings,
+  CollegeProWeek,
+} from '@/components/league/college-pro/CollegeProOneLeague'
+import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
+import { isCollegeProLeague } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
@@ -182,6 +192,7 @@ import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
 import { ImportedGuillyTab } from './tabs/ImportedGuillyTab'
 import { guillyTabKind } from '@/lib/guillotine/importedGuillyView'
+import { ImportedGuillyChopCard } from '@/components/league/ImportedGuillyChopCard'
 import { DynastyHome } from './tabs/DynastyHome'
 import { SurvivorHome } from '@/components/survivor/SurvivorHome'
 import { SurvivorNativeHome } from '@/components/survivor/SurvivorNativeHome'
@@ -268,7 +279,7 @@ function weekFromLeagueSettings(settings: unknown): number | null {
 }
 
 function prismaLeagueToUserLeague(
-  l: League,
+  l: SidebarLeague<League>,
   extra?: { draftDate?: string | null; redraftCurrentWeek?: number | null },
 ): UserLeague {
   const sport = normalizeToSupportedSport(String(l.sport)) ?? DEFAULT_SPORT
@@ -314,7 +325,8 @@ export type LeagueShellProps = {
   isCommissioner: boolean
   /** Head commissioner only (reset draft, co-comm management). */
   isHeadCommissioner: boolean
-  allLeagues: League[]
+  /** The viewer's leagues, slimmed to what the sidebar reads (`toSidebarLeague`). */
+  allLeagues: SidebarLeague<League>[]
   /** /core's rail data (this week's matchup + crest) per league in `allLeagues`. Null draws names only. */
   leagueRail?: LeagueRailData | null
   /**
@@ -1727,6 +1739,7 @@ export function LeagueShell({
         <NativeLeagueWorkspace
           native={nativeWorkspace}
           sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null}
+          headingBadges={isCollegeProPairable(league.platform) ? <CollegeProPairChip leagueId={league.id} variant="native" /> : null}
           importActions={
             !isAfHostedPlatform(league.platform) ? (
               <ImportedLeagueQuickActions
@@ -2625,8 +2638,27 @@ function LeagueTabRouter({
     leagueVariant: selectedLeague.leagueVariant,
     idp: idpLeagueActive,
     bestBall: lineupSetsItself(selectedLeague),
-    collegeRoster: collegeProFormatOf(selectedLeague) !== null,
+    collegeRoster: isCollegeProLeague(selectedLeague),
   })
+  /*
+   * A paired college + pro league (C2C / Devy) reads as ONE league on every tab: the week across both
+   * halves (Matchup), the franchise table (Standings), your franchise (Home), both leagues' moves
+   * (Activity, inside LeagueActivityTab), and on Draft / Trades / Waivers — which act on this half only —
+   * where the other half's are made. Each renders nothing extra for a league in no pair. Only imported
+   * Sleeper / Fantrax halves can be paired today.
+   */
+  const pairable = isCollegeProPairable(selectedLeague.platform)
+  const oneLeagueWeek = (screen: ReactNode) =>
+    pairable ? <CollegeProWeek leagueId={leagueId}>{screen}</CollegeProWeek> : screen
+  const oneLeagueStandings = (screen: ReactNode) =>
+    pairable ? <CollegeProStandings leagueId={leagueId}>{screen}</CollegeProStandings> : screen
+  const oneLeagueHome = (screen: ReactNode) =>
+    pairable ? <CollegeProFranchiseCard leagueId={leagueId}>{screen}</CollegeProFranchiseCard> : screen
+  const otherHalf = (tab: 'draft' | 'trades' | 'waivers', screen: ReactNode) =>
+    pairable ? <CollegeProOtherHalf leagueId={leagueId} tab={tab}>{screen}</CollegeProOtherHalf> : screen
+  // Draft also carries the offseason pipeline: who moves up, the rookie pool, the commissioner's checklist.
+  const oneLeagueDraft = (screen: ReactNode) =>
+    otherHalf('draft', pairable ? <CollegeProDraftPipeline leagueId={leagueId}>{screen}</CollegeProDraftPipeline> : screen)
   if (nativeScreen) {
     const firstTab = (...ids: string[]) => ids.find((id) => tabDefs.some((t) => t.id === id)) ?? ids[0]
     const goTo = (id: string) =>
@@ -2638,15 +2670,15 @@ function LeagueTabRouter({
       )
     switch (nativeScreen) {
       case 'matchup':
-        return <NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />
+        return oneLeagueWeek(<NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />)
       case 'lineup':
         return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
       case 'waivers':
-        return <NativeWaiversScreen league={selectedLeague} />
+        return otherHalf('waivers', <NativeWaiversScreen league={selectedLeague} />)
       case 'trades':
-        return <NativeTradesScreen league={selectedLeague} teams={teamSlots} />
+        return otherHalf('trades', <NativeTradesScreen league={selectedLeague} teams={teamSlots} />)
       case 'standings':
-        return <NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />
+        return oneLeagueStandings(<NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />)
     }
   }
 
@@ -2672,7 +2704,7 @@ function LeagueTabRouter({
       if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
         return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} /></div>
+      return <div className="wn-home-stack">{whatsNext}{oneLeagueHome(<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} />)}</div>
     }
     case 'home':
       return (
@@ -2689,17 +2721,17 @@ function LeagueTabRouter({
         />
       )
     case 'matchups':
-      return <MatchupTabContainer league={selectedLeague} />
+      return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'matchup':
-      return <MatchupTabContainer league={selectedLeague} />
+      return oneLeagueWeek(<MatchupTabContainer league={selectedLeague} />)
     case 'schedule':
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <CanonicalRedraftScheduleTab leagueId={leagueId} isCommissioner={isCommissioner} />
       }
       return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} isCommissioner={isCommissioner} />
     case 'draft':
-      if (isPredraftLifecycle) return renderPredraftDraftSetup()
-      return (
+      if (isPredraftLifecycle) return oneLeagueDraft(renderPredraftDraftSetup())
+      return oneLeagueDraft(
         <DraftTab
           league={selectedLeague}
           teams={teamSlots}
@@ -2710,7 +2742,7 @@ function LeagueTabRouter({
           seasonSnapshot={seasonSnapshot}
           standingsPresentation={leagueDashboard.standings}
           onOpenLeagueSettings={onOpenLeagueSettingsModal}
-        />
+        />,
       )
     case 'redraft':
       return <RedraftTab leagueId={leagueId} idpLeagueUi={idpLeagueActive} />
@@ -2726,8 +2758,12 @@ function LeagueTabRouter({
       return <PirateHome leagueId={leagueId} isCommissioner={isCommissioner} />
     case 'dynasty':
     case 'dynasty_taxi':
-    case 'dynasty_picks':
-      return <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+    case 'dynasty_picks': {
+      const dynastyHome = <DynastyHome leagueId={leagueId} view={activeTab as 'dynasty' | 'dynasty_taxi' | 'dynasty_picks'} />
+      // An imported league has no Draft tab in season (`?view=draft` falls back to Matchup), so the paired
+      // college + pro draft pipeline also rides on Draft picks, where its managers already look.
+      return activeTab === 'dynasty_picks' ? oneLeagueDraft(dynastyHome) : dynastyHome
+    }
     case 'devy':
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
@@ -2810,6 +2846,15 @@ function LeagueTabRouter({
     case 'decide':
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          {/* An imported Guilly league's League home leads with where the viewer stands against the chop line. */}
+          {guillyTabKind(selectedLeague, isNativePlatform(selectedLeague.platform)) === 'imported' ? (
+            <ImportedGuillyChopCard
+              leagueId={leagueId}
+              platform={selectedLeague.platform}
+              yourRosterId={userTeam?.externalId != null ? String(userTeam.externalId) : null}
+              onOpenGuilly={() => onSelectTab('guillotine')}
+            />
+          ) : null}
           <DecideHome
             league={selectedLeague}
             teams={teamSlots}
@@ -2870,7 +2915,7 @@ function LeagueTabRouter({
         and any failure to read the two halves, keeps the standard roster view above.
       */
       // Sleeper is the pro half; Fantrax is the college half, which builds the same page from its pro league.
-      if ((selectedLeague.platform !== 'sleeper' && selectedLeague.platform !== 'fantrax') || !collegeProFormatOf(selectedLeague)) {
+      if ((selectedLeague.platform !== 'sleeper' && selectedLeague.platform !== 'fantrax') || !isCollegeProLeague(selectedLeague)) {
         return standardRoster
       }
       return (
@@ -2897,7 +2942,7 @@ function LeagueTabRouter({
       return <LeagueActivityTab leagueId={leagueId} />
     case 'news':
       return <LeaguePlayerNewsTab leagueId={leagueId} sport={String(selectedLeague.sport ?? 'NFL')} />
-    case 'league_chat':
+    case 'league_chat': {
       /*
        * 10a. This case used to render a card telling the reader that chat was
        * somewhere else — a tab that, when clicked, pointed at another control.
@@ -2906,22 +2951,27 @@ function LeagueTabRouter({
        * leagues get an explicit "chat lives on your source platform" state
        * rather than an empty room; see LeagueChatSurface for why.
        */
+      const chatSurface = (
+        <LeagueChatSurface
+          leagueId={leagueId}
+          leagueName={selectedLeague.name ?? 'League'}
+          dynastyBackground={usesDynastyBackground(selectedLeague)}
+          dynastyClock={dynastyChatClock}
+          platform={selectedLeague.platform}
+          isCommissioner={isCommissioner}
+          teamCount={selectedLeague.teamCount ?? null}
+          importedLeagueCount={importedLeagueCount}
+          redraftSport={resolveRedraftIdentity(selectedLeague)?.sport ?? null}
+          matchup={leagueRail?.matchups?.[leagueId] ?? null}
+        />
+      )
       return (
         <div className="flex min-h-0 flex-1 flex-col" data-testid="g32-league-chat-tab">
-          <LeagueChatSurface
-            leagueId={leagueId}
-            leagueName={selectedLeague.name ?? 'League'}
-            dynastyBackground={usesDynastyBackground(selectedLeague)}
-            dynastyClock={dynastyChatClock}
-            platform={selectedLeague.platform}
-            isCommissioner={isCommissioner}
-            teamCount={selectedLeague.teamCount ?? null}
-            importedLeagueCount={importedLeagueCount}
-            redraftSport={resolveRedraftIdentity(selectedLeague)?.sport ?? null}
-            matchup={leagueRail?.matchups?.[leagueId] ?? null}
-          />
+          {/* A paired college + pro import: one card naming where both halves talk (CollegeProChat). */}
+          {pairable && !isAfHostedPlatform(selectedLeague.platform) ? <CollegeProChat leagueId={leagueId}>{chatSurface}</CollegeProChat> : chatSurface}
         </div>
       )
+    }
     case 'commissioner':
       return (
         <CommissionerOperationsWorkspace
@@ -2941,11 +2991,11 @@ function LeagueTabRouter({
         </div>
       )
     case 'waivers':
-      return <SportAwareWaiverWire leagueId={leagueId} />
+      return otherHalf('waivers', <SportAwareWaiverWire leagueId={leagueId} />)
     case 'trend':
       return <TrendTab league={selectedLeague} onPlayerClick={onPlayerClick} sport={sport} />
     case 'trades':
-      return <TradesTab league={selectedLeague} teams={teamSlots} />
+      return otherHalf('trades', <TradesTab league={selectedLeague} teams={teamSlots} />)
     case 'scores':
       return (
         <ScoresTab league={selectedLeague} sport={sport} idpLeagueUi={idpLeagueActive} />
@@ -2975,8 +3025,8 @@ function LeagueTabRouter({
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
         return <RedraftStandingsPlayoffsView leagueId={leagueId} isCommissioner={isCommissioner} />
       }
-      return (
-        <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />
+      return oneLeagueStandings(
+        <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />,
       )
     case 'fixtures':
       return <FixturesTab league={selectedLeague} tabLabel={tabLabel} />
@@ -3276,6 +3326,7 @@ export function LeagueHeader({
             <span className="inline-flex min-h-6 items-center rounded-full border border-emerald-300/20 bg-emerald-500/[0.08] px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-100/85">
               {headerStatusLabel}
             </span>
+            {isCollegeProPairable(league.platform) ? <CollegeProPairChip leagueId={leagueId} /> : null}
             {idpLeagueActive ? (
               <span className="idp-creator-badge flex-shrink-0 whitespace-nowrap">* Created by TheCiege</span>
             ) : null}
@@ -3774,3 +3825,7 @@ export function LeagueHeader({
   )
 }
 
+/** Only imported Sleeper / Fantrax halves can be paired into one college + pro league today. */
+function isCollegeProPairable(platform: string | null | undefined): boolean {
+  return platform === 'sleeper' || platform === 'fantrax'
+}

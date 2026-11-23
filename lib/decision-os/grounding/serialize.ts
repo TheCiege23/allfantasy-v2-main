@@ -104,8 +104,15 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   // "available" is what silenced three-brain's saved conclusion — the substance of plan item 6.2.
   if (typeof value === 'string') {
     const cap = MAX_PROSE_BY_SLICE[name] ?? MAX_PROSE
-    const trimmed = value.length > cap ? `${value.slice(0, cap)}…` : value
-    return trimmed.split('\n').map((l) => `    ${l}`)
+    if (value.length <= cap) return value.split('\n').map((l) => `    ${l}`)
+    /*
+     * ⚠ A CUT IS SAID OUT LOUD (hub serialization, 2026-11-23). A bare "…" read as the slice's natural end, so the
+     * model answered from the first `cap` characters as though they were all of it. Same convention as the 8-row
+     * object cap below: name what was left out, and point at the tool that has the rest.
+     */
+    const rows = `${value.slice(0, cap)}…`.split('\n').map((l) => `    ${l}`)
+    rows.push(`    (truncated: ${value.length - cap} more characters of ${name} not shown here — ask the matching tool for the rest)`)
+    return rows
   }
 
   /*
@@ -170,10 +177,13 @@ function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string
   const cap = MAX_ITEMS_BY_SLICE[name] ?? MAX_ITEMS
   const rows: string[] = []
   if (name === ROSTER_PROJECTIONS_SLICE) {
-    const first = value[0] as { week?: unknown; season?: unknown; basis?: unknown } | null
+    const first = value[0] as { week?: unknown; season?: unknown; basis?: unknown; rateSource?: unknown } | null
     const when = typeof first?.week === 'number' ? `Week ${first.week}${first.season ? ` ${String(first.season)}` : ''}` : 'This week'
     rows.push(
-      first?.basis === 'season_rate'
+      first?.basis === 'season_rate' && first.rateSource === 'season_projection'
+        ? // NCAAF (2026-11-23): AllFantasy's season projection under this league's rules — My Team's number.
+          `    ${when}, scored under this league's own rules from AllFantasy's season projections: each player's per-game projection under this league's points, times his games this week where the schedule is known — the same numbers My Team shows. A season rate, NOT a game-by-game forecast. For anyone on this list, quote THIS number, not the canonical Projections row. Injuries are not applied here.`
+        : first?.basis === 'season_rate'
         ? // NBA / NHL / MLB / NCAAB / soccer (2026-11-20): the league value board's per-game rate, the numbers My Team and the Trade Center use.
           `    ${when}, priced on this league's own value board: each player's per-game rate under this league's points, times his games this week where the schedule is known — the same per-game numbers My Team, the Trade Center and the value answer use. A season rate, NOT a game-by-game forecast: rest days and changed roles are not in it, and a daily league's My Team prices one day. For anyone on this list, quote THIS number, not the canonical Projections row. Injuries are not applied here.`
         : `    ${when}, scored under this league's own rules — the same numbers My Team shows. For anyone on this list, quote THIS number, not the canonical Projections row. Byes and injuries are not applied here (My Team counts a bye or ruled-out player as 0).`,
@@ -271,6 +281,25 @@ function renderObject(o: Record<string, unknown>): string[] {
   return rows
 }
 
+/** Non-illegal verdicts shown per decision; the rest are counted and named, never dropped silently. */
+const MAX_VERDICTS_SHOWN = 6
+
+const SEVERITY_RANK: Readonly<Record<string, number>> = { critical: 0, warning: 1, info: 2 }
+
+/** Attention first: anything that is not plainly `legal`, then by severity. Lower sorts earlier. */
+function verdictRank(v: Record<string, unknown>): number {
+  const attention = v.verdict === 'legal' ? 10 : 0
+  return attention + (SEVERITY_RANK[String(v.severity)] ?? 3)
+}
+
+/**
+ * One bridged decision as prompt lines — the same rendering the packet gives it, for a Chimmy tool that reads the
+ * slice itself (`get_league_health`, 2026-11-23). Exported so there is one renderer for a decision, never two.
+ */
+export function renderDecisionFactForPrompt(fact: unknown): string[] {
+  return isDecisionFact(fact) ? renderDecision(fact) : []
+}
+
 function isDecisionFact(v: unknown): v is Record<string, unknown> {
   if (v == null || typeof v !== 'object' || Array.isArray(v)) return false
   const o = v as Record<string, unknown>
@@ -304,8 +333,25 @@ function renderDecision(o: Record<string, unknown>): string[] {
   )
   const illegal = verdicts.filter((v) => v.verdict === 'illegal')
   for (const v of illegal) rows.push(`    NOT ALLOWED — ${String(v.rule)}: ${String(v.message)}`)
-  const others = verdicts.filter((v) => v.verdict !== 'illegal').slice(0, 3)
-  for (const v of others) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  /*
+   * ⚠ THE REST ARE ORDERED BY ATTENTION AND WHAT IS LEFT OUT IS COUNTED (hub serialization, 2026-11-23). This was
+   * `.slice(0, 3)` in engine order, and commissioner health can emit up to 13 verdicts — so "abandoned teams" or
+   * "missed lineups" could be the ones cut, silently. Now anything that is not `legal` (needs approval, temporarily
+   * blocked) comes before a plain `legal`, critical before warning before info, and a "+N more" line names the
+   * rules not shown — the same convention as the 8-row object cap.
+   */
+  const others = verdicts
+    .filter((v) => v.verdict !== 'illegal')
+    .map((v, i) => ({ v, i }))
+    .sort((a, b) => verdictRank(a.v) - verdictRank(b.v) || a.i - b.i)
+    .map(({ v }) => v)
+  const shownVerdicts = others.slice(0, MAX_VERDICTS_SHOWN)
+  for (const v of shownVerdicts) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+  const cutVerdicts = others.slice(MAX_VERDICTS_SHOWN)
+  if (cutVerdicts.length > 0) {
+    const names = cutVerdicts.map((v) => String(v.rule))
+    rows.push(`    (+${cutVerdicts.length} more rule verdict${cutVerdicts.length === 1 ? '' : 's'} not shown here: ${names.slice(0, 8).join(', ')}${names.length > 8 ? ', …' : ''})`)
+  }
 
   const count = typeof o.actionCount === 'number' ? o.actionCount : 0
   const summary = Array.isArray(o.actionSummary) ? (o.actionSummary as unknown[]).filter((x) => typeof x === 'string') : []
@@ -360,7 +406,9 @@ function renderItem(item: unknown): string | null {
     const pos = o.position ? ` (${String(o.position)})` : ''
     if (o.basis === 'season_rate') {
       // A per-game rate, and this week's total only when the games are known. A null is said in words, never 0.
-      const rate = typeof o.perGame === 'number' ? `${fmt(o.perGame)} pts/game` : 'not on this league’s value board (NOT zero)'
+      const rate = typeof o.perGame === 'number'
+        ? `${fmt(o.perGame)} pts/game`
+        : o.rateSource === 'season_projection' ? 'no AllFantasy season projection (NOT zero)' : 'not on this league’s value board (NOT zero)'
       const week =
         typeof o.perGame !== 'number'
           ? ''

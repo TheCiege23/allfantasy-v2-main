@@ -1,6 +1,21 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
+import {
+  CollegeProChat,
+  CollegeProFranchiseCard,
+  CollegeProOtherHalf,
+  CollegeProPairChip,
+  CollegeProStandings,
+  CollegeProWeek,
+} from '@/components/league/college-pro/CollegeProOneLeague'
+import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
+import { LeagueActivityFeedCard } from '@/components/league/native/LeagueActivityFeedCard'
+import '@/components/core-app/af-core.css'
+import '@/components/core-app/af-core-shell.css'
+import '@/components/league/native/native-league.css'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
 import type { CollegeProRosterPayload, CollegeProSide } from '@/lib/league/collegePro/loadCollegeProRoster'
 
@@ -206,9 +221,96 @@ function installFetch(lead: 'pro' | 'college', format: 'c2c' | 'devy', initialSc
           rookiePool: { drafted: 257, heldInCollege: 41, unheld: 216 },
           unlinked: 0,
         },
+        collegeMatchup: nba
+          ? { period: 4, me: { name: '#51 Butler Bulldogs', total: 171.3 }, opponent: { name: '#159 Dayton Flyers', total: 158.6 } }
+          : { period: 11, me: { name: 'Ciege82', total: 22.5 }, opponent: { name: 'Connor0488', total: 41.2 } },
         fetchedAt: new Date().toISOString(),
       }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+    if (url.includes('/api/league/college-pro-standings')) {
+      // Real Peach Bowl / Cream Bowl records, 2026-11-22; you are (F) SF TEP / Ciege82.
+      const r = (w: number, l: number, pf: number) => ({ wins: w, losses: l, ties: 0, pointsFor: pf })
+      const rows = [
+        ['GrindingFFB', 'Grindingffb', r(9, 1, 1543.36), r(8, 2, 1764.38)],
+        ['Connor0488', 'Connor0488', r(10, 0, 1757.22), r(5, 5, 1548.1)],
+        ['Scoresscotty', 'Scorescotty', r(7, 3, 1544.22), r(6, 4, 1826.3)],
+        ['Georgia Bulldogs', 'Georgia Bulldogs', r(5, 5, 1580.56), r(6, 4, 1690.4)],
+        ['(F) SF TEP', 'Ciege82', r(3, 7, 1000.92), r(2, 8, 1511.62)],
+      ].map(([pro, col, pr, cr], i) => {
+        const p = pr as ReturnType<typeof r>, c = cr as ReturnType<typeof r>
+        return {
+          rank: i + 1, proKey: `p${i}`, proName: pro, proRecord: p, collegeKey: `c${i}`, collegeName: col, collegeRecord: c,
+          total: { wins: p.wins + c.wins, losses: p.losses + c.losses, ties: 0, pointsFor: Math.round((p.pointsFor + c.pointsFor) * 100) / 100 },
+          isMine: pro === '(F) SF TEP',
+        }
+      })
+      const body = {
+        applies: true, scoring,
+        pro: { leagueId: 'harness', name: 'Peach Bowl (C2C)', sport: 'NFL' },
+        college: { leagueId: 'harness-college', name: 'Cream Bowl', sport: 'NCAAF' },
+        rows, unmatchedCollege: 0, autoMatched: 5,
+      }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+    const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    if (url.includes('/api/league/college-pro-pair')) {
+      return json({
+        applies: true, role: 'pro',
+        self: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper', sport: 'NFL', label: 'NFL', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'sleeper', sourceLeagueId: '1312978017894563840' })?.href ?? null },
+        other: { leagueId: 'harness-college', name: 'Cream Bowl', platform: 'fantrax', sport: 'NCAAF', label: 'College', canOpen: true, sourceUrl: resolveSourceLink({ platform: 'fantrax', sourceLeagueId: 'v2kzedypmm8jp61b' })?.href ?? null },
+      })
+    }
+    if (url.includes('/api/league/college-pro-draft') && init?.method === 'PATCH') return json({ ok: true })
+    if (url.includes('/api/league/college-pro-draft')) {
+      // An April 2027 draft night, as the commissioner of Peach Bowl sees it (illustrative picks).
+      const dp = (athleteId: string, name: string, position: string, proTeam: string, overall: number) =>
+        ({ fantraxId: `f${athleteId}`, athleteId, name, position, proTeam, round: Math.ceil(overall / 32), pick: ((overall - 1) % 32) + 1, overall })
+      const mine = { collegeKey: 'ciege', collegeName: 'Ciege82', proKey: '8', proName: '(F) SF TEP', players: [dp('a1', 'Braden Pegan', 'WR', 'NYJ', 14), dp('a2', 'Dante Reno', 'QB', 'LV', 71)] }
+      return json({
+        applies: true, year: 2027, proLabel: 'NFL',
+        pro: { leagueId: 'harness', name: 'Peach Bowl (C2C)', platform: 'sleeper' },
+        college: { leagueId: 'harness-college', name: 'Cream Bowl' },
+        mine,
+        movingUp: [mine, { collegeKey: 'grind', collegeName: 'Grindingffb', proKey: '11', proName: 'GrindingFFB', players: [dp('a3', 'Kade Morris', 'RB', 'DAL', 22)] },
+          { collegeKey: 'jws', collegeName: 'Jws452', proKey: null, proName: null, players: [dp('a4', 'Tre Holloway', 'TE', 'GB', 90)] }],
+        rookiePool: [
+          { athleteId: 'r1', name: 'Marcus Vance', position: 'EDGE', proTeam: 'CLE', college: 'Ohio State', round: 1, pick: 3, overall: 3 },
+          { athleteId: 'r2', name: 'Eli Whitfield', position: 'WR', proTeam: 'CHI', college: 'LSU', round: 1, pick: 9, overall: 9 },
+          { athleteId: 'r3', name: 'Jonah Pruitt', position: 'RB', proTeam: 'MIA', college: 'Georgia', round: 2, pick: 4, overall: 36 },
+        ],
+        unlinked: 0,
+        canEditChecklist: commish,
+        checklist: commish ? [
+          { id: 'results', title: '2027 NFL draft results are in', detail: '4 players from Cream Bowl were drafted.', state: 'done', manual: false },
+          { id: 'moveUp', title: 'Move 4 drafted players to Peach Bowl (C2C)', detail: "Add each one to his manager's NFL roster on Sleeper. 1 college team has no matching NFL team yet.", state: 'todo', manual: true },
+          { id: 'rookiePool', title: 'Set the rookie draft pool: 3 players', detail: 'Drafted players no college team held. Add them to the rookie draft on Sleeper.', state: 'done', manual: true },
+          { id: 'collegeCleared', title: 'Clear drafted players from Cream Bowl', detail: 'Drop them from their college rosters so those spots open up.', state: 'todo', manual: true },
+          { id: 'rookieDraft', title: 'Schedule the rookie draft', detail: 'It has no start date yet. Set one on Sleeper.', state: 'todo', manual: false },
+        ] : null,
+      })
+    }
+    // Home's activity card also reads league chat and shared activity; neither has anything in this fixture.
+    if (url.includes('/api/league/chat?') || url.includes('/api/shared/activity')) {
+      return Promise.resolve(new Response(JSON.stringify({ messages: [], items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }
+    if (url.includes('/chat/moves')) {
+      // Peach Bowl's Sleeper moves and Cream Bowl's stored Fantrax roster diffs, one feed.
+      const peach = { leagueId: 'harness', name: 'Peach Bowl (C2C)', label: 'NFL' }
+      const cream = { leagueId: 'harness-college', name: 'Cream Bowl', label: 'College' }
+      const hrs = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+      const pl = (id: string, name: string, position: string, team: string, to: string | null = null) => ({ id, name, position, team, imageUrl: null, to })
+      return json({
+        leagues: [peach, cream],
+        moves: [
+          { id: 'm1', kind: 'waiver', occurredAt: hrs(5), teamName: 'Connor0488', managerName: 'Connor0488', avatarUrl: null, involvedTeams: ['Connor0488'],
+            adds: [pl('a1', 'Tyler Allgeier', 'RB', 'ATL', 'Connor0488')], drops: [pl('d1', 'Zach Ertz', 'TE', 'WAS')], bid: 14, picks: [], league: peach },
+          { id: 'm2', kind: 'roster_move', occurredAt: hrs(30), teamName: 'Jws452', managerName: null, avatarUrl: null, involvedTeams: ['Jws452'],
+            adds: [pl('a2', 'Braden Pegan', 'WR', 'Utah', 'Jws452')], drops: [pl('d2', 'Dante Reno', 'QB', 'Florida')], bid: null, picks: [], inferred: true, league: cream },
+          { id: 'm3', kind: 'trade', occurredAt: hrs(60), teamName: 'GrindingFFB', managerName: 'GrindingFFB', avatarUrl: null, involvedTeams: ['GrindingFFB', 'Scoresscotty'],
+            adds: [pl('a3', 'Jaylen Waddle', 'WR', 'MIA', 'GrindingFFB'), pl('a4', 'Kyren Williams', 'RB', 'LAR', 'Scoresscotty')], drops: [], bid: null, picks: [], league: peach },
+        ],
+      })
     }
     return real(input, init)
   }
@@ -223,7 +325,52 @@ export function CollegeProRosterHarnessClient() {
   return (
     <div className="min-h-screen bg-[#07101a] text-white" data-league-skin={format}>
       <div className="mx-auto max-w-5xl">
-        <CollegeProRoster leagueId="harness" onPlayerClick={() => {}} fallback={<p className="p-4 text-sm">fallback</p>} />
+        {params?.get('view') === 'week' ? (
+          <CollegeProWeek leagueId="harness">
+            <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own matchup screen stays here, unchanged.</p>
+          </CollegeProWeek>
+        ) : params?.get('view') === 'header' ? (
+          <div className="flex flex-wrap items-center gap-2 p-4">
+            <span className="text-lg font-extrabold">Peach Bowl (C2C)</span>
+            <CollegeProPairChip leagueId="harness" />
+          </div>
+        ) : params?.get('view') === 'imported' ? (
+          // The imported-league header's badge row and Home's activity card, in the workspace's own styles.
+          <div className="af-core nl-workspace" style={{ display: 'block', minHeight: 0, padding: 16 }}>
+            <div className="nl-badges" style={{ marginBottom: 16 }}>
+              <span className="nl-chip nl-gold">Synced from Sleeper</span>
+              <span className="nl-chip nl-gold">Commissioner</span>
+              <CollegeProPairChip leagueId="harness" variant="native" />
+            </div>
+            <LeagueActivityFeedCard leagueId="harness" imported />
+          </div>
+        ) : params?.get('view') === 'home' ? (
+          <div className="p-4">
+            <CollegeProFranchiseCard leagueId="harness">
+              <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own home stays here, unchanged.</p>
+            </CollegeProFranchiseCard>
+          </div>
+        ) : params?.get('view') === 'trades' ? (
+          <CollegeProOtherHalf leagueId="harness" tab="trades">
+            <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own trades screen stays here, unchanged.</p>
+          </CollegeProOtherHalf>
+        ) : params?.get('view') === 'chat' ? (
+          <CollegeProChat leagueId="harness">
+            <p className="m-4 text-sm">fallback</p>
+          </CollegeProChat>
+        ) : params?.get('view') === 'draft' ? (
+          <CollegeProDraftPipeline leagueId="harness">
+            <p className="m-4 rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own draft screen stays here, unchanged.</p>
+          </CollegeProDraftPipeline>
+        ) : params?.get('view') === 'activity' ? (
+          <LeagueActivityTab leagueId="harness" />
+        ) : params?.get('view') === 'standings' ? (
+          <CollegeProStandings leagueId="harness">
+            <p className="rounded-2xl border border-white/10 p-4 text-sm text-white/60">This league’s own standings stay here, unchanged.</p>
+          </CollegeProStandings>
+        ) : (
+          <CollegeProRoster leagueId="harness" onPlayerClick={() => {}} fallback={<p className="p-4 text-sm">fallback</p>} />
+        )}
       </div>
     </div>
   )

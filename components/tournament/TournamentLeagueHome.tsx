@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Trophy, ExternalLink } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import { KingBuffaloPresentedBy } from '@/components/tournament/KingBuffaloPresentedBy'
+import { KingBuffaloPresentedBy, isKingBuffaloTournament } from '@/components/tournament/KingBuffaloPresentedBy'
 
 interface TournamentTheme {
   bannerUrl: string | null
@@ -72,9 +72,11 @@ export function TournamentLeagueHome({ leagueId }: { leagueId: string }) {
       className="mb-4 overflow-hidden rounded-xl border border-amber-500/20 bg-amber-950/10 p-4"
       style={accentColor ? { borderColor: `${accentColor}40`, boxShadow: config.theme?.glowAccent ? `0 0 20px ${config.theme.glowAccent}20` : undefined } : undefined}
     >
-      <div className="mb-3">
-        <KingBuffaloPresentedBy variant="compact" />
-      </div>
+      {isKingBuffaloTournament(config.tournamentName) ? (
+        <div className="mb-3">
+          <KingBuffaloPresentedBy tournamentName={config.tournamentName} variant="compact" />
+        </div>
+      ) : null}
       {hasBanner && config.theme?.bannerUrl && (
         <div
           className="mb-3 h-20 w-full rounded-lg bg-cover bg-center"

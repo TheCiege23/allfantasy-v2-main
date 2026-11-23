@@ -10,7 +10,7 @@
  *
  * Three layers of defense are now in place:
  *
- *   1. **Translation source** — both EN (`lib/i18n/translations.ts`)
+ *   1. **Translation source** — both EN (`lib/i18n/translations-en.ts`)
  *      and ES parity (`lib/i18n/translations-es-parity.ts`) define
  *      `draftRoom.legacy.{queueTab,rosterTab,aiTab}`. So the primary
  *      lookup resolves correctly.
@@ -36,8 +36,8 @@ function read(rel: string): string {
 }
 
 describe('Translation source defines the missing legacy tab keys', () => {
-  it('EN translations.ts has draftRoom.legacy.queueTab / rosterTab / aiTab', () => {
-    const src = read('lib/i18n/translations.ts')
+  it('EN translations-en.ts has draftRoom.legacy.queueTab / rosterTab / aiTab', () => {
+    const src = read('lib/i18n/translations-en.ts')
     expect(src).toMatch(/"draftRoom\.legacy\.queueTab":\s*"Queue"/)
     expect(src).toMatch(/"draftRoom\.legacy\.rosterTab":\s*"Roster"/)
     expect(src).toMatch(/"draftRoom\.legacy\.aiTab":\s*"Chimmy"/)

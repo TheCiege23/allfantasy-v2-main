@@ -4,13 +4,17 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { liveLeagueDrafts, liveLeagueMatchups, liveLeagueRosters, liveLeagueUsers, liveNflState } from '@/lib/sleeper/liveLeagueFeed'
 import { readStoredFantraxDraft } from '@/lib/league-import/fantrax/fantraxSnapshotHistory'
 import { fantraxDraftCard, sleeperDraftCards, type CollegeProDraft } from './drafts'
-import { buildPipeline, parseStoredDraftPicks, type CollegeProPipeline } from './pipeline'
-import { loadHeadToHead, type HeadToHead, type TeamMapEditor } from './headToHead'
+import { buildPipeline, type CollegeProPipeline } from './pipeline'
+import { athleteIdsByFantraxId, collegeSnapshotRoster, latestDraftPicksOnFile, type CollegeDraftSport } from './draftPicksOnFile'
+import { loadCollegeMatchup, loadHeadToHead, type CollegeMatchup, type HeadToHead, type TeamMapEditor } from './headToHead'
+import { fantraxPeriodForWindow } from './teamMatch'
+import { loadNflWeekWindow } from '@/lib/c2c/campusWeeks'
 import { currentFantraxPeriod, loadDailyPoints } from './dailyPoints'
 import { dailySportWeekForInstant, resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
 import { findLinkCandidates, type LinkCandidate } from './linkHalves'
 import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-app/connectedRoster'
-import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
+import type { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
+import { readLeaguePair, resolveCollegeProPair } from './leaguePair'
 import {
   buildFantraxLists,
   buildSleeperLists,
@@ -137,6 +141,11 @@ export type CollegeProRosterPayload =
       proLeagueId: string
       /** Combined scoring only: your NFL + college total against your opponent's. */
       headToHead: HeadToHead | null
+      /**
+       * The college half's own game this week, from its Fantrax schedule, both sides scored the same way.
+       * With the pro game in `sides`, it is the one-league week view. Null when there is no college game.
+       */
+      collegeMatchup: CollegeMatchup | null
       /** For someone allowed to change scoring, with combined on: the Sleeper-to-Fantrax team map to confirm. */
       teamMap: TeamMapEditor | null
       fetchedAt: string
@@ -155,10 +164,22 @@ export async function loadCollegeProRoster(
   now = new Date(),
   opts: { viewedFrom?: 'pro' | 'college' } = {},
 ): Promise<CollegeProRosterPayload> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true },
-  })
+  const select = { id: true, name: true, platform: true, platformLeagueId: true, leagueType: true, leagueVariant: true, sport: true, settings: true } as const
+  /*
+   * A manager of EITHER half reaches the page: one league is one league. Someone who claimed only
+   * their Cream Bowl team still opens Peach Bowl's combined page through the league-wide pair.
+   */
+  const league =
+    (await prisma.league.findFirst({ where: { id: leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] }, select })) ??
+    (await (async () => {
+      const row = await prisma.league.findUnique({ where: { id: leagueId }, select })
+      const pair = row ? readLeaguePair(row.settings) : null
+      if (!row || !pair) return null
+      const member = await prisma.league.count({
+        where: { id: pair.otherLeagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+      })
+      return member > 0 ? row : null
+    })())
   if (!league || !league.platformLeagueId) return { applies: false }
   const unlinked = async (): Promise<CollegeProRosterPayload> => {
     const link = await findLinkCandidates(leagueId, userId).catch(() => null)
@@ -166,8 +187,9 @@ export async function loadCollegeProRoster(
   }
 
   if (league.platform === 'fantrax') {
-    if (!collegeProFormatOf(league)) return { applies: false }
-    const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+    // Paired is enough: a league the commissioner linked is one league whatever its import typed it as.
+    if (!collegeProFormatOf(league) && !readLeaguePair(league.settings)) return { applies: false }
+    const paired = await resolveCollegeProPair(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
     if (!paired || paired.sides.length < 2) return unlinked()
     /*
      * OPENED FROM THE COLLEGE SIDE. Cream Bowl is the Fantrax half of the Peach Bowl franchise; the
@@ -185,7 +207,7 @@ export async function loadCollegeProRoster(
   }
   if (league.platform !== 'sleeper') return { applies: false }
 
-  const paired = await resolvePairedHalf(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
+  const paired = await resolveCollegeProPair(leagueId, userId, { includeOperationalSummary: false }).catch(() => null)
   const collegeHalf = paired?.sides.find((s) => s.role === 'college') ?? null
   const typed = collegeProFormatOf(league)
   if (!typed && !collegeHalf) return { applies: false }
@@ -329,8 +351,27 @@ export async function loadCollegeProRoster(
     proLeagueId: league.id,
     link,
     headToHead: h2h?.headToHead ?? null,
+    collegeMatchup: await sleeperCollegeMatchup(),
     teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
+  }
+
+  /** Your college team's game in the Fantrax period that matches this NFL week. */
+  async function sleeperCollegeMatchup(): Promise<CollegeMatchup | null> {
+    if (!collegeHalf || collegeHalf.platform !== 'fantrax' || !week) return null
+    const settings = (await collegeSettings) as Record<string, unknown> | null
+    const periods = Array.isArray(settings?.fantrax_scoring_periods) ? (settings!.fantrax_scoring_periods as Array<{ number: number; startDate?: string | null; endDate?: string | null }>) : []
+    const window = await loadNflWeekWindow(prisma, { season, nflWeek: week }).catch(() => null)
+    const period = window ? fantraxPeriodForWindow(periods, window) : null
+    return loadCollegeMatchup({
+      fantraxSnapshotId: collegeHalf.memberLeagueId,
+      myTeamName: collegeHalf.teamLabel,
+      period,
+      myTotal: college.score.total,
+      season,
+      nflWeek: week,
+      collegeSettings: settings,
+    }).catch(() => null)
   }
 }
 
@@ -439,44 +480,16 @@ async function loadPipeline(
   fantraxSnapshotId: string,
   myPlayers: ReadonlyArray<{ id: string; cfbdId?: string | null; name: string }>,
   now: Date,
-  sport: 'NCAAF' | 'NCAAB' = 'NCAAF',
+  sport: CollegeDraftSport = 'NCAAF',
 ): Promise<CollegeProPipeline | null> {
-  const prefix = sport === 'NCAAB' ? 'cbbd:draft-picks:v1:' : 'cfbd:draft-picks:v1:'
-  const thisYear = now.getUTCFullYear()
-  const rows = await prisma.sportsDataCache.findMany({
-    where: { cacheKey: { in: [`${prefix}${thisYear}`, `${prefix}${thisYear - 1}`] } },
-    select: { data: true },
-  })
-  const stored = rows
-    .map((r) => parseStoredDraftPicks(r.data))
-    .filter((x): x is NonNullable<typeof x> => x != null && x.picks.length > 0)
-    .sort((a, b) => b.year - a.year)[0]
+  const stored = await latestDraftPicksOnFile(sport, now)
   if (!stored) return null
 
   // Every college roster in the league: the snapshot holds all teams, tagged by teamName.
-  const snapshot = await prisma.fantraxLeague.findUnique({ where: { id: fantraxSnapshotId }, select: { roster: true } })
-  const fantraxIds = (Array.isArray(snapshot?.roster) ? (snapshot!.roster as unknown[]) : [])
-    .map((r) => String((r as { fantraxId?: unknown; id?: unknown })?.fantraxId ?? (r as { id?: unknown })?.id ?? '').trim())
-    .filter(Boolean)
+  const fantraxIds = (await collegeSnapshotRoster(fantraxSnapshotId)).map((r) => r.fantraxId)
   // Your own players are always looked up, even if an older snapshot's league list misses them.
   for (const p of myPlayers) if (p.id && !fantraxIds.includes(p.id)) fantraxIds.push(p.id)
-  const athleteIdOf = new Map<string, string | null>()
-  if (fantraxIds.length) {
-    const identities = sport === 'NCAAB'
-      ? (await prisma.playerIdentityMap.findMany({
-          where: { sport, fantraxId: { in: fantraxIds }, espnId: { not: null } },
-          select: { fantraxId: true, espnId: true },
-        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.espnId }))
-      : (await prisma.playerIdentityMap.findMany({
-          where: { sport, fantraxId: { in: fantraxIds }, cfbdId: { not: null } },
-          select: { fantraxId: true, cfbdId: true },
-        })).map((i) => ({ fantraxId: i.fantraxId, athleteId: i.cfbdId }))
-    for (const { fantraxId, athleteId } of identities) {
-      if (!fantraxId || !athleteId) continue
-      const seen = athleteIdOf.get(fantraxId)
-      athleteIdOf.set(fantraxId, seen === undefined || seen === athleteId ? athleteId : null)
-    }
-  }
+  const athleteIdOf = await athleteIdsByFantraxId(sport, fantraxIds)
   const leagueAthleteIds = new Set([...athleteIdOf.values()].filter((v): v is string => !!v))
   return buildPipeline({
     year: stored.year,
@@ -708,6 +721,26 @@ async function loadFantraxProPair(args: {
     pipeline,
     proLeagueId: league.id,
     headToHead: h2h?.headToHead ?? (scoring === 'combined' ? { me: myCombined, opponent: null, missing: "This week's matchup could not be read." } : null),
+    collegeMatchup: await (async (): Promise<CollegeMatchup | null> => {
+      // The college league's OWN period: its schedule is numbered by its periods, not the NBA's.
+      if (collegeSport !== 'NCAAB') return null
+      const cs = (collegeSettings ?? {}) as Record<string, unknown>
+      const fx = (cs.fantrax_settings ?? {}) as Record<string, unknown>
+      const collegePeriod = currentFantraxPeriod(cs.fantrax_scoring_periods ?? fx.scoringPeriods, now)
+      if (!collegePeriod) return null
+      return loadCollegeMatchup({
+        fantraxSnapshotId: collegeHalf.memberLeagueId,
+        myTeamName: collegeHalf.teamLabel,
+        period: collegePeriod.number,
+        myTotal: college.score.total,
+        collegeSport: 'NCAAB',
+        season: proSnap?.season ?? now.getFullYear(),
+        nflWeek: null,
+        scoreCollegePlayers: (players) =>
+          loadDailyPoints({ sport: 'NCAAB', window: collegePeriod.window, players: toPointsInput(players), settings: collegeSettings }).then((r) => r.points),
+        collegeSettings,
+      }).catch(() => null)
+    })(),
     teamMap: h2h?.editor ?? null,
     fetchedAt: now.toISOString(),
   }

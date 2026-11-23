@@ -254,6 +254,17 @@ export function buildGeneralGroups(p: HubSettingsPayload, kind: HubKind): HubGro
   if (l.medianGame != null) {
     setup.push({ key: 'median', label: 'League Median Game', description: 'Every team also plays the weekly median score', value: yesNo(l.medianGame), toggle: { field: 'medianGame', on: l.medianGame === true } })
   }
+  // A league drafted mid-season: do the weeks played before the draft count? (lib/redraft/preLeagueWeeksRules.ts)
+  // Only once those weeks are loaded. The settings GET carries both fields (commissioner-league-patch.ts).
+  if ((num(l.preLeagueWeekCount) ?? 0) > 0) {
+    setup.push({
+      key: 'preLeague',
+      label: 'Count Weeks Before the Draft',
+      description: 'Weeks played before this league drafted. Off: for viewing only. On: they count toward every record, including the league median',
+      value: yesNo(l.preLeagueWeeksCount === true),
+      toggle: { field: 'preLeagueWeeksCount', on: l.preLeagueWeeksCount === true },
+    })
+  }
 
   const deadline = num(l.tradeDeadlineWeek)
   const trade: HubRow[] = [

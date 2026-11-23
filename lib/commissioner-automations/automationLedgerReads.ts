@@ -102,10 +102,17 @@ export async function readAutomationAggregates(): Promise<AutomationLedgerAggreg
   return [...byType.values()].sort((a, b) => a.jobType.localeCompare(b.jobType))
 }
 
-/** Recent runs for one job type, newest first. */
-export async function readAutomationRuns(jobType: string, limit = 25): Promise<AutomationLedgerRun[]> {
+/**
+ * Recent runs for one job type in ONE league, plus the platform-wide runs (no league), newest first.
+ *
+ * 🛑 LEAGUE-SCOPED, UNLIKE THE AGGREGATES ABOVE. A run row carries its error message, metadata and league id, and
+ * the Automation Center renders them as the run's summary and detail. Read across the whole ledger, every
+ * commissioner was shown other leagues' failures and ids (2026-11-23 audit). Totals are one number per automation
+ * and stay platform-wide on purpose; a run's own text belongs to its league.
+ */
+export async function readAutomationRuns(jobType: string, leagueId: string, limit = 25): Promise<AutomationLedgerRun[]> {
   const rows = await prisma.automationRun.findMany({
-    where: { jobType },
+    where: { jobType, OR: [{ leagueId }, { leagueId: null }] },
     orderBy: { startedAt: 'desc' },
     take: Math.min(100, Math.max(1, limit)),
     select: {

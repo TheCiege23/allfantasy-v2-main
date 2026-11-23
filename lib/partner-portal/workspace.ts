@@ -20,7 +20,7 @@
 import { computeHealth, deriveActionItems, type CommissionerActionItem } from '@/lib/intelligence/IntelligenceQueryService'
 import type { BindingSyncState } from '@/lib/domain/syncHealth'
 import { syncHealthView } from '@/lib/domain/syncHealth'
-import { ledgerRecordFor, MIN_GRADED_FOR_OVERALL_RATE, type LedgerSnapshot } from '@/lib/chimmy-outcomes/ledgerRecord'
+import { ledgerRecordFor, MIN_GRADED_FOR_OVERALL_RATE, MIN_TRADES_PER_LETTER, type LedgerSnapshot } from '@/lib/chimmy-outcomes/ledgerRecord'
 
 export type TenantRoleName = 'TENANT_OWNER' | 'TENANT_ADMIN' | 'TENANT_SUPPORT'
 
@@ -85,6 +85,11 @@ export type PartnerRecord = {
   minSample: number
   startSit: { right: number; wrong: number; same: number; ratePct: number | null; gainPerCall: number | null; pending: number } | null
   pickups: { graded: number; startable: number; ratePct: number | null; vsDrop: number; beatDrop: number; pending: number } | null
+  /**
+   * Trade letters given in these leagues, checked against what happened (2026-11-22): per sport and measure, each
+   * letter's graded deals and net. Only letters with enough deals (MIN_TRADES_PER_LETTER); empty when none has.
+   */
+  trades: Array<{ key: string; sport: string; kind: 'points' | 'value' | 'categories'; letters: Array<{ letter: string; n: number; net: number; aheadPct: number | null }> }>
 }
 
 /** Pure: the scoped ledger → what the portal shows. Null when nothing has been given or graded at all. */
@@ -105,8 +110,11 @@ export function buildPartnerRecord(ledger: LedgerSnapshot | null): PartnerRecord
     : pickPending
       ? { graded: 0, startable: 0, ratePct: null, vsDrop: 0, beatDrop: 0, pending: pickPending }
       : null
-  if (!startSit && !pickups) return null
-  return { season: ledger.season, throughWeek: ledger.throughWeek, minSample: MIN_GRADED_FOR_OVERALL_RATE, startSit, pickups }
+  const trades = Object.entries(view?.tradeOutcomes ?? {})
+    .map(([key, b]) => ({ key, sport: b.sport, kind: b.kind, letters: b.letters.filter((t) => t.n >= MIN_TRADES_PER_LETTER).map((t) => ({ letter: t.letter, n: t.n, net: t.net, aheadPct: t.aheadPct })) }))
+    .filter((b) => b.letters.length > 0)
+  if (!startSit && !pickups && trades.length === 0) return null
+  return { season: ledger.season, throughWeek: ledger.throughWeek, minSample: MIN_GRADED_FOR_OVERALL_RATE, startSit, pickups, trades }
 }
 
 export type PortalView =

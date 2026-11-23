@@ -18,11 +18,11 @@ export default async function TournamentHarnessPage({
   searchParams,
 }: {
   params: Promise<{ tournamentId: string; screen: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; name?: string }>
 }) {
   if (process.env.NODE_ENV === 'production') notFound()
   const { screen } = await params
   if (!(TOURNAMENT_HARNESS_SCREENS as readonly string[]).includes(screen)) notFound()
-  const { tab } = await searchParams
-  return <TournamentHarnessClient screen={screen as TournamentHarnessScreen} commissionerTab={tab} />
+  const { tab, name } = await searchParams
+  return <TournamentHarnessClient screen={screen as TournamentHarnessScreen} commissionerTab={tab} tournamentName={name} />
 }

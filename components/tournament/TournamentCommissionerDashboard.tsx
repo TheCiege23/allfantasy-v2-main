@@ -319,7 +319,7 @@ export function TournamentCommissionerDashboard({
               </p>
             </div>
             <div className="flex w-full max-w-md flex-col gap-2 lg:items-end">
-              <KingBuffaloPresentedBy variant="strip" />
+              <KingBuffaloPresentedBy tournamentName={summary?.tournament.name} variant="strip" />
               <div className="flex flex-wrap gap-2">
                 <Link
                   href={`/tournament/${tournamentId}`}

@@ -2,7 +2,8 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { loadWaiverWorldFacts } from '@/lib/decision-os/waiver/loader'
+import { createWaiverOsLoaders } from '@/lib/decision-os/waiver-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 import { faabBidFor } from '@/lib/trade-intel/marketValueService'
 import { loadLeagueValueMap } from './playerDepth'
 import { waiverClaimLink, type PlatformLink } from './platformLinks'
@@ -21,7 +22,7 @@ import { waiverClaimLink, type PlatformLink } from './platformLinks'
  * ⚠ DB-FIRST, AND THAT IS WHY IT IS NOT WAIVER INTEL'S LOADER. WaiverIntel rebuilds a league's
  * history from the live Sleeper API (~230 calls cold, per viewer). Here every input is already in
  * Postgres: budget and FAAB remaining from the waiver settings and your roster
- * (loadWaiverWorldFacts, any platform), the value from the finder's own per-league value map, and
+ * (Waiver OS's user entry over loadWaiverWorldFacts, any platform), the value from the finder's own per-league value map, and
  * winning bids from `dw_transaction_facts` (Sleeper `waiver.waiverBid` — 37,011 bids across 222
  * leagues measured 2026-09-28 — and ESPN `waiver_add.bidAmount`).
  *
@@ -101,11 +102,20 @@ export async function loadFreeAgentBids(args: {
   ordered.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
 
   const priced = args.includeBids && args.sleeperId ? ordered.slice(0, BID_LEAGUE_CAP).map((l) => l.id) : []
+  /*
+   * THROUGH WAIVER OS (2026-11-23): this called `loadWaiverWorldFacts` directly, per league, on every /core shell load,
+   * beside the Waiver OS entry that exists to hold FAAB and priority for five minutes. It now reads that user-level
+   * entry, as `/api/ai/waivers/recommend` and Chimmy's waiver answer do — derived by the same `loadWaiverWorldFacts`
+   * on a miss, a store problem falling through to that derivation — and reports the feed's outcomes the same way.
+   * One loader per call, so the outcomes drained are this request's and no other's.
+   */
+  const waiverOs = priced.length ? createWaiverOsLoaders() : null
   const [values, room, facts] = await Promise.all([
     priced.length ? loadLeagueValueMap([args.sleeperId!], priced).catch(() => new Map()) : Promise.resolve(new Map()),
     priced.length ? loadRoom(priced) : Promise.resolve(new Map<string, { claims: number; median: number; p75: number }>()),
-    Promise.all(priced.map(async (id) => [id, await loadWaiverWorldFacts(args.userId, id).catch(() => null)] as const)).then((pairs) => new Map(pairs)),
+    Promise.all(priced.map(async (id) => [id, waiverOs ? await waiverOs.loadWorldFacts(args.userId, id).catch(() => null) : null] as const)).then((pairs) => new Map(pairs)),
   ])
+  if (waiverOs) emitFeedOutcomes('waiver', waiverOs.drainOutcomes())
 
   const rows: FreeAgentBidRow[] = ordered.map((l) => {
     const leagueName = l.name ?? 'your league'

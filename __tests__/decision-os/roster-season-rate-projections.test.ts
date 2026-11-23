@@ -135,6 +135,47 @@ describe('board-sport points leagues are priced on the league value board', () =
   })
 })
 
+describe('college football leagues are priced through My Team’s read (2026-11-23)', () => {
+  const absent = { present: false, value: null, asOf: null, servedFrom: null, confidence: null, conclusive: { ok: true }, gap: null }
+  const serialize = (slice: Awaited<ReturnType<typeof price>>) =>
+    serializeDecisionOsGroundingForPrompt({
+      leagueId: 'lg', userId: 'u', builtAt: new Date().toISOString(),
+      importAssertions: absent, leagueRules: absent, marketValues: absent, devyValues: absent, projections: absent,
+      contextFacts: null, contextLookups: null, commissionerIntelligence: absent, leagueIntelligence: absent, portfolio: absent,
+      rosterProjections: slice, gaps: [], meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
+    } as unknown as Parameters<typeof serializeDecisionOsGroundingForPrompt>[0])
+
+  it('NCAAF: the league-scored per-game projection times this week’s games, access checked first', async () => {
+    const d = deps({ loadRosterMetrics: vi.fn(async () => metrics({ sport: 'NCAAF', rows: [row('nba-1', 21.4, 1), row('nba-2', 14, 0)] })) })
+    const slice = await price('NCAAF', d)
+    expect(d.authorize).toHaveBeenCalledWith('lg', 'user-1')
+    expect(d.loadRosterMetrics).toHaveBeenCalledWith({ leagueId: 'lg', rosterIds: ['nba-1', 'nba-2', 'nba-3', 'nba-4'] })
+    expect(slice.present).toBe(true)
+    const byId = new Map(slice.value!.map((r) => [r.playerId, r]))
+    expect(byId.get('nba-1')).toMatchObject({ basis: 'season_rate', rateSource: 'season_projection', perGame: 21.4, weekGames: 1, points: 21.4, leagueScored: true })
+    // A bye week is 0 games, so 0 points — the schedule said so; a player with no projection is said in words.
+    expect(byId.get('nba-2')).toMatchObject({ perGame: 14, weekGames: 0, points: 0 })
+    expect(byId.get('nba-3')).toMatchObject({ perGame: null, points: null })
+    const text = serialize(slice)
+    expect(text).toContain("scored under this league's own rules from AllFantasy's season projections")
+    expect(text).toContain('Star Centre (C) 21.4 pts/game · 1 game this week → 21.4 pts')
+    expect(text).toContain('Deep Bench (SF) no AllFantasy season projection (NOT zero)')
+    // A college league has no value board; the prompt must not say it was priced on one.
+    expect(text).not.toContain('value board')
+  })
+
+  it('NCAAF with nobody projected is a stated gap that does not mention a value board', async () => {
+    const slice = await price('NCAAF', deps({ loadRosterMetrics: vi.fn(async () => metrics({ sport: 'NCAAF', rows: [] })) }))
+    expect(slice.present).toBe(false)
+    expect(slice.gap?.detail).toContain('season projection')
+  })
+
+  it('NCAAF metrics for another sport are refused, never relabelled', async () => {
+    const slice = await price('NCAAF', deps({ loadRosterMetrics: vi.fn(async () => metrics({ sport: 'NFL' })) }))
+    expect(slice.present).toBe(false)
+  })
+})
+
 describe('what is not priced, and why', () => {
   it('🛑 a category league has no points: not_requested, and it says so — no invented points', async () => {
     const slice = await price('NBA', deps({ loadRosterMetrics: vi.fn(async () => metrics({ unit: 'category score' })) }))

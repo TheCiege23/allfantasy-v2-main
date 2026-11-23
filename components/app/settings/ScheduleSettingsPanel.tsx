@@ -42,8 +42,9 @@ type EditableScheduleForm = {
 const SCHEDULE_UNIT_OPTIONS = ['week', 'round', 'series', 'slate', 'scoring_period'] as const
 const MATCHUP_CADENCE_OPTIONS = ['weekly', 'daily', 'round', 'slate'] as const
 const HEAD_TO_HEAD_OPTIONS = ['head_to_head', 'points_only', 'both'] as const
-const LOCK_TIME_OPTIONS = ['game_time', 'first_game', 'slate_lock', 'manual'] as const
-const LOCK_WINDOW_OPTIONS = ['first_game_of_week', 'first_game_of_slate', 'game_time', 'slate_lock', 'manual'] as const
+/** The rule the lineup lock enforces in every sport (lib/roster-lineup-engine/lineupLockService.ts). */
+const LINEUP_LOCK_RULE =
+  "Each player locks when his own game starts and stays locked for the rest of the week (the rest of the day in a daily-lineup league). Players whose games have not started can still be swapped. Best ball leagues set their own lineup."
 const SCORING_PERIOD_OPTIONS = ['full_period', 'daily_rolling', 'slate_based'] as const
 const RESCHEDULE_OPTIONS = ['use_final_time', 'use_original_time', 'exclude'] as const
 const DOUBLEHEADER_OPTIONS = ['all_games_count', 'single_score_per_slot'] as const
@@ -283,32 +284,16 @@ export default function ScheduleSettingsPanel({ leagueId }: { leagueId: string }
                 ))}
               </select>
             </label>
-            <label className="text-xs text-white/70">
-              Lock time behavior
-              <select
-                aria-label="Lock time behavior"
-                value={form.lockTimeBehavior}
-                onChange={(e) => setForm((prev) => (prev ? { ...prev, lockTimeBehavior: e.target.value } : prev))}
-                className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
-              >
-                {LOCK_TIME_OPTIONS.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-white/70">
-              Lock window behavior
-              <select
-                aria-label="Lock window behavior"
-                value={form.lockWindowBehavior}
-                onChange={(e) => setForm((prev) => (prev ? { ...prev, lockWindowBehavior: e.target.value } : prev))}
-                className="mt-1 w-full rounded border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
-              >
-                {LOCK_WINDOW_OPTIONS.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </label>
+            {/*
+              🛑 "Lock time" and "Lock window" were offered here and NOTHING ENFORCED THEM (2026-11-23): the
+              lock reads settings.sportConfig.lineupLockType (lib/redraft/lineupLock.ts), never these keys, so a
+              league showing "first_game" locked each player at his own kickoff. The owner's rule is per player
+              in every sport, so the screen now states the rule instead of offering a choice it ignored.
+            */}
+            <div className="text-xs text-white/70 sm:col-span-2" data-testid="schedule-lineup-lock-rule">
+              Lineup lock
+              <p className="mt-1 text-xs text-white/90">{LINEUP_LOCK_RULE}</p>
+            </div>
             <label className="text-xs text-white/70">
               Scoring period behavior
               <select
@@ -456,12 +441,8 @@ export default function ScheduleSettingsPanel({ leagueId }: { leagueId: string }
           <dd className="text-white/90">{config.head_to_head_behavior ?? '—'}</dd>
         </div>
         <div>
-          <dt className="text-white/50">Lock time behavior</dt>
-          <dd className="text-white/90">{config.lock_time_behavior ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-white/50">Lock window</dt>
-          <dd className="text-white/90">{config.lock_window_behavior ?? '—'}</dd>
+          <dt className="text-white/50">Lineup lock</dt>
+          <dd className="text-white/90">{LINEUP_LOCK_RULE}</dd>
         </div>
         <div>
           <dt className="text-white/50">Scoring period</dt>

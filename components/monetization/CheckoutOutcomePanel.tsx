@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { resolveLockedFeature } from '@/lib/monetization/lockedFeature'
 import { BACK_PARAM, safeBackPath } from '@/lib/monetization/lockReturn'
 import type { PostPurchaseSyncPhase } from '@/hooks/usePostPurchaseSync'
+import { AiSwapOptInDialog } from '@/components/monetization/AiSwapOptInDialog'
 import '@/components/monetization/af-monetization.css'
 
 /**
@@ -103,6 +104,8 @@ export function CheckoutOutcomePanel({
             View tokens
           </Link>
         </div>
+        {/* Asks once whether to turn AI swap on, when the plan includes it (AF Pro / Supreme). */}
+        <AiSwapOptInDialog />
       </section>
     )
   }

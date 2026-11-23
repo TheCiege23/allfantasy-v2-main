@@ -460,7 +460,7 @@ export type PlayerCardData = {
   injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
-  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue'>
+  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue' | 'afFactors'>
     & Pick<LeaguePlayerMetrics, 'week' | 'unit'>
   /**
    * Whether the signed-in reader follows him across every league (2026-09-14).
@@ -2181,6 +2181,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         weekly: afRow.weekly, fullSeason: afRow.fullSeason, fullSeasonBasis: afRow.fullSeasonBasis, restOfSeason: afRow.restOfSeason,
         week: afMetrics.week, unit: afMetrics.unit,
         tradeValue: afRow.tradeValue, tradeValueUnit: afRow.tradeValueUnit, dynastyTradeValue: afRow.dynastyTradeValue,
+        // Why `weekly` moved (its `unadjusted.weekly` lets the response gate revert it for a viewer without the plan).
+        ...(afRow.afFactors ? { afFactors: afRow.afFactors } : {}),
       },
     } : {}),
     ...(follow ? { follow } : {}),

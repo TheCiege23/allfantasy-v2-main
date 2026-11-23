@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Lock, Play, RefreshCw, Check, X } from 'lucide-react'
 import Link from 'next/link'
+import '../tabs/keeper/keeper-surfaces.css'
 
 type ContextPayload = {
   league: {
@@ -45,6 +46,12 @@ const KEEPER_COST_LABELS: Record<string, string> = {
   auction_value: 'auction dollars',
   free: 'nothing',
 }
+
+/** A keeper record's status in words; `pending` is the commissioner's to decide. */
+const STATUS_WORDS: Record<string, string> = { pending: 'Waiting for you', confirmed: 'Confirmed', approved: 'Confirmed', rejected: 'Rejected', locked: 'Locked in' }
+const STATUS_TONE: Record<string, string> = { pending: 'kp-warn', confirmed: 'kp-good', approved: 'kp-good', rejected: 'kp-bad', locked: 'kp-good' }
+const statusWord = (s: string) => STATUS_WORDS[s] ?? s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`
 
 export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) {
   const [loading, setLoading] = useState(true)
@@ -207,84 +214,85 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
 
   if (loading && !ctx) {
     return (
-      <div className="flex items-center gap-2 text-[13px] text-white/50">
+      <div className="kp-muted flex items-center gap-2 text-[13px]">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading keeper tools…
       </div>
     )
   }
 
   if (!ctx) {
-    return <p className="text-[13px] text-white/45">Keeper tools unavailable.</p>
+    return <p className="kp-muted text-[13px]">Keeper tools aren’t available right now.</p>
   }
 
   const pct = ctx.session
     ? Math.round((ctx.session.teamsSubmitted / Math.max(ctx.session.totalTeams, 1)) * 100)
     : 0
   const maxK = ctx.league.keeperCount ?? 3
+  const waiting = records.filter((r) => r.status === 'pending').length
+  const ordered = [...records].sort((a, b) => Number(b.status === 'pending') - Number(a.status === 'pending'))
+  const deadlineText = ctx.session
+    ? new Date(ctx.session.deadline).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : ''
 
   return (
-    <div className="space-y-5 text-[13px] text-white/85">
+    <div className="kp-text space-y-4 text-[13px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-medium text-white">Keeper commissioner center</p>
+        <p className="kp-text text-[15px] font-bold">Keeper commissioner center</p>
         <button
           type="button"
           onClick={() => void load()}
-          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-white/70 hover:bg-white/[0.07]"
+          className="kp-btn inline-flex min-h-[36px] items-center gap-1 rounded-lg px-3 py-1 text-[12px] font-semibold"
         >
           <RefreshCw className="h-3 w-3" /> Refresh
         </button>
       </div>
 
-      <p className="text-[12px] text-white/50">
-        League max keepers: <span className="font-semibold text-white/80">{maxK}</span>
+      <p className="kp-muted text-[13px]">
+        Each team keeps up to <span className="kp-text font-semibold">{plural(maxK, 'player')}</span>.
         {ctx.league.keeperCostSystem ? (
-          <>
-            {' '}
-            · Keeper cost: <span className="text-white/70">{KEEPER_COST_LABELS[ctx.league.keeperCostSystem] ?? ctx.league.keeperCostSystem.replace(/_/g, ' ')}</span>
-          </>
+          <> A keeper costs {KEEPER_COST_LABELS[ctx.league.keeperCostSystem] ?? ctx.league.keeperCostSystem.replace(/_/g, ' ')}.</>
         ) : null}
       </p>
 
       {!ctx.session ? (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
-          <p className="text-[12px] font-medium text-amber-100/95">Open keeper declaration</p>
-          <p className="mt-1 text-[11px] text-white/55">
-            Pick the <strong className="text-white/80">incoming season</strong> and a deadline. Managers can then
-            declare keepers before the draft is locked.
+        <div className="kp-card rounded-xl p-4" data-testid="keeper-commish-open-window">
+          <p className="kp-text text-[14px] font-semibold">Open the keeper window</p>
+          <p className="kp-muted mt-1 text-[13px]">
+            Pick the season and a deadline. Managers can pick keepers until then.
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="flex flex-1 flex-col gap-1 text-[11px] text-white/45">
+            <label className="kp-label flex flex-1 flex-col gap-1 text-[12px]">
               Season
               <select
                 value={incomingSeasonId}
                 onChange={(e) => setIncomingSeasonId(e.target.value)}
-                className="rounded-lg border border-white/10 bg-[#0a1220] px-3 py-2 text-[13px] text-white"
+                className="kp-field min-h-[40px] rounded-lg px-3 py-2 text-[13px] font-normal"
               >
                 {ctx.seasons.length === 0 ? (
-                  <option value="">No seasons — create a season first</option>
+                  <option value="">No seasons yet — create one first</option>
                 ) : (
                   ctx.seasons.map((s) => (
                     <option key={s.id} value={s.id}>
-                      Season {s.season} ({s.status})
+                      {s.season} season
                     </option>
                   ))
                 )}
               </select>
             </label>
-            <label className="flex flex-1 flex-col gap-1 text-[11px] text-white/45">
-              Declaration deadline (local)
+            <label className="kp-label flex flex-1 flex-col gap-1 text-[12px]">
+              Deadline
               <input
                 type="datetime-local"
                 value={deadlineLocal}
                 onChange={(e) => setDeadlineLocal(e.target.value)}
-                className="rounded-lg border border-white/10 bg-[#0a1220] px-3 py-2 text-[13px] text-white"
+                className="kp-field min-h-[40px] rounded-lg px-3 py-2 text-[13px] font-normal"
               />
             </label>
             <button
               type="button"
               disabled={busy !== null || !incomingSeasonId || ctx.seasons.length === 0}
               onClick={() => void openPhase()}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-amber-500/90 px-4 text-[13px] font-bold text-black hover:bg-amber-400 disabled:opacity-40"
+              className="kp-btn-primary inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-bold disabled:opacity-40"
             >
               {busy === 'open' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               Open window
@@ -292,15 +300,12 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
           </div>
         </div>
       ) : (
-        <div className="space-y-4 rounded-xl border border-[#ff3d81]/20 bg-[#ff3d81]/5 p-4">
+        <div className="kp-card space-y-3 rounded-xl p-4" data-testid="keeper-commish-window">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-[12px] font-semibold text-[#ffd7e5]/90">Active declaration session</p>
-              <p className="text-[11px] text-white/45">
-                Status: <span className="text-white/75">{ctx.session.status === 'locked' ? 'Locked' : 'Open'}</span>
-              </p>
-              <p className="mt-1 text-[11px] text-white/55">
-                Deadline: {new Date(ctx.session.deadline).toLocaleString()}
+              <p className="kp-text text-[14px] font-semibold">Keeper window</p>
+              <p className="kp-muted text-[13px]">
+                {ctx.session.status === 'locked' ? 'Locked. Keepers are final.' : `Open until ${deadlineText}.`}
               </p>
             </div>
             {ctx.session.status === 'open' ? (
@@ -308,41 +313,41 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void lockPhase()}
-                className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-3 py-2 text-[12px] font-semibold text-white hover:bg-white/10 disabled:opacity-40"
+                className="kp-btn inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold disabled:opacity-40"
               >
                 {busy === 'lock' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                Lock declarations
+                Lock keepers now
               </button>
             ) : (
-              <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] text-white/60">Locked</span>
+              <span className="kp-chip rounded-full px-3 py-1 text-[12px] font-semibold">Locked</span>
             )}
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
-            <div
-              className="h-full bg-sky-500/70 transition-all"
-              style={{ width: `${pct}%` }}
-            />
+          <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: 'var(--line2, var(--border))' }}
+            role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Teams that have picked keepers">
+            <div className="h-full transition-all" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
           </div>
-          <p className="text-[12px] text-white/60">
-            {ctx.session.teamsSubmitted} of {ctx.session.totalTeams} teams submitted ({pct}%)
+          <p className="kp-text2 text-[13px]">
+            {ctx.session.teamsSubmitted} of {ctx.session.totalTeams} teams have picked their keepers
           </p>
         </div>
       )}
 
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="kp-card rounded-xl p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[12px] font-semibold text-white">Review keeper declarations</p>
-          {ctx.seasons.length > 0 ? (
-            <label className="flex items-center gap-2 text-[11px] text-white/45">
+          <p className="kp-text text-[14px] font-semibold">
+            Review keepers{waiting > 0 ? <span className="kp-accent"> · {waiting} waiting for you</span> : null}
+          </p>
+          {ctx.seasons.length > 1 ? (
+            <label className="kp-label flex items-center gap-2 text-[12px]">
               Season
               <select
                 value={approvalSeasonId}
                 onChange={(e) => setApprovalSeasonId(e.target.value)}
-                className="rounded-lg border border-white/10 bg-[#0a1220] px-2 py-1 text-[12px] text-white"
+                className="kp-field min-h-[36px] rounded-lg px-2 py-1 text-[13px] font-normal"
               >
                 {ctx.seasons.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.season} ({s.status})
+                    {s.season}
                   </option>
                 ))}
               </select>
@@ -350,88 +355,67 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
           ) : null}
         </div>
         {recordsLoading ? (
-          <p className="text-[12px] text-white/45">
-            <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Loading records…
+          <p className="kp-muted text-[13px]">
+            <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Loading keepers…
           </p>
         ) : records.length === 0 ? (
-          <p className="text-[12px] text-white/45">No keeper records for this season yet.</p>
+          <p className="kp-muted text-[13px]">No one has picked a keeper for this season yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-[12px]">
-              <thead>
-                <tr className="border-b border-white/10 text-white/45">
-                  <th className="pb-2 pr-2">Team</th>
-                  <th className="pb-2 pr-2">Player</th>
-                  <th className="pb-2 pr-2">Cost</th>
-                  <th className="pb-2 pr-2">Status</th>
-                  <th className="pb-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((r) => (
-                  <tr key={r.id} className="border-b border-white/[0.06] text-white/85">
-                    <td className="py-2 pr-2 align-top">
-                      <span className="font-medium text-white">{r.teamName}</span>
-                      {r.ownerLabel ? (
-                        <span className="block text-[11px] text-white/40">{r.ownerLabel}</span>
-                      ) : null}
-                    </td>
-                    <td className="py-2 pr-2 align-top">
-                      {r.playerName}
-                      <span className="block text-[11px] text-white/40">{r.position}</span>
-                    </td>
-                    <td className="py-2 pr-2 align-top text-white/70">
-                      {r.costLabel ?? (r.costRound != null ? `Round ${r.costRound}` : '—')}
-                    </td>
-                    <td className="py-2 pr-2 align-top capitalize text-white/60">{r.status}</td>
-                    <td className="py-2 align-top">
-                      {r.status === 'pending' ? (
-                        <div className="flex flex-wrap gap-1">
-                          <button
-                            type="button"
-                            disabled={recordBusy !== null}
-                            onClick={() => void patchRecord(r.id, 'approve')}
-                            className="inline-flex items-center gap-0.5 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40"
-                          >
-                            {recordBusy === r.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Check className="h-3 w-3" />
-                            )}{' '}
-                            Confirm
-                          </button>
-                          <button
-                            type="button"
-                            disabled={recordBusy !== null}
-                            onClick={() => void patchRecord(r.id, 'reject')}
-                            className="inline-flex items-center gap-0.5 rounded-md border border-rose-500/35 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-200 hover:bg-rose-500/20 disabled:opacity-40"
-                          >
-                            <X className="h-3 w-3" /> Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-white/35">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          /* One card per keeper: it stacks on a phone instead of a 520px table scrolled sideways (audit item 3). */
+          <ul className="space-y-2">
+            {ordered.map((r) => {
+              const cost = (r.costLabel ?? (r.costRound != null ? `Round ${r.costRound}` : null))?.replace(/^Round (\d+)$/, 'a round $1 pick') ?? null
+              return (
+                <li key={r.id} data-testid={`keeper-review-${r.id}`}
+                  className="grid gap-2 rounded-lg p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_200px] sm:items-center"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--line, var(--border))' }}>
+                  <div className="min-w-0">
+                    <p className="kp-text truncate font-semibold">{r.playerName} <span className="kp-muted font-normal">· {r.position}</span></p>
+                    <p className="kp-muted truncate text-[12px]">{r.teamName}{r.ownerLabel ? ` · ${r.ownerLabel}` : ''}</p>
+                  </div>
+                  <div className="kp-text2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                    {cost ? <span>Costs {cost}</span> : null}
+                    <span className={`${STATUS_TONE[r.status] ?? 'kp-muted'} font-semibold`}>{statusWord(r.status)}</span>
+                  </div>
+                  {r.status === 'pending' ? (
+                    <div className="flex gap-2 sm:justify-end">
+                      <button
+                        type="button"
+                        disabled={recordBusy !== null}
+                        onClick={() => void patchRecord(r.id, 'approve')}
+                        aria-label={`Confirm ${r.playerName}`}
+                        className="kp-btn-good inline-flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-lg px-3 text-[13px] font-semibold disabled:opacity-40 sm:flex-none"
+                      >
+                        {recordBusy === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        disabled={recordBusy !== null}
+                        onClick={() => void patchRecord(r.id, 'reject')}
+                        aria-label={`Reject ${r.playerName}`}
+                        className="kp-btn-bad inline-flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-lg px-3 text-[13px] font-semibold disabled:opacity-40 sm:flex-none"
+                      >
+                        <X className="h-3.5 w-3.5" /> Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <div aria-hidden className="hidden sm:block" />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
 
-      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] text-white/45">
-        <p className="font-medium text-white/70">Draft room</p>
-        <p className="mt-1">
-          Pre-draft keeper picks and commissioner overrides live in the live draft room{' '}
-          <span className="text-white/55">(Keeper panel)</span> once the draft session is in pre-draft.
+      <div className="kp-card rounded-lg p-3 text-[13px]">
+        <p className="kp-text font-semibold">Draft</p>
+        <p className="kp-muted mt-1">
+          Before the draft starts, you can still add or change keepers in the draft room’s Keeper panel.
         </p>
-        <Link
-          href={`/league/${leagueId}?tab=draft`}
-          className="mt-2 inline-block text-[12px] font-semibold text-[#ff9ec0] hover:underline"
-        >
-          Open draft tab →
+        <Link href={`/league/${leagueId}?tab=draft`} className="kp-accent mt-2 inline-block font-semibold hover:underline">
+          Open draft →
         </Link>
       </div>
     </div>

@@ -392,6 +392,21 @@ describe('the frozen original (v2)', () => {
     expect(h.table[0]).toMatchObject({ snapshotType: V2 })
   })
 
+  it('/core trades card (2026-11-22): the preloaded path shows exactly what the per-trade path shows, and hands back today’s grade', async () => {
+    // The card now preloads originals per league instead of reading one per trade. Nothing on screen may move.
+    const single = await oneGradeForCompletedTrade(`L-${++n}`, ledgerTrade(), 2026, { now: NOW })
+    const freezes: Array<{ row: FrozenCompletedGrade; current: unknown }> = []
+    const batched = await oneGradeForCompletedTrade(`L-${++n}`, ledgerTrade(), 2026, {
+      now: NOW, frozen: new Map(), onFreeze: (row, current) => freezes.push({ row, current }),
+    })
+    expect(batched).toEqual(single)
+    expect(freezes).toHaveLength(1)
+    // Today's grade, so a card whose save fails shows it — never an original the table did not receive.
+    if (!single.graded || !single.current) throw new Error('expected a graded trade with today’s line')
+    expect(freezes[0]!.current).toMatchObject({ graded: true, ...single.current })
+    expect(freezes[0]!.current).not.toHaveProperty('frozenBasis')
+  })
+
   it('/core Trades rows (`gradeArchivedTradeRows`): the transaction id dates the trade', async () => {
     const league = `L-${++n}`
     const names: Record<string, string> = { [PUKA.id]: PUKA.name, [DRAKE.id]: DRAKE.name }

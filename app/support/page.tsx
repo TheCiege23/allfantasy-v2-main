@@ -5,6 +5,8 @@ import Script from 'next/script'
 import { motion } from 'framer-motion'
 import { Heart, ArrowLeft, Server, Brain, Zap, Shield, Users, BarChart3 } from 'lucide-react'
 
+import SupportMonthlyCard from './SupportMonthlyCard'
+
 const FUND_ITEMS = [
   {
     icon: Server,
@@ -78,6 +80,14 @@ export default function SupportPage() {
             </p>
           </div>
 
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <SupportMonthlyCard />
+          </motion.div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {FUND_ITEMS.map((item) => (
               <motion.div
@@ -109,8 +119,8 @@ export default function SupportPage() {
             style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}
           >
             <div className="text-center space-y-1">
-              <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Make a Donation</h2>
-              <p className="text-[11px]" style={{ color: 'var(--muted2)' }}>One-time contribution · No account needed</p>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Or give once</h2>
+              <p className="text-[11px]" style={{ color: 'var(--muted2)' }}>One-time donation · No account needed</p>
             </div>
 
             <div className="flex justify-center">
@@ -126,11 +136,7 @@ export default function SupportPage() {
             </div>
           </motion.div>
 
-          <div className="text-center pb-8">
-            <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-              Subscriptions coming soon — stay tuned for monthly supporter plans with exclusive perks.
-            </p>
-          </div>
+          <div className="pb-8" />
         </motion.div>
       </div>
     </div>

@@ -12,6 +12,9 @@ const h = vi.hoisted(() => ({
   values: new Map<string, Map<string, { value: number; faabAnchor: number | null }>>(),
   room: [] as Array<{ leagueId: string; claims: number; median: number; p75: number }>,
   worldFacts: vi.fn(),
+  feedFacts: vi.fn(),
+  emitFeedOutcomes: vi.fn(),
+  outcomes: { waiver_resource: { servedFrom: 'store', ageMs: 1000 } },
   valueMap: vi.fn(),
 }))
 
@@ -21,7 +24,13 @@ vi.mock('@/lib/prisma', () => ({
     $queryRaw: vi.fn(async () => h.room),
   },
 }))
+// The direct loader is mocked only so a regression that calls it again is SEEN (it must not be called).
 vi.mock('@/lib/decision-os/waiver/loader', () => ({ loadWaiverWorldFacts: h.worldFacts }))
+// The facts now come through Waiver OS's user entry (2026-11-23), as /api/ai/waivers/recommend reads them.
+vi.mock('@/lib/decision-os/waiver-os', () => ({
+  createWaiverOsLoaders: () => ({ loadWorldFacts: h.feedFacts, drainOutcomes: () => h.outcomes }),
+}))
+vi.mock('@/lib/decision-os/core/parity', () => ({ emitFeedOutcomes: h.emitFeedOutcomes }))
 vi.mock('@/lib/core-app/playerDepth', () => ({ loadLeagueValueMap: h.valueMap }))
 
 import { BID_LEAGUE_CAP, loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
@@ -53,6 +62,7 @@ beforeEach(() => {
   ])
   h.room = [{ leagueId: 'S1', claims: 48, median: 5, p75: 9 }]
   h.worldFacts.mockImplementation(async (_u: string, id: string) => h.facts.get(id) ?? null)
+  h.feedFacts.mockImplementation(async (_u: string, id: string) => h.facts.get(id) ?? null)
   h.valueMap.mockImplementation(async (_ids: string[], leagueIds: string[]) => new Map(leagueIds.filter((id) => h.values.has(id)).map((id) => [id, h.values.get(id)!])))
 })
 
@@ -60,6 +70,30 @@ const run = (includeBids = true, ids = ['S1', 'R1', 'F1']) =>
   loadFreeAgentBids({ userId: 'u1', sleeperId: '9001', freeLeagueIds: ids, includeBids })
 
 describe('loadFreeAgentBids', () => {
+  it('🛑 reads FAAB through Waiver OS, never the direct loader, and reports the feed outcomes (2026-11-23)', async () => {
+    await run()
+    expect(h.feedFacts).toHaveBeenCalledWith('u1', 'S1')
+    expect(h.feedFacts).toHaveBeenCalledTimes(3)
+    expect(h.worldFacts).not.toHaveBeenCalled()
+    expect(h.emitFeedOutcomes).toHaveBeenCalledWith('waiver', h.outcomes)
+  })
+
+  it('a feed read that throws is that league\'s "not on file", never the whole section', async () => {
+    h.feedFacts.mockImplementation(async (_u: string, id: string) => {
+      if (id === 'S1') throw new Error('store down')
+      return h.facts.get(id) ?? null
+    })
+    const { rows } = await run()
+    expect(rows.find((r) => r.leagueId === 'S1')!.note).toMatch(/not on file/)
+    expect(rows.find((r) => r.leagueId === 'F1')!.bid).not.toBeNull()
+  })
+
+  it('no bids asked for: no feed is opened and nothing is reported', async () => {
+    await run(false)
+    expect(h.feedFacts).not.toHaveBeenCalled()
+    expect(h.emitFeedOutcomes).not.toHaveBeenCalled()
+  })
+
   it('a FAAB league: the market bid capped at what you have left, the room beside it, a verified claim link', async () => {
     const { rows } = await run()
     const s1 = rows.find((r) => r.leagueId === 'S1')!

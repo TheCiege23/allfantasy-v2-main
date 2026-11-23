@@ -47,6 +47,6 @@ describe('League page server resilience', () => {
   it('does not crash predraft flow when draft setup data is missing', () => {
     expect(leaguePage).toContain('dispersalDraftInProgress={null}')
     expect(leagueShell).toContain('const renderPredraftDraftSetup = () => {')
-    expect(leagueShell).toContain('if (isPredraftLifecycle) return renderPredraftDraftSetup()')
+    expect(leagueShell).toMatch(/if \(isPredraftLifecycle\) return (?:\w+\([^\n]*)?renderPredraftDraftSetup\(\)/)
   })
 })

@@ -2,6 +2,10 @@ import type { PrismaClient } from '@prisma/client'
 
 import { describeFactorTable, learnFactors, type LearnedFactorTable } from './factorLearner'
 import { buildFactorObservations, opponentRatios, usageOf, type GameLine } from './factorObservations'
+import { dailyGameContext, loadMlbWeatherLevels } from './dailyGameContext'
+import { contextKey, loadNflGameContext, type GameContextLevels } from './gameContext'
+import { loadInjurySnapshots, nflPeriod, snapshotLevelFor } from './injurySnapshots'
+import { projectionTeamKey } from '@/lib/af-projections/leagueProjectionSchedule'
 
 /**
  * The scheduled half of AF's projection factors (`factorLearner.ts`): read a sport's stored game lines, learn, store.
@@ -36,7 +40,7 @@ const SPORT_KEYS: Record<string, string[]> = {
 const keysFor = (sport: string) => SPORT_KEYS[sport] ?? [sport, sport.toLowerCase()]
 const USAGE_SPORTS = new Set(['NBA', 'NCAAB', 'NHL', 'NFL'])
 
-type Db = Pick<PrismaClient, 'playerGameStat' | 'sportsDataCache'>
+type Db = Pick<PrismaClient, 'playerGameStat' | 'sportsDataCache'> & Partial<Pick<PrismaClient, 'sportsGame' | 'weatherCache' | 'coachStint'>>
 
 /** Read one sport's game lines as `GameLine`s. */
 export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sport: string, now: Date): Promise<GameLine[]> {
@@ -69,7 +73,43 @@ export async function readGameLines(db: Pick<PrismaClient, 'playerGameStat'>, sp
       opponent: r.opponent,
       points: Number(r.fantasyPoints ?? 0),
       usage: withUsage ? usageOf(sport, r.normalizedStatMap) : null,
+      ...(sport === 'NFL' ? { season: r.season, week: r.weekOrRound } : {}),
     })
+  }
+  if (sport === 'NFL' && 'sportsGame' in db) {
+    // The game's own context — Vegas, weather, coaching — as stored before kickoff (`gameContext.ts`).
+    const weeks = [...new Map(out.filter((l) => l.season != null && l.week != null).map((l) => [`${l.season}:${l.week}`, { season: l.season!, week: l.week! }])).values()]
+    const ctx = await loadNflGameContext(db as never, weeks).catch(() => new Map<string, GameContextLevels>())
+    // The player's own designation as it stood before HIS kickoff — the frozen weekly snapshot, never today's status.
+    const injuries = 'sportsDataCache' in db ? await loadInjurySnapshots(db as never, 'NFL', weeks.map((w) => nflPeriod(w.season, w.week))).catch(() => new Map()) : new Map()
+    for (const l of out) {
+      const code = projectionTeamKey('NFL', l.team)
+      const c = code && l.season != null && l.week != null ? ctx.get(contextKey(l.season, l.week, code)) : undefined
+      const injury = l.season != null && l.week != null ? snapshotLevelFor(injuries.get(nflPeriod(l.season, l.week)), l.playerId, code) : undefined
+      if (c || injury) l.context = { ...(c ?? {}), ...(injury ? { injury } : {}) }
+    }
+  }
+  if ((sport === 'NBA' || sport === 'NHL') && 'sportsDataCache' in db) {
+    // A daily game's designation, from the snapshot of its US-Eastern date — the date its game log carries.
+    const dayOf = (l: GameLine) => new Date(l.atMs).toISOString().slice(0, 10)
+    const injuries = await loadInjurySnapshots(db as never, sport, [...new Set(out.map(dayOf))]).catch(() => new Map())
+    if (injuries.size) {
+      for (const l of out) {
+        const injury = snapshotLevelFor(injuries.get(dayOf(l)), l.playerId, projectionTeamKey(sport, l.team))
+        if (injury) l.context = { ...(l.context ?? {}), injury }
+      }
+    }
+  }
+  if (sport === 'NBA' || sport === 'NHL' || sport === 'MLB') {
+    // The game's own context: the head coach on that day (all three), and MLB's stored pre-game forecast.
+    const dayOf = (l: GameLine) => new Date(l.atMs).toISOString().slice(0, 10)
+    const weather = sport === 'MLB' && 'sportsGame' in db && 'weatherCache' in db
+      ? await loadMlbWeatherLevels(db as never, [...new Set(out.map(dayOf))]).catch(() => new Map<string, string>())
+      : null
+    for (const l of out) {
+      const c = dailyGameContext(sport, l.team, l.atMs, dayOf(l), weather)
+      if (c) l.context = { ...(l.context ?? {}), ...c }
+    }
   }
   return out
 }

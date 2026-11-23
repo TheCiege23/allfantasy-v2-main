@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, ArrowRight, SmilePlus } from 'lucide-react'
 import { QUICK_REACTIONS, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
+import type { LeagueMove } from '@/lib/league-chat/leagueMoves'
 import { buildActivityFeed, type ChatMessageLite, type FeedItem, type LeagueActivityLite, type SharedActivityLite } from '@/lib/league/activity-feed'
 
 async function getJson(url: string): Promise<unknown | null> {
@@ -22,15 +23,21 @@ async function getJson(url: string): Promise<unknown | null> {
  *   those out.
  * - league activity (waiver claims and free-agent adds/drops, with player names).
  */
-export async function loadActivityFeed(leagueId: string): Promise<FeedItem[] | null> {
+export async function loadActivityFeed(leagueId: string, opts: { imported?: boolean } = {}): Promise<FeedItem[] | null> {
   const id = encodeURIComponent(leagueId)
-  const [chat, shared, moves] = await Promise.all([
+  // An imported league's moves live where the Activity tab reads them — its Sleeper transactions or
+  // Fantrax roster diffs, both halves of a paired college + pro league — not in the hosted-league
+  // activity table, which is empty for it. Reading the hosted source said "No trades or moves yet"
+  // over an Activity tab full of them.
+  const [chat, shared, moves, leagueMoves] = await Promise.all([
     getJson(`/api/league/chat?leagueId=${id}&limit=100`),
     getJson(`/api/shared/activity?leagueId=${id}&limit=20`),
-    getJson(`/api/leagues/${id}/activity`),
+    opts.imported ? Promise.resolve(null) : getJson(`/api/leagues/${id}/activity`),
+    opts.imported ? getJson(`/api/app/leagues/${id}/chat/moves?scope=franchise`) : Promise.resolve(null),
   ])
-  if (chat == null && shared == null && moves == null) return null
+  if (chat == null && shared == null && moves == null && leagueMoves == null) return null
   return buildActivityFeed({
+    leagueMoves: opts.imported ? ((leagueMoves as { moves?: LeagueMove[] } | null)?.moves ?? []) : null,
     chat: chat as { messages?: ChatMessageLite[]; viewerUserId?: string | null } | null,
     shared: (shared as { items?: SharedActivityLite[] } | null)?.items ?? null,
     moves: (moves as { items?: LeagueActivityLite[]; activity?: LeagueActivityLite[] } | null)?.items ??
@@ -51,15 +58,15 @@ const KIND_LABEL: Record<FeedItem['kind'], string> = { trade: 'Trade', waiver: '
  * live in league chat.
  */
 /** `onOpenChat` absent: no "Open league chat" link (an imported league without a chat tab). */
-export function LeagueActivityFeedCard({ leagueId, onOpenChat }: { leagueId: string; onOpenChat?: () => void }) {
+export function LeagueActivityFeedCard({ leagueId, onOpenChat, imported = false }: { leagueId: string; onOpenChat?: () => void; imported?: boolean }) {
   const [items, setItems] = useState<FeedItem[] | null | undefined>(undefined)
   const [picker, setPicker] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    setItems(await loadActivityFeed(leagueId))
-  }, [leagueId])
+    setItems(await loadActivityFeed(leagueId, { imported }))
+  }, [leagueId, imported])
 
   useEffect(() => {
     void load()
@@ -107,7 +114,7 @@ export function LeagueActivityFeedCard({ leagueId, onOpenChat }: { leagueId: str
           {items.map((item) => (
             <li key={item.id} data-kind={item.kind}>
               <div className="nl-activity-head">
-                <span className="nl-activity-kind">{KIND_LABEL[item.kind]}</span>
+                <span className="nl-activity-kind">{item.label ?? KIND_LABEL[item.kind]}</span>
                 <time dateTime={item.at}>{when(item.at)}</time>
               </div>
               <strong>{item.title}</strong>

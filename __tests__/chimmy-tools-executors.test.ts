@@ -124,6 +124,11 @@ describe('tool specs', () => {
       'get_league_standings',
       'get_head_to_head',
       /*
+       * Commissioner league health (2026-11-23): the Commissioner Hub's health engine over Commissioner OS's snapshot,
+       * gated on the 'view' commissioner check before anything is read. SELECT-only; writes nothing.
+       */
+      'get_league_health',
+      /*
        * The league's trade block — only what managers marked in AllFantasy, because Sleeper does
        * not share its own. Reads `trade_block_entries` for the session's league and writes
        * nothing; the marking itself is the player card's, never the model's.

@@ -55,6 +55,7 @@ import {
 import { loadDynastyOutlook } from './dynastyOutlook'
 import { loadChampionHistory } from '@/lib/league/dynastyChampionRafters'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -913,7 +914,8 @@ export async function getLeagueHomeData(
    */
   const boardRead =
     viewWeek != null && league.season != null
-      ? timer.time('scoreboard', latestProjectionWeek().catch(() => null).then((projectionWeek) => getLeagueScoreboard({
+      ? timer.time('scoreboard', latestProjectionWeek().catch(() => null).then(async (projectionWeek) => getLeagueScoreboard({
+          afIntelligence: await viewerHasAfIntelligence(userId),
           leagueId: league.id,
           platformLeagueId: league.platformLeagueId,
           seasonYear: league.season as number,
@@ -942,8 +944,9 @@ export async function getLeagueHomeData(
     settings: league.settings,
   })
   const recapWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null
-  const recapBoard = () =>
+  const recapBoard = async () =>
     getLeagueScoreboard({
+      afIntelligence: await viewerHasAfIntelligence(userId),
       leagueId: league.id,
       platformLeagueId: league.platformLeagueId,
       seasonYear: league.season as number,

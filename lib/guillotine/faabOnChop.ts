@@ -52,3 +52,12 @@ export function splitChoppedFaab(pool: number, survivors: ReadonlyArray<{ roster
   }
   return { pool: total, shares }
 }
+
+/**
+ * Owner's decision, 2026-11-22: "Split it among the survivors" and "FAAB after a chop" (top up / reset every
+ * survivor, ./chopSchedule.ts) cannot be on together. Both move the survivors' budgets in the same chop, and the
+ * reset ran after the split, so a "set" rule silently erased the split. Each save path refuses the second one with
+ * this message; the chop engine also skips the reset when both are somehow on (a league saved before the rule).
+ */
+export const FAAB_RULES_CONFLICT_MESSAGE =
+  "Splitting a chopped team's FAAB and resetting or topping up survivors' FAAB can't both be on. Turn one off first."

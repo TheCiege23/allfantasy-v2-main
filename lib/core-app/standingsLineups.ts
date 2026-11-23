@@ -5,6 +5,7 @@ import { resolveSportWeek } from '@/lib/season-week/seasonWeekService'
 import { latestProjectionWeek } from './playerProjections'
 import { loadRailProjections } from './railMatchups'
 import type { LeagueContextRow } from './leagueContext'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * Every team's lineup, projected for this week — AllFantasy's own engine (AF) and the provider's
@@ -91,8 +92,10 @@ export async function getStandingsLineups(args: {
     season,
     week: when.week,
   }
+  // AF Intelligence: read first, so both boards start together as before.
+  const afIntelligence = await viewerHasAfIntelligence(args.userId)
   const [priced, comparison] = await Promise.all([
-    loadRailProjections({ ...request, sharedAf: true }).catch(() => null),
+    loadRailProjections({ ...request, sharedAf: true, afIntelligence }).catch(() => null),
     (!args.league.sport || args.league.sport === 'NFL') ? loadRailProjections(request).catch(() => null) : null,
   ])
   const apiSides = comparison?.projectionWeek?.week === priced?.projectionWeek?.week && comparison?.projectionWeek?.season === priced?.projectionWeek?.season

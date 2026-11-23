@@ -4,7 +4,9 @@ const h = vi.hoisted(() => ({ access: vi.fn(), start: vi.fn(), waiver: vi.fn(), 
 vi.mock('@/lib/chimmy/chimmy-league-snapshot', () => ({ loadLeagueGroundingForUser: h.access }))
 vi.mock('@/lib/chimmy/lineupScenarioGrounding', () => ({ buildStartSitScenario: h.start, buildWaiverScenario: h.waiver }))
 vi.mock('@/lib/chimmy/tradeScenarioGrounding', () => ({ buildTradeScenario: h.trade }))
-vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimization: h.lineup, singleSwapCall: () => null }))
+vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ singleSwapCall: () => null }))
+// The lineup lane reads My Team's best lineup (2026-11-23), so that is the engine to stub — not the weekly-feed optimizer.
+vi.mock('@/lib/chimmy-alerts/myTeamLineupOptimization', () => ({ myTeamLineupOptimization: h.lineup }))
 vi.mock('@/lib/chimmy/otherSportStartSit', () => ({ buildOtherSportStartSit: h.otherSport }))
 vi.mock('@/lib/chimmy/lineupOptimizerOtherSports', () => ({ buildBaselineLineupContext: h.baseline }))
 vi.mock('@/lib/chimmy/tradeTargetVerdict', () => ({ buildTradeTargetVerdict: h.target }))
@@ -100,13 +102,43 @@ describe('shared consequential-answer contract', () => {
     expect(h.otherSport).toHaveBeenCalledWith({ leagueId: 'authorized-league', userId: 'u1', players: ['Home Star', 'Away Star'] })
     expect(out).toMatchObject({ status: 'ready', sources: ['league_rosters', 'league_scoring', 'current_season_game_logs', 'game_schedule'] })
   })
-  it('keeps a non-NFL whole-lineup baseline free and labelled when weekly league projections are absent', async () => {
-    h.lineup.mockResolvedValue({ status: 'unresolved', reason: 'sport_not_supported', detail: 'NFL-only weekly feed' })
-    h.baseline.mockResolvedValue('NBA standard per-game baseline for this roster.')
+  /*
+   * 2026-11-23: the lineup lane answered from the weekly-feed optimizer (and a per-game baseline outside the NFL) while My
+   * Team, the lineup tool and the alerts answer from `optimizeLineup`. It now reads My Team's own best lineup.
+   */
+  const myTeamPlayer = (id: string, name: string, position: string, points: number | null) => ({ playerId: id, name, position, team: 'AAA', injury: null, points })
+  it('answers a whole-lineup question with My Team\'s best lineup, for this league and user', async () => {
+    const runner = myTeamPlayer('r1', 'Bench Runner', 'RB', 15)
+    const starter = myTeamPlayer('r2', 'Slow Starter', 'RB', 6)
+    h.lineup.mockResolvedValue({ status: 'ready', projectionSource: 'allfantasy', week: { season: '2026', week: 12 },
+      best: { points: 15, slots: [{ slot: 'RB', player: runner }] },
+      current: { starters: [starter], points: 6, emptySlots: 0, known: true }, startInstead: [runner], benchInstead: [starter], gain: 9,
+      unpricedStarters: [], injuredStarters: [], bench: [starter], unpricedActive: 0, unfilledSlots: [],
+      lockedPlayers: [myTeamPlayer('k1', 'Early Kick', 'WR', 8)] })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Optimize my lineup', leagueId: 'l1', userId: 'u1' })
+    expect(h.lineup).toHaveBeenCalledWith('authorized-league', 'u1')
+    expect(out).toMatchObject({ status: 'ready', kind: 'lineup' })
+    expect(out?.answer).toContain('RB: Bench Runner (15.0 projected points).')
+    expect(out?.answer).toContain('Change from current lineup: 9.0 projected points.')
+    expect(out?.answer).toContain('Games already started: Early Kick.')
+  })
+  it('outside the NFL gives an honest gap, never a second engine\'s per-game baseline, when My Team has no answer', async () => {
+    h.lineup.mockResolvedValue({ status: 'unresolved', reason: 'no_league_projections', detail: 'No NBA projections this week.' })
     const out = await prepareChimmyDecisionAnswer({ question: 'Who should I start in my lineup?', leagueId: 'l1', userId: 'u1' })
-    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'league_scored_weekly_projection_unavailable' } })
-    expect(out?.answer).toContain('standard per-game baseline')
+    expect(h.baseline).not.toHaveBeenCalled()
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'no_league_projections' } })
+    expect(out?.answer).toContain('No NBA projections this week.')
     expect(out?.answer).toContain('not charged')
+  })
+  it('does not show a 0-point "best lineup" when My Team computed none (an unpriced starter)', async () => {
+    const unpriced = myTeamPlayer('t1', 'No Line', 'TE', null)
+    h.lineup.mockResolvedValue({ status: 'ready', week: { season: '2026', week: 12 }, best: { points: 0, slots: [{ slot: 'TE', player: unpriced }] },
+      current: { starters: [unpriced], points: null, emptySlots: 0, known: true }, startInstead: [], benchInstead: [], gain: null,
+      unpricedStarters: [unpriced], injuredStarters: [], bench: [], unpricedActive: 0, unfilledSlots: [] })
+    const out = await prepareChimmyDecisionAnswer({ question: 'Optimize my lineup', leagueId: 'l1', userId: 'u1' })
+    expect(out).toMatchObject({ status: 'needs_data', gap: { code: 'my_team_no_best_lineup' } })
+    expect(out?.answer).toContain('No Line starts but has no projection')
+    expect(out?.answer).not.toContain('Projected total')
   })
   it('does not sell an ungraded trade with no computed impact as a ready answer', async () => {
     h.trade.mockResolvedValue({ status: 'ready', value: { grade: null, withheld: 'Values missing.' }, lineup: null })

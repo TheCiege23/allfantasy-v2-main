@@ -168,14 +168,30 @@ async function resolveNbaSurvivorGameDayLocks(args: LineupLockResolveArgs, now: 
  * `per_player_kickoff`, honouring the league's lock mode and commissioner overrides). This applies the
  * same derivation here, so both save paths agree. NBA Survivor keeps its own pick-aware lock above.
  */
-const DAILY_LOCK_SPORTS: ReadonlySet<string> = new Set(['NBA', 'MLB', 'NHL', 'NCAAB'])
+/*
+ * 🛑 AND NFL, NCAAF AND SOCCER HAD NO SCHEDULE LOCK ON THIS PATH AT ALL (2026-11-23). They relied on the
+ * whole-lineup time windows in `evaluateLineupLock` — whose Thursday branch could never run (Wed–Sat
+ * returned "unlocked" first), so a Thursday-night starter could be benched on Friday and his points erased,
+ * and NCAAF Saturdays never locked — plus the client-sent `gameTime` heuristic below. Owner's rule: in every
+ * sport, a player whose game has started cannot be moved in or out; only best ball is exempt. Every sport
+ * the schedule lock knows (lib/redraft/lineupLock.ts) is locked from the schedule now.
+ */
+const SCHEDULE_LOCK_SPORTS: ReadonlySet<string> = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAAB', 'SOCCER'])
+
+/** The schedule told us nothing: no games stored for the week, or a sport it cannot read. */
+const SCHEDULE_UNKNOWN = /no .* games found|not locked|fall open/i
+
+export type ScheduleLocks = { lockedPlayerIds: string[]; reasons: Record<string, string>; scheduleKnown: boolean }
 
 export async function resolveDailySportWeeklyLocks(
   args: LineupLockResolveArgs,
   now: Date,
-): Promise<{ lockedPlayerIds: string[]; reasons: Record<string, string> } | null> {
+): Promise<ScheduleLocks | null> {
   const sport = args.sport.toUpperCase()
-  if (!DAILY_LOCK_SPORTS.has(sport) || args.editingWeek !== args.leagueWeek) return null
+  // A past week is view-only already. A FUTURE week is locked by THIS week's schedule: a save writes the
+  // roster's current slots (syncRedraftSlotTypesForLineup), so "editing week 13" moved week 12's lineup
+  // with no lock at all.
+  if (!SCHEDULE_LOCK_SPORTS.has(sport) || args.editingWeek < args.leagueWeek) return null
   const roster = await prisma.roster.findUnique({ where: { id: args.rosterId }, select: { redraftRosterId: true } })
   if (!roster?.redraftRosterId) return null
   const players: Array<{ playerId: string; team: string | null; isLocked?: boolean | null }> =
@@ -183,10 +199,10 @@ export async function resolveDailySportWeeklyLocks(
       where: { rosterId: roster.redraftRosterId, droppedAt: null },
       select: { playerId: true, team: true },
     })
-  const { players: stamped } = await hydrateRedraftLineupLocks(prisma, {
+  const { players: stamped, warnings } = await hydrateRedraftLineupLocks(prisma, {
     sport,
     season: args.season,
-    week: args.editingWeek,
+    week: args.leagueWeek,
     rosterId: roster.redraftRosterId,
     leagueSettings: args.settings,
     players,
@@ -201,8 +217,11 @@ export async function resolveDailySportWeeklyLocks(
       ? "This player's game today has started; he is locked until tomorrow."
       : "This player's first game of the fantasy week has started; he is locked until the week ends."
   }
-  return { lockedPlayerIds, reasons }
+  return { lockedPlayerIds, reasons, scheduleKnown: !warnings.some((w) => SCHEDULE_UNKNOWN.test(w)) }
 }
+
+/** The whole-lineup time-of-day guesses that a known schedule replaces. */
+const TIME_WINDOW_POLICIES: ReadonlySet<string> = new Set(['football_weekly', 'soccer_matchday', 'daily_slate'])
 
 export async function resolveSpecialtyLineupGuard(
   leagueId: string,
@@ -328,10 +347,22 @@ export async function resolveFullLineupLockContext(args: LineupLockResolveArgs):
      * the schedule-derived lock is its ONLY lock. Failing open here would let a player who has
      * already played today be moved out of today's lineup. Refuse the save until it can be checked.
      */
-    if (weeklyFailed && dailyLineups && args.editingWeek === args.leagueWeek) {
+    const scheduleSport = SCHEDULE_LOCK_SPORTS.has(args.sport.toUpperCase())
+    if (weeklyFailed && scheduleSport && args.editingWeek >= args.leagueWeek) {
+      // The schedule lock is the lock now, in every sport: failing open would let a player whose game
+      // has started be moved. Refuse the save until the start times can be read.
       locked = true
       reason = "Game start times could not be checked, so lineup changes are paused. Try again in a minute."
-      policy = 'daily_lock_unavailable'
+      policy = 'schedule_lock_unavailable'
+    } else if (weekly?.scheduleKnown && locked && TIME_WINDOW_POLICIES.has(policy)) {
+      /*
+       * A known schedule replaces the time-of-day guess. The football window locked EVERY player from
+       * Sunday 1 PM ET to Tuesday, so a Sunday-night or Monday-night starter could not be swapped before
+       * his game; the owner's rule is per player — only those whose game has started are locked.
+       */
+      locked = false
+      reason = undefined
+      policy = 'per_player_schedule'
     }
     if (weekly && weekly.lockedPlayerIds.length > 0) {
       const ids = new Set(kick.lockedPlayerIds)

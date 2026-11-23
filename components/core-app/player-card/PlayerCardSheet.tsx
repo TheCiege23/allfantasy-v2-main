@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 
 import type {
   PlayerCardComp,
@@ -729,7 +730,8 @@ export default function PlayerCardSheet({
                         sub={afProjection.tradeValueUnit ?? undefined} />
                     ) : null}
                     {afProjection.weekly != null ? (
-                      <Tile label={c.afWeek(afProjection.week)} value={projectionNumber(afProjection.weekly)} tone="plain" sub={projectionUnit} />
+                      <Tile label={c.afWeek(afProjection.week)} value={projectionNumber(afProjection.weekly)} tone="plain"
+                        sub={<>{projectionUnit}<ProjectionFactorLine reasons={afProjection.afFactors?.reasons} testId="player-card-af-factors" /></>} />
                     ) : null}
                     {afProjection.fullSeason != null ? (
                       <Tile label={c.afFullSeason} value={projectionNumber(afProjection.fullSeason)} tone="plain"
