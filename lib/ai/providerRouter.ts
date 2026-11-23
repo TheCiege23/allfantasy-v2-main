@@ -369,19 +369,52 @@ async function callXaiText(args: TextCallArgs): Promise<RouterResult> {
 
 // ─── DeepSeek adapter ─────────────────────────────────────────────────────────
 
+/** What lib/deepseek-client.ts asks for when the caller names no maxTokens. */
+const DEEPSEEK_DEFAULT_MAX_TOKENS = 1000
+/** The cut-off retry's ceiling: room for reasoning plus an answer, without an unbounded bill. */
+const DEEPSEEK_RETRY_MAX_TOKENS = 8000
+
 async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
   const { system, userContent } = extractSystemAndUser(args.messages)
   const model = resolveDeepSeekModel(args.profile ?? 'standard')
-  const result = await deepseekChat({
-    prompt: userContent,
-    systemPrompt: system,
-    model,
-    maxTokens: args.maxTokens,
-    temperature: args.temperature,
-    // Was never passed, so DeepSeek cached for 30 min even when the caller asked it not to.
-    skipCache: args.skipCache ?? false,
-  })
-  if (result.error || !result.content) {
+  const ask = (maxTokens: number | undefined, skipCache: boolean) =>
+    deepseekChat({
+      prompt: userContent,
+      systemPrompt: system,
+      model,
+      maxTokens,
+      temperature: args.temperature,
+      // Was never passed, so DeepSeek cached for 30 min even when the caller asked it not to.
+      skipCache,
+    })
+  let result = await ask(args.maxTokens, args.skipCache ?? false)
+  /*
+   * ⚠ AN EMPTY ANSWER CUT OFF AT THE LENGTH LIMIT (2026-11-23). From 2026-11-17 the router's DeepSeek
+   * calls answered HTTP 200 with NO text, 101 times, while the same model answered Chimmy's tool loop,
+   * which asks for far more tokens. A reasoning model can spend the whole budget thinking (900–1,400
+   * here) and hit `length` before writing a word. That is not a failure of the provider, so one retry
+   * with room to answer — never from the cache, which would hand back the same empty reply.
+   */
+  if (!result.error && !result.content?.trim() && result.finishReason === 'length') {
+    const requested = args.maxTokens ?? DEEPSEEK_DEFAULT_MAX_TOKENS
+    console.warn('[provider-router] deepseek answer cut off before any text; retrying with more room', {
+      model,
+      maxTokens: requested,
+      reasoningChars: result.reasoningChars ?? null,
+      completionTokens: result.usage?.completionTokens ?? null,
+    })
+    result = await ask(Math.min(Math.max(requested * 4, 4000), DEEPSEEK_RETRY_MAX_TOKENS), true)
+  }
+  if (result.error || !result.content?.trim()) {
+    if (!result.error) {
+      // Why it was empty, which no log said before: cut off, or a real empty answer.
+      console.warn('[provider-router] deepseek returned no text', {
+        model,
+        finishReason: result.finishReason ?? null,
+        reasoningChars: result.reasoningChars ?? null,
+        completionTokens: result.usage?.completionTokens ?? null,
+      })
+    }
     /*
      * The REAL status where DeepSeek sent one. A blanket 503 classified every DeepSeek failure —
      * a 429, a timeout, a 500 — as "unavailable", the same bucket as a missing key, so a caller
@@ -389,7 +422,10 @@ async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
      * status the message decides (a timeout reads as a timeout; a missing key as unavailable).
      */
     const status = result.status ?? (result.error ? undefined : 200)
-    throw Object.assign(new Error(result.error ?? 'DeepSeek returned no content'), status != null ? { status } : {})
+    throw Object.assign(
+      new Error(result.error ?? `DeepSeek returned no content (finish_reason=${result.finishReason ?? 'none'})`),
+      status != null ? { status } : {},
+    )
   }
   return {
     ok: true,
