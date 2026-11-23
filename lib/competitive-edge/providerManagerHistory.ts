@@ -15,9 +15,15 @@
  *   TRADES — counted for Fantrax from the commissioner's own trade-history upload only (2026-11-19, build
  *     item 6): `importFantraxTradeHistory` writes a trade only when every player, pick and team in it was
  *     placed, both sides at once, keyed `fantrax-csv:` — so the trade-inferred-from-roster-diffs rows stay
- *     out. Not counted yet for the rest: ESPN splits one trade into one row per message (and production
- *     held no ESPN trades); MFL's parser is suspected of dropping trades; Fleaflicker's sides lose what was
- *     given; Yahoo import is off. A count built on any of those would be a wrong number that looks right.
+ *     out. And for Yahoo (2026-11-23) from the historical backfill: one Yahoo transaction is one trade
+ *     (`payload.yahooTransactionId`), each leg a row with the team (`rosterId`) and `direction` add / drop,
+ *     the team matched to its person per season like the drafts below. ONLY those rows: the import commit
+ *     writes the same trade again with `providerTransactionId` and the receiving side only. Yahoo stores no
+ *     traded picks, and trades read before the leg fix carry no players — both named as gaps.
+ *     Not counted yet for the rest: ESPN stores one row per MESSAGE keyed by the message id, and the topic
+ *     id that groups a trade's messages is not stored (and production held no ESPN trades); MFL's parser
+ *     reads only per-player `to_franchise`/`from_franchise`, so its trade rows carry no legs; Fleaflicker's
+ *     sides lose what was given. A count built on any of those would be a wrong number that looks right.
  *
  *   DRAFTS — ESPN, MFL and Yahoo (2026-11-23): the historical backfill writes each pick under the TEAM
  *     (`dw_draft_facts.managerId` = ESPN team id / MFL franchise id / Yahoo team key) with its season, and in
@@ -307,6 +313,129 @@ export async function readProviderDrafts(league: {
     }
   }
   return { available: true, data: credited }
+}
+
+/** Yahoo transaction statuses that are not a completed trade. Yahoo's league feed lists completed ones; this is a floor. */
+const NOT_COMPLETED = new Set(['pending', 'proposed', 'vetoed', 'rejected', 'declined', 'cancelled', 'canceled', 'failed'])
+
+type StoredYahooTradeRow = { playerId: string | null; rosterId: string | null; season: number | null; createdAt: Date; payload: unknown }
+
+/**
+ * PURE. The Yahoo backfill's trade rows into the record builder's trades: one trade per Yahoo transaction, one side
+ * per team in it, each side credited to the person who owned that team that season. A trade with no player legs (read
+ * before the leg fix) or fewer than two teams is not a trade we can read: left out and its season named. A side whose
+ * team has no person on file that season stays in the trade with no owner, so it is credited to nobody.
+ */
+export function yahooTradeRowsToEdge(
+  rows: ReadonlyArray<StoredYahooTradeRow>,
+  owners: ReadonlyMap<string, string>,
+  positionOf: (playerId: string) => string | null,
+): { trades: EdgeTrade[]; unreadableSeasons: number[]; unmatchedSeasons: number[] } {
+  const byTx = new Map<string, StoredYahooTradeRow[]>()
+  for (const r of rows) {
+    const p = (r.payload ?? {}) as Record<string, unknown>
+    const id = typeof p.yahooTransactionId === 'string' ? p.yahooTransactionId.trim() : ''
+    if (!id) continue
+    const held = byTx.get(id)
+    if (held) held.push(r)
+    else byTx.set(id, [r])
+  }
+  const trades: EdgeTrade[] = []
+  const unreadable = new Set<number>()
+  const unmatched = new Set<number>()
+  for (const [id, group] of byTx) {
+    const season = group.find((r) => r.season != null)?.season ?? null
+    if (season == null) continue
+    const statuses = group.map((r) => String(((r.payload ?? {}) as Record<string, unknown>).status ?? '').toLowerCase())
+    if (statuses.some((st) => NOT_COMPLETED.has(st))) continue
+    // One leg per player, direction and team — a status re-read writes the same leg again under a new row.
+    const legs = new Map<string, { playerId: string; team: string; dir: 'add' | 'drop' }>()
+    for (const r of group) {
+      const dir = ((r.payload ?? {}) as Record<string, unknown>).direction
+      const team = String(r.rosterId ?? '').trim()
+      if (!r.playerId || !team || (dir !== 'add' && dir !== 'drop')) continue
+      legs.set(`${r.playerId}|${dir}|${team}`, { playerId: r.playerId, team, dir })
+    }
+    const teams = [...new Set([...legs.values()].map((l) => l.team))]
+    if (legs.size === 0 || teams.length < 2) {
+      unreadable.add(season)
+      continue
+    }
+    const sides: EdgeTradeSide[] = teams.map((team) => {
+      const owner = owners.get(seasonTeamKey(season, team)) ?? null
+      if (!owner) unmatched.add(season)
+      const mine = [...legs.values()].filter((l) => l.team === team)
+      return {
+        ownerId: owner,
+        playersIn: mine.filter((l) => l.dir === 'add').map((l) => ({ position: positionOf(l.playerId) })),
+        playersOut: mine.filter((l) => l.dir === 'drop').map((l) => ({ position: positionOf(l.playerId) })),
+        picksIn: [],
+        picksOut: [],
+      }
+    })
+    const at = group.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), group[0]!.createdAt)
+    trades.push({ id: `yahoo:${id}`, season: String(season), week: 0, createdIso: at.toISOString(), sides })
+  }
+  trades.sort((a, b) => b.createdIso.localeCompare(a.createdIso))
+  return {
+    trades,
+    unreadableSeasons: [...unreadable].sort((a, b) => a - b),
+    unmatchedSeasons: [...unmatched].sort((a, b) => a - b),
+  }
+}
+
+/**
+ * A Yahoo league's trades from its historical backfill, or why there are none to count.
+ *
+ * ⚠ NO SNAPSHOTS MEANS THE BACKFILL NEVER RAN — said in words, never "0 trades". With snapshots and no trade rows the
+ * backfill ran and saw none, which reads as "no completed trades on file" — true of what is on file.
+ * ⚠ Written once, at import (there is no daily Yahoo refresh), so the history is as of that import and goes stale.
+ */
+export async function readYahooTrades(
+  league: { id: string; sport: string; platform: string },
+  now: Date = new Date(),
+): Promise<SectionState<{ trades: EdgeTrade[]; seasonsScanned: string[]; historyGaps: string[]; asOf: string; stale: boolean }>> {
+  const [rows, snapshots] = await Promise.all([
+    prisma.transactionFact.findMany({
+      where: { leagueId: league.id, type: 'trade' },
+      select: { playerId: true, rosterId: true, season: true, createdAt: true, payload: true },
+    }),
+    prisma.rosterSnapshot.findMany({
+      where: { leagueId: league.id, weekOrPeriod: SEASON_END_SNAPSHOT_PERIOD, season: { not: null } },
+      select: { teamId: true, season: true, rosterPlayers: true, createdAt: true },
+    }),
+  ])
+  if (snapshots.length === 0) {
+    return { available: false, reason: "Yahoo's season-by-season history hasn't been imported for this league yet, so its trades can't be counted per manager." }
+  }
+  const owners = seasonTeamOwners('yahoo', snapshots)
+  const players = await resolveTradePlayers(
+    rows.map((r) => r.playerId).filter((x): x is string => Boolean(x)),
+    { space: playerIdSpaceFor({ platform: 'yahoo', sport: league.sport }), sport: league.sport },
+  ).catch(() => new Map())
+  const positionOf = (id: string) => {
+    const p = players.get(id)
+    return p?.ok ? p.position : null
+  }
+  const read = yahooTradeRowsToEdge(rows, owners, positionOf)
+  const importedAt = snapshots.reduce((max, s) => (s.createdAt > max ? s.createdAt : max), snapshots[0]!.createdAt)
+  const historyGaps = ["Draft picks moved in Yahoo trades aren't stored in the imported transactions, so these counts are players only."]
+  if (read.unreadableSeasons.length) {
+    historyGaps.push(`Some Yahoo trades from ${read.unreadableSeasons.join(', ')} were imported without the players each team got, so they aren't counted until the league's transactions are imported again.`)
+  }
+  if (read.unmatchedSeasons.length) {
+    historyGaps.push(`In ${read.unmatchedSeasons.join(', ')}, some teams' managers weren't recorded, so their side of a trade isn't credited to anyone.`)
+  }
+  return {
+    available: true,
+    data: {
+      trades: read.trades,
+      seasonsScanned: [...new Set(snapshots.flatMap((s) => (s.season == null ? [] : [String(s.season)])))].sort(),
+      historyGaps,
+      asOf: importedAt.toISOString(),
+      stale: now.getTime() - importedAt.getTime() > STALE_AFTER_MS,
+    },
+  }
 }
 
 export function providerDraftsReason(platform: string): string {

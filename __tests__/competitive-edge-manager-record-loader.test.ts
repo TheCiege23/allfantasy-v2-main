@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   native: vi.fn(),
   providerWaivers: vi.fn(),
   providerDrafts: vi.fn(),
+  yahooTrades: vi.fn(),
   leagueTrades: vi.fn(async () => [] as unknown[]),
   players: vi.fn(async () => [] as unknown[]),
 }))
@@ -33,6 +34,7 @@ vi.mock('@/lib/competitive-edge/providerManagerHistory', async (orig) => ({
   ...(await orig<typeof import('@/lib/competitive-edge/providerManagerHistory')>()),
   readProviderWaivers: m.providerWaivers,
   readProviderDrafts: m.providerDrafts,
+  readYahooTrades: m.yahooTrades,
 }))
 
 import { loadLeagueManagerRecords } from '@/lib/competitive-edge/managerRecordLoader'
@@ -181,6 +183,34 @@ describe('loadLeagueManagerRecords', () => {
     if (!r.available) throw new Error(r.reason)
     const w = r.data.records[0]!.waivers
     expect(w.available && w.data.facts.map((f) => f.text)).toEqual(['Mike has won 1 waiver claim this season.'])
+  })
+
+  it('a Yahoo league reads its trades from the backfill; an ESPN league never does', async () => {
+    m.league.mockResolvedValue({ id: 'L5', name: 'Y', platform: 'yahoo', platformLeagueId: 'y-1', sport: 'NFL', season: 2026 })
+    m.providerWaivers.mockResolvedValue({ available: false, reason: "Yahoo waiver claims aren't imported in a form that can be counted per manager yet." })
+    m.yahooTrades.mockResolvedValue({
+      available: true,
+      data: {
+        trades: [1, 2].map((n) => ({
+          id: `yahoo:${n}`, season: '2025', week: 0, createdIso: `2025-10-0${n}T00:00:00Z`,
+          sides: [
+            { ownerId: 'mike', playersIn: [{ position: 'WR' }], playersOut: [{ position: 'RB' }], picksIn: [], picksOut: [] },
+            { ownerId: 'sam', playersIn: [{ position: 'RB' }], playersOut: [{ position: 'WR' }], picksIn: [], picksOut: [] },
+          ],
+        })),
+        seasonsScanned: ['2025'], historyGaps: [], asOf: '2026-09-01T00:00:00Z', stale: false,
+      },
+    })
+    const r = await loadLeagueManagerRecords({ leagueId: 'L5', userId: 'u1' })
+    if (!r.available) throw new Error(r.reason)
+    expect(m.yahooTrades).toHaveBeenCalledWith(expect.objectContaining({ id: 'L5' }), expect.any(Date))
+    const mike = r.data.records.find((x) => x.manager.name === 'Mike')!
+    expect(mike.trades.available && mike.trades.data.coverage.trades).toBe(2)
+
+    m.yahooTrades.mockClear()
+    m.league.mockResolvedValue({ id: 'L2', name: 'Work', platform: 'espn', platformLeagueId: 'e-1', sport: 'NFL', season: 2026 })
+    await loadLeagueManagerRecords({ leagueId: 'L2', userId: 'u1' })
+    expect(m.yahooTrades).not.toHaveBeenCalled()
   })
 
   it('a native league reads our own tables for all three sections', async () => {

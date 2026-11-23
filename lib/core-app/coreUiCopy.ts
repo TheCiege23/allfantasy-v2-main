@@ -1486,6 +1486,11 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // ESPN / MFL / Yahoo drafts credited to each season's owner (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
   [/^No (.+) draft picks have been imported for this league yet\.$/, (m) => `Todavía no se importaron selecciones del draft de ${m[1]} para esta liga.`],
   [/^(.+) draft picks are on file, but who owned each team in those seasons wasn't recorded\.$/, (m) => `Hay selecciones del draft de ${m[1]} registradas, pero no quedó registrado quién manejaba cada equipo en esas temporadas.`],
+  // Yahoo trades from its historical backfill (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^Yahoo's season-by-season history hasn't been imported for this league yet, so its trades can't be counted per manager\.$/, () => 'El historial por temporada de Yahoo todavía no se importó para esta liga, así que sus intercambios no se pueden contar por mánager.'],
+  [/^Draft picks moved in Yahoo trades aren't stored in the imported transactions, so these counts are players only\.$/, () => 'Las selecciones del draft intercambiadas en Yahoo no se guardan en las transacciones importadas, así que estos conteos son solo de jugadores.'],
+  [/^Some Yahoo trades from (.+) were imported without the players each team got, so they aren't counted until the league's transactions are imported again\.$/, (m) => `Algunos intercambios de Yahoo de ${m[1]} se importaron sin los jugadores que recibió cada equipo, así que no se cuentan hasta que se vuelvan a importar las transacciones de la liga.`],
+  [/^In (.+), some teams' managers weren't recorded, so their side of a trade isn't credited to anyone\.$/, (m) => `En ${m[1]}, no quedaron registrados los mánagers de algunos equipos, así que su lado del intercambio no se le atribuye a nadie.`],
   [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
   [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [
