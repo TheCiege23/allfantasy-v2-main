@@ -123,7 +123,7 @@ export const COACH_STINTS: Record<'NBA' | 'NHL' | 'MLB', ReadonlyArray<CoachStin
     { team: "NYI", coach: "Patrick Roy", from: '2024-01-20', to: '2026-04-05', confidence: 'high', source: "https://thescore.com/nhl/news/3515434/islanders-hire-deboer-as-head-coach-fire-roy" },
     { team: "NYI", coach: "Peter DeBoer", from: '2026-04-05', to: null, confidence: 'high', source: "https://www.nhl.com/islanders/news/islanders-name-deboer-head-coach" },
     { team: "NYR", coach: "Peter Laviolette", from: '2023-06-13', to: '2025-04-19', confidence: 'high', source: "https://www.cbssports.com/nhl/news/nhl-head-coaching-tracker-rangers-hire-peter-laviolette-to-replace-gerard-gallant-flames-promote-ryan-huska/" },
-    { team: "NYR", coach: "Mike Sullivan", from: '2025-05-02', to: null, confidence: 'high', source: "https://bleacherreport.com/articles/25198587-grading-2025-nhl-head-coaching-hires" },
+    { team: "NYR", coach: "Mike Sullivan", from: '2025-05-02', to: null, confidence: 'high', source: "https://oilersnation.com/news/edmonton-oilers-nhl-coaching-timeline-approach-not-normal-knoblauch-cassidy" },
     { team: "OTT", coach: "D.J. Smith", from: '2019-05-23', to: '2023-12-18', confidence: 'high', source: "https://en.wikipedia.org/wiki/2023%E2%80%9324_NHL_season" },
     { team: "OTT", coach: "Jacques Martin", from: '2023-12-18', to: '2024-05-07', interim: true, confidence: 'high', source: "https://www.forbes.com/sites/carolschram/2024/05/07/senators-blues-make-hires-amidst-nhls-2024-summer-coaching-shuffle/" },
     { team: "OTT", coach: "Travis Green", from: '2024-05-07', to: null, confidence: 'high', source: "https://www.forbes.com/sites/carolschram/2024/05/07/senators-blues-make-hires-amidst-nhls-2024-summer-coaching-shuffle/" },
