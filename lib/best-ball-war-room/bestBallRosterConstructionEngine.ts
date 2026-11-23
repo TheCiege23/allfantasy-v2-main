@@ -85,7 +85,8 @@ export function evaluateRosterConstruction(context: BestBallWarRoomContext, rost
     else state = 'balanced'
     byPosition.push({ position: pos, count, startingNeed, state })
     if (state === 'thin') {
-      weaknesses.push(`${pos}: ${count} rostered for ~${startingNeed} auto-start slot(s) — thin for spike-week coverage.`)
+      // Plain words (2026-11-23): this read "TE: 1 rostered for ~1.3 auto-start slot(s) — thin for spike-week coverage".
+      weaknesses.push(`${pos}: ${count} on the roster for about ${Math.ceil(startingNeed)} lineup spot${Math.ceil(startingNeed) === 1 ? '' : 's'} a week — too few to cover a bye or a quiet week.`)
       underInvested.push(pos)
       facts.push(`${pos} thin (${count} vs ~${startingNeed}).`)
     } else if (state === 'heavy') {

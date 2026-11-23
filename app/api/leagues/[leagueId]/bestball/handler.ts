@@ -94,7 +94,10 @@ export async function GET(
     settings: league.settings,
     requestedWeek: Number.parseInt(req.nextUrl.searchParams.get('week') ?? '', 10),
     rankBy: bestBallSettings.matchupFormat === 'cumulative' ? 'points' : 'record',
+    viewerUserId: userId,
   })
+  // The older and imported paths: the viewer's roster is the one their user id is on.
+  const legacyViewerRosterIds = league.rosters.filter((roster) => roster.platformUserId === userId).map((roster) => roster.id)
   // Why scoring and competition settings are frozen (the draft has started / the season exists), or null.
   const structureLock = await structuralSettingsLockReason(leagueId).catch(() => null)
   // Daily best ball needs the season's regular-season opener (recorded, or derived from the stored
@@ -187,6 +190,7 @@ export async function GET(
           source: 'imported',
           importedNote: importedBestBallNote(league.platform),
           ...imported,
+          viewerRosterIds: legacyViewerRosterIds,
           draftNotice,
           dailySchedule,
           dailyScheduleNotice,
@@ -313,6 +317,7 @@ export async function GET(
     dailyScheduleNotice,
     lineups: lineupCards,
     rosterComposition,
+    viewerRosterIds: legacyViewerRosterIds,
     standings: standings.map((row) => ({
       rosterId: row.rosterId,
       rank: row.rank,

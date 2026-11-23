@@ -4,7 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { buildBestBallSlots } from '@/lib/redraft/scoringEngine'
 import { loadBestBallWeekRosterRows } from '@/lib/redraft/bestBallWeekRoster'
-import { buildNativeLineupCard, lineupPositionsForWeek, lineupSlotsForWeek, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
+import { buildNativeLineupCard, isReserveSlotType, lineupPositionsForWeek, lineupSlotsForWeek, snapshotSide, type NativeLineupCard } from '@/lib/bestball/nativeBestBallTab'
+
+export type BestBallRosterPlayer = { playerId: string; name: string; position: string; team: string | null; reserve: boolean }
 
 /** Matchup rows that have been scored at least once. */
 const SCORED = ['active', 'final']
@@ -13,7 +15,10 @@ export type NativeBestBallTabBody = {
   selectedWeek: number
   weeksAvailable: number[]
   lineups: NativeLineupCard[]
-  rosterComposition: Array<{ rosterId: string; teamName: string; playerCount: number }>
+  /** `players`: who was on the roster in the selected week, by the rule scoring uses; `reserve` = IR / reserve. */
+  rosterComposition: Array<{ rosterId: string; teamName: string; playerCount: number; players: BestBallRosterPlayer[] }>
+  /** The viewer's own rosters (owned, or run as a second team via `managerUserId`): the tab leads with them. */
+  viewerRosterIds: string[]
   standings: Array<{ rosterId: string; rank: number; teamName: string; wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }>
   history: Array<{ rosterId: string; week: number; totalPoints: number; status: 'final' | 'provisional' }>
 }
@@ -30,6 +35,8 @@ export async function loadNativeBestBallTab(args: {
   requestedWeek: number
   /** A season-total (cumulative) league ranks on points; head-to-head on record, then points. */
   rankBy: 'points' | 'record'
+  /** The signed-in viewer, to mark their own rosters. */
+  viewerUserId?: string | null
 }): Promise<{ season: number; body: NativeBestBallTabBody } | null> {
   if (resolveWriteAuthority(args.platform) !== 'NATIVE') return null
   const season = await prisma.redraftSeason.findFirst({
@@ -42,7 +49,7 @@ export async function loadNativeBestBallTab(args: {
   const [rosters, matchups] = await Promise.all([
     prisma.redraftRoster.findMany({
       where: { seasonId: season.id, leagueId: args.leagueId },
-      select: { id: true, teamName: true, ownerName: true, wins: true, losses: true, ties: true, pointsFor: true, pointsAgainst: true },
+      select: { id: true, ownerId: true, managerUserId: true, teamName: true, ownerName: true, wins: true, losses: true, ties: true, pointsFor: true, pointsAgainst: true },
     }),
     prisma.redraftMatchup.findMany({
       where: { seasonId: season.id, status: { in: SCORED } },
@@ -143,11 +150,24 @@ export async function loadNativeBestBallTab(args: {
       pointsAgainst: r.pointsAgainst,
     }))
 
-  const rosterComposition = rosters.map((r) => ({
-    rosterId: r.id,
-    teamName: nameOf.get(r.id) ?? 'Team',
-    playerCount: (rowsByRoster.get(r.id) ?? []).length,
-  }))
+  const rosterComposition = rosters.map((r) => {
+    const rows = rowsByRoster.get(r.id) ?? []
+    return {
+      rosterId: r.id,
+      teamName: nameOf.get(r.id) ?? 'Team',
+      playerCount: rows.length,
+      players: rows.map((row) => ({
+        playerId: row.playerId,
+        name: row.playerName,
+        position: row.position,
+        team: row.team ?? null,
+        reserve: isReserveSlotType(row.slotType),
+      })),
+    }
+  })
 
-  return { season: season.season, body: { selectedWeek, weeksAvailable, lineups, rosterComposition, standings, history } }
+  const viewer = args.viewerUserId ?? null
+  const viewerRosterIds = viewer ? rosters.filter((r) => r.ownerId === viewer || r.managerUserId === viewer).map((r) => r.id) : []
+
+  return { season: season.season, body: { selectedWeek, weeksAvailable, lineups, rosterComposition, standings, history, viewerRosterIds } }
 }

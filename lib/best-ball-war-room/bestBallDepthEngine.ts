@@ -60,7 +60,7 @@ export function evaluateDepth(context: BestBallWarRoomContext, rosterId: string)
     byPosition.push({ position: pos, count, startingNeed, surplus, fragile, injuredCount })
     if (fragile) {
       fragilePositions.push(pos)
-      riskFlags.push(`${pos} is fragile: ${count} rostered for ~${startingNeed} auto-start slot(s) — a single bye/injury thins the lineup.`)
+      riskFlags.push(`${pos}: ${count} on the roster for about ${Math.ceil(startingNeed)} lineup spot${Math.ceil(startingNeed) === 1 ? '' : 's'} a week — one bye or injury leaves the lineup short.`)
     }
     if (injuredCount > 0 && count - injuredCount < startingNeed) {
       riskFlags.push(`${pos} has ${injuredCount} non-healthy player(s), dropping healthy depth below the start need.`)
