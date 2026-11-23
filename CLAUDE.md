@@ -2452,8 +2452,15 @@ can never explain a cron.** A peer lost most of a day building an instrument, me
 verifying it deployed, and reading the wrong service's logs for it.
 
 **And the worker's branch moves once a day, on purpose.**
-`.github/workflows/worker-release.yml` fast-forwards it at `20 21 * * *`, never forces,
-and treats a non-fast-forward as a finding. Read its header before changing the cadence —
+`.github/workflows/worker-release.yml` fast-forwards it once each morning, in the
+13:00–16:30 UTC window (attempts at 13:20, 14:20 and 15:20; the first that runs wins), never forces,
+and treats a non-fast-forward as a finding.
+
+🛑 **GITHUB STARTS SCHEDULES LATE, AND THE SLOT IS BUILT FOR THAT.** It used to be one run at
+21:20 UTC. On 2026-11-22 that run started at 01:48 (4h28m late), and on 2026-11-23 it had not started
+by 23:17, so #4122 sat unshipped all day while the worker kept sending the pushes it fixed. An attempt
+GitHub starts outside the window now cancels itself (`scripts/worker-release-window.mjs` decides),
+so a late start skips a day instead of redeploying the worker into the evening games. Read its header before changing the cadence —
 it records the measurement that set it (24 worker deploys in one day, each container swap
 killing in-flight 90–300 s cron requests; 8 hours without a deployment produced 0 server
 errors against 17 hours with one producing all 95).
@@ -2469,7 +2476,7 @@ urgent, dispatch the workflow by hand rather than repointing the service — **b
 within 6 hours of the last advance is refused unless it passes `force=true` and a `reason`.**
 On 2026-11-22 the workflow ran 12 times in a day, 11 by hand from sessions each wanting its own
 fix live, so the "daily" worker redeployed about every two hours and two overlapping builds hung.
-Most cron fixes can wait for 21:20 UTC; say why yours cannot. There is also
+Most cron fixes can wait for the next morning's advance; say why yours cannot. There is also
 `/api/af-debug/sha` on either service, which answers `{branch, sha}` for the container
 actually serving you.
 
