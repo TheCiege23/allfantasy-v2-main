@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { signIn, useSession } from 'next-auth/react'
 import { Heart, Loader2, Mail } from 'lucide-react'
 
-import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
+import SignInNextTime from './SignInNextTime'
 
 type View = 'waiting' | 'done' | 'check_email' | 'slow'
 
@@ -27,18 +27,6 @@ export default function SupportWelcomeClient() {
   // True once this page has handled a no-account checkout: only those get the sign-in email.
   const [guest, setGuest] = useState(false)
   const started = useRef(false)
-  // Signed in just now with no password: offer Face ID / a fingerprint so getting back in later is one tap.
-  const [offerPasskey, setOfferPasskey] = useState(false)
-  useEffect(() => {
-    if (!guest || view !== 'done') return
-    let live = true
-    void shouldOfferPasskey().then((yes) => {
-      if (live && yes) setOfferPasskey(true)
-    })
-    return () => {
-      live = false
-    }
-  }, [guest, view])
 
   useEffect(() => {
     if (status === 'loading' || started.current) return
@@ -120,11 +108,9 @@ export default function SupportWelcomeClient() {
                 We emailed you a sign-in button for later. You never need a password.
               </div>
             ) : null}
-            {offerPasskey ? (
-              <div className="p-5 rounded-xl" style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}>
-                <PasskeyOffer compact onDone={() => setOfferPasskey(false)} />
-              </div>
-            ) : null}
+            {/* Signed in just now with no password: how to get back in later without the email
+                (a texted code, or Face ID where the device has it). ./SignInNextTime */}
+            {guest && view === 'done' ? <SignInNextTime /> : null}
             <Link
               href="/"
               className="inline-flex items-center justify-center w-full px-6 py-4 rounded-xl text-base font-semibold"
