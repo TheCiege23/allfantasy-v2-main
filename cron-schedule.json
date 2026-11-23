@@ -247,14 +247,6 @@
     {
       "path": "/api/cron/commissioner-workspace-refresh?limit=60",
       "schedule": "40 8 * * *"
-    },
-    {
-      "path": "/api/cron/partner-codes-daily",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/partner-codes-monthly",
-      "schedule": "0 7 * * *"
     }
   ]
 }

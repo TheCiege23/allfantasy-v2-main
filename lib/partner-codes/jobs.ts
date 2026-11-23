@@ -9,9 +9,12 @@ import { buildPayout, previousMonthKey } from './money'
 import { countMeters, EMPTY_LEVEL, shouldUnlockCash, stepRewards, type FreePlan, type RewardLevels } from './meters'
 
 /**
- * Commissioner Partner Codes — scheduled work.
- *   daily   (/api/cron/partner-codes-daily):   active days, meters, free plans, cash unlock, scheduled → accrued
- *   monthly (/api/cron/partner-codes-monthly): last month's statements; no money moves (admin approves)
+ * Commissioner Partner Codes — scheduled work. Both run once a day from the existing
+ * /api/cron/stripe-key-health job (no cron slot of its own: the repo sits at its cron ceiling,
+ * docs/crons.md). See runPartnerScheduled.
+ *   daily:   active days, meters, free plans, cash unlock, scheduled → accrued
+ *   monthly: last month's statements; idempotent (one per code per month), so running it daily is
+ *            safe and also catches up a missed 1st. No money moves — an admin approves each one.
  */
 
 const DAY = 86_400_000
@@ -278,3 +281,21 @@ export async function payoutsCsv(year: number): Promise<string> {
   return lines.join('\n') + '\n'
 }
 
+/**
+ * Both jobs, each isolated: a failure in one is reported and never stops the other, and neither
+ * can throw into the host cron. Off unless PARTNER_CODES_ENABLED=1 (checked by the caller).
+ */
+export async function runPartnerScheduled(now = new Date()) {
+  const out: { daily: unknown; monthly: unknown; errors: string[] } = { daily: null, monthly: null, errors: [] }
+  try {
+    out.daily = await runPartnerDaily(now)
+  } catch (error) {
+    out.errors.push(`daily: ${(error as Error)?.message ?? String(error)}`)
+  }
+  try {
+    out.monthly = await runPartnerMonthly(now)
+  } catch (error) {
+    out.errors.push(`monthly: ${(error as Error)?.message ?? String(error)}`)
+  }
+  return out
+}

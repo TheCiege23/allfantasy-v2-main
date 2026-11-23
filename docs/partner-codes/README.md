@@ -39,6 +39,18 @@ side effect runs until it is `1`.
 All of this is pure code in `lib/partner-codes/{settings,money,meters,code,fraud}.ts`,
 and `__tests__/partner-codes/rules.test.ts` is the rulebook.
 
+## Scheduled work
+
+No cron slot of its own: the repo is at its cron ceiling (`docs/crons.md`). Once a day the existing
+`/api/cron/stripe-key-health` job calls `runPartnerScheduled()` (`lib/partner-codes/jobs.ts`):
+
+- **daily** — active-user days, both meters, free plans granted/renewed/removed, the cash unlock, yearly slices coming due.
+- **monthly** — last month's statements (`pending_review`, or `held` without a W-9). Idempotent, one per code per month,
+  so running daily is safe and catches up a missed 1st. No money moves; an admin approves each one.
+
+It has its own heartbeat (`sync_job_runs` job `partner-codes`), catches its own errors, and never changes
+the Stripe key check's status.
+
 ## Env vars
 
 | Var | Purpose |
