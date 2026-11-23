@@ -1,4 +1,5 @@
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import type { Prisma } from '@prisma/client'
 import { isImportViewer } from '@/lib/league/importViewers'
 import { isTournamentCoCommissioner } from '@/lib/league/tournamentCoCommissioners'
 import { readSourceTeamId } from '@/lib/leagues/rosterTeamIdentity'
@@ -35,8 +36,8 @@ import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { fantraxSourceLeagueIds, linkableSourceLeagueId } from '@/lib/league-links/resolveSourceLinkForLeague'
 import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
-import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
-import { toSidebarLeague } from '@/lib/league/clientLeagueSettings'
+import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap, readListSettings } from '@/lib/dashboard/get-dashboard-league-list'
+import { SIDEBAR_LEAGUE_FIELDS, toSidebarLeague } from '@/lib/league/clientLeagueSettings'
 import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
 import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
@@ -48,6 +49,20 @@ export const dynamic = 'force-dynamic'
  * mobile (most users hit the league dashboard from a phone). Kept lean: one
  * indexed-safe title + description, no private data beyond the league name.
  */
+/**
+ * The league-list columns this page reads on the server (season collapse, rail crest and type) plus every
+ * column the sidebar gets (`SIDEBAR_LEAGUE_FIELDS`). `settings` is deliberately absent — see the list read.
+ */
+const LIST_LEAGUE_SELECT = {
+  id: true, name: true, platform: true, platformLeagueId: true, sport: true, leagueVariant: true, leagueType: true,
+  isDynasty: true, scoring: true, leagueSize: true, season: true, status: true, lifecycleState: true,
+  avatarUrl: true, logoUrl: true, bestBallMode: true, guillotineMode: true, keeperPhaseActive: true,
+  playoffLowerBracket: true, isCommissioner: true, userId: true, updatedAt: true, createdAt: true,
+} satisfies Prisma.LeagueSelect
+// Fails to compile if the sidebar gains a column this select does not read.
+const LIST_SELECT_COVERS_SIDEBAR: Record<(typeof SIDEBAR_LEAGUE_FIELDS)[number], true> = LIST_LEAGUE_SELECT
+void LIST_SELECT_COVERS_SIDEBAR
+
 export async function generateMetadata(
   props: {
     params: Promise<Promise<{ leagueId: string }> | { leagueId: string }>
@@ -330,6 +345,12 @@ export default async function LeaguePage(
                                     console.error('[league page] getLeagueRole failed', { leagueId, userId, err })
                                     return isOwner ? 'commissioner' : 'member'
                         }),
+                        /*
+                         * 🛑 NOT `settings` — READ BELOW BY `readListSettings`, WITHOUT `identity_mappings`.
+                         * The full rows were 3.9 MB of JSON for the owner's 50 leagues (3.7 MB of it
+                         * settings, mostly the importer's id table), read and parsed on every league
+                         * page load (measured 2026-11-23). /core's list fixed the same cost the same way.
+                         */
                         prisma.league
                           .findMany({
                                         where: {
@@ -337,6 +358,7 @@ export default async function LeaguePage(
                                         },
                                         orderBy: { updatedAt: 'desc' },
                                         take: 50,
+                                        select: LIST_LEAGUE_SELECT,
                           })
                           .catch((err) => {
                                         console.error('[league page] allLeagues query failed', { userId, err })
@@ -378,8 +400,10 @@ export default async function LeaguePage(
       // The league page powers the mobile switcher and the right rail. Use the same
       // provider/season identity as /core so an older import is not shown as another league.
       // Never group by name: separate AF leagues and separate Fantrax teams can share one.
-      const seriesMap = await loadLeagueSeriesMap(rawAllLeagues.map((l) => l.id))
-      const allLeagues = collapseLeagueSeasons(rawAllLeagues, seriesMap, (a, b) => {
+      const listIds = rawAllLeagues.map((l) => l.id)
+      const [seriesMap, listSettings] = await Promise.all([loadLeagueSeriesMap(listIds), readListSettings(listIds)])
+      const listRows = rawAllLeagues.map((l) => ({ ...l, settings: (listSettings.get(l.id) ?? null) as Prisma.JsonValue }))
+      const allLeagues = collapseLeagueSeasons(listRows, seriesMap, (a, b) => {
         const own = Number(b.userId === userId) - Number(a.userId === userId)
         return own !== 0 ? own : defaultLeagueRowTieBreak(a, b)
       }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
@@ -430,8 +454,7 @@ export default async function LeaguePage(
        * league id (null for a CSV-era row: the homepage, as before). Every other platform: unchanged.
        * DB read only (no query at all for a non-Fantrax league), never throws.
        */
-      const sourceLinkLeagueId = linkableSourceLeagueId(league, await fantraxSourceLeagueIds([league]))
-      const [draftSetupSession, railMatchups, railRecords, railPrefs, railNeeds] = await Promise.all([
+      const [draftSetupSession, railMatchups, railRecords, railPrefs, railNeeds, fantraxIds, intelligenceDepth] = await Promise.all([
         prisma.draftSession.findFirst({
           where: { leagueId },
           orderBy: CURRENT_DRAFT_SESSION_ORDER,
@@ -461,10 +484,14 @@ export default async function LeaguePage(
          * action chip; stale or unreadable is nothing flagged.
          */
         readUrgencyLeagueIds(userId).catch(() => null),
+        // Two independent reads that used to run one after another, before and after this batch.
+        fantraxSourceLeagueIds([league]),
+        resolveCoreDepth(userId, 'af_intelligence').catch(() => null),
       ])
+      const sourceLinkLeagueId = linkableSourceLeagueId(league, fantraxIds)
       const leagueRail = {
         // AF Intelligence: the rail's AF projection only for AF Pro, AF Commissioner and AF Supreme.
-        matchups: afIntelligenceFor(railMatchups?.byLeague ?? {}, await resolveCoreDepth(userId, 'af_intelligence').catch(() => null)),
+        matchups: afIntelligenceFor(railMatchups?.byLeague ?? {}, intelligenceDepth),
         records: railRecords,
         favoriteIds: railPrefs?.favorites ?? [],
         order: railPrefs?.order ?? [],
