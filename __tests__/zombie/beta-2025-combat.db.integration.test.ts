@@ -34,6 +34,7 @@ describe.skipIf(!enabled)('2025 combat workflows in disposable PostgreSQL', () =
       await prisma.zombieTeamItem.deleteMany({ where: { team: { leagueId: { in: leagues } } } })
       await prisma.zombieLeagueTeam.deleteMany({ where: { leagueId: { in: leagues } } })
       await prisma.zombieBashingEvent.deleteMany({ where: { leagueId: { in: leagues } } })
+      await prisma.zombieEventAnimation.deleteMany({ where: { leagueId: { in: leagues } } })
       await prisma.zombieMaulingEvent.deleteMany({ where: { leagueId: { in: leagues } } })
       await prisma.zombieAuditLog.deleteMany({ where: { leagueId: { in: leagues } } })
       await prisma.league.deleteMany({ where: { id: { in: leagues }, userId: users[0] } })
@@ -158,6 +159,8 @@ describe.skipIf(!enabled)('2025 combat workflows in disposable PostgreSQL', () =
     expect(await prisma.leagueChatMessage.count({ where: { id: `${row.id}:resolved` } })).toBe(1)
     await settleBetaCombat(f.z.id, 1)
     expect(await prisma.zombieBashingEvent.count({ where: { leagueId: f.league.id, week: 1 } })).toBe(1)
+    // One bashing video, and a repeated settle (the receipt above) does not queue a second.
+    expect(await prisma.zombieEventAnimation.count({ where: { leagueId: f.league.id, week: 1, animationType: 'bashing' } })).toBe(1)
   })
 
   it.each(['spare', 'replace'])('Survivor bashing Whisperer: %s preserves the seasonal ambush budget', async decision => {
