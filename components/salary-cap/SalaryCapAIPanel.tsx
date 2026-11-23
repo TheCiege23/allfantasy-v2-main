@@ -32,7 +32,8 @@ export function SalaryCapAIPanel({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const [type, setType] = useState<SalaryCapAIPanelType>('cap_health')
   const [loading, setLoading] = useState(false)
@@ -74,13 +75,15 @@ export function SalaryCapAIPanel({
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
       <section className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-cyan-200">

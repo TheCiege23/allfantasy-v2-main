@@ -71,6 +71,8 @@ export function LeagueSettingsPanel({
   const [medianGame, setMedianGame] = useState(Boolean(initialData.medianGame))
   const [medianInPlayoffs, setMedianInPlayoffs] = useState(initialData.medianGameInPlayoffs === true)
   const [multiTeamManagers, setMultiTeamManagers] = useState(initialData.allowMultiTeamManagers === true)
+  const [preLeagueCounts, setPreLeagueCounts] = useState(initialData.preLeagueWeeksCount === true)
+  const preLeagueWeekCount = initialData.preLeagueWeekCount ?? 0
   const [leagueType, setLeagueType] = useState((initialData.leagueType ?? 'redraft') as string)
   const [leagueSize, setLeagueSize] = useState(initialData.leagueSize ?? 12)
   const [allowPreDraft, setAllowPreDraft] = useState(Boolean(initialData.allowPreDraftMoves))
@@ -103,6 +105,7 @@ export function LeagueSettingsPanel({
     setMedianGame(Boolean(initialData.medianGame))
     setMedianInPlayoffs(initialData.medianGameInPlayoffs === true)
     setMultiTeamManagers(initialData.allowMultiTeamManagers === true)
+    setPreLeagueCounts(initialData.preLeagueWeeksCount === true)
     setLeagueType(initialData.leagueType ?? 'redraft')
     setLeagueSize(initialData.leagueSize ?? 12)
     setAllowPreDraft(Boolean(initialData.allowPreDraftMoves))
@@ -632,6 +635,19 @@ export function LeagueSettingsPanel({
             onChange={(v) => {
               setMedianInPlayoffs(v)
               void save({ medianGameInPlayoffs: v })
+            }}
+          />
+        ) : null}
+        {/* A league drafted mid-season: the weeks before the draft are loaded for viewing (lib/redraft/preLeagueWeeks.ts). */}
+        {preLeagueWeekCount > 0 ? (
+          <SettingsToggleRow
+            label="Count weeks before the draft"
+            description={`Weeks 1–${preLeagueWeekCount} were played before this league drafted. Each team was scored on those weeks with the players it drafted. Off: those scores are for viewing only. On: they count toward every team's record${medianGame ? ', including the league median' : ''}.`}
+            checked={preLeagueCounts}
+            disabled={disabled}
+            onChange={(v) => {
+              setPreLeagueCounts(v)
+              void save({ preLeagueWeeksCount: v })
             }}
           />
         ) : null}

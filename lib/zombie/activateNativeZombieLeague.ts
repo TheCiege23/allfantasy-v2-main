@@ -17,7 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureLeagueTeamRows } from '@/lib/zombie/ZombieOwnerStatusService'
 import { selectSecondWhisperer, selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
-import { getFirstScheduledWeek, getLastScheduledWeek } from '@/lib/zombie/matchupCompletion'
+import { getFirstScheduledWeek, getFirstUnplayedWeek, getLastScheduledWeek } from '@/lib/zombie/matchupCompletion'
 import { startBetaWhispererOffers } from './beta2025RoleWorkflows'
 
 export type ZombieActivationResult =
@@ -49,7 +49,9 @@ export async function ensureZombieSeasonActivated(input: {
     lastScheduledWeek != null ? Math.min(season.totalWeeks ?? lastScheduledWeek, lastScheduledWeek) : season.totalWeeks
   // A league drafted mid-season has a schedule that starts at the sport's current week. Starting the
   // zombie league at week 1 pointed it at a week with no matchups, where it waited forever.
-  const currentWeek = (await getFirstScheduledWeek(input.redraftSeasonId)) ?? 1
+  // And a week already played before activation is not part of it: start at the first unplayed week.
+  const currentWeek =
+    (await getFirstUnplayedWeek(input.redraftSeasonId)) ?? (await getFirstScheduledWeek(input.redraftSeasonId)) ?? 1
 
   await ensureLeagueTeamRows(input.leagueId, z.id)
 
