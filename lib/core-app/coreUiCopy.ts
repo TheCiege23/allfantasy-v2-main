@@ -391,6 +391,7 @@ const spanish: Record<string, string> = {
   'on bye': 'en descanso',
   'Lineup decision': 'Decisión de alineación',
   'Review starters': 'Revisar titulares',
+  'Clips and highlights': 'Clips y jugadas destacadas',
   'Review your starting lineup': 'Revisa tu alineación titular',
   'No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.': 'No identificamos ninguna posición vacía, descartada o en descanso entre los jugadores que pudimos leer. Los jugadores sin resolver y las noticias que falten pueden ocultar problemas; confirma la alineación en tu plataforma.',
   'This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.': 'Esta posición titular estaba vacía al revisarla. Confirma la alineación actual, la elegibilidad, los cierres y los cambios automáticos en tu plataforma.',

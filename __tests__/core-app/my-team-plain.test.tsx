@@ -183,10 +183,14 @@ describe('<MyTeam /> — what to do and the lineup', () => {
     expect(text).not.toMatch(/on your platform/)
   })
 
-  it('keeps the boilerplate when nothing was found', () => {
+  it('says "nothing found" once when nothing was found — the lineup check\'s line, not a second paragraph too', () => {
+    // 2026-11-23: the card printed "No empty, out, or bye slot was identified… confirm the lineup on your
+    // platform" and then the embedded check's "No issues were identified… Confirm … on your platform".
     const starters = { available: true, data: [{ slotLabel: 'QB', player: player(), empty: false, unresolvedId: null }] }
     const { container } = render(<MyTeam data={data({ starters })} />)
-    expect(container.querySelector('.af-mt-decision')?.textContent).toContain('No empty, out, or bye slot was identified')
+    const card = container.querySelector('.af-mt-decision')!.textContent ?? ''
+    expect(card).toContain('No issues were identified')
+    expect(card).not.toContain('No empty, out, or bye slot was identified')
   })
 
   it('says the best lineup in one line, with no repeated total and no method note', () => {
@@ -266,5 +270,42 @@ describe('Spanish', () => {
     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort())
     const text = Object.values(es).map((v) => (typeof v === 'function' ? String((v as (...a: unknown[]) => unknown)(2, 3)) : String(v))).join(' ')
     expect(text).not.toMatch(/waiver/i)
+  })
+})
+
+describe('<MyTeam /> — one screen, one answer (2026-11-23)', () => {
+  it('the headline and the "What to do" card read the same lineup check once a kickoff has passed', () => {
+    // The page was loaded 3h ago (the lock's asOf) and Garrett Wilson's game kicked off an hour ago.
+    // The headline used to stay on the load-time pass ("2 starters are questionable") while the card,
+    // re-checked on the live clock, said there was nothing to check.
+    const base = data()
+    const lock = { ...(base.lock as { data: Record<string, unknown> }).data, asOf: Date.now() - 3 * 3_600_000 }
+    const starters = {
+      available: true,
+      data: [
+        { slotLabel: 'QB', player: player(), empty: false, unresolvedId: null },
+        {
+          slotLabel: 'WR',
+          player: player({ sleeperId: 'gw', name: 'Garrett Wilson', position: 'WR', injuryStatus: 'Questionable', kickoff: new Date(Date.now() - 3_600_000) }),
+          empty: false,
+          unresolvedId: null,
+        },
+      ],
+    }
+    const { container } = render(<MyTeam data={data({ starters, lock: { available: true, data: lock } })} />)
+    const headline = container.querySelector('#af-mtg-title')?.textContent ?? ''
+    const card = container.querySelector('.af-mt-decision')?.textContent ?? ''
+    expect(headline).not.toMatch(/questionable/i)
+    expect(card).not.toMatch(/Garrett Wilson.*questionable/i)
+  })
+
+  it('clips and highlights are one closed row that mounts nothing until opened', () => {
+    const { getByTestId } = render(<MyTeam data={data()} />)
+    const fold = getByTestId('my-team-media') as HTMLDetailsElement
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('Clips and highlights')
+    // Nothing inside until it is opened: no clip or highlight panel, so nothing fetched or shared with X.
+    expect(fold.children).toHaveLength(1)
   })
 })
