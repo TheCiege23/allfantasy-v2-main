@@ -62,7 +62,6 @@ export function LandingStoreBadges({
   }, [])
   if (inApp) return null
 
-  const suffix = lang === 'es' ? 'es' : 'en'
   return (
     <div
       className={className ? `af-lp-stores ${className}` : 'af-lp-stores'}
@@ -81,7 +80,7 @@ export function LandingStoreBadges({
         onClick={() => track({ event: 'app_store_badge_click', store: 'app_store', page })}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="af-lp-store-img" src={`/badges/app-store-${suffix}.svg`} alt={copy.appStoreAlt} />
+        <img className="af-lp-store-img" src={`/badges/app-store-${lang}.svg`} alt={copy.appStoreAlt} />
       </a>
       <a
         className="af-lp-store"
@@ -92,7 +91,7 @@ export function LandingStoreBadges({
         onClick={() => track({ event: 'app_store_badge_click', store: 'google_play', page })}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="af-lp-store-img" src={`/badges/google-play-${suffix}.png`} alt={copy.playAlt} />
+        <img className="af-lp-store-img" src={`/badges/google-play-${lang}.png`} alt={copy.playAlt} />
       </a>
     </div>
   )
