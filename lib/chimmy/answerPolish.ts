@@ -244,6 +244,11 @@ export function proUpsellLine(tools: readonly ChimmyProOnlyTool[], language?: st
   return es ? `AF Pro añade ${list}.` : `AF Pro adds ${list}.`
 }
 
+/** The upgrade button under the line, in the viewer's language. */
+export function proUpsellCta(language?: string | null): string {
+  return String(language ?? '').toLowerCase().startsWith('es') ? 'Obtener AF Pro' : 'Get AF Pro'
+}
+
 /** The same labels in Spanish (2026-11-22) — every key of PRO_ONLY_TOOL_LABEL, so a new tool cannot fall back silently. */
 export const PRO_ONLY_TOOL_LABEL_ES: Record<ChimmyProOnlyTool, string> = {
   get_playoff_outlook: 'el simulador de playoffs',

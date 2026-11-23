@@ -8,6 +8,7 @@ import {
   VERDICT_LABEL,
   chimmyLockSource,
   VERDICT_SOURCE_LABEL,
+  proUpsellCta,
   proUpsellLine,
   type ChimmyFaabCard,
   type ChimmyProOnlyTool,
@@ -32,7 +33,6 @@ export function ChimmyPastChatsChip() {
  */
 export function ChimmyProUpsell({ tools }: { tools: readonly ChimmyProOnlyTool[] }) {
   const { language } = useOptionalLanguage()
-  const es = String(language ?? '').toLowerCase().startsWith('es')
   return (
     <div className="af-cm-proupsell" data-testid="chimmy-pro-upsell">
       <span className="af-cm-proupsell-line">{proUpsellLine(tools, language)}</span>
@@ -48,7 +48,7 @@ export function ChimmyProUpsell({ tools }: { tools: readonly ChimmyProOnlyTool[]
         className="af-cm-outofanswers-btn"
         testId="chimmy-pro-upsell-cta"
       >
-        {es ? 'Obtener AF Pro' : 'Get AF Pro'}
+        {proUpsellCta(language)}
       </CoreDepthLockCta>
     </div>
   )

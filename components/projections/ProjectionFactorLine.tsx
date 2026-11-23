@@ -12,7 +12,7 @@ export function ProjectionFactorLine({ reasons, testId }: { reasons: ReadonlyArr
   const lines = (reasons ?? []).filter((r) => typeof r === 'string' && r.trim() !== '')
   if (lines.length === 0) return null
   return (
-    <span className="block truncate text-[10px] text-white/45" title={lines.join(' · ')} data-testid={testId}>
+    <span className="block truncate text-[11px] text-white/45" title={lines.join(' · ')} data-testid={testId}>
       <EvidenceLine inline label="AF" lines={lines} />
     </span>
   )
