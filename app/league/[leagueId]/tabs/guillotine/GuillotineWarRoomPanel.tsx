@@ -35,25 +35,31 @@ import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'roster-risk' | 'lineup-safety' | 'faab-plan' | 'waivers' | 'dropped-players' | 'trade-analyze' | null
 
+/*
+ * Colour from the workspace tokens only (2026-11-23): the panel was hard-coded dark (#0a0820 / #07071a, white
+ * text, rose and violet tints), so in light mode its title, plan and buttons vanished and the question box was
+ * solid black. --text, --muted, --surface, --line, --good/--warn/--bad switch with the mode.
+ */
 const RISK_COLOR: Record<string, string> = {
-  critical: 'text-rose-300',
-  high: 'text-rose-300/80',
-  moderate: 'text-amber-200/90',
-  safe: 'text-emerald-300/85',
-  eliminated: 'text-white/40',
-  limited: 'text-white/50',
+  critical: 'text-[var(--bad)]',
+  high: 'text-[var(--bad)]',
+  moderate: 'text-[var(--warn)]',
+  safe: 'text-[var(--good)]',
+  eliminated: 'text-[var(--muted)]',
+  limited: 'text-[var(--muted)]',
 }
 const TIER_BADGE: Record<string, string> = {
-  chop_zone: 'bg-rose-500/20 text-rose-200',
-  danger: 'bg-amber-500/20 text-amber-200',
-  safe: 'bg-emerald-500/15 text-emerald-200',
-  unknown: 'bg-white/[0.06] text-white/50',
+  chop_zone: 'bg-[var(--bad-soft)] text-[var(--bad)]',
+  danger: 'bg-[var(--warn-soft)] text-[var(--warn)]',
+  safe: 'bg-[var(--good-soft)] text-[var(--good)]',
+  unknown: 'bg-[var(--surface2)] text-[var(--muted)]',
 }
+const TIER_WORD: Record<string, string> = { chop_zone: 'Chop zone', danger: 'Danger', safe: 'Safe', unknown: '—' }
 
 function Flag({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex items-start gap-1.5 text-[11px] text-amber-200/80">
-      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-400/70" />
+    <li className="flex items-start gap-1.5 text-[12px] text-[var(--warn)]">
+      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
       <span>{children}</span>
     </li>
   )
@@ -94,7 +100,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
         setWeeklyPlan(res.weeklyPlan)
         setError(null)
       })
-      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'Failed to load AF Legacy.'))
+      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'The Guilly War Room did not load.'))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -151,15 +157,15 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#07071a] p-4 text-[12px] text-white/50" data-testid="guillotine-war-room-loading">
-        <Loader2 className="h-4 w-4 animate-spin text-violet-300" /> Loading AF Legacy — Guilly…
+      <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4 text-[13px] text-[var(--muted)]" data-testid="guillotine-war-room-loading">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading the Guilly War Room…
       </div>
     )
   }
   if (error || !context) {
     return (
-      <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90" data-testid="guillotine-war-room-error">
-        {error ?? 'AF Legacy — Guilly is unavailable for this league.'}
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--warn-soft)] px-3 py-2 text-[13px] text-[var(--warn)]" data-testid="guillotine-war-room-error">
+        {error ?? 'The Guilly War Room is not available for this league.'}
       </div>
     )
   }
@@ -167,67 +173,62 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   const tradesEnabled = context.guillotine.tradesEnabled
 
   return (
-    <section className="space-y-3 rounded-xl border border-violet-400/20 bg-[#0a0820] p-4" data-testid="guillotine-war-room-panel">
-      <div className="flex items-center gap-2">
-        <Skull className="h-4 w-4 text-rose-300/80" />
-        <h2 className="text-sm font-bold text-white">AF Legacy — Guilly</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
-          {context.sport} · W{context.currentWeek}
+    <section className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4 text-[var(--text)]" data-testid="guillotine-war-room-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        <Skull className="h-4 w-4 text-[var(--bad)]" />
+        {/* Named for where it lives (the War Room tab), not "AF Legacy — Guilly". */}
+        <h2 className="text-[15px] font-bold">Guilly War Room</h2>
+        <span className="rounded-full bg-[var(--surface2)] px-2 py-0.5 text-[12px] font-semibold text-[var(--muted)]">
+          {context.sport} · week {context.currentWeek}
         </span>
       </div>
 
       {/* Survival risk hero + rules */}
-      <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="guillotine-war-room-survival-card">
+      <div className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 sm:grid-cols-2" data-testid="guillotine-war-room-survival-card">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Survival risk</p>
-          <p className={`text-[14px] font-bold ${RISK_COLOR[survival?.riskLevel ?? 'limited']}`}>
+          <p className="text-[12px] font-semibold text-[var(--muted)]">Your chop risk</p>
+          <p className={`text-[18px] font-bold capitalize ${RISK_COLOR[survival?.riskLevel ?? 'limited']}`}>
             {(survival?.riskLevel ?? 'limited').replace('_', ' ')}
           </p>
-          <p className="text-[11px] text-white/45">
-            {survival?.safetyMargin != null ? `${survival.safetyMargin >= 0 ? '+' : ''}${survival.safetyMargin} vs chop` : 'no elimination line yet'}
+          <p className="text-[12px] text-[var(--muted)]">
+            {survival?.safetyMargin != null ? `${survival.safetyMargin >= 0 ? '+' : ''}${survival.safetyMargin} points over the cut` : 'No cut line yet this week'}
           </p>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Field</p>
-          <p className="text-[11px] text-white/70">{context.activeTeamCount} alive · {context.eliminatedTeamCount} chopped</p>
-          <p className="text-[11px] text-white/45">{context.guillotine.teamsPerChop}/period · margin {context.guillotine.dangerMarginPoints}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
-          <p className="text-[11px] text-white/60">
-            line {context.availability.eliminationLine === 'available' ? '✓' : '—'} · scores{' '}
-            {context.availability.periodScores === 'available' ? '✓' : '—'} · pool{' '}
-            {context.availability.droppedPlayerPool === 'available' ? '✓' : '—'}
+          <p className="text-[12px] font-semibold text-[var(--muted)]">This league</p>
+          <p className="text-[13px] text-[var(--text2)]">{context.activeTeamCount} teams alive · {context.eliminatedTeamCount} chopped</p>
+          <p className="text-[12px] text-[var(--muted)]">
+            {context.guillotine.teamsPerChop === 1 ? '1 team' : `${context.guillotine.teamsPerChop} teams`} chopped each week · danger within {context.guillotine.dangerMarginPoints} points of the cut
           </p>
         </div>
       </div>
 
       {/* Weekly survival plan */}
       {weeklyPlan && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3" data-testid="guillotine-war-room-weekly-plan">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Weekly survival plan</p>
-          <p className="mt-1 text-[12px] font-semibold text-violet-100">{weeklyPlan.headline}</p>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3" data-testid="guillotine-war-room-weekly-plan">
+          <p className="text-[12px] font-semibold text-[var(--muted)]">Weekly survival plan</p>
+          <p className="mt-1 text-[12px] font-semibold text-[var(--text)]">{weeklyPlan.headline}</p>
           <div className="mt-1 space-y-0.5">
             {weeklyPlan.steps.map((s) => (
-              <p key={s.order} className="text-[11px] text-white/70">{s.order}. <span className="text-white/80">{s.action}</span> — {s.detail}</p>
+              <p key={s.order} className="text-[12px] text-[var(--text2)]">{s.order}. <span className="text-[var(--text)]">{s.action}</span> — {s.detail}</p>
             ))}
           </div>
         </div>
       )}
 
       {/* Survival standings (public to league) */}
-      <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3" data-testid="guillotine-war-room-standings">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Survival standings</p>
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3" data-testid="guillotine-war-room-standings">
+        <p className="text-[12px] font-semibold text-[var(--muted)]">Survival standings</p>
         <div className="mt-1 space-y-0.5">
           {context.standings.slice(0, 12).map((s) => (
-            <p key={s.rosterId} className={`text-[11px] ${s.isUserTeam ? 'text-white' : 'text-white/60'}`}>
+            <p key={s.rosterId} className={`text-[12px] ${s.isUserTeam ? 'font-semibold text-[var(--text)]' : 'text-[var(--text2)]'}`}>
               {s.eliminated ? (
-                <span className="text-white/35">☠ {s.teamName ?? s.ownerName}{s.choppedInPeriod != null ? ` (P${s.choppedInPeriod})` : ''}</span>
+                <span className="text-[var(--muted)]">☠ {s.teamName ?? s.ownerName}{s.choppedInPeriod != null ? ` · chopped in week ${s.choppedInPeriod}` : ''}</span>
               ) : (
                 <>
-                  <span className={`mr-1 rounded px-1 py-0.5 text-[11px] font-semibold ${TIER_BADGE[s.tier] ?? TIER_BADGE.unknown}`}>{s.tier.replace('_', ' ')}</span>
+                  <span className={`mr-1 rounded px-1 py-0.5 text-[12px] font-semibold ${TIER_BADGE[s.tier] ?? TIER_BADGE.unknown}`}>{TIER_WORD[s.tier] ?? s.tier.replace('_', ' ')}</span>
                   {s.teamName ?? s.ownerName}{s.isUserTeam ? ' (you)' : ''}
-                  <span className="text-white/40"> · {s.seasonPointsCumul.toFixed(0)} PF{s.pointsFromChopZone != null ? ` · ${s.pointsFromChopZone >= 0 ? '+' : ''}${s.pointsFromChopZone.toFixed(0)}` : ''}</span>
+                  <span className="text-[var(--muted)]"> · {s.seasonPointsCumul.toFixed(0)} pts{s.pointsFromChopZone != null ? ` · ${s.pointsFromChopZone >= 0 ? '+' : ''}${s.pointsFromChopZone.toFixed(0)} over the cut` : ''}</span>
                 </>
               )}
             </p>
@@ -242,75 +243,76 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
           .filter((t) => t !== 'lineup-safety' || context?.featureAvailability?.lineupSafety !== false)
           .map((t) => (
           <button key={t} type="button" onClick={() => void runTool(t)} disabled={toolBusy} data-testid={`guillotine-war-room-tool-${t}`}
-            className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-50">
-            {t === 'roster-risk' ? 'Roster risk' : t === 'lineup-safety' ? 'Lineup safety' : t === 'faab-plan' ? 'FAAB plan' : t === 'waivers' ? 'Waivers' : 'Dropped pool'}
+            className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text)] transition hover:border-[var(--accent-line)] disabled:opacity-50">
+            {t === 'roster-risk' ? 'Roster risk' : t === 'lineup-safety' ? 'Lineup safety' : t === 'faab-plan' ? 'FAAB plan' : t === 'waivers' ? 'Waivers' : 'Chopped teams’ players'}
           </button>
         ))}
-        <button type="button" onClick={() => void runTool('trade-analyze')} disabled={toolBusy || !tradesEnabled}
-          title={tradesEnabled ? undefined : 'Trades are disabled in this Guilly league'} data-testid="guillotine-war-room-tool-trade-analyze"
-          className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-40">Trade analyzer</button>
+        {tradesEnabled ? (
+          <button type="button" onClick={() => void runTool('trade-analyze')} disabled={toolBusy} data-testid="guillotine-war-room-tool-trade-analyze"
+            className="min-h-[40px] rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 text-[13px] font-semibold text-[var(--text)] transition hover:border-[var(--accent-line)] disabled:opacity-50">Trade analyzer</button>
+        ) : null}
       </div>
 
-      {toolBusy && <p className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3 w-3 animate-spin" /> Running…</p>}
+      {toolBusy && <p className="flex items-center gap-1.5 text-[12px] text-[var(--muted)]"><Loader2 className="h-3 w-3 animate-spin" /> Running…</p>}
 
       {tool === 'roster-risk' && rosterRisk && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70" data-testid="guillotine-war-room-roster-risk-result">
-          <p className="mb-1 font-semibold text-white/80">Floor risk: {rosterRisk.floorRiskScore}/100</p>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]" data-testid="guillotine-war-room-roster-risk-result">
+          <p className="mb-1 font-semibold text-[var(--text)]">Floor risk: {rosterRisk.floorRiskScore}/100</p>
           {rosterRisk.weaknesses.map((w) => (<p key={w.position}>⚠ {w.position} ({w.severity}) — {w.reason}</p>))}
-          {rosterRisk.injuredStarters.map((p) => (<p key={p.playerId} className="text-rose-300/70">🚑 {p.playerName} ({p.position}) {p.status}</p>))}
-          {rosterRisk.weaknesses.length === 0 && rosterRisk.injuredStarters.length === 0 && <p className="text-white/40">No structural holes or injured starters.</p>}
+          {rosterRisk.injuredStarters.map((p) => (<p key={p.playerId} className="text-[var(--bad)]">🚑 {p.playerName} ({p.position}) {p.status}</p>))}
+          {rosterRisk.weaknesses.length === 0 && rosterRisk.injuredStarters.length === 0 && <p className="text-[var(--muted)]">No structural holes or injured starters.</p>}
         </div>
       )}
 
       {tool === 'lineup-safety' && lineupSafety && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70" data-testid="guillotine-war-room-lineup-safety-result">
-          <p className="mb-1 font-semibold text-white/80">Lineup ({lineupSafety.posture.replace('_', ' ')}, confidence {lineupSafety.confidence})</p>
-          {lineupSafety.suggestedStarters.map((s, i) => (<p key={`${s.position}-${i}`}><span className="text-white/40">{s.position}:</span> {s.playerName ?? '—'}{s.value != null && <span className="text-white/40"> ({s.value})</span>}</p>))}
-          {lineupSafety.ceilingSwing && <p className="mt-1 text-amber-200/80">Ceiling swing: {lineupSafety.ceilingSwing.playerName} ({lineupSafety.ceilingSwing.position})</p>}
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]" data-testid="guillotine-war-room-lineup-safety-result">
+          <p className="mb-1 font-semibold text-[var(--text)]">Safest lineup ({lineupSafety.posture.replace('_', ' ')}, confidence {lineupSafety.confidence})</p>
+          {lineupSafety.suggestedStarters.map((s, i) => (<p key={`${s.position}-${i}`}><span className="text-[var(--muted)]">{s.position}:</span> {s.playerName ?? '—'}{s.value != null && <span className="text-[var(--muted)]"> ({s.value})</span>}</p>))}
+          {lineupSafety.ceilingSwing && <p className="mt-1 text-[var(--warn)]">Ceiling swing: {lineupSafety.ceilingSwing.playerName} ({lineupSafety.ceilingSwing.position})</p>}
         </div>
       )}
 
       {tool === 'faab-plan' && faab && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70" data-testid="guillotine-war-room-faab-plan-result">
-          <p className="mb-1 font-semibold text-white/80">FAAB: {faab.posture}{faab.suggestedMaxBid != null ? ` · max bid ~${faab.suggestedMaxBid}` : ''}</p>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]" data-testid="guillotine-war-room-faab-plan-result">
+          <p className="mb-1 font-semibold text-[var(--text)]">FAAB: {faab.posture}{faab.suggestedMaxBid != null ? ` · max bid ~${faab.suggestedMaxBid}` : ''}</p>
           {faab.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
         </div>
       )}
 
       {tool === 'waivers' && waivers && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70" data-testid="guillotine-war-room-waivers-result">
-          <p className="mb-1 font-semibold text-white/80">Waivers ({waivers.urgency} urgency) · target {waivers.targetPositions.join(', ') || 'none'}</p>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]" data-testid="guillotine-war-room-waivers-result">
+          <p className="mb-1 font-semibold text-[var(--text)]">Waivers ({waivers.urgency} urgency) · target {waivers.targetPositions.join(', ') || 'none'}</p>
           {waivers.recommendedAdds.map((a) => (<p key={a.playerId}>+ {a.playerName} ({a.position}) — {a.reason}</p>))}
-          {waivers.dropCandidates.map((d) => (<p key={d.playerId} className="text-white/55">– {d.playerName} ({d.position}) — {d.reason}</p>))}
-          {waivers.needsPoolData && <p className="mt-1 text-amber-200/80">No eliminated-team pool yet — target positions still apply.</p>}
+          {waivers.dropCandidates.map((d) => (<p key={d.playerId} className="text-[var(--muted)]">– {d.playerName} ({d.position}) — {d.reason}</p>))}
+          {waivers.needsPoolData && <p className="mt-1 text-[var(--warn)]">No players from chopped teams yet — the target positions still apply.</p>}
         </div>
       )}
 
       {tool === 'dropped-players' && dropped && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70" data-testid="guillotine-war-room-dropped-players-result">
-          {!dropped.available ? <p className="text-amber-200/80">No eliminated-team dropped-player pool available yet.</p> : (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]" data-testid="guillotine-war-room-dropped-players-result">
+          {!dropped.available ? <p className="text-[var(--warn)]">No players from chopped teams are on waivers yet.</p> : (
             <>
-              <p className="mb-1 font-semibold text-white/80">Eliminated-team pool ({dropped.poolSize})</p>
-              {dropped.targets.map((t) => (<p key={t.playerId}>{t.playerName} ({t.position}){t.atNeed ? <span className="text-emerald-300/80"> · need</span> : null} — {t.note}</p>))}
+              <p className="mb-1 font-semibold text-[var(--text)]">Players from chopped teams ({dropped.poolSize})</p>
+              {dropped.targets.map((t) => (<p key={t.playerId}>{t.playerName} ({t.position}){t.atNeed ? <span className="text-[var(--good)]"> · need</span> : null} — {t.note}</p>))}
             </>
           )}
         </div>
       )}
 
       {tool === 'trade-analyze' && !toolBusy && (
-        <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3 text-[11px] text-white/70">
-          {!tradesEnabled ? <p className="text-amber-200/80">Trades are disabled in this Guilly league.</p> : (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-[12px] text-[var(--text2)]">
+          {!tradesEnabled ? <p className="text-[var(--warn)]">Trades are disabled in this Guilly league.</p> : (
             <>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <select value={tradeOutgoingId} onChange={(e) => setTradeOutgoingId(e.target.value)} data-testid="guillotine-war-room-trade-outgoing-select"
-                  className="min-w-0 rounded-md border border-white/[0.1] bg-[#05050f] px-2 py-1.5 text-[11px] text-white/80 focus:border-violet-400/40 focus:outline-none">
+                  className="min-w-0 rounded-md border border-[var(--line2)] bg-[var(--surface)] px-2 py-1.5 text-[12px] text-[var(--text)] focus:border-[var(--accent-line)] focus:outline-none">
                   <option value="">Outgoing player</option>
                   {(context?.teams.find((t) => t.isUserTeam)?.players ?? []).map((p) => (<option key={p.playerId} value={p.playerId}>{p.playerName} ({p.position})</option>))}
                 </select>
                 <input value={tradeIncomingIds} onChange={(e) => setTradeIncomingIds(e.target.value)} placeholder="Incoming player ID" data-testid="guillotine-war-room-trade-incoming-input"
-                  className="min-w-0 rounded-md border border-white/[0.1] bg-[#05050f] px-2 py-1.5 text-[11px] text-white/80 placeholder:text-white/30 focus:border-violet-400/40 focus:outline-none" />
+                  className="min-w-0 rounded-md border border-[var(--line2)] bg-[var(--surface)] px-2 py-1.5 text-[12px] text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent-line)] focus:outline-none" />
                 <button type="button" onClick={() => void runTool('trade-analyze')} disabled={toolBusy} data-testid="guillotine-war-room-trade-analyze-submit"
-                  className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/80 transition hover:border-violet-400/30 hover:bg-violet-500/10 disabled:opacity-50">Analyze</button>
+                  className="rounded-lg border border-[var(--line2)] bg-[var(--surface2)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text)] transition hover:border-[var(--accent-line)] disabled:opacity-50">Analyze</button>
               </div>
               {tradeAnalysis && (
                 <div className="mt-2 space-y-1" data-testid="guillotine-war-room-trade-analyze-result">
@@ -327,20 +329,20 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
 
       {/* Global missing-data flags */}
       {context.missingDataFlags.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-amber-500/15 bg-amber-500/[0.04] p-2">{context.missingDataFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>
+        <ul className="space-y-1 rounded-lg border border-[var(--line)] bg-[var(--warn-soft)] p-2">{context.missingDataFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>
       )}
 
       {/* Ask War Room */}
-      <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3">
-        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40"><ShieldQuestion className="h-3.5 w-3.5" /> Ask AF Legacy</p>
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3">
+        <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-[var(--muted)]"><ShieldQuestion className="h-3.5 w-3.5" /> Ask Chimmy about surviving the chop</p>
         <textarea value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. Am I at risk of elimination, and should I spend FAAB?" rows={2} data-testid="guillotine-war-room-ask-input"
-          className="w-full resize-none rounded-md border border-white/[0.1] bg-[#05050f] px-2 py-1.5 text-[12px] text-white/85 placeholder:text-white/30 focus:border-violet-400/40 focus:outline-none" />
+          className="w-full resize-none rounded-md border border-[var(--line2)] bg-[var(--surface)] px-2 py-1.5 text-[12px] text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent-line)] focus:outline-none" />
         <button type="button" onClick={() => void onAsk()} disabled={askBusy || !question.trim()} data-testid="guillotine-war-room-ask-submit"
-          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-violet-500/20 px-3 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-500/30 disabled:opacity-50">
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-1.5 text-[13px] font-semibold text-[var(--accent)] transition disabled:opacity-50">
           {askBusy && <Loader2 className="h-3 w-3 animate-spin" />} Ask
         </button>
-        {askNote && <p className="mt-2 text-[11px] text-amber-200/80" data-testid="guillotine-war-room-ask-note">{askNote}</p>}
-        {answer && <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-white/80" data-testid="guillotine-war-room-answer">{answer}</p>}
+        {askNote && <p className="mt-2 text-[12px] text-[var(--warn)]" data-testid="guillotine-war-room-ask-note">{askNote}</p>}
+        {answer && <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--text)]" data-testid="guillotine-war-room-answer">{answer}</p>}
       </div>
     </section>
   )

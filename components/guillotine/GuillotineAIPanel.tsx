@@ -12,7 +12,7 @@ const TYPE_LABELS: Record<GuillotineAIPanelType, string> = {
   survival: 'Survival & chop-risk',
   waiver: 'Waiver aftermath',
   recap: 'Weekly recap',
-  orphan: 'Orphan / Chimmy manager',
+  orphan: 'Chimmy-run team',
 }
 
 export type DeterministicSummaryShape = {
@@ -119,23 +119,8 @@ export function GuillotineAIPanel({
         Guilly Chimmy
       </h2>
       <p className="gl-text2 mb-4 text-sm">
-        Strategy and explanation only. Elimination and standings are computed by the league engine.
+        Ask Chimmy for a plan to stay above the cut. Chimmy explains; the chop itself comes from the scores.
       </p>
-
-      {/* Deterministic data first */}
-      {deterministicSummary && (
-        <div className="gl-well mb-4 rounded-xl border p-3">
-          <p className="gl-muted mb-2 text-xs font-semibold uppercase tracking-wider">
-            Deterministic data (from league engine)
-          </p>
-          <ul className="gl-text space-y-1 text-sm">
-            <li>Survival standings: {deterministicSummary.survivalStandings.length} teams</li>
-            <li>Danger tiers: {deterministicSummary.dangerTiers?.length ?? 0} (Chop Zone / Danger / Safe)</li>
-            <li>Chopped this week: {deterministicSummary.choppedThisWeek.length}</li>
-            <li>Recent chop events: {deterministicSummary.recentChopEvents.length}</li>
-          </ul>
-        </div>
-      )}
 
       {/* Type selector */}
       <div className="mb-4 flex flex-wrap gap-2">

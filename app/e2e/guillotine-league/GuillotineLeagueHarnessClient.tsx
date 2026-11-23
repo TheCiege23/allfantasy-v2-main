@@ -5,7 +5,13 @@ import type { UserLeague } from '@/app/dashboard/types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import { SpecialtyLeagueAtmosphere } from '@/components/league-atmosphere/SpecialtyLeagueAtmosphere'
 import { GuillotineTab } from '@/app/league/[leagueId]/tabs/GuillotineTab'
-import { WarRoomTab } from '@/app/league/[leagueId]/tabs/WarRoomTab'
+/*
+ * The Guillotine panel, not the whole WarRoomTab (2026-11-23): WarRoomTab's import graph reaches lib/prisma.ts
+ * (hooks/useLeagueWarRoomCompanion → lib/draft-room), which throws at module load on a dev server with no
+ * DATABASE_URL — and a harness server must have none, so both tabs here 500'd. WarRoomTab mounts exactly this
+ * panel for a guillotine league.
+ */
+import { GuillotineWarRoomPanel } from '@/app/league/[leagueId]/tabs/guillotine/GuillotineWarRoomPanel'
 import { GUILLOTINE_LEAGUE_ID, GUILLOTINE_WEEK, installGuillotineHarnessFetch, type GuillotineHarnessMood, type GuillotineHarnessTab } from './fixtures'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
@@ -46,7 +52,7 @@ export default function GuillotineLeagueHarnessClient({ tab, mood }: { tab: Guil
   }
   const body =
     activeTab === 'guillotine' ? <GuillotineTab leagueId={league.id} sport="NFL" leagueName={league.name} />
-    : activeTab === 'war_room' ? <WarRoomTab league={league} sport="NFL" />
+    : activeTab === 'war_room' ? <div className="p-4"><GuillotineWarRoomPanel leagueId={league.id} /></div>
     : <p data-testid="gl-harness-other-tab">Not part of this harness.</p>
   return (
     <>

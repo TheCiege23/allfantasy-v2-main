@@ -677,9 +677,10 @@ describe('Guilly full regression matrix', () => {
     expect(screen.getByTestId('guillotine-row-danger').textContent).toContain('Team 3')
     expect(screen.getByTestId('guillotine-cut-line')).toBeTruthy()
 
-    expect(screen.getByText('Waiver & FAAB')).toBeTruthy()
+    // One waivers link on the hub (the quick chip); the separate Waiver & FAAB card went 2026-11-23.
+    expect(screen.queryByText('Waiver & FAAB')).toBeNull()
     expect(screen.getByTestId('guillotine-ai-panel')).toBeTruthy()
-    expect(screen.getByTestId('guillotine-open-waivers')).toBeTruthy()
+    expect(screen.getByTestId('guillotine-quick-waivers')).toBeTruthy()
     expect(screen.getByTestId('guillotine-league-settings')).toBeTruthy()
   })
 

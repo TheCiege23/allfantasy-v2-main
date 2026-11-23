@@ -20,7 +20,7 @@ function stepTone(step: SurvivalPathStep, closeCallMargin: number): { color: str
 
 function Path({ team, closeCallMargin }: { team: SurvivalTeam; closeCallMargin: number }) {
   return (
-    <ol className="flex flex-wrap gap-1" aria-label={`${team.name}, week by week`}>
+    <ol className="flex flex-nowrap gap-1" aria-label={`${team.name}, week by week`}>
       {team.path.map((step) => {
         const tone = stepTone(step, closeCallMargin)
         return (
@@ -91,15 +91,15 @@ export function GuillotineSurvivalHistory({
 
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]" data-testid="guillotine-history-teams">
-          <caption className="gl-muted mb-2 text-left text-[11px] uppercase tracking-wide">
-            Every team’s path · green safe · amber within {fmt(closeCallMargin)} of the line · red chopped
+          <caption className="gl-muted mb-2 text-left text-[12px]">
+            Every team’s path: green is safe, amber is within {fmt(closeCallMargin)} of the cut, red is chopped.
           </caption>
           <thead>
             <tr className="gl-muted text-left text-[11px] uppercase tracking-wide">
               <th scope="col" className="py-1 pr-2 font-semibold">Team</th>
               <th scope="col" className="py-1 pr-2 font-semibold">Status</th>
-              <th scope="col" className="py-1 pr-2 text-right font-semibold">Close calls</th>
-              <th scope="col" className="py-1 pr-2 text-right font-semibold">Closest escape</th>
+              <th scope="col" className="hidden py-1 pr-2 text-right font-semibold sm:table-cell">Close calls</th>
+              <th scope="col" className="hidden py-1 pr-2 text-right font-semibold sm:table-cell">Closest escape</th>
               <th scope="col" className="py-1 font-semibold">Path</th>
             </tr>
           </thead>
@@ -110,10 +110,11 @@ export function GuillotineSurvivalHistory({
                 <tr key={t.rosterId} className={`gl-line border-t ${me ? 'gl-me' : ''}`} data-testid={`guillotine-history-team-${t.rosterId}`} data-status={t.status}>
                   <td className="gl-text py-1.5 pr-2">{me ? `You · ${t.name}` : t.name}</td>
                   <td className={`py-1.5 pr-2 ${t.status === 'chopped' ? 'gl-bad' : 'gl-good'}`}>
-                    {t.status === 'chopped' ? `Chopped wk ${t.choppedWeek}` : `Alive · ${t.weeksSurvived} ${t.weeksSurvived === 1 ? 'chop' : 'chops'} survived`}
+                    {/* "Alive" once: the path beside it already shows each chop survived (2026-11-23). */}
+                    {t.status === 'chopped' ? `Chopped wk ${t.choppedWeek}` : 'Alive'}
                   </td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{t.closeCalls}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{t.bestEscape == null ? '—' : signed(t.bestEscape)}</td>
+                  <td className="hidden py-1.5 pr-2 text-right tabular-nums sm:table-cell">{t.closeCalls}</td>
+                  <td className="hidden py-1.5 pr-2 text-right tabular-nums sm:table-cell">{t.bestEscape == null ? '—' : signed(t.bestEscape)}</td>
                   <td className="py-1.5"><Path team={t} closeCallMargin={closeCallMargin} /></td>
                 </tr>
               )

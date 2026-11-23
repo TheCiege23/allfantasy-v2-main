@@ -252,6 +252,8 @@ export function GuillotineSpecialtyHome({
               ) : null}
             </SpecialtyCard>
           }
+          // Below 1048px the rail drops under the main column; spread its cards across the width there (Devy's fix).
+          railClassName={gl.railWide}
           rail={
             <>
               <SpecialtyCard
@@ -305,7 +307,8 @@ export function GuillotineSpecialtyHome({
             <span className={sp.lbl} style={{ color: TONE_TEXT[me.tier] }}>
               {me.tier === 'safe' ? 'You’re safe right now' : me.tier === 'danger' ? 'You’re in the danger tier' : 'You’re in the chop zone'}
             </span>
-            <span className={`${gl.big} ${gl.phoneMargin}`} style={me.tier === 'chop_zone' ? { color: 'var(--gl-zone-big, #ffb0a4)' } : undefined}>
+            {/* The margin takes its tier's colour: a manager in the danger tier was shown a "safe" green +5.3 (2026-11-23). */}
+            <span className={`${gl.big} ${gl.phoneMargin} ${me.tier === 'chop_zone' ? gl.phoneMarginZone : me.tier === 'danger' ? gl.phoneMarginDanger : ''}`}>
               {me.tier === 'chop_zone' ? 'CUT' : `+${fmt(me.margin)}`}
             </span>
             <span className={sp.t2}>
@@ -345,9 +348,12 @@ export function GuillotineSpecialtyHome({
               Watch the chop
             </a>
           ) : null}
-          <Link className={`${sp.btn} ${home?.lastChop ? '' : sp.btnP}`} href={lineupHref}>
-            Set lineup
-          </Link>
+          {/* A chopped team has no lineup to set; the desktop hero already left this out. */}
+          {myChopped ? null : (
+            <Link className={`${sp.btn} ${home?.lastChop ? '' : sp.btnP}`} href={lineupHref}>
+              Set lineup
+            </Link>
+          )}
         </div>
       </div>
 
