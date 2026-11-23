@@ -31,6 +31,28 @@ export function clientLeagueSettings<T>(settings: T): T {
   return out as T
 }
 
+/**
+ * A league in a LIST of the viewer's leagues (switcher, rail): client-safe, and without the importer's
+ * `identity_mappings` table.
+ *
+ * 🛑 `identity_mappings` is one entry per imported player, team and manager — up to ~200 KB per league
+ * and nothing on a client reads it (only the import pipeline, from the league row). Sent for every
+ * league in the list it was 4.4 MB of a 5.6 MB league page for an owner with 69 imported leagues
+ * (measured 2026-11-23), and parsing it froze Chrome for 30+ s. `getDashboardLeagueListForUser`
+ * already drops it for /core; this is the same rule for the league page's list.
+ *
+ * Only for a list a client READS. Never hand the result to anything that writes `settings` back.
+ */
+export function withListLeagueSettings<T>(league: T): T {
+  if (!isPlainObject(league) || !('settings' in league)) return league
+  const base = clientLeagueSettings(league.settings)
+  if (!isPlainObject(base) || !('identity_mappings' in base)) {
+    return base === league.settings ? league : ({ ...league, settings: base } as T)
+  }
+  const { identity_mappings: _dropped, ...settings } = base
+  return { ...league, settings } as T
+}
+
 /** A league-shaped object with its `settings` made client-safe. Anything else passes through. */
 export function withClientLeagueSettings<T>(league: T): T {
   if (!isPlainObject(league) || !('settings' in league)) return league
