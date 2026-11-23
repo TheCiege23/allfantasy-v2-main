@@ -63,6 +63,17 @@ vi.mock('@/lib/decision-os/trade/frozenCompletedGrade', async (importOriginal) =
   saveFrozenCompletedGrades,
 }))
 
+/* The card's reused grades: read and write stubbed; the fingerprint and the hit rule are the real ones. */
+const { readCoreTradeGrades, writeCoreTradeGrades } = vi.hoisted(() => ({
+  readCoreTradeGrades: vi.fn(),
+  writeCoreTradeGrades: vi.fn(),
+}))
+vi.mock('@/lib/core-app/recentTradeGradeCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-app/recentTradeGradeCache')>()),
+  readCoreTradeGrades,
+  writeCoreTradeGrades,
+}))
+
 const { receiptIdForGrade } = vi.hoisted(() => ({ receiptIdForGrade: vi.fn() }))
 vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/decision-os/trade/recordTradeGrade')>()),
@@ -70,6 +81,8 @@ vi.mock('@/lib/decision-os/trade/recordTradeGrade', async (importOriginal) => ({
 }))
 
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
+import { CORE_TRADE_GRADE_FRESH_MS, coreTradeGradeFingerprint } from '@/lib/core-app/recentTradeGradeCache'
+import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { gradeTrade } from '@/lib/decision-os/trade/tradeGrade'
 
 /* THE grade for side one sending `give` and receiving `get`, by the real scale. */
@@ -115,6 +128,10 @@ function payload(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  readCoreTradeGrades.mockReset()
+  readCoreTradeGrades.mockResolvedValue(new Map())
+  writeCoreTradeGrades.mockReset()
+  writeCoreTradeGrades.mockResolvedValue(undefined)
   loadFrozenCompletedGrades.mockReset()
   loadFrozenCompletedGrades.mockResolvedValue(new Map())
   saveFrozenCompletedGrades.mockReset()
@@ -919,5 +936,82 @@ describe('visible trade grades: stored originals read once per league (2026-11-2
     const rows = await getRecentTrades(LEAGUES, NOW, 3)
     expect(rows[0]!.verdict).not.toBeNull()
     expect(oneGradeForCompletedTrade.mock.calls[0]![3].frozen.size).toBe(0)
+  })
+})
+
+describe('visible trade grades: reused from an earlier open (2026-11-23)', () => {
+  const SRC = () => payload().data.trades[0] as unknown as GradedTrade
+  const cached = (ageMs: number, fp = coreTradeGradeFingerprint(SRC(), 2026), g = grade(1000, 1600)) =>
+    new Map([['af-1', { 'tr-1': { fp, at: new Date(NOW.getTime() - ageMs).toISOString(), grade: g } }]])
+
+  it('a fresh entry is shown as computed: no grading, no stored-original read, nothing written', async () => {
+    oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1600))
+    const computedRows = await getRecentTrades(LEAGUES, NOW, 3)
+    expect(writeCoreTradeGrades).toHaveBeenCalledTimes(1)
+    oneGradeForCompletedTrade.mockClear()
+    loadFrozenCompletedGrades.mockClear()
+    writeCoreTradeGrades.mockClear()
+
+    readCoreTradeGrades.mockResolvedValue(cached(60_000))
+    const rows = await getRecentTrades(LEAGUES, NOW, 3)
+    expect(oneGradeForCompletedTrade).not.toHaveBeenCalled()
+    expect(loadFrozenCompletedGrades).not.toHaveBeenCalled()
+    expect(writeCoreTradeGrades).not.toHaveBeenCalled()
+    // Exactly what the computed grade puts on screen.
+    expect(rows[0]!.sides).toEqual(computedRows[0]!.sides)
+    expect(rows[0]!.verdict).toEqual(computedRows[0]!.verdict)
+  })
+
+  it('a stale entry is shown, then re-graded after the card and stored for the next open', async () => {
+    readCoreTradeGrades.mockResolvedValue(cached(CORE_TRADE_GRADE_FRESH_MS + 60_000))
+    oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1000))
+    const rows = await getRecentTrades(LEAGUES, NOW, 3)
+    // On screen: the cached grade (1000 for 1600), not the re-grade (even).
+    expect(rows[0]!.verdict?.favoursRosterId).toBe(1)
+    await vi.waitFor(() => expect(writeCoreTradeGrades).toHaveBeenCalledTimes(1))
+    expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(1)
+    const [leagueId, previous, fresh] = writeCoreTradeGrades.mock.calls[0]!
+    expect(leagueId).toBe('af-1')
+    expect(previous).toHaveProperty('tr-1')
+    expect([...fresh.keys()]).toEqual(['tr-1'])
+  })
+
+  it('a different trade shape is a miss: the trade is graded and its new grade stored', async () => {
+    readCoreTradeGrades.mockResolvedValue(cached(60_000, 'a-different-fingerprint'))
+    oneGradeForCompletedTrade.mockResolvedValue(grade(1000, 1150))
+    await getRecentTrades(LEAGUES, NOW, 3)
+    expect(oneGradeForCompletedTrade).toHaveBeenCalledTimes(1)
+    const [leagueId, , fresh] = writeCoreTradeGrades.mock.calls[0]!
+    expect(leagueId).toBe('af-1')
+    expect(fresh.get('tr-1')).toMatchObject({ fp: coreTradeGradeFingerprint(SRC(), 2026), at: NOW.toISOString() })
+  })
+
+  it('never stores a grade that failed or whose original could not be saved', async () => {
+    oneGradeForCompletedTrade.mockRejectedValue(new Error('chart down'))
+    await getRecentTrades(LEAGUES, NOW, 3)
+    oneGradeForCompletedTrade.mockImplementation(async (_l: string, _t: unknown, _s: number, deps: { onFreeze: (r: unknown, c: unknown) => void }) => {
+      deps.onFreeze({ v: 2, basis: 'trade_date' }, grade(1000, 1000))
+      return grade(1000, 1600)
+    })
+    saveFrozenCompletedGrades.mockResolvedValue(false)
+    await getRecentTrades(LEAGUES, NOW, 3)
+    expect(writeCoreTradeGrades).not.toHaveBeenCalled()
+  })
+
+  it('counts reused grades on the timing line', async () => {
+    readCoreTradeGrades.mockResolvedValue(cached(60_000))
+    let clock = 0
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => (clock += 1000))
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    try {
+      await getRecentTrades(LEAGUES, NOW, 3)
+      const line = JSON.parse(String(info.mock.calls.find((c) => c[0] === '[core-trades-timing]')![1]))
+      expect(line.grades).toEqual({ reused: 1 })
+      expect(line.phases).toHaveProperty('reuse')
+      expect(line.phases).not.toHaveProperty('frozen')
+    } finally {
+      spy.mockRestore()
+      info.mockRestore()
+    }
   })
 })
