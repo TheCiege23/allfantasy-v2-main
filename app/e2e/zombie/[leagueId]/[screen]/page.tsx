@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import ZombieHarnessClient from '../../ZombieHarnessClient'
 import { ZOMBIE_HARNESS_SCREENS } from '../../screens'
-import { getRulesDocAsHtml } from '@/lib/zombie/rulesDocGenerator'
+import { getRulesDocAsHtml } from '@/lib/zombie/rulesDocHtml'
 import { rulesDocument } from '../../fixtures'
 
 /**

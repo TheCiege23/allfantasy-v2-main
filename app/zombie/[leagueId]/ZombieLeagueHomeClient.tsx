@@ -280,8 +280,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
       ) : null}
       {z.isPaid ? (
         <>
-          <ZombieQuickAction href={LEAGUE_SAFE_URL} label="Pay LeagueSafe" icon={Wallet} kind="pay" data-testid="zombie-quick-leaguesafe" />
-          <ZombieQuickAction href={fanCredUrl} label="Pay FanCred" icon={Wallet} kind="pay" data-testid="zombie-quick-fancred" />
+          {/* Dues links live once, in the Dues & payouts card below (2026-11-23). */}
         </>
       ) : null}
       <ZombieQuickAction
@@ -317,7 +316,6 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
       >
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 lg:px-6">
         <ZombieRoleActions leagueId={leagueId} onChanged={() => setRoleRefresh(n => n + 1)} />
-        <ZombieSeasonOperations leagueId={leagueId} />
         <ZombieCommandHero
           leagueName={z.name}
           logoUrl={z.logoUrl}
@@ -492,7 +490,7 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                 </div>
               </ZombieGlassPanel>
 
-              <ZombieGlassPanel title="Command summary" eyebrow="Weekly update" icon={<Sparkles className="h-5 w-5 text-amber-200" />}>
+              <ZombieGlassPanel title="This week’s recap" eyebrow="Weekly update" icon={<Sparkles className="h-5 w-5 text-amber-200" />}>
                 {lastUpdate ? (
                   <>
                     <p className="text-sm font-semibold text-white">Week {lastUpdate.week ?? z.currentWeek}</p>
@@ -567,38 +565,9 @@ export function ZombieLeagueHomeClient({ leagueId, userId }: { leagueId: string;
                 })}
               </div>
             </ZombieGlassPanel>
-
-            <ZombieGlassPanel title="Jump to live surfaces" eyebrow="Navigation" icon={<ArrowUpRight className="h-5 w-5 text-cyan-200" />}>
-              <div className="grid grid-cols-1 gap-2">
-                <Link
-                  href={`/zombie/${leagueId}/standings`}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/[0.08]"
-                >
-                  Standings and status map
-                </Link>
-                <Link
-                  href={`/zombie/${leagueId}/matchups`}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/[0.08]"
-                >
-                  Matchups and infection risk
-                </Link>
-                <Link
-                  href={`/zombie/${leagueId}/chat`}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/[0.08]"
-                >
-                  League chat and @Chimmy
-                </Link>
-                {z.universeId ? (
-                  <Link
-                    href={`/app/zombie-universe/${z.universeId}`}
-                    className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/[0.08]"
-                  >
-                    Universe war room
-                  </Link>
-                ) : null}
-              </div>
-            </ZombieGlassPanel>
           </aside>
+        {/* League business (the pot, rule votes, owner changes) after the season's content, not above the hero. */}
+        <ZombieSeasonOperations leagueId={leagueId} />
         </div>
         </div>
       </div>
