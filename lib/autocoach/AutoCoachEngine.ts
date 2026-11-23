@@ -23,6 +23,7 @@ import { pickBestBenchReplacementForAutoCoach } from '@/lib/autocoach/pickBestBe
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
 import type { AutoCoachSwapResult } from '@/lib/autocoach/types'
 import { findSportsPlayerByLeagueId, findSportsPlayersByLeagueIds } from '@/lib/player-identity/findSportsPlayerByLeagueId'
+import { readAiSwapPreference } from '@/lib/lineup-automation/aiSwapPolicy'
 
 export { BESTBALL_VARIANTS, isBestBallLeague }
 
@@ -333,6 +334,8 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
       select: { autoCoachGlobalEnabled: true, autoCoachPreferences: true },
     })
     if (profile?.autoCoachGlobalEnabled === false) continue
+    // AI swap is off until the subscriber turns it on (lib/lineup-automation/aiSwapPolicy.ts).
+    if (!(await readAiSwapPreference(setting.userId)).on) continue
 
     const prefs = parseAutoCoachUserPreferences(profile?.autoCoachPreferences ?? null)
 

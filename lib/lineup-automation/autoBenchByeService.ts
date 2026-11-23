@@ -2,7 +2,7 @@ import { resolveActingRoster, resolveViewingRoster } from '@/lib/league/viewerTe
 import 'server-only'
 
 /**
- * The free "bench my starters on bye automatically" setting (`./autoBenchByePolicy.ts`): the owner's
+ * The "bench my starters on bye automatically" setting (an AI swap: AF Pro / Supreme, ./aiSwapPolicy.ts) (`./autoBenchByePolicy.ts`): the owner's
  * switch, and the hourly run that applies it.
  *
  * Leagues played on AllFantasy with weekly lineups only. An imported league is played on its provider;
@@ -31,6 +31,7 @@ import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { AUTO_BENCH_BYE_KEY, autoBenchByeOn, planAutoBenchBye, withAutoBenchBye } from './autoBenchByePolicy'
+import { aiSwapAllowedForTeam, isAiSeat } from './aiSwapPolicy'
 
 export const AUTO_BENCH_BYE_ACTION = 'auto_bench_bye.applied'
 
@@ -116,8 +117,7 @@ export async function runAutoBenchByes(opts?: { limit?: number; deadline?: numbe
         skip((ctx && 'skip' in ctx ? ctx.skip : null) ?? 'no_league')
         continue
       }
-      const { league, week, season, slots, managed } = ctx
-      if (managed.has(rosterId)) {
+      if (ctx.managed.has(rosterId)) {
         skip('managed_by_autopilot')
         continue
       }
@@ -126,81 +126,211 @@ export async function runAutoBenchByes(opts?: { limit?: number; deadline?: numbe
         skip('not_owner_setting')
         continue
       }
-      const lock = await resolveFullLineupLockContext({
-        leagueId,
-        rosterId,
-        sport: String(league.sport ?? 'NFL'),
-        leagueVariant: league.leagueVariant as string | null,
-        settings: league.settings,
-        leagueWeek: week,
-        editingWeek: week,
-        season,
-        now: new Date(),
-        playerData: roster.playerData,
-        lockAllMoves: league.lockAllMoves,
-        lifecycleState: league.lifecycleState,
-      })
-      if (lock.locked) {
-        skip('lineup_locked')
+      /*
+       * 🛑 THIS SWITCH WAS FREE. Benching a starter for the manager is an AI swap, which is an AF Pro /
+       * Supreme feature the subscriber turns on and the commissioner can switch off league-wide
+       * (owner's rule 2026-11-23, ./aiSwapPolicy.ts). The switch on the team stays where the owner left
+       * it; it only RUNS while all three hold. A manager it does not run for is alerted instead, by
+       * `runByeStarterSweep`.
+       */
+      const swap = await aiSwapAllowedForTeam({ roster, league: ctx.league })
+      if (!swap.allowed) {
+        skip(swap.reason)
         continue
       }
-      const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: roster.platformUserId, limit: 200 })
-      const players: Record<string, LineupPlayerInfo> = {}
-      const names: Record<string, string> = {}
-      const byeFacts: Record<string, { byeWeek: number | null }> = {}
-      for (const p of rows.map(serializeUnifiedPlayerForApi)) {
-        players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
-        names[p.id] = p.name ?? p.id
-        byeFacts[p.id] = { byeWeek: p.product?.byeWeek ?? p.nflRedraftGameContext?.byeWeek ?? null }
-      }
-      const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
-      const locked = new Set(lock.lockedPlayerIds)
-      const plan = planAutoBenchBye({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
-      if (plan.kind === 'skip') {
-        if (plan.reason === 'already_best' || plan.reason === 'no_bye_starters') result.unchanged += 1
-        else skip(plan.reason)
-        continue
-      }
-      const pd = settingsObject(roster.playerData)
-      const said = plan.changes.map((c) => `${c.out ? names[c.out] ?? c.out : 'empty'} (bye) → ${names[c.in] ?? c.in} at ${c.slot}`)
-      const auditId = `auto-bench-bye:${JSON.stringify([leagueId, rosterId, season, week, plan.changes.map((c) => c.in)])}`
-      const saved = await persistRosterLineupWithEngine({
-        leagueId,
-        rosterId,
-        actorUserId: roster.platformUserId,
-        expectedOwnerUserId: roster.platformUserId,
-        season,
-        week,
-        source: 'system',
-        nextPlayerData: plan.nextPlayerData,
-        ...(Array.isArray(pd.starters) ? { expectedStarters: pd.starters.map(String) } : {}),
-        automationAudit: {
-          id: auditId,
-          action: AUTO_BENCH_BYE_ACTION,
-          message: `Benched a starter on bye, as the manager asked: ${said.join('; ')}.`,
-          metadata: { season, week, changes: plan.changes },
-        },
-      })
-      if (!saved.ok) {
-        skip(`save_refused:${saved.status ?? 'error'}`)
-        continue
-      }
-      result.swapped += 1
-      await dispatchNotification({
-        userIds: [roster.platformUserId],
-        category: 'autocoach',
-        type: 'auto_bench_bye',
-        title: `Bye week swap · ${league.name ?? 'your league'}`,
-        body: said.join('; '),
-        severity: 'low',
-        leagueId,
-        actionHref: `/league/${leagueId}?tab=team`,
-        actionLabel: 'View lineup',
-        dedupePrefix: auditId,
-        meta: { leagueId, rosterId, week },
-      }).catch(() => {})
+      const outcome = await benchByesForTeam(ctx, roster, { notifyOwner: true })
+      if (outcome === 'swapped') result.swapped += 1
+      else if (outcome === 'unchanged') result.unchanged += 1
+      else skip(outcome)
     } catch (e) {
       result.failures.push({ leagueId, rosterId, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return result
+}
+
+type LoadedByeLeague = Exclude<NonNullable<Awaited<ReturnType<typeof loadLeague>>>, { skip: string }>
+type ByeTeam = { id: string; platformUserId: string | null; playerData: unknown; settings?: unknown }
+
+/** Swap this team's starters on bye for the best bench players who can play. Returns what happened. */
+async function benchByesForTeam(
+  ctx: LoadedByeLeague,
+  roster: ByeTeam,
+  opts: { notifyOwner: boolean },
+): Promise<'swapped' | 'unchanged' | string> {
+  const { league, week, season, slots } = ctx
+  const leagueId = league.id
+  const rosterId = roster.id
+  const owner = roster.platformUserId
+  if (!owner) return 'no_owner'
+  const lock = await resolveFullLineupLockContext({
+    leagueId,
+    rosterId,
+    sport: String(league.sport ?? 'NFL'),
+    leagueVariant: league.leagueVariant as string | null,
+    settings: league.settings,
+    leagueWeek: week,
+    editingWeek: week,
+    season,
+    now: new Date(),
+    playerData: roster.playerData,
+    lockAllMoves: league.lockAllMoves,
+    lifecycleState: league.lifecycleState,
+  })
+  if (lock.locked) return 'lineup_locked'
+  const rows = await getNormalizedPlayerData({ surface: 'roster', leagueId, userId: owner, limit: 200 })
+  const players: Record<string, LineupPlayerInfo> = {}
+  const names: Record<string, string> = {}
+  const byeFacts: Record<string, { byeWeek: number | null }> = {}
+  for (const p of rows.map(serializeUnifiedPlayerForApi)) {
+    players[p.id] = { position: p.position, projectedPoints: p.projectedPoints }
+    names[p.id] = p.name ?? p.id
+    byeFacts[p.id] = { byeWeek: p.product?.byeWeek ?? p.nflRedraftGameContext?.byeWeek ?? null }
+  }
+  const onBye = new Set(startersOnBye(Object.keys(byeFacts), (id) => byeFacts[id], week))
+  const locked = new Set(lock.lockedPlayerIds)
+  const plan = planAutoBenchBye({ slots, playerData: roster.playerData, players, isLocked: (id) => locked.has(id), onBye: (id) => onBye.has(id) })
+  if (plan.kind === 'skip') return plan.reason === 'already_best' || plan.reason === 'no_bye_starters' ? 'unchanged' : plan.reason
+  const pd = settingsObject(roster.playerData)
+  const said = plan.changes.map((c) => `${c.out ? names[c.out] ?? c.out : 'empty'} (bye) → ${names[c.in] ?? c.in} at ${c.slot}`)
+  const auditId = `auto-bench-bye:${JSON.stringify([leagueId, rosterId, season, week, plan.changes.map((c) => c.in)])}`
+  const saved = await persistRosterLineupWithEngine({
+    leagueId,
+    rosterId,
+    actorUserId: owner,
+    expectedOwnerUserId: owner,
+    season,
+    week,
+    source: 'system',
+    nextPlayerData: plan.nextPlayerData,
+    ...(Array.isArray(pd.starters) ? { expectedStarters: pd.starters.map(String) } : {}),
+    automationAudit: {
+      id: auditId,
+      action: AUTO_BENCH_BYE_ACTION,
+      message: opts.notifyOwner
+        ? `Benched a starter on bye, as the manager asked: ${said.join('; ')}.`
+        : `Benched a starter on bye for an AI-managed seat: ${said.join('; ')}.`,
+      metadata: { season, week, changes: plan.changes },
+    },
+  })
+  if (!saved.ok) return `save_refused:${saved.status ?? 'error'}`
+  if (opts.notifyOwner) {
+    await dispatchNotification({
+      userIds: [owner],
+      category: 'autocoach',
+      type: 'auto_bench_bye',
+      title: `Bye week swap · ${league.name ?? 'your league'}`,
+      body: said.join('; '),
+      severity: 'low',
+      leagueId,
+      actionHref: `/league/${leagueId}?tab=team`,
+      actionLabel: 'View lineup',
+      dedupePrefix: auditId,
+      meta: { leagueId, rosterId, week },
+    }).catch(() => {})
+  }
+  return 'swapped'
+}
+
+export type ByeStarterSweepResult = {
+  leagues: number
+  teams: number
+  aiSeatsSwapped: number
+  managersAlerted: number
+  skipped: Record<string, number>
+  failures: { leagueId: string; rosterId?: string; error: string }[]
+}
+
+/** The redraft slot types that do not start (lib/redraft/lineupValidation.ts NON_STARTER_SLOTS). */
+const NON_STARTING_SLOT_TYPES = ['bench', 'bn', 'ir', 'taxi', 'devy', 'reserve', 'il', 'il_plus', 'na', 'prospect', 'rights', 'minors']
+
+/**
+ * Hourly, every hosted weekly-lineup league in season: a team starting a player on bye this week.
+ *
+ * 🛑 THE BYE RULE WAS ONLY EVER CHECKED WHEN SOMEONE SAVED. `validateRedraftLineup` refuses to START a
+ * player on bye, but a lineup set by the draft, or left from an earlier week, walks into the bye week
+ * untouched: Zombie Chimmy Test and the 8-team redraft league both started Kyren Williams in week 11
+ * (his bye) on 2026-11-22, and ten unclaimed "Open Team" seats started bye players nobody could move.
+ *
+ * Owner's rule (2026-11-23): an AI-managed or unclaimed seat is fixed — the bye starter benched for the
+ * best eligible bench player whose game has not started. A person is ALERTED and nothing moves, unless
+ * they have AI swap (AF Pro / Supreme, switched on, league not off) and the bye switch on, in which case
+ * `runAutoBenchByes` swaps it. A team the inactive-manager autopilot runs is left to that run.
+ */
+export async function runByeStarterSweep(opts?: { limit?: number; deadline?: number; now?: Date }): Promise<ByeStarterSweepResult> {
+  const now = opts?.now ?? new Date()
+  const deadline = opts?.deadline ?? Date.now() + 25_000
+  const result: ByeStarterSweepResult = { leagues: 0, teams: 0, aiSeatsSwapped: 0, managersAlerted: 0, skipped: {}, failures: [] }
+  const skip = (reason: string) => (result.skipped[reason] = (result.skipped[reason] ?? 0) + 1)
+  const hourKey = now.toISOString().slice(0, 13)
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM leagues
+    WHERE (LOWER(status) IN ('active', 'in_season') OR (status IS NULL AND "lifecycleState"::text = 'in_season'))
+    ORDER BY md5(id || ${hourKey}) LIMIT ${Math.max(1, Math.min(opts?.limit ?? 200, 1000))}`
+
+  for (const { id: leagueId } of ids) {
+    if (Date.now() >= deadline) break
+    try {
+      const ctx = await loadLeague(leagueId)
+      if (!ctx || 'skip' in ctx) {
+        skip((ctx && 'skip' in ctx ? ctx.skip : null) ?? 'no_league')
+        continue
+      }
+      result.leagues += 1
+      // Cheap first: the season roster's starters whose bye is this week. Most teams have none.
+      const flagged = await prisma.$queryRaw<Array<{ rosterId: string; names: string[] }>>`
+        SELECT r.id AS "rosterId", array_agg(p."playerName" ORDER BY p."playerName") AS names
+        FROM rosters r JOIN redraft_roster_players p ON p."rosterId" = r."redraftRosterId"
+        WHERE r."leagueId" = ${leagueId} AND p."droppedAt" IS NULL AND p."byeWeek" = ${ctx.week}
+          AND LOWER(p."slotType") <> ALL(${NON_STARTING_SLOT_TYPES})
+        GROUP BY r.id`
+      for (const { rosterId, names } of flagged) {
+        if (Date.now() >= deadline) break
+        result.teams += 1
+        try {
+          if (ctx.managed.has(rosterId)) {
+            skip('managed_by_autopilot')
+            continue
+          }
+          const roster = await prisma.roster.findFirst({ where: { id: rosterId, leagueId } })
+          if (!roster) continue
+          if (isAiSeat(roster)) {
+            const outcome = await benchByesForTeam(ctx, roster, { notifyOwner: false })
+            if (outcome === 'swapped') result.aiSeatsSwapped += 1
+            else skip(`ai_seat_${outcome}`)
+            continue
+          }
+          if (!roster.platformUserId) {
+            skip('no_owner')
+            continue
+          }
+          // The manager's own bye switch with AI swap allowed is `runAutoBenchByes`' job.
+          if (autoBenchByeOn(roster.settings, roster.platformUserId) && (await aiSwapAllowedForTeam({ roster, league: ctx.league })).allowed) {
+            skip('owner_auto_bench_on')
+            continue
+          }
+          const list = names.join(', ')
+          await dispatchNotification({
+            userIds: [roster.platformUserId],
+            category: 'lineup_alerts',
+            type: 'starter_on_bye',
+            title: `Starter on bye · ${ctx.league.name ?? 'your league'}`,
+            body: `${list} ${names.length === 1 ? 'is' : 'are'} on bye in Week ${ctx.week} and will score 0. Swap ${names.length === 1 ? 'him' : 'them'} out before lineups lock.`,
+            severity: 'medium',
+            leagueId,
+            actionHref: `/league/${encodeURIComponent(leagueId)}?tab=team`,
+            actionLabel: 'Fix lineup',
+            // Once per team, week and set of players: a new bye starter alerts again, the same one does not.
+            dedupePrefix: `bye-starter:${leagueId}:${rosterId}:${ctx.season}:${ctx.week}:${list}`,
+            meta: { leagueId, rosterId, week: ctx.week },
+          })
+          result.managersAlerted += 1
+        } catch (e) {
+          result.failures.push({ leagueId, rosterId, error: e instanceof Error ? e.message : String(e) })
+        }
+      }
+    } catch (e) {
+      result.failures.push({ leagueId, error: e instanceof Error ? e.message : String(e) })
     }
   }
   return result

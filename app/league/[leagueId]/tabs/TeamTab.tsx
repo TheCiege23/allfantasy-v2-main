@@ -1499,13 +1499,17 @@ const maxWeekMenu = useMemo(() => {
     })
   }, [dbRosterMeta, resolvedSport, week])
 
+  // A past week is view-only. Otherwise the server's lock decides (`canEditLineup`, per player from the
+  // schedule in every sport); the client's time-of-day guess only stands in when the server sent none.
+  const weekLockBlocks =
+    weekLock?.policy === 'view_only_past' || (dbRosterMeta?.canEditLineup === undefined && Boolean(weekLock?.locked))
   const lineupEditable =
     !isBestBall &&
     !isSleeper &&
     Boolean(dbRosterMeta) &&
     dbRosterMeta?.canEditLineup !== false &&
     Boolean(weekLock) &&
-    !weekLock!.locked
+    !weekLockBlocks
 
   const saveLineup = useCallback(
     async (next: RosterLineupLists, campus?: string[]): Promise<boolean> => {
@@ -1897,7 +1901,7 @@ const maxWeekMenu = useMemo(() => {
         </p>
       ) : null}
 
-      {!isSleeper && weekLock?.locked ? (
+      {!isSleeper && weekLock && weekLockBlocks ? (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
           {weekLock.reason ?? 'Lineup is locked for this week.'}
         </p>
