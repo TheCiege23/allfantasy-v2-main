@@ -3,16 +3,14 @@ import "server-only"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getServedOrigin } from "@/lib/http/served-origin"
 
 /** The page's origin, for the relying party outside production (see passkeyConfig). */
 export function requestOriginOf(req: Request): string | null {
   const header = req.headers.get("origin")
   if (header && header !== "null") return header
-  try {
-    return new URL(req.url).origin
-  } catch {
-    return null
-  }
+  // Never req.url's origin: a route handler sees the BIND address there (0.0.0.0:8080 on Railway).
+  return getServedOrigin(req) || null
 }
 
 export async function signedInUserId(): Promise<string | null> {
