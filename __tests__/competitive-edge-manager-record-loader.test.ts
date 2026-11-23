@@ -16,8 +16,12 @@ const m = vi.hoisted(() => ({
   rules: vi.fn(),
   native: vi.fn(),
   providerWaivers: vi.fn(),
+  leagueTrades: vi.fn(async () => [] as unknown[]),
+  players: vi.fn(async () => [] as unknown[]),
 }))
-vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: m.league }, leagueTeam: { findMany: m.teams } } }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: { league: { findUnique: m.league }, leagueTeam: { findMany: m.teams }, leagueTrade: { findMany: m.leagueTrades }, sportsPlayer: { findMany: m.players } },
+}))
 vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: m.membership }))
 vi.mock('@/lib/core-app/waivers', () => ({ resolveWaiverRules: m.rules }))
 vi.mock('@/lib/competitive-edge/tradeEdgeLoader', () => ({ readSleeperTradeHistory: m.trades }))
@@ -94,6 +98,31 @@ describe('loadLeagueManagerRecords', () => {
     expect(mike.waivers.available && mike.waivers.data.faabRemaining).toBe(88)
     expect(m.waivers).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', usesFaab: true }))
     expect(m.trades).toHaveBeenCalledWith('sl-1', expect.any(Date))
+  })
+
+  it('Sleeper: each trade\'s saved situation is read and becomes facts on the record; MANAGER_TRADE_SITUATION=off drops them', async () => {
+    const side = (ownerId: string, rosterId: number) => ({ ownerId, rosterId, playersIn: [{ playerId: 'p1', position: 'WR' }], playersOut: [], picksIn: [], picksOut: [] })
+    const three = ['a', 'b', 'c'].map((tx) => ({
+      id: `sl-1:${tx}`, season: '2026', week: 9, createdIso: '2026-10-20T00:00:00Z', sides: [side('mike', 3), side('viewer', 1)],
+    }))
+    m.trades.mockResolvedValue({ available: true, data: { trades: three, seasonsScanned: ['2026'], historyGaps: [], asOf: '2026-11-15T00:00:00Z', stale: false } })
+    m.leagueTrades.mockResolvedValue(['a', 'b', 'c'].map((tx) => ({
+      transactionId: tx, history: { sleeperLeagueId: 'sl-1' },
+      contextSnapshot: { starterSlots: { WR: 3 }, sides: [{ rosterId: '3', record: { wins: 6, losses: 2, ties: 0 }, rosterBefore: [{ position: 'WR' }] }] },
+    })))
+    const situation = async () => {
+      const r = await loadLeagueManagerRecords({ leagueId: 'L1', userId: 'u1', teamExternalId: '3' })
+      if (!r.available) throw new Error(r.reason)
+      const t = r.data.records[0]!.trades
+      return t.available ? t.data.facts.filter((f) => f.key.startsWith('trade.situation')).map((f) => f.key) : []
+    }
+    expect(await situation()).toEqual(expect.arrayContaining(['trade.situation.timing', 'trade.situation.record', 'trade.situation.depth.WR']))
+    process.env.MANAGER_TRADE_SITUATION = 'off'
+    try {
+      expect(await situation()).toEqual([])
+    } finally {
+      delete process.env.MANAGER_TRADE_SITUATION
+    }
   })
 
   it('one team by id — including the viewer, when asked for by id', async () => {

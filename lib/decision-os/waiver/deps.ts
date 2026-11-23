@@ -11,6 +11,7 @@ import type { WaiverAIServiceOutput } from '@/lib/waiver-ai-engine'
 import type { WaiverWorldFacts } from './loader'
 import type { WaiverDecisionDeps } from './decision'
 import type { WaiverRuleDeps } from './rules'
+import type { WaiverCalibration } from './calibration'
 
 function newId(): string {
   return (
@@ -71,10 +72,12 @@ export function productionWaiverRecommend(): WaiverDecisionDeps['recommend'] {
  * ⚠ `newId` stays module-private. Exporting it to let callers assemble deps by hand is how a second
  * spelling of "how a waiver decision is constructed" gets created.
  */
-export function buildLiveWaiverDecisionDeps(facts: WaiverWorldFacts): WaiverDecisionDeps {
+export function buildLiveWaiverDecisionDeps(facts: WaiverWorldFacts, calibration: WaiverCalibration | null = null): WaiverDecisionDeps {
   return {
     recommend: productionWaiverRecommend(),
     ruleDeps: buildProductionWaiverRuleDeps(facts),
     newId,
+    // The engine's graded record for this league, when the ledger can measure it (calibrationStore.ts).
+    calibration,
   }
 }

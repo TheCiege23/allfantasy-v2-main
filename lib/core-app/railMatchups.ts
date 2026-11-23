@@ -6,6 +6,7 @@ import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { managerArtUrl } from './leagueArt'
 import { realManagerName, rosterLabel } from './managerName'
+import { loadLeagueRosterWeeks } from '@/lib/af-projections/leagueRosterWeek'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
@@ -17,6 +18,7 @@ import { getNativeRailMatchups } from './nativeRailMatchups'
 import { mostHavePlayed } from './liveRailScores'
 import { loadBestBallField, type BestBallFieldRoster } from './bestBallField'
 import { isBestBallLeagueRow } from './leagueBestBall'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -748,8 +750,11 @@ async function getImportedRailMatchups(userId: string, leagues: RailLeagueInput[
   }
 
   const projections = await loadRailProjections({
+    sharedAf: true,
+    afIntelligence: await viewerHasAfIntelligence(userId),
     fixtures: fixtures.map((f) => ({
       dbLeagueId: f.you.leagueId,
+      season: f.row.seasonYear, week: f.row.week,
       platformLeagueId: f.row.leagueId,
       /*
        * A paired league prices two lineups; an unpaired one prices its whole
@@ -950,7 +955,10 @@ async function loadBestBallFields(
 }
 
 export async function loadRailProjections(args: {
-  fixtures: Array<{ dbLeagueId: string; platformLeagueId: string; rosterIds: string[] }>
+  sharedAf?: boolean
+  /** The viewer's AF Intelligence (lib/core-app/afIntelligenceViewer.ts): false prices the boards without AF's factors. */
+  afIntelligence?: boolean
+  fixtures: Array<{ dbLeagueId: string; platformLeagueId: string; rosterIds: string[]; season?: number; week?: number }>
   /* ReadonlyMap, not Map: `Map` is invariant in its value type, so the caller's
      richer `TeamMeta` would not assign to a narrower one. */
   teamByKey: ReadonlyMap<string, { externalId: string; rosterKeys: string[] }>
@@ -1014,7 +1022,7 @@ export async function loadRailProjections(args: {
   const foreignLeagues = new Set(leagueMeta.filter((m) => isForeignIdSpace(m.platform, m.sport)).map((m) => m.id))
   for (const r of starterRows) {
     if (!r.platformUserId) continue
-    startersByKey.set(`${r.leagueId}:${r.platformUserId}`, foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))
+    startersByKey.set(`${r.leagueId}:${r.platformUserId}`, !args.sharedAf && foreignLeagues.has(r.leagueId) ? [] : startersOf(r.starters))
   }
 
   /* Which lineup belongs to which side, resolved once so it is not re-derived per pass. */
@@ -1037,6 +1045,33 @@ export async function loadRailProjections(args: {
     }
   }
   if (sides.length === 0) return NO_PROJECTIONS
+  if (args.sharedAf) {
+    const grouped = new Map<string, Side[]>()
+    for (const side of sides) grouped.set(side.dbLeagueId, [...(grouped.get(side.dbLeagueId) ?? []), side])
+    const fixtures = new Map(args.fixtures.map(f => [f.dbLeagueId, f]))
+    const requests = [...grouped].map(([leagueId, entries]) => ({
+      leagueId, season: fixtures.get(leagueId)?.season ?? args.season, week: fixtures.get(leagueId)?.week ?? args.week,
+      ids: entries.flatMap(side => side.starters),
+    }))
+    const boards = await loadLeagueRosterWeeks(requests, { afIntelligence: args.afIntelligence })
+    const byLeague = new Map<string, SidesForLeague>()
+    for (const meta of leagueMeta) {
+      const players = boards.get(meta.id)
+      if (!players?.size) continue
+      const totals = new Map<string, RailSideProjection>()
+      for (const side of grouped.get(meta.id) ?? []) {
+        const starters = side.starters.filter(id => id && id !== '0')
+        const amounts = starters.flatMap(id => players.get(id)?.points ?? [])
+        const total = amounts.length ? Math.round(amounts.reduce((a, b) => a + b, 0) * 100) / 100 : null
+        totals.set(side.externalId, { projected: null, afProjected: total, afEngine: total,
+          afEngineFrom: amounts.length, pricedFrom: amounts.length, starterCount: starters.length })
+      }
+      byLeague.set(meta.id, { sides: totals, elimination: eliminationFormat(meta) != null })
+    }
+    const period = requests.find(r => byLeague.has(r.leagueId))
+    return { byLeague, projectionWeek: period && requests.every(r => !byLeague.has(r.leagueId) || (r.week === period.week && r.season === period.season))
+      ? { season: String(period.season), week: period.week } : null }
+  }
 
   /*
    * 🛑 ONLY AN NFL SIDE IS PRICED FROM THIS FEED (2026-11-06). One read serves every league on the

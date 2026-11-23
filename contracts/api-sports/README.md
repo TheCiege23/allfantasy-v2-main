@@ -8,6 +8,58 @@ This is **not** a full contract like `contracts/rolling-insights/` or
 exists because the root CLAUDE.md rule for probing is that *"the captured fixture
 must be committed in the same change"*, and one probe was run.
 
+## 🛑 College injuries: API-Sports publishes none. Do not build a college sweep.
+
+Probed 2026-11-22 with `scripts/probe.sh`, on the **Ultra** plan (75,000/day,
+active, per the free `/status` call). `/injuries?team=<id>` for five of the biggest
+FBS programs returned **HTTP 200, `errors: []`, 0 results** each, while the NFL
+control on the same key in the same minute returned rows:
+
+| team | id | results | fixture |
+|---|---:|---:|---|
+| Ohio State | 107 | 0 | `injuries-ncaaf-team-107.json` |
+| Alabama | 106 | 0 | `injuries-ncaaf-team-106.json` |
+| Michigan | 115 | 0 | `injuries-ncaaf-team-115.json` |
+| Texas | 195 | 0 | `injuries-ncaaf-team-195.json` |
+| LSU | 207 | 0 | `injuries-ncaaf-team-207.json` |
+| **NFL control:** Jacksonville | 2 | **17** | `injuries-nfl-team-2.json` |
+
+Ravens (5) and Lions (7) returned 13 and 20 in the same run and were not kept.
+⚠ Raiders (1) returned **0**: a single NFL team is not a control, because a team
+can genuinely have nobody listed. Use one known to carry injuries.
+
+**Why this is "no data" and not "not entitled":** this vendor reports a plan refusal
+as a populated `errors` object (`errors.plan`), and these responses carry none. The
+key does reach college for other endpoints: 5,508 NCAAF 2026 games and their scores
+come through it (`SportsGame`, `source = 'api_sports'`).
+
+**What it would have cost to learn this the slow way:** API-Sports carries 726
+college teams. The bounded list was the FBS: 138 teams in the stored NCAAF
+standings, 137 resolvable to an API-Sports id by school name (`SportsGame.homeTeamId`),
+Buffalo excluded because id 141 carries both FBS Buffalo's MAC schedule and
+Division III Buffalo State's. A per-team sweep of that list is ~137 calls a run that
+would have written nothing and reported success. NCAAF injuries need another source.
+
+## `scripts/probe.sh`
+
+One request per run, written to `fixtures/<name>.json`, after a `/status` call that
+reports the key's plan (that call does not count against the quota). The key goes in
+the `x-apisports-key` header through a 0600 temp file (`curl -H @file`), so it is in
+neither the URL nor any process's argv, and it is never printed. `/status`'s account
+name and email are discarded. JSON is parsed with `node -e` because `jq` is not
+installed in this repo's Git Bash.
+
+```bash
+export API_SPORTS_KEY="$(grep -m1 '^API_SPORTS_KEY=' .env.local | cut -d= -f2- | tr -d '\r"')"
+contracts/api-sports/scripts/probe.sh injuries-nfl-team-2 injuries team=2
+```
+
+Exit 3 means the response carried a populated `errors` object, since API-Sports
+answers HTTP 200 for those.
+
+It is a shell script rather than `.mjs` on purpose: `scripts/check-db-first-api-boundary.mjs`
+scans `.mjs` files, and a capture tool is not a request path.
+
 ## Why the probe was run, and why reading the docs was not enough
 
 The vendor documentation was read first. It pins the request envelope — `/odds`

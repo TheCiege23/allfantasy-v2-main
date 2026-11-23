@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto'
 import type { Prisma, ZombieLeague, ZombieRoleWorkflow } from '@prisma/client'
+import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { lockItemLeague } from './beta2025ItemService'
@@ -57,16 +58,73 @@ async function defeated(tx: Tx, z: ZombieLeague, loserRosterId: string, winnerRo
     defeatedByUserId: winnerUserId, ambushesRemaining: 0, activePowers: [] } })
 }
 
+/**
+ * Which seats take part in the Whisperer draw, or why it cannot run yet.
+ *
+ * 🛑 A LEAGUE WITH A CHIMMY SEAT COULD NEVER DRAW A WHISPERER. The draw required every seat to be a
+ * distinct registered manager, and a seat Chimmy runs keeps its placeholder owner key (see
+ * app/api/leagues/[leagueId]/orphaned-teams/assign-ai), so it failed that check for good. Reported by
+ * the owner on a 4-team test league, 2026-11-21: one manager, three seats for Chimmy, and "assign the
+ * Whisperer" refused. The role is OFFERED and must be accepted, which Chimmy cannot do, so a Chimmy
+ * seat sits the draw out instead of blocking it. A seat that is simply empty still blocks: the league
+ * is not full.
+ */
+export function whispererDrawSeats(
+  rosters: ReadonlyArray<{ id: string; platformUserId: string }>,
+  registeredUserIds: ReadonlySet<string>,
+  /** Seats Chimmy runs, by the one switch every engine reads (lib/inactive-manager `isChimmyRunning`). */
+  chimmyRosterIds: ReadonlySet<string>,
+  teamCount: number,
+): { ok: true; managerRosterIds: string[] } | { ok: false; error: string } {
+  const managers = rosters.filter(r => registeredUserIds.has(r.platformUserId))
+  const others = rosters.filter(r => !registeredUserIds.has(r.platformUserId))
+  if (rosters.length !== teamCount || new Set(managers.map(r => r.platformUserId)).size !== managers.length || others.some(r => !chimmyRosterIds.has(r.id))) {
+    return { ok: false, error: 'Fill every seat with a manager, or hand it to Chimmy, before the Whisperer draw.' }
+  }
+  if (managers.length === 0) return { ok: false, error: 'The Whisperer draw needs at least one manager: Chimmy cannot accept the role.' }
+  return { ok: true, managerRosterIds: managers.map(r => r.id) }
+}
+
+/**
+ * The seats Chimmy runs, for the Whisperer draw: the inactive-manager autopilot, or a seat marked
+ * `aiManaged` whose owner is not a registered manager (see `candidatesFor`).
+ */
+export function chimmyDrawSeatIds(
+  rosters: ReadonlyArray<{ id: string; platformUserId: string; settings?: unknown }>,
+  registeredUserIds: ReadonlySet<string>,
+  managed: ReturnType<typeof readManagedLineups>,
+): Set<string> {
+  const aiSeat = (r: { platformUserId: string; settings?: unknown }) =>
+    !registeredUserIds.has(r.platformUserId) &&
+    Boolean(r.settings && typeof r.settings === 'object' && (r.settings as Record<string, unknown>).aiManaged === true)
+  return new Set(rosters.filter(r => isChimmyRunning(managed, r.id, r.platformUserId) || aiSeat(r)).map(r => r.id))
+}
+
 async function candidatesFor(tx: Tx, z: ZombieLeague): Promise<Candidate[]> {
-  const rosters = await tx.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } })
+  const rosters = await tx.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true, settings: true } })
   const users = await tx.appUser.findMany({ where: { id: { in: rosters.map(r => r.platformUserId) } }, select: { id: true } })
   const registered = new Set(users.map(u => u.id))
-  if (rosters.length !== z.teamCount || new Set(rosters.map(r => r.platformUserId)).size !== z.teamCount ||
-      rosters.some(r => !registered.has(r.platformUserId))) throw new Error('Fill every seat with a distinct registered manager before the Whisperer draw.')
+  const managed = readManagedLineups((await tx.league.findUnique({ where: { id: z.leagueId }, select: { settings: true } }))?.settings)
+  /*
+   * 🛑 A SEAT HANDED TO THE AI AT CREATION WAS NOT A CHIMMY SEAT HERE. A test league's extra seats (and
+   * the orphan-seat AI switch) mark the roster `settings.aiManaged`, with a placeholder owner; only the
+   * inactive-manager autopilot (`af_managed_lineups`) counted. So the owner's 4-team "Zombie Chimmy
+   * Test" (one manager, three AI seats, drafted 2026-11-22) failed this draw on every post-draft pass,
+   * never became `active`, and the scheduled resolver never ran its week. An AI-managed seat with no
+   * registered owner sits the draw out, as a Chimmy seat does.
+   */
+  const chimmySeats = chimmyDrawSeatIds(rosters, registered, managed)
+  const seats = whispererDrawSeats(rosters, registered, chimmySeats, z.teamCount)
+  if (!seats.ok) throw new Error(seats.error)
+  const inDraw = new Set(seats.managerRosterIds)
   const teams = await tx.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId } })
-  return rosters.map(r => {
+  // Every team must still be a Survivor, the Chimmy seats included; only managers are offered the role.
+  for (const r of rosters) {
     const team = teams.find(t => t.rosterId === r.id)
     if (!team || team.status !== 'Survivor') throw new Error('The initial draw requires all teams to be Survivors.')
+  }
+  return rosters.filter(r => inDraw.has(r.id)).map(r => {
+    const team = teams.find(t => t.rosterId === r.id)!
     return { userId: r.platformUserId, rosterId: r.id, name: team.fantasyTeamName || team.displayName || 'Manager', veteran: team.isVeteran }
   })
 }

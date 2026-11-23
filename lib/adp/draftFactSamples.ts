@@ -1,3 +1,4 @@
+import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -184,6 +185,9 @@ async function resolvePlayers(
   return out
 }
 
+/** Imported dynasty drafts this short are rookie drafts, not startups. */
+export const MAX_ROOKIE_DRAFT_ROUNDS = 6
+
 function leagueTypeOf(league: { leagueVariant: string | null; isDynasty: boolean }): string {
   const variant = (league.leagueVariant ?? '').trim().toLowerCase()
   if (variant) return variant
@@ -245,7 +249,7 @@ export async function collectDraftFactSamples(
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: Array.from(new Set(facts.map((f) => f.leagueId))) } },
-    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true, platform: true },
+    select: { id: true, scoring: true, isDynasty: true, leagueVariant: true, platform: true, settings: true },
   })
   const leagueById = new Map(leagues.map((l) => [l.id, l]))
 
@@ -284,15 +288,28 @@ export async function collectDraftFactSamples(
       continue
     }
 
-    const context = {
-      sport: options.sport.toUpperCase(),
-      leagueType: leagueTypeOf(league),
-      draftType: 'imported',
-      scoringFormat: (league.scoring ?? 'ppr').toLowerCase(),
-      rosterFormat: 'standard',
-      teamCount,
+    /*
+     * 🛑 A SHORT DYNASTY DRAFT IS A ROOKIE DRAFT, and gets its own board. An imported dynasty league brings every
+     * season's draft; after the startup, each one is a three-to-five round rookie draft whose 1.01 is a rookie. Read
+     * as a startup, every rookie looked like a first-round pick. Startups run far longer than six rounds.
+     */
+    const rounds = bucket.reduce((m, f) => Math.max(m, f.round), 0)
+    const rookie = leagueTypeOf(league) !== 'redraft' && rounds > 0 && rounds <= MAX_ROOKIE_DRAFT_ROUNDS
+    // The one derivation every writer and reader shares (`draftContextKey.ts`): QB format and rookie split included.
+    const context = buildDraftContext({
+      league: {
+        sport: options.sport,
+        season: Number(season) || 0,
+        scoring: league.scoring ?? null,
+        isDynasty: league.isDynasty,
+        leagueVariant: league.leagueVariant,
+        leagueSize: null,
+        settings: league.settings,
+      },
+      session: { draftType: 'imported', teamCount },
       season,
-    }
+      rookieDraft: rookie,
+    })
 
     const platform = String(league.platform ?? 'unknown').toLowerCase()
     const column = idColumnFor(league.platform)

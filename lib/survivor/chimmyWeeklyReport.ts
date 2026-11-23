@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { rosterIdFromOrphanSeat, seatPlaceholderUserIdOr } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { readExileRoster } from './exileRosterRules'
@@ -7,7 +8,6 @@ import { notifySurvivorCommissionerOnce } from './survivorCommissionerAlerts'
 import { readSurvivorGovernanceSettings } from './survivorGovernanceSettings'
 import { castawayNameWithTribeEmoji, tribeEmojiFor } from './survivorTribeEmoji'
 
-const SEAT_PREFIX = 'orphan-'
 
 export type ChimmyReportRow = {
   name: string
@@ -111,14 +111,14 @@ export function chimmyWeeklyReportBody(
  */
 export async function sendChimmyWeeklyReport(leagueId: string, week: number, opts: { finale?: boolean; dedupeKey?: string } = {}): Promise<boolean> {
   const cast = await prisma.survivorPlayer.findMany({
-    where: { leagueId, userId: { startsWith: SEAT_PREFIX } },
+    where: { leagueId, OR: seatPlaceholderUserIdOr() },
     select: { userId: true, displayName: true, playerState: true, redraftRosterId: true, tribeId: true },
   })
   if (cast.length === 0 && !opts.finale) return false
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true, language: true } })
   const lang: ReportLang = String(league?.language ?? '').toLowerCase().startsWith('es') ? 'es' : 'en'
   const managed = readManagedLineups(league?.settings)
-  const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? p.userId.slice(SEAT_PREFIX.length), p.userId))
+  const chimmy = cast.filter((p) => isChimmyRunning(managed, p.redraftRosterId ?? rosterIdFromOrphanSeat(p.userId) ?? '', p.userId))
   // The finale's progress (counts only). Best-effort: a failed read leaves the report as it was.
   const finaleLine = opts.finale ? await loadFinaleReportProgress(leagueId).then((p) => (p ? finaleReportLine(p, lang) : null)).catch(() => null) : null
   if (chimmy.length === 0 && !finaleLine) return false

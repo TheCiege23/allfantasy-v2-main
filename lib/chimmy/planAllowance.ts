@@ -81,11 +81,16 @@ const resolver = new EntitlementResolver()
 
 const defaultDeps: PlanAllowanceDeps = {
   hasChimmyPlan: async (userId, email) => {
-    const result = await resolver.resolveForUser(userId, 'ai_chat', email, { strictReads: true })
+    /*
+     * `af_intelligence`, not `ai_chat` (owner, 2026-11-22: "all high level functions that come from Chimmy
+     * and the OS … covered by AF Pro, Supreme or Commissioner"). `ai_chat` is a single-plan matrix key
+     * (AF Pro, and Supreme through the bundle), so an AF Commissioner subscriber was answered as free.
+     */
+    const result = await resolver.resolveForUser(userId, 'af_intelligence', email, { strictReads: true })
     const plans = result.entitlement.plans
     return {
       included: result.hasAccess,
-      planName: getDisplayPlanName(plans.includes('supreme') ? 'supreme' : 'pro'),
+      planName: getDisplayPlanName(plans.includes('supreme') ? 'supreme' : plans.includes('pro') ? 'pro' : plans.includes('commissioner') ? 'commissioner' : 'pro'),
     }
   },
   readUsed: async (endpoint, { windowStart, windowEnd }) => {

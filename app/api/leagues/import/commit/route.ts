@@ -30,6 +30,7 @@ function rewardReferredImport(userId: string): void {
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import {
+  ImportedLeagueAlreadyHereError,
   ImportedLeagueConflictError,
   ImportedLeagueTombstonedError,
 } from '@/lib/league-import/ImportedLeagueCommitService'
@@ -357,6 +358,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
       importerSourceTeamId: claimSourceTeamId || null,
       /* Provider-proven only: a self-attested commissioner never joins another account's league. */
       importerIsProvenCommissioner: gate.ok && gate.isCommissioner === true && gate.verification === 'api',
+      /* One copy per league: an importer who cannot be placed in another account's copy gets the invite pointer, not a duplicate. */
+      refuseSecondCopy: true,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
@@ -410,6 +413,8 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
        * `claimExistingLeagueForMember` in ImportedLeagueCommitService.
        */
       joinedExisting: persisted.joinedExisting === true,
+      /* A team-less league mate: 'co_owner' of a shared team, or a 'viewer'. Unset for a team claim. */
+      joinedAs: persisted.joinedAs ?? null,
       /*
        * ⚠ WHAT DID NOT FINISH, SO "Imported" STOPS BEING AN UNQUALIFIED CLAIM.
        *
@@ -437,6 +442,12 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
           code: 'IMPORT_IN_PROGRESS',
           hint: 'Wait a moment and try again.',
         },
+        { status: 409 },
+      )
+    }
+    if (error instanceof ImportedLeagueAlreadyHereError) {
+      return NextResponse.json(
+        { error: error.message, code: 'LEAGUE_ALREADY_HERE', hint: 'The commissioner can copy the invite link from the league page.' },
         { status: 409 },
       )
     }

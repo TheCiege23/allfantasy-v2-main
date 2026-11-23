@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getC2CConfig } from '../C2CLeagueConfig'
 import type { C2CDraftPhase, C2CPoolType } from '../types'
 import type { C2CLeagueConfigShape } from '../types'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type C2CDraftPhaseStatus = 'not_started' | 'in_progress' | 'completed'
@@ -39,13 +40,24 @@ export async function getCurrentC2CDraftPhase(leagueId: string): Promise<{
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: { id: true, status: true, draftType: true, rounds: true },
+    select: { id: true, status: true, draftType: true, rounds: true, draftModeLabel: true },
   })
 
   const status: C2CDraftPhaseStatus =
     session?.status === 'completed' ? 'completed' : session?.status === 'in_progress' ? 'in_progress' : 'not_started'
   const draftType = normalizeC2CDraftType(session?.draftType) ?? config.startupDraftType
   const rounds = session?.rounds ?? 0
+
+  if (session?.draftModeLabel === ANNUAL_C2C_DRAFT) {
+    return {
+      phase: ANNUAL_C2C_DRAFT,
+      phaseInfo: {
+        phase: ANNUAL_C2C_DRAFT, status, rounds, draftType,
+        description: 'Combined annual draft (Canton rookies and Campus players)',
+      },
+      sessionId: session.id,
+    }
+  }
 
   if (config.mergedStartupDraft) {
     return {

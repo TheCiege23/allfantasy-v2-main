@@ -135,6 +135,23 @@ describe('PlayerComparisonEngine', () => {
     expect(result?.deterministic.statComparisons.length).toBeGreaterThan(0);
   });
 
+  it('uses the selected league week in comparisons and preserves zero', async () => {
+    const player = { value: 9000, rank: 10, trend30Day: 100, fpPerGame: 20, projectionPoints: 320,
+      internalAdp: 20, injuryRisk: 20, scheduleDifficulty: 45, volatility: 11 };
+    comparePlayersMock.mockResolvedValueOnce(buildComparisonResult(
+      buildResolvedPlayer({ name: 'Player A', ...player }),
+      buildResolvedPlayer({ name: 'Player B', ...player }),
+    ));
+    const { runTwoPlayerComparisonEngine } = await import('@/lib/player-comparison-lab/PlayerComparisonEngine');
+    const result = await runTwoPlayerComparisonEngine({
+      playerAName: 'Player A', playerBName: 'Player B', sport: 'NBA',
+      leagueWeekProjections: { week: 5, playerA: 230.46, playerB: 0 },
+    });
+    expect(result?.deterministic.statComparisons.find((row) => row.metricId === 'projection_points')).toMatchObject({
+      label: 'Week 5 projected points', playerAValue: 230.46, playerBValue: 0,
+    });
+  });
+
   it('uses AI explanation when requested and available', async () => {
     comparePlayersMock.mockResolvedValueOnce(
       buildComparisonResult(

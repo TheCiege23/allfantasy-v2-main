@@ -9,8 +9,10 @@ import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
 import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
-import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, WeatherChip } from './NativeScreenParts'
+import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
 import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
@@ -53,7 +55,8 @@ function slotGameLine(p: MatchupPlayerSlot): string {
   return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : vs
 }
 
-function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'right' }) {
+function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left' | 'right'; sport: string | null | undefined }) {
+  const openCard = useNativePlayerCard(sport)
   // Redraft: a live / final dot from the feed's own game state (none for an unknown state).
   const rd = useRedraftScreenContext()
   if (!p) return <div className="nls-player" data-side={side}><strong className="nls-muted">Empty</strong></div>
@@ -73,8 +76,10 @@ function SlotCell({ p, side }: { p: MatchupPlayerSlot | null; side: 'left' | 'ri
         {media ? <span className="nls-mavatar"><PlayerAvatar name={p.name} headshotUrl={p.headshotUrl} teamLogoUrl={o?.teamLogoUrl} /></span> : null}
         <span className="nls-pl-text">
           <strong title={p.name}>
-            <span className="nls-long">{p.name}</span>
-            <span className="nls-short">{shortPlayerName(p.name)}</span>
+            <PlayerNameButton name={p.name} onOpen={() => openCard({ id: p.playerId, name: p.name, position: p.position, team: p.team, imageUrl: p.headshotUrl })}>
+              <span className="nls-long">{p.name}</span>
+              <span className="nls-short">{shortPlayerName(p.name)}</span>
+            </PlayerNameButton>
           </strong>
           <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
             {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
@@ -113,13 +118,15 @@ export function NativeMatchupScreen(props: ScreenProps) {
   const state = String(props.league.lifecycleState ?? props.league.status ?? '').toLowerCase()
   if (['setup', 'pre_draft', 'drafting', 'in_progress'].includes(state)) {
     return <RedraftScreen identity={rd}><div className="nls" data-testid="native-matchup-screen">
-      <ScreenHead eyebrow={`${props.league.name} · Matchup`} title="Your season starts with the draft" />
+      <ScreenHead eyebrow="Matchup" title="Your season starts with the draft" />
       <Card label="Matchups are coming" tone="accent">
         <p>Finish the draft to fill your roster and get ready for weekly matchups.</p>
         <div className="nls-actions"><button type="button" className="nls-btn" data-variant="primary" onClick={() => props.onSelectTab('draft')}>Open Draft HQ</button></div>
       </Card>
     </div></RedraftScreen>
   }
+  // Guillotine has no opponent: the tab is the week's scores against the chop line.
+  if (isNativeGuillotineLeague(props.league)) return <RedraftScreen identity={rd}><GuillotineMatchupScreen {...props} /></RedraftScreen>
   return <RedraftScreen identity={rd}>{isRotisserieLeagueSettings(props.league.settings) ? <RotisserieMatchupScreen {...props} /> : <HeadToHeadMatchupScreen {...props} />}</RedraftScreen>
 }
 
@@ -128,11 +135,11 @@ export function NativeMatchupScreen(props: ScreenProps) {
  * pins both scores to 0 (`lib/redraft/scoringEngine.ts`) — so the head-to-head screen would show a
  * 0.0 vs 0.0 "matchup" and a win probability for a game nobody plays. Point at the standings instead.
  */
-function RotisserieMatchupScreen({ league, onSelectTab }: ScreenProps) {
+function RotisserieMatchupScreen({ onSelectTab }: ScreenProps) {
   const rd = useRedraftScreenContext()
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Rotisserie`} title="No weekly matchup" />
+      <ScreenHead eyebrow="Rotisserie" title="No weekly matchup" />
       <Card label="How this league is decided" tone="accent">
         <p>
           This is a rotisserie league. Every week&apos;s stats add to your season totals, and teams are ranked in each
@@ -347,7 +354,7 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
 
   return (
     <div className="nls" data-testid="native-matchup-screen" data-rd-screen={rd ? 'matchup' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Matchup`} title={`Week ${week}`}>
+      <ScreenHead eyebrow="Matchup" title={`Week ${week}`}>
         {weekControls}
       </ScreenHead>
 
@@ -422,11 +429,11 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
                   {rows.map((row, i) => {
                     return (
                       <li key={`${row.pos}-${i}`} className="nls-mrow">
-                        <SlotCell p={row.l} side="left" />
+                        <SlotCell p={row.l} side="left" sport={league.sport} />
                         <SlotPoints p={row.l} other={row.r} side="left" show={showPlayerPoints} />
                         <PosPill label={row.pos} />
                         <SlotPoints p={row.r} other={row.l} side="right" show={showPlayerPoints} />
-                        <SlotCell p={row.r} side="right" />
+                        <SlotCell p={row.r} side="right" sport={league.sport} />
                       </li>
                     )
                   })}

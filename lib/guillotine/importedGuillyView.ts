@@ -12,6 +12,7 @@
  *
  * Pure. The loader is ./importedGuillyHealthLoad.ts; the tab is app/league/[leagueId]/tabs/ImportedGuillyTab.tsx.
  */
+import { isGuillotineFormat } from '@/lib/guillotine/nativeGuillotineScreens'
 import { chopTimeline, importedGuillyFormat, type ImportedGuillyRow } from './importedGuillyHealth'
 import { DEFAULT_DANGER_MARGIN_POINTS } from './constants'
 
@@ -92,7 +93,10 @@ export function guillyTabKind(
   if (!native) {
     return importedGuillyFormat({ leagueType: league.leagueType ?? null, guillotineMode: league.guillotineMode ?? null, settings: league.settings }) ? 'imported' : null
   }
-  return league.guillotineMode === true || league.leagueVariant === 'guillotine' ? 'native' : null
+  // A league hosted here is guillotine by any of the three ways its row can say so. It used to need
+  // `guillotineMode` or `leagueVariant`: a row carrying only `leagueType: 'guillotine'` was chopped every
+  // week by the engine (which does read `leagueType`) and had no Guilly tab to see it on.
+  return isGuillotineFormat(league) ? 'native' : null
 }
 
 /**

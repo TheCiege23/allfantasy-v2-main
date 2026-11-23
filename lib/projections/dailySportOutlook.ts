@@ -1,3 +1,4 @@
+import { liveFactorAdjustments, loadFactorTable, type FactorAdjustment } from '@/lib/af-projections/factors/factorTables'
 import 'server-only'
 
 import type { PrismaClient } from '@prisma/client'
@@ -45,6 +46,13 @@ export type DailySportOutlook = {
    */
   opponent?: string | null
   homeAway?: 'home' | 'away' | null
+  /**
+   * The learned factors that moved this projection (`lib/af-projections/factors`): back-to-backs, streaks, playing
+   * time, opponent, a new team, a return from a layoff — only those that made later games' projections closer in the
+   * hold-out check. Absent when none applied; `projectedPoints` is then exactly the form rate × games.
+   */
+  /** `unadjusted` holds the fields before the factors, restored for a viewer without AF Intelligence. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
 }
 
 export type DailySportOutlookResult = {
@@ -84,6 +92,12 @@ export async function loadDailySportOutlook(
     league: { sport: string | null; season: number | null; settings: unknown }
     players: readonly OutlookPlayerInput[]
     now?: Date
+    /**
+     * False for a viewer whose plan does not include AF Intelligence (lib/core-app/afIntelligenceWithhold.ts): the
+     * learned factors are not applied at all, so every number — and every TOTAL a caller sums from them — is the
+     * plain one. Default true.
+     */
+    afIntelligence?: boolean
     /**
      * Daily-lineup leagues: the Eastern day the lineup screen's day picker has selected
      * ('YYYY-MM-DD'). The period is that day — its games and its opponent — and its week. Absent or
@@ -165,6 +179,33 @@ export async function loadDailySportOutlook(
     }
   }
 
+  /*
+   * The learned factors for each player's next game. A daily period is one game, so rest and opponent are known; a
+   * weekly one can hold several, so only the factors about the player himself apply (form, playing time, a new team,
+   * a return). Never throws: a failed read is no adjustment.
+   */
+  const factorTable = args.afIntelligence === false ? null : await loadFactorTable(db, sport, now).catch(() => null)
+  const nextAtMs = daily && periodDay ? Date.parse(`${periodDay}T23:00:00Z`) : now.getTime()
+  const adjustments = factorTable
+    ? await liveFactorAdjustments(db, {
+        sport,
+        table: factorTable,
+        now,
+        players: args.players.flatMap((p) => {
+          const formId = p.lookupId ? formIdByLookup.get(p.lookupId) : undefined
+          if (!formId) return []
+          const code = teamCode(sport, p.team) ?? teamCode(sport, scored.get(formId)?.team ?? null)
+          return [{
+            key: p.key,
+            gameLogId: formId,
+            next: daily
+              ? { atMs: nextAtMs, opponent: (code ? opponentByTeam.get(code)?.opponent : null) ?? null }
+              : { atMs: nextAtMs, drop: ['rest', 'opponent'] as const },
+          }]
+        }),
+      }).catch(() => new Map<string, FactorAdjustment>())
+    : new Map<string, FactorAdjustment>()
+
   const byKey = new Map<string, DailySportOutlook>()
   for (const p of args.players) {
     const formId = p.lookupId ? formIdByLookup.get(p.lookupId) : undefined
@@ -177,13 +218,16 @@ export async function loadDailySportOutlook(
       periodGames = daily ? (periodDay && days?.has(periodDay) ? 1 : 0) : days?.size ?? 0
     }
     const matchup = daily && code ? opponentByTeam.get(code) : undefined
+    const base = projectPeriodPoints({
+      perGame: f.perGame,
+      teamGames: periodGames,
+      available: !isUnavailableForProjection(p.injuryStatus),
+      part: f.part,
+    })
+    const adj = adjustments.get(p.key)
     byKey.set(p.key, {
-      projectedPoints: projectPeriodPoints({
-        perGame: f.perGame,
-        teamGames: periodGames,
-        available: !isUnavailableForProjection(p.injuryStatus),
-        part: f.part,
-      }),
+      projectedPoints: base != null && adj ? Math.round(base * adj.multiplier * 100) / 100 : base,
+      ...(adj && base ? { afFactors: { multiplier: adj.multiplier, reasons: adj.reasons, unadjusted: { projectedPoints: base } } } : {}),
       periodGames,
       perGame: f.perGame,
       recentGames: f.recentGames,

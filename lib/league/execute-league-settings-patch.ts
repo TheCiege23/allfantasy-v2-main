@@ -98,6 +98,7 @@ import {
 } from '@/lib/playoff-runtime/playoffSeries'
 import { MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY } from '@/lib/redraft/medianGame'
 import { medianGameChangeRefusal } from '@/lib/redraft/medianGameSwitch'
+import { PRE_LEAGUE_WEEKS_COUNT_SETTINGS_KEY, readPreLeagueWeeksCount } from '@/lib/redraft/preLeagueWeeksRules'
 import { playoffFitOverflow, playoffFitOverflowMessage, type PlayoffFitChange } from '@/lib/playoff-runtime/championshipLengthFit'
 import { MAX_PLAYOFF_TEAMS } from '@/lib/playoff-runtime/playoffFit'
 import { playoffStartWeekCapRefusal, regularSeasonCapApplies, settingsMergeCapRefusal } from '@/lib/redraft/regularSeasonCap'
@@ -644,6 +645,9 @@ export async function executeLeagueSettingsPatch(
   }
   if (body.medianGameInPlayoffs !== undefined && typeof body.medianGameInPlayoffs !== 'boolean') {
     return jsonError('medianGameInPlayoffs must be true or false', 400)
+  }
+  if (body.preLeagueWeeksCount !== undefined && typeof body.preLeagueWeeksCount !== 'boolean') {
+    return jsonError('preLeagueWeeksCount must be true or false', 400)
   }
 
   /*
@@ -1304,6 +1308,25 @@ export async function executeLeagueSettingsPatch(
       data: { settings: { ...prev, [MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY]: body.medianGameInPlayoffs } as Prisma.InputJsonValue },
     })
     updatedFieldNames.push(MEDIAN_GAME_IN_PLAYOFFS_SETTINGS_KEY)
+  }
+
+  /*
+   * Whether the weeks played before a late-starting league existed count toward records
+   * (lib/redraft/preLeagueWeeksRules.ts). Open at any time, unlike the median switch: these weeks are
+   * fixed history the commissioner is choosing to include, and every record is recomputed from them
+   * right away so the board never shows the old count under the new rule.
+   */
+  if (typeof body.preLeagueWeeksCount === 'boolean') {
+    const prev = await readCurrentLeagueSettings(leagueId)
+    if (readPreLeagueWeeksCount(prev) !== body.preLeagueWeeksCount) {
+      await prisma.league.update({
+        where: { id: leagueId },
+        data: { settings: { ...prev, [PRE_LEAGUE_WEEKS_COUNT_SETTINGS_KEY]: body.preLeagueWeeksCount } as Prisma.InputJsonValue },
+      })
+      const { recomputeStandingsForLeague } = await import('@/lib/redraft/preLeagueWeeks')
+      await recomputeStandingsForLeague(leagueId)
+      updatedFieldNames.push(PRE_LEAGUE_WEEKS_COUNT_SETTINGS_KEY)
+    }
   }
 
   if (championshipLengthToStore != null) {

@@ -11,9 +11,8 @@
  * `app/projections/page.tsx` redirects to /login without a session. An open API behind a gated
  * page is not a smaller hole for being inconsistent — it is the same data with the gate removed.
  *
- * ⚠ It takes NO league id and needs none. A projection is a property of the player and the week,
- * identical for every user, so there is nothing here to scope to a league and nothing another
- * member could learn about someone's roster.
+ * The standard board is available to signed-in users. League-scored metrics
+ * require access to the requested league.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,11 +20,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { listAfProjections } from '@/lib/af-projections/readAfProjections'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { authorizeLeagueRead } from '@/lib/decision-os/leagueReadAuthorization'
+import { isSupportedSport } from '@/lib/sport-scope'
+import { gateAfIntelligence, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
-
-/** Sports the projection engine writes rows for. Anything else is a 400, not an empty list. */
-const SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAABB', 'SOCCER'])
 
 function intParam(v: string | null): number | null {
   if (v == null || v.trim() === '') return null
@@ -42,8 +42,9 @@ export async function GET(req: NextRequest) {
   if (!rl.success) return NextResponse.json({ error: 'Rate limited' }, { status: 429 })
 
   const sp = req.nextUrl.searchParams
-  const sport = (sp.get('sport') ?? 'NFL').trim().toUpperCase()
-  if (!SPORTS.has(sport)) {
+  const sportParam = (sp.get('sport') ?? 'NFL').trim().toUpperCase()
+  const sport = sportParam === 'NCAABB' ? 'NCAAB' : sportParam
+  if (!isSupportedSport(sport)) {
     /*
      * ⚠ A 400 RATHER THAN AN EMPTY LIST. "We hold no rows for MADEUPBALL" and "this sport does not
      * exist" are different answers, and an empty list for a typo reads as "nobody is projected".
@@ -52,6 +53,32 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // AF Intelligence (AF Pro, AF Commissioner, AF Supreme — owner, 2026-11-22). Without it the board keeps
+    // the provider's baseline and loses AF's own number, its reason and its rest-of-season line.
+    const afAccess = await readAfIntelligenceAccess(session.user.id)
+    const leagueId = sp.get('leagueId')?.trim()
+    if (leagueId) {
+      const access = await authorizeLeagueRead(leagueId, session.user.id)
+      if (!access.authorized) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+      const playerPool = sport === 'NBA' && sp.get('view') === 'weekly-player-pool'
+      const result = await loadLeaguePlayerMetrics({
+        afIntelligence: afAccess.unlocked,
+        leagueId,
+        week: intParam(sp.get('week')),
+        position: sp.get('position'),
+        playerName: sp.get('player'),
+        limit: intParam(sp.get('limit')) ?? (playerPool ? undefined : 100),
+        ...(playerPool ? { includePlayerPool: true, includeTradeValues: false } : {}),
+      })
+      if (!result) return NextResponse.json({ error: 'League metrics unavailable' }, { status: 404 })
+      if (sp.has('sport') && result.sport !== sport) {
+        return NextResponse.json({ error: 'Sport does not match the league' }, { status: 400 })
+      }
+      if (sp.has('season') && intParam(sp.get('season')) !== result.season) {
+        return NextResponse.json({ error: 'Season does not match the league' }, { status: 400 })
+      }
+      return NextResponse.json(gateAfIntelligence(result, afAccess))
+    }
     const { rows, season } = await listAfProjections({
       sport,
       season: intParam(sp.get('season')),
@@ -69,7 +96,8 @@ export async function GET(req: NextRequest) {
        * "this position has nobody". The projections cron silently wrote nothing for 13 days while
        * reporting success, so this distinction is not hypothetical.
        */
-      rows: rows.map((r) => ({
+      ...(afAccess.unlocked ? {} : { afIntelligenceLock: afAccess }),
+      rows: rows.map((r) => afAccess.unlocked ? ({
         playerId: r.playerId,
         playerName: r.playerName,
         position: r.position,
@@ -83,6 +111,20 @@ export async function GET(req: NextRequest) {
         restOfSeasonWeeks: r.rosWeeksRemaining,
         confidence: r.confidenceLevel,
         reason: r.adjustmentReason,
+        isOutdoorGame: r.isOutdoorGame,
+        computedAt: r.computedAt.toISOString(),
+      }) : ({
+        playerId: r.playerId,
+        playerName: r.playerName,
+        position: r.position,
+        week: r.week,
+        perGame: null,
+        baseline: r.baselineProjection,
+        weatherAdjustment: null,
+        restOfSeason: null,
+        restOfSeasonWeeks: null,
+        confidence: null,
+        reason: null,
         isOutdoorGame: r.isOutdoorGame,
         computedAt: r.computedAt.toISOString(),
       })),

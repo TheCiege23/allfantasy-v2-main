@@ -18,6 +18,7 @@ import { shouldRunShadow } from '@/lib/decision-os/core/shadow'
 import { emitShadowParity } from '@/lib/decision-os/core/parity'
 import { evaluateDraftShadow } from '@/lib/shared-services/draft'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { sharedDraftPickForUser } from '@/lib/shared-services/draft/pickDecision'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,8 +95,18 @@ async function paidToolPost(req: NextRequest) {
           : null,
   }))
 
+  /*
+   * ONE ENGINE IN THE ROOM (build item 8): in a league draft, the pick is the draft card's own — the server's pool,
+   * this draft's context and the live pick rules (pickDecision.ts) — and the explanation is written about it.
+   * Only in the card's mode (`needs`): a manager who asked for best-available gets that, from the posted pool.
+   * No league, no roster for this user, an auction, or an unreadable draft: the posted pool, as before.
+   */
+  const sharedLeagueId = typeof body.leagueId === 'string' && body.leagueId.trim() ? body.leagueId.trim() : null
+  const shared =
+    sharedLeagueId && mode === 'needs' ? await sharedDraftPickForUser({ leagueId: sharedLeagueId, userId: session.user.id }) : null
   try {
     const result = await runDraftAIAssist({
+      precomputed: shared?.result ?? null,
       available: normalized,
       teamRoster,
       rosterSlots,
@@ -189,6 +200,10 @@ async function paidToolPost(req: NextRequest) {
       evidence: result.recommendation.evidence,
       caveats: result.recommendation.caveats,
       uncertainty: result.recommendation.uncertainty,
+      /** Where the pick came from: the draft card's decision, or the pool this request posted. */
+      engineSource: shared ? 'draft_decision' : 'posted_pool',
+      /** The user's own next turn the pick was planned for, when they are not on the clock. */
+      plannedFor: shared?.plannedFor ?? null,
       execution: buildDraftExecutionMetadata({
         feature: 'draft_helper_recommendation_engine',
         aiUsed,

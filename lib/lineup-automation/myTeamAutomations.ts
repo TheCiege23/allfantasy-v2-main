@@ -19,6 +19,8 @@ type MyTeamFacts = {
   weeklyLineups: boolean
   /** The league owner holds AF Commissioner: the paid automations run. */
   commissionerPlan: boolean
+  /** The league owner's plan lets Chimmy run teams (AF Pro or AF Supreme). Absent means as commissionerPlan. */
+  autopilotPlan?: boolean
   /** This team is being run for its owner right now. */
   managed: null | { autopilot: boolean }
   /** The commissioner's "auto-switch injured starters" for this team, while the owner has Pro. */
@@ -59,7 +61,7 @@ export function myTeamAutomations(f: MyTeamFacts): { items: MyTeamAutomation[]; 
   }
   const handover = readAutoHandover(f.settings)
   if (handover && !f.managed) {
-    items.push({ key: 'auto_handover', en: `If you have no activity for ${handover.days} days, your team is handed to ${handover.to === 'autopilot' && f.commissionerPlan ? 'Chimmy autopilot' : 'AllFantasy'} until you are back.`, es: `Si no tienes actividad durante ${handover.days} días, tu equipo pasa a ${handover.to === 'autopilot' && f.commissionerPlan ? 'el piloto automático de Chimmy' : 'AllFantasy'} hasta que vuelvas.` })
+    items.push({ key: 'auto_handover', en: `If you have no activity for ${handover.days} days, your team is handed to ${handover.to === 'autopilot' && (f.autopilotPlan ?? f.commissionerPlan) ? 'Chimmy autopilot' : 'AllFantasy'} until you are back.`, es: `Si no tienes actividad durante ${handover.days} días, tu equipo pasa a ${handover.to === 'autopilot' && (f.autopilotPlan ?? f.commissionerPlan) ? 'el piloto automático de Chimmy' : 'AllFantasy'} hasta que vuelvas.` })
   }
   if (f.commissionerPlan) {
     if (asRecord(f.settings).draft_as_me !== false) {

@@ -22,11 +22,12 @@ describe('simple creation team choices agree with the server', () => {
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '4')
     if (concept === 'dynasty') {
-      // Dynasty takes every size from 4 to 250, odd ones included.
-      evens.push(5, 9, 34, 36, 160, 250)
-      expect(count).toHaveAttribute('max', '250')
+      // NFL Dynasty takes every size, odd ones included, up to the NFL's 32 teams (owner's rule,
+      // 2026-11-22: lib/league/teamCountLimits.ts PRO_LEAGUE_TEAMS). College leagues keep the full range to 250.
+      evens.push(5, 9, 31, 32)
+      expect(count).toHaveAttribute('max', '32')
       expect(count).toHaveAttribute('step', '1')
-      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 250')
+      expect(document.getElementById('g30-team-count-options')).toHaveTextContent('4 to 32')
     } else {
       expect(count).toHaveAttribute('max', String(evens.at(-1)))
       expect(count).toHaveAttribute('step', '2')
@@ -61,7 +62,8 @@ describe('simple creation team choices agree with the server', () => {
 
   it('preserves the full redraft range and a valid existing selection', () => {
     const onChange = vi.fn()
-    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 160, sport: 'NFL' as const }
+    // A college league: the full native range. (A pro league stops where its players run out.)
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 160, sport: 'NCAAF' as const }
     render(<LeagueBasicsStep state={state} onChange={onChange} fieldErrors={null} />)
     const count = screen.getByTestId('g30-team-count')
     expect(count).toHaveAttribute('min', '2')
@@ -97,5 +99,12 @@ describe('Zombie universe controls', () => {
       onChange={vi.fn()} importCarryover fieldErrors={null} />)
     expect(screen.getByTestId('g30-zombie-league-count')).toBeDisabled()
     expect(screen.getByTestId('g30-zombie-league-count')).toHaveValue('1')
+  })
+
+  it('a pro-sport league is offered no more teams than the real league has', () => {
+    const state = { ...DEFAULT_V2_STATE, leagueType: 'redraft' as const, teamCount: 12, sport: 'NFL' as const }
+    render(<LeagueBasicsStep state={state} onChange={vi.fn()} fieldErrors={null} />)
+    expect(screen.getByTestId('g30-team-count')).toHaveAttribute('max', '32')
+    expect(document.getElementById('g30-team-count-options')).toHaveTextContent('2 to 32')
   })
 })

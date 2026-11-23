@@ -76,7 +76,13 @@ describe('the mock picker list is the league list', () => {
   it.each(SPORTS)('%s redraft and dynasty match what a league accepts', (sport) => {
     for (const type of ['redraft', 'dynasty'] as const) {
       expect(getMockDraftTeamCountOptions(sport, type)).toEqual(getTeamCountOptions(sport, type))
-      expect(getMockDraftTeamCountOptions(sport, type)).toEqual(getAllowedTeamCountsFromCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1, type, sport))
+      // A pro sport's list stops at its real league (NFL and NHL 32, NBA and MLB 30); college and soccer
+      // go to the native limit. Either way the mock picker is exactly the league's list.
+      const catalog = getAllowedTeamCountsFromCatalog(LEAGUE_CREATE_OPTIONS_CATALOG_V1, type, sport)
+      const opts = getMockDraftTeamCountOptions(sport, type)
+      expect(opts).toEqual(catalog)
+      const realLeague = ({ NFL: 32, NBA: 30, MLB: 30, NHL: 32 } as Record<string, number>)[sport]
+      expect(Math.max(...opts)).toBe(realLeague ?? 250)
     }
   })
 
@@ -88,10 +94,14 @@ describe('the mock picker list is the league list', () => {
   })
 
   it('dynasty offers every size a dynasty league takes, from 4, odd ones included', () => {
-    const opts = getMockDraftTeamCountOptions('NFL', 'dynasty')
+    const opts = getMockDraftTeamCountOptions('NCAAF', 'dynasty')
     expect(opts[0]).toBe(4)
     for (const n of [4, 5, 9, 34, 36, 160, 250]) expect(opts).toContain(n)
     expect(opts).not.toContain(251)
+    // A pro sport stops at its real league: 32 NFL dynasty teams, not 250.
+    const nfl = getMockDraftTeamCountOptions('NFL', 'dynasty')
+    for (const n of [4, 5, 9, 31, 32]) expect(nfl).toContain(n)
+    expect(nfl).not.toContain(33)
   })
 
   it('an unknown league type reads as redraft', () => {
@@ -115,7 +125,8 @@ describe('normalizeMockDraftTeamCount', () => {
   it('moves a size the type does not take to the nearest one it does', () => {
     expect(normalizeMockDraftTeamCount(7, 'NFL', 'dynasty')).toBe(7)
     expect(normalizeMockDraftTeamCount(3, 'NFL', 'dynasty')).toBe(4)
-    expect(normalizeMockDraftTeamCount(400, 'NFL', 'dynasty')).toBe(250)
+    expect(normalizeMockDraftTeamCount(400, 'NCAAF', 'dynasty')).toBe(250)
+    expect(normalizeMockDraftTeamCount(400, 'NFL', 'dynasty')).toBe(32)
     expect(normalizeMockDraftTeamCount(999, 'NFL', 'redraft')).toBe(Math.max(...getTeamCountOptions('NFL', 'redraft')))
   })
 

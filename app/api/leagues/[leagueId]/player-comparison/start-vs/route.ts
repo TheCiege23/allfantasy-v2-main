@@ -39,6 +39,9 @@ import { resolveStartVsDisplayMedia } from '@/lib/player-comparison-lab/resolve-
 import type { LeagueScoringSettings, ScoringFormat } from '@/lib/player-comparison-lab/types'
 import { FeatureGateService } from '@/lib/subscription/FeatureGateService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { isFantraxNbaCampusLeague } from '@/lib/decision-os/trade/sportPointsValue'
+import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
+import { afJson, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +121,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, sport: true, scoring: true, settings: true },
+    select: { id: true, sport: true, platform: true, leagueType: true, scoring: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -165,6 +168,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
   }
 
   const started = Date.now()
+  const campusLeague = sport === 'NBA' && isFantraxNbaCampusLeague(String(league.sport), league)
+  const requestedWeek = /^(?:week\s+)?([1-9]\d?)$/i.exec(body.weekOrPeriod ?? '')?.[1]
+  const weeklyProjection = async (playerName: string) => {
+    const result = await loadLeaguePlayerMetrics({
+      leagueId, playerName, week: requestedWeek ? Number(requestedWeek) : null, limit: 2, includeTradeValues: false,
+      // AF Intelligence: a locked viewer compares the plain weekly numbers.
+      afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked,
+    }).catch(() => null)
+    return {
+      week: result?.week ?? null,
+      points: result?.unit === 'fantasy points' && result.rows.length === 1 ? result.rows[0]?.weekly ?? null : null,
+    }
+  }
+  const leagueWeekProjections = campusLeague ? await Promise.all([weeklyProjection(body.playerA), weeklyProjection(body.playerB)]) : null
   const engine = await runTwoPlayerComparisonEngine({
     playerAName: body.playerA,
     playerBName: body.playerB,
@@ -172,6 +189,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
     scoringFormat: effectiveScoringFormat,
     leagueScoringSettings,
     includeAIExplanation,
+    ...(leagueWeekProjections ? { leagueWeekProjections: {
+      week: leagueWeekProjections[0].week ?? leagueWeekProjections[1].week,
+      playerA: leagueWeekProjections[0].points,
+      playerB: leagueWeekProjections[1].points,
+    } } : {}),
   })
 
   if (!engine) {
@@ -260,7 +282,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
     weekOrPeriod: body.weekOrPeriod ?? null,
   }).catch(() => {})
 
-  return NextResponse.json({
+  return await afJson(userId, {
     ...payload,
     leagueId,
     explanationGate,

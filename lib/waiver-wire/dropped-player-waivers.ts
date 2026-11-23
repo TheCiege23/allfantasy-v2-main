@@ -176,6 +176,22 @@ export async function loadChopReleaseDropRows(
   since: Date,
   playerIds?: readonly string[],
 ): Promise<DropRow[]> {
+  /*
+   * 🛑 "RIGHT AFTER THE CHOP" WAS A SETTING THAT DID NOTHING. The commissioner's choice between
+   * "At the next waiver run" and "Right after the chop" (`rosterReleaseTiming`) was saved, shown on the
+   * rules page and quoted in the chop alert ("are free agents now"), and read by nothing that decides
+   * who may add a player: every chopped player was held like a drop either way. A league that chose
+   * "Right after the chop" now gets it: its chop releases are not held. Any failure to read the choice
+   * keeps the hold, the fair default.
+   */
+  let immediate = false
+  try {
+    const config = await prisma.guillotineLeagueConfig.findUnique({ where: { leagueId }, select: { rosterReleaseTiming: true } })
+    immediate = config?.rosterReleaseTiming === 'immediate'
+  } catch {
+    immediate = false
+  }
+  if (immediate) return []
   try {
     const rows = (await prisma.guillotineWaiverRelease.findMany({
       where: { leagueId, availableAt: { gte: since }, ...(playerIds ? { playerId: { in: [...playerIds] } } : {}) },

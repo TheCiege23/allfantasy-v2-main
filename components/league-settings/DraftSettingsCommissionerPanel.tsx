@@ -357,7 +357,8 @@ export function DraftSettingsCommissionerPanel({ leagueId, hasAfCommissionerSub 
         if (d.cpuAutoPick === true) setCpuAutoPickEnabled(true)
         setCustomOpen(false)
         await loadSettings().catch(() => {})
-        flash(t('lsEd.dr.saved'))
+        // Seats handed to Chimmy: say how many, and what is still empty, instead of a bare "Saved".
+        flash(typeof d.chimmyTeams === 'number' && typeof d.message === 'string' ? d.message : t('lsEd.dr.saved'))
       } else {
         setError(d.message ?? t('lsEd.dr.noAction'))
       }

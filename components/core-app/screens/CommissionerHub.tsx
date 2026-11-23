@@ -404,7 +404,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
         {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
         {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
-        {league.platform.toLowerCase() === 'fantrax' && (league.sport ?? 'NFL').toUpperCase() === 'NFL' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
+        {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
         <h3>{t('Draft archive')}</h3>
         {data.history.drafts.length ? (
           data.history.drafts.map((draft) => (

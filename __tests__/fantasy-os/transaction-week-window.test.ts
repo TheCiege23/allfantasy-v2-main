@@ -3,10 +3,10 @@
  *
  * ⚠ THEY ARE DELIBERATELY DIFFERENT SHAPES AND THE TESTS PIN THAT. Transactions get a WINDOW
  * (two weeks back, one forward) because a trade is an event and older ones are already stored. Matchups get a CAP
- * (1..current+1) because `bootstrapLeagueFromNormalizedImport` upserts TeamPerformance from every
- * week in the payload, so dropping a PAST week would freeze a real score with nothing behind it —
- * `SleeperHistoricalMatchupSyncService` has no scheduled caller. Swapping the two shapes would be
- * silently wrong in both directions.
+ * (1..current+1) because `bootstrapLeagueFromNormalizedImport` writes TeamPerformance and the
+ * current season's matchup facts from every week in the payload, so dropping a PAST week would
+ * leave a real score stale until the scheduled history refresh reaches that league, which takes
+ * days. Swapping the two shapes would be silently wrong in both directions.
  *
  * 🛑 THE FAILURE THIS FILE EXISTS TO CATCH IS SILENT IN BOTH DIRECTIONS. Fetching the wrong weeks
  * writes nothing and still reports a completed scope — indistinguishable from a quiet week — and
@@ -293,9 +293,10 @@ describe('resolveMatchupWeekCap — keep every played week, drop the unplayed ta
   /*
    * 🛑 THE ASYMMETRY IS THE DESIGN. Transactions get a WINDOW because a trade is an event and last
    * month's are already stored. Matchups get a CAP because `bootstrapLeagueFromNormalizedImport`
-   * upserts TeamPerformance from every week in the payload, and a past week dropped from the fetch
-   * simply stops being refreshed — `SleeperHistoricalMatchupSyncService` has no scheduled caller.
-   * A window would silently freeze real scores; "1..current+1" cannot.
+   * writes TeamPerformance and the current season's matchup facts from every week in the payload,
+   * and a past week dropped from the fetch stops being refreshed here. The scheduled history
+   * refresh is the only other writer and takes days to lap every league.
+   * A window would silently leave real scores stale; "1..current+1" cannot.
    */
   it('keeps every week up to next week in the regular season', () => {
     expect(cap(new Date('2026-10-15T12:00:00Z'))).toBe(7) // week 6 + 1

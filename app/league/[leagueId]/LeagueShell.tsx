@@ -19,11 +19,10 @@ import { LeagueTypeHero } from '@/components/league/LeagueTypeHero'
 import { LeagueActivityTab } from '@/components/league/LeagueActivityTab'
 import { LeaguePlayerNewsTab } from '@/components/league/LeaguePlayerNewsTab'
 import { redraftSkinSport, resolveLeagueSkin } from '@/lib/league/leagueTypeSkin'
-import { LeagueWorkspaceNavigation } from '@/components/league/LeagueWorkspaceNavigation'
 import { ImportedLeagueQuickActions } from '@/components/league/ImportedLeagueQuickActions'
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
-import { usesNativeLineupScreen } from '@/lib/league/native/lineupScreenRouting'
+import { nativeScreenFor } from '@/lib/league/native/lineupScreenRouting'
 import { lineupSetsItself } from '@/lib/guillotine/guillotineBestBall'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { KickerValuePanel } from '@/components/league/KickerValuePanel'
@@ -112,6 +111,7 @@ import { resolveLegacySettingsPanel, settingsPanelView } from '@/lib/league-sett
 import type { SettingsSubPageId } from '@/lib/league-settings-home/buildLeagueSettingsHome'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
+import type { ImportedLeagueLike } from '@/lib/league/whats-next/adapters'
 import { NativeMatchupScreen } from '@/components/league/native/screens/NativeMatchupScreen'
 import { NativeLineupScreen } from '@/components/league/native/screens/NativeLineupScreen'
 import { NativeWaiversScreen } from '@/components/league/native/screens/NativeWaiversScreen'
@@ -141,6 +141,8 @@ import { buildLeagueTabGroups, groupForLeagueTab } from '@/components/decide/lea
 import { LegacyHome } from '@/components/decide/LegacyHome'
 import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
 import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
+import { CollegeProRoster } from '@/components/league/college-pro/CollegeProRoster'
+import { collegeProFormatOf } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
@@ -537,6 +539,13 @@ export function LeagueShell({
   )
 
   const nativeWorkspace = isNativePlatform(league.platform)
+  /*
+   * Every league opens in the one workspace (NativeLeagueWorkspace) since 2026-11-22: native and imported leagues
+   * looked like two different products. `nativeWorkspace` still means HOSTED ON AF and still gates the native-only
+   * screens and settings; `workspaceShell` is about chrome only. An imported league embedded in the dashboard iframe
+   * keeps the older shell, so /core's embed is unchanged.
+   */
+  const workspaceShell = nativeWorkspace || !embedMode
   // An imported Guilly league (lib/guillotine/importedGuillyView.ts): its tab reads the provider's scores, not
   // our chop engine. Most imports carry only `leagueType: 'guillotine'`, which the native gate below never read.
   const guillyTab = guillyTabKind(league, nativeWorkspace)
@@ -575,7 +584,8 @@ export function LeagueShell({
       // members too (read-only). Elsewhere redraft Settings stays modal-driven.
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
       else if (nativeWorkspace) core.push({ id: 'settings', label: '⚙ Settings' })
-      if (nativeWorkspace) core.unshift({ id: 'native_home', label: 'League home' })
+      // League home leads every league in the workspace, imported ones too (2026-11-22): one Overview for all.
+      if (workspaceShell) core.unshift({ id: 'native_home', label: 'League home' })
       return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings' || nativeWorkspace).map((tab) => {
         if (tab.id === 'roster') return { ...tab, label: 'My Team' }
         if (tab.id === 'players') return { ...tab, label: 'Players' }
@@ -679,7 +689,7 @@ export function LeagueShell({
     // first tab (and therefore the default landing) for general/imported leagues.
     // Deep links (?view=…) still land on their requested tab via leagueTabSync.
     return [
-      ...(nativeWorkspace ? [{ id: 'native_home', label: 'League home' }] : []),
+      ...(workspaceShell ? [{ id: 'native_home', label: 'League home' }] : []),
       { id: 'decide', label: 'Decide' },
       // Slice 4: live Sleeper draft cockpit. Grouped under Draft by the group
       // bar; renders honest unlinked/no-draft states when there's nothing live.
@@ -694,6 +704,7 @@ export function LeagueShell({
     ]
   }, [
     nativeWorkspace,
+    workspaceShell,
     nflRedraftCore,
     league.sport,
     league.leagueType,
@@ -850,11 +861,13 @@ export function LeagueShell({
     if (shouldUseMatchupPrimary) return
     if (league.guillotineMode) return
     if (!zombieLeague || zombieLandingApplied.current) return
+    // An imported league has no outbreak board (lib/zombie/importedZombieNote.ts): open on its usual tab.
+    if (!nativeWorkspace) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (!ids.has('zombie')) return
     setActiveTab('zombie')
     zombieLandingApplied.current = true
-  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague])
+  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary, zombieLeague, nativeWorkspace])
 
   /** Big Brother leagues default to the Big Brother hub. */
   useEffect(() => {
@@ -1262,6 +1275,16 @@ export function LeagueShell({
     () => prismaLeagueToUserLeague(league, { draftDate: draftDateIso, redraftCurrentWeek }),
     [league, draftDateIso, redraftCurrentWeek],
   )
+  /** An imported league's "What's next?" source: where it is hosted, so the panel can send you there. Null when native. */
+  const importedWhatsNext = nativeWorkspace
+    ? null
+    : {
+        platform: String(league.platform ?? ''),
+        sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
+        season: selectedLeague.season ?? null,
+        name: league.name ?? null,
+        status: selectedLeague.status ?? null,
+      }
   /*
    * Dynasty Era chat header clock. Read from the raw row, not `selectedLeague`: the season there
    * falls back to the calendar year, and the first-season fallback needs `createdAt`.
@@ -1703,6 +1726,18 @@ export function LeagueShell({
         ) : null}
         <NativeLeagueWorkspace
           native={nativeWorkspace}
+          sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null}
+          importActions={
+            !isAfHostedPlatform(league.platform) ? (
+              <ImportedLeagueQuickActions
+                compact
+                leagueId={league.id}
+                leagueName={selectedLeague.name ?? 'League'}
+                platform={league.platform}
+                canRemove={isOwner}
+              />
+            ) : null
+          }
           league={selectedLeague}
           leagues={leagueList}
           tabs={tabDefs}
@@ -1776,31 +1811,7 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-            {!embedMode && !nativeWorkspace ? (
-              // ONE line in place of three stacked bars: the back links, where the league is hosted,
-              // the imported-league actions and the host button share a row; the read-only note sits
-              // under it.
-              <LeagueWorkspaceNavigation
-                variant="strip"
-                leagueId={league.id}
-                leagueName={selectedLeague.name ?? 'League'}
-                platform={league.platform}
-                sourceLeagueId={sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId}
-                season={league.season}
-                trailing={
-                  !isAfHostedPlatform(league.platform) ? (
-                    <ImportedLeagueQuickActions
-                      compact
-                      leagueId={league.id}
-                      leagueName={selectedLeague.name ?? 'League'}
-                      platform={league.platform}
-                      canRemove={isOwner}
-                    />
-                  ) : null
-                }
-              />
-            ) : null}
-            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${nativeWorkspace ? 'hidden' : ''}`}>
+            <div className={`shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden ${workspaceShell ? 'hidden' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -1823,7 +1834,7 @@ export function LeagueShell({
                 </button>
               </div>
             </div>
-            {!nativeWorkspace && showSpecialtyHero && specialtyHeroVariant ? (
+            {!workspaceShell && showSpecialtyHero && specialtyHeroVariant ? (
               <SpecialtyLeagueHomeHero
                 leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
@@ -1845,7 +1856,7 @@ export function LeagueShell({
               />
             ) : null}
             <ActiveTeamSwitcher leagueId={league.id} />
-            {!nativeWorkspace && showDevyHero ? (
+            {!workspaceShell && showDevyHero ? (
               <DevyLeagueHomeHero
                 leagueName={selectedLeague.name ?? 'League'}
                 sport={String(selectedLeague.sport)}
@@ -1859,7 +1870,7 @@ export function LeagueShell({
                 }
               />
             ) : null}
-            {!nativeWorkspace && <LeagueHeader
+            {!workspaceShell && <LeagueHeader
               league={selectedLeague}
               leagueId={league.id}
               tabs={tabDefs}
@@ -1932,7 +1943,7 @@ export function LeagueShell({
             */}
             {/* The block only this league type has, on the first tab. Survivor, Big Brother,
                 tournament and devy leagues already open with their own hero above the header. */}
-            {!nativeWorkspace && !showSpecialtyHero && !showDevyHero && activeTab === tabDefs[0]?.id ? (
+            {!workspaceShell && !showSpecialtyHero && !showDevyHero && activeTab === tabDefs[0]?.id ? (
               <LeagueTypeHero
                 skin={leagueSkin}
                 sportLabel={String(league.sport ?? 'NFL').toUpperCase()}
@@ -1941,7 +1952,7 @@ export function LeagueShell({
                 teamCount={league.leagueSize ?? selectedLeague.teamCount ?? null}
               />
             ) : null}
-            {!nativeWorkspace && activeTab === tabDefs[0]?.id ? (
+            {!workspaceShell && activeTab === tabDefs[0]?.id ? (
               <div className="mb-4">
                 <WhatsNextPanel
                   league={selectedLeague}
@@ -1951,19 +1962,13 @@ export function LeagueShell({
                   draftDateIso={draftDateIso}
                   availableTabIds={tabDefs.map((item) => item.id)}
                   onSelectTab={setActiveTab}
-                  imported={{
-                    platform: String(league.platform ?? ''),
-                    sourceLeagueId: sourceLinkLeagueId !== undefined ? sourceLinkLeagueId : league.platformLeagueId ?? null,
-                    season: selectedLeague.season ?? null,
-                    name: league.name ?? null,
-                    status: selectedLeague.status ?? null,
-                  }}
+                  imported={importedWhatsNext}
                 />
               </div>
             ) : null}
 
             {/* Live scores strip */}
-            {!nativeWorkspace && <LeagueLiveStrip sport={String(league.sport)} />}
+            {!workspaceShell && <LeagueLiveStrip sport={String(league.sport)} />}
 
             {/* League story card - shown on league tab */}
             {activeTab === 'league' && (
@@ -2025,6 +2030,8 @@ export function LeagueShell({
               activeTab={activeTab}
               tabDefs={tabDefs}
               importedLeagueCount={leagueList.filter((l) => !isAfHostedPlatform(l.platform)).length}
+              importedWhatsNext={importedWhatsNext}
+              nativeScreens={workspaceShell}
               leagueRail={leagueRail}
               leagueId={league.id}
               selectedLeague={selectedLeague}
@@ -2371,6 +2378,8 @@ function LeagueTabRouter({
   draftSetupSession,
   hasActiveRedraftSeason,
   importedLeagueCount,
+  importedWhatsNext = null,
+  nativeScreens = false,
   leagueRail,
   viewerUserId,
   autoOpenFormatWalkthrough,
@@ -2404,6 +2413,10 @@ function LeagueTabRouter({
   hasActiveRedraftSeason: boolean
   /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
   importedLeagueCount: number
+  /** Imported leagues: where the league is hosted, for League home's "What's next?". Null for a native league. */
+  importedWhatsNext?: ImportedLeagueLike | null
+  /** The league is shown in the workspace (always for native; for an import, unless embedded): use the native screens. */
+  nativeScreens?: boolean
   /** The rail's saved matchup summaries — the chat's pinned score card reads this league's entry. */
   leagueRail?: LeagueRailData | null
   /** The signed-in viewer, for the format walkthrough's per-user "seen" flag. */
@@ -2578,10 +2591,28 @@ function LeagueTabRouter({
 
   /*
    * Native league screens (handoff 2026-10-11 §3): AF-hosted leagues get the rebuilt Matchup, Lineup,
-   * Waivers, Trades and Standings. Synced leagues, and the variants whose tab renders something
-   * else entirely (Big Brother standings, IDP / Best Ball / dynasty team views), keep the components below.
+   * Waivers, Trades and Standings. Since 2026-11-22 an imported league in the workspace gets all of them too
+   * (owner: one look for every league). The routes behind them already serve
+   * imports: trades-panel and the trade actions are the Trades tab's own, the lineup save carries the
+   * imported Write Authority, standings keep the platform's records, matchup-center reads the provider's
+   * week, and the waiver routes are the classic waiver page's own (the screen says a claim on an import stays in
+   * AllFantasy). An import keeps the classic Team tab when it has a college roster (C2C / devy: the two-lineup
+   * roster lives there). An embedded import keeps every classic screen.
+   * The variants whose tab renders something else entirely (Big Brother standings, IDP / Best Ball /
+   * college team views) keep the components below.
    */
-  if (isNativePlatform(selectedLeague.platform)) {
+  // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself. The same
+  // test the lineup saves refuse by (guillotineBestBall.ts `lineupSetsItself`), so no editor is shown for a
+  // save that would be refused.
+  const nativeScreen = nativeScreenFor(activeTab, {
+    hosted: isNativePlatform(selectedLeague.platform),
+    inWorkspace: nativeScreens,
+    leagueVariant: selectedLeague.leagueVariant,
+    idp: idpLeagueActive,
+    bestBall: lineupSetsItself(selectedLeague),
+    collegeRoster: collegeProFormatOf(selectedLeague) !== null,
+  })
+  if (nativeScreen) {
     const firstTab = (...ids: string[]) => ids.find((id) => tabDefs.some((t) => t.id === id)) ?? ids[0]
     const goTo = (id: string) =>
       onSelectTab(
@@ -2590,28 +2621,17 @@ function LeagueTabRouter({
             : id === 'settings' ? firstTab('settings', 'commissioner', 'league')
               : id,
       )
-    // A best ball Guilly league keeps the classic tab like a Best Ball league: its lineup sets itself. The same
-    // test the lineup saves refuse by (guillotineBestBall.ts `lineupSetsItself`), so no editor is shown for a
-    // save that would be refused.
-    const bestBall = lineupSetsItself(selectedLeague)
-    switch (activeTab) {
-      case 'matchups':
+    switch (nativeScreen) {
       case 'matchup':
         return <NativeMatchupScreen league={selectedLeague} onSelectTab={goTo} />
-      case 'team':
-      case 'roster':
-      case 'squad':
-        // Dynasty uses the lineup screen too (taxi and IR live there, with tap to swap). Devy and C2C keep the
-        // classic Team tab: their devy squad and college-rights moves live only there.
-        if (usesNativeLineupScreen({ leagueVariant: selectedLeague.leagueVariant, idp: idpLeagueActive, bestBall })) return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
-        break
+      case 'lineup':
+        return <NativeLineupScreen league={selectedLeague} userTeam={userTeam} onSelectTab={goTo} />
       case 'waivers':
         return <NativeWaiversScreen league={selectedLeague} />
       case 'trades':
         return <NativeTradesScreen league={selectedLeague} teams={teamSlots} />
       case 'standings':
-        if (selectedLeague.leagueVariant !== 'big_brother') return <NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />
-        break
+        return <NativeStandingsScreen league={selectedLeague} isCommissioner={isCommissioner} onSelectTab={goTo} />
     }
   }
 
@@ -2631,12 +2651,13 @@ function LeagueTabRouter({
           availableTabIds={tabDefs.map((item) => item.id)}
           onSelectTab={onSelectTab}
           autoOpenWalkthrough={autoOpenFormatWalkthrough}
+          imported={importedWhatsNext}
         />
       )
-      if (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor') {
+      if (!importedWhatsNext && (selectedLeague.leagueVariant === 'survivor' || selectedLeague.format.toLowerCase() === 'survivor')) {
         return <div className="wn-home-stack">{whatsNext}<SurvivorNativeHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} /></div>
       }
-      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} /></div>
+      return <div className="wn-home-stack">{whatsNext}<NativeLeagueHome settingsOpen={settingsOpen} league={selectedLeague} teams={teamSlots} userTeamId={userTeam?.id ?? null} isCommissioner={isCommissioner} draftDateIso={draftDateIso} snapshot={seasonSnapshot} onOpenSettings={onOpenLeagueSettingsModal} onSelectTab={onSelectTab} inviteCode={inviteToken ?? ''} availableTabIds={tabDefs.map(item => item.id)} imported={importedWhatsNext != null} /></div>
     }
     case 'home':
       return (
@@ -2736,7 +2757,7 @@ function LeagueTabRouter({
                     ? 'history'
                     : 'house'
       return (
-        <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} />
+        <BigBrotherHome leagueId={leagueId} initialView={bbView} isCommissioner={isCommissioner} shellNav />
       )
     }
     case 'salary_cap':
@@ -2791,8 +2812,8 @@ function LeagueTabRouter({
       return <KeeperSelectionTab leagueId={leagueId} />
     case 'team':
     case 'roster':
-    case 'squad':
-      return (
+    case 'squad': {
+      const standardRoster = (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Draft-aware live roster (Sleeper leagues): current roster incl.
               in-progress draft picks; renders nothing for other platforms. */}
@@ -2829,6 +2850,20 @@ function LeagueTabRouter({
           />
         </div>
       )
+      /*
+        A college + pro league (C2C / Devy) shows both lineups on one page. Every other league,
+        and any failure to read the two halves, keeps the standard roster view above.
+      */
+      // Sleeper is the pro half; Fantrax is the college half, which builds the same page from its pro league.
+      if ((selectedLeague.platform !== 'sleeper' && selectedLeague.platform !== 'fantrax') || !collegeProFormatOf(selectedLeague)) {
+        return standardRoster
+      }
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <CollegeProRoster leagueId={leagueId} onPlayerClick={onPlayerClick} fallback={standardRoster} />
+        </div>
+      )
+    }
     case 'league':
       return (
         <LeagueTab

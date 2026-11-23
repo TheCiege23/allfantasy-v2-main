@@ -67,7 +67,7 @@ export const matchupScreenMessages = defineMessages({
           : yours.length
             ? `Your ${list(yours)}, and nobody of theirs.`
             : `Their ${list(theirs)}, and nobody of yours.`
-      return `${who} ${inGame} of ${remaining} starters still to play.`
+      return `${who} ${inGame} of the ${remaining} starters still to play are in this game.`
     },
     lineupLabel: 'Lineup check',
     lineupTitle: (n: number, name: string | null, slot: string) =>

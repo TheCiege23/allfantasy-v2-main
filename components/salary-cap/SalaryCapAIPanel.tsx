@@ -32,7 +32,8 @@ export function SalaryCapAIPanel({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const [type, setType] = useState<SalaryCapAIPanelType>('cap_health')
   const [loading, setLoading] = useState(false)
@@ -74,13 +75,15 @@ export function SalaryCapAIPanel({
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
       <section className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-cyan-200">
@@ -116,7 +119,7 @@ export function SalaryCapAIPanel({
               onClick={() => setType(t)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
                 type === t
-                  ? 'bg-cyan-500/80 text-white'
+                  ? 'bg-cyan-700 text-white'
                   : 'border border-white/20 bg-white/5 text-white/80 hover:bg-white/10'
               }`}
             >
@@ -130,7 +133,7 @@ export function SalaryCapAIPanel({
             type="button"
             onClick={runAI}
             disabled={loading}
-            className="rounded-lg bg-cyan-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <>

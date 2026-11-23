@@ -1,4 +1,4 @@
-import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS } from '@/lib/league/teamCountLimits'
+import { DYNASTY_TEAM_COUNTS, REDRAFT_TEAM_COUNTS, capToRealLeague } from '@/lib/league/teamCountLimits'
 import { getZombieCreationTeamCounts } from '@/lib/zombie/creationPolicy'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { SURVIVOR_CREATE_CAST_SIZES } from '@/lib/league-creation-wizard/sport-team-limits'
@@ -35,10 +35,15 @@ const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = [...SURVIVOR_CREATION_SPORTS]
 
 const UNIVERSAL_CREATE_TEAM_COUNTS = [...REDRAFT_TEAM_COUNTS]
 const DYNASTY_CREATE_TEAM_COUNTS = [...DYNASTY_TEAM_COUNTS]
+/** Even sizes from 8 (as before) up to the NFL's 32 teams, for formats that draft NFL players beside college ones. */
+const NFL_PRO_BOUND_EVEN_TEAM_COUNTS = Array.from({ length: 13 }, (_, i) => 8 + i * 2)
+
+/** 1,700 draftable NCAAF devy prospects (rounded down from 1,772) over 10 DEVY seats a team. */
+const NCAAF_DEVY_MAX_TEAMS = 170
 
 const KEEPER_TEAM_COUNTS_WITH_ODD = [...KEEPER_EVEN_TEAM_COUNTS, ...KEEPER_ODD_TEAM_COUNTS].sort((a, b) => a - b)
 
-export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
+const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
   version: 1,
   defaultTimezone: 'America/New_York',
   supportedModes: ['quick', 'advanced'],
@@ -135,10 +140,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introVideoUrl: '/league-type-survivor-intro.mp4',
       introPosterUrl: '/league-type-survivor.png',
     },
-    // Tournament Mode retired from active creation (2026-07-23). Removing the
-    // catalog entry takes it out of every creation selector; the server also
-    // refuses the concept (lib/league-creation/retiredConcepts.ts). Existing
-    // tournaments keep working — this list only drives NEW league creation.
+    // Tournament Mode has no card here: a tournament is several leagues feeding one bracket, and it
+    // is created on its own screen (/tournament-hub/new), not through this single-league form. It was
+    // retired from creation on 2026-07-23 and brought back by the owner on 2026-11-22
+    // (lib/league-creation/retiredConcepts.ts).
     {
       id: 'big_brother',
       title: 'Big Brother',
@@ -361,14 +366,23 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       NCAAB: [8, 10, 12, 14, 16],
       SOCCER: [8, 10, 12, 14, 16],
     },
+    /*
+     * Owner's decisions, 2026-11-22: an NFL-based Devy or C2C league goes up to 32 teams (the size of
+     * the real league), and a college-sport Devy or C2C league goes up to the college maximum. The
+     * owner's own college leagues run 140 and 180 teams.
+     *
+     * College Devy is bounded by its prospects, not by 250: its DEVY seats are filled from the devy
+     * pool (production, 2026-11-22: 1,772 draftable NCAAF prospects; the NCAAF Devy template holds
+     * 10 DEVY seats per team). `NCAAF_DEVY_MAX_TEAMS` sizes it so the devy rounds cannot run dry.
+     */
     devy: {
-      NFL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS.filter((n) => n <= NCAAF_DEVY_MAX_TEAMS),
     },
     c2c: {
-      NFL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
-      NCAAB: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
+      NCAAB: DYNASTY_CREATE_TEAM_COUNTS,
     },
     // Guilly: 4–27 teams single elimination, up to 35 with double-elimination weeks — the
     // same for every sport (lib/guillotine/teamCountLimits.ts). A commissioner on a short
@@ -407,4 +421,21 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       SOCCER: [12, 14, 16, 18],
     },
   },
+}
+
+/**
+ * The catalog the form and the server read: every team-count list capped at the real league's size
+ * for pro sports (`capToRealLeague`, lib/league/teamCountLimits.ts). Applied once, here, so the
+ * wizard's pills, `getTeamCountOptions` and the create handler's catalog check cannot disagree.
+ */
+export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
+  ...LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED,
+  teamCountOptionsByConceptSport: Object.fromEntries(
+    Object.entries(LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED.teamCountOptionsByConceptSport).map(([concept, bySport]) => [
+      concept,
+      Object.fromEntries(
+        Object.entries(bySport).map(([sport, counts]) => [sport, capToRealLeague(sport, concept, counts ?? [])]),
+      ),
+    ]),
+  ),
 }

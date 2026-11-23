@@ -26,21 +26,43 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
    * `optimizeLineup`; the psychology one had no renderer. An exact key set fails the moment either
    * is re-added, which a pair of `toBe(false)` assertions could not do.
    */
-  it('the router decides exactly three slices', () => {
+  it('the router decides exactly seven slices', () => {
     for (const intent of ALL_INTENTS) {
       expect(Object.keys(deriveWantFromIntent(intent)).sort()).toEqual([
         'commissionerHealthDecision',
+        'draftBoard',
+        'managerRecords',
+        'myTeamLineup',
+        'pendingTrades',
         'rosterValueGrade',
         'waiverDecision',
       ])
     }
   })
 
-  it('start_sit turns on nothing', () => {
+  // 2026-11-20: a trade question carries the offers waiting on the asker, graded by the one trade engine.
+  // 2026-11-20: a draft question carries the draft board with Draft OS's pick for the asker.
+  it('draft turns on draftBoard, and only draft does', () => {
+    expect(deriveWantFromIntent('draft').draftBoard).toBe(true)
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'draft')) expect(deriveWantFromIntent(intent).draftBoard).toBe(false)
+  })
+
+  it('trade turns on pendingTrades, and only trade does', () => {
+    expect(deriveWantFromIntent('trade').pendingTrades).toBe(true)
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'trade')) expect(deriveWantFromIntent(intent).pendingTrades).toBe(false)
+  })
+
+  /*
+   * 2026-11-20: start_sit asks for My Team's best lineup — the one optimizer the screen runs, read the way the lineup
+   * tool reads it (NOT the retired 37 s `lineupDecision` engine). Bounded by the packet's deadline like any read.
+   */
+  it('start_sit turns on myTeamLineup, and nothing else', () => {
     const w = deriveWantFromIntent('start_sit')
+    expect(w.myTeamLineup).toBe(true)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
     expect(w.waiverDecision).toBe(false)
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'start_sit')) expect(deriveWantFromIntent(intent).myTeamLineup).toBe(false)
   })
 
   it('commissioner turns on commissionerHealthDecision, and nothing else', () => {
@@ -49,10 +71,12 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('manager_psychology turns on nothing', () => {
+  // 2026-11-20: a manager question carries every leaguemate's record, facts only, behind Competitive Edge.
+  it('manager_psychology turns on managerRecords, and nothing else; no other intent does', () => {
     const w = deriveWantFromIntent('manager_psychology')
-    expect(w.commissionerHealthDecision).toBe(false)
-    expect(w.rosterValueGrade).toBe(false)
+    expect(w.managerRecords).toBe(true)
+    expect(Object.entries(w).filter(([, v]) => v).map(([k]) => k)).toEqual(['managerRecords'])
+    for (const intent of ALL_INTENTS.filter((i) => i !== 'manager_psychology')) expect(deriveWantFromIntent(intent).managerRecords).toBe(false)
   })
 
   /**
@@ -113,9 +137,10 @@ describe('R2/R3.3 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('every other intent (trade, draft, matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {
+  it('every other intent (matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {
+    // `trade` and `draft` left this list on 2026-11-20: they turn on `pendingTrades` and `draftBoard` (tested above).
     const untouched: ChimmyOrchestrationIntent[] = [
-      'trade', 'draft', 'matchup', 'league_strength', 'bracket', 'injury', 'weather', 'story_recap', 'general',
+      'matchup', 'league_strength', 'bracket', 'injury', 'weather', 'story_recap', 'general',
     ]
     for (const intent of untouched) {
       const w = deriveWantFromIntent(intent)

@@ -2,6 +2,7 @@
  * POST: Commissioner controls — start, pause, resume, reset_timer, undo_pick, force_autopick, complete, etc.
  */
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { commissionerAccessResponse } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -64,6 +65,8 @@ import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { isLoggedCommissionerDraftAction, recordCommissionerDraftAction, refuseIfSleeperMirrored } from '@/lib/draft-room/commissionerDraftActions'
 import { createNextLeagueDraft } from '@/lib/live-draft-engine/createNextLeagueDraft'
+import { forfeitDraftPick } from '@/lib/live-draft-engine/commissioner/forfeitDraftPick'
+import { skipForfeitedPicksOnClock } from '@/lib/live-draft-engine/forfeitedPickSkips'
 import { CUSTOM_TIMER_MAX_SECONDS, CUSTOM_TIMER_MIN_SECONDS, decideCommissionerTimerSeconds } from '@/lib/draft/draftSettingsPolicy'
 
 export const dynamic = 'force-dynamic'
@@ -109,6 +112,7 @@ const ALLOWED_ACTIONS = [
   'reset_draft',
   'swap_manager',
   'create_next_draft',
+  'forfeit_pick',
 ]
 
 type AutoPickCandidate = {
@@ -354,6 +358,8 @@ async function handleDraftControl(
       }
       const ok = await resumeDraftSession(leagueId)
       if (!ok) return NextResponse.json({ error: 'Cannot resume draft' }, { status: 400 })
+      // A pick forfeited while paused may be the one on the clock; skip it now rather than sit on it.
+      await skipForfeitedPicksOnClock(leagueId, submitPick).catch((err) => console.error('[draft] forfeit skip on resume failed', err))
       // skipRepair: repair/reconcile not needed for a status-only transition.
       const snapshot = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
       console.info('[draft-perf] resume controls total', { leagueId, ms: Date.now() - _resumeStart })
@@ -393,6 +399,27 @@ async function handleDraftControl(
       }
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({ ok: true, action: 'undo_pick', session: await withViewerSession(leagueId, userId, snapshot) })
+    }
+    if (action === 'forfeit_pick') {
+      // Penalty: the team's pick in that round is skipped when the draft reaches it (2026-11-19).
+      const round = Number(body.round)
+      const rosterId = typeof body.rosterId === 'string' ? body.rosterId.trim() : ''
+      const reason = typeof body.reason === 'string' ? body.reason.slice(0, 100) : ''
+      if (!Number.isInteger(round) || !rosterId) {
+        return NextResponse.json({ error: 'round and rosterId are required', code: 'BAD_REQUEST' }, { status: 400 })
+      }
+      const result = await forfeitDraftPick({ leagueId, round, originalRosterId: rosterId, reason })
+      if (!result.ok) {
+        const status = result.code === 'NO_SESSION' ? 404 : result.code === 'PICK_ALREADY_MADE' || result.code === 'INVALID_STATUS' ? 409 : 400
+        return NextResponse.json({ error: result.error, code: result.code }, { status })
+      }
+      const snapshot = await buildSessionSnapshot(leagueId)
+      return NextResponse.json({
+        ok: true,
+        action: 'forfeit_pick',
+        overall: result.overall,
+        session: await withViewerSession(leagueId, userId, snapshot),
+      })
     }
     if (action === 'swap_manager') {
       // Slice 5 — swap two slots' managers. Affects future picks only; past DraftPick rows untouched.
@@ -522,7 +549,7 @@ async function handleDraftControl(
         select: { platformUserId: true },
       })
       const queueUserId =
-        onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
+        onClockRoster?.platformUserId && !isSeatPlaceholderUserId(String(onClockRoster.platformUserId))
           ? String(onClockRoster.platformUserId)
           : null
       let useAiQueueMode = false

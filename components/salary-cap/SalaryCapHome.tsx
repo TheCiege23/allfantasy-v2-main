@@ -18,6 +18,7 @@ import { SalaryCapRulesView } from './SalaryCapRulesView'
 import { SpecialtyShell } from '@/components/league/specialty/SpecialtyShell'
 import { SalaryCapSpecialtyHome } from '@/components/league/specialty/salary/SalaryCapSpecialtyHome'
 import { SalaryCapBidCheck } from '@/components/league/specialty/salary/SalaryCapBidCheck'
+import { ImportedContractsUpload } from './ImportedContractsUpload'
 
 interface SalaryCapHomeProps {
   leagueId: string
@@ -114,6 +115,13 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
   return (
     <SpecialtyShell format="salary" testId="salary-specialty">
     <div className="space-y-6">
+      {/* Shown above every cap view: an imported league whose contracts AllFantasy does not hold. */}
+      {summary?.contractsNote ? (
+        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          {summary.contractsNote}
+        </p>
+      ) : null}
+      {summary?.canImportContracts ? <ImportedContractsUpload leagueId={leagueId} onSaved={() => void load()} /> : null}
       {view === 'home' && summary && (
         <SalaryCapSpecialtyHome
           summary={summary}
@@ -190,24 +198,35 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       </>
       ) : null}
 
+      {/*
+        The sub-views live in the Salary Cap specialty shell, which is dark in BOTH modes (Cap home reads fine in light
+        mode because it is styled by a CSS module). They are written with Tailwind's text-white, which the global
+        light-mode readability rule (app/globals.css, `.mode-readable [class*="text-white"]`) turns dark — dark text on
+        the shell's dark backdrop, ~1:1 contrast (2026-11-07, Salary Cap audit item 3). `af-draft-dark` is that rule's
+        existing opt-out, so the sub-views keep the shell's theme like Cap home does.
+      */}
+      {view !== 'home' ? (
+      <div className="af-draft-dark" data-cap-subview={view}>
       {view === 'cap-dashboard' && summary && (
-        <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <CapDashboard summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'contracts' && summary && (
-        <ContractsPage summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <ContractsPage summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'team-builder' && summary && (
-        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'draft' && summary && (
-        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'ai' && summary && (
-        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'rules' && summary && (
-        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
+      </div>
+      ) : null}
     </div>
     </SpecialtyShell>
   )

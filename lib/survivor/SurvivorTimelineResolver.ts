@@ -52,6 +52,21 @@ export async function resolveSurvivorCurrentWeek(
   const explicitWeek = toPositiveInt(requestedWeek)
   if (explicitWeek != null) return explicitWeek
 
+  /*
+   * The game's own week comes first. Every fallback below guesses the week from somewhere else
+   * (settings, team performance, matchup facts, the draft), and a native survivor league has none
+   * of them, so this answered 1 while the game state said 6: the commissioner's command center read
+   * "Week 1" beside a to-do list for week 6 and looked up week 1's council (walked locally
+   * 2026-11-20). A league with no game state, or one not started, falls through as before.
+   */
+  try {
+    const game = await prisma.survivorGameState.findUnique({ where: { leagueId }, select: { currentWeek: true } })
+    const gameWeek = toPositiveInt(game?.currentWeek)
+    if (gameWeek != null) return gameWeek
+  } catch {
+    // An unreadable game state is not a reason to fail the week lookup.
+  }
+
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {

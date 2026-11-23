@@ -48,6 +48,8 @@ export interface SleeperUserRaw {
 export interface SleeperRosterRaw {
   roster_id: number
   owner_id?: string | null
+  /** Sleeper user ids that share this team with its owner. */
+  co_owners?: string[] | null
   players?: string[]
   starters?: string[]
   reserve?: string[]
@@ -98,6 +100,34 @@ export interface SleeperTransactionRaw {
    * the boundary.
    */
   settings?: Record<string, unknown>
+  /**
+   * FAAB moved BETWEEN two rosters in a trade, roster ids as Sleeper sends them. Not a waiver bid — that is
+   * `settings.waiver_bid`. Already relied on by `SleeperHistoricalTransactionSyncService`.
+   */
+  waiver_budget?: Array<{ sender?: number | string; receiver?: number | string; amount?: number | string }>
+}
+
+/**
+ * A trade's FAAB transfers, normalized: roster ids as strings, amounts as numbers. PURE.
+ *
+ * ⚠ ABSENT IS NOT EMPTY. An array — even an empty one — means Sleeper stated the trade's FAAB, so "none moved" is a
+ * fact and each side's `LeagueTrade.budgetGiven/Received` is written (0 included). No array means it was never read,
+ * and the columns stay NULL — the contract `NormalizedTradeFact.waiverBudget` already states. A malformed entry
+ * makes the whole statement unreadable rather than silently dropping one transfer.
+ */
+export function sleeperTradeWaiverBudget(raw: unknown): Array<{ sender: string; receiver: string; amount: number }> | null {
+  if (!Array.isArray(raw)) return null
+  const out: Array<{ sender: string; receiver: string; amount: number }> = []
+  for (const b of raw) {
+    if (!b || typeof b !== 'object') return null
+    const r = b as Record<string, unknown>
+    const amount = Number(r.amount)
+    const sender = r.sender == null ? '' : String(r.sender)
+    const receiver = r.receiver == null ? '' : String(r.receiver)
+    if (!Number.isFinite(amount) || amount < 0 || !sender || !receiver) return null
+    out.push({ sender, receiver, amount })
+  }
+  return out
 }
 
 export interface SleeperDraftPickRaw {

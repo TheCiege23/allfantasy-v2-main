@@ -50,8 +50,8 @@ describe('tradeLetterRecord', () => {
   const view = ledgerRecordFor(ledger(), null)
 
   it('gives the letter its graded record, with whether it held up', () => {
-    expect(tradeLetterRecord(view, 'A')).toEqual({ letter: 'A', n: 20, netPerWeek: 2.1, aheadPct: 70, verdict: 'held_up' })
-    expect(tradeLetterRecord(view, 'b')).toEqual({ letter: 'B', n: 25, netPerWeek: -1.3, aheadPct: 36, verdict: 'not_held_up' })
+    expect(tradeLetterRecord(view, 'A')).toEqual({ letter: 'A', n: 20, netPerWeek: 2.1, aheadPct: 70, verdict: 'held_up', confidence: null })
+    expect(tradeLetterRecord(view, 'b')).toEqual({ letter: 'B', n: 25, netPerWeek: -1.3, aheadPct: 36, verdict: 'not_held_up', confidence: null })
   })
 
   it('says nothing for a letter below the sample, a missing letter, or no record at all', () => {

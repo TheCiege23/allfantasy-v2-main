@@ -27,7 +27,7 @@ import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
-import { findViewerRosterId, resolveGuillotineCurrentWeek } from '@/lib/guillotine/guillotineCurrentWeek'
+import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/guillotineCurrentWeek'
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
@@ -118,12 +118,13 @@ export async function GET(
     return 'error' in preview ? NextResponse.json(preview, { status: 409 }) : NextResponse.json(preview)
   }
 
-  // No `?week=` means "the current week" — it used to mean week 1, all season.
+  // No `?week=` means the week being PLAYED: the one after the last settled chop (guillotineLiveWeek).
+  // It used to mean week 1 all season, then the last chopped week all season.
   const config = await getGuillotineConfig(leagueId)
   const weekParam = req.nextUrl.searchParams?.get('week')
   const weekOrPeriod = weekParam
     ? Math.max(1, parseInt(weekParam, 10)) || 1
-    : await resolveGuillotineCurrentWeek(leagueId, config)
+    : await resolveGuillotineLiveWeek(leagueId, config)
 
   const [summary, myEscapes, myRosterId, home, advanced, watch] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),

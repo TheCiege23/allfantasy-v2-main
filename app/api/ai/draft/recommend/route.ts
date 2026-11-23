@@ -6,6 +6,7 @@ import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { getDraftEligiblePositionsFromPayload, getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
 import { getDraftAdvisorContext } from '@/lib/sports-reporting/DraftAdvisorContextService'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
+import { sharedDraftPickForUser } from '@/lib/shared-services/draft/pickDecision'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,9 +118,22 @@ export async function POST(req: Request) {
     round: input.round,
   }).catch(() => undefined)
 
+  /*
+   * ONE ENGINE IN THE ROOM (build item 8): in a league draft the War Room's pick is the draft card's own
+   * (pickDecision.ts), so the board's "AI pick" badge and the card cannot point at different players. Only in the
+   * card's mode (`needs`); otherwise, or when there is no decision to share, the posted pool as before.
+   */
+  const shared =
+    leagueId && input.mode === 'needs' ? await sharedDraftPickForUser({ leagueId, userId: session.user.id }) : null
+
   try {
-    const result = await runDraftWarRoomRecommendation({ ...input, groundedContext })
-    return NextResponse.json({ ok: true, ...result })
+    const result = await runDraftWarRoomRecommendation({ ...input, groundedContext, precomputed: shared?.result ?? null })
+    return NextResponse.json({
+      ok: true,
+      ...result,
+      engineSource: shared ? 'draft_decision' : 'posted_pool',
+      plannedFor: shared?.plannedFor ?? null,
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'War room failed'
     console.error('[api/ai/draft/recommend]', e)

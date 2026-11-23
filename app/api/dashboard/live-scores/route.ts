@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { readExtraMatchupViewForSeason } from '@/lib/redraft/oddTeamExtraMatchup'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -10,6 +11,7 @@ import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import { etagMatches, livePayloadEtag } from '@/lib/live/livePayloadEtag'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: live scoring reads the platform feed
 const SLEEPER_CACHE_PREFIX = 'live-scores-sleeper:v1:'
@@ -67,7 +69,7 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
     where: {
       platform: 'sleeper',
       platformLeagueId: { not: '' },
-      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+      OR: leagueMemberWhere(userId),
     },
     select: { id: true, name: true, platformLeagueId: true },
     take: MAX_SLEEPER_LEAGUES,
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
           upcoming: data.detail.status?.state === 'pre',
         })
       : null
-    return NextResponse.json(
+    return await afJson(session?.user?.id ?? null, 
       { ...data, starters },
       starters ? { headers: { 'Cache-Control': 'private, no-store' } } : undefined,
     )
@@ -227,7 +229,7 @@ export async function GET(request: NextRequest) {
         headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
       })
     }
-    return NextResponse.json(data, {
+    return await afJson(session?.user?.id ?? null, data, {
       headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
     })
   }
@@ -245,7 +247,7 @@ export async function GET(request: NextRequest) {
     if (!leagueId) return NextResponse.json({ error: 'league is required' }, { status: 400 })
     try {
       const data = await getMatchupData(leagueId, session.user.id, null)
-      return NextResponse.json({ strip: buildMatchupStrip(data) }, { headers: { 'Cache-Control': 'private, no-store' } })
+      return await afJson(session?.user?.id ?? null, { strip: buildMatchupStrip(data) }, { headers: { 'Cache-Control': 'private, no-store' } })
     } catch (e) {
       console.error('[dashboard/live-scores] matchup strip read failed', e)
       return NextResponse.json({ error: 'matchup read failed' }, { status: 500 })
@@ -286,7 +288,7 @@ export async function GET(request: NextRequest) {
   const sleeperScoresPromise = sleeperLiveScores(userId).catch(() => [] as DashboardLiveScore[])
 
   if (seasons.length === 0) {
-    return NextResponse.json({ scores: await sleeperScoresPromise })
+    return await afJson(session?.user?.id ?? null, { scores: await sleeperScoresPromise })
   }
 
   // For each season, count total rosters and get the user's matchup for the current week.
@@ -388,5 +390,5 @@ export async function GET(request: NextRequest) {
    */
   const plays = await getPlayFeed().catch(() => [])
 
-  return NextResponse.json({ scores: results, plays })
+  return await afJson(session?.user?.id ?? null, { scores: results, plays })
 }

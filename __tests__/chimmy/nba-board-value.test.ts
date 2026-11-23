@@ -103,9 +103,9 @@ describe('get_player_value in an NBA league', () => {
 
   it('another sport returns null, so the NFL market values answer as before', async () => {
     expect(await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Josh Allen' }, deps(ctx(), { ...LEAGUE, sport: 'NFL' }))).toBeNull()
-    // NBA, then MLB, then NHL, by the owner's order; soccer joins on its own.
-    expect([...BOARD_VALUE_SPORTS]).toEqual(['NBA', 'MLB', 'NHL'])
-    expect(await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Cooper Flagg' }, deps(ctx(), { ...LEAGUE, sport: 'NCAAB' }))).toBeNull()
+    expect([...BOARD_VALUE_SPORTS]).toEqual(['NBA', 'MLB', 'NHL', 'NCAAB', 'SOCCER'])
+    expect(await buildSportBoardValueContext({ leagueId: 'L1', playerName: 'Cooper Flagg' }, deps(ctx(), { ...LEAGUE, sport: 'NCAAB' })))
+      .toMatch(/NCAAB VALUE: not available/)
   })
 })
 

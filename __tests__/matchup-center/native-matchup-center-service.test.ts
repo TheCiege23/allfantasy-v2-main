@@ -141,7 +141,9 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
     expect(engine.scoreRosterForWeek).toHaveBeenCalledTimes(2)
     expect(engine.scoreRosterForWeek).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', week: 2, seasonYear: 2026, collectPlayerPoints: true }))
-    expect(p.left.starters.map((s) => [s.playerId, s.currentPoints, s.gameStatus])).toEqual([['a-pg', 77, 'live']])
+    // Every current starter is listed while the week is live: a-c has no points yet and still shows (owner report, 2026-11-22).
+    expect(p.left.starters.map((s) => s.playerId)).toEqual(['a-pg', 'a-c'])
+    expect(p.left.starters.find((s) => s.playerId === 'a-pg')).toMatchObject({ currentPoints: 77, gameStatus: 'live' })
     expect(p.native.playerPointsAvailable).toBe(true)
   })
 

@@ -20,7 +20,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { getRosterTemplate } from '@/lib/multi-sport/RosterTemplateService'
 
-function league(sport: 'NFL' | 'NCAAF', settings: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+function league(sport: 'NFL' | 'NCAAF' | 'NCAAB', settings: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
   return {
     settings,
     sport,
@@ -81,4 +81,17 @@ describe('getRosterTemplate — football redraft saved layout', () => {
     const template = await getRosterTemplate('NFL', 'standard', 'league-1')
     expect(template.templateId.startsWith('saved-')).toBe(false)
   })
+})
+
+it('resolves the saved NCAAB Zombie layout with guard and forward eligibility', async () => {
+  leagueFindUnique.mockResolvedValue({
+    ...league('NCAAB', { ncaab_roster_config: { slots: { G: 2, F: 2, C: 1, BN: 3 } } }),
+    leagueType: 'zombie',
+    leagueVariant: 'zombie',
+  })
+  const template = await getRosterTemplate('NCAAB', 'standard', 'league-1')
+  expect(starters(template)).toEqual({ G: 2, F: 2, C: 1 })
+  expect(template.slots.find(slot => slot.slotName === 'G')?.allowedPositions).toEqual(['G', 'PG', 'SG'])
+  expect(template.slots.find(slot => slot.slotName === 'F')?.allowedPositions).toEqual(['F', 'SF', 'PF'])
+  expect(template.slots.find(slot => slot.slotName === 'BN')?.benchCount).toBe(3)
 })

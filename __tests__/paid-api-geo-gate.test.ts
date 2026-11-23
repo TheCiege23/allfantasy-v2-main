@@ -71,11 +71,18 @@ describe("paid API routes refuse paid-block states", () => {
   })
 })
 
-describe("Washington — a full block includes the paid tier", () => {
-  it("403 GEO_BLOCKED on a paid API route", async () => {
+// Nov 2026 (owner, on counsel's confirmation): Washington moved from full-block to paid-block.
+describe("Washington — paid-block, like Nevada", () => {
+  it("451 PAID_GEO_BLOCKED on a paid API route", async () => {
     const res = await middleware(fromState("/api/leagues/import", "WA"))
-    expect(res.status).toBe(403)
-    expect((await res.json()).error).toBe("GEO_BLOCKED")
+    expect(res.status).toBe(451)
+    expect((await res.json()).error).toBe("PAID_GEO_BLOCKED")
+  })
+
+  it("a NON-paid API route is open (free play is legal there)", async () => {
+    for (const path of ["/api/leagues", "/api/user/profile"]) {
+      expect([451, 403], path).not.toContain((await middleware(fromState(path, "WA", "US", "GET"))).status)
+    }
   })
 })
 
@@ -172,25 +179,22 @@ describe("the /paid-restricted cancel button's API", () => {
     expect([451, 403]).not.toContain(res.status)
   })
 
-  // Owner's call, 2026-10-02: a FULLY blocked state can cancel too (from /geo-blocked).
-  it("is reachable from a fully blocked state", async () => {
+  it("is reachable from Washington", async () => {
     const res = await middleware(fromState("/api/account/cancel-subscription", "WA"))
     expect([451, 403]).not.toContain(res.status)
   })
 
-  it("control: every other API is still refused there", async () => {
-    for (const path of ["/api/leagues", "/api/subscription/billing-portal", "/api/user/profile"]) {
-      expect((await middleware(fromState(path, "WA"))).status, path).toBe(403)
-    }
+  it("control: the billing portal is still refused from Washington (its plan changes are a purchase)", async () => {
+    expect((await middleware(fromState("/api/subscription/billing-portal", "WA"))).status).toBe(451)
   })
 
-  it("sends a fully blocked page load of the billing portal to /geo-blocked, where the button is", async () => {
+  it("sends a Washington page load of the billing portal to /paid-restricted, where the button is", async () => {
     const req = new NextRequest(new URL("https://www.allfantasy.ai/api/subscription/billing-portal"), {
       method: "GET",
       headers: { "cf-ipcountry": "US", "cf-connecting-ip": "198.51.100.40", "cf-region-code": "WA", "sec-fetch-mode": "navigate" },
     })
     const loc = new URL((await middleware(req)).headers.get("location")!)
-    expect(loc.pathname + loc.search).toBe("/geo-blocked?state=WA")
+    expect(loc.pathname + loc.search).toBe("/paid-restricted?state=WA")
   })
 })
 

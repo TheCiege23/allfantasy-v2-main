@@ -149,7 +149,7 @@ export type TradeConsolePlayerLine = {
    * starting slots priced the player — no market prices defenders, so collapsing it
    * into 'unknown' would report a value we can fully explain as one we cannot.
    */
-  pricedSource: 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
+  pricedSource: 'allfantasy' | 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
   /**
    * True when the engine found NO value, and `marketValue` is only its placeholder 0.
    *

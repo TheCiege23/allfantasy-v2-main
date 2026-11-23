@@ -199,9 +199,12 @@ describe("an ordinary visitor is untouched", () => {
     expect(res.headers.get("location")).toBeNull()
   })
 
-  it("still sends a Washington home connection to /geo-blocked, not /vpn-blocked", async () => {
+  // Nov 2026: Washington is paid-block, so a home connection there reaches the free product.
+  it("lets a Washington home connection into the free product — no /geo-blocked, no /vpn-blocked", async () => {
     const res = await middleware(request("/core", { ip: HOME_IP, region: "WA" }))
-    expect(res.headers.get("location")).toContain("/geo-blocked")
+    const loc = res.headers.get("location") ?? ""
+    expect(loc).not.toContain("/geo-blocked")
+    expect(loc).not.toContain("/vpn-blocked")
   })
 })
 

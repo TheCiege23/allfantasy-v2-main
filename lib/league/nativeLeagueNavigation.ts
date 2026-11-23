@@ -164,8 +164,15 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
     ...item('league.nav.myPicks', 'My picks', 'picks', 'my-picks'),
     ...item('league.nav.chimmyCoaching', 'Chimmy Coaching', 'insight', 'ai_coaching'),
   ])
+  /*
+   * An imported league has no League home tab: its first page is Decide (What's next, record, standing, standings),
+   * which is that league's overview. It sits where native leagues keep theirs, under League, rather than as a Trade
+   * sub-tab it would open on (2026-11-22, imported leagues moved into this workspace).
+   */
+  const nativeOverview = item('league.nav.overview', 'Overview', 'home', 'native_home', 'home')
+  const overview = nativeOverview.length ? nativeOverview : item('league.nav.overview', 'Overview', 'home', 'decide')
   const leagueChildren = [
-    ...item('league.nav.overview', 'Overview', 'home', 'native_home', 'home'),
+    ...overview,
     ...(isSurvivor ? item('league.nav.standings', 'Standings', 'standings', 'standings', 'table') : item('league.nav.standingsPlayoffs', 'Standings & playoffs', 'standings', 'standings', 'table')),
     ...item('league.nav.activity', 'Activity', 'more', 'activity'),
     ...item('league.nav.leagueChat', 'League chat', 'chat', 'league_chat'),
@@ -174,7 +181,7 @@ export function buildNativeLeagueNavigation(tabs: WorkspaceTab[], commissioner: 
   ]
   const trade = top('league.nav.tab.trade', 'Trade', 'trades', [
     ...item('league.nav.trades', 'Trades', 'trades', 'trades', 'transfers'),
-    ...item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide'),
+    ...(used.has('decide') ? [] : item('league.nav.decisionOs', 'Decision OS', 'insight', 'decide')),
   ])
   const news = top('league.nav.tab.news', 'News', 'intel', [
     ...item('league.nav.news', 'News', 'intel', 'news'),

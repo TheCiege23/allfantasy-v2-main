@@ -215,6 +215,10 @@ export type EspnNcaabRosterResult = {
   rosterSnapshotsRejected: number
   /** An ESPN athlete already linked to a DIFFERENT canonical player. Never overwritten. */
   identityConflicts: number
+  /** Identity-map rows given an ESPN id this pass (the id the NBA draft pipeline links through). */
+  espnIdsLinked: number
+  /** A match whose ESPN id another identity row already holds: left alone, never given twice. */
+  espnIdHeldElsewhere: number
   headshotsWritten: number
   headshotsMissing: number
   /** ESPN had a photo, but the row already holds another source's real one — left alone. */
@@ -238,6 +242,8 @@ export async function syncEspnNcaabRosters(opts: {
     noCandidate: 0,
     refused: 0,
     identitiesCreated: 0,
+    espnIdsLinked: 0,
+    espnIdHeldElsewhere: 0,
     rosterSnapshotsStored: 0,
     rosterSnapshotsRejected: 0,
     identityConflicts: 0,
@@ -314,6 +320,31 @@ export async function syncEspnNcaabRosters(opts: {
   return result
 }
 
+/**
+ * Give the RI row's identity-map row this ESPN id. Never overwrites an espnId already set (it may
+ * have come from a stronger source), and never gives one ESPN id to a second row: two rows holding
+ * one athlete's id would let the NBA draft pipeline move the wrong player up.
+ */
+async function linkEspnId(riExternalId: string, athleteId: string, result: EspnNcaabRosterResult): Promise<void> {
+  try {
+    const holder = await prisma.playerIdentityMap.findFirst({
+      where: { sport: SPORT, espnId: athleteId },
+      select: { rollingInsightsId: true },
+    })
+    if (holder) {
+      if (holder.rollingInsightsId !== riExternalId) result.espnIdHeldElsewhere += 1
+      return
+    }
+    const written = await prisma.playerIdentityMap.updateMany({
+      where: { sport: SPORT, rollingInsightsId: riExternalId, espnId: null },
+      data: { espnId: athleteId },
+    })
+    result.espnIdsLinked += written.count
+  } catch {
+    result.errors += 1
+  }
+}
+
 async function linkSchoolRoster(
   athletes: EspnNcaabAthlete[],
   riSchoolId: string,
@@ -358,10 +389,21 @@ async function linkSchoolRoster(
     const playerId = canonicalByRi.get(m.riExternalId)
     const athlete = athleteById.get(m.athleteId)!
     const riRow = riRowByExternal.get(m.riExternalId)!
+    /*
+     * 🛑 THE ESPN ID IS WRITTEN BEFORE THE CANONICAL-IDENTITY CHECK, ON PURPOSE. It needs only the
+     * school + name + jersey match above, which is the whole evidence standard here. It used to sit
+     * after `if (!playerId) continue`, so a matched player whose RI row had no canonical identity
+     * never got one: measured 2026-11-22, 2,654 of 2,656 valid matches across 361 schools were
+     * dropped that way, 1,326 of them on a Fantrax roster. The canonical identity is needed only
+     * for the provider identity and the canonical headshot below.
+     */
+    const prior = existingByAthlete.get(m.athleteId)
+    // An ESPN identity already pointing at a DIFFERENT player is a disagreement: write nothing.
+    const disagrees = Boolean(prior?.playerId && prior.playerId !== playerId)
+    if (!disagrees) await linkEspnId(m.riExternalId, m.athleteId, result)
     if (!playerId) continue
     result.matched += 1
 
-    const prior = existingByAthlete.get(m.athleteId)
     if (prior && prior.playerId && prior.playerId !== playerId) {
       // Someone already linked this athlete elsewhere. Two answers to one question means
       // neither is safe to act on; leave it and let the count surface it.
@@ -401,13 +443,6 @@ async function linkSchoolRoster(
       continue
     }
 
-    // Never overwrites an espnId already set — it may have come from a stronger source.
-    await prisma.playerIdentityMap
-      .updateMany({
-        where: { sport: SPORT, rollingInsightsId: m.riExternalId, espnId: null },
-        data: { espnId: m.athleteId },
-      })
-      .catch(() => undefined)
 
     if (!athlete.headshotUrl) {
       result.headshotsMissing += 1

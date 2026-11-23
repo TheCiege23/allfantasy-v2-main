@@ -227,3 +227,46 @@ describe('🛑 a Sleeper handle linked to a different AllFantasy login', () => {
     expect(screen.queryByTestId('import-sleeper-linked-elsewhere')).toBeNull()
   })
 })
+
+describe('search on a long "Which team is yours?" list', () => {
+  const BIG_PREVIEW = {
+    ...FLEA_PREVIEW,
+    managers: Array.from({ length: 12 }, (_, i) => ({
+      rosterId: String(2000 + i),
+      teamName: i === 7 ? 'Road Warriors' : `Team ${i + 1}`,
+      displayName: i === 7 ? 'Guap' : `Manager ${i + 1}`,
+    })),
+  }
+
+  async function openBigPreview() {
+    fetchImportPreview.mockResolvedValue({ ok: true, data: BIG_PREVIEW })
+    render(<ImportV4 defaultProvider="fleaflicker" initialLeagueSourceId="206154" />)
+    return screen.findByTestId('import-preview-team-pick')
+  }
+
+  it('a short list has no search box', async () => {
+    await openFleaPreview()
+    expect(screen.queryByTestId('import-preview-team-search')).toBeNull()
+  })
+
+  it('typing a manager name narrows twelve teams to one, and clearing brings them back', async () => {
+    await openBigPreview()
+    const search = screen.getByTestId('import-preview-team-search')
+    expect(screen.getAllByText('This is my team')).toHaveLength(12)
+
+    fireEvent.change(search, { target: { value: 'guap' } })
+    expect(screen.getAllByText('This is my team')).toHaveLength(1)
+    expect(screen.getByTestId('import-preview-team-2007')).toBeTruthy()
+
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.getAllByText('This is my team')).toHaveLength(12)
+  })
+
+  it('says so when nothing matches, and keeps the picked team on screen', async () => {
+    await openBigPreview()
+    fireEvent.click(screen.getByTestId('import-preview-team-2007'))
+    fireEvent.change(screen.getByTestId('import-preview-team-search'), { target: { value: 'zzzz' } })
+    expect(screen.getByTestId('import-preview-team-search-empty')).toBeTruthy()
+    expect(screen.getByTestId('import-preview-team-2007').textContent).toContain('Your team')
+  })
+})

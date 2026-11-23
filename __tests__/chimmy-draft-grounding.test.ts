@@ -252,7 +252,7 @@ describe('Draft OS recommendation in the draft context', () => {
 
   it("gives Chimmy Draft OS's pick for the viewer's own roster, from the room's engine", async () => {
     const out = await buildDraftContext('lg1', 'app-user-1')
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'roster-1', planForOwnTurn: true })
     expect(mocks.computeDraftRecommendation).toHaveBeenCalledWith({ marker: 'engine-input' })
     expect(out).toContain('DRAFT DECISION for THIS USER')
     expect(out).toContain('the same decision their draft room')
@@ -286,6 +286,16 @@ describe('Draft OS recommendation in the draft context', () => {
   it('keeps the rest of the context when Draft OS fails', async () => {
     mocks.buildDraftDecisionContext.mockRejectedValue(new Error('No DraftSession exists'))
     const out = await buildDraftContext('lg1', 'app-user-1')
+    expect(out).toContain('ON THE CLOCK: Manager 3')
+    expect(out).not.toContain('DRAFT DECISION')
+  })
+
+  it('a caller-shortened budget (the grounding packet’s) drops the pick line and keeps the board', async () => {
+    mocks.buildDraftDecisionContext.mockImplementation(() => new Promise(() => {}))
+    const started = Date.now()
+    const out = await buildDraftContext('lg1', 'app-user-1', { draftOsBudgetMs: 20 })
+    // Well under the default DRAFT_OS_BUDGET_MS (2,500 ms): the caller's budget, not the default, ended the wait.
+    expect(Date.now() - started).toBeLessThan(1000)
     expect(out).toContain('ON THE CLOCK: Manager 3')
     expect(out).not.toContain('DRAFT DECISION')
   })
@@ -426,7 +436,7 @@ describe("the viewer's side of a live draft", () => {
     expect(out).toContain('THIS USER drafts at slot 2; their next pick is 2.03 (3 picks away).')
     expect(mocks.managersAhead).toHaveBeenCalledWith({ leagueId: 'lg1', userId: 'app-user-1', viewerSlot: 2 })
     // Draft OS still takes the AF roster id.
-    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me' })
+    expect(mocks.buildDraftDecisionContext).toHaveBeenCalledWith({ leagueId: 'lg1', rosterId: 'af-roster-me', planForOwnTurn: true })
   })
 
   it('lists the picks filed under their Sleeper user id, and what they still have no starter at', async () => {

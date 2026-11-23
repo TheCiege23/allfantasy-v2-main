@@ -8,6 +8,17 @@ export { TOURNAMENT_PARTICIPANT_POOL_SIZES } from './types'
 
 export const TOURNAMENT_LEAGUE_VARIANT = 'tournament_mode' as const
 
+/**
+ * Every league a tournament builds has a draft ahead of it, so it starts before the draft.
+ * Without this the league took the column default (`in_season`), which refuses a draft start.
+ * Its draft-settings row is added after the league's defaults are in place
+ * (lib/draft-defaults/ensureLeagueSettingsRow.ts).
+ */
+export const TOURNAMENT_LEAGUE_DRAFT_READY = {
+  status: 'pre_draft',
+  lifecycleState: 'pre_draft',
+} as const
+
 export const DEFAULT_TOURNAMENT_SETTINGS: TournamentSettings = {
   draftType: 'snake',
   participantPoolSize: 72,

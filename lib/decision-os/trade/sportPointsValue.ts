@@ -64,6 +64,11 @@ export type BoardPlayer = {
   aliases: readonly string[]
   rosterAlias?: string | null
   /** The season the projection's numbers come from (last season, until this one has games). */
+  tradeMarket?: { percent: number; trades: number }
+  currentSeasonParticipant?: boolean
+  /** NBA date (Eastern) when a verified roster review found the player outside the NBA. */
+  verifiedNbaInactiveSince?: string
+  verifiedNbaTeam?: string
   sourceSeason?: number | null
   /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
   seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
@@ -218,12 +223,14 @@ export function boardReadinessReason(args: {
   board: readonly BoardPlayer[]
   season: number
   seasonLabel: string
+  verifiedWire?: boolean
+  rosterDepth?: number
 }): string | null {
   const label = SPORT_LABEL[args.sport]
   if (args.board.length === 0) return `No ${label} projection could be scored, so this deal cannot be graded.`
   // College first: its cause is the turnover, and a thin board is only a symptom of it.
   if (args.sport === 'NCAAB') {
-    const prior = args.board.filter((p) => p.sourceSeason != null && p.sourceSeason < args.season).length
+    const prior = args.board.filter((p) => !p.currentSeasonParticipant && p.sourceSeason != null && p.sourceSeason < args.season).length
     if (prior / args.board.length > 0.5) {
       return `College rosters turn over every year, and these projections still come from last season, which includes players who have since left. College basketball grades start once the ${args.seasonLabel} season has games behind it.`
     }
@@ -234,7 +241,12 @@ export function boardReadinessReason(args: {
    * complete board.
    */
   const cleared = args.board.filter(meetsGamesBar).length
-  if (cleared / args.board.length < MIN_BOARD_COVERAGE) {
+  // A national college pool includes thousands of new players every November. A
+  // verified returning pool deep enough to fill this league can set replacement
+  // while newcomers accumulate the normal player-level sample.
+  const collegeDepth = args.sport === 'NCAAB' && args.rosterDepth != null && args.rosterDepth > 0 &&
+    args.board.every((p) => p.currentSeasonParticipant) && (args.verifiedWire || cleared >= args.rosterDepth)
+  if (!collegeDepth && cleared / args.board.length < MIN_BOARD_COVERAGE) {
     return `${label[0]!.toUpperCase()}${label.slice(1)} projections are switching to the ${args.seasonLabel} season, and most players have fewer than ${MIN_SAMPLE_GAMES} games behind them, so grades pause until the board fills in.`
   }
   return null
@@ -272,6 +284,21 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
         ? 'category grades cover the standard 5x5 and 6x6 setups so far'
         : `there are no ${SPORT_LABEL[sport]} category grades yet`
   return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — ${covered} — and a points total would answer a different question, so this deal is not graded.`
+}
+
+export function isFantraxNbaCampusLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return sport === 'NBA' && isFantraxCampusProjectionLeague(sport, league)
+}
+
+export function isFantraxCampusProjectionLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return (sport === 'NBA' || sport === 'NCAAB') &&
+    league.platform?.trim().toLowerCase() === 'fantrax' && league.leagueType?.trim().toLowerCase() === 'c2c'
 }
 
 /**
@@ -460,7 +487,7 @@ export function priceBoardPlayer(
     player,
     replacementPerGame: replacement.perGame,
     replacementName: replacement.name,
-    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining,
+    value: Math.max(0, player.perGame - replacement.perGame) * ctx.window.gamesRemaining * (1 + (player.tradeMarket?.percent ?? 0) / 100),
   }
 }
 

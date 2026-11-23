@@ -7,6 +7,7 @@ import { soccerLeagueHintFromLeagueSettings } from '@/lib/player-data/leagueSocc
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { resolveIncludePlayerDataDiagnostics } from '@/lib/player-data/providerFallbackDiagnostics'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
   if (playerId) {
     const player = players[0] ?? null
     const canonical = player?.nflRedraft ?? null
-    return NextResponse.json({
+    return await afJson(userId, {
       player,
       playerData: canonical,
       canonicalNflRedraft: canonical,
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
   const rookies = players.filter((player) => player.product.isRookie === true)
   const veterans = players.filter((player) => player.product.isRookie !== true)
 
-  return NextResponse.json({
+  return await afJson(userId, {
     players,
     rookies,
     veterans,

@@ -1,5 +1,7 @@
 'use client'
 
+import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
+import { GuillotineStandingsScreen } from './NativeGuillotineScreens'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { allPlayShare, fitPlayoffFormatToLeague, fmt1, initialsOf, oddsTone, ordinal, powerOrder, readPlayoffFormat, streakTone } from '@/lib/league/native/nativeScreenModels'
@@ -41,7 +43,13 @@ type View = 'standings' | 'playoffs' | 'power'
 
 const record = (r: Row) => `${r.wins}–${r.losses}${r.ties ? `–${r.ties}` : ''}`
 
-export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+export function NativeStandingsScreen(props: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
+  // Guillotine has no record and no playoffs: the table is who is still alive, then who was chopped.
+  if (isNativeGuillotineLeague(props.league)) return <GuillotineStandingsScreen league={props.league} onSelectTab={props.onSelectTab} />
+  return <HeadToHeadStandingsScreen {...props} />
+}
+
+function HeadToHeadStandingsScreen({ league, isCommissioner, onSelectTab }: { league: UserLeague; isCommissioner: boolean; onSelectTab: (id: string) => void }) {
   const [view, setView] = useState<View>('standings')
   const [data, setData] = useState<StandingsData | null>(null)
   const [forecast, setForecast] = useState<Forecast[] | null>(null)
@@ -181,7 +189,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   if (data?.scoringMode === 'roto') {
     return (
       <div className="nls" data-testid="native-standings-screen">
-        <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Rotisserie standings" />
+        <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Rotisserie standings" />
         <div className="nls-cols">
           <section className="nls-card nls-card-flush" aria-label="Standings">
             {!rows.length ? (
@@ -230,7 +238,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-standings-screen" data-rd-screen={rd ? 'standings' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · ${scored ? `After week ${scored}` : `${season} season`}`} title="Standings & playoffs">
+      <ScreenHead eyebrow={scored ? `After week ${scored}` : `${season} season`} title="Standings & playoffs">
         <Segmented label="Standings view" value={view} onChange={setView} options={[{ id: 'standings', label: 'Standings' }, { id: 'playoffs', label: 'Playoff picture' }, { id: 'power', label: 'Power rankings' }]} />
       </ScreenHead>
 
@@ -254,7 +262,7 @@ export function NativeStandingsScreen({ league, isCommissioner, onSelectTab }: {
                       <th scope="col">PF</th>
                       <th scope="col" data-hide="phone">PA</th>
                       <th scope="col" data-hide="phone">Strk</th>
-                      <th scope="col" data-align="left">Playoff odds</th>
+                      <th scope="col" data-align="left"><span className="nls-rd-th-lead">Playoff </span>odds</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -23,7 +23,7 @@ export default function TermsOfServiceBody() {
           <p>This summary is for convenience. The full Terms control.</p>
           <ul>
             <li>AllFantasy is a season-long fantasy sports manager with an AI assistant. It is not gambling, not daily fantasy, and awards no prizes. We do not hold or move league money.</li>
-            <li>You must be at least 18, hold only one account, and not be in Washington State. Paid features are not sold in Hawaii, Idaho, Montana, or Nevada.</li>
+            <li>You must be at least 18, and hold only one account. Paid features are not sold in Hawaii, Idaho, Montana, Nevada, or Washington.</li>
             <li>Paid plans renew automatically until you cancel. You can cancel any time in Settings → Billing. Tokens have no cash value.</li>
             <li>Chimmy and our other AI features can be wrong. They are information, not advice. Your fantasy decisions are yours.</li>
             <li>When you connect a league from another platform, you are responsible for having the right to do so and for following that platform&apos;s rules.</li>
@@ -83,7 +83,7 @@ export default function TermsOfServiceBody() {
           <li>&quot;Commissioner&quot; means the user who creates or administers a League on the Services.</li>
           <li>&quot;Connected Platform&quot; means a third-party fantasy sports service (for example, Sleeper, ESPN, Fantrax, MFL, Fleaflicker, or Yahoo) whose league data you connect to or import into the Services.</li>
           <li>&quot;League&quot; means a fantasy sports league hosted on the Services or imported into the Services from a Connected Platform.</li>
-          <li>&quot;Restricted States&quot; means Hawaii, Idaho, Montana, and Nevada, and any other state we add under Section <a href="#section-3-2">3.2</a>.</li>
+          <li>&quot;Restricted States&quot; means Hawaii, Idaho, Montana, Nevada, and Washington, and any other state we add under Section <a href="#section-3-2">3.2</a>.</li>
           <li>&quot;Subscription&quot; means a paid plan for the Services (currently AF Pro, AF Commissioner, AF Legacy, and AF Supreme).</li>
           <li>&quot;Tokens&quot; means the pay-as-you-go credits described in Section <a href="#section-8-8">8.8</a>.</li>
           <li>&quot;User Content&quot; means anything you submit to the Services, including usernames, display names, avatars, league and team names, chat and direct messages, bracket and pool entries, feedback, and prompts you enter into AI Features.</li>
@@ -102,7 +102,6 @@ export default function TermsOfServiceBody() {
         <p id="section-3-1"><strong>3.1 Age.</strong> You must be at least 18 years old, or the age of majority where you live if that is higher, to create an Account or use the Services.</p>
         <p id="section-3-2"><strong>3.2 Location.</strong> The Services are offered to people in the United States. As a matter of our policy:</p>
         <ul>
-          <li>The Services are not available to anyone located in Washington State.</li>
           <li>Subscriptions, Tokens, and other paid features are not sold to anyone located in a Restricted State, and Leagues hosted on the Services that collect dues may not be used from a Restricted State. Free features remain available there.</li>
           <li>We determine your location from your network connection and other signals and may store the state we identify on your Account. If you believe we have identified your state incorrectly, contact <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a>; we may ask you to verify where you are.</li>
           <li>You may not use a VPN, proxy, or any other method to hide your location or get around these restrictions. Doing so is a breach of these Terms.</li>

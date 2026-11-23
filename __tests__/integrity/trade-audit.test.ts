@@ -69,6 +69,18 @@ describe('pairFrequency — a pattern, never one trade', () => {
     ...Array.from({ length: others }, (_, i) => row({ tradeKey: `o${i}`, sideATeamId: `X${i}`, sideAName: `X${i}`, sideBTeamId: `Y${i}`, sideBName: `Y${i}` })),
   ]
 
+  it('their gap with each other, beside each team\'s gap with everyone else (2026-11-22)', () => {
+    // Alpha and Bravo: four trades, gaps 55/5/5/5 → middle 5. Alpha also traded three times elsewhere at 30%; Bravo once.
+    const rows = [
+      ...league(4, 4),
+      ...[0, 1, 2].map((i) => row({ tradeKey: `ae${i}`, sideBTeamId: `Z${i}`, sideBName: `Z${i}`, gapPct: i === 1 ? -30 : 30 })),
+      row({ tradeKey: 'be0', sideATeamId: 'Q', sideAName: 'Q', gapPct: 12 }),
+    ]
+    const f = pairFrequency(rows, 12).find((x) => x.teamIds.join('|') === 'A|B')!
+    expect(f.gapTogether).toBe(5)
+    expect(f.elsewhere).toEqual([{ trades: 3, gap: 30 }, { trades: 1, gap: null }])
+  })
+
   it('names a pair trading far above the league’s volume', () => {
     const [f] = pairFrequency(league(4, 6), 12)
     expect(f).toMatchObject({ teamIds: ['A', 'B'], count: 4, outside: 1 })

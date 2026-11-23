@@ -368,28 +368,59 @@ describe('linked to the league chat', () => {
 })
 
 describe('fits the draft room dock', () => {
-  it('pops out of the short dock into a tall panel, and docks back', () => {
+  it('has no pop-out or refresh button; the box keeps clear of the corner button (2026-11-19)', () => {
     renderPanel()
-    const panel = screen.getByTestId('draft-chat-panel')
-    const pop = screen.getByTestId('draft-chat-popout')
-    expect(panel.getAttribute('data-popped')).toBe('false')
-    expect(pop.getAttribute('aria-label')).toBe('Pop out the chat')
-    fireEvent.click(pop)
-    expect(panel.getAttribute('data-popped')).toBe('true')
-    expect(panel.className).toContain('md:fixed')
-    expect(pop.getAttribute('aria-pressed')).toBe('true')
-    expect(pop.getAttribute('aria-label')).toBe('Dock the chat')
-    fireEvent.click(pop)
-    expect(panel.getAttribute('data-popped')).toBe('false')
-    expect(panel.className).not.toContain('md:fixed')
+    expect(screen.queryByTestId('draft-chat-popout')).toBeNull()
+    expect(screen.queryByTestId('draft-chat-refresh')).toBeNull()
+    const box = screen.getByTestId('draft-chat-input').closest('.af-dc-composer') as HTMLElement
+    expect(box.getAttribute('data-fab-corner')).toBe('true')
   })
 
-  it("keeps the box clear of the War Room's corner button while docked, not when popped out", () => {
+  it('filters the stream to picks or messages', () => {
     renderPanel()
-    const box = () => screen.getByTestId('draft-chat-input').closest('.af-dc-composer') as HTMLElement
-    expect(box().getAttribute('data-fab-corner')).toBe('true')
-    fireEvent.click(screen.getByTestId('draft-chat-popout'))
-    expect(box().hasAttribute('data-fab-corner')).toBe(false)
+    expect(screen.getAllByTestId('draft-chat-pick-event')).toHaveLength(1)
+    expect(screen.getByText('taking the best QB')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('draft-chat-filter-picks'))
+    expect(screen.getAllByTestId('draft-chat-pick-event')).toHaveLength(1)
+    expect(screen.queryByText('taking the best QB')).toBeNull()
+    fireEvent.click(screen.getByTestId('draft-chat-filter-messages'))
+    expect(screen.queryByTestId('draft-chat-pick-event')).toBeNull()
+    expect(screen.getByText('taking the best QB')).toBeTruthy()
+  })
+
+  it('shows a pick on one line with its pick number, and a Round divider before a round starts', () => {
+    renderPanel()
+    const pick = screen.getByTestId('draft-chat-pick-event')
+    expect(pick.textContent).toContain('1.01')
+    expect(pick.textContent).toContain('Bijan Robinson')
+    expect(pick.textContent).toContain('Team Kyle')
+    expect(screen.getByTestId('draft-chat-round-divider').textContent).toBe('Round 1')
+  })
+
+  it('keeps poll, voice note and video behind "+"', () => {
+    renderPanel()
+    expect(screen.getByTestId('draft-chat-media-gif')).toBeTruthy()
+    expect(screen.getByTestId('draft-chat-media-image')).toBeTruthy()
+    expect(screen.queryByTestId('draft-chat-poll-toggle')).toBeNull()
+    expect(screen.queryByTestId('draft-chat-media-video')).toBeNull()
+    fireEvent.click(screen.getByTestId('draft-chat-more-tools'))
+    expect(screen.getByTestId('draft-chat-poll-toggle')).toBeTruthy()
+    expect(screen.getByTestId('draft-chat-media-video')).toBeTruthy()
+  })
+
+  it('shows who is typing, from the draft room typing channel when not linked to league chat', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/typing') ? json({ typing: [{ userId: 'kim', name: 'Kim' }] }) : json({ status: 'ok' }),
+    )
+    renderPanel()
+    expect(await screen.findByText('Kim is typing…')).toBeTruthy()
+    expect(calls((u) => u.includes(encodeURIComponent('league:L1:draft') + '/typing')).length).toBeGreaterThan(0)
+  })
+
+  it('uses the league chat typing channel when linked to league chat', async () => {
+    renderPanel({ leagueChatSync: true })
+    await waitFor(() => expect(calls((u) => u.includes(encodeURIComponent('league:L1') + '/typing')).length).toBeGreaterThan(0))
+    expect(calls((u) => u.includes(encodeURIComponent('league:L1:draft'))).length).toBe(0)
   })
 
   it('opens the emoji picker over the page when the dock is too short to hold it', async () => {

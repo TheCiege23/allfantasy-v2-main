@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { prisma } from '@/lib/prisma'
 import { resolveRecipients } from '@/lib/notifications/resolveAppUserIds'
 import type { PendingProviderTrade, PendingTradeAsset } from '@/lib/provider-trades/scanPendingSleeperTrades'
@@ -54,7 +55,7 @@ function playerDetail(position: string | null, team: string | null): string | nu
 
 /** One AF user id for one member id (our id on a native league, a Sleeper id on an import). */
 async function appUserIdFor(memberId: string | null | undefined): Promise<string | null> {
-  if (!memberId || memberId.startsWith('orphan-')) return null
+  if (!memberId || isSeatPlaceholderUserId(memberId)) return null
   const { userIds } = await resolveRecipients([memberId])
   return userIds[0] ?? null
 }

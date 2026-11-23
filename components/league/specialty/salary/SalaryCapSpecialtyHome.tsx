@@ -12,6 +12,7 @@ import {
 } from '@/components/league/specialty/SpecialtyShell'
 import type { SalaryCapSummary } from '@/components/salary-cap/types'
 import { OFFSEASON_STEPS, capBarSegments, contractTags } from '@/lib/salary-cap/capHomeView'
+import { formatCapMoney, isOverCap } from '@/lib/salary-cap/capMoney'
 import s from './salary-specialty.module.css'
 
 /*
@@ -20,8 +21,7 @@ import s from './salary-specialty.module.css'
  * with the offseason calendar, the cap rules and the latest moves. Every figure is the summary route's.
  */
 
-const money = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n) ? '—' : `$${(Math.round(n * 10) / 10).toFixed(1)}`
+const money = formatCapMoney
 
 const humanEvent = (t: string) => {
   if (t === 'contract_cut') return 'A contract was cut'
@@ -49,7 +49,9 @@ export function SalaryCapSpecialtyHome({
   const ceiling = thisYear?.capCeiling ?? cfg.startupCap
   const ledger = summary.ledger
   const bar = ledger ? capBarSegments(ledger, ceiling) : null
-  const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, y.totalCapHit)))
+  // A year's commitment is its contracts plus its dead money (FutureCapProjectionService keeps them apart).
+  const committedIn = (y: { totalCapHit: number; deadMoney: number }) => y.totalCapHit + Math.max(0, y.deadMoney)
+  const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, committedIn(y))))
   const phase = cfg.offseasonPhase ?? 'in_season'
   const dead = summary.deadContracts ?? []
 
@@ -77,7 +79,7 @@ export function SalaryCapSpecialtyHome({
           lg?.teamCount ? `${lg.teamCount} teams` : null,
         ].filter((c): c is string => Boolean(c))}
         title={lg?.name || 'Salary Cap League'}
-        headline={ledger ? `${money(ledger.totalCapHit)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
+        headline={bar ? `${money(bar.committed)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
         blurb="Every player has a salary and a contract length. Stay under the cap, plan for next year, and pay dead money when you cut someone early."
         actions={[
           { label: 'Contracts', onClick: onOpenContracts, primary: true },
@@ -92,6 +94,12 @@ export function SalaryCapSpecialtyHome({
               of {money(ceiling)}
               {ledger && ledger.deadMoneyHit > 0 ? ` · after ${money(ledger.deadMoneyHit)} dead money` : ''}
             </span>
+            {/* The Cap space screen warned; Cap home only showed a negative number (Salary Cap audit item 5). */}
+            {ledger && isOverCap(ledger.capSpace) ? (
+              <span className={s.overNote} role="status" data-testid="salary-over-cap">
+                Over the cap by {money(-ledger.capSpace)}
+              </span>
+            ) : null}
           </div>
         }
       />
@@ -137,19 +145,21 @@ export function SalaryCapSpecialtyHome({
                   </h3>
                   <div className={s.years}>
                     {projection.map((y) => {
-                      const over = y.totalCapHit > y.capCeiling
+                      // The engine's own verdict: projected space already nets dead money and rollover.
+                      const over = y.projectedSpace < 0
+                      const committed = committedIn(y)
                       return (
-                        <div key={y.capYear} className={s.year}>
+                        <div key={y.capYear} className={s.year} data-cap-year={y.capYear}>
                           <div className={s.col}>
                             <span
                               className={`${s.fill} ${over ? s.fillOver : ''}`}
-                              style={{ height: `${Math.min(100, (y.totalCapHit / maxCol) * 100)}%` }}
+                              style={{ height: `${Math.min(100, (committed / maxCol) * 100)}%` }}
                             />
                             <span className={s.capLine} style={{ bottom: `${Math.min(100, (y.capCeiling / maxCol) * 100)}%` }} />
                           </div>
                           <b>{y.capYear}</b>
                           <span>
-                            {money(y.totalCapHit)} / {money(y.capCeiling)}
+                            {money(committed)} / {money(y.capCeiling)}
                           </span>
                           {over ? <SpecialtyTag tone="zone">Over the cap</SpecialtyTag> : null}
                         </div>

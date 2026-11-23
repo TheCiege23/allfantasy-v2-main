@@ -1,4 +1,8 @@
 import { acceptedCoOwnerRosterId } from '@/lib/team-coowners/access'
+import { isImportViewer } from '@/lib/league/importViewers'
+import { isTournamentCoCommissioner } from '@/lib/league/tournamentCoCommissioners'
+import { readSourceTeamId } from '@/lib/leagues/rosterTeamIdentity'
+import { leagueMemberWhere } from '@/lib/league/leagueMemberWhere'
 import { LeagueDisplayPreferences } from '@/components/league/LeagueDisplayPreferences'
 import { readHiddenLeagueSections } from '@/lib/league/leagueSections'
 import { getServerSession } from 'next-auth'
@@ -33,6 +37,8 @@ import { imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { collapseLeagueSeasons, defaultLeagueRowTieBreak, loadLeagueSeriesMap } from '@/lib/dashboard/get-dashboard-league-list'
 import { withListLeagueSettings } from '@/lib/league/clientLeagueSettings'
+import { afIntelligenceFor } from '@/lib/core-app/afIntelligenceWithhold'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 export const dynamic = 'force-dynamic'
 
@@ -296,9 +302,17 @@ export default async function LeaguePage(
 
       const isOwner = league.userId === userId
         const coOwnerRosterId = await acceptedCoOwnerRosterId(leagueId, userId)
-        const userTeam = league.teams.find((t) => t.claimedByUserId === userId) ?? (coOwnerRosterId ? league.teams.find((t) => t.externalId === coOwnerRosterId) : null) ?? null
+        // A co-owned team in an imported league is keyed by the provider's team id, not the roster id.
+        const coOwnedSourceTeamId = coOwnerRosterId
+          ? readSourceTeamId((await prisma.roster.findFirst({ where: { id: coOwnerRosterId, leagueId }, select: { playerData: true } }).catch(() => null)) ?? { playerData: null })
+          : null
+        const userTeam = league.teams.find((t) => t.claimedByUserId === userId)
+          ?? (coOwnerRosterId ? league.teams.find((t) => t.externalId === coOwnerRosterId || (coOwnedSourceTeamId != null && t.externalId === coOwnedSourceTeamId)) : null)
+          ?? null
+        // In the league without a claimed team: a co-owner, a viewer, or a co-commissioner who does not play.
+        const teamlessMember = Boolean(coOwnerRosterId) || isImportViewer(league.settings, userId) || isTournamentCoCommissioner(league.settings, userId)
 
-      if (!isOwner && !userTeam) {
+      if (!isOwner && !userTeam && !teamlessMember) {
               // Not a member — show explicit join/request state instead of opaque redirect.
               return (
                 <DashboardUnavailableState
@@ -319,7 +333,7 @@ export default async function LeaguePage(
                         prisma.league
                           .findMany({
                                         where: {
-                                                        OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+                                                        OR: leagueMemberWhere(userId),
                                         },
                                         orderBy: { updatedAt: 'desc' },
                                         take: 50,
@@ -449,7 +463,8 @@ export default async function LeaguePage(
         readUrgencyLeagueIds(userId).catch(() => null),
       ])
       const leagueRail = {
-        matchups: railMatchups?.byLeague ?? {},
+        // AF Intelligence: the rail's AF projection only for AF Pro, AF Commissioner and AF Supreme.
+        matchups: afIntelligenceFor(railMatchups?.byLeague ?? {}, await resolveCoreDepth(userId, 'af_intelligence').catch(() => null)),
         records: railRecords,
         favoriteIds: railPrefs?.favorites ?? [],
         order: railPrefs?.order ?? [],

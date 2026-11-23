@@ -39,6 +39,8 @@ export const draftHqLeagueGuideMessages = defineMessages({
     impDone: (platform: string, picks: number, season: number | null) =>
       `${season != null ? `${season} draft` : 'Draft'} done on ${platform} · ${picks} ${picks === 1 ? 'pick' : 'picks'}`,
     impBefore: (platform: string) => `Not started on ${platform}`,
+    impRecorded: (platform: string, picks: number, season: number | null) =>
+      `${season != null ? `${season} draft` : 'Draft'} on ${platform} · ${picks.toLocaleString('en-US')} ${picks === 1 ? 'pick' : 'picks'} on file`,
     impOther: (status: string) => `Draft status: ${status}`,
     /** When the page could not name the platform the draft runs on. */
     impPlatformFallback: 'the platform',
@@ -72,6 +74,8 @@ export const draftHqLeagueGuideMessages = defineMessages({
     impDone: (platform, picks, season) =>
       `${season != null ? `Draft ${season}` : 'Draft'} terminado en ${platform} · ${picks} ${picks === 1 ? 'selección' : 'selecciones'}`,
     impBefore: (platform) => `Sin empezar en ${platform}`,
+    impRecorded: (platform, picks, season) =>
+      `${season != null ? `Draft de ${season}` : 'Draft'} en ${platform} · ${picks.toLocaleString('es-US')} ${picks === 1 ? 'selección registrada' : 'selecciones registradas'}`,
     impOther: (status) => `Estado del draft: ${status}`,
     impPlatformFallback: 'la plataforma',
     impIntro: (platform) =>

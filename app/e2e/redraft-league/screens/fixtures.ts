@@ -327,3 +327,23 @@ export function tradesResponse(sport: HarnessSport) {
     ],
   }
 }
+
+/** `/api/leagues/[id]/guillotine/summary` — a guillotine league in week 4: nine alive, three chopped. */
+export function guillotineSummaryResponse() {
+  const alive = MANAGERS.slice(0, 9)
+  const week = [142.6, 131.2, 127.9, 118.4, 109.7, 101.3, 96.8, 92.1, 84.5]
+  const season = [498.2, 471.0, 455.6, 462.3, 430.9, 441.7, 402.5, 415.0, 389.4]
+  const line = week[week.length - 1]
+  return {
+    weekOrPeriod: 4,
+    myRosterId: 'r-6',
+    dangerTiers: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, tier: i === 8 ? 'chop_zone' : week[i] - line <= 15 ? 'danger' : 'safe', pointsFromChopZone: Math.round((week[i] - line) * 10) / 10 })),
+    survivalStandings: alive.map((displayName, i) => ({ rosterId: `r-${i}`, displayName, rank: i + 1, seasonPointsCumul: season[i] })),
+    chopWatch: { live: true, week: 4, chopCount: 1, chopLine: line },
+    home: {
+      season: 2026, scores: Object.fromEntries(alive.map((_, i) => [`r-${i}`, week[i]])), teamCount: 12, aliveCount: 9, chopLabel: 'Wed 9:00 AM',
+      chopped: [{ rosterId: 'r-9', name: MANAGERS[9], week: 3, points: 78.2 }, { rosterId: 'r-10', name: MANAGERS[10], week: 2, points: 81.9 }, { rosterId: 'r-11', name: MANAGERS[11], week: 1, points: 66.4 }],
+    },
+    config: { eliminationStartWeek: 1, eliminationEndWeek: 11 },
+  }
+}

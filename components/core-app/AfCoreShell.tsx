@@ -45,9 +45,12 @@ import type { RailGuillotineLine } from '@/lib/core-app/railGuillotineLine'
 import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
+import { ScreenGuide } from '@/components/core-app/ScreenGuide'
+import { HowItWorks } from '@/components/core-app/HowItWorks'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
+import { RailScoresContext, withRailScores, type RailScores } from '@/components/core-app/railScores'
 import { ScopeResetLink, ScopeSwitcher, type ScopeSwitcherField, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { applyLeagueOrder, withoutHidden } from '@/lib/core-app/leaguePreferences'
 import {
@@ -100,6 +103,8 @@ import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import {
   LEAGUE_CHIP_SECTION,
   LEAGUE_RAIL_OMITTED_SECTIONS,
+  LEAGUE_SCOPED_SECTIONS,
+  groupLeagueTabs,
   NAV_SECTION_ORDER,
   NAV_SECTION_ORDER_NO_LEAGUE,
   leagueDestinationHidden,
@@ -570,6 +575,11 @@ type AfCoreShellProps = {
   /** Expected active-game window, including a provider status that is one poll late. */
   gameDayActive?: boolean
   children: React.ReactNode
+  /**
+   * The /core path the "What's this page?" strip explains. Unset in the app, where it reads the URL;
+   * the DB-free harness at /e2e/screen-guide sets it, because its own URL is not a /core one.
+   */
+  screenGuidePath?: string
 }
 
 /**
@@ -1363,7 +1373,12 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * `props`, so nothing downstream had to change.
    */
   const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
-  const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
+  /* The rail's matchup scores arrive after the shell paints (railScores.tsx). */
+  const [railScores, setRailScores] = useState<RailScores | null>(null)
+  const props = useMemo(
+    () => withRailScores(withPublishedSignals(incoming, publishedSignals), railScores),
+    [incoming, publishedSignals, railScores],
+  )
   const router = useRouter()
   // A lineup set on the platform reaches these screens without a button press — on opening the
   // app, coming back to it, and opening a league. See lib/core-app/lineupAutoSync.ts.
@@ -1394,6 +1409,14 @@ function AfCoreShell(incoming: AfCoreShellProps) {
    * the SCREEN rather than the nav (refresh cadence, prompts) still reads `active`.
    */
   const navActive: CoreNavKey = active === 'portfolio' ? 'my-leagues' : active
+  /*
+   * Inside a league the rail is Sleeper's tabs (lib/core-app/leagueDestinations.ts LEAGUE_TABS, owner 2026-11-19): the
+   * league's screens fold into Matchup, Team, League, Trade and Settings, and the open tab's screens show as a row of
+   * links above the screen. Outside a league the rail is unchanged.
+   */
+  // A themed league (Survivor) keeps its show-named sections: the island theme is that league's identity, not clutter.
+  const leagueTabs = useMemo(() => (props.selectedLeagueId && !props.leagueTheme ? groupLeagueTabs(navRailSections) : null), [props.selectedLeagueId, props.leagueTheme, navRailSections])
+  const activeLeagueTab = leagueTabs?.find((tab) => tab.children.some((child) => child.key === navActive)) ?? null
 
   /*
    * A /core navigation in flight — see coreNavPending.tsx for the whole argument. A click on a
@@ -2460,7 +2483,40 @@ function AfCoreShell(incoming: AfCoreShellProps) {
           support") were the two furthest from the fold.
         */}
         <div className="af-nav-scroll">
-        {navRailSections.map((section) => (
+        {leagueTabs ? (
+          <div className="af-nav-group" data-league-tabs="">
+            {selectedLeagueName ? (
+              <div className="af-nav-league" title={selectedLeagueName}>
+                <span className="af-nav-league-dot" aria-hidden />
+                <span className="af-nav-league-name">{selectedLeagueName}</span>
+              </div>
+            ) : null}
+            <ul className="af-nav-items" aria-label={copy('League')}>
+              {leagueTabs.map((tab) => {
+                const first = tab.children[0]!
+                const on = tab === activeLeagueTab
+                // A tab carries a screen's badge (the waivers count, a live game), so folding hides no alert.
+                const badge = tab.children.find((child) => child.badge)?.badge
+                return (
+                  <li key={tab.id}>
+                    <Link href={first.href} className="af-nav-item" data-core-nav="" prefetch={false} data-active={on} aria-current={on ? 'page' : undefined} data-league-tab={tab.id}>
+                      <span className="af-nav-glyph" aria-hidden>
+                        <CoreNavIcon navKey={first.key} size={16} />
+                      </span>
+                      <span className="af-nav-label">{copy(tab.label)}</span>
+                      {badge ? (
+                        <span className="af-nav-badge" data-tone={badge.tone}>
+                          {badgeText(badge.text, language)}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
+        {(leagueTabs ? navRailSections.filter((s) => !LEAGUE_SCOPED_SECTIONS.has(s.id)) : navRailSections).map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
@@ -2790,6 +2846,9 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             </details>
 
+            {/* "How it works" (2026-11-20, HowItWorks.tsx): every page explained, one tap from anywhere. */}
+            <HowItWorks leagueCount={leagues.length} />
+
             {/*
               Notifications, with its count, while a league is open (2026-11-15). The rail drops its
               "Manage" group inside a league, and this count was only ever there. Not on a phone
@@ -2945,10 +3004,32 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               selectedLeagueId={props.selectedLeagueId}
             />
           ) : null}
+          {activeLeagueTab && activeLeagueTab.children.length > 1 ? (
+            <nav className="af-subtabs" aria-label={copy('Sections of this tab')} data-testid="af-subtabs">
+              {activeLeagueTab.children.map((child) => (
+                <Link key={child.key} href={child.href} className="af-subtab" data-core-nav="" prefetch={false} aria-current={child.key === navActive ? 'page' : undefined} data-subtab={child.key}>
+                  {copy(child.label)}
+                  {child.badge ? (
+                    <span className="af-nav-badge" data-tone={child.badge.tone}>
+                      {badgeText(child.badge.text, language)}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+          {/*
+            "What's this page?" (2026-11-20, ScreenGuide.tsx): one line above every screen that
+            opens into what the page is for and where to start. Open the first time a page is seen,
+            one quiet line after that. In the shell so no screen can be left unexplained.
+          */}
+          <ScreenGuide path={props.screenGuidePath} />
           <ShellSignalsContext.Provider value={setPublishedSignals}>
-            <CoreNavPendingContext.Provider value={navPending != null}>
-              <PlayerCardProvider>{children}</PlayerCardProvider>
-            </CoreNavPendingContext.Provider>
+            <RailScoresContext.Provider value={setRailScores}>
+              <CoreNavPendingContext.Provider value={navPending != null}>
+                <PlayerCardProvider>{children}</PlayerCardProvider>
+              </CoreNavPendingContext.Provider>
+            </RailScoresContext.Provider>
           </ShellSignalsContext.Provider>
           {/*
             The bracket promo sits AFTER the screen on home (2026-11-06 phone pass). It used to open

@@ -16,6 +16,20 @@ export type LiveRailScore = RailMatchupSummary & { season: number; week: number;
 const MIN_RAIL_REFRESH_MS = 10_000
 
 /**
+ * ⚠ ONLY ASK FOR SCORES THE ROUTE CAN RETURN. `/api/core/rail-scores` scores a Sleeper league only
+ * when it is a current-season NFL league; every other Sleeper league comes back "unavailable" on
+ * every poll, which also marks its rail row "Updates delayed" although nothing is late. Measured on
+ * prod 2026-11-19 during an NFL game: 62 requests in 163 seconds for one open tab, eight leagues
+ * per request across every Sleeper league the viewer has, NBA and college included.
+ *
+ * A league whose sport is NOT KNOWN is still asked about, so nothing that scores today is dropped;
+ * the route decides those. Native leagues are added separately (`nativeIds`) and are unaffected.
+ */
+export function scoresSport(sport: string | null | undefined): boolean {
+  return sport == null || sport === '' || sport.toUpperCase() === 'NFL'
+}
+
+/**
  * Live rail scores, polled on the SHELL'S OWN REFRESH POLICY rather than a constant of its own.
  *
  * 🛑 THE POLICY EXISTED AND THIS POLL IGNORED IT. `coreRefreshIntervalMs` answers 20s while a
@@ -47,7 +61,7 @@ export function useLiveRailScores(
   const [scores, setScores] = useState<Record<string, LiveRailScore>>({})
   const [delayed, setDelayed] = useState<string[]>([])
   const idsKey = JSON.stringify([...new Set([
-    ...leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused).map(league => league.id),
+    ...leagues.filter(league => league.platform.toLowerCase() === 'sleeper' && !league.syncPaused && scoresSport(league.sport)).map(league => league.id),
     ...nativeIds.filter(id => leagues.some(league => league.id === id && !league.syncPaused)),
   ])])
   useEffect(() => {

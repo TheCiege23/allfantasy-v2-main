@@ -78,6 +78,22 @@ export async function runSpecialtyAutomationOrchestrator(
   const existing = await prisma.specialtyAutomationRun.findUnique({
     where: { idempotencyKey },
   })
+  /*
+   * 🛑 A SECOND PRESS FOR THE SAME WEEK WAS A SERVER ERROR. Only a COMPLETED run was answered from the
+   * log; a run that had been skipped ("the week is not ready yet") or had failed fell through to a
+   * fresh `create` under the same unique key and died on it (P2002, HTTP 500). So a commissioner could
+   * ask once per week: the first answer was "not ready", and every press after it crashed. Found
+   * walking a guillotine league locally, 2026-11-20. A run that did not complete is now reopened in
+   * place (`openRun`), and one still running is reported as running.
+   */
+  if (existing?.status === 'running' && Date.now() - new Date(existing.startedAt).getTime() < RUNNING_STALE_MS) {
+    return {
+      runId: existing.id,
+      concept: conceptKey,
+      duplicate: true,
+      result: { summary: 'This automation is already running. Try again in a few minutes.', actions: [], events: [], skipped: true, skipReason: 'already_running' },
+    }
+  }
   if (existing?.status === 'completed') {
     const meta = (existing.metadata as { handlerResult?: unknown } | null) ?? null
     return {
@@ -95,7 +111,7 @@ export async function runSpecialtyAutomationOrchestrator(
   }
 
   if (!isSpecialtyConcept(conceptKey) && !input.force) {
-    const run = await prisma.specialtyAutomationRun.create({
+    const run = await openRun(existing, {
       data: {
         leagueId: input.leagueId,
         concept: conceptKey,
@@ -127,7 +143,7 @@ export async function runSpecialtyAutomationOrchestrator(
     trigger: input.trigger,
   })
   if (!v.ok && !input.force) {
-    const run = await prisma.specialtyAutomationRun.create({
+    const run = await openRun(existing, {
       data: {
         leagueId: input.leagueId,
         concept: conceptKey,
@@ -162,7 +178,7 @@ export async function runSpecialtyAutomationOrchestrator(
 
   const cr = validateConceptRulesShape(conceptRules)
   if (!cr.ok && !input.force) {
-    const run = await prisma.specialtyAutomationRun.create({
+    const run = await openRun(existing, {
       data: {
         leagueId: input.leagueId,
         concept: conceptKey,
@@ -209,7 +225,7 @@ export async function runSpecialtyAutomationOrchestrator(
     },
   }
 
-  const runRow = await prisma.specialtyAutomationRun.create({
+  const runRow = await openRun(existing, {
     data: {
       leagueId: input.leagueId,
       concept: conceptKey,
@@ -264,4 +280,31 @@ export async function runSpecialtyAutomationOrchestrator(
     duplicate: false,
     result: handlerResult,
   }
+}
+
+/** A run left `running` longer than this crashed mid-way; it may be reopened. */
+const RUNNING_STALE_MS = 10 * 60 * 1000
+
+type RunRow = Awaited<ReturnType<typeof prisma.specialtyAutomationRun.create>>
+type RunCreateArgs = Parameters<typeof prisma.specialtyAutomationRun.create>[0]
+
+/**
+ * The log row for this run: a new one, or the earlier row under the same key reopened. The key is
+ * unique, so a run that was skipped or failed must be written over, not created beside.
+ */
+async function openRun(existing: RunRow | null, args: RunCreateArgs): Promise<RunRow> {
+  if (!existing) return prisma.specialtyAutomationRun.create(args)
+  const data = args.data as Record<string, unknown>
+  return prisma.specialtyAutomationRun.update({
+    where: { id: existing.id },
+    data: {
+      status: data.status as string,
+      triggerType: data.triggerType as string,
+      summary: (data.summary as string | undefined) ?? null,
+      error: null,
+      startedAt: new Date(),
+      completedAt: (data.completedAt as Date | undefined) ?? null,
+      metadata: (data.metadata as object | undefined) ?? {},
+    },
+  })
 }

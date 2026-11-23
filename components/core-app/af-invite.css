@@ -68,3 +68,12 @@
 @media (max-width: 560px) {
   .af-inv-actions { flex-direction: column; }
 }
+
+/* Who is already here: names under the claim bar (lib/league/managersHere.ts). */
+.af-inv-here { margin-top: 8px; }
+.af-inv-here-h { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted, #989fc2); }
+.af-inv-here-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.af-inv-here-row { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); font-size: 12px; }
+.af-inv-here-row[data-you="true"] { border-color: rgba(52,211,153,.4); }
+.af-inv-here-name { font-weight: 600; color: var(--text, #e8ebff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-inv-here-team { font-size: 11px; color: var(--muted, #989fc2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

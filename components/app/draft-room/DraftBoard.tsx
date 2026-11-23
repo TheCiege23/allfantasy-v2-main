@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { SurvivorTribeBadge, SurvivorTribeMark } from '@/components/league/survivor/SurvivorTribeBadge'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, Gavel, Lock, UserRound } from 'lucide-react'
 import { DraftBoardCell, type DraftBoardCellPick, type PickHighlightTone } from './DraftBoardCell'
 import type { DraftPickSnapshot, SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import type { KeeperSessionSnapshot } from '@/lib/live-draft-engine/types'
@@ -21,7 +21,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useMessages } from '@/components/i18n/useMessages'
 import { draftRoomHeaderMessages } from '@/lib/core-app/messages/draftRoomHeader'
 import { useStickyBoardHeader } from './useStickyBoardHeader'
-import { seatDisplayName } from '@/lib/draft-room/seatLabel'
+import { OPEN_SEAT_LABEL, seatDisplayName } from '@/lib/draft-room/seatLabel'
 
 /**
  * One board column. Sleeper-style: the board spans the full width with short, wide tiles; past
@@ -806,6 +806,9 @@ function DraftBoardInner({
                           ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                         }}
                       />
+                    ) : headerName === OPEN_SEAT_LABEL ? (
+                      // An empty seat has no manager to take initials from ("OS" read as a name).
+                      <UserRound className="h-3.5 w-3.5 opacity-70" aria-hidden data-testid="draft-board-open-seat-icon" />
                     ) : (
                       managerInitials(headerName)
                     )}

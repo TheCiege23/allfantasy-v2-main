@@ -16,6 +16,7 @@
  */
 
 import type { ManagerHealthRow, ManagerHealthStatus } from '@/lib/commissioner-hub/managerHealth'
+import { useInactiveFlagRecord } from '@/components/core-app/useAdviceRecord'
 
 const STATUS_LABEL: Record<ManagerHealthStatus, string> = {
   active: 'Active',
@@ -55,7 +56,13 @@ function initials(row: ManagerHealthRow): string {
   return trimmed ? trimmed.slice(0, 1).toUpperCase() : '·'
 }
 
-function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
+/**
+ * `flagRecord` — a native league only: the "inactive" flag reads the manager's own actions there, and that is
+ * the flag the record grades (`lib/commissioner-hub/inactiveFlagLedger.ts`). An imported league's flag reads a
+ * synced timestamp, so the record says nothing about it and is not shown.
+ */
+function ManagerHealthTable({ rows, flagRecord = false }: { rows: ManagerHealthRow[]; flagRecord?: boolean }) {
+  const record = useInactiveFlagRecord(flagRecord && rows.length > 0)
   if (rows.length === 0) {
     return <p className="af-cm-empty">No rosters found for this league yet.</p>
   }
@@ -148,6 +155,12 @@ function ManagerHealthTable({ rows }: { rows: ManagerHealthRow[] }) {
           </tbody>
         </table>
       </div>
+      {record?.ratePct != null ? (
+        <p className="af-cm-empty" style={{ marginTop: 10 }} data-testid="manager-health-flag-record">
+          How the inactive flag has held up: of {record.graded} managers AllFantasy flagged inactive in the past year,{' '}
+          {record.stayedAway} ({record.ratePct}%) still had done nothing of their own two weeks later.
+        </p>
+      ) : null}
     </div>
   )
 }

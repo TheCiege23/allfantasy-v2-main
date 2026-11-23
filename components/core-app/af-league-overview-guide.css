@@ -53,40 +53,15 @@
   color: var(--text);
 }
 
-/* ── More about this league ─────────────────────────────────────────────────────────────────────── */
+/* ── More detail (the shared MoreDetail fold, 2026-11-20) ───────────────────────────────────────────
+   Its summary look comes from more-detail.css; only this page's spacing stays here. */
 .af-core .af-lho-more {
   margin: 16px 0 0;
-}
-.af-core .af-lho-more > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-}
-.af-core .af-lho-more > summary::-webkit-details-marker {
-  display: none;
-}
-.af-core .af-lho-more > summary::after {
-  content: '▾';
-  margin-left: auto;
-  color: var(--muted);
-}
-.af-core .af-lho-more:not([open]) > summary::after {
-  transform: rotate(-90deg);
 }
 .af-core .af-lho-more-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 14px;
 }
 
 @media (max-width: 720px) {

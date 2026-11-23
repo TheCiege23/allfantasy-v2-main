@@ -1,3 +1,4 @@
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { assertNotOwnTeamTrade } from '@/lib/league-trade-engine/ownTeamTrade'
 import { acceptedCoOwnerRosterId, isAcceptedCoOwnerForRoster } from '@/lib/team-coowners/access'
@@ -1521,7 +1522,7 @@ export async function expireAfLeagueTradeAtDeadline(input: {
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length > 0) {
       const { ingest, tradeEvent } = await import('@/lib/notification-engine')
@@ -1620,7 +1621,7 @@ async function notifyTradePartiesOfVeto(input: { leagueId: string; tradeId: stri
     })
     const raw = rosters
       .map((r) => r.platformUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !id.startsWith('orphan-'))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !isSeatPlaceholderUserId(id))
     const userIds = [...new Set(await Promise.all(raw.map(deliverableUserId)))]
     if (userIds.length === 0) return
     const { ingest, tradeEvent } = await import('@/lib/notification-engine')

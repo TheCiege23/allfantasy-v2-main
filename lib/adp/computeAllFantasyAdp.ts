@@ -186,10 +186,61 @@ function clampRoundPick(pick: AggregatablePick): number {
 }
 
 /**
+ * RECENT DRAFTS COUNT MORE (owner's call, 2026-11-22: "if a player starts dropping in drafts, he doesn't keep the ADP
+ * he had"). A pick's weight halves every `ADP_HALF_LIFE_DAYS` before `now`. Picks with no time (imported history,
+ * which only knows its season) weigh 1 — and sit in their own imported, per-season boards anyway, so they are never
+ * mixed with dated live picks.
+ *
+ * ⚠ THE SAMPLE SIZE IS STILL THE COUNT OF PICKS. Readers shrink a thin board by `n` (`blendPolicy.sampleConfidence`),
+ * and "how many drafts saw this" must not shrink because they were old.
+ */
+export const ADP_HALF_LIFE_DAYS = 14
+const DAY_MS = 86_400_000
+
+export type AggregateOptions = {
+  /** Weights are measured back from here. Absent: every pick weighs 1 (the plain mean). */
+  now?: Date
+  halfLifeDays?: number
+}
+
+function pickWeight(pick: AggregatablePick, now: Date | undefined, halfLifeDays: number): number {
+  if (!now || !pick.pickedAt) return 1
+  const ageDays = Math.max(0, (now.getTime() - pick.pickedAt.getTime()) / DAY_MS)
+  return Math.pow(0.5, ageDays / halfLifeDays)
+}
+
+function weightedMean(values: readonly number[], weights: readonly number[]): number {
+  let sw = 0
+  let sv = 0
+  for (let i = 0; i < values.length; i++) {
+    sw += weights[i]!
+    sv += values[i]! * weights[i]!
+  }
+  return sw > 0 ? sv / sw : meanOf(values)
+}
+
+/**
+ * Where this player was going `days` ago: the same weighted mean over only the picks made before then, weighed back
+ * from then. Null when no pick is that old. PURE.
+ *
+ * This is what the 7- and 30-day trends compare against, and it needs no stored history: the picks themselves carry
+ * their dates. (The stored-snapshot comparison it replaces could never fire for an active player — the row is
+ * rewritten every day, so no row of his was ever older than seven days.)
+ */
+function adpAsOf(list: readonly AggregatablePick[], now: Date, days: number, halfLifeDays: number): number | null {
+  const at = new Date(now.getTime() - days * DAY_MS)
+  const older = list.filter((p) => p.pickedAt && p.pickedAt.getTime() < at.getTime())
+  if (older.length === 0) return null
+  return weightedMean(older.map((p) => p.overall), older.map((p) => pickWeight(p, at, halfLifeDays)))
+}
+
+/**
  * Aggregate a flat list of picks into one snapshot per (player, context, draftMode).
  * Caller is responsible for filtering out invalid/undone/test picks BEFORE passing.
  */
-export function aggregateAdp(picks: readonly AggregatablePick[]): AdpSnapshot[] {
+export function aggregateAdp(picks: readonly AggregatablePick[], options: AggregateOptions = {}): AdpSnapshot[] {
+  const now = options.now
+  const halfLife = options.halfLifeDays ?? ADP_HALF_LIFE_DAYS
   type Key = string
   const groups = new Map<Key, AggregatablePick[]>()
   const groupKey = (p: AggregatablePick): Key =>
@@ -211,6 +262,14 @@ export function aggregateAdp(picks: readonly AggregatablePick[]): AdpSnapshot[] 
     const rounds = list.map((p) => p.round)
     const pickInRounds = list.map(clampRoundPick)
     const sd = stdDevOf(overalls)
+    const weights = list.map((p) => pickWeight(p, now, halfLife))
+    const current = weightedMean(overalls, weights)
+    // Positive = drafted EARLIER now than then (moving up); negative = sliding. Same sign as `applyTrends`.
+    const trend = (days: number) => {
+      if (!now) return null
+      const then = adpAsOf(list, now, days, halfLife)
+      return then == null ? null : round2(then - current)
+    }
     out.push({
       playerKey: buildPlayerKey(first.playerName, first.position),
       playerName: first.playerName.trim(),
@@ -218,14 +277,14 @@ export function aggregateAdp(picks: readonly AggregatablePick[]): AdpSnapshot[] 
       draftMode: first.draftMode,
       contextHash: buildContextHash(first.context),
       sampleSize: list.length,
-      averageOverallPick: round2(meanOf(overalls)),
-      averageRound: round2(meanOf(rounds)),
-      averagePickInRound: round2(meanOf(pickInRounds)),
+      averageOverallPick: round2(current),
+      averageRound: round2(weightedMean(rounds, weights)),
+      averagePickInRound: round2(weightedMean(pickInRounds, weights)),
       minOverallPick: Math.min(...overalls),
       maxOverallPick: Math.max(...overalls),
       standardDeviation: sd == null ? null : round2(sd),
-      sevenDayTrend: null,
-      thirtyDayTrend: null,
+      sevenDayTrend: trend(7),
+      thirtyDayTrend: trend(30),
     })
   }
   return out
@@ -259,14 +318,13 @@ export function applyTrends(
     return {
       ...snap,
       standardDeviation: snap.standardDeviation,
+      // A trend measured from the picks' own dates (`aggregateAdp`) wins; a stored prior only fills a gap.
       sevenDayTrend:
-        typeof sevenPrior === 'number' && Number.isFinite(sevenPrior)
-          ? round2(sevenPrior - snap.averageOverallPick)
-          : null,
+        snap.sevenDayTrend ??
+        (typeof sevenPrior === 'number' && Number.isFinite(sevenPrior) ? round2(sevenPrior - snap.averageOverallPick) : null),
       thirtyDayTrend:
-        typeof thirtyPrior === 'number' && Number.isFinite(thirtyPrior)
-          ? round2(thirtyPrior - snap.averageOverallPick)
-          : null,
+        snap.thirtyDayTrend ??
+        (typeof thirtyPrior === 'number' && Number.isFinite(thirtyPrior) ? round2(thirtyPrior - snap.averageOverallPick) : null),
     }
   })
 }

@@ -21,6 +21,14 @@ import { draftScreensMessages } from '@/lib/core-app/messages/draftScreens'
 import { draftHqLeagueGuideMessages } from '@/lib/core-app/messages/draftHqLeagueGuide'
 import { leagueDraftHeadline, leagueDraftPhase, type LeagueDraftHeadline, type LeagueDraftPhase } from '@/lib/core-app/draftHqLeagueGuide'
 import { DraftHqRookieRoom } from './DraftHqRookieRoom'
+import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { defineMessages } from '@/lib/i18n/messages'
+
+/* The "More detail" fold's note — what is inside, in a few words (2026-11-20). */
+const draftHqMoreDetailMessages = defineMessages({
+  en: { prep: 'Prep tools: ADP, mock drafts, outlook', recorded: 'Last recorded draft board' },
+  es: { prep: 'Herramientas de preparación: ADP, drafts de prueba, perspectiva', recorded: 'Tablero del último draft registrado' },
+})
 
 /**
  * Screen 8 — one league's Draft HQ.
@@ -117,6 +125,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
   const copy = (value: string) => draftHqUiCopy(value, language)
   const m = useMessages(draftScreensMessages)
   const g = useMessages(draftHqLeagueGuideMessages)
+  const md = useMessages(draftHqMoreDetailMessages)
   /*
    * A dynasty league's draft room (data.rookieRoom — absent for every other league). When it carries
    * your exact picks from this session, Draft HQ's own "Your picks" list would repeat them word for
@@ -501,23 +510,54 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
     ) : null
 
   /* ── Prep tools: ADP, mock drafts, outlook — folded; the checklist inside still leads ─────────── */
+  /*
+    2026-11-20: no longer its own fold. Before and during a draft it sits in the page's one "More detail"
+    fold (`moreFold` below) beside last season's board; the wrapper keeps `draft-hq-prep-fold`.
+  */
   const prep =
     data.preparation && !done ? (
-      <details className="af-dhl-fold" data-testid="draft-hq-prep-fold">
-        <summary>{g.prepTools}</summary>
+      <div className="af-dhl-more-part" data-testid="draft-hq-prep-fold">
         <DraftPreparation data={data.preparation} leagueId={data.league.id} draftComplete={false} />
-      </details>
+      </div>
     ) : null
   /* After the draft the prep block is its own review (draftComplete), so it stays as it was, unfolded. */
   const prepDone = data.preparation && done ? <DraftPreparation data={data.preparation} leagueId={data.league.id} draftComplete /> : null
 
   /* The recorded board is long (every pick by round) and, before or during a draft, last season's — folded everywhere. */
+  /*
+    2026-11-20: after the draft this IS the page's board, so it keeps its own "See the full board" fold
+    (the same one the live board uses). Before and during a draft it is last season's — history — so it
+    goes in "More detail" instead (`recordedPart`), wrapper keeping `draft-hq-recorded-fold`.
+  */
   const recordedFold = recordedBoard ? (
     <details className="af-dhl-fold" data-testid="draft-hq-recorded-fold">
       <summary>{g.seeFullBoard}</summary>
       {recordedBoard}
     </details>
   ) : null
+  const recordedPart = recordedBoard && !done ? (
+    <div className="af-dhl-more-part" data-testid="draft-hq-recorded-fold">
+      {recordedBoard}
+    </div>
+  ) : null
+
+  /*
+    ── More detail (2026-11-20) ─────────────────────────────────────
+    The page's one shared fold (MoreDetail.tsx), at the bottom, before and during a draft: the prep tools
+    and last season's board, which were two folds under their own names. Closed, as both were. After the
+    draft there is nothing secondary to hold — the prep block is the draft's own review and stays open.
+  */
+  const moreFold =
+    prep || recordedPart ? (
+      <MoreDetail
+        className="af-dhl-more"
+        testId="draft-hq-more"
+        note={[prep ? md.prep : null, recordedPart ? md.recorded : null].filter(Boolean).join(' · ')}
+      >
+        {prep}
+        {recordedPart}
+      </MoreDetail>
+    ) : null
 
   const edgeBlock = showEdge ? <DraftCompetitiveEdge access={edgeAccess} edge={edge} /> : null
   /* One line for everything that only exists once the draft is done, instead of a sentence per section. */
@@ -546,10 +586,9 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
           {queuePair}
           {lotterySection}
           {edgeBlock}
-          {prep}
           {gradesSection}
-          {recordedFold}
           {laterLine}
+          {moreFold}
         </>
       ) : (
         <>
@@ -557,12 +596,11 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
           {queuePair}
           {lotterySection}
           {edgeBlock}
-          {prep}
           {boardBlock}
           {madeSection}
           {gradesSection}
-          {recordedFold}
           {laterLine}
+          {moreFold}
         </>
       )}
     </div>

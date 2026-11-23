@@ -159,7 +159,7 @@ export function NativeTradesScreen({ league, teams }: { league: UserLeague; team
   return (
     <RedraftScreen identity={rd}>
     <div className="nls" data-testid="native-trades-screen" data-rd-screen={rd ? 'trades' : undefined}>
-      <ScreenHead eyebrow={`${league.name} · Trades`} title="Trade center">
+      <ScreenHead eyebrow="Trades" title="Trade center">
         {!rd ? <span className="nls-chip">{deadline}</span> : null}
         <button type="button" className="nls-btn" data-variant="primary" onClick={() => { setCounterTradeId(null); setBuilderOpen(true) }}>Propose a trade</button>
       </ScreenHead>

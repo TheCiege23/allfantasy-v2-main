@@ -51,6 +51,8 @@
 .verdict>p { flex: 1 1 240px; margin: 0; color: #9be3b8; font-size: 14px; }
 .verdictOver { border-color: rgba(255, 138, 107, .55); }
 .verdictOver>p { color: #ff8a6b; }
+/* Cap home's cap-space clock when the team is over: the same warning colour as the bid check's over verdict. */
+.overNote { display: block; margin-top: 6px; font: 700 13px 'Archivo', sans-serif; color: #ff8a6b; }
 
 @media (prefers-reduced-motion: reduce) {
   .col>.fill, .pbar>i { transition: none; }

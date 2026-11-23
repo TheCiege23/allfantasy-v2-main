@@ -80,11 +80,25 @@ const GROUPS: { id: string; title: string; rows: RowSpec[] }[] = [
     id: 'manage',
     title: 'Manage your own team',
     rows: [
-      { id: 'trade_breakdown', label: 'The full trade breakdown', detail: 'Why a trade grades the way it does, its value layers, and counters worth sending.', featureId: 'trade_analyzer' },
-      { id: 'player_depth', label: 'Player deep dives', detail: 'Trade, compare and verdict views for any player, with market and history.', featureId: 'player_ai_recommendations' },
+      { id: 'trade_breakdown', label: 'The full trade breakdown', detail: 'Why a trade grades the way it does, its value layers, and counters worth sending.', featureId: 'af_intelligence' },
+      { id: 'player_depth', label: 'Player deep dives', detail: 'Trade, compare and verdict views for any player, with market and history.', featureId: 'af_intelligence' },
+      // 2026-11-22: what the /core gate actually reads (CORE_DEPTH, lib/core-app/afIntelligenceWithhold.ts).
+      { id: 'af_numbers', label: 'AF projections and AF ADP', detail: "AllFantasy's own projection for every player and ADP from real drafts, each measured against what happened.", featureId: 'af_intelligence' },
       { id: 'competitive_edge', label: 'Competitive Edge', detail: 'What the other managers in your league have actually done — their trades, picks and waiver bids.', featureId: 'manager_psychology' },
       { id: 'start_sit', label: 'Start/sit calls', featureId: 'pro_start_sit' },
       { id: 'waivers', label: 'Waiver recommendations', featureId: 'ai_waivers' },
+      {
+        id: 'chimmy_drafts',
+        label: 'Chimmy drafts for you',
+        detail: 'On auto-pick, Chimmy picks from your queue or the way you draft, and fills what your roster still needs.',
+        featureId: 'pro_draft_ai',
+      },
+      {
+        id: 'chimmy_runs_team',
+        label: 'Chimmy runs a team',
+        detail: 'Hand a team with no manager to Chimmy: it drafts for it and manages it until someone takes over. One team is free.',
+        featureId: 'commissioner_chimmy_autopilot',
+      },
     ],
   },
   {
@@ -178,8 +192,9 @@ export const PLAN_EXAMPLES: Record<ComparisonTier, readonly PlanExample[]> = {
     },
   ],
   af_pro: [
-    { text: 'Open any trade and see why it grades the way it does — the value layers, and the counter-offer worth sending.', featureId: 'trade_analyzer' },
+    { text: 'Open any trade and see why it grades the way it does — the value layers, and the counter-offer worth sending.', featureId: 'af_intelligence' },
     { text: 'Before you send an offer, see what that manager has actually done: their past trades, draft picks and waiver bids.', featureId: 'manager_psychology' },
+    { text: 'Put your draft on auto and let Chimmy pick the way you draft — or hand an empty team to Chimmy to run.', featureId: 'commissioner_chimmy_autopilot' },
   ],
   af_commissioner: [
     {

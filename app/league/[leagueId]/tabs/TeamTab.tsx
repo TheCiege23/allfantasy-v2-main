@@ -756,7 +756,7 @@ function LineupReplacementPickerSheet({
   )
 }
 
-/** Exported for the DB-free harness at /e2e/league-phase-a; TeamTab is its only real caller. */
+/** Projection and actual points for a player in a league lineup. */
 export function RosterRow({
   playerId,
   sport,
@@ -775,6 +775,7 @@ export function RosterRow({
   liveScore,
   byeTeams = null,
   noGameTeams = null,
+  projectionPrecision,
 }: {
   playerId: string
   sport: string
@@ -799,6 +800,7 @@ export function RosterRow({
   byeTeams?: ReadonlySet<string> | null
   /** NBA / NHL / MLB: clubs with no game today (`useNoGameTeams`). A player on one shows NG in AF blue. */
   noGameTeams?: ReadonlySet<string> | null
+  projectionPrecision?: number
 }) {
   // Flash animation when liveScore changes - hooks must run before any early return.
   const [ptFlash, setPtFlash] = useState(false)
@@ -937,6 +939,7 @@ export function RosterRow({
           ) : null}
           <ProjectionDisplay
             projection={baseline}
+            precision={projectionPrecision}
             suffix=""
             showAFCrest={showCrest}
             pointsClassName="text-xs text-muted"

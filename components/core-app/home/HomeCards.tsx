@@ -11,7 +11,7 @@ import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { hiddenHomeCards, type HomeSectionId } from '@/lib/core-app/homeSections'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
-import { HomeCustomizeLink, HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
+import { HomeCustomizeLink, HomeMoreDetail, HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
@@ -772,27 +772,8 @@ export function CoreHomeCards({
 
           {shown(order.bands).map((name) => bands[name])}
 
-          {/* The two guide cards (2026-11-12): the leagues you run, then where you stand in yours. */}
+          {/* The guide card (2026-11-12): the leagues you run — tasks, so it stays on top. */}
           {card('commish', <CommishCard commish={loads.commish} />)}
-          {card('season-pulse', <SeasonPulseCard standings={loads.standings} />)}
-          {/* The teaching cards (2026-11-12): when things happen on each platform, and what each format means. */}
-          {card('calendar', <CalendarCard calendar={loads.calendar} dash34={loads.dash34} />)}
-          {card('formats', <FormatsCard formats={loads.formats} />)}
-
-          {/*
-            The league trade evaluator, folded to one row (owner, 2026-11-06). After the news bands so
-            decisions and news still lead; it opens into the Trades hub's own picker and builder.
-          */}
-          {/*
-            With no trade league it opens the open-market grade instead. A Settings → Home page
-            switch since 2026-11-12, off by default (lib/core-app/homeSections.ts). Still no
-            `data-home-card`: it was never part of the per-viewer card ORDER, and it is not now.
-          */}
-          {isHidden('trade-evaluator') ? null : (
-            <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
-              <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues ?? []} viewerId={viewerId} /></Suspense>
-            </CoreCardBoundary>
-          )}
 
           {/*
             3a mounted as the screen BODY. It ships its own rail/nav/topbar
@@ -829,12 +810,40 @@ export function CoreHomeCards({
             }}
           />
           {/*
-            The coverage disclosure, at the foot where a footnote belongs.
-            It used to sit third on the page: leading with everything we
-            cannot see sets the tone to apology before the reader has seen
-            anything the product does know.
+            "More detail" (2026-11-20, owner: "the core site is confusing"). The home's job is what
+            needs you today — the headline, the decision queue, the news bands, the leagues you run and
+            the dashboard stay on top. Everything here is background or a tool, so it moved, unchanged,
+            into the ONE shared fold (components/core-app/MoreDetail.tsx): where you stand this season,
+            the platform calendar and format guide (teaching cards), the folded trade evaluator, and
+            the coverage disclosure. Each keeps its own boundary, card name and Settings switch; a
+            closed <details> still renders its children, so nothing streams differently. The fold is
+            not drawn when every card in it is switched off.
           */}
-          {card('coverage', <CoverageCard dash34={loads.dash34} />)}
+          {['season-pulse', 'calendar', 'formats', 'trade-evaluator', 'coverage'].every(isHidden) ? null : (
+            <HomeMoreDetail>
+              {card('season-pulse', <SeasonPulseCard standings={loads.standings} />)}
+              {/* The teaching cards (2026-11-12): when things happen on each platform, and what each format means. */}
+              {card('calendar', <CalendarCard calendar={loads.calendar} dash34={loads.dash34} />)}
+              {card('formats', <FormatsCard formats={loads.formats} />)}
+              {/*
+                The league trade evaluator, folded to one row (owner, 2026-11-06); it opens into the
+                Trades hub's own picker and builder, or the open-market grade with no trade league. A
+                Settings → Home page switch since 2026-11-12, off by default (lib/core-app/homeSections.ts).
+                Still no `data-home-card`: it was never part of the per-viewer card ORDER.
+              */}
+              {isHidden('trade-evaluator') ? null : (
+                <CoreCardBoundary card="trade-evaluator" resetKey={resetKey}>
+                  <Suspense fallback={null}><HomeTradeEvaluatorCard leagues={tradeLeagues ?? []} viewerId={viewerId} /></Suspense>
+                </CoreCardBoundary>
+              )}
+              {/*
+                The coverage disclosure, at the foot where a footnote belongs. It used to sit third on
+                the page: leading with everything we cannot see sets the tone to apology before the
+                reader has seen anything the product does know.
+              */}
+              {card('coverage', <CoverageCard dash34={loads.dash34} />)}
+            </HomeMoreDetail>
+          )}
           {/*
             The way to a quieter home, from the home itself — a user found it "way too much
             information" (2026-10-24). Names how many sections are off so a hidden card is never a

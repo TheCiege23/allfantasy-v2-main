@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreLocale } from '@/lib/core-app/messages/coreLocale'
 import type { OrphanAuctionView } from '@/lib/orphan-auction/orphanAuctionService'
+import { useHoldUnsavedWork } from '@/lib/core-app/unsavedWork'
 
 /**
  * A team's sealed bids in the league's orphan auction (lib/orphan-auction), on the Waivers page —
@@ -30,6 +31,9 @@ export function OrphanAuctionBids({ leagueId }: { leagueId: string }) {
   const [bids, setBids] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  // Bids typed but not saved: no deploy reload while they are (lib/core-app/unsavedWork).
+  const [touched, setTouched] = useState(false)
+  useHoldUnsavedWork(touched)
   const when = (iso: string) => new Date(iso).toLocaleString(coreLocale(language).usLocale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   const load = useCallback(async () => {
@@ -38,6 +42,7 @@ export function OrphanAuctionBids({ leagueId }: { leagueId: string }) {
       if (!r.ok) return
       const body = (await r.json()) as OrphanAuctionView
       setView(body)
+      setTouched(false)
       if (body.supported && body.mine) setBids(Object.fromEntries(Object.entries(body.mine.bids).map(([k, v]) => [k, String(v)])))
     } catch {
       // Nothing to show is the right answer when the auction cannot be read.
@@ -123,7 +128,7 @@ export function OrphanAuctionBids({ leagueId }: { leagueId: string }) {
                   value={bids[a.id] ?? ''}
                   placeholder="$"
                   aria-label={tx('bidFor', { asset: a.label })}
-                  onChange={(e) => setBids((b) => ({ ...b, [a.id]: e.target.value }))}
+                  onChange={(e) => { setTouched(true); setBids((b) => ({ ...b, [a.id]: e.target.value })) }}
                   data-testid="orphan-auction-bid"
                   style={{ width: '5.5rem' }}
                 />
