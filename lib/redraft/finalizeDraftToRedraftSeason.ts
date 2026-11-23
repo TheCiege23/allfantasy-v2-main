@@ -652,16 +652,30 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    // A replay must not resurrect a drafted player who was later dropped or traded.
-    // Survivor Guillotine permits roster moves immediately after draft finalization.
-    const existingActive = await prisma.redraftRosterPlayer.findFirst({
-      where: {
-        rosterId: mapping.redraftRoster.id,
-        playerId,
-        ...(league.leagueVariant === 'survivor_guillotine' ? {} : { droppedAt: null }),
-      },
-      select: { id: true },
-    })
+    /*
+     * 🛑 A REPLAY MUST NOT RESURRECT A DRAFTED PLAYER WHO WAS LATER DROPPED OR TRADED — IN ANY FORMAT.
+     * Any row for this pick on this season roster, active OR dropped, means the pick was already
+     * materialized; a dropped one means a roster move happened after it. This replay runs on every
+     * post-draft artifact pass (roster and draft-room requests, the draft-room poll), so a filter on
+     * `droppedAt: null` re-created the player every time someone opened the league.
+     *
+     * Measured 2026-11-22, Zombie Chimmy Test (NFL redraft): Kyren Williams dropped for Bhayshul
+     * Tuten at 21:02:55, back on the roster as "drafted" at 21:08:36 — the second the next pass ran.
+     * `33e4a268e` had fixed exactly this for Survivor Guillotine only; the rule was never format-specific.
+     *
+     * ⚠ AND A TRADE LEAVES NO ROW BEHIND: it MOVES the row to the receiving roster (applyRedraftRosterMoves,
+     * tradeSettlement), so the drafting roster has nothing to find. A player active anywhere in this
+     * season is already placed, and re-creating him here puts one player on two teams.
+     */
+    const existingActive =
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { rosterId: mapping.redraftRoster.id, playerId },
+        select: { id: true },
+      })) ??
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { playerId, droppedAt: null, roster: { seasonId: season.id } },
+        select: { id: true },
+      }))
 
     if (existingActive) {
       redraftPlayersAlreadyPresent += 1
