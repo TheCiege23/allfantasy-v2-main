@@ -53,8 +53,9 @@ describe('LeagueHome redraft deck', () => {
     expect(container.querySelector('.af-lh-head .af-lh-headside')).toBeNull()
     const foot = container.querySelector('[data-testid=league-home-foot]')
     expect(foot).not.toBeNull()
-    expect(text(foot)).toContain('Back to home')
-    expect(foot?.querySelector('.af-lh-back')).not.toBeNull()
+    // 2026-11-23: in the shell "Back to home" is gone — the tab bar and sidebar carry Home.
+    expect(text(foot)).not.toContain('Back to home')
+    expect(foot?.querySelector('.af-lh-back')).toBeNull()
     // The foot is the last thing on the page, after the deck and the week.
     const page = container.querySelector('.af-lh')!
     expect(page.lastElementChild).toBe(foot)
@@ -70,7 +71,8 @@ describe('LeagueHome redraft deck', () => {
       const { data } = homeFixture('nfl', opts)
       const { container, unmount } = render(<LeagueHome data={data} otherLeagueIssueCount={0} identityInShell />)
       expect(container.querySelector('.af-lh-head .af-lh-headside')).toBeNull()
-      expect(container.querySelector('[data-testid=league-home-foot] .af-lh-back')).not.toBeNull()
+      expect(container.querySelector('[data-testid=league-home-foot]')).not.toBeNull()
+      expect(container.querySelector('[data-testid=league-home-foot] .af-lh-back')).toBeNull()
       unmount()
       const outside = render(<LeagueHome data={data} otherLeagueIssueCount={0} />)
       expect(outside.container.querySelector('.af-lh-head .af-lh-headside .af-lh-back')).not.toBeNull()

@@ -264,7 +264,7 @@ describe('LeagueScoreboardPanel', () => {
     expect(t).toContain('Projected')
   })
 
-  it('shows a win chance on each side, and they complement to 100', () => {
+  it('shows the favourite’s win chance only — the other side’s is the remainder (2026-11-23)', () => {
     const c = render(
       <LeagueScoreboardPanel
         board={board({
@@ -285,8 +285,45 @@ describe('LeagueScoreboardPanel', () => {
       .map((e) => e.textContent ?? '')
       .filter((x) => x.includes('%'))
       .map((x) => Number(x.replace('%', '')))
-    expect(pcts).toEqual([62, 38])
-    expect(pcts[0] + pcts[1]).toBe(100)
+    expect(pcts).toEqual([62])
+  })
+
+  it('a dead heat shows on both sides, since neither is the favourite', () => {
+    const c = render(
+      <LeagueScoreboardPanel
+        board={board({
+          allUnplayed: true,
+          games: [{ matchupId: 1, unplayed: true, margin: 0, winProbability: 0.5, teams: [team(), team({ rosterId: '2' })] }],
+        })}
+      />,
+    ).container
+    expect([...c.querySelectorAll('.af-sb-win')].filter((e) => e.textContent?.includes('%')).map((e) => e.textContent)).toEqual(['50%', '50%'])
+  })
+
+  it('your game says ONE win chance — the headline’s, from the matchup engine — not the board’s too', () => {
+    // Found 2026-11-23: 64% beside your name (the board's model) and 54% at the end of the row (the
+    // engine's, which the headline also says) — two answers for one game.
+    const c = render(
+      <LeagueScoreboardPanel
+        winProbability={{ pWin: 0.54, confidence: 'medium' }}
+        board={board({
+          allUnplayed: true,
+          games: [
+            {
+              matchupId: 1,
+              unplayed: true,
+              margin: 4,
+              winProbability: 0.64,
+              teams: [team({ isYou: true, projected: 111 }), team({ rosterId: '2', projected: 104 })],
+            },
+          ],
+        })}
+      />,
+    ).container
+    const shown = [...c.querySelectorAll('.af-sb-game')].map((li) => li.textContent ?? '').join(' ')
+    expect(shown).toContain('54%')
+    expect(shown).not.toContain('64%')
+    expect(c.querySelector('.af-sb-winprob')).toBeNull()
   })
 
   it('marks home and away so the same team holds the same line', () => {

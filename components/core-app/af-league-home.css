@@ -824,6 +824,17 @@
   .af-sb-game { grid-template-columns: 1fr 60px; padding: 8px 10px; }
 }
 
+/*
+ * Phone only: a game with nothing in its lead column — every game before kickoff — gives that column
+ * back to the team names (2026-11-23). It was reserved empty on every row and cut "Fourth & Long" to
+ * "Fourth &…". Phone only because the phone hides the column headings (`.af-sb-cols` above); on a wider
+ * screen collapsing it would slide the win chance out from under its WIN heading.
+ * Its own top-level query, not inserted into the one above (a rule placed inside a query moves with it).
+ */
+@media (max-width: 640px) {
+  .af-sb-game:not(:has(> .af-sb-margin)) { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Power board: all-play + movement ────────────────────────────────── */
 .af-lh-power-panel {
   grid-column: 1 / -1;
