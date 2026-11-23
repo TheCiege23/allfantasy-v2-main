@@ -39,6 +39,18 @@ side effect runs until it is `1`.
 All of this is pure code in `lib/partner-codes/{settings,money,meters,code,fraud}.ts`,
 and `__tests__/partner-codes/rules.test.ts` is the rulebook.
 
+### A free plan stops the paid one it covers
+
+Owner's rule (2026-11-23). When a commissioner unlocks a free plan, any paid plan it covers stops
+renewing (`lib/partner-codes/paidPlanOverlap.ts`). AF Supreme covers paid AF Supreme, AF Commissioner
+and AF Pro; AF Commissioner covers paid AF Commissioner. AF Legacy is never touched.
+
+- **Stripe:** `cancel_at_period_end`. They keep what they paid for until the period ends, then the free
+  plan carries on. No refund, nothing taken away early. Checked daily, so a plan bought later is caught too.
+- **Apple / Google:** we can't cancel a store subscription, so the commissioner is emailed how to,
+  once, on the day the free plan unlocks.
+- If the free plan later ends, they subscribe again like anyone else.
+
 ## Scheduled work
 
 No cron slot of its own: the repo is at its cron ceiling (`docs/crons.md`). Once a day the existing

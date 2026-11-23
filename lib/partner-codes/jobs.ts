@@ -4,6 +4,8 @@ import { getMonetizationCatalogItemBySku, type MonetizationSku } from '@/lib/mon
 import { upsertSubscriptionPlanForCatalogItem } from '@/lib/subscription/webhookHandlers'
 import { syncUserProfileFromSubscriptions } from '@/lib/subscription/syncBridge'
 import { sendNotificationEmail } from '@/lib/resend-client'
+import { getStripeClient } from '@/lib/stripe-client'
+import { overlapEmail, stopPaidPlansCoveredBy } from './paidPlanOverlap'
 import { loadPartnerSettings } from './service'
 import { buildPayout, previousMonthKey } from './money'
 import { countMeters, EMPTY_LEVEL, shouldUnlockCash, stepRewards, type FreePlan, type RewardLevels } from './meters'
@@ -131,8 +133,27 @@ export async function runPartnerDaily(now = new Date()) {
       },
     })
     await applyFreePlan(code.id, code.ownerUserId, freePlan, now)
+    if (freePlan !== 'none') await stopOverlappingPaidPlan(code.id, code.ownerUserId, freePlan, code.freePlan)
   }
   return { codes, cashUnlocked, slicesAccrued: accrued.count }
+}
+
+/**
+ * Owner's rule: a commissioner on a free plan is not also charged for a paid plan it covers
+ * (lib/partner-codes/paidPlanOverlap.ts). Stripe renewals are turned off; store-billed plans get an
+ * email saying how to cancel, sent only on the day the free plan first unlocks so it is not daily.
+ * Never throws into the job.
+ */
+async function stopOverlappingPaidPlan(partnerCodeId: string, ownerUserId: string, freePlan: Exclude<FreePlan, 'none'>, previousPlan: string) {
+  try {
+    const result = await stopPaidPlansCoveredBy({ stripe: getStripeClient(), userId: ownerUserId, freePlan, partnerCodeId })
+    const email = overlapEmail(freePlan, { stopped: result.stopped, storeOwned: freePlan !== previousPlan ? result.storeOwned : [] })
+    if (!email) return
+    const user = await prisma.appUser.findUnique({ where: { id: ownerUserId }, select: { email: true } })
+    if (user?.email) await sendNotificationEmail({ to: user.email, ...email, actionHref: '/partner-code', actionLabel: 'See your Partner Code' })
+  } catch (error) {
+    console.warn('[partner-codes] paid-plan overlap not handled', { partnerCodeId, message: (error as Error)?.message })
+  }
 }
 
 /** Dates come back from JSON as strings. */
