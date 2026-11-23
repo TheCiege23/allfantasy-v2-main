@@ -6,6 +6,7 @@ import type { LeagueDefenderBoard, DefenderBoardRow } from '@/lib/values/leagueD
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { useMessages } from '@/components/i18n/useMessages'
 import { defenseHubMessages } from '@/lib/core-app/messages/defenseHub'
+import { idpPositionGroup } from '@/lib/core-app/scoringNotes'
 
 /**
  * Every defender in the league and what he is worth HERE — the board a manager reads before
@@ -161,7 +162,6 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
   const filtering = query.trim().length > 0 || hideMine
   const shown = showAll || filtering ? rows : rows.slice(0, BOARD_TOP)
   const unpriced = data.rows.filter((r) => r.value == null).length
-  const kickersShown = Boolean(data.kickerValue && data.kickers.length > 0)
 
   return (
     <section data-testid="defense-trade-board">
@@ -189,7 +189,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
           aria-label={m.boardFilterLabel}
           className="min-h-[44px] min-w-[220px] flex-1 rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-3 py-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent-line)]"
         />
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-[13px] text-[var(--text2)]">
           <input
             type="checkbox"
             checked={hideMine}
@@ -201,20 +201,20 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
       </div>
 
       <div className="overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
-        <table className="w-full min-w-[720px] text-left">
+        <table className="w-full text-left sm:min-w-[720px]">
           <thead>
             <tr className="border-b border-[var(--line)] font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">{m.colPlayer}</th>
-              <th className="px-2 py-3">{m.colPos}</th>
-              <th className="px-2 py-3 text-right">{m.colProj.replace(' ↓', '')}</th>
-              <th className="px-2 py-3 text-right">
+              <th className="hidden px-2 py-3 sm:table-cell">{m.colPos}</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell">{m.colProj.replace(' ↓', '')}</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell">
                 <abbr title={m.vorpTip} className="no-underline">
                   {m.colVorp}
                 </abbr>
               </th>
-              <th className="px-2 py-3 text-right">{m.colPosRank}</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell">{m.colPosRank}</th>
               <th className="px-2 py-3 text-right text-[var(--accent)]">{m.colValue} ↓</th>
-              <th className="px-4 py-3">{m.colHeldBy}</th>
+              <th className="hidden px-4 py-3 sm:table-cell">{m.colHeldBy}</th>
             </tr>
           </thead>
           <tbody>
@@ -240,51 +240,66 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
         </button>
       ) : null}
 
-      <Kickers data={data} />
-
+      {/*
+        No kicker block here any more (2026-11-23): the hub already shows it, and every kicker carries the same
+        value, so a second copy repeated the number and its paragraph word for word on one page.
+      */}
       <details className="mt-3 rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3" data-testid="defense-trade-board-how">
         <summary className="cursor-pointer text-[13px] font-bold text-[var(--text)]">{m.boardHowTitle}</summary>
         <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-[12px] leading-relaxed text-[var(--muted)]">
           <li>{m.noteLeague}</li>
           <li>{m.noteCrossGroup}</li>
           {unpriced > 0 ? <li>{m.noteUnpriced(unpriced)}</li> : null}
-          {kickersShown ? <li>{m.noteKicker}</li> : null}
         </ul>
       </details>
     </section>
   )
 }
 
+/**
+ * The rank's label: his position GROUP (DL/LB/DB), the same one the hub prints. The rank is computed per group,
+ * so pairing it with the raw spelling printed "DE1" here beside "DL1" in Your defenders for one ranking (audit
+ * 2026-11-23). An older server sends no `positionGroup`, so it is derived from the position here too.
+ */
+function rankLabel(row: DefenderBoardRow): string | null {
+  if (row.positionRank == null) return null
+  const group = row.positionGroup ?? idpPositionGroup(row.position) ?? row.position
+  return group ? `${group}${row.positionRank}` : null
+}
+
 function BoardRow({ row }: { row: DefenderBoardRow }) {
   const m = useMessages(defenseHubMessages)
+  const rank = rankLabel(row)
+  const mine = row.ownedBy.isMine
+  // Below `sm` the table is Player · Value, so the rest rides on a line under the name.
+  const facts = [
+    row.position ? (rank ? `${row.position} · ${rank}` : row.position) : rank,
+    row.projectedPoints != null ? `${row.projectedPoints.toFixed(1)} proj` : null,
+    mine ? m.you : row.ownedBy.teamName ? m.factHeldBy(row.ownedBy.teamName) : null,
+  ].filter(Boolean)
   return (
     <tr
-      className={`border-b border-[var(--line)] last:border-0 ${
-        row.ownedBy.isMine ? 'bg-[var(--accent-soft)]' : ''
-      }`}
+      className={`border-b border-[var(--line)] last:border-0 ${mine ? 'bg-[var(--accent-soft)]' : ''}`}
       data-testid="defense-trade-board-row"
     >
       <td className="px-4 py-3">
         <div className="text-[13px] font-extrabold">{row.name}</div>
         <div className="font-mono text-[11px] text-[var(--faint)]">{row.team ?? '—'}</div>
+        {facts.length ? <div className="mt-1 text-[12px] text-[var(--text2)] sm:hidden">{facts.join(' · ')}</div> : null}
       </td>
-      <td className="px-2 py-3 font-mono text-[11px] text-[var(--text2)]">{row.position ?? <Dash />}</td>
+      <td className="hidden px-2 py-3 font-mono text-[11px] text-[var(--text2)] sm:table-cell">{row.position ?? <Dash />}</td>
       {/*
         A dash, never 0.0. A defender this league's scoring could not price has an absent
         projection, and rendering that as zero tells a manager the player scores nothing.
       */}
-      <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
+      <td className="hidden px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)] sm:table-cell">
         {row.projectedPoints != null ? row.projectedPoints.toFixed(1) : <Dash />}
       </td>
-      <td className="px-2 py-3 text-right font-mono text-[12px]">
+      <td className="hidden px-2 py-3 text-right font-mono text-[12px] sm:table-cell">
         {row.vorp != null ? `${row.vorp > 0 ? '+' : ''}${row.vorp.toFixed(1)}` : <Dash />}
       </td>
-      <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
-        {row.positionRank != null && row.position ? (
-          `${row.position}${row.positionRank}`
-        ) : (
-          <Dash />
-        )}
+      <td className="hidden px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)] sm:table-cell">
+        {rank ?? <Dash />}
       </td>
       <td className="px-2 py-3 text-right font-mono text-[12px]">
         {row.value == null ? (
@@ -305,57 +320,17 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
           row.value.toLocaleString()
         )}
       </td>
-      <td className="px-4 py-3">
-        <div className="text-[12px] font-semibold text-[var(--text2)]">
-          {row.ownedBy.teamName ?? <Dash />}
-        </div>
-        <div className="font-mono text-[11px] text-[var(--faint)]">
-          {row.ownedBy.isMine ? m.you : (row.ownedBy.ownerName ?? '—')}
-        </div>
+      <td className="hidden px-4 py-3 sm:table-cell">
+        {/* Your own rows are already tinted: "You", not your team name and "you" again. */}
+        {mine ? (
+          <div className="text-[12px] font-semibold text-[var(--text)]">{m.you}</div>
+        ) : (
+          <>
+            <div className="text-[12px] font-semibold text-[var(--text2)]">{row.ownedBy.teamName ?? <Dash />}</div>
+            <div className="font-mono text-[11px] text-[var(--faint)]">{row.ownedBy.ownerName ?? '—'}</div>
+          </>
+        )}
       </td>
     </tr>
-  )
-}
-
-/**
- * Kickers across the league.
- *
- * 🛑 ONE VALUE, STATED ONCE ABOVE THE LIST — NOT A COLUMN REPEATED DOWN IT. Every kicker here
- * carries the same number by design, and a reader scanning a column of identical values
- * concludes the page is broken rather than that the position is flat. The hub renders it the
- * same way for the same reason.
- *
- * ⚠ NO PROJ / VORP / RANK COLUMNS. Kicker rank does not carry year to year — negative in all
- * six measured season pairs — so those columns would invite a comparison the data refuses.
- */
-function Kickers({ data }: { data: LeagueDefenderBoard }) {
-  const m = useMessages(defenseHubMessages)
-  if (!data.kickerValue || data.kickers.length === 0) return null
-
-  return (
-    <div className="mt-[22px]">
-      <Label>{m.kickersTitle}</Label>
-      <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
-        <div className="flex items-baseline gap-2.5">
-          <div className="font-mono text-[17px] font-black text-[var(--text)]">
-            {data.kickerValue.value?.toLocaleString()}
-          </div>
-          <div className="text-[11px] text-[var(--muted)]">{m.kickerAny}</div>
-        </div>
-        <p className="mt-1.5 max-w-[560px] text-[11px] leading-relaxed text-[var(--faint)]">
-          {data.kickerValue.basis}
-        </p>
-        <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
-          {data.kickers.map((k) => (
-            <li key={k.sleeperId} className="text-[12px] text-[var(--text2)]">
-              {k.name}
-              <span className="ml-1.5 font-mono text-[11px] text-[var(--faint)]">
-                {k.ownedBy.isMine ? m.you : (k.ownedBy.teamName ?? k.ownedBy.ownerName ?? '—')}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
   )
 }

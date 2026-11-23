@@ -59,7 +59,9 @@ describe('the board renders what the manager came for', () => {
 
   it('marks his own players as his rather than showing an owner name', async () => {
     mount(BOARD({ rows: [row({ ownedBy: { teamName: 'My Team', ownerName: 'Me', isMine: true } })] }))
-    expect(await screen.findByText('you')).toBeTruthy()
+    // "You" alone since 2026-11-23: the row is already tinted, so not "My Team" and "you" again.
+    expect((await screen.findAllByText('You')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('My Team')).toBeNull()
   })
 
   /*
@@ -110,7 +112,12 @@ describe('the honesty rules a table can silently un-make', () => {
    * rendering bug rather than as the finding it is, and rank/proj columns beside kickers invite
    * a comparison seven seasons of data refuse.
    */
-  it('states the kicker value once and gives kickers no rank or projection', async () => {
+  /*
+   * 2026-11-23: the board no longer repeats the kicker block — the hub above it states the one kicker value
+   * once (defenseHubKickers.test.tsx keeps the "one value, never ranked" rule). Two copies on one page
+   * printed the same number and paragraph twice.
+   */
+  it('leaves kickers to the hub: no second kicker block, no kicker rank or projection', async () => {
     mount(
       BOARD({
         kickerValue: { value: 500, replacementRank: 13, scarcity: 0.4, rankPredictability: 'none', basis: 'flat by design' },
@@ -120,11 +127,10 @@ describe('the honesty rules a table can silently un-make', () => {
         ],
       }),
     )
-    await screen.findByText('Boot One')
-    /* The value appears ONCE despite two kickers — not once per row. */
-    expect(screen.getAllByText('500')).toHaveLength(1)
-    expect(screen.getByText(/for any kicker in this league/i)).toBeTruthy()
-    expect(screen.getByText('flat by design')).toBeTruthy()
+    await screen.findByText('Target Backer')
+    expect(screen.queryByText('Boot One')).toBeNull()
+    expect(screen.queryByText('500')).toBeNull()
+    expect(screen.queryByText('flat by design')).toBeNull()
   })
 
   it('renders no kicker block at all when the league starts none', async () => {
