@@ -222,7 +222,8 @@ test.describe('@db Guilly War Room runtime', () => {
     await rendered(page.getByTestId('guillotine-war-room-dropped-players-result'))
 
     // Trade analyzer button is disabled (trades off) — truthful, not dead.
-    await expect(page.getByTestId('guillotine-war-room-tool-trade-analyze')).toBeDisabled()
+    // Not offered at all in a league without trades (it was a greyed-out button until 2026-11-23).
+    await expect(page.getByTestId('guillotine-war-room-tool-trade-analyze')).toHaveCount(0)
 
     await page.getByTestId('guillotine-war-room-ask-input').fill('Am I at risk and should I spend FAAB?')
     const askResponse = await waitForAction(page, 'ask', async () => { await page.getByTestId('guillotine-war-room-ask-submit').click() })

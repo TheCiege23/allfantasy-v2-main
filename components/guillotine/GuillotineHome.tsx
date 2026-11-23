@@ -105,6 +105,12 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   }, [load])
 
   const myEscape = summary?.myEscapes?.[0] ?? null
+  // The chop card above already shows that week's scores and the cut, so the banner then keeps only the share.
+  const escapeShownInChop = myEscape != null && summary?.home?.lastChop?.week === myEscape.weekOrPeriod
+  const releaseLabel = summary?.config?.rosterReleaseTiming
+    ? (RELEASE_OPTIONS.find((o) => o.value === summary.config?.rosterReleaseTiming)?.label ??
+      summary.config.rosterReleaseTiming.replace(/_/g, ' '))
+    : null
 
   if (loading && !summary) {
     return (
@@ -142,7 +148,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         <GuillotineSpecialtyHome leagueId={leagueId} sport={sport} leagueName={leagueName} summary={summary} />
       ) : null}
 
-      {/* Quick links: Chat, Settings, AI, Waivers */}
+      {/* Quick links: Chat, Settings, Chimmy, Waivers — the only waivers and Chimmy links on the hub. */}
       <div className="flex flex-wrap gap-2">
         <Link
           href={leagueQueryPath(leagueId, { openChat: 'league' })}
@@ -188,10 +194,14 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         >
           <p className="text-sm">
             <span className="gl-good font-semibold">You survived week {myEscape.weekOrPeriod}&rsquo;s chop</span>{' '}
-            {myEscape.margin === 0 ? 'on the tiebreaker' : `by ${myEscape.margin.toFixed(1)} pts`} ·{' '}
-            <span className="tabular-nums">
-              {myEscape.myPoints.toFixed(1)} vs {myEscape.chopLine.toFixed(1)}
-            </span>
+            {escapeShownInChop ? null : (
+              <>
+                {myEscape.margin === 0 ? 'on the tiebreaker' : `by ${myEscape.margin.toFixed(1)} pts`} ·{' '}
+                <span className="tabular-nums">
+                  {myEscape.myPoints.toFixed(1)} vs {myEscape.chopLine.toFixed(1)}
+                </span>
+              </>
+            )}
           </p>
           <button
             type="button"
@@ -260,31 +270,6 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
 
       {summary?.nextChopPick ? <GuillotineNextChopPick leagueId={leagueId} state={summary.nextChopPick} /> : null}
 
-      {/* Waiver Fallout / Next release */}
-      <section id="guillotine-waivers" className="gl-card rounded-2xl border p-4 sm:p-6">
-        <h2 className="gl-text mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Zap className="gl-warn h-5 w-5" />
-          Waiver & FAAB
-        </h2>
-        <p className="gl-text2 text-sm">
-          Released players from chopped rosters enter the waiver pool. Next processing per league settings.
-        </p>
-        {summary?.config?.rosterReleaseTiming && (
-          <p className="gl-muted mt-2 text-xs" data-testid="guillotine-release-timing">
-            Chopped players are released:{' '}
-            {RELEASE_OPTIONS.find((o) => o.value === summary.config?.rosterReleaseTiming)?.label ??
-              summary.config.rosterReleaseTiming.replace(/_/g, ' ')}
-          </p>
-        )}
-        <Link
-          href={leagueQueryPath(leagueId, { view: 'players' })}
-          className="gl-accent-text mt-3 inline-block text-sm hover:underline"
-          data-testid="guillotine-open-waivers"
-        >
-          Open Waivers →
-        </Link>
-      </section>
-
       {/* Guillotine AI Panel: deterministic data first, then gated AI strategy */}
       <div id="guillotine-ai">
       <GuillotineAIPanel
@@ -303,15 +288,6 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         defaultType="survival"
       />
       </div>
-      <section className="gl-card rounded-2xl border p-4 sm:p-6">
-        <Link
-          href={leagueQueryPath(leagueId, { view: intelligenceViewForSport(sport) })}
-          className="gl-accent-text text-sm hover:underline"
-          data-testid="guillotine-more-ai-tools"
-        >
-          More research &amp; Chimmy tools →
-        </Link>
-      </section>
 
       {/* Settings / Rules */}
       <section data-testid="guillotine-rules" className="gl-card rounded-2xl border p-4 sm:p-6">
@@ -341,6 +317,12 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
         ) : (
           <p className="gl-muted text-sm">No config loaded.</p>
         )}
+        {/* Said once, here — it used to sit in a Waiver & FAAB card of its own as well. */}
+        {releaseLabel ? (
+          <p className="gl-text2 mt-3 text-sm" data-testid="guillotine-release-timing">
+            Chopped players are released: {releaseLabel}
+          </p>
+        ) : null}
         <Link
           href={leagueQueryPath(leagueId, { view: 'settings' })}
           className="gl-accent-text mt-3 inline-block text-sm hover:underline"

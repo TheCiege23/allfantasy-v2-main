@@ -78,7 +78,9 @@ describe('GuillotineSurvivalHistory', () => {
     // No-chop weeks are not listed as chops.
     expect(screen.queryByTestId('guillotine-history-week-2')).toBeNull()
     expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('You · Clutch')
-    expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Alive · 2 chops survived')
+    expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Alive')
+    // "Alive" once; the path squares already count the chops survived (2026-11-23).
+    expect(screen.getByTestId('guillotine-history-team-c').textContent).not.toContain('chops survived')
     expect(screen.getByTestId('guillotine-history-team-d').textContent).toContain('Chopped wk 3')
     // Each square of a path says what happened, for a screen reader too.
     expect(screen.getByTestId('guillotine-history-team-c').textContent).toContain('Week 1: 62.0 points, close call, +2.0')
