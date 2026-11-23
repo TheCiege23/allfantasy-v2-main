@@ -17,6 +17,8 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 import { mapWithConcurrency } from '@/lib/concurrency/mapWithConcurrency'
+import { loadFrozenCompletedGrades, saveFrozenCompletedGrades, sleeperTradeKey, type FrozenCompletedGrade } from '@/lib/decision-os/trade/frozenCompletedGrade'
+import { ungradedBucket } from '@/lib/observability/recentTradesTiming'
 
 /**
  * Trades that landed in your leagues recently.
@@ -862,6 +864,25 @@ async function loadRecentTrades(
     receiptWrites = save.then(() => undefined, () => undefined)
     return save
   }
+  /*
+   * ⚠ THE STORED ORIGINALS, ONE READ PER LEAGUE (2026-11-22). Each visible ledger trade used to read its own
+   * original inside `frozenOriginalFor` — two snapshot reads and a league read per trade, on every open. Same rows,
+   * same filter (`loadFrozenCompletedGrades`); a league whose read fails reads as "nothing stored", as before.
+   */
+  const ledgerTradeIdsByLeague = new Map<string, string[]>()
+  for (const t of visible) {
+    const src = graded.get(`${t.platformLeagueId}:${t.id}`)
+    if (!src) continue
+    const ids = ledgerTradeIdsByLeague.get(t.leagueId) ?? []
+    ids.push(src.id)
+    ledgerTradeIdsByLeague.set(t.leagueId, ids)
+  }
+  const frozenByLeague = new Map<string, ReadonlyMap<string, FrozenCompletedGrade>>()
+  if (ledgerTradeIdsByLeague.size > 0) {
+    await timing.read('frozen', () => Promise.all([...ledgerTradeIdsByLeague].map(async ([leagueId, ids]) => {
+      frozenByLeague.set(leagueId, await loadFrozenCompletedGrades(leagueId, ids).catch(() => new Map()))
+    })))
+  }
   // Grade only visible trades without changing display order or provider scan limits.
   await timing.read('grading', async () => {
     /*
@@ -880,9 +901,29 @@ async function loadRecentTrades(
            * graded from their own assets now. A native trade (`status` set) keeps its frozen receipt.
            */
           await gradeProviderRecentTrade(t, now)
+          timing.grade('provider')
           return
         }
-        const oneGrade = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason).catch(() => null)
+        const frozen = frozenByLeague.get(t.leagueId) ?? new Map<string, FrozenCompletedGrade>()
+        const wasStored = frozen.has(sleeperTradeKey(src.id))
+        let freeze: { row: FrozenCompletedGrade; current: TradeGradeView } | null = null
+        let oneGrade: TradeGradeView | null = await oneGradeForCompletedTrade(t.leagueId, src, currentSeason, {
+          frozen,
+          onFreeze: (row, current) => { freeze = { row, current } },
+        }).catch(() => null)
+        /*
+         * A new original is saved before it is shown. A failed save shows TODAY's letter, never an original the table
+         * did not receive — exactly what `frozenOriginalFor` did when each trade read and saved on its own.
+         */
+        const pending = freeze as { row: FrozenCompletedGrade; current: TradeGradeView } | null
+        if (oneGrade && pending) {
+          const saved = await saveFrozenCompletedGrades(t.leagueId, [pending.row])
+          if (!saved) oneGrade = pending.current
+          timing.grade(!saved ? 'saveFailed' : pending.row.v === 2 && pending.row.basis === 'first_graded' ? 'firstGraded' : 'tradeDate')
+        } else if (!oneGrade) timing.grade('failed')
+        else if (wasStored) timing.grade('stored')
+        else if (!oneGrade.graded) timing.grade(`ungraded:${ungradedBucket(oneGrade.reason, 'kind' in oneGrade ? oneGrade.kind : null)}`)
+        else timing.grade('unfrozen')
         t.verdict = gradeOf(src, oneGrade)
         /*
          * The receipt for that grade (Trade OS). No stored link: completed imported trades have no loader yet.
