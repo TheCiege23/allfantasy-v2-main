@@ -124,7 +124,8 @@ export function SurvivorVoteCast({
   const canVote = Boolean(open && view?.you.isEligibleVoter && !view?.you.isSafeFromVote)
   const canChange = Boolean(canVote && view?.you.voteChangeAllowed && !view?.you.voteLocked)
   const votesIn = view?.votesIn ?? null
-  const idol = (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
+  // Past the deadline an idol can no longer be played, so its "Play it before votes close" prompt is hidden.
+  const idol = deadlinePassed ? null : (view?.you.playableIdols ?? []).find(item => !item.alreadyPlayed) ?? null
   const idolDef = idol ? idolDefinition(idol.powerType) : null
   const idolName = idolDef?.name ?? null
   const week = view?.week ?? null
@@ -199,9 +200,10 @@ export function SurvivorVoteCast({
       {clock && <div className="swl-vc-clock" role="timer" aria-live="off"><span className="swl-lbl">Votes close in</span><span className="swl-num">{clock}</span></div>}
     </header>
 
-    {deadlinePassed && <p role="status" className="swl-vc-alert" style={{ marginTop: 16 }} data-testid="survivor-vote-closed">
+    {/* A div, not a p: `.swl-vc p { margin: 0 }` strips the alert's side margins and it runs edge to edge. */}
+    {deadlinePassed && <div role="status" className="swl-vc-alert" style={{ marginTop: 16 }} data-testid="survivor-vote-closed">
       Voting has closed. {view?.you.hasVoted ? 'Your vote is in. ' : ''}The host reads the votes next.
-    </p>}
+    </div>}
 
     {error && <p role="alert" className="swl-vc-alert" style={{ marginTop: 16 }}>{error}</p>}
 
