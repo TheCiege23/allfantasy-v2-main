@@ -372,6 +372,15 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_league_health',
+      description:
+        "COMMISSIONERS ONLY. The Commissioner Hub's league-health read for the league in scope: overall status and health score, inactive or abandoned teams, missed lineups, activity, fairness and churn warnings, and what to do about them. Use for 'is anyone inactive in my league', 'is my league healthy', 'who has stopped setting lineups', 'what should I fix as commissioner'. For anyone who is not this league's commissioner (or a co-commissioner) it refuses and says so; never describe league health without it.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_trade_block',
       description:
         "Players on this league's trade block — who is available and which team listed them. Use for 'who is on the block', 'is X available', 'who is shopping players'. Only players managers marked in AllFantasy are visible (Sleeper does not share its own block); the result says so, and your answer must too.",
@@ -1099,6 +1108,39 @@ export async function executeChimmyTool(
         return out.text
       }
 
+      /*
+       * League health (2026-11-23). Before this tool, these facts reached Chimmy only when a turn was CLASSIFIED
+       * `commissioner` (intentToWant), so "is anyone inactive in my league?" read as anything else got nothing.
+       *
+       * 🛑 THE PERMISSION CHECK IS THE SLICE'S, NOT A SECOND ONE HERE. `loadCommissionerHealthDecisionSlice` runs
+       * `assertLeagueCommissioner(leagueId, userId, 'view')` — the head commissioner, or a co-commissioner with any
+       * scope, the same 'view' need the Commissioner Hub's own handler checks — BEFORE it reads anything, and reads
+       * through Commissioner OS's five-minute snapshot. A second implementation of that rule would be the bug.
+       * The packet's kill switch for this feed is honoured too, so switching it off turns the tool off as well.
+       */
+      case 'get_league_health': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const { resolveDecisionOsFeedFlags } = await import('@/lib/decision-os/flags')
+        if (!(await resolveDecisionOsFeedFlags()).enabled('commissionerHealthDecision')) {
+          return 'League health is switched off right now, so nothing was read. Say you cannot check it at the moment; do not say anyone is or is not inactive. The Commissioner Hub shows it.'
+        }
+        const [{ loadCommissionerHealthDecisionSlice }, { renderDecisionFactForPrompt }] = await Promise.all([
+          import('@/lib/decision-os/grounding/decisionBridge'),
+          import('@/lib/decision-os/grounding/serialize'),
+        ])
+        const slice = await loadCommissionerHealthDecisionSlice({ userId: ctx.userId, leagueId: ctx.leagueId })
+        if (slice.present && slice.value) {
+          return [
+            "LEAGUE HEALTH — the Commissioner Hub's health engine, for this league (commissioner view):",
+            ...renderDecisionFactForPrompt(slice.value),
+          ].join('\n')
+        }
+        if (slice.gap?.reason === 'not_entitled') {
+          return "League health is a commissioner view, and this user is not this league's commissioner or a co-commissioner, so NOTHING was read. Say so plainly and suggest they ask their commissioner. Do not say whether anyone is inactive or how healthy the league is."
+        }
+        return `League health could not be read for this league: ${slice.gap?.detail ?? 'no reason was given.'} ${slice.gap?.remedy ?? ''} Do not say the league is healthy or that nobody is inactive — nothing was measured.`.trim()
+      }
+
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
@@ -1355,8 +1397,31 @@ export async function executeChimmyTool(
           ? await buildExplainValueContext({ playerName: asked, sport })
           : await buildPlayerValueContext({ playerName: asked, leagueId: null })
         if (!asked) return 'Ask which player the manager means.'
+        /*
+         * 🛑 AN NFL LEAGUE QUOTES THE PLAYER CARD'S NUMBER, THROUGH THE CARD'S OWN READER (2026-11-23). This branch
+         * read `loadLeaguePlayerMetrics`, whose NFL value is the house trade-market table (5+ fresh completed trades),
+         * while the card shows `playerValueSnapshot` on the league's chart — so in a league Chimmy quoted a different
+         * number than the card, or "no verified trade value" for a player the card prices. The tool description
+         * promises the SAME number. Board sports and NCAAF keep the league metrics below.
+         */
+        const leagueSport = await (async () => {
+          const { prisma } = await import('@/lib/prisma')
+          const row = await prisma.league.findUnique({ where: { id: ctx.leagueId! }, select: { sport: true } })
+          return row ? String(row.sport ?? 'NFL').trim().toUpperCase() || 'NFL' : null
+        })().catch(() => null)
+        if (leagueSport === 'NFL') {
+          if (sport && sport !== 'NFL') return 'The requested sport differs from the connected league.'
+          const value = await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId })
+          if (name !== 'explain_value') return value
+          const why = await buildExplainValueContext({ playerName: asked, sport: 'NFL' })
+          return [
+            value,
+            'WHY — the AllFantasy engine\'s derivation over current inputs. Its result can differ from the card value above; the card value is his value in this league, and the derivation explains what drives it.',
+            why,
+          ].join('\n')
+        }
         const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
-        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2 }).catch(() => null)
+        const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2, afIntelligence: ctx.depth === 'pro' }).catch(() => null)
         if (metrics && sport && metrics.sport !== (sport === 'NCAABB' ? 'NCAAB' : sport)) return 'The requested sport differs from the connected league.'
         if (metrics && metrics.rows.length > 1) return 'Multiple players in this league sport match. Ask for their position or team.'
         const row = metrics?.rows[0]
@@ -1383,7 +1448,10 @@ export async function executeChimmyTool(
         const week = typeof args.week === 'number' && Number.isFinite(args.week)
           ? Math.floor(args.week)
           : null
-        return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId })
+        // AF Intelligence (AF Pro, AF Commissioner, AF Supreme): without it, the baseline only — and the button.
+        const afIntelligence = ctx.depth === 'pro'
+        if (!afIntelligence && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId, afIntelligence })
       }
 
       /*
@@ -1564,13 +1632,19 @@ export async function executeChimmyTool(
       case 'evaluate_trade': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const { runTradeScenarioTool } = await import('@/lib/chimmy/tools/scenarioTools')
-        return await runTradeScenarioTool({
+        const scenarioText = await runTradeScenarioTool({
           give: args.give,
           get: args.get,
           leagueId: ctx.leagueId,
           userId: ctx.userId,
           ...(ctx.tradeGrades ? { onGrade: (g: ChimmyTradeGrade) => ctx.tradeGrades!.push(g) } : {}),
         })
+        // AF Intelligence: a free plan gets the letter and the league values — the basic answer — and the button.
+        if (ctx.depth === 'pro') return scenarioText
+        const { basicTradeScenarioText } = await import('@/lib/chimmy/basicTradeAnswer')
+        const basic = basicTradeScenarioText(scenarioText)
+        if (basic !== scenarioText && !(ctx.proToolsRefused ??= []).includes(name)) ctx.proToolsRefused.push(name)
+        return basic
       }
 
       case 'suggest_counter_offer': {

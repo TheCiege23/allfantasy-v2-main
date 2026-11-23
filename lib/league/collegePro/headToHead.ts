@@ -4,7 +4,7 @@ import { connectedRosterPlayers, type ConnectedRosterPlayer } from '@/lib/core-a
 import { buildFantraxLists, sumStarterPoints } from './buildSides'
 import { loadCollegePoints } from './collegePoints'
 import { combinedTotal } from './format'
-import { readTeamMap, suggestTeamMatches, type FantraxTeam, type SleeperTeam } from './teamMatch'
+import { confidentTeamMatches, effectiveTeamMap, readTeamMap, suggestTeamMatches, type FantraxTeam, type SleeperTeam } from './teamMatch'
 
 /**
  * Combined scoring, head to head: your NFL + college points against your Sleeper opponent's NFL +
@@ -82,7 +82,9 @@ export async function loadHeadToHead(args: {
 
   const base: HeadToHead = { me: args.myCombined, opponent: null, missing: null }
   if (!args.opponentRosterId) return { headToHead: { ...base, missing: 'No head-to-head opponent this week.' }, editor }
-  const oppTeamId = saved[args.opponentRosterId]
+  // What is scored: the commissioner's saved choices, then every unambiguous automatic match.
+  const teamMap = effectiveTeamMap(saved, confidentTeamMatches(args.sleeperTeams, fantraxTeams, known))
+  const oppTeamId = teamMap[args.opponentRosterId]
   if (!oppTeamId) {
     return { headToHead: { ...base, missing: 'Match each pro team to its college team to compare combined scores.' }, editor }
   }
@@ -91,23 +93,96 @@ export async function loadHeadToHead(args: {
     return { headToHead: { ...base, missing: "Your opponent's college team could not be read." }, editor }
   }
 
-  const oppRows = rows.filter((r) => String((r as { teamName?: unknown }).teamName ?? '').trim().toLowerCase() === oppTeam.name.trim().toLowerCase())
-  const oppPlayers = oppRows.length ? await connectedRosterPlayers('fantrax', args.collegeSport ?? 'NCAAF', oppRows).catch(() => []) : []
-  const oppLists = buildFantraxLists(oppPlayers.map((p) => ({ id: p.id, slot: p.rosterSlot ?? null, status: p.rosterStatus ?? null })))
-  const oppPoints = args.scoreCollegePlayers
-    ? await args.scoreCollegePlayers(oppPlayers).catch(() => null)
-    : await loadCollegePoints({
-        season: args.season,
-        nflWeek: args.nflWeek!,
-        players: oppPlayers.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
-        settings: args.collegeSettings,
-      })
-        .then((r) => r.points)
-        .catch(() => null)
-  const oppCollege = oppPoints ? sumStarterPoints(oppLists.starters, oppPoints) : null
+  const oppCollege = await scoreCollegeTeamRows({
+    rows,
+    teamName: oppTeam.name,
+    collegeSport: args.collegeSport,
+    season: args.season,
+    nflWeek: args.nflWeek,
+    scoreCollegePlayers: args.scoreCollegePlayers,
+    collegeSettings: args.collegeSettings,
+  })
 
   return {
     headToHead: { ...base, opponent: { name: args.opponentName, total: combinedTotal(args.opponentProTotal, oppCollege) } },
     editor,
   }
+}
+
+/**
+ * One college team's starters, scored exactly as the viewer's own college team is: the same reader
+ * and the same league rules. Null when its points cannot be read. Shared by combined head to head and
+ * the one-league week view, so a college opponent is never scored two different ways.
+ */
+async function scoreCollegeTeamRows(args: {
+  rows: unknown[]
+  teamName: string
+  collegeSport?: string
+  season: number
+  nflWeek: number | null
+  scoreCollegePlayers?: (players: ConnectedRosterPlayer[]) => Promise<Record<string, number> | null>
+  collegeSettings?: unknown
+}): Promise<number | null> {
+  if (args.nflWeek == null && !args.scoreCollegePlayers) return null
+  const want = args.teamName.trim().toLowerCase()
+  const teamRows = args.rows.filter((r) => String((r as { teamName?: unknown }).teamName ?? '').trim().toLowerCase() === want)
+  const players = teamRows.length ? await connectedRosterPlayers('fantrax', args.collegeSport ?? 'NCAAF', teamRows).catch(() => []) : []
+  const lists = buildFantraxLists(players.map((p) => ({ id: p.id, slot: p.rosterSlot ?? null, status: p.rosterStatus ?? null })))
+  const points = args.scoreCollegePlayers
+    ? await args.scoreCollegePlayers(players).catch(() => null)
+    : await loadCollegePoints({
+        season: args.season,
+        nflWeek: args.nflWeek!,
+        players: players.map((p) => ({ id: p.id, cfbdId: p.cfbdId ?? null, rollingInsightsId: p.rollingInsightsId ?? null, position: p.position })),
+        settings: args.collegeSettings,
+      })
+        .then((r) => r.points)
+        .catch(() => null)
+  return points ? sumStarterPoints(lists.starters, points) : null
+}
+
+export type CollegeMatchup = {
+  period: number
+  me: { name: string; total: number | null }
+  opponent: { name: string; total: number | null } | null
+}
+
+/**
+ * The college half's own matchup this period, from the Fantrax snapshot's schedule: who your college
+ * team plays, and both teams' points scored the same way. `myTotal` is the number already shown for
+ * your college lineup, so the two can never disagree. Null when the schedule has no such game.
+ */
+export async function loadCollegeMatchup(args: {
+  fantraxSnapshotId: string
+  myTeamName: string | null
+  period: number | null
+  myTotal: number | null
+  collegeSport?: string
+  season: number
+  nflWeek: number | null
+  scoreCollegePlayers?: (players: ConnectedRosterPlayer[]) => Promise<Record<string, number> | null>
+  collegeSettings?: unknown
+}): Promise<CollegeMatchup | null> {
+  if (!args.myTeamName || args.period == null) return null
+  const snap = await prisma.fantraxLeague.findUnique({ where: { id: args.fantraxSnapshotId }, select: { matchups: true, roster: true } })
+  const games = Array.isArray(snap?.matchups) ? (snap!.matchups as Array<Record<string, unknown>>) : []
+  const me = args.myTeamName.trim().toLowerCase()
+  const name = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const game = games.find(
+    (g) => Number(g.week) === args.period && (name(g.homeTeam).toLowerCase() === me || name(g.awayTeam).toLowerCase() === me),
+  )
+  if (!game) return { period: args.period, me: { name: args.myTeamName, total: args.myTotal }, opponent: null }
+  const oppName = name(game.homeTeam).toLowerCase() === me ? name(game.awayTeam) : name(game.homeTeam)
+  const oppTotal = oppName
+    ? await scoreCollegeTeamRows({
+        rows: Array.isArray(snap?.roster) ? (snap!.roster as unknown[]) : [],
+        teamName: oppName,
+        collegeSport: args.collegeSport,
+        season: args.season,
+        nflWeek: args.nflWeek,
+        scoreCollegePlayers: args.scoreCollegePlayers,
+        collegeSettings: args.collegeSettings,
+      })
+    : null
+  return { period: args.period, me: { name: args.myTeamName, total: args.myTotal }, opponent: oppName ? { name: oppName, total: oppTotal } : null }
 }

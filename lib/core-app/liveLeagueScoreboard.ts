@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { getLeagueScoreboard, type ScoreboardGame } from './leagueScoreboard'
 import { latestProjectionWeek } from './playerProjections'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * The rest of the held league's games this week, for Live scores (`/core/live?league=`).
@@ -36,6 +37,7 @@ export async function getLiveLeagueGames(args: {
     select: { externalId: true },
   })
   const board = await getLeagueScoreboard({
+    afIntelligence: await viewerHasAfIntelligence(args.userId),
     leagueId: league.id,
     platformLeagueId: league.platformLeagueId,
     seasonYear: args.seasonYear,

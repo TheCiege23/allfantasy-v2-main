@@ -223,3 +223,16 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
     `fixtures/fantasy-league.NFL.2026.json` is a head-to-head league and cannot answer it.
   - Not probed. Resolving it needs a capture of this league format through `scripts/probe.sh`, committed
     as a fixture in the same change, and the owner's go-ahead.
+
+## Pending trade offers, 2026-11-23 — recorded without probing
+
+- `T-03` OPEN: no committed endpoint or fixture lists ESPN trade offers that are PROPOSED and not yet
+  accepted, so the provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's
+  pending-trade block stay Sleeper-only for ESPN. `fantasy-league.NFL.2026.json`'s `mTransactions2` held 8
+  executed roster moves and no trade. `kona_league_communication` answers 401 without cookies even for a
+  public league (`T-01`). A pending offer is most likely visible only to the teams involved, which would
+  mean the reading member's `espn_s2`/`SWID` cookies and one read per user, not one per league. That is
+  unconfirmed.
+- **Needed:** which view (or `mTransactions2` filter) returns pending offers and with whose cookies; then one
+  capture via `scripts/probe.sh` from a league the owner chooses, with an offer open, redacted with
+  `scripts/redact-fantasy.mjs`, committed with the ledger mapping. Not probed.

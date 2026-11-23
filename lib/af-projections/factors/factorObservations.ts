@@ -1,4 +1,5 @@
 import type { FactorLevels, FactorObservation } from './factorLearner'
+import type { GameContextLevels } from './gameContext'
 
 /**
  * PAST GAMES AS FACTOR OBSERVATIONS (`factorLearner.ts`). PURE apart from the one read in `factorLearning.ts`.
@@ -29,6 +30,11 @@ export type GameLine = {
   points: number
   /** Playing time this game, when the feed carries it. */
   usage: number | null
+  /** What was known about THIS game before kickoff — Vegas, weather, coaching (`gameContext.ts`, `dailyGameContext.ts`). */
+  context?: GameContextLevels
+  /** Season and week, for joining that context (weekly sports). */
+  season?: number
+  week?: number
 }
 
 const DAY = 86_400_000
@@ -76,7 +82,7 @@ export type Situation = { baseline: number; levels: FactorLevels }
 export function situationOf(
   sport: string,
   past: readonly Pick<GameLine, 'atMs' | 'team' | 'points' | 'usage'>[],
-  next: { atMs: number; team: string | null },
+  next: { atMs: number; team: string | null; context?: GameContextLevels },
   opponentRatio: number | null,
 ): Situation | null {
   if (past.length < MIN_PRIOR_GAMES) return null
@@ -111,6 +117,8 @@ export function situationOf(
     const before = past[past.length - Math.min(past.length, 6)]
     levels.team_change = before?.team && before.team !== next.team && withTeam < 5 ? 'new_team' : 'same_team'
   }
+  // The game's own context, as stored before kickoff — only the levels that were actually read.
+  for (const [k, v] of Object.entries(next.context ?? {})) if (v) levels[k as keyof GameContextLevels] = v
   return { baseline, levels }
 }
 
@@ -160,7 +168,7 @@ export function buildFactorObservations(sport: string, lines: readonly GameLine[
     const past = history.get(g.playerId) ?? []
     const opp = g.opponent ? allowed.get(g.opponent) : undefined
     const ratio = opp && opp.n >= MIN_OPPONENT_GAMES && league.n > 0 ? opp.sum / opp.n / (league.sum / league.n) : null
-    const sit = situationOf(sport, past, { atMs: g.atMs, team: g.team }, ratio)
+    const sit = situationOf(sport, past, { atMs: g.atMs, team: g.team, context: g.context }, ratio)
     if (sit) out.push({ baseline: sit.baseline, actual: g.points, levels: sit.levels, atMs: g.atMs })
     // Only now does this game become history — nothing about it was known before it was played.
     past.push(g)

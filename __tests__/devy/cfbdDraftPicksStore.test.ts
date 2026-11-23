@@ -4,11 +4,13 @@ const h = vi.hoisted(() => ({
   row: null as unknown,
   upsert: vi.fn(async () => ({})),
   result: { ok: true, data: [] } as unknown,
+  notify: vi.fn(async () => ({ leagues: 1, managers: 2, commissioners: 1 })),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { sportsDataCache: { findUnique: vi.fn(async () => h.row), upsert: h.upsert } },
 }))
 vi.mock('@/lib/cfb-player-data', () => ({ getCFBDraftPicksResult: vi.fn(async () => h.result) }))
+vi.mock('@/lib/league/collegePro/draftNotices', () => ({ notifyNewDraftPicks: h.notify }))
 
 import { inDraftWindow, latestDraftYear, refreshCfbdDraftPicks, toStoredPicks } from '@/lib/devy/cfbdDraftPicksStore'
 
@@ -19,6 +21,7 @@ const pick = (id: string | null, name = 'A Player') => ({
 beforeEach(() => {
   h.row = null
   h.upsert.mockClear()
+  h.notify.mockClear()
   h.result = { ok: true, data: [] }
 })
 
@@ -46,10 +49,23 @@ describe('toStoredPicks', () => {
 describe('refreshCfbdDraftPicks', () => {
   const NOV = new Date('2026-11-21T12:00:00Z')
 
+  it('after writing, hands the paired-league notices the picks it held BEFORE, so only new picks notify', async () => {
+    h.row = { data: { year: 2026, fetchedAt: '2026-11-19T00:00:00Z', picks: [{ collegeAthleteId: '1' }] } }
+    h.result = { ok: true, data: [pick('1'), pick('2')] }
+    await refreshCfbdDraftPicks(NOV)
+    expect(h.notify).toHaveBeenCalledWith({ sport: 'NCAAF', year: 2026, previousIds: new Set(['1']), currentIds: ['1', '2'], now: NOV })
+  })
+
+  it('a notice failing does not fail the store', async () => {
+    h.notify.mockRejectedValueOnce(new Error('dispatcher down'))
+    h.result = { ok: true, data: [pick('1')] }
+    expect(await refreshCfbdDraftPicks(NOV)).toMatchObject({ stored: 1, notified: null })
+  })
+
   it('stores the latest draft under its year', async () => {
     h.result = { ok: true, data: [pick('1'), pick('2'), pick(null)] }
     const r = await refreshCfbdDraftPicks(NOV)
-    expect(r).toEqual({ year: 2026, stored: 2, droppedWithoutAthleteId: 1 })
+    expect(r).toEqual({ year: 2026, stored: 2, droppedWithoutAthleteId: 1, notified: { leagues: 1, managers: 2, commissioners: 1 } })
     const call = (h.upsert.mock.calls[0] as unknown as [{ where: { cacheKey: string } }])[0]
     expect(call.where.cacheKey).toBe('cfbd:draft-picks:v1:2026')
   })

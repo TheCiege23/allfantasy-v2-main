@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { applyLearnedFactors, type FactorLevels, type LearnedFactorLevel } from './factorLearner'
 import { situationOf, usageOf, type GameLine } from './factorObservations'
 import { FACTOR_TABLE_KEY, FACTOR_TABLE_MAX_AGE_MS, projectionFactorsOn, type StoredFactorTable } from './factorLearning'
+import type { GameContextLevels } from './gameContext'
 
 /**
  * The live half of AF's projection factors: read a sport's learned table and move a player's projection for the game(s)
@@ -57,6 +58,14 @@ export function factorReason(l: LearnedFactorLevel): string {
     'opponent:tough': 'opponent allows less than average',
     'team_change:new_team': 'new team',
     'returning:returning': 'first game back after a layoff',
+    'vegas:high': 'his team is expected to score 3+ points more than the week’s average (closing line)',
+    'vegas:low': 'his team is expected to score 3+ points less than the week’s average (closing line)',
+    'weather:bad': 'wind 15+ mph or rain or snow likely',
+    'weather:dome': 'played indoors',
+    'coaching:new_coach': 'first season under a new head coach',
+    'injury:probable': 'listed Probable before the game',
+    'injury:questionable': 'listed Questionable or day-to-day before the game',
+    'injury:doubtful': 'listed Doubtful before the game',
   }
   return `${what[`${l.factor}:${l.level}`] ?? `${l.factor} ${l.level}`} ${signed} (measured on ${l.games.toLocaleString('en-US')} games)`
 }
@@ -73,7 +82,7 @@ export async function liveFactorAdjustments(
   args: {
     sport: string
     table: StoredFactorTable | null
-    players: ReadonlyArray<{ key: string; gameLogId: string; next: { atMs: number; opponent?: string | null; drop?: ReadonlyArray<keyof FactorLevels> } }>
+    players: ReadonlyArray<{ key: string; gameLogId: string; next: { atMs: number; opponent?: string | null; drop?: ReadonlyArray<keyof FactorLevels>; context?: GameContextLevels } }>
     now?: Date
   },
 ): Promise<Map<string, FactorAdjustment>> {
@@ -119,7 +128,7 @@ export async function liveFactorAdjustments(
      * His team is read from the FEED (his latest line), never the roster row: the learner compared feed codes with feed
      * codes, and a roster's spelling ("Los Angeles Lakers") against a feed code ("LAL") would read as a trade.
      */
-    const sit = situationOf(sport, past, { atMs: p.next.atMs, team: past.length ? past[past.length - 1]!.team : null }, ratio)
+    const sit = situationOf(sport, past, { atMs: p.next.atMs, team: past.length ? past[past.length - 1]!.team : null, context: p.next.context }, ratio)
     if (!sit) continue
     for (const f of p.next.drop ?? []) delete sit.levels[f]
     const { multiplier, applied } = applyLearnedFactors(1, sit.levels, table)

@@ -13,6 +13,7 @@ import { getDisplayPlanName } from "@/lib/subscription/feature-access";
 import type { PricingAccount } from "@/lib/core-app/pricingAccount";
 import { readWeeklyTokenSpend } from "@/lib/tokens/readWeeklyTokenSpend";
 import { buildPlanComparison } from "@/lib/monetization/planComparison";
+import { readHeldSubscriptionSkus } from "@/lib/core-app/readHeldSubscriptionSkus";
 
 /**
  * /pricing — cut over to the V4 five-lane grid.
@@ -105,19 +106,25 @@ export default async function PricingPage(
   const userId = session?.user?.id ?? null;
   let account: PricingAccount | null = null;
   if (userId) {
-    const [access, weeklySpend] = await Promise.all([
+    const [access, weeklySpend, heldSkus] = await Promise.all([
       aiAccessResolver.resolveForUser({ userId, userEmail: session?.user?.email, now: new Date() }).catch(() => null),
       readWeeklyTokenSpend(userId),
+      readHeldSubscriptionSkus(userId),
     ]);
     if (isSubscriptionEntitlementBypassUserId(userId, session?.user?.email)) {
       // The spend chart reads the viewer's own ledger, which an admin account has like anyone else.
       account = { planIds: ["supreme"], planName: "AF Supreme", renewsAt: null, tokenBalance: null, weeklySpend };
     } else if (access) {
-      const planIds = access.hasSubscription ? access.subscription.plans : [];
+      /*
+       * ⚠ `hasPlan`, NOT `hasSubscription`. `hasSubscription` means "holds Chimmy chat" (ai_chat),
+       * which AF Commissioner does not — so a paying Commissioner was shown "You're on Free".
+       */
+      const planIds = access.hasPlan ? access.subscription.plans : [];
       account = {
         planIds,
         planName: planIds[0] ? getDisplayPlanName(planIds[0]) : null,
-        renewsAt: access.hasSubscription ? access.subscription.currentPeriodEnd : null,
+        renewsAt: access.hasPlan ? access.subscription.currentPeriodEnd : null,
+        heldSkus,
         tokenBalance: access.tokenBalance,
         weeklySpend,
       };

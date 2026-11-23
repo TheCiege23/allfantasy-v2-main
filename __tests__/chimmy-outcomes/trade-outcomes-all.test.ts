@@ -113,11 +113,12 @@ describe('gradeAllTradeOutcomes (database read, mocked)', () => {
     expect(Object.keys(out)).not.toContain('NFL:points')
   })
 
-  it('category leagues are skipped with a reason, never scored on points', async () => {
+  it('a category league whose categories are not stored is skipped with a reason in its categories bucket, never scored on points', async () => {
     const d = db([snap({ sport: 'NBA', receipt: receipt('A', 'redraft', ['1'], ['2']), settings: { scoring_mode: 'h2h_category' } })])
     const out = await gradeAllTradeOutcomes({ now: NOW, db: d as never })
-    expect(out['NBA:points']!.skips).toEqual({ category_league: 1 })
-    expect(out['NBA:points']!.gradable).toBe(0)
+    expect(out['NBA:categories']!.skips).toEqual({ category_league: 1 })
+    expect(out['NBA:categories']!.gradable).toBe(0)
+    expect(out['NBA:points']).toBeUndefined()
   })
 
   it('another sport’s dynasty deal goes to that sport’s points bucket, over the longer window', () => {
@@ -164,5 +165,52 @@ describe('through the snapshot to the screen', () => {
     const lines = publicTrackRecord(ledgerRecordFor(ledger, null)).lines
     expect(lines.find((l) => l.key === 'trade-NFL:value-A')).toMatchObject({ title: 'Trades graded A in dynasty-style leagues', tone: 'held' })
     expect(lines.find((l) => l.key === 'trade-NBA:points-D')).toMatchObject({ title: 'Trades graded D in NBA leagues', tone: 'not_held' })
+  })
+})
+
+describe('picks and category leagues (2026-11-22)', () => {
+  it('reads a traded pick off a grade line in every spelling the graders use', async () => {
+    const { parseTradedPick } = await import('@/lib/chimmy-outcomes/tradeOutcomesAll')
+    expect(parseTradedPick('2027 1st')).toEqual({ season: '2027', round: 1 })
+    expect(parseTradedPick('2027 2nd (Early)')).toEqual({ season: '2027', round: 2 })
+    expect(parseTradedPick('2026 Pick 1.04')).toEqual({ season: '2026', round: 1 })
+    expect(parseTradedPick('2027 Round 3')).toEqual({ season: '2027', round: 3 })
+    expect(parseTradedPick('Bijan Robinson')).toBeNull()
+  })
+
+  it('places each pick on its side from the lines; FAAB, or a pick the lines do not name, is not guessed', async () => {
+    const { picksFromReceipt } = await import('@/lib/chimmy-outcomes/tradeOutcomesAll')
+    const receipt = (assets: unknown[], lines: unknown[]) => ({ assets, grade: { lines } })
+    expect(picksFromReceipt(receipt([{ kind: 'pick' }], [{ side: 'get', name: '2027 1st' }, { side: 'give', name: 'Player' }])))
+      .toEqual({ getPicks: [{ season: '2027', round: 1 }], givePicks: [] })
+    expect(picksFromReceipt(receipt([{ kind: 'pick' }, { kind: 'faab' }], [{ side: 'get', name: '2027 1st' }]))).toBeNull()
+    expect(picksFromReceipt(receipt([{ kind: 'pick' }, { kind: 'pick' }], [{ side: 'get', name: '2027 1st' }]))).toBeNull()
+  })
+
+  it('a pick adds its market value to its side; an unpriced pick leaves the deal unscored, never zero', async () => {
+    const { valueShareNet } = await import('@/lib/chimmy-outcomes/tradeOutcomesAll')
+    const valueOf = (id: string) => ({ a: 3000, b: 5000 } as Record<string, number>)[id] ?? null
+    // get a + a 2027 1st (2000) vs give b: 5000 vs 5000 → even.
+    expect(valueShareNet(['a'], ['b'], valueOf, { get: [{ season: '2027', round: 1 }], give: [], valueOf: () => 2000 })).toBe(0)
+    expect(valueShareNet(['a'], ['b'], valueOf, { get: [{ season: '2027', round: 1 }], give: [], valueOf: () => null })).toBeNull()
+    // Without picks, exactly as before (positive control).
+    expect(valueShareNet(['a'], ['b'], valueOf)).toBe(-25)
+  })
+
+  it("a category trade is graded on the league's own categories won minus lost", async () => {
+    const { categoriesNet } = await import('@/lib/chimmy-outcomes/tradeOutcomesAll')
+    const cats = [
+      { id: 'pts', label: 'PTS', direction: 'higher', computation: { kind: 'sum', statKey: 'pts' } },
+      { id: 'reb', label: 'REB', direction: 'higher', computation: { kind: 'sum', statKey: 'reb' } },
+      { id: 'to', label: 'TO', direction: 'lower', computation: { kind: 'sum', statKey: 'to' } },
+    ] as never
+    const by = new Map([
+      ['got', [{ dayMs: 10, stats: { pts: 30, reb: 4, to: 1 } }]],
+      ['gave', [{ dayMs: 10, stats: { pts: 20, reb: 9, to: 4 } }]],
+    ])
+    // got wins PTS and TO (fewer turnovers), loses REB: +1.
+    expect(categoriesNet(['got'], ['gave'], by, 0, 100, cats)).toBe(1)
+    // A player we cannot place: unscored.
+    expect(categoriesNet(['got', 'ghost'], ['gave'], by, 0, 100, cats)).toBeNull()
   })
 })

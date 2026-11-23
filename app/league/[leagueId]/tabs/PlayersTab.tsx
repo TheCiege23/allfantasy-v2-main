@@ -29,6 +29,7 @@ import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/pla
 import { injuryNeedsAttention } from '@/lib/injuries/injuryStatusDisplay'
 import { REDRAFT_POSITION_FILTERS, isFootballTheme } from '@/lib/league-media/redraftScreens'
 import { PosPill } from '@/components/league/native/screens/NativeScreenParts'
+import { ProjectionFactorLine } from '@/components/projections/ProjectionFactorLine'
 import { RedraftScreen, useRedraftScreen } from '@/components/league/native/screens/RedraftScreenParts'
 
 type RiBatchEntry = {
@@ -763,6 +764,9 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                 const normalizedStats = parseRollingInsightsStatsJson(p.normalizedStats ?? null)
                 // Honest projection: real tiers only — no fabricated baseline (Honesty Pack 1A).
                 const projPts = weeklyProjectionFor(p)
+                // The measured factors that moved this projection (injury designation, rest, form …), verbatim from the
+                // learner. Present only for AF Intelligence viewers — the server strips `afFactors` for everyone else.
+                const factorReasons = projection && campusPoolEnabled ? campusMetricsById.get(p.afProjectionPlayerId ?? p.id)?.afFactors?.reasons ?? [] : []
                 const seasonFp =
                   ri?.fantasyPointsSeason ??
                   (ri?.fantasyPointsPerGame != null && ri?.gamesPlayed != null
@@ -841,6 +845,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                             <span className="text-white/45">FA</span>
                           )}
                         </p>
+                        <ProjectionFactorLine reasons={factorReasons} testId={`players-tab-factors-${p.id}`} />
                       </div>
                     </button>
                     <div className="rdp-pts-cell w-14 shrink-0 text-right text-[11px] text-white/60">

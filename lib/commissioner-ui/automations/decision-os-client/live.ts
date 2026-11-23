@@ -1,4 +1,5 @@
 import { isLiveReady } from '../../liveReadiness'
+import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
 import {
   readAutomationAggregates,
   readAutomationRuns,
@@ -266,7 +267,10 @@ export const liveAutomationClient: AutomationClient = {
       }
     }
 
-    const runs = await readAutomationRuns(automationId)
+    // Only the commissioner's own league's runs (and platform-wide ones): a run's text belongs to its league.
+    const leagueId = await resolveActiveLeagueId()
+    if (!leagueId) return { data: [], error: null, source: 'live', timestamp }
+    const runs = await readAutomationRuns(automationId, leagueId)
 
     const data: AutomationExecutionEntry[] = runs.map((run) => {
       const result = toResult(run.status) ?? 'failure'

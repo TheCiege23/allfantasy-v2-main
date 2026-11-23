@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getCachedMockDraftPool } from '@/lib/mock-draft/mock-draft-pool-cache'
+import { afJson } from '@/lib/core-app/afIntelligenceGate'
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
       forceRefresh: req.nextUrl.searchParams?.get('refresh') === '1',
     })
 
-    return NextResponse.json(payload)
+    return await afJson(session.user.id, payload)
   } catch (err: any) {
     console.error('[mock-draft/adp] Error:', err)
     return NextResponse.json({ error: err.message || 'Failed to fetch ADP' }, { status: 500 })

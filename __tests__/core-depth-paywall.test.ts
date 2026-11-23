@@ -33,7 +33,7 @@ import type { PlayerCardData } from '@/lib/core-app/playerCard'
 
 const BEFORE = new Date('2026-10-01T12:00:00.000Z')
 const AFTER = new Date('2026-10-20T12:00:00.000Z')
-const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge']
+const DEPTHS: CoreDepth[] = ['player_depth', 'trade_depth', 'commissioner_depth', 'competitive_edge', 'af_intelligence']
 
 const locked = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: false })
 const open = (depth: CoreDepth) => decideCoreDepth(depth, { live: true, startsAt: DEFAULT_PAYWALL_STARTS_AT, hasPlan: true })
@@ -82,11 +82,18 @@ describe('the plan mapping, read through the real entitlement matrix', () => {
     expect(opens(['pro'], 'commissioner_depth')).toBe(false)
   })
 
-  it('AF Commissioner opens the commissioner depth, not Pro depth', () => {
+  it('AF Commissioner opens the commissioner depth AND, since 2026-11-22, the OS depth (owner: "covered by AF Pro, Supreme or Commissioner")', () => {
     expect(opens(['commissioner'], 'commissioner_depth')).toBe(true)
-    expect(opens(['commissioner'], 'player_depth')).toBe(false)
-    expect(opens(['commissioner'], 'trade_depth')).toBe(false)
-    expect(opens(['commissioner'], 'competitive_edge')).toBe(false)
+    expect(opens(['commissioner'], 'player_depth')).toBe(true)
+    expect(opens(['commissioner'], 'trade_depth')).toBe(true)
+    expect(opens(['commissioner'], 'competitive_edge')).toBe(true)
+    expect(opens(['commissioner'], 'af_intelligence')).toBe(true)
+  })
+
+  it('AF Intelligence opens for Pro, Commissioner and Supreme — never for Legacy alone or for nobody', () => {
+    for (const plan of ['pro', 'commissioner', 'supreme'] as const) expect(opens([plan], 'af_intelligence'), plan).toBe(true)
+    expect(opens(['war_room'], 'af_intelligence')).toBe(false)
+    expect(opens([], 'af_intelligence')).toBe(false)
   })
 
   it('Competitive Edge opens for AF Pro AND the War Room plan — which does not get the trade breakdown', () => {

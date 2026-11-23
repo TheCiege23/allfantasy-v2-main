@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { franchiseLeagueIds, franchiseTagsFor, type FranchiseTag } from '@/lib/league/collegePro/franchiseScope'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { categoryFromMeta } from '@/lib/core-app/notificationMutes'
 import { handoffFor } from '@/lib/core-app/platformLinks'
@@ -65,6 +66,12 @@ export type NotificationRow = {
   category?: NotificationCategoryId | null
   leagueId: string | null
   leagueName: string | null
+  /**
+   * Half of a paired college + pro league (C2C / Devy): the franchise both halves belong to, so the
+   * inbox lists and filters the pair as ONE league. Absent for every other league.
+   */
+  franchiseId?: string
+  franchiseName?: string
   platform: string | null
   createdAt: string
   read: boolean
@@ -324,6 +331,13 @@ export async function getNotificationsCenter(input: {
 }): Promise<NotificationsCenterData> {
   const now = input.now ?? new Date()
   const scope = input.leagueId ?? null
+  /*
+   * A league scope covers its whole franchise: opening Peach Bowl's notifications shows Cream Bowl's
+   * too, because the two are one league to the people in them (lib/league/collegePro/franchiseScope.ts).
+   */
+  const scopeIds = scope ? await franchiseLeagueIds(scope).catch(() => [scope]) : null
+  // One league keeps the plain id; a franchise lists both halves.
+  const leagueWhere = scopeIds ? (scopeIds.length === 1 ? scopeIds[0]! : { in: scopeIds }) : null
 
   /*
    * ⚠ THE ACT-TODAY TIER IS DERIVED, NOT STORED. PlatformNotification rows are a
@@ -361,7 +375,7 @@ export async function getNotificationsCenter(input: {
 
   const stored = await prisma.platformNotification
     .findMany({
-      where: scope ? { userId: input.userId, leagueId: scope } : { userId: input.userId },
+      where: leagueWhere ? { userId: input.userId, leagueId: leagueWhere } : { userId: input.userId },
       orderBy: { createdAt: 'desc' },
       take: 60,
       select: {
@@ -493,7 +507,7 @@ export async function getNotificationsCenter(input: {
    * filtering it here would return whichever slice of this league happened to
    * fall inside the account's newest sixty rows.
    */
-  const scopedActToday = scope ? actToday.filter((r) => r.leagueId === scope) : actToday
+  const scopedActToday = scopeIds ? actToday.filter((r) => r.leagueId != null && scopeIds.includes(r.leagueId)) : actToday
 
   const all = [...scopedActToday, ...rest]
   const counts: Record<NotificationFilter, number> = {
@@ -531,8 +545,8 @@ export async function getNotificationsCenter(input: {
    * number that is too low is still better than confidently claiming nothing
    * is waiting, which is the exact failure being fixed here.
    */
-  const storedWhere = scope
-    ? { userId: input.userId, leagueId: scope }
+  const storedWhere = leagueWhere
+    ? { userId: input.userId, leagueId: leagueWhere }
     : { userId: input.userId }
   const [storedUnread, storedTotal] = await Promise.all([
     prisma.platformNotification
@@ -541,10 +555,19 @@ export async function getNotificationsCenter(input: {
     prisma.platformNotification.count({ where: storedWhere }).catch(() => rest.length),
   ])
 
+  // Both halves of a paired league carry the franchise they belong to, for one inbox entry per pair.
+  const tags = await franchiseTagsFor([...scopedActToday, ...rest].map((r) => r.leagueId).filter((v): v is string => !!v)).catch(
+    () => new Map<string, FranchiseTag>(),
+  )
+  const tagged = (r: NotificationRow): NotificationRow => {
+    const tag = r.leagueId ? tags.get(r.leagueId) : undefined
+    return tag ? { ...r, franchiseId: tag.franchiseId, franchiseName: tag.franchiseName } : r
+  }
+
   return {
     viewerId: input.userId,
-    actToday: scopedActToday,
-    rest,
+    actToday: scopedActToday.map(tagged),
+    rest: rest.map(tagged),
     counts,
     unread: storedUnread + scopedActToday.length,
     listed: rest.length,

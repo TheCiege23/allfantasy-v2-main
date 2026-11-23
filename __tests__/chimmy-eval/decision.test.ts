@@ -12,7 +12,9 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/chimmy/chimmy-league-snapshot', () => ({ loadLeagueGroundingForUser: h.access }))
 vi.mock('@/lib/chimmy/lineupScenarioGrounding', () => ({ buildStartSitScenario: h.start, buildWaiverScenario: h.waiver }))
 vi.mock('@/lib/chimmy/tradeScenarioGrounding', () => ({ buildTradeScenario: h.trade }))
-vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimization: h.lineup, singleSwapCall: () => null }))
+vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ singleSwapCall: () => null }))
+// The lineup lane reads My Team's best lineup (2026-11-23), so that is the engine to stub — not the weekly-feed optimizer.
+vi.mock('@/lib/chimmy-alerts/myTeamLineupOptimization', () => ({ myTeamLineupOptimization: h.lineup }))
 vi.mock('@/lib/chimmy/tradeTargetVerdict', () => ({ buildTradeTargetVerdict: h.target }))
 vi.mock('@/lib/chimmy/tradeFinderGrounding', () => ({ buildTradeFinder: h.finder, readTradeFinderPosition: () => null }))
 vi.mock('@/lib/chimmy/pendingTradeQuestions', () => ({ pendingTradeQuestions: h.pending }))

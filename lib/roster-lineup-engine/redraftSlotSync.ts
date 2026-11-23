@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { redraftSlotChanges } from '@/lib/league-runtime/redraftSlotType'
+import { relabelRosterStarters } from '@/lib/redraft/relabelStarters'
 
 /**
  * Keep `RedraftRosterPlayer.slotType` in step with a saved NATIVE lineup.
@@ -21,19 +22,31 @@ import { redraftSlotChanges } from '@/lib/league-runtime/redraftSlotType'
  */
 export async function syncRedraftSlotTypesForLineup(
   tx: Prisma.TransactionClient,
-  input: { redraftRosterId: string; playerData: unknown },
+  input: {
+    redraftRosterId: string
+    playerData: unknown
+    /**
+     * With these, starters are then relabelled to fit the league's layout (lib/redraft/starterSlotLabels.ts):
+     * a starter moved in is stored under his POSITION, so a FLEX starter otherwise read as a third RB.
+     */
+    sport?: string
+    leagueSettings?: unknown
+  },
 ): Promise<{ updated: number }> {
   const rows = await tx.redraftRosterPlayer.findMany({
     where: { rosterId: input.redraftRosterId, droppedAt: null },
     select: { id: true, playerId: true, position: true, slotType: true },
   })
   const changes = redraftSlotChanges(input.playerData, rows)
-  if (changes.length === 0) return { updated: 0 }
 
   const byTarget = new Map<string, string[]>()
   for (const c of changes) byTarget.set(c.to, [...(byTarget.get(c.to) ?? []), c.id])
   for (const [slotType, ids] of byTarget) {
     await tx.redraftRosterPlayer.updateMany({ where: { id: { in: ids } }, data: { slotType } })
   }
-  return { updated: changes.length }
+  // Labels only (who starts is settled above); runs even when nobody moved, so an old label heals on any save.
+  const relabelled = input.sport
+    ? await relabelRosterStarters(tx, { redraftRosterId: input.redraftRosterId, sport: input.sport, leagueSettings: input.leagueSettings })
+    : 0
+  return { updated: changes.length + relabelled }
 }

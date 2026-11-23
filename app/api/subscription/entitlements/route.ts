@@ -11,6 +11,7 @@ import {
   isSubscriptionFeatureId,
   resolveBundleInheritance,
 } from "@/lib/subscription/feature-access"
+import { readHeldSubscriptionSkus } from "@/lib/core-app/readHeldSubscriptionSkus"
 
 export const dynamic = "force-dynamic"
 
@@ -39,11 +40,11 @@ export async function GET(req: Request) {
     }
     const featureId = rawFeatureId ? (rawFeatureId as SubscriptionFeatureId) : undefined
     const resolver = new EntitlementResolver()
-    const { entitlement, hasAccess, message } = await resolver.resolveForUser(
-      session.user.id,
-      featureId,
-      session.user.email
-    )
+    const [{ entitlement, hasAccess, message }, heldSkus] = await Promise.all([
+      resolver.resolveForUser(session.user.id, featureId, session.user.email),
+      // The exact live SKUs (any store), so purchase pages can say "Current plan" rather than sell it again.
+      readHeldSubscriptionSkus(session.user.id),
+    ])
     const requiredPlanId = featureId ? getRequiredPlanForFeature(featureId) : null
     const requiredPlan = requiredPlanId ? getDisplayPlanName(requiredPlanId) : null
     const upgradePath = featureId ? buildFeatureUpgradePath(featureId) : "/pricing"
@@ -64,6 +65,7 @@ export async function GET(req: Request) {
       requiredPlan,
       upgradePath,
       isAdminBypassAccount,
+      heldSkus,
     })
   } catch (e) {
     console.error("[subscription/entitlements GET]", e instanceof Error ? e.message : e)

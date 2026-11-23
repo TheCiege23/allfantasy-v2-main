@@ -143,3 +143,47 @@ describe('the scheduled learning and the live read', () => {
     expect(factorReason({ factor: 'rest', level: 'back_to_back', multiplier: 0.9, games: 1200 } as never)).toBe('second game of a back-to-back -10% (measured on 1,200 games)')
   })
 })
+
+describe('the game itself: Vegas, weather, coaching (2026-11-22)', () => {
+  it('reads each level only from what was stored, and leaves a missing read as no level', async () => {
+    const { vegasLevel, weatherLevel, coachingLevels } = await import('@/lib/af-projections/factors/gameContext')
+    expect(vegasLevel(27, 22.5)).toBe('high')
+    expect(vegasLevel(18, 22.5)).toBe('low')
+    expect(vegasLevel(23, 22.5)).toBe('average')
+    expect(vegasLevel(null, 22.5)).toBeUndefined()
+    expect(weatherLevel({ windSpeedMph: 18, precipChancePct: 10 })).toBe('bad')
+    expect(weatherLevel({ windSpeedMph: 5, precipChancePct: 70 })).toBe('bad')
+    expect(weatherLevel({ isDome: true, windSpeedMph: 30 })).toBe('dome')
+    expect(weatherLevel({ windSpeedMph: 5, precipChancePct: 10 })).toBe('normal')
+    expect(weatherLevel({})).toBeUndefined()
+    const stints = [
+      { teamId: 'CHI', season: 2025, coachId: 'a' }, { teamId: 'CHI', season: 2026, coachId: 'b' },
+      { teamId: 'KC', season: 2025, coachId: 'r' }, { teamId: 'KC', season: 2026, coachId: 'r' },
+      // A mid-season change: two head coaches in one season — no level, the week is unknown.
+      { teamId: 'NYG', season: 2025, coachId: 'x' }, { teamId: 'NYG', season: 2026, coachId: 'x' }, { teamId: 'NYG', season: 2026, coachId: 'y' },
+    ]
+    const lv = coachingLevels(stints, 2026)
+    expect(lv.get('CHI')).toBe('new_coach')
+    expect(lv.get('KC')).toBe('same_coach')
+    expect(lv.has('NYG')).toBe(false)
+  })
+
+  it('a game context level reaches the situation, and a learned Vegas effect is measured like any other (positive control)', async () => {
+    const { situationOf } = await import('@/lib/af-projections/factors/factorObservations')
+    const past = Array.from({ length: 6 }, (_, i) => ({ atMs: i * 7 * 86_400_000, team: 'KC', points: 10, usage: null }))
+    const sit = situationOf('NFL', past, { atMs: 6 * 7 * 86_400_000, team: 'KC', context: { vegas: 'high', weather: 'bad' } }, null)
+    expect(sit?.levels).toMatchObject({ vegas: 'high', weather: 'bad' })
+    const plain = situationOf('NFL', past, { atMs: 6 * 7 * 86_400_000, team: 'KC' }, null)
+    expect(plain?.levels.vegas).toBeUndefined()
+
+    const { learnFactors } = await import('@/lib/af-projections/factors/factorLearner')
+    const obs = Array.from({ length: 1200 }, (_, i) => {
+      const high = i % 3 === 0
+      return { baseline: 10, actual: high ? 12 + (i % 5) * 0.1 : 10 + (i % 5) * 0.1, levels: { vegas: high ? 'high' : 'average' }, atMs: i * 3_600_000 }
+    })
+    const t = learnFactors('NFL', obs, new Date(1200 * 3_600_000))
+    const row = t.levels.find((l) => l.factor === 'vegas' && l.level === 'high')!
+    expect(row.published).toBe(true)
+    expect(row.multiplier).toBeGreaterThan(1.1)
+  })
+})

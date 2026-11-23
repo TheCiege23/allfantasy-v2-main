@@ -495,6 +495,35 @@ describe.runIf(enabled)('a Guilly chop week against a real database', () => {
       expect(await faab()).toEqual({ Axes: 90, Blades: 90, Cleavers: 90, Daggers: 90 })
     })
 
+    it('puts back a FAAB reset to each survivor, and a re-chop applies it again (owner, 2026-11-22)', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'set', amount: 100 } } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      const faab = async () =>
+        Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      const markers = () => prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_after_chop' } })
+      // Blades is chopped and keeps its 90; every survivor is reset to 100.
+      expect(await faab()).toEqual({ Axes: 100, Blades: 90, Cleavers: 100, Daggers: 100 })
+      expect(await markers()).toBe(1)
+
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1, chopInstead: [lg.byName('Daggers').rosterId] })).toMatchObject({ ok: true })
+      // Every survivor back to 90, then the re-chop of Daggers applies the reset afresh to the new survivors.
+      expect(await faab()).toEqual({ Axes: 100, Blades: 100, Cleavers: 100, Daggers: 90 })
+      expect(await markers()).toBe(1)
+    })
+
+    it('puts back a FAAB reset on a plain undo', async () => {
+      const lg = await league(TEAMS, { settings: { guillotine_advanced: { steps: [], overrides: {}, immunity: 'off', faab: { mode: 'add', amount: 25 } } } })
+      for (const r of lg.rosters) await prisma.roster.update({ where: { id: r.rosterId }, data: { faabRemaining: 90 } })
+      await sync(lg, 2, afterWeek(1))
+      const faab = async () =>
+        Object.fromEntries((await prisma.roster.findMany({ where: { leagueId: lg.leagueId }, select: { id: true, faabRemaining: true } })).map((r) => [lg.rosters.find((x) => x.rosterId === r.id)!.name, r.faabRemaining]))
+      expect(await faab()).toEqual({ Axes: 115, Blades: 90, Cleavers: 115, Daggers: 115 })
+      expect(await undoLatestChop({ leagueId: lg.leagueId, userId: owner(lg), week: 1 })).toMatchObject({ ok: true })
+      expect(await faab()).toEqual({ Axes: 90, Blades: 90, Cleavers: 90, Daggers: 90 })
+      expect(await prisma.guillotineEventLog.count({ where: { leagueId: lg.leagueId, eventType: 'faab_after_chop' } })).toBe(0)
+    })
+
     it('refuses once a waiver run has processed claims since the chop, and changes nothing', async () => {
       const lg = await league()
       await sync(lg, 2, afterWeek(1))

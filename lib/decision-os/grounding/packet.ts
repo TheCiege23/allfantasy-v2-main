@@ -756,15 +756,26 @@ export function withSliceDeadline<T = ValueLookup[]>(
     detail: 'IDP and kicker values did not finish in time for this answer.',
     remedy: 'They are priced per request; asking again usually includes them.',
   },
+  /**
+   * Called when — and only when — the deadline wins (2026-11-23). The packet passes one that adds the slice to
+   * `lateSlices`, so a second-hop read that runs out of time is in the late-slice log like every first-wave read;
+   * before this it was a gap in one prompt and nothing anywhere else. A read that REJECTS is not late and does not
+   * call it.
+   */
+  onLate?: () => void,
 ): Promise<GroundedSlice<T>> {
   const late = absent<T>(lateGap)
   if (remainingMs <= 0) {
     work.catch(() => undefined)
+    onLate?.()
     return Promise.resolve(late)
   }
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<GroundedSlice<T>>((resolve) => {
-    timer = setTimeout(() => resolve(late), remainingMs)
+    timer = setTimeout(() => {
+      onLate?.()
+      resolve(late)
+    }, remainingMs)
   })
   return Promise.race([work.catch(() => late), timeout]).finally(() => {
     if (timer) clearTimeout(timer)
@@ -890,6 +901,16 @@ export async function buildDecisionOsGroundingPacket(
     return Promise.race([promise, deadline]).finally(() => {
       if (timer) clearTimeout(timer)
     })
+  }
+
+  /**
+   * A second-hop read (roster projections, IDP/kicker) that lost to `IDP_KICKER_DEADLINE_MS`. Those go through
+   * `withSliceDeadline`, not `withinBudget`, so without this they never reached `lateSlices` and the late-slice log
+   * below did not name them (2026-11-23). Their own late gap is kept — `stamp` is never applied to them.
+   */
+  const markSecondHopLate = (slice: string) => {
+    lateSlices.add(slice)
+    if (!sliceMs.has(slice)) sliceMs.set(slice, Date.now() - startedAt)
   }
 
   /** Timed AND bounded: the per-slice figure in `meta.sources`, and the budget above. */
@@ -1678,6 +1699,7 @@ export async function buildDecisionOsGroundingPacket(
           detail: 'Your roster\'s projections under this league\'s scoring did not finish in time for this answer.',
           remedy: 'Asking again usually includes them; My Team shows the same numbers.',
         },
+        () => markSecondHopLate('rosterProjections'),
       ),
     )
   }
@@ -1732,7 +1754,7 @@ export async function buildDecisionOsGroundingPacket(
          */
         numTeams: size.numTeams ?? 12,
         isDynasty: fmt?.format === 'DYNASTY',
-      })),
+      }), undefined, () => markSecondHopLate('idpKickerValues')),
     )
   }
 
@@ -1807,6 +1829,8 @@ export async function buildDecisionOsGroundingPacket(
       slices: [...lateSlices].sort(),
       ms: Object.fromEntries([...lateSlices].map((name) => [name, sliceMs.get(name) ?? null])),
       deadlineMs: PACKET_SLICE_DEADLINE_MS,
+      // rosterProjections and idpKickerValues run on the second hop's clock, not the first wave's.
+      secondHopDeadlineMs: IDP_KICKER_DEADLINE_MS,
     })
   }
   let pendingTrades: GroundedSlice<string> = absent<string>(NOT_REQUESTED)

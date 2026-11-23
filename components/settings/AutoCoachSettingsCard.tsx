@@ -57,11 +57,16 @@ export default function AutoCoachSettingsCard() {
   const load = useCallback(async () => {
     setLoadError(false)
     try {
-      const res = await fetch("/api/user/autocoach?include=players", { cache: "no-store" })
+      const [res, swapRes] = await Promise.all([
+        fetch("/api/user/autocoach?include=players", { cache: "no-store" }),
+        fetch("/api/user/ai-swap", { cache: "no-store" }),
+      ])
       if (!res.ok) throw new Error(String(res.status))
       const j = (await res.json()) as Partial<Loaded>
+      // The switch is AI swap (lib/lineup-automation/aiSwapPolicy.ts): OFF until the user turns it on.
+      const swap = swapRes.ok ? ((await swapRes.json()) as { on?: boolean }) : null
       setData({
-        globalEnabled: j.globalEnabled !== false,
+        globalEnabled: swap?.on === true,
         preferences: (j.preferences ?? {}) as AutoCoachUserPreferences,
         settings: Array.isArray(j.settings) ? j.settings : [],
         players: Array.isArray(j.players) ? j.players : [],
@@ -104,12 +109,18 @@ export default function AutoCoachSettingsCard() {
     setSaveError(false)
     setData({ ...data, globalEnabled: enabled })
     try {
-      const res = await fetch("/api/user/autocoach/global", {
+      // AI swap is the switch every automation reads; the old AutoCoach flag is kept in step with it.
+      const res = await fetch("/api/user/ai-swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ on: enabled }),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      await fetch("/api/user/autocoach/global", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
-      })
-      if (!res.ok) throw new Error(String(res.status))
+      }).catch(() => null)
     } catch {
       setData(before)
       setSaveError(true)

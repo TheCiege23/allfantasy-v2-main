@@ -122,6 +122,14 @@ export async function GET(request: Request) {
   const projectionFactors = await Promise.all([import('@/lib/af-projections/factors/factorLearning'), import('@/lib/prisma')])
     .then(([{ runFactorLearningTick }, { prisma }]) => runFactorLearningTick(prisma as never))
     .catch((error) => ({ status: 'error' as const, error: error instanceof Error ? error.message.slice(0, 120) : 'factor learning failed' }))
+  /*
+   * Pre-game injury designations for NFL, NBA and NHL (`injurySnapshots.ts`): at most one capture per sport every 30
+   * minutes, frozen per team at its start, so the injury factor learns from what was known BEFORE the game. Caught: it
+   * never turns this cron red.
+   */
+  const injurySnapshot = await Promise.all([import('@/lib/af-projections/factors/injurySnapshots'), import('@/lib/prisma')])
+    .then(([{ captureInjurySnapshots }, { prisma }]) => captureInjurySnapshots(prisma as never))
+    .catch((error) => ({ status: 'error' as const, error: error instanceof Error ? error.message.slice(0, 120) : 'injury snapshot failed' }))
   // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
   // paths -- so writes can still be in flight when this handler reaches here, and on Vercel this instance can
   // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
@@ -131,5 +139,5 @@ export async function GET(request: Request) {
   const warnings = tickWarnings(draftOutcomes, adviceLearning)
 
   await recordTick({ warnings, metadata: { maintenance: 'retired' } }, startedAt)
-  return NextResponse.json({ ok: true, parityWrites, draftOutcomes, adviceLearning, projectionFactors, chimmyRecovered })
+  return NextResponse.json({ ok: true, parityWrites, draftOutcomes, adviceLearning, projectionFactors, injurySnapshot, chimmyRecovered })
 }

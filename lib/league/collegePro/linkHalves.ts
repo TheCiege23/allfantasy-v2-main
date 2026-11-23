@@ -103,5 +103,13 @@ export async function linkHalves(args: { leagueId: string; otherLeagueId: string
     leagueId: memberKeyFor(college),
     teamExternalId: '',
   })
-  return second.ok ? { ok: true } : second
+  if (!second.ok) return second
+  /*
+   * The pair is the LEAGUE's when the person linking may decide that for it (the head commissioner, or
+   * whoever imported both halves): every manager then sees one league with nothing to set up. Anyone
+   * else's link stays their own view, as before. A failure here leaves their own link working.
+   */
+  const { recordLeaguePair } = await import('./leaguePair')
+  await recordLeaguePair({ proLeagueId: pro.id, collegeLeagueId: college.id, linkedByUserId: args.userId }).catch(() => 'refused')
+  return { ok: true }
 }

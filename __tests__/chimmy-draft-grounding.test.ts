@@ -323,6 +323,19 @@ describe('Draft OS recommendation in the draft context', () => {
     expect(mocks.fit).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'lg1', rosterId: 'roster-1', newPickPosition: 'RB' }))
   })
 
+  it('names an AF ADP move this week for a plan holder, with its number — and says nothing for a free plan', async () => {
+    const readAfAdp = async () => ({ entries: [
+      { playerName: 'Bijan Robinson', position: 'RB', adp: 2.4, sampleSize: 140, sevenDayTrend: 0.4 },
+      { playerName: 'CeeDee Lamb', position: 'WR', adp: 7.8, sampleSize: 120, sevenDayTrend: 3.2 },
+    ] })
+    const paid = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1', readAfAdp, hasAfIntelligence: async () => true }))!.join('\n')
+    expect(paid).toContain('CeeDee Lamb is going 3.2 picks earlier than a week ago (AF ADP 7.8, 120 drafts)')
+    // A 0.4-pick wobble is not news.
+    expect(paid).not.toMatch(/Bijan Robinson is going/)
+    const free = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1', readAfAdp, hasAfIntelligence: async () => false }))!.join('\n')
+    expect(free).not.toContain('AF ADP this week')
+  })
+
   it('says "queue", not "draft", when it is not this user\'s turn', async () => {
     mocks.snapshot.mockResolvedValue(liveSnapshot({ currentPick: { overall: 2, round: 1, slot: 2, rosterId: 'roster-2', displayName: 'Manager 2', pickLabel: '1.02' } }))
     const out = (await buildDraftOsRecommendationLines('lg1', 'roster-1', { userId: 'app-user-1' }))!.join('\n')

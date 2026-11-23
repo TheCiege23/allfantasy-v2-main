@@ -2,11 +2,15 @@
  * Which Fantrax (college) team belongs to which Sleeper (pro) team, so combined scoring can be head to
  * head: your NFL + college points against your opponent's NFL + college points.
  *
- * ⚠ NAMES SUGGEST, THE COMMISSIONER DECIDES. The two platforms name teams differently. Measured on
- * Peach Bowl / Cream Bowl (2026-11-21): "Scoresscotty" / "Scorescotty", "loganhall17" / "loganhall",
- * "KingGustov" / "king gustov", "JMasc" / "Team JMasc", "TheCiege24" / "Ciege82". A guessed match
- * that is wrong puts one manager's college points on another manager's score, so suggestions are
- * only ever pre-filled choices. What is stored, and scored, is what the commissioner saved.
+ * The two platforms name teams differently. Measured on Peach Bowl / Cream Bowl (2026-11-21):
+ * "Scoresscotty" / "Scorescotty", "loganhall17" / "loganhall", "KingGustov" / "king gustov",
+ * "JMasc" / "Team JMasc", "TheCiege24" / "Ciege82".
+ *
+ * ⚠ AUTOMATIC WHEN UNAMBIGUOUS, THE COMMISSIONER STILL DECIDES. Owner direction 2026-11-22: a paired
+ * league must feel like one league with no setup step. So `confidentTeamMatches` applies a pair on its
+ * own only when it is each side's single best candidate and nothing else competes for either side —
+ * a wrong guess would put one manager's college points on another manager's score. Anything weaker
+ * stays a suggestion, and whatever the commissioner saved always wins (`effectiveTeamMap`).
  *
  * Pure.
  */
@@ -88,6 +92,52 @@ export function suggestTeamMatches(
     if (out[c.rosterId] || usedF.has(c.teamId)) continue
     out[c.rosterId] = c.teamId
     usedF.add(c.teamId)
+  }
+  return out
+}
+
+/**
+ * The suggestions that are safe to apply without anyone confirming them: each pair is the single best
+ * candidate for BOTH of its teams, and no other team ties it from either side. `known` pairs (the
+ * linker's own two teams) are fixed first, exactly as in `suggestTeamMatches`.
+ */
+export function confidentTeamMatches(
+  sleeper: readonly SleeperTeam[],
+  fantrax: readonly FantraxTeam[],
+  known: Record<string, string> = {},
+): Record<string, string> {
+  const suggested = suggestTeamMatches(sleeper, fantrax, known)
+  const out: Record<string, string> = {}
+  for (const [rosterId, teamId] of Object.entries(known)) if (suggested[rosterId] === teamId) out[rosterId] = teamId
+  const knownF = new Set(Object.values(out))
+  const free = (s: SleeperTeam) => !(s.rosterId in out)
+  for (const [rosterId, teamId] of Object.entries(suggested)) {
+    if (rosterId in out) continue
+    const s = sleeper.find((x) => x.rosterId === rosterId)
+    const f = fantrax.find((x) => x.teamId === teamId)
+    if (!s || !f) continue
+    const mine = score(s, f)
+    if (mine === 0) continue
+    // No other Fantrax team scores as well for this Sleeper team...
+    const rivalsForS = fantrax.filter((o) => o.teamId !== teamId && !knownF.has(o.teamId) && score(s, o) >= mine)
+    // ...and no other Sleeper team scores as well for this Fantrax team.
+    const rivalsForF = sleeper.filter((o) => o.rosterId !== rosterId && free(o) && score(o, f) >= mine)
+    if (rivalsForS.length === 0 && rivalsForF.length === 0) out[rosterId] = teamId
+  }
+  return out
+}
+
+/**
+ * The map that is actually used: the commissioner's saved choices, then every confident automatic
+ * match that does not collide with one. A saved choice always wins, for either team in the pair.
+ */
+export function effectiveTeamMap(saved: Record<string, string>, confident: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = { ...saved }
+  const usedF = new Set(Object.values(saved))
+  for (const [rosterId, teamId] of Object.entries(confident)) {
+    if (rosterId in out || usedF.has(teamId)) continue
+    out[rosterId] = teamId
+    usedF.add(teamId)
   }
   return out
 }

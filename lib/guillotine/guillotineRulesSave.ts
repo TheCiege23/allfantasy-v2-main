@@ -8,9 +8,11 @@ import { DEFAULT_END_WEEK_BY_SPORT, getGuillotineConfig, upsertGuillotineConfig 
 import { resolveGuillotineEndgame } from './endgameRules'
 import { calendarFitMessage, guillotineCalendarFit } from './calendarFit'
 import { readGuillotineAdvanced } from './guillotineAdvancedSettings'
+import { DEFAULT_ADVANCED } from './chopSchedule'
 import { hasFirstChopHappened } from './guillotineFirstChopWeek'
 import { normalizeGuillotineRulesPatch, paidFieldsChanged, RULE_DEFAULTS, AI_RECAP_AUTO_KEY, type GuillotineRuleField, type GuillotineRules } from './guillotineRules'
-import { FAAB_ON_CHOP_KEY, readFaabOnChop } from './faabOnChop'
+import { FAAB_ON_CHOP_KEY, FAAB_RULES_CONFLICT_MESSAGE, readFaabOnChop } from './faabOnChop'
+import { readAdvanced } from './chopSchedule'
 import { hasGuillotineAiRecapPlan } from './weeklyRecap'
 import { canChangeGuillotineBestBall, GUILLOTINE_BEST_BALL_KEY, readGuillotineBestBall } from './guillotineBestBall'
 import { checkLeagueBestBallPool } from '@/lib/bestball/leaguePoolCheck'
@@ -162,7 +164,7 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
       startWeek: current.startWeek,
       endWeek: patch.eliminationEndWeek ?? current.rules.eliminationEndWeek,
       baseChops: patch.teamsPerChop ?? current.rules.teamsPerChop,
-      advanced: advanced ?? { steps: [], overrides: {}, immunity: 'off' as const },
+      advanced: advanced ?? DEFAULT_ADVANCED,
       threshold: nextEndgame.threshold,
       finalPeriods: nextEndgame.cumulativePeriods,
       periodWeeks: patch.periodWeeks ?? current.rules.periodWeeks,
@@ -209,9 +211,11 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
   const periodChanged = periodWeeks !== undefined && periodWeeks !== current.rules.periodWeeks
   if (endgameChanged || recapChanged || faabChanged || bestBallChanged || periodChanged) {
     // League.settings is shared by every settings writer: take the row lock (as chop rules do).
-    await prisma.$transaction(async (tx) => {
+    const conflict = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM leagues WHERE id = ${leagueId} FOR UPDATE`
       const row = await tx.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+      // Split and "FAAB after a chop" cannot be on together (faabOnChop.ts); checked under the lock.
+      if (faabChanged && faabOnChop === 'split' && readAdvanced(row?.settings).faab.mode !== 'unchanged') return true
       const settings: Record<string, unknown> = { ...((row?.settings as Record<string, unknown> | null) ?? {}) }
       if (endgameChanged) settings.guillotineEndgame = endgame
       if (recapChanged) settings[AI_RECAP_AUTO_KEY] = aiRecapAuto
@@ -229,7 +233,9 @@ export async function saveGuillotineRules(leagueId: string, userId: string, raw:
           ...(endgameChanged && endgame ? { guillotineEndgame: endgame, guillotineEndgameThreshold: ENDGAME_THRESHOLD[endgame] } : {}),
         },
       })
+      return false
     })
+    if (conflict) return { ok: false, status: 409, error: FAAB_RULES_CONFLICT_MESSAGE, field: 'faabOnChop' }
   }
 
   const view = await readGuillotineRules(leagueId, userId)

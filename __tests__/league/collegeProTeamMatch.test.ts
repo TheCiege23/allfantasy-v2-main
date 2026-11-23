@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fantraxPeriodForWindow, readTeamMap, suggestTeamMatches, teamKey } from '@/lib/league/collegePro/teamMatch'
+import { confidentTeamMatches, effectiveTeamMap, fantraxPeriodForWindow, readTeamMap, suggestTeamMatches, teamKey } from '@/lib/league/collegePro/teamMatch'
 
 // The real Peach Bowl (Sleeper) and Cream Bowl (Fantrax) team lists, 2026-11-21.
 const SLEEPER = [
@@ -59,5 +59,37 @@ describe('teamKey / readTeamMap / fantraxPeriodForWindow', () => {
     const nflWeek12 = { start: Date.UTC(2026, 10, 17, 9), end: Date.UTC(2026, 10, 24, 9) }
     expect(fantraxPeriodForWindow(periods, nflWeek12)).toBe(12)
     expect(fantraxPeriodForWindow([], nflWeek12)).toBeNull()
+  })
+})
+
+describe('confidentTeamMatches: what is applied with nobody confirming it', () => {
+  it('applies all 12 real Peach Bowl / Cream Bowl pairs, because every one is unambiguous', () => {
+    const c = confidentTeamMatches(SLEEPER, FANTRAX, { '8': 'ciege' })
+    expect(c).toEqual(suggestTeamMatches(SLEEPER, FANTRAX, { '8': 'ciege' }))
+    expect(Object.keys(c)).toHaveLength(12)
+  })
+
+  it('applies nothing for a team two candidates fit equally well', () => {
+    const sleeper = [{ rosterId: 'r1', teamName: 'Hawks', ownerName: null }]
+    const fantrax = [{ teamId: 'a', name: 'Hawks' }, { teamId: 'b', name: 'Hawks' }]
+    expect(Object.keys(suggestTeamMatches(sleeper, fantrax))).toHaveLength(1) // a suggestion is still offered
+    expect(confidentTeamMatches(sleeper, fantrax)).toEqual({}) // but never applied
+  })
+
+  it('applies nothing for a college team two pro teams fit equally well', () => {
+    const sleeper = [{ rosterId: 'r1', teamName: 'Ravens', ownerName: null }, { rosterId: 'r2', teamName: null, ownerName: 'Ravens' }]
+    expect(confidentTeamMatches(sleeper, [{ teamId: 'a', name: 'Ravens' }])).toEqual({})
+  })
+
+  it('a near spelling is applied only when nothing else is close', () => {
+    const sleeper = [{ rosterId: 'r1', teamName: 'Scoresscotty', ownerName: null }]
+    expect(confidentTeamMatches(sleeper, [{ teamId: 'a', name: 'Scorescotty' }])).toEqual({ r1: 'a' })
+    expect(confidentTeamMatches(sleeper, [{ teamId: 'a', name: 'Scorescotty' }, { teamId: 'b', name: 'Scoresscottie' }])).toEqual({})
+  })
+})
+
+describe('effectiveTeamMap', () => {
+  it("keeps every commissioner choice and fills only the gaps, never reusing a college team they picked", () => {
+    expect(effectiveTeamMap({ r1: 'b' }, { r1: 'a', r2: 'b', r3: 'c' })).toEqual({ r1: 'b', r3: 'c' })
   })
 })

@@ -3,6 +3,7 @@ import { myRosterCandidates } from './myRoster'
 import { currentSleeperRoster } from './currentSleeperRoster'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { prisma } from '@/lib/prisma'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * The inputs to one matchup's win probability, shared by the Matchup screen and the
@@ -126,6 +127,7 @@ export async function loadMatchupSides(args: {
         yourPlatformUserId: yourRosterKey,
         opponentPlatformUserId: oppRosterKey,
         ...(liveLineups ? { liveLineups } : {}),
+        afIntelligence: await viewerHasAfIntelligence(args.userId),
       }).catch(() => null)
     : null
 }

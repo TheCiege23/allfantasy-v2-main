@@ -12,6 +12,7 @@ import { managerArtUrl } from './leagueArt'
 import { realManagerName } from './managerName'
 import { guillotineLine, type GuillotineTeamInput } from './railGuillotineLine'
 import type { RailMatchup } from './railMatchups'
+import { viewerHasAfIntelligence } from '@/lib/core-app/afIntelligenceViewer'
 
 /**
  * The rail rows of NATIVE leagues — the ones hosted here, which `getRailMatchups`' `WeeklyMatchup`
@@ -232,9 +233,9 @@ export async function getNativeRailMatchups(userId: string, leagueIds: readonly 
             select: { playerId: true, sport: true, season: true, week: true, stats: true, updatedAt: true },
           })
           .catch((): StatRow[] => []),
-        loadLeagueRosterWeeks(live.map(l => ({ leagueId: l.leagueId, season: l.season, week: l.week,
+        viewerHasAfIntelligence(userId).then((afIntelligence) => loadLeagueRosterWeeks(live.map(l => ({ leagueId: l.leagueId, season: l.season, week: l.week,
           ids: starters.filter(p => l.aliveIds.includes(p.rosterId)).map(p => p.playerId),
-        }))),
+        })), { afIntelligence })),
       ])
     : [[], new Map()]
   const statByKey = new Map(statRows.map((r) => [`${r.playerId}|${String(r.sport).toUpperCase()}|${r.season}|${r.week}`, r]))

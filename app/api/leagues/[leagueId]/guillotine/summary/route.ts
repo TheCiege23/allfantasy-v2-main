@@ -31,7 +31,7 @@ import { findViewerRosterId, resolveGuillotineLiveWeek } from '@/lib/guillotine/
 import { updateGuillotineFirstChopWeek } from '@/lib/guillotine/guillotineFirstChopWeek'
 import { buildGuillotineHomeExtras } from '@/lib/league-specialty/guillotineHome'
 import { readGuillotineAdvanced, saveGuillotineAdvanced } from '@/lib/guillotine/guillotineAdvancedSettings'
-import { describeSchedule } from '@/lib/guillotine/chopSchedule'
+import { MAX_FAAB_AMOUNT, describeSchedule } from '@/lib/guillotine/chopSchedule'
 import { readGuillotineRules, saveGuillotineRules, viewerCanEditPaidGuillotineRules } from '@/lib/guillotine/guillotineRulesSave'
 import { loadChopPreview } from '@/lib/guillotine/chopPreviewLoad'
 import { loadChopWatch } from '@/lib/guillotine/chopWatchLoad'
@@ -287,8 +287,13 @@ export async function PATCH(
     const before = await bestEffort(() => readGuillotineAdvanced(leagueId))
     const saved = await saveGuillotineAdvanced(leagueId, userId, body.advanced)
     if (!saved.ok) {
-      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : 400
-      const message = saved.error === 'not_entitled' ? 'Chop schedules and immunity are part of AF Commissioner.' : ('message' in saved && saved.message) || saved.error
+      const status = saved.error === 'not_entitled' ? 402 : saved.error === 'not_found' ? 404 : saved.error === 'faab_conflict' ? 409 : 400
+      const message =
+        saved.error === 'not_entitled'
+          ? 'Chop schedules, immunity and FAAB after a chop are part of AF Commissioner.'
+          : saved.error === 'bad_faab'
+            ? `FAAB after a chop must be a whole dollar amount up to ${MAX_FAAB_AMOUNT}.`
+            : ('message' in saved && saved.message) || saved.error
       return NextResponse.json({ error: message, code: saved.error }, { status })
     }
     if (before) {
