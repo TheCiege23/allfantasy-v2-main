@@ -151,8 +151,10 @@ export default function SupportMonthlyCard() {
         onClick={start}
         disabled={!agreed || busy}
         data-testid="support-monthly-button"
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-50"
-        style={{ background: '#ef4444' }}
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold transition active:scale-[0.98] disabled:opacity-50"
+        /* White inline, not a text-white class: light mode's readability rule (.mode-readable
+           [class*="text-white"], !important) turns any text-white class dark. */
+        style={{ background: '#ef4444', color: '#fff' }}
       >
         {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : needsGoogleFirst ? null : <Heart className="w-5 h-5" fill="currentColor" />}
         {needsGoogleFirst
