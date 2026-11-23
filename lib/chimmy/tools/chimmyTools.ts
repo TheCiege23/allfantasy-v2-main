@@ -1355,6 +1355,29 @@ export async function executeChimmyTool(
           ? await buildExplainValueContext({ playerName: asked, sport })
           : await buildPlayerValueContext({ playerName: asked, leagueId: null })
         if (!asked) return 'Ask which player the manager means.'
+        /*
+         * 🛑 AN NFL LEAGUE QUOTES THE PLAYER CARD'S NUMBER, THROUGH THE CARD'S OWN READER (2026-11-23). This branch
+         * read `loadLeaguePlayerMetrics`, whose NFL value is the house trade-market table (5+ fresh completed trades),
+         * while the card shows `playerValueSnapshot` on the league's chart — so in a league Chimmy quoted a different
+         * number than the card, or "no verified trade value" for a player the card prices. The tool description
+         * promises the SAME number. Board sports and NCAAF keep the league metrics below.
+         */
+        const leagueSport = await (async () => {
+          const { prisma } = await import('@/lib/prisma')
+          const row = await prisma.league.findUnique({ where: { id: ctx.leagueId! }, select: { sport: true } })
+          return row ? String(row.sport ?? 'NFL').trim().toUpperCase() || 'NFL' : null
+        })().catch(() => null)
+        if (leagueSport === 'NFL') {
+          if (sport && sport !== 'NFL') return 'The requested sport differs from the connected league.'
+          const value = await buildPlayerValueContext({ playerName: asked, leagueId: ctx.leagueId })
+          if (name !== 'explain_value') return value
+          const why = await buildExplainValueContext({ playerName: asked, sport: 'NFL' })
+          return [
+            value,
+            'WHY — the AllFantasy engine\'s derivation over current inputs. Its result can differ from the card value above; the card value is his value in this league, and the derivation explains what drives it.',
+            why,
+          ].join('\n')
+        }
         const { loadLeaguePlayerMetrics } = await import('@/lib/af-projections/leaguePlayerMetrics')
         const metrics = await loadLeaguePlayerMetrics({ leagueId: ctx.leagueId, playerName: asked, limit: 2, afIntelligence: ctx.depth === 'pro' }).catch(() => null)
         if (metrics && sport && metrics.sport !== (sport === 'NCAABB' ? 'NCAAB' : sport)) return 'The requested sport differs from the connected league.'
