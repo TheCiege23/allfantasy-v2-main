@@ -13,8 +13,8 @@ const ROWS: { id: keyof AiAutomationV1State; label: string; hint: string; icon: 
   { id: 'standings', label: 'Auto-calculate universal standings', hint: 'W–L first, points for second.', icon: Bot },
   { id: 'transitions', label: 'Auto-post phase transitions', hint: 'Pinned hub + optional league echoes.', icon: Zap },
   { id: 'fairness', label: 'Fairness recommendations', hint: 'Flags unusual patterns for review.', icon: Shield },
-  { id: 'collusion', label: 'Anti-collusion monitoring', hint: 'Heuristic signals — commissioner review.', icon: Shield },
-  { id: 'tank', label: 'Anti-tanking alerts', hint: 'Lineup / motivation heuristics by sport.', icon: Shield },
+  { id: 'collusion', label: 'Anti-collusion monitoring', hint: 'Flags unusual trading patterns for you to review.', icon: Shield },
+  { id: 'tank', label: 'Anti-tanking alerts', hint: 'Flags lineups that look like a team has stopped trying.', icon: Shield },
 ]
 
 export function TournamentAiOperationsCenter({
@@ -126,8 +126,8 @@ export function TournamentAiOperationsCenter({
           })}
         </ul>
         <p className="mt-4 text-xs text-white/40">
-          Operations console in <strong className="text-white/60">Leagues</strong> runs invites, announcements, and
-          round tools. This panel persists commissioner automation preferences for this tournament hub.
+          Invites, announcements and round tools are on the <strong className="text-white/60">Leagues</strong> tab.
+          These switches save your automation choices for this tournament.
         </p>
       </WarRoomPanel>
     </div>

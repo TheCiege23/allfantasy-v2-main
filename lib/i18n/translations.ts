@@ -5652,7 +5652,7 @@ export const translations: Record<string, Record<string, string>> = {
     "tournament.commissioner.draftsFooter":
       "Draft rooms open per sub-league; this schedule is the commissioner source of truth for phase clocks and reminders.",
     "tournament.commissioner.universalVsOverrides": "Universal vs overrides",
-    "tournament.commissioner.universalVsOverridesSubtitle": "Template + per–sub-league patches with guardrails.",
+    "tournament.commissioner.universalVsOverridesSubtitle": "Set rules for the whole tournament, then adjust individual leagues where you allow it.",
     "tournament.commissioner.openTournamentSettings": "Open tournament league settings",
     "tournament.commissioner.approvalsTitle": "Pending co-commissioner requests",
     "tournament.commissioner.approvalsSubtitle": "League co-commissioners propose settings changes. Approve or reject each one.",
@@ -9432,7 +9432,7 @@ export const translations: Record<string, Record<string, string>> = {
     "tournament.commissioner.draftsFooter":
       "Las salas de draft abren por sub-liga; este calendario es la fuente de verdad del comisionado para relojes y recordatorios.",
     "tournament.commissioner.universalVsOverrides": "Universal vs anulaciones",
-    "tournament.commissioner.universalVsOverridesSubtitle": "Plantilla + parches por sub-liga con guardarraíles.",
+    "tournament.commissioner.universalVsOverridesSubtitle": "Define las reglas de todo el torneo y luego ajusta ligas concretas donde lo permitas.",
     "tournament.commissioner.openTournamentSettings": "Abrir ajustes de liga del torneo",
     "tournament.commissioner.approvalsTitle": "Solicitudes pendientes de co-comisionado",
     "tournament.commissioner.approvalsSubtitle": "Los co-comisionados de liga proponen cambios de ajustes. Aprueba o rechaza cada uno.",
