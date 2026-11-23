@@ -424,3 +424,9 @@
 .nl-member-menu button:hover,.nl-member-menu button:focus-visible{background:var(--chip)}
 .nl-member-menu strong{font-size:13px;font-weight:700;color:var(--text)}
 .nl-member-menu span{font-size:11px;line-height:1.4;color:var(--text2)}
+
+/* Imported devy leagues: the old header's NFL / Taxi / Devy counts, under the league name (2026-11-22). */
+.nl-heading-name .nl-devy-counts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:8px 0 0;font-size:12px;font-weight:600;color:var(--text2)}
+.nl-devy-counts>span{display:inline-flex;align-items:center;gap:6px}
+.nl-devy-dot{width:6px;height:6px;border-radius:999px}
+.nl-devy-sep{margin-right:2px;opacity:.4}

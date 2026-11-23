@@ -5,6 +5,7 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { NativeLeagueWorkspace } from '@/components/league/native/NativeLeagueWorkspace'
 import { NativeLeagueHome } from '@/components/league/native/NativeLeagueHome'
 import { WhatsNextPanel } from '@/components/league/whats-next/WhatsNextPanel'
+import { DevyBucketCounts, IdpViewSwitch, type IdpViewMode } from '@/components/league/native/ImportedLeagueExtras'
 // LeagueShell loads /core's palette itself (the workspace does not), so the harness must too.
 import '@/components/core-app/af-core.css'
 
@@ -67,9 +68,10 @@ const TEAMS: UserLeagueTeam[] = [
 ]
 
 /** Harness only (app/e2e is 404 in production): the real workspace and League home for an imported league, no database. */
-export default function ImportedLeagueWorkspaceHarnessClient({ member = false }: { member?: boolean }) {
+export default function ImportedLeagueWorkspaceHarnessClient({ member = false, extras = false }: { member?: boolean; extras?: boolean }) {
   const [activeTab, setActiveTab] = useState('native_home')
   const [picked, setPicked] = useState<string | null>(null)
+  const [idpView, setIdpView] = useState<IdpViewMode>('full')
   /* The member menu's items, with the shell's English copy (lib/i18n/translations.ts league.memberMenu.*); picking one only records it here. */
   const memberMenu = member
     ? [
@@ -86,6 +88,7 @@ export default function ImportedLeagueWorkspaceHarnessClient({ member = false }:
       sourceLeagueId="e2e-fantrax-league"
       importActions={null}
       memberMenu={memberMenu}
+      headingExtras={extras ? <DevyBucketCounts stats={{ active: 18, taxi: 3, devy: 6 }} /> : null}
       league={IMPORTED}
       leagues={[IMPORTED, NATIVE]}
       tabs={TABS}
@@ -123,6 +126,8 @@ export default function ImportedLeagueWorkspaceHarnessClient({ member = false }:
             imported
           />
         </div>
+      ) : extras && activeTab === 'roster' ? (
+        <div><IdpViewSwitch value={idpView} onChange={setIdpView} /><p data-testid="imported-harness-tab">Tab body: roster, IDP view {idpView} (unchanged screen)</p></div>
       ) : (
         <p data-testid="imported-harness-tab">Tab body: {activeTab} (unchanged screen, not part of this harness)</p>
       )}
