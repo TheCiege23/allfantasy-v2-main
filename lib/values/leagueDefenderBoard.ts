@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { sleeperReadableRosters, sleeperReadablePlayerDataOf, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
-import { isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
+import { idpPositionGroup, isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import {
@@ -63,6 +63,12 @@ export interface DefenderBoardRow {
   projectedPoints: number | null
   /** Rank among his own group, for reading. Does NOT set the price. */
   positionRank: number | null
+  /**
+   * The group `positionRank` is counted in (DL/LB/DB). The board labels the rank with it — "DL1", as the hub
+   * does — never with `position`, which printed "DE1" here for the hub's "DL1" (2026-11-23). Optional: a client
+   * reading an older response derives it from `position`.
+   */
+  positionGroup?: 'DL' | 'LB' | 'DB' | null
   /**
    * True when `value` is the board's own floor rather than a separately measured price. The
    * defense hub carries the same flag for the same reason: a floor is a statement about the
@@ -326,6 +332,7 @@ export async function loadLeagueDefenderBoard(
       vorp: vorp.vorpBySleeperId.get(id) ?? null,
       projectedPoints: vorp.projectionBySleeperId.get(id) ?? null,
       positionRank: vorp.positionRankBySleeperId.get(id) ?? null,
+      positionGroup: idpPositionGroup(info.position),
       valueIsFloor: boardFloor != null && value === boardFloor,
       ownedBy: ownerFor(id),
     })
