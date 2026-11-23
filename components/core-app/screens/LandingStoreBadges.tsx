@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { APP_STORE_URL, PLAY_STORE_URL } from '@/lib/platform/appStoreLinks'
 import { isInIosAppClient } from '@/lib/platform/iosApp'
 import { isTrustedWebActivity } from '@/lib/platform/isTrustedWebActivity'
+import { track } from '@/lib/analytics/dataLayer'
 import '@/components/core-app/screens/landing-store-badges.css'
 
 export type LandingStoreBadgesCopy = {
@@ -38,12 +39,17 @@ export const STORE_BADGES_EN: LandingStoreBadgesCopy = {
  *
  * Hidden inside our own iOS app and Android TWA: someone already in the app has nothing to install.
  */
+export type StoreBadgesPage = 'landing' | 'commissioners' | 'signup'
+
 export function LandingStoreBadges({
+  page,
   copy = STORE_BADGES_EN,
   lang = 'en',
   className,
   testId = 'landing-store-badges',
 }: {
+  /** Which page the badges are on — sent with every tap as `app_store_badge_click.page`. */
+  page: StoreBadgesPage
   copy?: LandingStoreBadgesCopy
   lang?: 'en' | 'es'
   /** e.g. `af-lp-stores--center` */
@@ -65,11 +71,26 @@ export function LandingStoreBadges({
       data-hide-in-ios-app
       data-testid={testId}
     >
-      <a className="af-lp-store" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" data-testid="landing-store-apple">
+      {/* Tracking is a synchronous dataLayer push on click; it never delays opening the store. */}
+      <a
+        className="af-lp-store"
+        href={APP_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="landing-store-apple"
+        onClick={() => track({ event: 'app_store_badge_click', store: 'app_store', page })}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="af-lp-store-img" src={`/badges/app-store-${suffix}.svg`} alt={copy.appStoreAlt} />
       </a>
-      <a className="af-lp-store" href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer" data-testid="landing-store-google">
+      <a
+        className="af-lp-store"
+        href={PLAY_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="landing-store-google"
+        onClick={() => track({ event: 'app_store_badge_click', store: 'google_play', page })}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="af-lp-store-img" src={`/badges/google-play-${suffix}.png`} alt={copy.playAlt} />
       </a>

@@ -156,7 +156,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
                 {h.ctaSecondary}
               </CommissionersCtaLink>
             </div>
-            <LandingStoreBadges testId="commissioners-store-badges" />
+            <LandingStoreBadges page="commissioners" testId="commissioners-store-badges" />
             <p className="af-lp-reassure">{h.reassure}</p>
           </div>
 

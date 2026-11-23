@@ -346,7 +346,7 @@ export function LandingV4({
             button is visible at every width, and the bar is not sticky, so on first load the line
             was the same action twice on one screen.
           */}
-          <LandingStoreBadges copy={c.hero.stores} lang={lang} />
+          <LandingStoreBadges page="landing" copy={c.hero.stores} lang={lang} />
         </div>
 
         {/*

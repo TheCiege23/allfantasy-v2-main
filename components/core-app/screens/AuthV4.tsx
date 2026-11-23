@@ -1058,7 +1058,7 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
       </Suspense>
       {/* Sign-up only: someone arriving to create an account may rather do it in the app. */}
       {mode === 'signup' ? (
-        <LandingStoreBadges className="af-lp-stores--center" testId="signup-store-badges" />
+        <LandingStoreBadges page="signup" className="af-lp-stores--center" testId="signup-store-badges" />
       ) : null}
       <p className="af-au-legal">
         100% fantasy sports — no gambling, no DFS. Not available in WA.
