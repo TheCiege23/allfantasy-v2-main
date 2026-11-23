@@ -200,10 +200,6 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         <Link className="afh-back" href="/core/commissioner">
           {t('← All leagues you run')}
         </Link>
-        {/* A small link beside the way back (2026-11-14), not a full-width button above the cockpit. */}
-        <Link className="af-ch-back-more" href="/tournament-hub">
-          {t('Multi-league tournaments and weekly reports →')}
-        </Link>
       </div>
 
       <header className="afh-head">
@@ -301,506 +297,540 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         </div>
       ) : null}
 
-      {/* ── This week — the weekly checklist (redraft; renders nothing for other leagues) ── */}
-      {league.native ? <WeeklyChecklist leagueId={league.id} language={language} /> : null}
       {league.native && data.role === 'commissioner' ? <RolloverWizard leagueId={league.id} /> : null}
       {/* A private league's "Ask to join" requests from Find a League; renders nothing when there are none to show. */}
       {league.native && data.role === 'commissioner' ? <JoinRequestsCard leagueId={league.id} /> : null}
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
-      {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
       {/*
-        ── EVERYTHING BELOW "NEEDS YOU NOW" IS FOLDED (2026-11-14) ─────────────────────────────────
-        Each section is one row — its title and, where there is one, the fact worth seeing closed — and
-        opens in place (HubFold). The jump chips and in-page links open the fold they point into
-        (HubFoldOpener). Nothing inside a section changed.
+        ── EVERYTHING BELOW "NEEDS YOU NOW" IS FOLDED, IN FIVE GROUPS ──────────────────────────────
+        2026-11-14: each section became one row that opens in place (HubFold); the jump chips and in-page
+        links open the fold they point into (HubFoldOpener). 2026-11-23 (user feedback: "crowded"): the
+        22 rows were one flat run in no predictable order, so the same rows now sit under five headings.
+        Nothing inside a section changed, and every section keeps its id.
       */}
-      {data.role === 'commissioner' ? (
-        <HubFold id="ch-weekly" title={t('Turn this week into league action')}>
-          <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />
-        </HubFold>
-      ) : null}
-      {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
-      {data.role === 'commissioner' ? (
-        <HubFold id="ch-find-players" title={t('Find players for your league')}>
-          {league.native ? <FindLeagueListingCard leagueId={league.id} /> : <ExternalListingCard leagueId={league.id} />}
-        </HubFold>
-      ) : null}
-      {/*
-        The AllFantasy-run league's settings cards, under ONE fold: most hide themselves when they do not
-        apply, so a fold each would leave empty rows. AutoSubs always draws, so this fold is never empty.
-        Their own headings stay visible inside it — there are several, and the summary names none of them.
-      */}
-      {league.native && data.role === 'commissioner' ? (
-        <HubFold id="ch-native-settings" title={t('Lineup and roster autopilot')}>
-          <AutomationOverview leagueId={league.id} />
-          <OffseasonCalendar leagueId={league.id} />
-          <NativeAutoSubsCommissioner leagueId={league.id} />
-          <InactiveManagerCommissioner leagueId={league.id} />
-          <FillEmptyStarters leagueId={league.id} />
-          <EliminatedLineups leagueId={league.id} />
-          <IrAutoMove leagueId={league.id} />
-          <OrphanAuction leagueId={league.id} />
-        </HubFold>
-      ) : null}
 
-      <HubFold id="ch-intelligence" title={t('Commissioner intelligence')}>
-        <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
-          <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
-          <CommissionerChimmy leagueId={league.id} />
-        </HubSection>
-      </HubFold>
+      <section className="af-ch-grp" aria-labelledby="ch-group-weekly-work">
+        <h2 className="af-ch-group" id="ch-group-weekly-work">{t('Weekly work')}</h2>
 
-      <HubFold id="ch-format-ops" title={t('Format operations')}>
-      <HubSection id="ch-format-ops" title={t('Format operations')}>
-        {data.network && (
-          <p className="af-ch-muted">
-            {t('Network:')} <Link href="/commissioner-os/networks">{data.network.name}</Link> · {t(data.network.role)}
-          </p>
-        )}
-        {data.formatCards.length ? (
-          <ul className="af-ch-areas">
-            {data.formatCards.map((card) =>
-              card.tone === 'dynasty' ? (
-                <DynastyFormatCard key={card.key} card={card} />
-              ) : (
-                <li key={card.key}>
-                  <strong>{t(card.title)}</strong>
-                  <p>{t(card.detail)}</p>
-                  <Link href={card.href}>{t(card.action)} →</Link>
-                </li>
-              ),
-            )}
-          </ul>
-        ) : (
-          <p className="af-ch-muted">
-            {t('No specialty mechanics were resolved for this league. Review league settings before applying format-specific rules.')}
-          </p>
-        )}
-        {/* The owner's statement of how the league is really run, which no platform publishes. */}
-        {data.formatTemplate ? <FormatTemplateControl leagueId={league.id} template={data.formatTemplate} /> : null}
-      </HubSection>
-      </HubFold>
+        {/* The redraft weekly checklist, folded: its "to do" items are the ones "Needs you now" lists. */}
+        {league.native ? <WeeklyChecklist leagueId={league.id} language={language} folded /> : null}
 
-      <HubFold id="ch-history" title={t('Trades and draft archive')}>
-      <HubSection id="ch-history" title={t('Trades and draft archive')}>
-        <h3>{t('Latest trades')}</h3>
-        {data.history.trades.length ? (
-          <ul className="af-ch-areas">
-            {data.history.trades.map((trade) => (
-              <li key={trade.id}>
-                <strong>{trade.label}</strong>
-                <p>
-                  {t(trade.status)} · {trade.source} · {new Date(trade.at).toLocaleDateString(hubDateLocale(language))}
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
-        )}
-        <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
-        {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
-        {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
-        {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
-        {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
-        <h3>{t('Draft archive')}</h3>
-        {data.history.drafts.length ? (
-          data.history.drafts.map((draft) => (
-            <details key={`${draft.source}-${draft.id}`}>
-              <summary>
-                {draft.season ?? t('Season unknown')}
-                {draft.seasonBasis === 'date_inferred' ? t(' (year inferred)') : ''} · {draft.source} · {t(draft.status)} ·{' '}
-                {t(draft.picks.length === 1 ? '1 pick' : `${draft.picks.length} picks`)}
-              </summary>
-              <ol>
-                {draft.picks.map((pick) => (
-                  <li key={pick.overall}>
-                    {t(`Round ${pick.round}, pick ${pick.overall}: ${pick.owner} selected ${pick.player}`)}
-                    {pick.corrections.length > 0 && (
-                      <ul>
-                        {pick.corrections.map((correction, index) => (
-                          <li key={index}>
-                            {t('Correction:')} {t(correction)}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </details>
-          ))
-        ) : data.history.importedDrafts?.length ? null : (
-          <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
-        )}
-        {/* An imported draft is shown pick by pick in the Draft HQ archive; here it is one line that opens it. */}
-        {data.history.importedDrafts?.length ? (
-          <ul className="af-ch-areas">
-            {data.history.importedDrafts.map((draft) => (
-              <li key={draft.key}>
-                <strong>{draft.season ?? t('Season unknown')} · {t('Imported draft')}</strong>
-                <p><Link href={draft.href}>{t('Open in the draft archive')}</Link></p>
-              </li>
-            ))}
-          </ul>
+        {/*
+          The task tracker — the same findings as "Needs you now", with their review status (in progress,
+          waiting on a manager, archived). Folded 2026-11-23: open, it was a third to-do list on the page.
+        */}
+        {data.role === 'commissioner' ? (
+          <HubFold id="ch-queue" title={t('Task tracker')}>
+            <CommissionerActionQueue leagueId={league.id} />
+          </HubFold>
         ) : null}
-        <p className="af-ch-muted">{t(data.history.draftNote)}</p>
-        {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
-        {data.history.lotteries?.length ? (
-          <>
-            <h3>{t('Weighted lottery history')}</h3>
-            <p className="af-ch-muted">{t('Recorded AllFantasy draws; older or imported results may be missing.')}</p>
-            {data.history.lotteries.map((draw) => (
-              <details key={draw.id}>
-                <summary>{draw.season != null ? `${draw.season} · ` : ''}{new Date(draw.at).toLocaleDateString(hubDateLocale(language))}</summary>
-                <ol>
-                  {draw.slots.map((slot) => (
-                    <li key={slot.slot}>{t('Pick')} {slot.slot}: {slot.team}{slot.odds != null ? ` · ${slot.odds.toLocaleString(hubDateLocale(language), { maximumFractionDigits: 2 })}% ${t('odds at pick 1')}` : ''}</li>
-                  ))}
-                </ol>
-              </details>
-            ))}
-          </>
+
+        {data.role === 'commissioner' ? (
+          <HubFold id="ch-weekly" title={t('Turn this week into league action')}>
+            <CommissionerWeeklyPlan key={league.id} leagueId={league.id} />
+          </HubFold>
         ) : null}
-      </HubSection>
-      </HubFold>
 
-      {/* Recent changes moved into the audit log's fold (2026-11-14): both listed the same syncs. */}
-      <HubFold
-        id="ch-members"
-        title={t('Member activity')}
-        note={quiet.length > 0 ? t(quiet.length === 1 ? '1 gone quiet' : `${quiet.length} gone quiet`) : null}
-      >
-        <HubDepthGate depth={depth} id="ch-members" what={t('Member activity')} language={language}>
-          <MemberActivity data={data} language={language} />
-        </HubDepthGate>
-      </HubFold>
+        {/* ── This week's lineups, projected (AF beside API, 2026-09-30) ── */}
+        {lineups ? (
+          <HubFold id="ch-lineups" title={t('This week’s lineups, projected')} note={t(`week ${lineups.week}`)}>
+          <HubSection
+            id="ch-lineups"
+            title={t('This week’s lineups, projected')}
+            note={<span className="af-num">{t(`week ${lineups.week}`)}</span>}
+            className="af-ch-lineups"
+          >
+            <WeekLineupsBody lineups={lineups} caveat={t('nothing here changes a standing or a ruling.')} />
+          </HubSection>
+          </HubFold>
+        ) : null}
 
-      {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
-      {/*
-        The health panel inside a `display: contents` wrapper: it changes no layout anywhere, and carries the
-        engine score as `--rdc-health` for the redraft identity's score ring (af-core-redraft-standings.css).
-        No score, no variable and no ring — lib/core-app/redraftCoreRace.ts healthRingPct.
-      */}
-      <HubFold id="ch-health" title={t('League health')} note={healthNote}>
-      <div
-        className="af-rdc-health"
-        style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
-        data-ring={healthRing == null ? undefined : 'true'}
-      >
-        <HealthPanel
-          data={data}
-          language={language}
-          breakdown={
-            activity ? (
-              <Suspense fallback={<HealthBreakdownStatic data={data} reason="loading" language={language} />}>
-                <HealthBreakdown data={data} activity={activity} language={language} />
-              </Suspense>
-            ) : (
-              <HealthBreakdownStatic data={data} reason="locked" language={language} />
-            )
-          }
-        />
-      </div>
-      </HubFold>
+        {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
+        {data.waivers || depth?.unlocked === false ? (
+          <HubFold id="ch-waivers" title={t('Waiver oversight')}>
+            <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')} language={language}>
+              {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
+            </HubDepthGate>
+          </HubFold>
+        ) : null}
 
-      {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}
-      <HubFold id="ch-calendar" title={t('League calendar')}>
-        <HubCalendar data={data} language={language} />
-      </HubFold>
+        {/* Lineup integrity — free for the latest week; the card names what the plan adds. ESPN reads the kickoff capture. */}
+        {league.native || league.platform === 'sleeper' || league.platform === 'espn' ? (
+          <HubFold id="ch-lineup-integrity" title={t('Lineup integrity')}>
+            <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
+              <LineupIntegrity leagueId={league.id} />
+            </HubSection>
+          </HubFold>
+        ) : null}
 
-      {/* ── 5 · Guides (item 4) ───────────────────────────────────────── */}
-      <HubFold id="ch-workflows" title={t('Step-by-step guides')}>
-        <HubSection id="ch-workflows" title={t('Step-by-step guides')}>
-          <GuidedWorkflows workflows={data.workflows} />
-        </HubSection>
-      </HubFold>
+        {/*
+          Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
+          and the card itself says which part is the Commissioner plan (the route enforces it).
+        */}
+        <HubFold id="ch-deadlines" title={t('Deadline autopilot')}>
+          <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
+            <DeadlineAutopilot leagueId={league.id} />
+          </HubSection>
+        </HubFold>
 
-      {/* ── 6 · Every league area (item 2) ────────────────────────────── */}
-      <HubFold id="ch-areas" title={t('Every part of the league')}>
-        <LeagueAreas data={data} language={language} />
-      </HubFold>
+        {/*
+          Weekly recap review — outside the depth gate: editing the league's own recap before it posts
+          is a free commissioner control. Only where a recap runs at all (Sleeper and AllFantasy-run).
+        */}
+        {league.native || league.platform === 'sleeper' ? (
+          <HubFold id="ch-recap" title={t('Weekly recap')}>
+            <HubSection id="ch-recap" title={t('Weekly recap')}>
+              <WeeklyRecapReview leagueId={league.id} />
+            </HubSection>
+          </HubFold>
+        ) : null}
+      </section>
 
-      {/* ── This week's lineups, projected (AF beside API, 2026-09-30) ── */}
-      {lineups ? (
-        <HubFold id="ch-lineups" title={t('This week’s lineups, projected')} note={t(`week ${lineups.week}`)}>
-        <HubSection
-          id="ch-lineups"
-          title={t('This week’s lineups, projected')}
-          note={<span className="af-num">{t(`week ${lineups.week}`)}</span>}
-          className="af-ch-lineups"
+      <section className="af-ch-grp" aria-labelledby="ch-group-managers">
+        <h2 className="af-ch-group" id="ch-group-managers">{t('Managers')}</h2>
+
+        {/* Recent changes moved into the audit log's fold (2026-11-14): both listed the same syncs. */}
+        <HubFold
+          id="ch-members"
+          title={t('Member activity')}
+          note={quiet.length > 0 ? t(quiet.length === 1 ? '1 gone quiet' : `${quiet.length} gone quiet`) : null}
         >
-          <WeekLineupsBody lineups={lineups} caveat={t('nothing here changes a standing or a ruling.')} />
-        </HubSection>
-        </HubFold>
-      ) : null}
-
-      {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
-      {data.waivers || depth?.unlocked === false ? (
-        <HubFold id="ch-waivers" title={t('Waiver oversight')}>
-          <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')} language={language}>
-            {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
+          <HubDepthGate depth={depth} id="ch-members" what={t('Member activity')} language={language}>
+            <MemberActivity data={data} language={language} />
           </HubDepthGate>
         </HubFold>
-      ) : null}
 
-      <HubFold id="ch-rules" title={t('How this league runs')} note={league.season != null ? String(league.season) : null}>
-        {/* ── How the league runs ────────────────────────────────────── */}
-        <HubSection
-          id="ch-rules"
-          title={t('How this league runs')}
-          note={league.season != null ? <span className="af-num">{league.season}</span> : undefined}
-        >
-          <ul className="af-ch-settings">
-            {settings.map((row) => (
-              <li key={row.key}>
-                <span className="af-ch-setting-key">{t(row.key)}</span>
-                {row.state.available ? (
-                  <span className="af-ch-setting-value">{t(row.state.data)}</span>
-                ) : (
-                  <span className="af-ch-setting-why">{t(row.state.reason)}</span>
+        {/* Open seats → Find a League. Native only: an imported league's seats are filled on its own platform. */}
+        {data.role === 'commissioner' ? (
+          <HubFold id="ch-find-players" title={t('Find players for your league')}>
+            {league.native ? <FindLeagueListingCard leagueId={league.id} /> : <ExternalListingCard leagueId={league.id} />}
+          </HubFold>
+        ) : null}
+
+        <HubFold id="ch-access" title={t('Who can run this league')} note={t(access.length === 1 ? '1 person' : `${access.length} people`)}>
+          {/* ── Access ────────────────────────────────────────────────── */}
+          <HubSection
+            id="ch-access"
+            title={t('Who can run this league')}
+            note={t(access.length === 1 ? '1 person' : `${access.length} people`)}
+          >
+            {access.length > 0 ? (
+              <ul className="af-ch-access">
+                {access.map((a) => (
+                  <li key={`${a.role}-${a.basis}-${a.handle}`}>
+                    <span className="af-ch-access-mark af-num" aria-hidden>
+                      {a.initials}
+                    </span>
+                    <span className="af-ch-access-name">
+                      {a.handle}
+                      {a.isYou ? <span className="af-ch-access-you"> · {t('you')}</span> : null}
+                      {/*
+                        An imported league has two authorities, and the row says which one this is:
+                        AllFantasy's owner runs it here, the platform publishes its own commissioner.
+                      */}
+                      {league.native ? null : (
+                        <span className="af-ch-access-basis">
+                          {t(
+                            a.basis === 'platform'
+                              ? `On ${platformName}`
+                              : a.basis === 'both'
+                                ? `Here and on ${platformName}`
+                                : 'Here on AllFantasy',
+                          )}
+                        </span>
+                      )}
+                    </span>
+                    <span className="af-ch-access-role af-label" data-role={a.role}>
+                      {a.role === 'commissioner' ? t('Commissioner') : t('Co-commissioner')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="af-ch-empty">
+                <span className="af-ch-empty-mark af-num" aria-hidden>
+                  —
+                </span>
+                <p>
+                  {t(
+                    'No commissioner is recorded on this league’s ingested teams. That is a gap in what the platform published, not a league without one.',
+                  )}
+                </p>
+              </div>
+            )}
+            {!league.native && access.some((a) => a.basis === 'platform') && access.some((a) => a.basis === 'allfantasy') ? (
+              <p className="af-ch-access-note">
+                {t(
+                  `Whoever imported this league runs it here on AllFantasy. ${platformName}’s own commissioner is listed as ${platformName} publishes it — rulings are still applied there.`,
                 )}
-              </li>
-            ))}
-          </ul>
+              </p>
+            ) : null}
+
+            {/*
+              The boundary the handoff asks to be stated. Worth saying plainly to a
+              co-commissioner rather than discovering it at a 403.
+            */}
+            {role === 'co_commissioner' ? (
+              <p className="af-ch-boundary">
+                {t(
+                  'As a co-commissioner you can act on everything above, including @everyone announcements. You cannot transfer commissionership or remove the primary commissioner, and connecting Discord is left to the league owner.',
+                )}
+              </p>
+            ) : null}
+          </HubSection>
+        </HubFold>
+
+        {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
+        <HubFold id="ch-communities" title={t('Connections')}>
+          <CommunityLinks
+            data={data}
+            language={language}
+            announce={data.viewerCanBroadcast ? <AnnounceButton leagueId={league.id} /> : null}
+          />
+        </HubFold>
+      </section>
+
+      <section className="af-ch-grp" aria-labelledby="ch-group-rules-and-settings">
+        <h2 className="af-ch-group" id="ch-group-rules-and-settings">{t('Rules and settings')}</h2>
+
+        <HubFold id="ch-rules" title={t('How this league runs')} note={league.season != null ? String(league.season) : null}>
+          {/* ── How the league runs ────────────────────────────────────── */}
+          <HubSection
+            id="ch-rules"
+            title={t('How this league runs')}
+            note={league.season != null ? <span className="af-num">{league.season}</span> : undefined}
+          >
+            <ul className="af-ch-settings">
+              {settings.map((row) => (
+                <li key={row.key}>
+                  <span className="af-ch-setting-key">{t(row.key)}</span>
+                  {row.state.available ? (
+                    <span className="af-ch-setting-value">{t(row.state.data)}</span>
+                  ) : (
+                    <span className="af-ch-setting-why">{t(row.state.reason)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            {/*
+              Disputes state their absence rather than being quietly left off the
+              screen. The engines behind a dispute scan only read AF-native tables,
+              so on an imported league "0 disputes" would be a claim with no scan
+              behind it. The guide above is what a commissioner uses instead.
+            */}
+            <div className="af-ch-disputes">
+              <span className="af-label">{t('Disputes')}</span>
+              <p>{t(disputes.reason)}</p>
+              {league.native && (
+                <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>{t('Open integrity monitor →')}</Link>
+              )}
+            </div>
+
+            {/* Filed disputes: managers file, the commissioner rules. Works for imported leagues too. */}
+            <div className="af-ch-dispute-desk" style={{ marginTop: 16 }}>
+              <DisputeDesk leagueId={league.id} />
+              <p className="af-ch-setting-why">
+                <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
+              </p>
+            </div>
+
+            {/* The constitution: written from these settings, changed by league vote. */}
+            <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
+              <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
+            </p>
+
+            {/* The league log: every commissioner action, readable by the league unless set commish-only. */}
+            <p className="af-ch-setting-why">
+              <Link href={`/league/${encodeURIComponent(league.id)}/log`}>{t('League log: who can see your actions →')}</Link>
+            </p>
+          </HubSection>
+        </HubFold>
+
+        {/*
+          The AllFantasy-run league's settings cards, under ONE fold: most hide themselves when they do not
+          apply, so a fold each would leave empty rows. AutoSubs always draws, so this fold is never empty.
+          Their own headings stay visible inside it — there are several, and the summary names none of them.
+        */}
+        {league.native && data.role === 'commissioner' ? (
+          <HubFold id="ch-native-settings" title={t('Lineup and roster autopilot')}>
+            <AutomationOverview leagueId={league.id} />
+            <OffseasonCalendar leagueId={league.id} />
+            <NativeAutoSubsCommissioner leagueId={league.id} />
+            <InactiveManagerCommissioner leagueId={league.id} />
+            <FillEmptyStarters leagueId={league.id} />
+            <EliminatedLineups leagueId={league.id} />
+            <IrAutoMove leagueId={league.id} />
+            <OrphanAuction leagueId={league.id} />
+          </HubFold>
+        ) : null}
+
+        <HubFold id="ch-format-ops" title={t('Format operations')}>
+        <HubSection id="ch-format-ops" title={t('Format operations')}>
+          {data.network && (
+            <p className="af-ch-muted">
+              {t('Network:')} <Link href="/commissioner-os/networks">{data.network.name}</Link> · {t(data.network.role)}
+            </p>
+          )}
+          {data.formatCards.length ? (
+            <ul className="af-ch-areas">
+              {data.formatCards.map((card) =>
+                card.tone === 'dynasty' ? (
+                  <DynastyFormatCard key={card.key} card={card} />
+                ) : (
+                  <li key={card.key}>
+                    <strong>{t(card.title)}</strong>
+                    <p>{t(card.detail)}</p>
+                    <Link href={card.href}>{t(card.action)} →</Link>
+                  </li>
+                ),
+              )}
+            </ul>
+          ) : (
+            <p className="af-ch-muted">
+              {t('No specialty mechanics were resolved for this league. Review league settings before applying format-specific rules.')}
+            </p>
+          )}
+          {/* The owner's statement of how the league is really run, which no platform publishes. */}
+          {data.formatTemplate ? <FormatTemplateControl leagueId={league.id} template={data.formatTemplate} /> : null}
+        </HubSection>
+        </HubFold>
+
+        {/* ── 8 · Automations (item 8) ──────────────────────────────────── */}
+        <HubFold id="ch-recipes" title={t('Automations')}>
+          <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')} language={language}>
+            <HubSection id="ch-recipes" title={t('Automations')}>
+              <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
+            </HubSection>
+          </HubDepthGate>
+        </HubFold>
+
+        {/* ── 4 · Calendar (item 3) ─────────────────────────────────────── */}
+        <HubFold id="ch-calendar" title={t('League calendar')}>
+          <HubCalendar data={data} language={language} />
+        </HubFold>
+
+        {/* ── Public standings ────────────────────────────────────────── */}
+        <HubFold id="ch-public" title={t('Public standings')} note={publicStandings.enabled ? t('Published') : t('Private')}>
+        <section id="ch-public" className="af-card af-ch-section af-ch-publish" data-on={publicStandings.enabled}>
+          <header className="af-ch-section-head">
+            <h2 className="af-label">{t('Public standings')}</h2>
+            <span className="af-ch-section-note" data-on={publicStandings.enabled}>
+              {publicStandings.enabled ? t('Published') : t('Private')}
+            </span>
+          </header>
+
+          {publicStandings.enabled ? (
+            <p className="af-ch-publish-body">
+              {t(
+                'This league’s standings are readable by anyone with the link, without an account, and search engines are allowed to index them. Team names are published; manager names are not.',
+              )}
+            </p>
+          ) : (
+            <p className="af-ch-publish-body">
+              {/*
+                ⚠ THE COPY STATES WHAT PUBLISHING ACTUALLY DOES, NOT THAT IT IS A
+                FEATURE. League and team names are user-authored and often
+                personal; a commissioner turning this on is publishing twelve
+                people's writing, and should be told that in the same sentence as
+                the offer.
+              */}
+              {t('Off. Turning this on gives this league a public page at')} <code>{publicStandings.url}</code>{' '}
+              {t(
+                '— readable without an account and indexable by search engines. It publishes the league name, team names, records and points. It does not publish manager names.',
+              )}
+            </p>
+          )}
 
           {/*
-            Disputes state their absence rather than being quietly left off the
-            screen. The engines behind a dispute scan only read AF-native tables,
-            so on an imported league "0 disputes" would be a claim with no scan
-            behind it. The guide above is what a commissioner uses instead.
+            The switch itself is a client island. Access was already decided
+            server-side — this renders only inside the granted branch, and the
+            route re-checks `requireCommissionerRole` regardless, so the component
+            cannot grant what the gate did not.
           */}
-          <div className="af-ch-disputes">
-            <span className="af-label">{t('Disputes')}</span>
-            <p>{t(disputes.reason)}</p>
-            {league.native && (
-              <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>{t('Open integrity monitor →')}</Link>
-            )}
-          </div>
+          <PublishStandingsToggle leagueId={league.id} enabled={publicStandings.enabled} url={publicStandings.url} />
+        </section>
+        </HubFold>
+      </section>
 
-          {/* Filed disputes: managers file, the commissioner rules. Works for imported leagues too. */}
-          <div className="af-ch-dispute-desk" style={{ marginTop: 16 }}>
-            <DisputeDesk leagueId={league.id} />
-            <p className="af-ch-setting-why">
-              <Link href={`/league/${encodeURIComponent(league.id)}/disputes`}>{t('Share the dispute desk with your league →')}</Link>
-            </p>
-          </div>
+      <section className="af-ch-grp" aria-labelledby="ch-group-reports-and-history">
+        <h2 className="af-ch-group" id="ch-group-reports-and-history">{t('Reports and history')}</h2>
 
-          {/* The constitution: written from these settings, changed by league vote. */}
-          <p className="af-ch-setting-why" style={{ marginTop: 12 }}>
-            <Link href={`/league/${encodeURIComponent(league.id)}/constitution`}>{t('League constitution and amendments →')}</Link>
-          </p>
-
-          {/* The league log: every commissioner action, readable by the league unless set commish-only. */}
-          <p className="af-ch-setting-why">
-            <Link href={`/league/${encodeURIComponent(league.id)}/log`}>{t('League log: who can see your actions →')}</Link>
-          </p>
-        </HubSection>
-      </HubFold>
-
-      <HubFold id="ch-access" title={t('Who can run this league')} note={t(access.length === 1 ? '1 person' : `${access.length} people`)}>
-        {/* ── Access ────────────────────────────────────────────────── */}
-        <HubSection
-          id="ch-access"
-          title={t('Who can run this league')}
-          note={t(access.length === 1 ? '1 person' : `${access.length} people`)}
+        {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}
+        {/*
+          The health panel inside a `display: contents` wrapper: it changes no layout anywhere, and carries the
+          engine score as `--rdc-health` for the redraft identity's score ring (af-core-redraft-standings.css).
+          No score, no variable and no ring — lib/core-app/redraftCoreRace.ts healthRingPct.
+        */}
+        <HubFold id="ch-health" title={t('League health')} note={healthNote}>
+        <div
+          className="af-rdc-health"
+          style={healthRing == null ? { display: 'contents' } : ({ display: 'contents', '--rdc-health': healthRing } as CSSProperties)}
+          data-ring={healthRing == null ? undefined : 'true'}
         >
-          {access.length > 0 ? (
-            <ul className="af-ch-access">
-              {access.map((a) => (
-                <li key={`${a.role}-${a.basis}-${a.handle}`}>
-                  <span className="af-ch-access-mark af-num" aria-hidden>
-                    {a.initials}
-                  </span>
-                  <span className="af-ch-access-name">
-                    {a.handle}
-                    {a.isYou ? <span className="af-ch-access-you"> · {t('you')}</span> : null}
-                    {/*
-                      An imported league has two authorities, and the row says which one this is:
-                      AllFantasy's owner runs it here, the platform publishes its own commissioner.
-                    */}
-                    {league.native ? null : (
-                      <span className="af-ch-access-basis">
-                        {t(
-                          a.basis === 'platform'
-                            ? `On ${platformName}`
-                            : a.basis === 'both'
-                              ? `Here and on ${platformName}`
-                              : 'Here on AllFantasy',
-                        )}
-                      </span>
-                    )}
-                  </span>
-                  <span className="af-ch-access-role af-label" data-role={a.role}>
-                    {a.role === 'commissioner' ? t('Commissioner') : t('Co-commissioner')}
-                  </span>
+          <HealthPanel
+            data={data}
+            language={language}
+            breakdown={
+              activity ? (
+                <Suspense fallback={<HealthBreakdownStatic data={data} reason="loading" language={language} />}>
+                  <HealthBreakdown data={data} activity={activity} language={language} />
+                </Suspense>
+              ) : (
+                <HealthBreakdownStatic data={data} reason="locked" language={language} />
+              )
+            }
+          />
+        </div>
+        </HubFold>
+
+        {/* ── 7 · Charts (item 5) — large, so below the working sections ─── */}
+        <HubFold id="ch-reports" title={t('League at a glance')}>
+          <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')} language={language}>
+            {activity ? (
+              <Suspense fallback={<ChartsFallback language={language} />}>
+                <OperationalCharts data={data} activity={activity} language={language} />
+              </Suspense>
+            ) : null}
+          </HubDepthGate>
+        </HubFold>
+
+        <HubFold id="ch-intelligence" title={t('Commissioner intelligence')}>
+          <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
+            <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
+            <CommissionerChimmy leagueId={league.id} />
+          </HubSection>
+        </HubFold>
+
+        {/*
+          Storyline Studio — outside the depth gate: the card reads the AF Commissioner plan itself and
+          shows the upsell without it (the route enforces the plan). Every league: an AllFantasy league
+          can post and auto-post; an imported one gets Copy, shaped for its own platform's chat.
+        */}
+        <HubFold id="ch-storylines" title={t('Storyline Studio')}>
+          <HubSection id="ch-storylines" title={t('Storyline Studio')}>
+            <StorylineStudio leagueId={league.id} />
+          </HubSection>
+        </HubFold>
+
+        <HubFold id="ch-history" title={t('Trades and draft archive')}>
+        <HubSection id="ch-history" title={t('Trades and draft archive')}>
+          <h3>{t('Latest trades')}</h3>
+          {data.history.trades.length ? (
+            <ul className="af-ch-areas">
+              {data.history.trades.map((trade) => (
+                <li key={trade.id}>
+                  <strong>{trade.label}</strong>
+                  <p>
+                    {t(trade.status)} · {trade.source} · {new Date(trade.at).toLocaleDateString(hubDateLocale(language))}
+                  </p>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="af-ch-empty">
-              <span className="af-ch-empty-mark af-num" aria-hidden>
-                —
-              </span>
-              <p>
-                {t(
-                  'No commissioner is recorded on this league’s ingested teams. That is a gap in what the platform published, not a league without one.',
-                )}
-              </p>
-            </div>
+            <p className="af-ch-muted">{data.history.tradeAvailable ? t('No trade records on file.') : t('Trade history unavailable.')}</p>
           )}
-          {!league.native && access.some((a) => a.basis === 'platform') && access.some((a) => a.basis === 'allfantasy') ? (
-            <p className="af-ch-access-note">
-              {t(
-                `Whoever imported this league runs it here on AllFantasy. ${platformName}’s own commissioner is listed as ${platformName} publishes it — rulings are still applied there.`,
-              )}
-            </p>
+          <p className="af-ch-muted">{t(data.history.tradeNote)}</p>
+          {/* The budget a budget move in a trade is priced against — set here only where the platform's import records none. */}
+          {league.waiverBudget?.settableHere ? <WaiverBudgetControl leagueId={league.id} initial={league.waiverBudget.value} /> : null}
+          {/* Fantrax gives AllFantasy no completed-trade feed; the commissioner uploads Fantrax's own export. */}
+          {league.platform.toLowerCase() === 'fantrax' ? <FantraxTradeHistoryUpload leagueId={league.id} /> : null}
+          <h3>{t('Draft archive')}</h3>
+          {data.history.drafts.length ? (
+            data.history.drafts.map((draft) => (
+              <details key={`${draft.source}-${draft.id}`}>
+                <summary>
+                  {draft.season ?? t('Season unknown')}
+                  {draft.seasonBasis === 'date_inferred' ? t(' (year inferred)') : ''} · {draft.source} · {t(draft.status)} ·{' '}
+                  {t(draft.picks.length === 1 ? '1 pick' : `${draft.picks.length} picks`)}
+                </summary>
+                <ol>
+                  {draft.picks.map((pick) => (
+                    <li key={pick.overall}>
+                      {t(`Round ${pick.round}, pick ${pick.overall}: ${pick.owner} selected ${pick.player}`)}
+                      {pick.corrections.length > 0 && (
+                        <ul>
+                          {pick.corrections.map((correction, index) => (
+                            <li key={index}>
+                              {t('Correction:')} {t(correction)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ))
+          ) : data.history.importedDrafts?.length ? null : (
+            <p className="af-ch-muted">{data.history.draftAvailable ? t('No draft sessions on file.') : t('Draft history unavailable.')}</p>
+          )}
+          {/* An imported draft is shown pick by pick in the Draft HQ archive; here it is one line that opens it. */}
+          {data.history.importedDrafts?.length ? (
+            <ul className="af-ch-areas">
+              {data.history.importedDrafts.map((draft) => (
+                <li key={draft.key}>
+                  <strong>{draft.season ?? t('Season unknown')} · {t('Imported draft')}</strong>
+                  <p><Link href={draft.href}>{t('Open in the draft archive')}</Link></p>
+                </li>
+              ))}
+            </ul>
           ) : null}
-
-          {/*
-            The boundary the handoff asks to be stated. Worth saying plainly to a
-            co-commissioner rather than discovering it at a 403.
-          */}
-          {role === 'co_commissioner' ? (
-            <p className="af-ch-boundary">
-              {t(
-                'As a co-commissioner you can act on everything above, including @everyone announcements. You cannot transfer commissionership or remove the primary commissioner, and connecting Discord is left to the league owner.',
-              )}
-            </p>
+          <p className="af-ch-muted">{t(data.history.draftNote)}</p>
+          {data.history.lotteryReadFailed ? <p className="af-ch-muted">{t('Lottery history is temporarily unavailable.')}</p> : null}
+          {data.history.lotteries?.length ? (
+            <>
+              <h3>{t('Weighted lottery history')}</h3>
+              <p className="af-ch-muted">{t('Recorded AllFantasy draws; older or imported results may be missing.')}</p>
+              {data.history.lotteries.map((draw) => (
+                <details key={draw.id}>
+                  <summary>{draw.season != null ? `${draw.season} · ` : ''}{new Date(draw.at).toLocaleDateString(hubDateLocale(language))}</summary>
+                  <ol>
+                    {draw.slots.map((slot) => (
+                      <li key={slot.slot}>{t('Pick')} {slot.slot}: {slot.team}{slot.odds != null ? ` · ${slot.odds.toLocaleString(hubDateLocale(language), { maximumFractionDigits: 2 })}% ${t('odds at pick 1')}` : ''}</li>
+                    ))}
+                  </ol>
+                </details>
+              ))}
+            </>
           ) : null}
         </HubSection>
-      </HubFold>
-
-      {/* ── 7 · Charts (item 5) — large, so below the working sections ─── */}
-      <HubFold id="ch-reports" title={t('League at a glance')}>
-        <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')} language={language}>
-          {activity ? (
-            <Suspense fallback={<ChartsFallback language={language} />}>
-              <OperationalCharts data={data} activity={activity} language={language} />
-            </Suspense>
-          ) : null}
-        </HubDepthGate>
-      </HubFold>
-
-      {/* ── 8 · Automations (item 8) ──────────────────────────────────── */}
-      <HubFold id="ch-recipes" title={t('Automations')}>
-        <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')} language={language}>
-          <HubSection id="ch-recipes" title={t('Automations')}>
-            <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
-          </HubSection>
-        </HubDepthGate>
-      </HubFold>
-
-      {/* Lineup integrity — free for the latest week; the card names what the plan adds. ESPN reads the kickoff capture. */}
-      {league.native || league.platform === 'sleeper' || league.platform === 'espn' ? (
-        <HubFold id="ch-lineup-integrity" title={t('Lineup integrity')}>
-          <HubSection id="ch-lineup-integrity" title={t('Lineup integrity')}>
-            <LineupIntegrity leagueId={league.id} />
-          </HubSection>
         </HubFold>
-      ) : null}
-
-      {/*
-        Deadline autopilot — outside the depth gate on purpose: its list and "Remind now" are free,
-        and the card itself says which part is the Commissioner plan (the route enforces it).
-      */}
-      <HubFold id="ch-deadlines" title={t('Deadline autopilot')}>
-        <HubSection id="ch-deadlines" title={t('Deadline autopilot')}>
-          <DeadlineAutopilot leagueId={league.id} />
-        </HubSection>
-      </HubFold>
-
-      {/*
-        Storyline Studio — outside the depth gate: the card reads the AF Commissioner plan itself and
-        shows the upsell without it (the route enforces the plan). Every league: an AllFantasy league
-        can post and auto-post; an imported one gets Copy, shaped for its own platform's chat.
-      */}
-      <HubFold id="ch-storylines" title={t('Storyline Studio')}>
-        <HubSection id="ch-storylines" title={t('Storyline Studio')}>
-          <StorylineStudio leagueId={league.id} />
-        </HubSection>
-      </HubFold>
-
-      {/*
-        Weekly recap review — outside the depth gate: editing the league's own recap before it posts
-        is a free commissioner control. Only where a recap runs at all (Sleeper and AllFantasy-run).
-      */}
-      {league.native || league.platform === 'sleeper' ? (
-        <HubFold id="ch-recap" title={t('Weekly recap')}>
-          <HubSection id="ch-recap" title={t('Weekly recap')}>
-            <WeeklyRecapReview leagueId={league.id} />
-          </HubSection>
-        </HubFold>
-      ) : null}
-
-      {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
-      <HubFold id="ch-communities" title={t('Connections')}>
-        <CommunityLinks
-          data={data}
-          language={language}
-          announce={data.viewerCanBroadcast ? <AnnounceButton leagueId={league.id} /> : null}
-        />
-      </HubFold>
-
-      {/* ── Public standings ────────────────────────────────────────── */}
-      <HubFold id="ch-public" title={t('Public standings')} note={publicStandings.enabled ? t('Published') : t('Private')}>
-      <section id="ch-public" className="af-card af-ch-section af-ch-publish" data-on={publicStandings.enabled}>
-        <header className="af-ch-section-head">
-          <h2 className="af-label">{t('Public standings')}</h2>
-          <span className="af-ch-section-note" data-on={publicStandings.enabled}>
-            {publicStandings.enabled ? t('Published') : t('Private')}
-          </span>
-        </header>
-
-        {publicStandings.enabled ? (
-          <p className="af-ch-publish-body">
-            {t(
-              'This league’s standings are readable by anyone with the link, without an account, and search engines are allowed to index them. Team names are published; manager names are not.',
-            )}
-          </p>
-        ) : (
-          <p className="af-ch-publish-body">
-            {/*
-              ⚠ THE COPY STATES WHAT PUBLISHING ACTUALLY DOES, NOT THAT IT IS A
-              FEATURE. League and team names are user-authored and often
-              personal; a commissioner turning this on is publishing twelve
-              people's writing, and should be told that in the same sentence as
-              the offer.
-            */}
-            {t('Off. Turning this on gives this league a public page at')} <code>{publicStandings.url}</code>{' '}
-            {t(
-              '— readable without an account and indexable by search engines. It publishes the league name, team names, records and points. It does not publish manager names.',
-            )}
-          </p>
-        )}
 
         {/*
-          The switch itself is a client island. Access was already decided
-          server-side — this renders only inside the granted branch, and the
-          route re-checks `requireCommissionerRole` regardless, so the component
-          cannot grant what the gate did not.
+          ── 10 · Audit log (item 6) — the longest table, so last ────────────────────────────────────
+          Recent changes lives here now (2026-11-14): it and the log listed the same syncs, in two places.
+          It stays free; only the full log is behind the depth lock, as before.
         */}
-        <PublishStandingsToggle leagueId={league.id} enabled={publicStandings.enabled} url={publicStandings.url} />
-      </section>
-      </HubFold>
-
-      {/*
-        ── 10 · Audit log (item 6) — the longest table, so last ────────────────────────────────────
-        Recent changes lives here now (2026-11-14): it and the log listed the same syncs, in two places.
-        It stays free; only the full log is behind the depth lock, as before.
-      */}
-      <HubFold id="ch-timeline" title={t('Audit log')}>
-        <Suspense fallback={<RecentChangesFallback language={language} />}>
-          <RecentChanges timeline={timeline} language={language} />
-        </Suspense>
-        <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')} language={language}>
-          <Suspense fallback={<AuditTimelineFallback language={language} />}>
-            <AuditTimeline timeline={timeline} language={language} />
+        <HubFold id="ch-timeline" title={t('Audit log')}>
+          <Suspense fallback={<RecentChangesFallback language={language} />}>
+            <RecentChanges timeline={timeline} language={language} />
           </Suspense>
-        </HubDepthGate>
-      </HubFold>
+          <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')} language={language}>
+            <Suspense fallback={<AuditTimelineFallback language={language} />}>
+              <AuditTimeline timeline={timeline} language={language} />
+            </Suspense>
+          </HubDepthGate>
+        </HubFold>
+      </section>
+
+      <section className="af-ch-grp" aria-labelledby="ch-group-help">
+        <h2 className="af-ch-group" id="ch-group-help">{t('Help')}</h2>
+
+        {/* ── 5 · Guides (item 4) ───────────────────────────────────────── */}
+        <HubFold id="ch-workflows" title={t('Step-by-step guides')}>
+          <HubSection id="ch-workflows" title={t('Step-by-step guides')}>
+            <GuidedWorkflows workflows={data.workflows} />
+          </HubSection>
+        </HubFold>
+
+        {/* ── 6 · Every league area (item 2) ────────────────────────────── */}
+        <HubFold id="ch-areas" title={t('Every part of the league')}>
+          <LeagueAreas data={data} language={language} />
+        </HubFold>
+      </section>
 
       <footer className="afh-foot">
         <p>
@@ -815,6 +845,10 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
           {t('Health trends in Commissioner OS →')}
         </CommissionerOsLink>
+        {/* Moved from beside the way back (2026-11-23): a cross-league tool, not this league's first screen. */}
+        <Link className="afh-link" href="/tournament-hub">
+          {t('Multi-league tournaments and weekly reports →')}
+        </Link>
       </footer>
     </div>
   )
