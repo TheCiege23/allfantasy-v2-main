@@ -22,15 +22,15 @@ function stub(valueReport: unknown) {
 
 describe('keeper screen — value report', () => {
   it('formats a player above, at and below his cost', () => {
-    expect(keeperValueLine({ marketRank: 10, pickSlot: 102, surplus: 92 })).toBe('+92 value · market #10, costs pick ~#102')
-    expect(keeperValueLine({ marketRank: 30, pickSlot: 30, surplus: 0 })).toBe('Even value · market #30, costs pick ~#30')
-    expect(keeperValueLine({ marketRank: 80, pickSlot: 30, surplus: -50 })).toBe('Worth 50 picks less than his cost · market #80, costs pick ~#30')
+    expect(keeperValueLine({ marketRank: 10, pickSlot: 102, surplus: 92 })).toBe('Worth 92 picks more than he costs (drafted around pick 10, costs pick 102)')
+    expect(keeperValueLine({ marketRank: 30, pickSlot: 30, surplus: 0 })).toBe('Worth about what he costs (drafted around pick 30, costs pick 30)')
+    expect(keeperValueLine({ marketRank: 80, pickSlot: 30, surplus: -50 })).toBe('Worth 50 picks less than he costs (drafted around pick 80, costs pick 30)')
   })
 
   it('shows each candidate’s value when the league has the report', async () => {
     stub({ available: true, values: { p1: { marketRank: 10, pickSlot: 102, surplus: 92 }, p2: { marketRank: 80, pickSlot: 30, surplus: -50 } } })
     render(<KeeperSelectionTab leagueId="L" />)
-    expect(await screen.findByText('+92 value · market #10, costs pick ~#102')).toBeTruthy()
+    expect(await screen.findByText('Worth 92 picks more than he costs (drafted around pick 10, costs pick 102)')).toBeTruthy()
     expect(screen.getByText(/Worth 50 picks less/)).toBeTruthy()
     expect(screen.getByTestId('keeper-value-note')).toBeTruthy()
   })
