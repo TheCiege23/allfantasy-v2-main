@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { resolvePairedHalf, type PairedHalf } from '@/lib/core-app/leaguePairing'
 import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { COLLEGE_PRO_TEAM_MAP_KEY } from './headToHead'
+import { COLLEGE_PRO_PAIR_KEY, readLeaguePair, type LeaguePairRecord } from './pairRecord'
 import { confidentTeamMatches, effectiveTeamMap, readTeamMap, type FantraxTeam, type SleeperTeam } from './teamMatch'
 
 /**
@@ -28,25 +29,7 @@ import { confidentTeamMatches, effectiveTeamMap, readTeamMap, type FantraxTeam, 
  * Fantrax's, so the name is the only key the two share.
  */
 
-export const COLLEGE_PRO_PAIR_KEY = 'collegeProPair'
-
-export type LeaguePairRecord = {
-  role: 'pro' | 'college'
-  otherLeagueId: string
-  linkedByUserId: string
-  linkedAt: string
-}
-
-export function readLeaguePair(settings: unknown): LeaguePairRecord | null {
-  const raw = settings && typeof settings === 'object' ? (settings as Record<string, unknown>)[COLLEGE_PRO_PAIR_KEY] : null
-  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
-  if (!r) return null
-  const role = r.role === 'pro' || r.role === 'college' ? r.role : null
-  const otherLeagueId = typeof r.otherLeagueId === 'string' && r.otherLeagueId ? r.otherLeagueId : null
-  const linkedByUserId = typeof r.linkedByUserId === 'string' && r.linkedByUserId ? r.linkedByUserId : null
-  if (!role || !otherLeagueId || !linkedByUserId) return null
-  return { role, otherLeagueId, linkedByUserId, linkedAt: typeof r.linkedAt === 'string' ? r.linkedAt : '' }
-}
+export { COLLEGE_PRO_PAIR_KEY, readLeaguePair, type LeaguePairRecord } from './pairRecord'
 
 /**
  * May this user make a pair the league's? The head commissioner of the pro half, or the user who
@@ -193,6 +176,8 @@ export type PairContext = {
   /** The viewer's team key in each half, or null when unknown. */
   proKey: string | null
   collegeKey: string | null
+  /** Every AllFantasy user who claimed a team in either half, by that half's team key. */
+  owners: Array<{ role: 'pro' | 'college'; key: string; userId: string }>
 }
 
 /**
@@ -233,7 +218,12 @@ export async function loadPairContext(leagueId: string, userId: string): Promise
   let collegeKey = mine(college)
   if (proKey && !collegeKey) collegeKey = map[proKey] ?? null
   if (collegeKey && !proKey) proKey = Object.entries(map).find(([, c]) => c === collegeKey)?.[0] ?? null
-  return { pair, pro, college, proTeams: proTeams.keyed, collegeTeams: collegeTeams.keyed, map, auto, proKey, collegeKey }
+  const owners: PairContext['owners'] = []
+  for (const claim of allClaims) {
+    const key = claim.claimedByUserId ? keyOf(claim) : null
+    if (key && claim.claimedByUserId) owners.push({ role: claim.leagueId === pro.id ? 'pro' : 'college', key, userId: claim.claimedByUserId })
+  }
+  return { pair, pro, college, proTeams: proTeams.keyed, collegeTeams: collegeTeams.keyed, map, auto, proKey, collegeKey, owners }
 }
 
 /**

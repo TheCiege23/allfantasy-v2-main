@@ -17,6 +17,8 @@ export type PipelinePick = {
   round: number
   pick: number
   overall: number
+  /** The school he was drafted from, when the store recorded one. */
+  college?: string | null
 }
 
 export type CollegeProPipeline = {
@@ -52,6 +54,7 @@ export function parseStoredDraftPicks(data: unknown): { year: number; picks: Pip
       round,
       pick,
       overall: Number.isFinite(overall) ? overall : pick,
+      college: typeof p?.collegeTeam === 'string' && p.collegeTeam.trim() ? p.collegeTeam.trim() : typeof p?.college === 'string' && p.college.trim() ? p.college.trim() : null,
     })
   }
   // Basketball rows record the picks they could not link (lib/devy/cbbdDraftPicksStore.ts); football's do not.
