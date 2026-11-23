@@ -120,6 +120,8 @@ export type GuillotineEventType =
   /** A chopped team's unspent FAAB was split among the survivors (./faabOnChop.ts). */
   | 'faab_split'
   | 'removal_request'
+  /** Survivors' FAAB topped up or reset after a chop (./faabAfterChop.ts); once per season and week. */
+  | 'faab_after_chop'
   /** A chopped manager's "Who's next?" pick (./nextChopPick.ts). */
   | 'next_chop_pick'
   /** The once-a-week chop-zone warning went out (./chopAlerts.ts); its presence stops a resend. */
