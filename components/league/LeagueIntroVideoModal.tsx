@@ -46,19 +46,22 @@ export function LeagueIntroVideoModal({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 backdrop-blur-md">
       <div className="relative w-full max-w-4xl mx-4">
-        {/* Close button */}
-        <button
-          onClick={dismiss}
-          className="absolute -top-10 right-0 flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10 hover:text-white transition z-10"
-        >
-          <X className="h-3.5 w-3.5" /> Skip Intro
-        </button>
-
-        {/* League name overlay */}
-        <div className="absolute top-4 left-4 z-10">
-          <div className="text-xs uppercase tracking-[0.2em] text-white/40 mb-1">Welcome to</div>
-          <div className="text-xl font-bold text-white drop-shadow-lg">{leagueName}</div>
-          <div className="text-xs text-white/50 mt-1 capitalize">{leagueType.replace(/_/g, ' ')} League</div>
+        {/*
+          The welcome line sits ABOVE the video, beside Skip. Laid over the video's top-left corner it
+          covered the artwork's own title on every format's intro (audit 2026-11-23).
+        */}
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0" data-testid="league-intro-welcome">
+            <div className="text-xs uppercase tracking-[0.2em] text-white/55 mb-1">Welcome to</div>
+            <div className="text-xl font-bold text-white break-words">{leagueName}</div>
+            <div className="text-xs text-white/60 mt-1 capitalize">{leagueType.replace(/_/g, ' ')} league</div>
+          </div>
+          <button
+            onClick={dismiss}
+            className="shrink-0 flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white transition"
+          >
+            <X className="h-3.5 w-3.5" /> Skip Intro
+          </button>
         </div>
 
         {/* Video player */}

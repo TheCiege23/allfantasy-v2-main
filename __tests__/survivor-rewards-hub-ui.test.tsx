@@ -126,7 +126,7 @@ describe('Commissioner Hub → Rewards', () => {
 })
 
 const challenge = (over: Record<string, unknown>) => ({
-  id: 'c1', week: 9, title: 'T', question: 'Q', kind: 'sweep', scope: 'individual', status: 'open', opensAt: '2026-11-01T14:00:00Z', locksAt: '2026-11-02T01:00:00Z',
+  id: 'c1', week: 9, title: 'T', question: 'Q', kind: 'sweep', scope: 'individual', status: 'open', opensAt: '2026-11-01T14:00:00Z', locksAt: '2099-11-02T01:00:00Z', // a passed lock hides the answer form
   inputKind: 'sweep', options: [], prizeText: '+20 points', wager: null, uniqueAnswers: false, sealed: false, mine: null, answers: null, resultSummary: null, myResult: null, ...over,
 })
 

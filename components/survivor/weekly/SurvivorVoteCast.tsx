@@ -35,7 +35,9 @@ function useCountdown(targetIso: string | null): string | null {
     return () => window.clearInterval(id)
   }, [target])
   if (!Number.isFinite(target)) return null
-  const left = Math.max(0, Math.floor((target - now) / 1000))
+  const left = Math.floor((target - now) / 1000)
+  // ⚠ Past the deadline there is no countdown: a frozen 00:00:00 read as "closing right now" for days.
+  if (left <= 0) return null
   const days = Math.floor(left / 86400)
   const pad = (n: number) => String(n).padStart(2, '0')
   const clock = `${pad(Math.floor((left % 86400) / 3600))}:${pad(Math.floor((left % 3600) / 60))}`
@@ -190,12 +192,16 @@ export function SurvivorVoteCast({
     <header className="swl-vc-head">
       <Link className="swl-vc-back" href={backHref} aria-label="Back">‹</Link>
       <div className="swl-vc-title">
-        <h1>Cast your vote</h1>
+        <h1>{deadlinePassed ? 'The votes are in' : 'Cast your vote'}</h1>
         <span className="swl-t2 swl-vc-dtitle">{headerSub}</span>
         {clock && <span className="swl-vc-mclock">{tribeName ? `Tribe ${tribeName} · ` : ''}closes in <span className="swl-gold swl-num">{clock}</span></span>}
       </div>
       {clock && <div className="swl-vc-clock" role="timer" aria-live="off"><span className="swl-lbl">Votes close in</span><span className="swl-num">{clock}</span></div>}
     </header>
+
+    {deadlinePassed && <p role="status" className="swl-vc-alert" style={{ marginTop: 16 }} data-testid="survivor-vote-closed">
+      Voting has closed. {view?.you.hasVoted ? 'Your vote is in. ' : ''}The host reads the votes next.
+    </p>}
 
     {error && <p role="alert" className="swl-vc-alert" style={{ marginTop: 16 }}>{error}</p>}
 

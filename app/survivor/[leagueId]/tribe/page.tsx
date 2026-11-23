@@ -5,19 +5,8 @@ import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { TribeMemberCard } from '@/app/survivor/components/TribeMemberCard'
-import type { SurvivorStatusBadgeVariant } from '@/app/survivor/components/SurvivorStatusBadge'
-import type { SurvivorSeasonPlayer } from '@/lib/survivor/survivorUiTypes'
 import { tribeCrestAlt } from '@/lib/survivor/survivorTribeIdentity'
-
-function memberVariant(p: SurvivorSeasonPlayer, councilOpen: boolean): SurvivorStatusBadgeVariant {
-  if (p.playerState === 'eliminated' || (p.eliminatedWeek != null && p.eliminatedWeek > 0)) return 'eliminated'
-  if (p.playerState === 'exile') return 'exiled'
-  if (p.isJuryMember || p.playerState === 'jury') return 'jury'
-  if (p.isFinalist) return 'finalist'
-  if (p.hasImmunityThisWeek) return 'immune'
-  if (councilOpen && p.playerState === 'active' && !p.hasImmunityThisWeek) return 'vulnerable'
-  return 'safe'
-}
+import { islandMemberBadge, islandTribeTotals } from '@/lib/survivor/survivorIslandView'
 
 export default function SurvivorTribePage() {
   const params = useParams()
@@ -44,12 +33,16 @@ export default function SurvivorTribePage() {
     return tribes.find((t) => t.id !== tribeId) ?? null
   }, [tribeId, tribes])
 
-  const tribeStatusLabel =
-    councilOpen && ctx.season?.activeCouncil?.attendingTribeId === tribe?.id
-      ? 'TRIBAL TONIGHT'
-      : postMerge
-        ? 'MERGED TRIBE'
-        : 'SAFE'
+  // Said once, here, instead of a badge on every member's card.
+  const atCouncil = Boolean(councilOpen && (!ctx.season?.activeCouncil?.attendingTribeId || ctx.season.activeCouncil.attendingTribeId === tribe?.id))
+  const tribeStatusLabel = atCouncil ? 'At Tribal Council this week' : postMerge ? 'Merged tribe' : 'Safe this week'
+
+  // The same sums the home page's tribe cards show, so the two pages agree.
+  const totals = useMemo(() => islandTribeTotals(ctx.season?.weeklyScores ?? []), [ctx.season?.weeklyScores])
+  const scoreByUser = useMemo(() => new Map((ctx.season?.weeklyScores ?? []).map((s) => [s.userId, s.finalScore])), [ctx.season?.weeklyScores])
+  const ours = tribe ? totals.get(tribe.id) : undefined
+  const theirs = opponent ? totals.get(opponent.id) : undefined
+  const share = ours != null && theirs != null && ours + theirs > 0 ? ours / (ours + theirs) : null
 
   return (
     <div className="relative px-3 pb-28 pt-4 md:px-6 md:pb-10">
@@ -79,25 +72,30 @@ export default function SurvivorTribePage() {
             >
               <span style={{ color: tribe?.colorHex ?? 'var(--survivor-gold)' }}>{tribe?.name ?? 'Tribe'}</span>
             </h1>
-            <p className="mt-1 text-[12px] text-[var(--survivor-text-medium)]">
+            <p className={`mt-1 text-[12px] ${atCouncil ? 'font-semibold text-[#f4a493]' : 'text-[var(--survivor-text-medium)]'}`} data-testid="survivor-tribe-status">
               {roster.length} members · {tribeStatusLabel}
             </p>
           </div>
         </div>
-        <div className="mt-4 md:mt-0 md:text-right">
-          <p className="font-mono text-3xl font-bold tabular-nums text-white">—</p>
-          <p className="text-[11px] text-[var(--survivor-text-dim)]">Weekly tribe score (syncs with league scoring)</p>
-          {opponent ? (
-            <p className="mt-2 text-[12px] text-white/55">
-              vs {opponent.name ?? 'Opponent'}: <span className="sv-score font-mono">—</span>
-            </p>
-          ) : null}
-        </div>
+        {!postMerge ? (
+          <div className="mt-4 md:mt-0 md:text-right">
+            <p className="font-mono text-3xl font-bold tabular-nums text-white" data-testid="survivor-tribe-score">{ours != null ? ours.toFixed(1) : 'No score yet'}</p>
+            <p className="text-[11px] text-[var(--survivor-text-dim)]">This week&apos;s tribe score</p>
+            {opponent ? (
+              <p className="mt-2 text-[12px] text-white/55">
+                vs {opponent.name ?? 'Opponent'}: <span className="sv-score font-mono">{theirs != null ? theirs.toFixed(1) : '—'}</span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-[#e8c98e] to-[#f0a35e]" />
-      </div>
+      {share != null ? (
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]" role="img" aria-label={`${tribe?.name ?? 'Your tribe'} has ${Math.round(share * 100)}% of the points this week`}>
+          {/* Inline tokens: the `from-[#…] to-[#…]` gradient utilities compiled to nothing here, so the fill was invisible. */}
+          <div className="h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: 'linear-gradient(90deg, var(--survivor-gold), var(--survivor-torch))' }} />
+        </div>
+      ) : null}
 
       <section className="mt-6">
         <h2 className="sv-kicker mb-3 text-[12px]">Roster</h2>
@@ -108,36 +106,23 @@ export default function SurvivorTribePage() {
               name={p.displayName}
               avatarUrl={p.avatarUrl ?? null}
               outWeek={p.eliminatedWeek ?? null}
-              weeklyScore={undefined}
-              statusVariant={memberVariant(p, Boolean(councilOpen))}
-              ringClass={
-                p.hasImmunityThisWeek
-                  ? 'ring-[#f2c46b]/50'
-                  : councilOpen && p.playerState === 'active' && !p.hasImmunityThisWeek
-                    ? 'ring-red-500/35'
-                    : 'ring-white/10'
-              }
-              atRisk={Boolean(councilOpen && p.playerState === 'active' && !p.hasImmunityThisWeek)}
+              weeklyScore={scoreByUser.get(p.userId)}
+              statusVariant={islandMemberBadge(p)}
             />
           ))}
         </div>
       </section>
 
-      <section className="mt-8 survivor-panel rounded-2xl p-4">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between text-left"
-          aria-expanded={false}
-        >
-          <span className="sv-kicker text-[12px]">Tribe challenge history</span>
-          <span className="text-white/35">▼</span>
-        </button>
-        <p className="mt-2 text-[12px] text-white/45">Last three weeks will appear here as the season logs results.</p>
-      </section>
+      {/*
+        The "Tribe challenge history" panel that sat here was a disclosure button that opened nothing over
+        a promise ("Last three weeks will appear here"). Past results live on the Challenges page.
+      */}
+      <Link href={`${base}/challenges`} className="sv-link mt-6 inline-block text-[13px]">Past challenge results →</Link>
 
+      {/* In the page flow at the end, not floating: fixed, it sat over the last lines of the page on a phone. */}
       <Link
         href={`${base}/chat`}
-        className="fixed bottom-20 right-4 z-30 flex h-14 min-h-[56px] items-center gap-2 rounded-full bg-[var(--survivor-torch)] px-5 text-[13px] font-semibold text-[#1a0f05] shadow-[0_10px_30px_rgba(0,0,0,0.45)] hover:bg-[#f4b47a] md:bottom-8 md:right-8"
+        className="mt-6 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[var(--survivor-torch)] px-5 text-[14px] font-semibold text-[#1a0f05] hover:bg-[#f4b47a] md:w-auto md:inline-flex"
       >
         💬 Tribe Chat
       </Link>

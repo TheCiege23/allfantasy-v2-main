@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useMessages } from '@/components/i18n/useMessages'
 import { defineMessages } from '@/lib/i18n/messages'
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
@@ -42,6 +43,7 @@ export const challengeBoardMessages = defineMessages({
     points: 'points',
     textAnswer: 'Your answer',
     sweepHint: (n: number): string => `Pick one answer on each of the ${n} props — every one must hit.`,
+    seeAll: (n: number): string => `See all ${n} challenges →`,
   },
   es: {
     heading: 'Retos de la isla',
@@ -72,6 +74,7 @@ export const challengeBoardMessages = defineMessages({
     points: 'puntos',
     textAnswer: 'Tu respuesta',
     sweepHint: (n: number): string => `Elige una respuesta en cada una de las ${n} apuestas: hay que acertarlas todas.`,
+    seeAll: (n: number): string => `Ver los ${n} retos →`,
   },
 })
 
@@ -100,7 +103,11 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [picks, setPicks] = useState<Record<string, string>>({})
-  const canAnswer = c.status === 'open' && !c.mine
+  // ⚠ The board can still say `open` after the lock time until the server sweeps it; the server
+  // refuses an answer then, so the box would only collect a "no take backs" answer that bounces.
+  const lockMs = Date.parse(c.locksAt)
+  const pastLock = c.status === 'open' && Number.isFinite(lockMs) && lockMs <= Date.now()
+  const canAnswer = c.status === 'open' && !pastLock && !c.mine
   const props = c.props ?? []
   const ready = c.inputKind === 'number' || c.inputKind === 'text' ? value.trim() !== ''
     : c.inputKind === 'sweep' ? props.length > 0 && props.every((p) => picks[p.id])
@@ -128,7 +135,7 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
     <li className="rounded-xl border border-white/10 bg-black/20 p-3" data-testid={`challenge-${c.id}`}>
       <p className="text-[15px] font-bold text-white">{c.title}</p>
       <p className="mt-1 text-[13px] text-white/75 whitespace-pre-line">{c.question}</p>
-      <p className="mt-1 text-[11px] text-white/50">{c.scope === 'tribe' ? m.tribe : m.individual}{c.status === 'open' ? ` · ${m.locks(formatLocalTime(c.locksAt))}` : ''}</p>
+      <p className="mt-1 text-[11px] text-white/50">{c.scope === 'tribe' ? m.tribe : m.individual}{c.status === 'open' && !pastLock ? ` · ${m.locks(formatLocalTime(c.locksAt))}` : ''}</p>
       <p className="mt-1 text-[12px] text-amber-200/90">{m.prize}: {c.prizeText}</p>
       {c.uniqueAnswers ? <p className="mt-1 text-[11px] text-white/45">{m.unique}</p> : null}
       {c.sealed ? <p className="mt-1 text-[11px] text-white/45">{m.sealed}</p> : null}
@@ -171,7 +178,7 @@ function ChallengeItem({ c, leagueId, onDone }: { c: BuilderChallengeView; leagu
         </div>
       ) : null}
       {error ? <p role="alert" className="mt-1 text-[12px] text-red-300">{error}</p> : null}
-      {c.status === 'locked' || c.status === 'settling' ? <p className="mt-2 text-[12px] text-white/55">{m.locked}</p> : null}
+      {c.status === 'locked' || c.status === 'settling' || pastLock ? <p className="mt-2 text-[12px] text-white/55">{m.locked}</p> : null}
       {c.answers ? (
         <details className="mt-2 text-[12px] text-white/65">
           <summary>{m.answers} ({c.answers.length})</summary>
@@ -209,7 +216,22 @@ function RewardChoice({ r, leagueId, onDone }: { r: Reward; leagueId: string; on
   )
 }
 
-export function SurvivorChallengeBoardCard({ leagueId }: { leagueId: string }) {
+/** Open challenges shown on the island home; the rest live on the Challenges page. */
+const COMPACT_LIMIT = 2
+
+export function SurvivorChallengeBoardCard({
+  leagueId,
+  compact = false,
+  allHref,
+}: {
+  leagueId: string
+  /**
+   * The island home: only open challenges, at most two, and no rewards list — with a link to the full
+   * board. Showing every challenge and result there stacked five cards and ~1,700px on a phone.
+   */
+  compact?: boolean
+  allHref?: string
+}) {
   const m = useMessages(challengeBoardMessages)
   const [challenges, setChallenges] = useState<BuilderChallengeView[] | null>(null)
   const [rewards, setRewards] = useState<Reward[] | null>(null)
@@ -224,6 +246,24 @@ export function SurvivorChallengeBoardCard({ leagueId }: { leagueId: string }) {
   useEffect(() => { void load() }, [load])
   const live = (challenges ?? []).filter((c) => c.status !== 'complete')
   const recent = (challenges ?? []).filter((c) => c.status === 'complete').slice(0, 5)
+  if (compact) {
+    const total = challenges?.length ?? 0
+    // Only what the manager can still act on: open, before its lock time.
+    const shown = live.filter((c) => c.status === 'open' && !(Date.parse(c.locksAt) <= Date.now())).slice(0, COMPACT_LIMIT)
+    // Nothing open: the home page has nothing to ask of the manager here.
+    if (!shown.length) return null
+    return (
+      <section className="mt-6 survivor-panel rounded-2xl p-4" data-testid="survivor-challenge-board">
+        <h2 className="sv-kicker text-[12px]">{m.heading}</h2>
+        <ul className="mt-3 space-y-3">
+          {shown.map((c) => <ChallengeItem key={c.id} c={c} leagueId={leagueId} onDone={() => void load()} />)}
+        </ul>
+        {allHref && total > shown.length ? (
+          <Link href={allHref} className="sv-link mt-3 inline-block text-[13px]">{m.seeAll(total)}</Link>
+        ) : null}
+      </section>
+    )
+  }
   return (
     <section className="mt-6 survivor-panel p-4" data-testid="survivor-challenge-board">
       <h2 className="text-[11px] font-bold uppercase tracking-wider text-[var(--survivor-torch)]">{m.heading}</h2>

@@ -10,9 +10,11 @@
  *      components rendered inside them) are written in, with a readable floor for the faintest steps;
  *   3. it adds a few island classes: Cinzel headings, torch buttons, the scene banner, the nav.
  *
- * These pages have always been dark-only (hard-coded white text on dark panels, no light-mode
- * variant), so the shell paints its own island background and stays dark in the app's light mode
- * rather than putting light text on a light page.
+ * Light mode (2026-11-23): the island used to stay dark when a manager chose light. Every colour
+ * below now comes from a token, and `html[data-mode='light'] .sv-island` re-points the tokens at a
+ * sand-and-driftwood palette. The shell keeps `af-draft-dark` so globals.css's generic light-mode
+ * recolouring stays out: this file is the one place island colour is decided, in both modes.
+ * The scene banner stays night-time art in both modes and resets the ink tokens to light.
  */
 
 .sv-island {
@@ -34,11 +36,24 @@
   --sv-serif: 'Cinzel', 'Trajan Pro', Georgia, 'Times New Roman', serif;
   --sv-scene: url('/survivor/scenes/tribal.svg');
 
+  /* Ink: the warm white the pages' `text-white*` utilities are re-pointed at, as an RGB triple. */
+  --sv-ink-rgb: 241 236 228;
+  --sv-line-rgb: 255 236 214;
+  --sv-fade-top: rgba(7, 8, 13, 0.25);
+  --sv-fade-mid: rgba(7, 8, 13, 0.78);
+  --sv-chrome: color-mix(in srgb, #0a0b10 86%, transparent);
+  --sv-btn-bg: rgba(14, 16, 24, 0.82);
+  --sv-btn-ink: #f1ece4;
+  --sv-primary-ink: #1a0f05;
+  --sv-pill-ink: #f6d3ae;
+  --sv-chimmy-wash: #241a12;
+  --sv-exile-wash: linear-gradient(180deg, rgba(12, 8, 24, 0.55) 0%, rgba(7, 8, 13, 0.82) 320px, var(--survivor-bg) 520px);
+
   color: var(--survivor-text-bright);
   background-color: var(--survivor-bg);
   /* The scene sits behind the top of the page and fades into the page colour before content gets busy. */
   background-image:
-    linear-gradient(180deg, rgba(7, 8, 13, 0.25) 0, rgba(7, 8, 13, 0.78) 260px, #07080d 440px),
+    linear-gradient(180deg, var(--sv-fade-top) 0, var(--sv-fade-mid) 260px, var(--survivor-bg) 440px),
     var(--sv-scene);
   background-size: 100% 100%, max(100%, 1280px) auto;
   background-position: 0 0, center top;
@@ -57,29 +72,31 @@
 }
 
 /* ── 2. Warm text and hairlines (Tailwind 3 utilities, re-pointed inside the island only) ── */
-.sv-island .text-white { color: #f1ece4; }
-.sv-island .text-white\/90 { color: rgb(241 236 228 / 0.94); }
+.sv-island .text-white { color: rgb(var(--sv-ink-rgb)); }
+.sv-island .text-white\/90 { color: rgb(var(--sv-ink-rgb) / 0.94); }
 .sv-island .text-white\/85,
-.sv-island .text-white\/80 { color: rgb(241 236 228 / 0.88); }
+.sv-island .text-white\/80 { color: rgb(var(--sv-ink-rgb) / 0.88); }
 .sv-island .text-white\/75,
-.sv-island .text-white\/70 { color: rgb(241 236 228 / 0.82); }
+.sv-island .text-white\/70 { color: rgb(var(--sv-ink-rgb) / 0.82); }
 .sv-island .text-white\/65,
-.sv-island .text-white\/60 { color: rgb(241 236 228 / 0.74); }
-.sv-island .text-white\/55 { color: rgb(241 236 228 / 0.68); }
-.sv-island .text-white\/50 { color: rgb(241 236 228 / 0.64); }
+.sv-island .text-white\/60 { color: rgb(var(--sv-ink-rgb) / 0.74); }
+.sv-island .text-white\/55 { color: rgb(var(--sv-ink-rgb) / 0.68); }
+.sv-island .text-white\/50 { color: rgb(var(--sv-ink-rgb) / 0.64); }
 /* The faintest steps get a floor: below ~0.55 warm text on these panels drops under 4.5:1. */
 .sv-island .text-white\/45,
-.sv-island .text-white\/40 { color: rgb(241 236 228 / 0.6); }
+.sv-island .text-white\/40 { color: rgb(var(--sv-ink-rgb) / 0.6); }
 .sv-island .text-white\/35,
 .sv-island .text-white\/30,
-.sv-island .text-white\/25 { color: rgb(241 236 228 / 0.56); }
+.sv-island .text-white\/25 { color: rgb(var(--sv-ink-rgb) / 0.56); }
 
 .sv-island .border-white\/5,
-.sv-island .border-white\/\[0\.06\] { border-color: rgba(255, 236, 214, 0.08); }
-.sv-island .border-white\/\[0\.08\] { border-color: rgba(255, 236, 214, 0.1); }
-.sv-island .border-white\/10 { border-color: rgba(255, 236, 214, 0.14); }
-.sv-island .border-white\/15 { border-color: rgba(255, 236, 214, 0.18); }
-.sv-island .border-white\/20 { border-color: rgba(255, 236, 214, 0.22); }
+.sv-island .border-white\/\[0\.06\] { border-color: rgb(var(--sv-line-rgb) / 0.08); }
+.sv-island .border-white\/\[0\.08\] { border-color: rgb(var(--sv-line-rgb) / 0.1); }
+.sv-island .border-white\/10 { border-color: rgb(var(--sv-line-rgb) / 0.14); }
+.sv-island .border-white\/15 { border-color: rgb(var(--sv-line-rgb) / 0.18); }
+.sv-island .border-white\/20 { border-color: rgb(var(--sv-line-rgb) / 0.22); }
+
+.sv-island .sv-exile-wash { background: var(--sv-exile-wash); }
 
 /* ── 3. Island classes ── */
 
@@ -118,23 +135,23 @@
   font-weight: 600;
   font-size: 14px;
   text-decoration: none;
-  color: #f1ece4;
-  border: 1px solid rgba(255, 236, 214, 0.18);
-  background: rgba(14, 16, 24, 0.82);
+  color: var(--sv-btn-ink);
+  border: 1px solid rgb(var(--sv-line-rgb) / 0.18);
+  background: var(--sv-btn-bg);
 }
-.sv-island .sv-btn:hover { border-color: rgba(240, 163, 94, 0.55); }
+.sv-island .sv-btn:hover { border-color: var(--sv-accent-line); }
 .sv-island .sv-btn:focus-visible { outline: 2px solid var(--survivor-torch); outline-offset: 2px; }
 .sv-island .sv-btn:disabled { opacity: 0.45; }
-.sv-island .sv-btn-primary { background: var(--survivor-torch); border-color: transparent; color: #1a0f05; }
-.sv-island .sv-btn-primary:hover { background: #f4b47a; }
+.sv-island .sv-btn-primary { background: var(--survivor-torch); border-color: transparent; color: var(--sv-primary-ink); }
+.sv-island .sv-btn-primary:hover { filter: brightness(1.08); }
 
 /* A selected pill (chat channels) and a torch-tinted chip. */
-.sv-island .sv-pill-on { background: var(--sv-accent-soft); color: #f6d3ae; box-shadow: inset 0 0 0 1px var(--sv-accent-line); }
-.sv-island .sv-chip-torch { background: var(--sv-accent-soft); color: #f6d3ae; border: 1px solid var(--sv-accent-line); }
+.sv-island .sv-pill-on { background: var(--sv-accent-soft); color: var(--sv-pill-ink); box-shadow: inset 0 0 0 1px var(--sv-accent-line); }
+.sv-island .sv-chip-torch { background: var(--sv-accent-soft); color: var(--sv-pill-ink); border: 1px solid var(--sv-accent-line); }
 
 /* Chimmy's private lane: the warm host gradient the /core island uses for Chimmy (`--chimmy`). */
 .sv-island .sv-chimmy-card {
-  background: linear-gradient(160deg, #241a12, var(--survivor-panel) 58%);
+  background: linear-gradient(160deg, var(--sv-chimmy-wash), var(--survivor-panel) 58%);
   border-color: var(--sv-accent-line);
 }
 
@@ -150,24 +167,24 @@
 .sv-island .sv-bottom-nav,
 .sv-island .sv-status-dock {
   border-color: var(--survivor-border);
-  background: color-mix(in srgb, #0a0b10 86%, transparent);
+  background: var(--sv-chrome);
   backdrop-filter: blur(8px);
 }
 .sv-island .sv-topbar-league {
   font-family: var(--sv-serif);
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.04em;
   color: var(--survivor-gold);
 }
 .sv-island .sv-nav-item[data-active='true'] {
   background: linear-gradient(90deg, var(--sv-accent-soft), transparent 90%);
   box-shadow: inset 3px 0 0 var(--survivor-torch);
-  color: #f1ece4;
+  color: var(--survivor-text-bright);
 }
 .sv-island .sv-nav-item[data-active='true'] .sv-nav-glyph { text-shadow: 0 0 10px var(--sv-accent-line); }
 .sv-island .sv-bottom-item[data-active='true'] {
   background: var(--sv-accent-soft);
-  color: #f6d3ae;
+  color: var(--sv-pill-ink);
   box-shadow: inset 0 -2px 0 var(--survivor-torch);
 }
 .sv-island .sv-sheet { background: var(--survivor-panel); border-color: var(--survivor-border-strong); }
@@ -228,6 +245,83 @@
   40% { transform: scale(0.94, 1.06) skewX(2deg); }
   100% { transform: scale(1.03, 0.96) skewX(-2deg); }
 }
+
+/* ── Light mode: sand, driftwood and dark ink ── */
+html[data-mode='light'] .sv-island {
+  --survivor-bg: #f4ede2;
+  --survivor-panel: #fffaf3;
+  --survivor-panel-2: #f8f1e6;
+  --survivor-border: rgba(92, 58, 24, 0.14);
+  --survivor-border-strong: rgba(92, 58, 24, 0.24);
+  --survivor-torch: #a9531a;
+  --survivor-gold: #7c4f0e;
+  --survivor-immune: #8a5d08;
+  --survivor-tribal: #b3331b;
+  --survivor-jury: #8a5d08;
+  --survivor-text-dim: #6b5a47;
+  --survivor-text-medium: #4a3b2c;
+  --survivor-text-bright: #2a1d12;
+  --sv-accent-soft: rgba(169, 83, 26, 0.1);
+  --sv-accent-line: rgba(169, 83, 26, 0.36);
+  --sv-ink-rgb: 42 29 18;
+  --sv-line-rgb: 92 58 24;
+  --sv-fade-top: rgba(244, 237, 226, 0.15);
+  --sv-fade-mid: rgba(244, 237, 226, 0.86);
+  --sv-chrome: color-mix(in srgb, #fbf6ee 92%, transparent);
+  --sv-btn-bg: #fffaf3;
+  --sv-btn-ink: #2a1d12;
+  --sv-primary-ink: #ffffff;
+  --sv-pill-ink: #7a3a0c;
+  --sv-chimmy-wash: #f6e4cf;
+  --sv-exile-wash: linear-gradient(180deg, rgba(221, 214, 254, 0.55) 0%, rgba(244, 237, 226, 0.9) 320px, var(--survivor-bg) 520px);
+  --sv-inset: rgba(92, 58, 24, 0.05);
+  --sv-wash: rgba(92, 58, 24, 0.07);
+  --sv-violet-ink: #5b21b6;
+  --sv-emerald-ink: #047857;
+  --sv-cyan-ink: #0e7490;
+  --sv-violet-wash: rgba(221, 214, 254, 0.35);
+  --sv-amber-wash: rgba(253, 230, 138, 0.3);
+  color-scheme: light;
+}
+/* The scene banner stays night-time art; its text keeps the light ink it was drawn for. */
+html[data-mode='light'] .sv-island .sv-banner {
+  --sv-ink-rgb: 241 236 228;
+  --sv-line-rgb: 255 236 214;
+  --survivor-torch: #f0a35e;
+  --survivor-gold: #e8c98e;
+  --sv-btn-bg: rgba(14, 16, 24, 0.82);
+  --sv-btn-ink: #f1ece4;
+  --sv-primary-ink: #1a0f05;
+}
+html[data-mode='light'] .sv-island .bg-black\/20,
+html[data-mode='light'] .sv-island .bg-black\/25,
+html[data-mode='light'] .sv-island .bg-black\/30 { background-color: var(--sv-inset); }
+html[data-mode='light'] .sv-island .bg-white\/\[0\.04\],
+html[data-mode='light'] .sv-island .bg-white\/\[0\.05\],
+html[data-mode='light'] .sv-island .bg-white\/\[0\.06\],
+html[data-mode='light'] .sv-island .bg-white\/10 { background-color: var(--sv-wash); }
+html[data-mode='light'] .sv-island .text-amber-50,
+html[data-mode='light'] .sv-island .text-amber-100,
+html[data-mode='light'] .sv-island .text-amber-100\/90,
+html[data-mode='light'] .sv-island .text-amber-200,
+html[data-mode='light'] .sv-island .text-amber-200\/90,
+html[data-mode='light'] .sv-island .text-amber-300,
+html[data-mode='light'] .sv-island .text-\[\#f6d3ae\],
+html[data-mode='light'] .sv-island .text-\[\#f2c46b\] { color: var(--survivor-gold); }
+html[data-mode='light'] .sv-island .text-violet-100,
+html[data-mode='light'] .sv-island .text-violet-200,
+html[data-mode='light'] .sv-island .text-violet-300,
+html[data-mode='light'] .sv-island .\!text-violet-200 { color: var(--sv-violet-ink) !important; }
+html[data-mode='light'] .sv-island .text-emerald-100,
+html[data-mode='light'] .sv-island .text-emerald-200,
+html[data-mode='light'] .sv-island .text-emerald-300 { color: var(--sv-emerald-ink); }
+html[data-mode='light'] .sv-island .text-red-200,
+html[data-mode='light'] .sv-island .text-red-300,
+html[data-mode='light'] .sv-island .text-\[\#f4a493\] { color: var(--survivor-tribal); }
+html[data-mode='light'] .sv-island .text-cyan-300 { color: var(--sv-cyan-ink); }
+html[data-mode='light'] .sv-island .text-\[\#1a0f05\] { color: var(--sv-primary-ink); }
+html[data-mode='light'] .sv-island .bg-violet-950\/20 { background-color: var(--sv-violet-wash); }
+html[data-mode='light'] .sv-island .bg-amber-950\/35 { background-color: var(--sv-amber-wash); }
 
 @media (max-width: 720px) {
   .sv-island .sv-banner { background-position: 66% 60%; }

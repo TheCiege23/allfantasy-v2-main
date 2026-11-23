@@ -125,6 +125,14 @@ export function SurvivorPremiumCommandCenterPanel({
   const accessFor = (tile: SurvivorPremiumTileGate): TileAccess =>
     serverAccess?.[tile.tileId] ?? (plan === undefined ? null : resolveSurvivorPremiumTileAccess({ tileId: tile.tileId, plan, isCommissioner: Boolean(isCommissioner) }))
   const openTile = SURVIVOR_PREMIUM_COMMAND_TILES.find(tile => tile.tileId === openTileId) ?? null
+  // The player Intel page leaves out tiles only a commissioner can ever open: four of nine read
+  // "Commissioner only" to a player, who can do nothing about it. The host hub still lists them all.
+  const tiles = tilesOnly
+    ? SURVIVOR_PREMIUM_COMMAND_TILES.filter((tile) => {
+        const access = accessFor(tile)
+        return !(access?.ok === false && access.reason === 'commissioner_only')
+      })
+    : SURVIVOR_PREMIUM_COMMAND_TILES
   // Only actions that exist and can be run: the same table the AI route charges from.
   const playerActions = SURVIVOR_SOLD_AI_ACTIONS.filter((a) => a.lane === 'player')
   const hostActions = SURVIVOR_SOLD_AI_ACTIONS.filter((a) => a.lane === 'host')
@@ -132,16 +140,20 @@ export function SurvivorPremiumCommandCenterPanel({
   return (
     <div className="space-y-6" data-testid="survivor-premium-command-center">
       <WarRoomPanel
-        title="Premium Survivor command center"
-        subtitle="Tournament-grade intel — tiered by AF Pro, AF Commissioner, and AF Supreme. Advanced reports can burn AF Tokens."
+        title={tilesOnly ? 'Island intel' : 'Premium Survivor command center'}
+        subtitle={tilesOnly
+          ? 'Reports on your tribe, your rivals and the vote. Tap one to open it.'
+          : 'Tournament-grade intel — tiered by AF Pro, AF Commissioner, and AF Supreme. Advanced reports can burn AF Tokens.'}
       >
-        <p className="text-sm leading-relaxed text-white/55">
-          Player lens unlocks with <span className="text-emerald-200/90">AF Pro</span>. Host tools unlock with{' '}
-          <span className="text-amber-100/90">AF Commissioner</span>, and story mode controls with{' '}
-          <span className="text-violet-200/90">AF Supreme</span> (AF Pro + AF Commissioner in one plan).
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {SURVIVOR_PREMIUM_COMMAND_TILES.map((tile) => (
+        {tilesOnly ? null : (
+          <p className="text-sm leading-relaxed text-white/55">
+            Player lens unlocks with <span className="text-emerald-200/90">AF Pro</span>. Host tools unlock with{' '}
+            <span className="text-amber-100/90">AF Commissioner</span>, and story mode controls with{' '}
+            <span className="text-violet-200/90">AF Supreme</span> (AF Pro + AF Commissioner in one plan).
+          </p>
+        )}
+        <div className={tilesOnly ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3'}>
+          {tiles.map((tile) => (
             <SurvivorPremiumTileCard
               key={tile.tileId}
               tile={tile}
