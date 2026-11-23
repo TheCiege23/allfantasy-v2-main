@@ -4243,6 +4243,7 @@ export const translationsEn: Record<string, string> = {
   "settings.security.rateLimitedMinutes": "Too many attempts. Wait a few minutes.",
   "settings.security.phoneError.notConfigured": "Phone verification is not configured on the server yet.",
   "settings.security.phoneError.invalidPhone": "Please enter a valid phone number with country code.",
+  "settings.security.phoneError.regionNotSupported": "We can only text US and Canadian phone numbers right now.",
   "settings.security.phoneError.unauthenticated": "Please sign in again and retry.",
   "settings.security.phoneError.sendFailed": "The verification text could not be sent right now.",
   "settings.security.phoneError.verifyFailed": "The verification check failed right now.",

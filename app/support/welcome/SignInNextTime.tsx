@@ -81,6 +81,8 @@ export default function SignInNextTime() {
         setError('Please wait a couple of minutes before asking for another code.')
       } else if (result.error === 'INVALID_PHONE') {
         setError('Enter a valid phone number, including the area code.')
+      } else if (result.error === 'PHONE_REGION_NOT_SUPPORTED') {
+        setError('We can only text US and Canadian phone numbers right now.')
       } else {
         setError("We couldn't send a text right now. Please try again.")
       }

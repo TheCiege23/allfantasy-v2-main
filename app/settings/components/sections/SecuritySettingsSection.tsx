@@ -176,6 +176,8 @@ export function SecuritySettingsSection({
         return t("settings.security.phoneError.notConfigured")
       case "INVALID_PHONE":
         return t("settings.security.phoneError.invalidPhone")
+      case "PHONE_REGION_NOT_SUPPORTED":
+        return t("settings.security.phoneError.regionNotSupported")
       case "UNAUTHENTICATED":
         return t("settings.security.phoneError.unauthenticated")
       case "SEND_FAILED":
