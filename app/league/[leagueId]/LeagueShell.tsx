@@ -149,6 +149,7 @@ import {
   CollegeProStandings,
   CollegeProWeek,
 } from '@/components/league/college-pro/CollegeProOneLeague'
+import { CollegeProDraftPipeline } from '@/components/league/college-pro/CollegeProDraftPipeline'
 import { isCollegeProLeague } from '@/lib/league/collegePro/format'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
@@ -2635,6 +2636,9 @@ function LeagueTabRouter({
     pairable ? <CollegeProFranchiseCard leagueId={leagueId}>{screen}</CollegeProFranchiseCard> : screen
   const otherHalf = (tab: 'draft' | 'trades' | 'waivers', screen: ReactNode) =>
     pairable ? <CollegeProOtherHalf leagueId={leagueId} tab={tab}>{screen}</CollegeProOtherHalf> : screen
+  // Draft also carries the offseason pipeline: who moves up, the rookie pool, the commissioner's checklist.
+  const oneLeagueDraft = (screen: ReactNode) =>
+    otherHalf('draft', pairable ? <CollegeProDraftPipeline leagueId={leagueId}>{screen}</CollegeProDraftPipeline> : screen)
   if (nativeScreen) {
     const firstTab = (...ids: string[]) => ids.find((id) => tabDefs.some((t) => t.id === id)) ?? ids[0]
     const goTo = (id: string) =>
@@ -2706,8 +2710,8 @@ function LeagueTabRouter({
       }
       return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} isCommissioner={isCommissioner} />
     case 'draft':
-      if (isPredraftLifecycle) return otherHalf('draft', renderPredraftDraftSetup())
-      return otherHalf('draft',
+      if (isPredraftLifecycle) return oneLeagueDraft(renderPredraftDraftSetup())
+      return oneLeagueDraft(
         <DraftTab
           league={selectedLeague}
           teams={teamSlots}
