@@ -19,8 +19,16 @@
  *     held no ESPN trades); MFL's parser is suspected of dropping trades; Fleaflicker's sides lose what was
  *     given; Yahoo import is off. A count built on any of those would be a wrong number that looks right.
  *
- *   DRAFTS — the backfill writes picks under the TEAM, never the person who owned it that season, so
- *     a pick cannot be credited to a manager across seasons. Fleaflicker writes no picks at all.
+ *   DRAFTS — ESPN, MFL and Yahoo (2026-11-23): the historical backfill writes each pick under the TEAM
+ *     (`dw_draft_facts.managerId` = ESPN team id / MFL franchise id / Yahoo team key) with its season, and in
+ *     the same run writes that season's end-of-season roster snapshot per team (`dw_roster_snapshots`,
+ *     period 0), each player stamped with the team's `ownerId` — the same id the import puts on
+ *     `LeagueTeam.platformUserId`. So a pick is credited to the PERSON who owned the team THAT season, never
+ *     to whoever holds the slot now. ⚠ Where the backfill had no person id it stamped the team's own id
+ *     instead (`managerId || teamId`, and Yahoo's slot-like numeric `manager_id`); those seasons are left
+ *     unattributed and named, never credited.
+ *   Not counted: Fantrax has no person per team; Fleaflicker's draft board is read at import but no
+ *     importer stores it (there is no Fleaflicker historical backfill), and no per-season team→owner map.
  *
  * Each "not yet" is a named reason, never an empty section that reads as a quiet manager.
  * DB-first: nothing here calls a provider.
@@ -33,6 +41,7 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import { playerIdSpaceFor, resolveTradePlayers } from '@/lib/decision-os/trade/tradePlayers'
 import type { EdgeWaiverClaim } from './waiverEdge'
 import type { EdgeTrade, EdgeTradeSide } from './tradeEdge'
+import type { EdgeDraftPick } from './draftEdge'
 
 /** Platforms whose `waiver_add` rows carry the claiming team. */
 const WAIVER_TEAM_PLATFORMS = new Set(['espn', 'mfl'])
@@ -168,6 +177,136 @@ export async function readFantraxUploadedTrades(
       stale: false,
     },
   }
+}
+
+/** Platforms whose backfill stores picks by team AND each season's team → person (see the header). */
+const DRAFT_TEAM_PLATFORMS = new Set(['espn', 'mfl', 'yahoo'])
+/** `SEASON_END_ROSTER_SNAPSHOT_PERIOD` in the ESPN / MFL / Yahoo historical backfills. */
+const SEASON_END_SNAPSHOT_PERIOD = 0
+
+export function providerDraftSupport(platform: string): boolean {
+  return DRAFT_TEAM_PLATFORMS.has(platform.toLowerCase())
+}
+
+const seasonTeamKey = (season: number, teamId: string) => `${season}|${teamId}`
+
+/** MFL franchise ids are zero-padded strings: "0003" and "3" are the same franchise. */
+function sameTeamId(a: string, b: string): boolean {
+  if (a === b) return true
+  return /^\d+$/.test(a) && /^\d+$/.test(b) && a.replace(/^0+/, '') === b.replace(/^0+/, '')
+}
+
+/**
+ * PURE. The person who owned a team in one season, from that season's snapshot, or null when the backfill
+ * recorded none. ⚠ The backfills stamp `managerId || teamId` (Yahoo: `guid || manager_id || team key`), so an
+ * owner equal to the team's own id is the fallback, not a person. Yahoo's `manager_id` and ESPN's `team.id`
+ * fallback are small integers that name a SLOT, which is reused across seasons — a numeric owner on those two
+ * is refused for the same reason Sleeper's slot number is (`draftEdge.ts`). MFL's owner id is kept as given.
+ */
+export function seasonOwnerFromSnapshot(platform: string, teamId: string, rosterPlayers: unknown): string | null {
+  if (!Array.isArray(rosterPlayers)) return null
+  const owners = new Set<string>()
+  for (const p of rosterPlayers) {
+    const v = p && typeof p === 'object' ? (p as { ownerId?: unknown }).ownerId : null
+    if (typeof v === 'string' && v.trim()) owners.add(v.trim())
+  }
+  if (owners.size !== 1) return null
+  const owner = [...owners][0]!
+  if (sameTeamId(owner, teamId.trim()) || owner === 'manager') return null
+  const p = platform.toLowerCase()
+  if ((p === 'espn' || p === 'yahoo') && /^\d+$/.test(owner)) return null
+  return owner
+}
+
+/** PURE. Every `season|team` → person the snapshots name. */
+export function seasonTeamOwners(
+  platform: string,
+  rows: ReadonlyArray<{ teamId: string; season: number | null; rosterPlayers: unknown }>,
+): Map<string, string> {
+  const out = new Map<string, string>()
+  const refused = new Set<string>()
+  for (const r of rows) {
+    if (r.season == null) continue
+    const key = seasonTeamKey(r.season, String(r.teamId).trim())
+    const owner = seasonOwnerFromSnapshot(platform, String(r.teamId), r.rosterPlayers)
+    // Two snapshots for one team-season that disagree are not a person either.
+    if (!owner || refused.has(key) || (out.has(key) && out.get(key) !== owner)) {
+      out.delete(key)
+      refused.add(key)
+      continue
+    }
+    out.set(key, owner)
+  }
+  return out
+}
+
+/** PURE. Stored picks (filed under the team) credited to the person who owned that team that season. */
+export function creditProviderDraftPicks(
+  rows: ReadonlyArray<{ season: number | null; round: number; playerId: string; managerId: string | null }>,
+  owners: ReadonlyMap<string, string>,
+  positionOf: (playerId: string) => string | null,
+): { picks: EdgeDraftPick[]; unattributedSeasons: number[] } {
+  const picks: EdgeDraftPick[] = []
+  const unattributed = new Set<number>()
+  for (const r of rows) {
+    if (r.season == null) continue
+    const team = String(r.managerId ?? '').trim()
+    const owner = team ? owners.get(seasonTeamKey(r.season, team)) : undefined
+    if (!owner) {
+      unattributed.add(r.season)
+      continue
+    }
+    picks.push({ season: r.season, round: r.round, position: positionOf(r.playerId), ownerSleeperId: owner })
+  }
+  return { picks, unattributedSeasons: [...unattributed].sort((a, b) => a - b) }
+}
+
+/**
+ * An ESPN / MFL / Yahoo league's past drafts, each pick credited to the person who owned the drafting team that
+ * season, or why there are none to count.
+ *
+ * ⚠ NO ROWS IS NOT "NEVER DRAFTED" — it is a league whose history was not backfilled, said in words. And picks on
+ * file with NO owner for any season would make every manager read "0 drafts", so that is a reason too.
+ * ⚠ A draft held after the import is not here: drafts are written by the one-time backfill only (the daily refresh
+ * re-reads waiver claims). The record's `seasons` list shows which seasons were read.
+ */
+export async function readProviderDrafts(league: {
+  id: string
+  sport: string
+  platform: string
+}): Promise<SectionState<{ picks: EdgeDraftPick[]; unattributedSeasons: number[] }>> {
+  const platform = league.platform.toLowerCase()
+  if (!providerDraftSupport(platform)) return { available: false, reason: providerDraftsReason(platform) }
+
+  const [rows, snapshots] = await Promise.all([
+    prisma.draftFact.findMany({
+      where: { leagueId: league.id, season: { not: null } },
+      select: { season: true, round: true, playerId: true, managerId: true },
+    }),
+    prisma.rosterSnapshot.findMany({
+      where: { leagueId: league.id, weekOrPeriod: SEASON_END_SNAPSHOT_PERIOD, season: { not: null } },
+      select: { teamId: true, season: true, rosterPlayers: true },
+    }),
+  ])
+  if (rows.length === 0) return { available: false, reason: `No ${platformLabel(platform)} draft picks have been imported for this league yet.` }
+
+  const owners = seasonTeamOwners(platform, snapshots)
+  const players = await resolveTradePlayers(
+    rows.map((r) => r.playerId),
+    { space: playerIdSpaceFor({ platform, sport: league.sport }), sport: league.sport },
+  ).catch(() => new Map())
+  const positionOf = (id: string) => {
+    const p = players.get(id)
+    return p?.ok ? p.position : null
+  }
+  const credited = creditProviderDraftPicks(rows, owners, positionOf)
+  if (credited.picks.length === 0) {
+    return {
+      available: false,
+      reason: `${platformLabel(platform)} draft picks are on file, but who owned each team in those seasons wasn't recorded.`,
+    }
+  }
+  return { available: true, data: credited }
 }
 
 export function providerDraftsReason(platform: string): string {

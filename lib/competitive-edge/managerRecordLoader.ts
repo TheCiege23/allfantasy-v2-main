@@ -26,7 +26,7 @@ import { readSleeperTradeHistory } from './tradeEdgeLoader'
 import { readWaiverEdgeInput } from './waiverEdgeLoader'
 import { readDraftEdgeInput } from './draftEdgeLoader'
 import { readNativeHistory } from './nativeManagerHistory'
-import { providerDraftsReason, providerTradesReason, readFantraxUploadedTrades, readProviderWaivers } from './providerManagerHistory'
+import { providerTradesReason, readFantraxUploadedTrades, readProviderDrafts, readProviderWaivers } from './providerManagerHistory'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 export type LeagueManagerRecords = {
@@ -285,11 +285,13 @@ async function readHistory(input: {
     }
   }
 
-  const [waiverRead, trades] = await Promise.all([
+  const [waiverRead, trades, drafts] = await Promise.all([
     readProviderWaivers(league).catch(() => couldNotRead('Waiver')),
     league.platform === 'fantrax'
       ? readFantraxUploadedTrades(league, input.teamOwnerIds, now).catch(() => couldNotRead('Trade'))
       : Promise.resolve({ available: false as const, reason: providerTradesReason(league.platform) }),
+    // ESPN / MFL / Yahoo picks credited to each season's owner; the rest return their reason without a read.
+    readProviderDrafts(league).catch(() => couldNotRead('Draft')),
   ])
   return {
     trades,
@@ -303,6 +305,6 @@ async function readHistory(input: {
           },
         }
       : waiverRead,
-    drafts: { available: false, reason: providerDraftsReason(league.platform) },
+    drafts,
   }
 }

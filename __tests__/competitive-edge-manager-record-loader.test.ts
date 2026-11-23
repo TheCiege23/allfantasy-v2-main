@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   rules: vi.fn(),
   native: vi.fn(),
   providerWaivers: vi.fn(),
+  providerDrafts: vi.fn(),
   leagueTrades: vi.fn(async () => [] as unknown[]),
   players: vi.fn(async () => [] as unknown[]),
 }))
@@ -31,6 +32,7 @@ vi.mock('@/lib/competitive-edge/nativeManagerHistory', () => ({ readNativeHistor
 vi.mock('@/lib/competitive-edge/providerManagerHistory', async (orig) => ({
   ...(await orig<typeof import('@/lib/competitive-edge/providerManagerHistory')>()),
   readProviderWaivers: m.providerWaivers,
+  readProviderDrafts: m.providerDrafts,
 }))
 
 import { loadLeagueManagerRecords } from '@/lib/competitive-edge/managerRecordLoader'
@@ -76,6 +78,7 @@ beforeEach(() => {
     },
   })
   m.drafts.mockResolvedValue({ ok: true, picks: [], teams: TEAMS, unattributed: [] })
+  m.providerDrafts.mockResolvedValue({ available: false, reason: "MFL draft picks are on file, but who owned each team in those seasons wasn't recorded." })
 })
 
 describe('loadLeagueManagerRecords', () => {
@@ -134,8 +137,19 @@ describe('loadLeagueManagerRecords', () => {
     expect(none).toEqual({ available: false, reason: 'That team is not in this league.' })
   })
 
-  it('an ESPN league: waiver claims from its import, and trades and drafts each name the gap — never "no trades"', async () => {
+  it('an ESPN league: waiver claims and drafts from its import, and trades name the gap — never "no trades"', async () => {
     m.league.mockResolvedValue({ id: 'L2', name: 'Work', platform: 'espn', platformLeagueId: 'e-1', sport: 'NFL', season: 2026 })
+    m.providerDrafts.mockResolvedValue({
+      available: true,
+      data: {
+        picks: [
+          { season: 2024, round: 1, position: 'RB', ownerSleeperId: 'mike' },
+          { season: 2025, round: 1, position: 'RB', ownerSleeperId: 'mike' },
+          { season: 2025, round: 1, position: 'WR', ownerSleeperId: 'sam' },
+        ],
+        unattributedSeasons: [2023],
+      },
+    })
     m.providerWaivers.mockResolvedValue({
       available: true,
       data: {
@@ -150,7 +164,9 @@ describe('loadLeagueManagerRecords', () => {
     expect(m.waivers).not.toHaveBeenCalled()
     const mike = r.data.records[0]!
     expect(!mike.trades.available && mike.trades.reason).toBe("ESPN trades aren't imported in a form that can be counted per manager yet.")
-    expect(!mike.drafts.available && mike.drafts.reason).toBe("ESPN draft picks aren't matched to the manager who made them yet.")
+    expect(m.drafts).not.toHaveBeenCalled() // the Sleeper reader
+    expect(m.providerDrafts).toHaveBeenCalledWith(expect.objectContaining({ id: 'L2', platform: 'espn' }))
+    expect(mike.drafts.available && [mike.drafts.data.drafts, mike.drafts.data.picks, mike.drafts.data.unattributedSeasons]).toEqual([2, 2, [2023]])
     expect(mike.waivers.available && mike.waivers.data.facts.map((f) => f.text)).toContain('Mike has won 1 waiver claim this season, spending $17 in all.')
     expect(mike.waivers.available && mike.waivers.data.faabRemaining).toBe(64)
   })

@@ -1483,6 +1483,9 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^Only trades in the uploaded Fantrax export are counted; trades made since the last upload are not\.$/, () => 'Solo se cuentan los intercambios del archivo de Fantrax subido; los hechos desde la última subida no.'],
   [/^(.+) waiver claims aren't imported in a form that can be counted per manager yet\.$/, (m) => `Los reclamos de ${m[1]} todavía no se importan de forma que se puedan contar por mánager.`],
   [/^(.+) draft picks aren't matched to the manager who made them yet\.$/, (m) => `Las selecciones del draft de ${m[1]} todavía no están asignadas al mánager que las hizo.`],
+  // ESPN / MFL / Yahoo drafts credited to each season's owner (2026-11-23, lib/competitive-edge/providerManagerHistory.ts).
+  [/^No (.+) draft picks have been imported for this league yet\.$/, (m) => `Todavía no se importaron selecciones del draft de ${m[1]} para esta liga.`],
+  [/^(.+) draft picks are on file, but who owned each team in those seasons wasn't recorded\.$/, (m) => `Hay selecciones del draft de ${m[1]} registradas, pero no quedó registrado quién manejaba cada equipo en esas temporadas.`],
   [/^(.+) doesn't give each team a person id, so there is no per-manager history to read\.$/, (m) => `${m[1]} no da un identificador de persona para cada equipo, así que no hay historial por mánager que leer.`],
   [/^(Trade|Waiver|Draft) history could not be read right now\.$/, (m) => `No se pudo leer ahora el historial de ${m[1] === 'Trade' ? 'intercambios' : m[1] === 'Waiver' ? 'reclamos' : 'drafts'}.`],
   [
