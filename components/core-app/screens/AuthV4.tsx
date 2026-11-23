@@ -23,6 +23,7 @@ import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import AndroidBracketAppOption from '@/components/brackets/AndroidBracketAppOption'
 import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
+import AppleNativeSignInButton from '@/components/auth/AppleNativeSignInButton'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -433,6 +434,9 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {/* iOS app only: the social grid is hidden there, so this is the one-tap way in. */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} />
+
       {method === 'code' ? (
         <PhoneCodeSignIn callbackUrl={callbackUrl} onUsePassword={() => setMethod('password')} />
       ) : (
@@ -816,6 +820,9 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           ) : null}
         </div>
       </header>
+
+      {/* iOS app only: one tap, no username or password (the social grid is hidden there). */}
+      <AppleNativeSignInButton callbackUrl={callbackUrl} showTerms />
 
       <OAuthGrid
         callbackUrl={callbackUrl}
