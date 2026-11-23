@@ -305,7 +305,9 @@ export async function GET(req: NextRequest) {
 
     const selectedDay = searchParams?.get('day')
     unifiedRoster = await leagueRosterForecasts(unifiedRoster, { ...league, id: leagueId, sport: leagueSport,
-      season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null })
+      season: league.season ?? null }, unifiedRoster.map(p => p.id), { day: isDayKey(selectedDay) ? selectedDay : null,
+      // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
+      afIntelligence: (await readAfIntelligenceAccess(sessionUserId)).unlocked })
 
     // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
     // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the

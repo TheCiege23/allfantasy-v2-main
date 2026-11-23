@@ -211,6 +211,13 @@ export type ChimmyProOnlyTool = keyof typeof PRO_ONLY_TOOL_LABEL
 
 /** AF Pro on the purchase surface, tagged so the plans page can tell this button's buyers apart. */
 export const CHIMMY_PRO_TOOL_UPGRADE_HREF = '/upgrade?plan=af_pro&from=chimmy-pro-tool'
+/** The same plan without a `from`, for a tracked button that names its own source (`chimmyLockSource`). */
+export const CHIMMY_PRO_TOOL_UPGRADE_PATH = '/upgrade?plan=af_pro'
+
+/** `lock_chimmy_<first refused tool>` — which paid Chimmy tool the button sold, on the growth page. PURE. */
+export function chimmyLockSource(tools: readonly ChimmyProOnlyTool[]): string {
+  return `lock_chimmy_${tools[0] ?? 'answer'}`.slice(0, 48)
+}
 
 /**
  * `meta.proUpsell`: the AF Pro tools a free user's answer reached for and the EXECUTOR refused.
@@ -228,11 +235,30 @@ export function readProUpsell(value: unknown): ChimmyProOnlyTool[] {
 }
 
 /** "AF Pro adds the playoff simulator and trade ideas." — the line beside the upgrade button. */
-export function proUpsellLine(tools: readonly ChimmyProOnlyTool[]): string {
-  const labels = tools.map((t) => PRO_ONLY_TOOL_LABEL[t])
-  const list = labels.length <= 1 ? (labels[0] ?? 'deeper answers')
-    : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
-  return `AF Pro adds ${list}.`
+export function proUpsellLine(tools: readonly ChimmyProOnlyTool[], language?: string | null): string {
+  const es = String(language ?? '').toLowerCase().startsWith('es')
+  const labels = tools.map((t) => (es ? PRO_ONLY_TOOL_LABEL_ES[t] : PRO_ONLY_TOOL_LABEL[t]))
+  const and = es ? 'y' : 'and'
+  const list = labels.length <= 1 ? (labels[0] ?? (es ? 'respuestas más completas' : 'deeper answers'))
+    : `${labels.slice(0, -1).join(', ')} ${and} ${labels[labels.length - 1]}`
+  return es ? `AF Pro añade ${list}.` : `AF Pro adds ${list}.`
+}
+
+/** The upgrade button under the line, in the viewer's language. */
+export function proUpsellCta(language?: string | null): string {
+  return String(language ?? '').toLowerCase().startsWith('es') ? 'Obtener AF Pro' : 'Get AF Pro'
+}
+
+/** The same labels in Spanish (2026-11-22) — every key of PRO_ONLY_TOOL_LABEL, so a new tool cannot fall back silently. */
+export const PRO_ONLY_TOOL_LABEL_ES: Record<ChimmyProOnlyTool, string> = {
+  get_playoff_outlook: 'el simulador de playoffs',
+  find_trade_ideas: 'ideas de intercambio',
+  get_faab_bid_plan: 'planes de puja FAAB',
+  recall_past_chats: 'recordar tus chats anteriores',
+  get_draft_pick_outlook: 'quién se irá antes de tu selección',
+  get_manager_record: 'el historial completo de un mánager',
+  get_player_projection: 'las proyecciones propias de AF',
+  evaluate_trade: 'el análisis completo del intercambio',
 }
 
 /* ── "Newer answer below" ───────────────────────────────────────────────────────────────────── */

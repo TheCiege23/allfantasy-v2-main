@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({ board: vi.fn(), metrics: vi.fn(), nfl: vi.fn() }))
 vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/chimmy/sportBoardValue', () => ({ buildSportBoardValueContext: h.board }))
 vi.mock('@/lib/chimmy/tools/playerValueTool', () => ({ buildPlayerValueContext: h.nfl }))
+// The league sport read that routes an NFL league to the card's value (nfl-league-value-card-parity.test.ts).
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: async () => ({ sport: 'NBA' }) } } }))
 
 import { executeChimmyTool, type ChimmyToolContext } from '@/lib/chimmy/tools/chimmyTools'
 

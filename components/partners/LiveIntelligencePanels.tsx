@@ -90,6 +90,7 @@ export function LiveIntelligencePanels({ data }: { data: LiveIntelligence }) {
                 <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: VIZ.series1 }} aria-hidden />
                 AllFantasy projection
               </li>
+              <li className="text-white/50">Shorter bar = closer to what was scored</li>
             </ul>
             <ul className="space-y-4">
               {data.projections.map((p) => (

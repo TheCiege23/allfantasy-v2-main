@@ -47,6 +47,11 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/decision-os/waiver/loader', () => ({ loadWaiverWorldFacts: vi.fn(async (_u: string, id: string) => h.facts.get(id) ?? null) }))
+// The FA loader reads FAAB through Waiver OS (2026-11-23); without this the real feed would run against the mock DB.
+vi.mock('@/lib/decision-os/waiver-os', () => ({
+  createWaiverOsLoaders: () => ({ loadWorldFacts: vi.fn(async (_u: string, id: string) => h.facts.get(id) ?? null), drainOutcomes: () => ({}) }),
+}))
+vi.mock('@/lib/decision-os/core/parity', () => ({ emitFeedOutcomes: vi.fn() }))
 vi.mock('@/lib/core-app/playerDepth', () => ({
   loadLeagueValueMap: vi.fn(async (_ids: string[], leagueIds: string[]) => new Map(leagueIds.filter((id) => h.values.has(id)).map((id) => [id, h.values.get(id)!]))),
 }))

@@ -44,6 +44,12 @@ import type { GroundedSlice, GroundingGap } from './packet'
  * points, times this week's games where the schedule is known. One source, so Chimmy, My Team, the Trade Center and
  * the value answer quote the same per-game number. A CATEGORY league has no points to project: it keeps the canonical
  * rows and says why. Every other sport is `not_requested` — not a gap: the projection slice still carries its numbers.
+ *
+ * COLLEGE FOOTBALL (2026-11-23) goes through the same read. It has no value board, but `loadLeaguePlayerMetrics`
+ * prices NCAAF from AllFantasy's season projections re-scored under the league's rules (`scoreNcaafProjection`),
+ * times this week's games — the exact read My Team's `priceLeaguePlayers` makes for an NCAAF roster. Before this
+ * an NCAAF league got `not_requested` and Chimmy only had canonical rows labelled "NOT this league". Its rows carry
+ * `rateSource: 'season_projection'` so the prompt does not call that a value board.
  */
 
 /** One rostered player, priced for the feed's week under this league's rules. */
@@ -65,6 +71,8 @@ export interface RosterLeagueProjection {
    * re-scored weekly line. `points` is then `perGame × weekGames` — null when this week's games are not known.
    */
   basis?: 'season_rate'
+  /** NCAAF only: the per-game rate is AllFantasy's season projection under this league's rules, not a value board. */
+  rateSource?: 'season_projection'
   perGame?: number | null
   weekGames?: number | null
 }
@@ -97,12 +105,15 @@ export const defaultRosterLeagueProjectionDeps: RosterLeagueProjectionDeps = {
     loadLeaguePlayerMetrics({ leagueId, rosterIds, includeTradeValues: false, limit: rosterIds.length }),
 }
 
-/** The sports priced on the league value board here: every board sport (`BOARD_VALUE_SPORTS`), owner's call 2026-11-20. */
-export const SEASON_RATE_PROJECTION_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB', 'NCAAB', 'SOCCER'])
+/**
+ * The sports priced on a per-game rate through `loadLeaguePlayerMetrics`: every board sport (`BOARD_VALUE_SPORTS`),
+ * owner's call 2026-11-20, plus college football (its season projections under the league's rules), 2026-11-23.
+ */
+export const SEASON_RATE_PROJECTION_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB', 'NCAAB', 'SOCCER', 'NCAAF'])
 
 const NOT_NFL: GroundingGap = {
   reason: 'not_requested',
-  detail: 'League-scored roster projections are computed for NFL leagues and NBA, NHL, MLB, college basketball and soccer points leagues; the projection slice carries this sport.',
+  detail: 'League-scored roster projections are computed for NFL and college football leagues and NBA, NHL, MLB, college basketball and soccer points leagues; the projection slice carries this sport.',
   remedy: 'Nothing to do.',
 }
 
@@ -233,6 +244,7 @@ async function priceRosterFromBoard(
   }
   if (data.unit !== 'fantasy points') return absent(CATEGORY_LEAGUE)
   const byRoster = new Map(data.rows.flatMap((r) => (r.rosterPlayerId ? [[r.rosterPlayerId, r] as const] : [])))
+  const college = basis.sport === 'NCAAF'
   const rows: RosterLeagueProjection[] = players.map((p) => {
     const hit = byRoster.get(p.id)
     const perGame = hit && Number.isFinite(hit.perGame) ? hit.perGame : null
@@ -246,11 +258,18 @@ async function priceRosterFromBoard(
       season: String(data.season),
       leagueScored: true,
       basis: 'season_rate',
+      ...(college ? { rateSource: 'season_projection' as const } : {}),
       perGame,
       weekGames: hit?.weekGames ?? null,
     }
   })
   if (!rows.some((r) => r.perGame != null)) {
+    if (college) {
+      return absent(gap(
+        'None of your rostered players has an AllFantasy season projection, so none could be priced under this league’s scoring.',
+        'A player the projections do not carry stays unpriced.',
+      ))
+    }
     return absent(
       gap(
         "None of your rostered players is on this league's value board, so none could be priced under its scoring.",

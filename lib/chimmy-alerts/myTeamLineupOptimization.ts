@@ -57,6 +57,10 @@ export function lineupOptimizationFromMyTeam(data: MyTeamData, now: Date): Lineu
   const gain = !opt ? null : opt.state === 'improve' && opt.verdict === 'swap' ? opt.gain : 0
   const bestPoints = opt ? (opt.state === 'improve' ? opt.bestTotal : opt.currentTotal) : 0
   const moved = new Set(benchInstead.map((p) => p.playerId))
+  // Kicked off by `now`: `optimizeLineup` holds such a starter in its seat and leaves such a bench player out.
+  const lockedPlayers = [...starters, ...benchPlayers]
+    .filter((p) => p.kickoff instanceof Date && p.kickoff.getTime() <= now.getTime())
+    .map(toPlayer)
 
   return {
     status: 'ready',
@@ -83,10 +87,15 @@ export function lineupOptimizationFromMyTeam(data: MyTeamData, now: Date): Lineu
       .sort((a, b) => (b.points ?? -1) - (a.points ?? -1)),
     unpricedActive: benchPlayers.filter((p) => toPlayer(p).points == null).length,
     unfilledSlots: slots.filter((s) => s.empty).map((s) => s.slotLabel),
+    ...(lockedPlayers.length ? { lockedPlayers } : {}),
   }
 }
 
-/** The alerts' default optimizer: My Team's load for this league and user, read the same way the screen reads it. */
+/**
+ * The alerts' default optimizer: My Team's load for this league and user, read the same way the screen reads it. Also
+ * what Chimmy's lineup decision lane (`decisionAnswerService.ts`) and the portfolio report (`portfolio/data.ts`) read
+ * (2026-11-23), so neither can name a different lineup from My Team.
+ */
 export async function myTeamLineupOptimization(leagueId: string, userId: string, now: Date = new Date()): Promise<LineupOptimization> {
   const { getMyTeamData } = await import('@/lib/core-app/myTeam')
   const data = await getMyTeamData(leagueId, userId)

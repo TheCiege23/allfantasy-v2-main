@@ -3,6 +3,8 @@
 import { createContext, useContext } from 'react'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { CoreDepthLockCta } from '@/components/core-app/CoreDepthLockCta'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreDepthLockCopy } from '@/lib/core-app/coreDepthLockCopy'
 
 /**
  * AF ADP's lock in the draft rooms (owner, 2026-11-22: AF ADP is AF Pro, AF Commissioner or AF Supreme).
@@ -19,7 +21,12 @@ export function useAfAdpLock(): CoreDepthAccess | null {
   return useContext(AfAdpLockContext)
 }
 
-export const AF_ADP_LOCKED_TITLE = 'AF ADP — where players actually go in real drafts — is part of AF Pro, AF Commissioner and AF Supreme.'
+/** The lock's tooltip, in the reader's language (lib/core-app/messages/coreDepthLock.ts). */
+export function afAdpLockedTitle(language?: string | null): string {
+  return coreDepthLockCopy(language).afAdpLockedTitle
+}
+/** English, for callers outside a language provider. */
+export const AF_ADP_LOCKED_TITLE = afAdpLockedTitle('en')
 
 /** Read the lock off a pool response. PURE. */
 export function afAdpLockOf(payload: unknown): CoreDepthAccess | null {
@@ -28,8 +35,9 @@ export function afAdpLockOf(payload: unknown): CoreDepthAccess | null {
 }
 
 export function AfAdpLockedCell() {
+  const title = afAdpLockedTitle(useOptionalLanguage().language)
   return (
-    <span className="text-[11px] text-white/40" title={AF_ADP_LOCKED_TITLE} aria-label={AF_ADP_LOCKED_TITLE}>
+    <span className="text-[11px] text-white/40" title={title} aria-label={title}>
       🔒
     </span>
   )

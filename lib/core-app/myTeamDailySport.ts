@@ -151,12 +151,15 @@ export async function applyDailySportToLineup(
     if (o.periodGames === 0 && kind && !o.opponent) p.noGamePeriod = kind
   }
   return outlook.period
-    ? { kind: outlook.period.kind, day: outlook.period.day ?? null, week: outlook.period.week ?? null }
+    ? { kind: outlook.period.kind, day: outlook.period.day ?? null, week: outlook.period.week ?? null, season: outlook.period.season ?? null }
     : null
 }
 
-/** The period the outlook priced — one day in a daily-lineup league, else the sport's week. */
-export type DailyLineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null }
+/**
+ * The period the outlook priced — one day in a daily-lineup league, else the sport's week. `season` is the sport
+ * season that week number belongs to (the bench-check ledger records a call under it); absent where unknown.
+ */
+export type DailyLineupPeriod = { kind: 'day' | 'week'; day: string | null; week: number | null; season?: number | null }
 
 /**
  * The row's game line. A daily-lineup league knows the day's opponent ("BOS vs NYR"); a weekly one knows

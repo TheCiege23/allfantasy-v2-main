@@ -320,3 +320,28 @@ which reads this fixture and `scoreboard.NFL.2021.week1.json`.
 - `resolveFleaflickerServedSeason` (the import path) keeps the REQUESTED season when a key-less
   body's dates disagree. In January and February a live NFL league imported with the default season
   (the calendar year) is therefore still labelled with the new year. Unchanged by this fix.
+
+---
+
+### `G-14` — PENDING (proposed, not yet accepted) trade offers: no documented endpoint, so none are swept
+
+**Status: OPEN, blocked on `G-07` and on documentation.** Recorded 2026-11-23, without probing.
+
+The provider-offer ledger (`lib/provider-trades/providerTradeOfferLedger.ts`) and Chimmy's pending-trade
+block (`lib/chimmy-trade/pendingTradeDecisionGrounding.ts`) read Sleeper only. Adding Fleaflicker needs a
+response that lists offers still awaiting an answer. Nothing committed shows one:
+
+- `FetchTrades` is `DISCOVERED_NOT_CAPTURED`. Its `filter` parameter has no documented values (see `G-07`),
+  so whether any value returns PENDING offers is unknown. Omitting it may return completed trades only.
+- `FetchLeagueTransactions` is uncaptured (`G-13`). `lib/league-import/fleaflicker/types.ts` lists a
+  `TRADE_PROPOSED` type, but that list was copied from the vendor's Swagger types, not seen in a response.
+  Whether a proposed trade shows up there before it is accepted, and with which teams and assets, is unknown.
+- A pending offer is a private negotiation between two managers. It is a more sensitive record than the
+  activity log `G-07` already deferred on privacy grounds, and this repository is public.
+
+Not probed. Guessing a `filter` value and probing would be the assumption `G-07` names.
+
+**Needed:** (1) the owner reopening `G-07` and naming a league whose pending trades may be published (one
+they run, with an offer open when the capture is taken); (2) the documented value of `FetchTrades.filter`
+for pending offers, or a capture showing `FetchLeagueTransactions` lists a proposed trade; (3) one capture via
+`scripts/probe.sh`, trimmed and with team names replaced, committed with the ledger mapping that reads it.

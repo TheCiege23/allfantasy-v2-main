@@ -1,4 +1,5 @@
 import 'server-only'
+import { nflWeeklyWithFactors } from './nflWeeklyFactors'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 import { loadAfNflWeek, nflComponentRates } from './nflLeagueWeek'
@@ -232,6 +233,8 @@ async function loadRecordedTeams(sport: string, season: number, playerIds: strin
  * League-scored AF player board. Callers must already have authorized access
  * to the league. The sport and season are always read from that league.
  */
+
+
 export async function loadLeaguePlayerMetrics(args: {
   leagueId: string
   week?: number | null
@@ -405,10 +408,20 @@ export async function loadLeaguePlayerMetrics(args: {
       ? null
       : nflValue != null ? 'market points' : unit === 'category score' ? 'category score over replacement' : 'fantasy points over replacement'
     const totals = totalsForLeaguePlayer(row.perGame, team ? schedule.get(team) : undefined)
+    let nflFactors: LeaguePlayerMetric['afFactors'] | undefined
     if (sport === 'NFL') {
       const line = nflWeek?.get(leagueIdOf(linked, 'sleeperId') ?? '')
       totals.weekGames = line?.weekGames ?? null
       totals.weekly = computeLeagueProjectedPoints(line?.componentStats, nflScoring)?.points ?? null
+      /*
+       * The NFL week already carries AF's learned factors (`applyNflFactors`, upstream of the scored components). League
+       * scoring is linear in those components, so the number before the factors is weekly ÷ multiplier — kept as
+       * `unadjusted` so a viewer without AF Intelligence gets it back (here, or at the response gate), and the reasons
+       * travel with the number to every screen that shows it.
+       */
+      const priced = nflWeeklyWithFactors(totals.weekly, line?.afFactors, args.afIntelligence !== false)
+      totals.weekly = priced.weekly
+      nflFactors = priced.afFactors
     }
     const standardGames = team ? standardLeagueSeasonGames(sport) : null
     const fullSeason = totals.fullSeason ?? projectedTotal(row.perGame, standardGames)
@@ -418,6 +431,7 @@ export async function loadLeaguePlayerMetrics(args: {
     return {
       ...row,
       ...totals,
+      ...(nflFactors ? { afFactors: nflFactors } : {}),
       ...(noNbaRoster ? { weeklyUnavailableReason: 'no_nba_roster' as const } : {}),
       positionCount: positionCounts.get(row.position),
       remainingGames: team ? schedule.get(team)?.remainingGames ?? null : null,

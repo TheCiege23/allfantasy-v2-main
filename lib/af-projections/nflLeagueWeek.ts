@@ -3,6 +3,8 @@ import 'server-only'
 import { COMPONENT_RULE_KEYS, type IdpComponent } from './idpScoring'
 import { prisma } from '@/lib/prisma'
 import { liveFactorAdjustments, loadFactorTable } from './factors/factorTables'
+import { contextKey, loadNflGameContext } from './factors/gameContext'
+import { loadInjurySnapshots, nflPeriod, snapshotLevelFor } from './factors/injurySnapshots'
 import type { PlayerProjection } from '@/lib/core-app/playerProjections'
 import { projectionTeamKey, loadProjectionSchedule } from './leagueProjectionSchedule'
 import { loadNflSpecialistRates } from './nflSpecialistRates'
@@ -72,7 +74,7 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
     result.set(linked.sleeperId, { key: row.playerId, playerId: linked.sleeperId, name: row.playerName, position: row.position, team: team ?? null,
       weekGames: games, componentStats: components, projectedPoints: row.afProjection * games, source: 'allfantasy' })
   }
-  await applyNflFactors(result).catch(() => undefined)
+  await applyNflFactors(result, { season, week }).catch(() => undefined)
   return result
 }
 
@@ -81,14 +83,26 @@ async function readWeek(season: number, week: number): Promise<Map<string, NflWe
  * player himself, which his recent game lines carry. Rest and opponent are left out here (this schedule carries no
  * kickoff time or opponent). Component stats scale with the points, so league scoring prices the same move.
  */
-async function applyNflFactors(result: Map<string, NflWeekLine>): Promise<void> {
+async function applyNflFactors(result: Map<string, NflWeekLine>, at: { season: number; week: number }): Promise<void> {
   const table = await loadFactorTable(prisma, 'NFL')
   if (!table) return
   const lines = [...result.values()].filter((l) => l.weekGames > 0)
+  // This week's game context — Vegas, weather, coaching — only when the table has published one of those levels.
+  const wantsContext = table.levels.some((l) => l.published && (l.factor === 'vegas' || l.factor === 'weather' || l.factor === 'coaching'))
+  const ctx = wantsContext ? await loadNflGameContext(prisma, [at]).catch(() => new Map()) : new Map()
+  // This week's designations, from the same snapshot the learner reads — so a player is matched the same way both times.
+  const wantsInjury = table.levels.some((l) => l.published && l.factor === 'injury')
+  const injuries = wantsInjury ? (await loadInjurySnapshots(prisma, 'NFL', [nflPeriod(at.season, at.week)]).catch(() => new Map())).get(nflPeriod(at.season, at.week)) : undefined
   const adjustments = await liveFactorAdjustments(prisma, {
     sport: 'NFL',
     table,
-    players: lines.map((l) => ({ key: l.playerId, gameLogId: l.playerId, next: { atMs: Date.now(), drop: ['rest', 'opponent', 'returning'] as const } })),
+    players: lines.map((l) => {
+      const code = projectionTeamKey('NFL', l.team)
+      const injury = snapshotLevelFor(injuries, l.playerId, code)
+      const game = code ? ctx.get(contextKey(at.season, at.week, code)) : undefined
+      const context = game || injury ? { ...(game ?? {}), ...(injury ? { injury } : {}) } : undefined
+      return { key: l.playerId, gameLogId: l.playerId, next: { atMs: Date.now(), drop: ['rest', 'opponent', 'returning'] as const, ...(context ? { context } : {}) } }
+    }),
   })
   for (const [key, adj] of adjustments) {
     const line = result.get(key)

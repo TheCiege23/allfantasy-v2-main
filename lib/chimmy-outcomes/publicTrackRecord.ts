@@ -78,7 +78,7 @@ export function publicTrackRecord(view: LedgerRecordView | null | undefined): Pu
   }
   // Every other sport and league type, graded on its own measure (2026-11-22) — the misses included, same rules.
   for (const [key, b] of Object.entries(view?.tradeOutcomes ?? {})) {
-    const where = b.kind === 'value' ? 'dynasty-style leagues' : `${b.sport} leagues`
+    const where = b.kind === 'value' ? 'dynasty-style leagues' : b.kind === 'categories' ? `${b.sport} category leagues` : `${b.sport} leagues`
     for (const t of b.letters) {
       if (!(t.n >= MIN_TRADES_PER_LETTER)) continue
       const verdict = letterVerdict(t.letter, t.net)
@@ -87,10 +87,12 @@ export function publicTrackRecord(view: LedgerRecordView | null | undefined): Pu
         title: `Trades graded ${t.letter} in ${where}`,
         headline: b.kind === 'value'
           ? `${abs1(t.net)} points ${t.net >= 0 ? 'more' : 'less'} of the deal's value a month on`
-          : `${abs1(t.net)} points a week ${t.net >= 0 ? 'more' : 'less'} than they gave up`,
+          : b.kind === 'categories'
+            ? `${abs1(t.net)} ${t.net >= 0 ? 'more' : 'fewer'} categories won than lost, on average`
+            : `${abs1(t.net)} points a week ${t.net >= 0 ? 'more' : 'less'} than they gave up`,
         detail:
           `Across ${t.n.toLocaleString('en-US')} graded trades${t.aheadPct != null ? `, the graded side came out ahead in ${t.aheadPct}%` : ''}. ` +
-          (b.kind === 'value' ? 'Measured on the dynasty market, in the league’s own QB format. ' : 'Measured under each league’s own scoring. ') +
+          (b.kind === 'value' ? 'Measured on the dynasty market, in the league’s own QB format. ' : b.kind === 'categories' ? 'Measured on each league’s own categories, the players each side got over the weeks after. ' : 'Measured under each league’s own scoring. ') +
           (verdict === 'held_up' ? 'This letter has held up.' : verdict === 'not_held_up' ? 'This letter has not held up so far.' : 'A C promises no direction either way.'),
         tone: verdict === 'held_up' ? 'held' : verdict === 'not_held_up' ? 'not_held' : 'even',
       })
@@ -99,6 +101,6 @@ export function publicTrackRecord(view: LedgerRecordView | null | undefined): Pu
   return {
     season: view?.season ?? null,
     lines,
-    measured: 'Start/sit, pickups and NFL redraft trade letters are measured in standard PPR points on NFL games, players only (draft picks and budget score nothing). Other sports and formats are graded under each league’s own scoring, and dynasty-style leagues on the dynasty market a month or more after the trade; dynasty trades that moved draft picks are not graded yet.',
+    measured: 'Start/sit, pickups and NFL redraft trade letters are measured in standard PPR points on NFL games, players only (draft picks and budget score nothing). Other sports and formats are graded under each league’s own scoring, category and roto leagues on categories won, and dynasty-style leagues on the dynasty market a month or more after the trade — draft picks included, priced on the same market; a dynasty trade that moved budget is not graded yet.',
   }
 }

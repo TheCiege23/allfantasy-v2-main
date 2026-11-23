@@ -226,7 +226,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       const keys = await resolveRosterIdsToKeys(prisma, String(league.sport), column, [...group.keys()]).catch(() => new Map<string, string>())
       for (const [id, key] of keys) for (const i of group.get(id) ?? []) canonical[i] = key
     }))
-    priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, { canonical: true })
+    // Priced with or without AF's learned factors per the viewer's plan (afJson reverts them as well).
+    priced = await leagueRosterForecasts(priced, { ...league, id: leagueId, season: league.season ?? null }, canonical, {
+      canonical: true, afIntelligence: (await readAfIntelligenceAccess(userId)).unlocked })
 
     // What each player scored last week under this league's scoring (lib/waiver-wire/lastWeekPoints.ts).
     // Every sport's points leagues; null for a categories league, and the screen then shows no such figure.
