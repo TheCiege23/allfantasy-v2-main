@@ -409,6 +409,18 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
           if (stB && isSwapEligibleStatus(stB)) continue
           // An excluded player is the user's to move, in either direction.
           if (autoCoachSkipReason({ id: bid }, prefs) === 'excluded') continue
+          /*
+           * 🛑 A BENCH PLAYER WHOSE GAME HAS STARTED CANNOT COME IN (owner's rule 2026-11-23, every sport).
+           * Only the outgoing starter's game was checked, so in an imported league a Sunday swap could bring
+           * in a bench player who already played on Thursday.
+           */
+          const benchLock = await getPlayerGameLockStateForAutoCoach({
+            sport,
+            teamAbbr: pRow?.team,
+            leagueSeason: league.season,
+            leagueSettings: league.settings,
+          })
+          if (benchLock.lockedBecauseGameStarted) continue
 
           eligibleBench.push({
             id: bid,

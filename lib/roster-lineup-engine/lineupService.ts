@@ -397,7 +397,7 @@ async function runRosterLineupWithEngine(
             ).map((p) => [p.playerId, p.slotType] as const),
           )
         : undefined
-      await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
+      await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData, sport, leagueSettings: league.settings })
       if (taxiCheck) await logTaxiPromotions(tx, { leagueId: input.leagueId, redraftRosterId, week: input.week, actorUserId: input.actorUserId, check: taxiCheck })
       // A daily-lineup league is scored per day: pin the synced slots to every day the save decides.
       if (dailyLineups) {

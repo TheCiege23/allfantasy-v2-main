@@ -33,6 +33,7 @@ import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { matchStarterSlots } from '@/lib/redraft/nativeDraftRosterTemplate'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { relabelSeasonStarters } from '@/lib/redraft/relabelStarters'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -777,6 +778,20 @@ export async function syncCompletedDraftToRedraftSeason(
       })
     })
   }
+
+  /*
+   * Starter labels that fit the league's layout (./relabelStarters.ts): the picks above are written as
+   * each starter's POSITION, so a FLEX starter read as a third RB and the lineup looked illegal. Labels
+   * only — who starts is unchanged. This pass re-runs on roster and draft-room views, so a season
+   * drafted before it heals on its next view. Must not fail draft completion.
+   */
+  await relabelSeasonStarters(prisma, { seasonId: season.id, sport: season.sport || String(session.sportType ?? 'NFL'), leagueSettings: league.settings }).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] starter labels not normalized', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
 
   await ensureScheduleForNewSeason({
     seasonId: season.id,

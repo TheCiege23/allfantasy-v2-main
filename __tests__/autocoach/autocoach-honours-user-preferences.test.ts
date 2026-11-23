@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   swapLogs: [] as Array<{ playerOutId: string; playerInId: string }>,
   pickCalls: [] as Array<{ playerOut: string; bench: string[] }>,
   aiSwapOn: true,
+  teams: {} as Record<string, string>,
+  startedTeams: new Set<string>(),
 }))
 
 // AI swap is off until the subscriber turns it on (lib/lineup-automation/aiSwapPolicy.ts).
@@ -80,8 +82,8 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
 }))
 vi.mock('@/lib/queues/bullmq', () => ({ getNotificationsQueue: () => null }))
 vi.mock('@/lib/autocoach/playerGameLock', () => ({
-  getPlayerGameLockStateForAutoCoach: async () => ({
-    lockedBecauseGameStarted: false,
+  getPlayerGameLockStateForAutoCoach: async (args: { teamAbbr?: string | null }) => ({
+    lockedBecauseGameStarted: mocks.startedTeams.has(String(args.teamAbbr ?? '')),
     nextKickoffUtc: null,
     scheduleKnown: true,
     reason: 'pregame',
@@ -101,7 +103,7 @@ vi.mock('@/lib/player-identity/findSportsPlayerByLeagueId', () => {
   const row = (id: string) => ({
     name: id,
     position: POSITIONS[id] ?? 'UNK',
-    team: 'KC',
+    team: mocks.teams[id] ?? 'KC',
     status: mocks.statuses[id] ?? 'ACTIVE',
     updatedAt: new Date('2026-10-02T12:00:00Z'),
   })
@@ -138,6 +140,8 @@ beforeEach(() => {
   mocks.swapLogs = []
   mocks.pickCalls = []
   mocks.aiSwapOn = true
+  mocks.teams = {}
+  mocks.startedTeams = new Set()
 })
 
 describe('autoCoachSkipReason (pure)', () => {
@@ -183,6 +187,17 @@ describe('runAutoCoachForLeague', () => {
     // qb1 is out, but the only QB replacement is managed by the user — no QB swap at all.
     expect(mocks.swapLogs).toEqual([{ playerOutId: 'rb1', playerInId: 'rb2' }])
     expect(mocks.pickCalls.find((c) => c.playerOut === 'qb1')).toBeUndefined()
+  })
+
+  /*
+   * 🛑 ONLY THE OUTGOING STARTER'S GAME WAS CHECKED (2026-11-23). A bench player whose game had started
+   * could be swapped in. Owner's rule: a started player cannot be moved in or out.
+   */
+  it('never swaps in a bench player whose game has started', async () => {
+    mocks.teams = { rb2: 'DAL' }
+    mocks.startedTeams = new Set(['DAL'])
+    await runAutoCoachForLeague('L1')
+    expect(mocks.swapLogs).toEqual([{ playerOutId: 'qb1', playerInId: 'qb2' }])
   })
 
   it('does NOT let the margin knobs block a swap of a ruled-out starter', async () => {
