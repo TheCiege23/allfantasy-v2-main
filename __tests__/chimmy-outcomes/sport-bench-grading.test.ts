@@ -188,6 +188,8 @@ describe('🛑 the ledger rebuild carries each sport\'s line beside the NFL reco
     }
     const snap = await recomputeLedgerRecord({ now: NOW, db: db as never })
     expect(snap?.sportBench?.NBA?.tally).toMatchObject({ right: 1, gain: 20 })
+    // Its calibration: projected 110 over 100 is a 10% edge on the starter — the `clear` band, one call, silent until 20.
+    expect(snap?.sportBench?.NBA?.edges).toEqual({ clear: expect.objectContaining({ n: 1, right: 1 }) })
     expect(snap?.bench).toMatchObject({ right: 0, wrong: 0 })
     expect(snap?.users).toEqual({})
   })

@@ -160,6 +160,26 @@ describe('said, never decided', () => {
     expect(withRecord.split('\n').filter((l) => !l.startsWith('How My Team')).join('\n')).toBe(plain)
   })
 
+  it('🛑 an NBA swap is read against the NBA record by its share of the starter — and the answer is otherwise unchanged', async () => {
+    const { foldBenchShareBands } = await import('@/lib/decision-os/lineup/benchCalibration')
+    const nba = (starters: unknown[], bench: unknown[]) => ({ ...(data(starters, bench) as object), league: { id: 'L', name: 'Hoops', platform: 'sleeper', sport: 'NBA', format: 'redraft', sourceLink: null } }) as never
+    // Sam Bench 15 over Pat Guard 9: a 6-point edge, 67% of the starter — `wide` by share (it would be `clear` in points).
+    const share = benchCalibrationFrom(foldBenchShareBands([...Array.from({ length: 40 }, () => ({ edge: 30, starterProjected: 100, call: 'right' as const, ageDays: 0 })), ...Array.from({ length: 10 }, () => ({ edge: 30, starterProjected: 100, call: 'wrong' as const, ageDays: 0 }))]))
+    const hoop = (id: string, name: string, position: string, af: number) =>
+      ({ sleeperId: id, name, position, team: 'XX', sport: 'NBA', kickoff: later, injuryStatus: null, ruledOut: false, afProjectedPoints: af, onBye: false }) as never
+    const pg = hoop('11', 'Pat Guard', 'PG', 9)
+    const c = hoop('12', 'Cal Center', 'C', 20)
+    const sgBench = hoop('13', 'Sam Bench', 'PG', 15)
+    const d = nba([slot('PG', pg), slot('C', c)], [sgBench])
+    const plain = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => d, calibration: async () => null })) as string
+    const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => d, calibration: async () => share })) as string
+    expect(out).toContain("swaps with an edge of 25%+ of the starter's projection were right 71% of 50 graded calls")
+    expect(out.split('\n').filter((l) => !l.startsWith('How My Team')).join('\n')).toBe(plain)
+    // The NFL points record is never read for it: a points-only record says nothing here.
+    const pointsOnly = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => d, calibration: async () => record })) as string
+    expect(pointsOnly).not.toContain('held up')
+  })
+
   it('a close call gets no record line — only a swap is a call', async () => {
     const d = data([slot('QB', qb), slot('RB', rbBench)], [rb])
     const out = (await buildMyTeamLineupContext({ leagueId: 'L', userId: 'u', now: NOW }, { load: async () => d, calibration: async () => record })) as string
@@ -177,7 +197,7 @@ describe('said, never decided', () => {
   it('My Team attaches the record to a swap only, from the edge it already computed', async () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync(`${process.cwd()}/lib/core-app/myTeam.ts`, 'utf8')
-    expect(src).toMatch(/const record = swap \? benchCallRecord\(c\.gap, benchCalibration\) : null/)
+    expect(src).toMatch(/const record = swap \? benchCallRecord\(c\.gap, benchCalibration, \{ scale: benchEdgeScaleFor\(sport\), starterProjected: c\.starterProj \}\) : null/)
     expect(src).toMatch(/verdict: swap \? 'swap' : 'close',/)
   })
 })
@@ -240,7 +260,7 @@ describe('🛑 native NFL leagues are graded on our own engine\'s weekly scores 
     expect(values).not.toContain('')
   })
 
-  it('My Team reads the bench record in a native NFL league, not in ESPN or a native NBA league', async () => {
+  it('My Team reads the bench record in a native NFL league, not in ESPN, nor in a native NBA league with no NBA record', async () => {
     const snapshot = { ledger: { benchEdges: { clear: { n: 30, right: 25, wrong: 5, same: 0, wDecided: 30, wRight: 25 } } } }
     vi.doMock('@/lib/chimmy-outcomes/learningStore', () => ({ readAdviceLearningSnapshot: vi.fn(async () => snapshot) }))
     vi.resetModules()
@@ -251,5 +271,81 @@ describe('🛑 native NFL leagues are graded on our own engine\'s weekly scores 
     expect(await loadBenchCalibration({ sport: 'NFL', platform: '' })).toBeNull()
     expect(await loadBenchCalibration({ sport: 'NBA', platform: 'allfantasy' })).toBeNull()
     vi.doUnmock('@/lib/chimmy-outcomes/learningStore')
+  })
+})
+
+describe('🛑 NBA / NHL / MLB: banded by share of the starter, each sport its own record (2026-11-23)', () => {
+  it('the share bands: under 10%, 10–25%, 25%+ — and still nothing under the swap threshold', async () => {
+    const { benchShareBand } = await import('@/lib/decision-os/lineup/benchCalibration')
+    expect(benchShareBand(5, 100)).toBe('narrow')
+    expect(benchShareBand(10, 100)).toBe('clear')
+    expect(benchShareBand(24.9, 100)).toBe('clear')
+    expect(benchShareBand(25, 100)).toBe('wide')
+    expect(benchShareBand(3, 0)).toBe('wide')
+    expect(benchShareBand(BENCH_EDGE_FLOOR - 0.1, 10)).toBeNull()
+    expect(benchShareBand(5, null)).toBeNull()
+  })
+
+  it('the same 6-point edge is a different call in a 100-point week and a 10-point one', async () => {
+    const { benchCallRecord: rec, foldBenchShareBands } = await import('@/lib/decision-os/lineup/benchCalibration')
+    const cal = benchCalibrationFrom(
+      foldBenchShareBands([
+        ...Array.from({ length: 30 }, () => ({ edge: 6, starterProjected: 100, call: 'wrong' as const, ageDays: 0 })),
+        ...Array.from({ length: 30 }, () => ({ edge: 6, starterProjected: 10, call: 'right' as const, ageDays: 0 })),
+      ]),
+    )
+    expect(rec(6, cal, { scale: 'share', starterProjected: 100 })).toMatchObject({ band: 'narrow', level: 'low', scale: 'share' })
+    expect(rec(6, cal, { scale: 'share', starterProjected: 10 })).toMatchObject({ band: 'wide', level: 'high', scale: 'share' })
+    // Read in points it would be the one `clear` band for both — a band this share record does not hold, so: nothing.
+    expect(rec(6, cal)).toBeNull()
+  })
+
+  it('🛑 silent below the minimum sample; shrunk toward a coin flip', async () => {
+    const { foldBenchShareBands } = await import('@/lib/decision-os/lineup/benchCalibration')
+    const few = Array.from({ length: BENCH_CALIBRATION_MIN_SAMPLE - 1 }, () => ({ edge: 30, starterProjected: 100, call: 'right' as const, ageDays: 0 }))
+    expect(benchCalibrationFrom(foldBenchShareBands(few))).toBeNull()
+    const enough = Array.from({ length: 20 }, () => ({ edge: 30, starterProjected: 100, call: 'right' as const, ageDays: 0 }))
+    expect(benchCalibrationFrom(foldBenchShareBands(enough))?.wide?.rightRate).toBeCloseTo(0.75, 5)
+  })
+
+  it('the snapshot line bands each graded call by the starter it would bench; a call missing a projection is tallied only', async () => {
+    const { sportBenchLineFrom } = await import('@/lib/chimmy-outcomes/sportBenchRecord')
+    const tally = { right: 3, wrong: 0, same: 0, gain: 9, pending: 0, unscored: 0, withdrawn: 0 }
+    const line = sportBenchLineFrom({
+      tally,
+      graded: [
+        { call: 'right', recProjected: 115, altProjected: 100, ageDays: 0 },
+        { call: 'right', recProjected: 104, altProjected: 100, ageDays: 0 },
+        { call: 'right', recProjected: null, altProjected: 100, ageDays: 0 },
+      ],
+    })
+    expect(line.tally).toBe(tally)
+    expect(line.edges).toMatchObject({ clear: { n: 1, right: 1 }, narrow: { n: 1, right: 1 } })
+    expect(sportBenchLineFrom({ tally, graded: [] })).toEqual({ tally })
+  })
+
+  it('My Team reads each sport\'s own line — never the NFL bands, never another sport\'s', async () => {
+    const edges = { wide: { n: 30, right: 27, wrong: 3, same: 0, wDecided: 30, wRight: 27 } }
+    const snapshot = { ledger: { benchEdges: { clear: { n: 99, right: 90, wrong: 9, same: 0, wDecided: 99, wRight: 90 } }, sportBench: { NBA: { tally: {}, edges } } } }
+    vi.doMock('@/lib/chimmy-outcomes/learningStore', () => ({ readAdviceLearningSnapshot: vi.fn(async () => snapshot) }))
+    vi.resetModules()
+    const { loadBenchCalibration } = await import('@/lib/decision-os/lineup/benchCalibrationStore')
+    expect(await loadBenchCalibration({ sport: 'NBA', platform: 'sleeper' })).toEqual({ wide: expect.objectContaining({ decided: 30 }) })
+    expect(await loadBenchCalibration({ sport: 'nba', platform: 'allfantasy' })).toEqual({ wide: expect.objectContaining({ decided: 30 }) })
+    expect(await loadBenchCalibration({ sport: 'NHL', platform: 'sleeper' })).toBeNull()
+    expect(await loadBenchCalibration({ sport: 'NFL', platform: 'sleeper' })).toEqual({ clear: expect.objectContaining({ decided: 99 }) })
+    expect(await loadBenchCalibration({ sport: 'NBA', platform: 'espn' })).toBeNull()
+    expect(await loadBenchCalibration({ sport: 'SOCCER', platform: 'sleeper' })).toBeNull()
+    vi.doUnmock('@/lib/chimmy-outcomes/learningStore')
+  })
+
+  it('the screen says the share, in English and Spanish', () => {
+    const en = myTeamScreenMessages.en.benchCheckRecord
+    const es = myTeamScreenMessages.es.benchCheckRecord
+    expect(en(71, 140, 'clear', false, 'share')).toBe("Swaps with an edge of 10–25% of the starter's projection have been right 71% of the time (140 graded calls).")
+    expect(en(48, 90, 'narrow', true, 'share')).toBe("Swaps with an edge of under 10% of the starter's projection have been right only 48% of the time (90 graded calls) — closer than the projections suggest.")
+    expect(es(71, 140, 'wide', false, 'share')).toBe('Los cambios con una ventaja de más del 25% de la proyección del titular han acertado el 71% de las veces (140 decisiones evaluadas).')
+    // Points, as before, when no scale is given.
+    expect(en(71, 140, 'clear', false)).toBe('Swaps with a 4–8 point edge have been right 71% of the time (140 graded calls).')
   })
 })

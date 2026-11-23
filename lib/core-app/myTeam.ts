@@ -30,7 +30,7 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
 import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
-import { benchCallRecord, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
+import { benchCallRecord, benchEdgeScaleFor, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
@@ -246,7 +246,7 @@ export type BenchCheck = {
   starterProjected: number
   /**
    * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
-   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper and native leagues only, and only once its edge
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, Sleeper and native NFL / NBA / NHL / MLB leagues only, and only once its edge
    * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
    */
   record?: BenchCallRecord | null
@@ -1706,7 +1706,7 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
-  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper and native leagues.
+  // The bench check's own graded record, by the size of a swap's edge. Null outside Sleeper and native NFL / NBA / NHL / MLB leagues.
   const benchCalibration = base.league.bestBall
     ? null
     : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)
@@ -1714,7 +1714,7 @@ async function loadMyTeamData(
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
     const swap = c.gap >= BENCH_SWAP_POINTS
-    const record = swap ? benchCallRecord(c.gap, benchCalibration) : null
+    const record = swap ? benchCallRecord(c.gap, benchCalibration, { scale: benchEdgeScaleFor(sport), starterProjected: c.starterProj }) : null
     checkBySlot.set(c.slotIndex, {
       verdict: swap ? 'swap' : 'close',
       benchName: c.bench.name,

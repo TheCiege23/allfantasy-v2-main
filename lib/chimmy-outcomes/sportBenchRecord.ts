@@ -23,6 +23,7 @@
  */
 
 import { gradeStartSit, type BenchTally, type StartSitCall } from './ledgerRecord'
+import { foldBenchShareBands, type BenchEdgeLedger, type GradedShareBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
 
 /** The sports graded this way — the ones the ledger records on their own calendar. */
 export const SPORT_BENCH_SPORTS = ['NBA', 'NHL', 'MLB'] as const
@@ -66,8 +67,23 @@ export type SportBenchCall = {
 
 export type GradedSportBenchCall = { call: StartSitCall; recProjected: number | null; altProjected: number | null; ageDays: number }
 
-/** One sport's line: the tally and, for the calibration, the graded calls that carried both projections. */
-export type SportBenchLine = { tally: BenchTally }
+/**
+ * One sport's line: the tally and the bench check's own calibration for that sport — its graded calls that carried
+ * both projections, banded by the edge's share of the starter's projection (`benchCalibration.ts`). `edges` is absent
+ * when no such call was graded.
+ */
+export type SportBenchLine = { tally: BenchTally; edges?: BenchEdgeLedger }
+
+/** The graded calls → the snapshot's line for the sport. A call missing either projection is tallied, never banded. */
+export function sportBenchLineFrom(result: { tally: BenchTally; graded: readonly GradedSportBenchCall[] }): SportBenchLine {
+  const banded: GradedShareBenchCall[] = result.graded.flatMap((g) =>
+    g.recProjected != null && g.altProjected != null
+      ? [{ edge: g.recProjected - g.altProjected, starterProjected: g.altProjected, call: g.call, ageDays: g.ageDays }]
+      : [],
+  )
+  const edges = banded.length > 0 ? foldBenchShareBands(banded) : null
+  return { tally: result.tally, ...(edges && Object.keys(edges).length > 0 ? { edges } : {}) }
+}
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 

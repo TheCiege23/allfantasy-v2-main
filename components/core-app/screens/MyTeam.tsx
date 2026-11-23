@@ -1157,7 +1157,7 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
             label={m.benchCheckRecordLabel}
             tone={check.record.level === 'low' ? 'low' : undefined}
             lines={[{
-              text: m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low'),
+              text: m.benchCheckRecord(check.record.rightPct, check.record.decided, check.record.band, check.record.level === 'low', check.record.scale),
               data: { level: check.record.level },
             }]}
           />

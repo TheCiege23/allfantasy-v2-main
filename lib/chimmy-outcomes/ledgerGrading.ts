@@ -487,13 +487,16 @@ async function part<T>(fn: () => Promise<T>, empty: T): Promise<T> {
  */
 /**
  * NBA, NHL and MLB bench calls, each sport on its own calendar (`sportBenchGrading.ts`). Each sport is contained there,
- * and the whole read here: a failure costs only these lines, never the NFL record beside them. The graded calls stay
- * here; the snapshot keeps only each sport's tally.
+ * and the whole read here: a failure costs only these lines, never the NFL record beside them. The snapshot keeps each
+ * sport's tally and its share-banded calibration, never a call.
  */
 async function sportBenchLines(now: Date, db: Db, leagueIds?: readonly string[]): Promise<NonNullable<LedgerSnapshot['sportBench']>> {
   return import('./sportBenchGrading')
     .then(({ gradeAllSportBench }) => gradeAllSportBench({ now, db, leagueIds }))
-    .then((bySport) => Object.fromEntries(Object.entries(bySport).map(([sport, line]) => [sport, { tally: line!.tally }])))
+    .then(async (bySport) => {
+      const { sportBenchLineFrom } = await import('./sportBenchRecord')
+      return Object.fromEntries(Object.entries(bySport).map(([sport, line]) => [sport, sportBenchLineFrom(line!)]))
+    })
     .catch((err: unknown) => {
       console.warn('[ledgerGrading] sport bench grading failed', err instanceof Error ? err.message : err)
       return {}
