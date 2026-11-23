@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { SMS_REGION_ERROR, SMS_REGION_MESSAGE, isSmsAllowedNumber } from "@/lib/phone/smsRegion"
 import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 export const runtime = "nodejs"
@@ -15,6 +16,10 @@ export async function POST(req: Request) {
   }
   if (!/^\+\d{10,15}$/.test(phone)) {
     return NextResponse.json({ error: "INVALID_PHONE" }, { status: 400 })
+  }
+  // US and Canada only, before any rate-limit bucket or Twilio call (lib/phone/smsRegion).
+  if (!isSmsAllowedNumber(phone)) {
+    return NextResponse.json({ error: SMS_REGION_ERROR, message: SMS_REGION_MESSAGE }, { status: 400 })
   }
 
   const ip = getClientIp(req)

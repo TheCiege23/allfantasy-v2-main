@@ -17,6 +17,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { normalizePhoneE164, isValidPhoneE164 } from '@/lib/phone/e164'
+import { isSmsAllowedNumber } from '@/lib/phone/smsRegion'
 import { clearSharedRateLimit, consumeSharedRateLimit } from '@/lib/security/sharedRateLimit'
 import { maskPhonesInText } from '@/lib/sms/maskPhone'
 import { activeAccountRestriction, ACCOUNT_SUSPENDED_ERROR } from '@/lib/moderation/accountSuspension'
@@ -57,7 +58,7 @@ async function verifyService(): Promise<VerifyService | null> {
 
 export type StartResult =
   | { ok: true }
-  | { ok: false; error: 'INVALID_PHONE' | 'PHONE_VERIFY_NOT_CONFIGURED' | 'SEND_FAILED' }
+  | { ok: false; error: 'INVALID_PHONE' | 'PHONE_REGION_NOT_SUPPORTED' | 'PHONE_VERIFY_NOT_CONFIGURED' | 'SEND_FAILED' }
 
 /**
  * Text a sign-in code if — and only if — the number belongs to a verified account.
@@ -66,6 +67,8 @@ export type StartResult =
 export async function startPhoneCodeSignIn(rawPhone: string): Promise<StartResult> {
   const phone = normalizePhoneE164(rawPhone)
   if (!isValidPhoneE164(phone)) return { ok: false, error: 'INVALID_PHONE' }
+  // Says nothing about whether an account exists: it depends on the number alone.
+  if (!isSmsAllowedNumber(phone)) return { ok: false, error: 'PHONE_REGION_NOT_SUPPORTED' }
 
   const service = await verifyService()
   if (!service) return { ok: false, error: 'PHONE_VERIFY_NOT_CONFIGURED' }

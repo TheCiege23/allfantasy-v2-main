@@ -1123,6 +1123,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.security.rateLimitedMinutes": "Demasiados intentos. Espera unos minutos.",
     "settings.security.phoneError.notConfigured": "La verificación por teléfono aún no está configurada en el servidor.",
     "settings.security.phoneError.invalidPhone": "Introduce un número válido con código de país.",
+    "settings.security.phoneError.regionNotSupported": "Por ahora solo podemos enviar mensajes a números de Estados Unidos y Canadá.",
     "settings.security.phoneError.unauthenticated": "Vuelve a iniciar sesión e inténtalo de nuevo.",
     "settings.security.phoneError.sendFailed": "No se pudo enviar el SMS de verificación ahora.",
     "settings.security.phoneError.verifyFailed": "La verificación falló ahora.",
