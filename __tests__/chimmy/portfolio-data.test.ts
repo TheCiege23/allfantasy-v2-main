@@ -6,7 +6,8 @@ vi.mock('@/lib/ai-payload/resolveAiTeamContext', () => ({ resolveAiTeamContext: 
 vi.mock('@/lib/player-identity/resolveRosterPlayerIdentities', () => ({ resolveRosterPlayerIdentities: h.identities }))
 vi.mock('@/lib/core-app/rosterGrade', () => ({ getRosterGrade: h.grade }))
 vi.mock('@/lib/injuries/injuryReadPort', () => ({ resolveInjuryFacts: h.injury }))
-vi.mock('@/lib/chimmy/lineupOptimizerGrounding', () => ({ buildLineupOptimization: h.lineup }))
+// The portfolio's lineup gain is My Team's best lineup (2026-11-23), not the weekly-feed optimizer.
+vi.mock('@/lib/chimmy-alerts/myTeamLineupOptimization', () => ({ myTeamLineupOptimization: h.lineup }))
 vi.mock('@/lib/chimmy/portfolio/weeklyStrength', () => ({ weeklyLeagueStrength: h.weekly }))
 import { loadPortfolioTeam } from '@/lib/chimmy/portfolio/data'
 
@@ -70,6 +71,22 @@ describe('portfolio roster evidence', () => {
     const result = await loadPortfolioTeam(league, 'u1', 'season')
     expect(result.metrics.find(m => m.key === 'injuries')?.value).toBeNull()
     expect(result.gaps.join(' ')).toMatch(/injury feed is stale/)
+  })
+  it('reports My Team\'s lineup gain, for a non-NFL league too', async () => {
+    h.lineup.mockResolvedValue({ status: 'ready', week: { season: '2026', week: 7 }, gain: 4.5 })
+    const nba = { ...league, sport: 'NBA' }
+    const result = await loadPortfolioTeam(nba, 'u1', 'season')
+    expect(h.lineup).toHaveBeenCalledWith('a', 'u1')
+    const gain = result.metrics.find(m => m.key === 'lineup_gain')
+    expect(gain?.value).toBe(4.5)
+    expect(gain?.detail).toContain('My Team')
+  })
+  it('says My Team has no best lineup rather than inventing a gain', async () => {
+    h.lineup.mockResolvedValue({ status: 'ready', week: { season: '2026', week: 7 }, gain: null })
+    const result = await loadPortfolioTeam(league, 'u1', 'season')
+    const gain = result.metrics.find(m => m.key === 'lineup_gain')
+    expect(gain?.value).toBeNull()
+    expect(gain?.detail).toMatch(/no best lineup/)
   })
   it('does not recommend manually setting starters in best ball', async () => {
     const c = context(); c.context.flags.bestBallMode = true; h.rules.mockResolvedValue(c)

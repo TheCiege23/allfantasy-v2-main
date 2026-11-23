@@ -7,7 +7,7 @@ import { getRosterGrade } from '@/lib/core-app/rosterGrade'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { isLeagueNotStarted } from '@/lib/core-app/leagueNotStarted'
-import { buildLineupOptimization } from '@/lib/chimmy/lineupOptimizerGrounding'
+import { myTeamLineupOptimization } from '@/lib/chimmy-alerts/myTeamLineupOptimization'
 import { weeklyLeagueStrength } from './weeklyStrength'
 import { leaguePercentile, rosterStructure } from './metrics'
 import type { NamedLeague } from '@/lib/chimmy/tools/leagueByName'
@@ -60,7 +60,8 @@ export async function loadPortfolioTeam(l: NamedLeague, userId: string, horizon:
       myPlatformUserIds: [team.platformUserId, c.team?.platformUserId, c.team?.externalId, userId].filter((id): id is string => Boolean(id)),
       isDynasty: horizon === 'dynasty', starters: c.roster.starters, scoringSettings: c.scoring.pointsByStat }).catch(() => null) : Promise.resolve(null),
     horizon === 'week' ? weeklyLeagueStrength(l.id, userId).catch(() => null) : Promise.resolve(null),
-    l.sport === 'NFL' && !autoLineup ? buildLineupOptimization({ leagueId: l.id, userId }).catch(() => null) : Promise.resolve(null),
+    // My Team's own best lineup (2026-11-23), for every sport, so this gain is the gain the My Team screen shows.
+    !autoLineup ? myTeamLineupOptimization(l.id, userId).catch(() => null) : Promise.resolve(null),
     resolveInjuryFacts({ sport: l.sport, players: resolved.filter(p => p.name).map(p => ({ name: p.name!, position: p.position, team: p.team })) }).catch(() => null),
   ])
   if (horizon === 'dynasty' && !canDynasty) gaps.push('Dynasty outlook is not applicable to this redraft team.')
@@ -93,7 +94,7 @@ export async function loadPortfolioTeam(l: NamedLeague, userId: string, horizon:
   if (!injuries?.coverage.sourceAvailable) gaps.push('Injury report coverage is unavailable for this sport.')
   if (injuryPlayers.some(p => p.stale)) gaps.push('Some injury reports are stale.')
   if (lineup?.status === 'ready') metrics.push({ key: 'lineup_gain', label: 'Available lineup gain', value: lineup.gain,
-    detail: lineup.gain == null ? 'The current lineup could not be fully priced.' : 'Week ' + lineup.week.week + ': ' + lineup.gain.toFixed(1) + ' projected points from the shared lineup optimizer. Recheck locks before confirming changes.' })
+    detail: lineup.gain == null ? 'My Team has no best lineup this week: a starter has no projection, or no seat can still change.' : 'Week ' + lineup.week.week + ': ' + lineup.gain.toFixed(1) + ' projected points from My Team’s best lineup. Recheck locks before confirming changes.' })
   else if (autoLineup) metrics.push({ key: 'lineup_gain', label: 'Lineup management', value: null, detail: 'Best ball selects scoring starters automatically; manual start/sit changes do not apply.' })
   if (native) metrics.push({ key: 'source', label: 'Roster source', value: null, detail: 'Native AllFantasy roster read directly; no external sync is required.' })
   if (horizon === 'dynasty') gaps.push('This compares roster assets only. Draft picks, contracts and future-season outcomes are not included in the construction index.')
