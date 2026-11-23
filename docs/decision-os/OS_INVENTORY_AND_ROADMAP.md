@@ -266,6 +266,22 @@ Membership is still proved on every call before either is read. Test: `__tests__
 Player Value are n/a by design (the feed cannot serve their screens without making them worse); the commissioner hub is
 n/a as the feed's writer.
 
+**Import Kernel: n/a by design, not ⚠ (owner's call, 2026-11-23).** The 2026-11-23 re-score marked Import Kernel ⚠
+because the League Sync screen (`lib/core-app/leagueSync.ts`, `getLeagueSync`) reads `LeagueSyncState` directly while
+only the packet reads Import OS. Rewiring it was costed and refused, for the same reason as Projection and Value:
+- **The feed would make the screen wrong exactly when it matters.** Import OS holds its assertions for five minutes
+  (`lib/decision-os/import-os/index.ts`), and this screen has a **Sync now** button (`SyncNowButton`). Read through the
+  feed, a user who syncs and reloads would be shown the pre-sync status for up to five minutes — on the one screen whose
+  job is to say how current their league is.
+- **The feed does not hold what the screen shows.** `ImportAssertions` carries freshness, status, failures, scopes and
+  parity. The screen also shows the paused state, per-row roster / score / transaction times, seasons on file, the last
+  job run and its killed-mid-run signature, the provider-gone state, the last error and the imported-Guilly card — so it
+  would still read all of those directly and gain only an older copy of its headline field.
+
+So the screen stays on its direct indexed reads, as Lineup's screens stay live, and the packet keeps reading through
+Import OS where a five-minute freshness claim is the right shape. With `FANTASY_OS_EXEC_SYNC_LIVE` confirmed set on the
+worker by the owner (2026-11-23), Import Cron is ✅ too, so neither Import mark is a gap any more.
+
 **Built in this change (no migration):**
 - **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
   with `buildLineupOptimization` (the weekly-feed optimizer and the Trade Center's greedy fill), while My Team and
