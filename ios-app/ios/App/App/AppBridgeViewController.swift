@@ -17,6 +17,16 @@ class AppBridgeViewController: CAPBridgeViewController {
                 self?.view.window?.windowScene
             }
             webView.configuration.userContentController.add(appleIAP, name: AppleIAPHandler.messageName)
+
+            // Native Sign in with Apple, only in a build signed with that entitlement: the page
+            // offers the button only when this handler exists, so a build without it never shows
+            // a button that would fail (AppleSignInHandler.swift).
+            if AppleSignInHandler.isEnabledInThisBuild {
+                let appleSignIn = AppleSignInHandler(webView: webView) { [weak self] in
+                    self?.view.window?.windowScene
+                }
+                webView.configuration.userContentController.add(appleSignIn, name: AppleSignInHandler.messageName)
+            }
         }
     }
 }

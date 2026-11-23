@@ -366,6 +366,24 @@ const providers: NextAuthOptions["providers"] = [
     },
   }),
   /*
+   * Sign in with Apple from the iOS app's native sheet (lib/auth/appleNativeSignIn). The web
+   * Apple button cannot work inside the app's WebView; this verifies Apple's signed identity
+   * token (our bundle id, this page's nonce) and links exactly as the web Apple callback does.
+   */
+  CredentialsProvider({
+    id: "apple-native",
+    name: "Sign in with Apple (app)",
+    credentials: {
+      identityToken: { label: "Identity token", type: "text" },
+      nonce: { label: "Nonce", type: "text" },
+      name: { label: "Name", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizeAppleNative } = await import("@/lib/auth/appleNativeSignIn");
+      return authorizeAppleNative(credentials as Record<string, unknown> | undefined);
+    },
+  }),
+  /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *
    * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing
