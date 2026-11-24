@@ -1064,6 +1064,18 @@ function AuthModeSwitch({ mode }: { mode: AuthMode }) {
   </div>
 }
 
+/**
+ * The store badges under the sign-up form, EXCEPT for a friend who came through a commissioner's
+ * Partner Code link (/with/CODE redirects here with ?code=CODE). That code attaches only at a WEB
+ * signup — the /with cookie read by /api/auth/register — so a badge tap that moved the signup into
+ * the app would silently cost the commissioner the referral. Sign up here first; the app comes after.
+ */
+function SignupStoreBadges() {
+  const params = useSearchParams()
+  if (params?.get('code')?.trim()) return null
+  return <LandingStoreBadges page="signup" className="af-lp-stores--center" testId="signup-store-badges" />
+}
+
 export function AuthV4({ mode }: { mode: AuthMode }) {
   return (
     <div className="af-core af-au">
@@ -1102,7 +1114,7 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
       </Suspense>
       {/* Sign-up only: someone arriving to create an account may rather do it in the app. */}
       {mode === 'signup' ? (
-        <LandingStoreBadges page="signup" className="af-lp-stores--center" testId="signup-store-badges" />
+        <Suspense fallback={null}><SignupStoreBadges /></Suspense>
       ) : null}
       <p className="af-au-legal">
         100% fantasy sports — no gambling, no DFS. Not available in WA.
