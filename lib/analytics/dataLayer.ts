@@ -80,6 +80,15 @@ type AnalyticsEvent =
       cta: 'import' | 'pricing'
       placement: 'nav' | 'mobile_nav' | 'hero' | 'how_it_works' | 'bottom'
     }
+  /**
+   * A tap on an App Store / Google Play badge (LandingStoreBadges). `store` is which badge, `page`
+   * where it sat. It counts intent to install, not installs — the stores do not report back here.
+   */
+  | {
+      event: 'app_store_badge_click'
+      store: 'app_store' | 'google_play'
+      page: 'landing' | 'commissioners' | 'signup'
+    }
   | { event: 'begin_checkout'; plan: Plan }
   | {
       event: 'purchase'

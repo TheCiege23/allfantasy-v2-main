@@ -26,6 +26,7 @@ import IosBracketAppOption from '@/components/brackets/IosBracketAppOption'
 import AppleNativeSignInButton from '@/components/auth/AppleNativeSignInButton'
 import PasskeySignInButton from '@/components/auth/PasskeySignInButton'
 import PasskeyOffer, { shouldOfferPasskey } from '@/components/auth/PasskeyOffer'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -1099,6 +1100,10 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
       <Suspense fallback={<div className="af-au-card" aria-busy="true" />}>
         <AuthInner mode={mode} />
       </Suspense>
+      {/* Sign-up only: someone arriving to create an account may rather do it in the app. */}
+      {mode === 'signup' ? (
+        <LandingStoreBadges page="signup" className="af-lp-stores--center" testId="signup-store-badges" />
+      ) : null}
       <p className="af-au-legal">
         100% fantasy sports — no gambling, no DFS. Not available in WA.
       </p>
