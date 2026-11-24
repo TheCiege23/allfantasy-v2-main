@@ -91,6 +91,37 @@ export function splitNewsAudience(input: {
   return { push: [...push], feedOnly: [...feedOnly] }
 }
 
+/**
+ * A highlights clip ("X vs. Y: Game Highlights", "… - Full Highlights"): a video recap, not news.
+ *
+ * 🛑 Bell only, never a phone push (owner, 2026-11-23). ESPN posts one for nearly every game, so a
+ * manager in a college basketball league got one push per game all evening — 754 of the 4,160 news
+ * pushes in the week to 2026-11-23 were highlights. They still reach the bell.
+ */
+export function isHighlightsClip(title: string): boolean {
+  return /\bhighlights\s*$/i.test(title.trim())
+}
+
+/**
+ * An ESPN video clip (`espn.com/video/clip/...`): talk-show reactions, debate segments, highlight reels.
+ * Bell only like highlights (owner, 2026-11-23): 512 of the week's news pushes were video clips that are
+ * not highlights. ESPN is the only source here that posts video, so only its links are matched.
+ */
+export function isEspnVideoClip(sourceUrl: string | null | undefined): boolean {
+  if (!sourceUrl) return false
+  try {
+    const url = new URL(sourceUrl)
+    return /(^|\.)espn\.com$/i.test(url.hostname) && url.pathname.toLowerCase().startsWith('/video/')
+  } catch {
+    return false
+  }
+}
+
+/** A story that reaches the bell only, never a phone push: highlights clips and ESPN video clips. */
+export function isBellOnlyStory(row: { title: string; sourceUrl?: string | null }): boolean {
+  return isHighlightsClip(row.title) || isEspnVideoClip(row.sourceUrl)
+}
+
 /** The teams a story names: nickname scan for the pros, the article's own team field for college. */
 async function teamsForStory(row: NewsRow): Promise<string[]> {
   const sport = row.sport.toUpperCase()
@@ -193,7 +224,11 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
       for (const id of (await listFollowerIdsForTeam(sport, team).catch(() => null)) ?? []) namedTeamFollowers.push(id)
     }
     const [playing, sportAudience] = await Promise.all([listUserIdsPlayingSport(sport), listSportsAlertAudience(sport)])
-    const { push: pushIds, feedOnly } = splitNewsAudience({ playing, namedTeamFollowers, sportAudience })
+    const split = splitNewsAudience({ playing, namedTeamFollowers, sportAudience })
+    // A highlights or video clip goes to the bell for everyone who would have had it, pushes included.
+    const bellOnly = isBellOnlyStory(c.row)
+    const pushIds = bellOnly ? [] : split.push
+    const feedOnly = bellOnly ? [...split.push, ...split.feedOnly] : split.feedOnly
     if (pushIds.length + feedOnly.length === 0) continue
 
     if (!(await claimStory(c.storyKey, c.row, now).catch(() => false))) {

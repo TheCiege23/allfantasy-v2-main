@@ -25,7 +25,7 @@ vi.mock('@/lib/follows/teamFollows', () => ({
 }))
 vi.mock('@/lib/follows/teamResolver', () => ({ resolveTeam: () => null }))
 
-import { dispatchBreakingNewsAlerts, splitNewsAudience } from '@/lib/news/breakingNewsAlerts'
+import { dispatchBreakingNewsAlerts, isEspnVideoClip, isHighlightsClip, splitNewsAudience } from '@/lib/news/breakingNewsAlerts'
 
 const NOW = new Date('2026-11-01T17:05:00Z')
 const story = (title: string) => ({
@@ -93,5 +93,64 @@ describe('news dispatch', () => {
     )
     await expect(dispatchBreakingNewsAlerts({ now: NOW })).rejects.toThrow(/incomplete/)
     expect(h.remove).toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 Highlights clips reach the bell only, never a phone (owner, 2026-11-23): ESPN posts one per game, and
+ * 754 of the week's 4,160 news pushes were highlights.
+ */
+describe('highlights clips', () => {
+  it('recognises a game highlights clip by its title, and leaves real stories that use the word', () => {
+    expect(isHighlightsClip('Yale Bulldogs vs. Belmont Bruins: Game Highlights')).toBe(true)
+    expect(isHighlightsClip('Vancouver Whitecaps vs. Real Salt Lake - Game Highlights')).toBe(true)
+    expect(isHighlightsClip('Yale Bulldogs vs. Harvard Crimson: Full Highlights ')).toBe(true)
+    expect(isHighlightsClip("Josh Heupel highlights creativity behind Tennessee's offense")).toBe(false)
+    expect(isHighlightsClip('ESPN Highlights Recurring Problem for Bills, Head Coach Joe Brady')).toBe(false)
+    expect(isHighlightsClip("Justin Herbert's highlight-reel touchdown can't save 1-9 Chargers")).toBe(false)
+  })
+
+  it('a highlights clip goes to everyone in the bell, including people it would have pushed to', async () => {
+    h.news.mockResolvedValue([story('Rochester Tigers vs. Buffalo Bulls: Game Highlights')])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    const calls = h.dispatch.mock.calls.map(([arg]) => arg)
+    expect(calls.find((c) => !c.skipChannels.push)).toBeUndefined()
+    const bell = calls.find((c) => c.skipChannels.push === true)
+    expect(bell?.userIds).toEqual(['in-league', 'profile-only', 'follows-other-team'])
+    expect(h.dispatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('[control] a real story in the same sport still pushes to league members', async () => {
+    h.news.mockResolvedValue([story('Rochester coach fired after season opener')])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    const pushCall = h.dispatch.mock.calls.map(([a]) => a).find((c) => !c.skipChannels.push)
+    expect(pushCall?.userIds).toEqual(['in-league'])
+  })
+})
+
+/* Other ESPN video clips — talk-show reactions, debate segments — are bell only too (owner, 2026-11-23). */
+describe('ESPN video clips', () => {
+  it('recognises an espn.com video link, and nothing else', () => {
+    expect(isEspnVideoClip('https://www.espn.com/video/clip/_/id/50541756/closing-my-eyes-taking-arch-manning-no-1-nfl-draft')).toBe(true)
+    expect(isEspnVideoClip('https://espn.com/video/clip/_/id/1')).toBe(true)
+    expect(isEspnVideoClip('https://www.espn.com/nfl/story/_/id/1/a-real-story')).toBe(false)
+    expect(isEspnVideoClip('https://notespn.com/video/clip/_/id/1')).toBe(false)
+    expect(isEspnVideoClip('https://www.espn.com/nfl/story/_/id/1/video-review-explained')).toBe(false)
+    expect(isEspnVideoClip(null)).toBe(false)
+    expect(isEspnVideoClip('not a url')).toBe(false)
+  })
+
+  it('a video clip goes to everyone in the bell; an ESPN article in the same sport still pushes', async () => {
+    h.news.mockResolvedValue([{ ...story("Bayless: I'm closing my eyes and taking Arch Manning at No. 1"), sourceUrl: 'https://www.espn.com/video/clip/_/id/50541756/x' }])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    let calls = h.dispatch.mock.calls.map(([arg]) => arg)
+    expect(calls.find((c) => !c.skipChannels.push)).toBeUndefined()
+    expect(calls.find((c) => c.skipChannels.push === true)?.userIds).toEqual(['in-league', 'profile-only', 'follows-other-team'])
+
+    h.dispatch.mockClear()
+    h.news.mockResolvedValue([{ ...story('Giants fire offensive coordinator'), id: 'n2' }])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    calls = h.dispatch.mock.calls.map(([arg]) => arg)
+    expect(calls.find((c) => !c.skipChannels.push)?.userIds).toEqual(['in-league'])
   })
 })
