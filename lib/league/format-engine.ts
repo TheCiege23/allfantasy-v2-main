@@ -555,7 +555,8 @@ export function getFormatIntroMetadata(options: {
 
   return {
     title: `${resolution.sport} ${resolution.format.label}`,
-    subtitle: `${resolution.format.description}${modifierLabel}.`,
+    // Descriptions end in a period; appending another printed "formats.." (2026-11-24 audit).
+    subtitle: `${resolution.format.description.replace(/\.$/, '')}${modifierLabel}.`,
     introVideo: resolution.media.introVideo,
     thumbnail: resolution.media.thumbnail,
     fallbackCopy: `Welcome to ${resolution.format.label} on AllFantasy. Your ${resolution.sport} format is configured and ready to customize.`,

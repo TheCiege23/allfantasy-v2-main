@@ -10,7 +10,6 @@ import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiCon
 import { useTournamentParticipantState } from '@/lib/tournament/useTournamentParticipantState'
 import { AdvancementOverlay, EliminationOverlay } from '@/app/tournament/components/AdvancementCard'
 import { TournamentStatusCard } from '@/app/tournament/components/TournamentStatusCard'
-import { LeagueIdentityCard } from '@/app/tournament/components/LeagueIdentityCard'
 import { RoundProgressBar } from '@/app/tournament/components/RoundProgressBar'
 import { ForumPostCard } from '@/app/tournament/components/ForumPostCard'
 import { MiniCommissionerHub } from '@/app/tournament/[tournamentId]/components/MiniCommissionerHub'
@@ -23,6 +22,7 @@ import {
 import { resolveHubAccent } from '@/lib/commissioner-hub/feeder-accent'
 import { LEAGUE_TYPE_MEDIA } from '@/lib/create-league-v2/theme'
 import type { LanguageCode } from '@/lib/i18n/constants'
+import { advancementWord } from '@/lib/tournament/tournamentWords'
 
 function formatConferenceOrdinal(rank: number, lang: LanguageCode): string {
   if (lang === 'es') return `${rank}.º`
@@ -171,7 +171,12 @@ export default function TournamentHomePage() {
     const rows = state.standingsLeagues
       .filter((L) => L.conferenceId === conference.id)
       .flatMap((L) => L.participants)
-    rows.sort((a, b) => b.pointsFor - a.pointsFor || b.wins - a.wins)
+    // The stored conference rank when every row has one — the number the status card shows as "Conf. rank".
+    // Sorting by points put the viewer 1st here while the card said 3rd (2026-11-24 audit).
+    const ranked = rows.every((r) => typeof r.conferenceRank === 'number')
+    rows.sort((a, b) =>
+      ranked ? (a.conferenceRank as number) - (b.conferenceRank as number) : b.pointsFor - a.pointsFor || b.wins - a.wins,
+    )
     return rows.slice(0, 8)
   }, [conference, state.standingsLeagues])
 
@@ -183,10 +188,6 @@ export default function TournamentHomePage() {
     const idx = viewerUserId ? rows.findIndex((r) => r.userId === viewerUserId) : -1
     return { rows, idx, total: rows.length }
   }, [state.standingsLeagues, viewerUserId])
-
-  const percentile = globalBoard.idx >= 0 && globalBoard.total > 0
-    ? Math.round((1 - globalBoard.idx / globalBoard.total) * 100)
-    : null
 
   const latest = announcements[0]
 
@@ -259,7 +260,10 @@ export default function TournamentHomePage() {
         : t('tournament.hub.status.active')
 
   return (
-    <div className={`mx-auto max-w-3xl space-y-4 md:max-w-4xl ${isFinals ? 'rounded-2xl ring-1 ring-yellow-500/20' : ''}`}>
+    <div
+      data-tournament-home
+      className={`mx-auto max-w-3xl space-y-4 md:max-w-4xl ${isFinals ? 'rounded-2xl ring-1 ring-yellow-500/20' : ''}`}
+    >
       {shell.status === 'bubble' ? (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-3 text-center text-[13px] font-bold text-amber-100">
           {t('tournament.hub.bubbleWeekBanner')}
@@ -311,7 +315,13 @@ export default function TournamentHomePage() {
             </div>
           ) : null}
           <span className="self-start rounded-full bg-white/10 px-4 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-cyan-200 md:self-end">
-            {roundLabelDisplay}
+            {currentRoundMeta
+              ? tInterpolate('tournament.hub.roundWeeks', {
+                  label: roundLabelDisplay,
+                  start: String(currentRoundMeta.weekStart),
+                  end: String(currentRoundMeta.weekEnd),
+                })
+              : roundLabelDisplay}
           </span>
           <p className="text-[12px] text-[var(--tournament-text-mid)]">
             {tInterpolate('tournament.hub.participantsLine', {
@@ -453,6 +463,8 @@ export default function TournamentHomePage() {
           recordL={state.myStandingsRow?.losses ?? participant.careerLosses}
           pointsFor={state.myStandingsRow?.pointsFor ?? participant.careerPointsFor}
           conferenceRank={state.conferenceRank}
+          pointsRank={globalBoard.idx >= 0 ? globalBoard.idx + 1 : null}
+          pointsRankOf={globalBoard.total}
           basePath={base}
           nextDraftAt={state.nextDraftAt}
           isDraftLive={state.isDraftLive}
@@ -464,7 +476,8 @@ export default function TournamentHomePage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-orange-500/35 bg-[#0c1219] p-4">
+      {state.isDraftLive || countdownDraft ? (
+      <div className="rounded-xl border border-orange-500/35 bg-[#0c1219] p-4" data-testid="tournament-next-draft">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md bg-orange-500/20 px-2 py-0.5 text-[11px] font-bold uppercase text-orange-100">
             {state.isDraftLive ? t('tournament.hub.nextEvent.draftMatchup') : t('tournament.hub.nextEvent.nextEvent')}
@@ -474,18 +487,7 @@ export default function TournamentHomePage() {
           <p className="mt-2 font-mono text-[26px] font-bold tracking-tight text-[var(--tournament-gold)]">
             {countdownDraft}
           </p>
-        ) : (
-          <p className="mt-2 text-[14px] text-[var(--tournament-text-mid)]">{t('tournament.hub.nextEvent.scheduleUpdates')}</p>
-        )}
-        <p className="mt-1 text-[12px] text-[var(--tournament-text-dim)]">
-          {currentRoundMeta
-            ? tInterpolate('tournament.hub.nextEvent.weeksLine', {
-                start: String(currentRoundMeta.weekStart),
-                end: String(currentRoundMeta.weekEnd),
-                label: currentRoundMeta.roundLabel,
-              })
-            : t('tournament.hub.nextEvent.seasonClock')}
-        </p>
+        ) : null}
         {tlFromCtx?.leagueId ? (
           <Link
             href={`/league/${tlFromCtx.leagueId}`}
@@ -495,19 +497,6 @@ export default function TournamentHomePage() {
           </Link>
         ) : null}
       </div>
-
-      {tlFromCtx && conference ? (
-        <LeagueIdentityCard
-          name={tlFromCtx.name}
-          conference={conference}
-          roundLabel={currentRoundMeta?.roundLabel ?? t('tournament.hub.roundWord')}
-          teamSlots={tlFromCtx.teamSlots}
-          currentCount={tlFromCtx.currentTeamCount}
-          status={tlFromCtx.status}
-          leagueId={tlFromCtx.id}
-          href={tlFromCtx.leagueId ? `/league/${tlFromCtx.leagueId}` : `${base}/league`}
-          leagueIndex={0}
-        />
       ) : null}
 
       {conference && top5.length ? (
@@ -536,7 +525,7 @@ export default function TournamentHomePage() {
                 </span>
                 <span className="font-semibold text-white">{row.pointsFor.toFixed(1)}</span>
                 <span className="hidden text-[11px] uppercase text-[var(--tournament-text-dim)] sm:inline">
-                  {row.advancementStatus.replace('_', ' ')}
+                  {advancementWord(row.advancementStatus, t)}
                 </span>
               </li>
             ))}
@@ -562,32 +551,6 @@ export default function TournamentHomePage() {
         </div>
       ) : null}
 
-      <div className="tournament-panel p-4">
-        <h2 className="text-[13px] font-bold text-white">{t('tournament.hub.overall.title')}</h2>
-        {globalBoard.idx >= 0 ? (
-          <>
-            <p className="mt-2 text-[15px] text-white">
-              {tInterpolate('tournament.hub.overall.rankLine', {
-                rank: String(globalBoard.idx + 1),
-                total: String(globalBoard.total),
-              })}
-            </p>
-            {percentile != null ? (
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-yellow-400"
-                  style={{ width: `${Math.min(100, percentile)}%` }}
-                />
-              </div>
-            ) : null}
-            <p className="mt-2 text-[11px] text-[var(--tournament-text-dim)]">
-              {t('tournament.hub.overall.tiebreakerNote')}
-            </p>
-          </>
-        ) : (
-          <p className="mt-2 text-[12px] text-[var(--tournament-text-dim)]">{t('tournament.hub.overall.joinToAppear')}</p>
-        )}
-      </div>
 
       <RoundProgressBar
         rounds={ctx.rounds}

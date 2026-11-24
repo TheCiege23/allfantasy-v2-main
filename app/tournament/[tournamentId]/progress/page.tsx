@@ -1,11 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tournamentStatusWord } from '@/lib/tournament/tournamentWords'
 import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiContext'
 import { TournamentBracketView } from '@/components/tournament/TournamentBracketView'
 import { ChampionCelebration } from '@/components/tournament/ChampionCelebration'
 
 export default function TournamentProgressPage() {
+  const { t, tInterpolate } = useLanguage()
   const ctx = useTournamentUi()
   const { shell, rounds, tournamentLeagues, conferences, participant } = ctx
   const [tab, setTab] = useState<'bracket' | 'list'>('bracket')
@@ -50,10 +53,8 @@ export default function TournamentProgressPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-[18px] font-bold text-white">Progression map</h1>
-      <p className="text-[12px] text-[var(--tournament-text-mid)]">
-        Multi-league funnel — each node is a tournament league. You advance automatically; no invites.
-      </p>
+      <h1 className="text-[18px] font-bold text-white">{t('tournament.progress.title')}</h1>
+      <p className="text-[12px] text-[var(--tournament-text-mid)]">{t('tournament.progress.subtitle')}</p>
 
       <div className="flex gap-2">
         <button
@@ -63,7 +64,7 @@ export default function TournamentProgressPage() {
             tab === 'bracket' ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/5 text-white/60'
           }`}
         >
-          Bracket view
+          {t('tournament.progress.bracketView')}
         </button>
         <button
           type="button"
@@ -72,7 +73,7 @@ export default function TournamentProgressPage() {
             tab === 'list' ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/5 text-white/60'
           }`}
         >
-          List view
+          {t('tournament.progress.listView')}
         </button>
       </div>
 
@@ -106,7 +107,9 @@ export default function TournamentProgressPage() {
                         >
                           <p className="font-semibold text-white">{l.name}</p>
                           <p className="mt-1 text-[var(--tournament-text-dim)]">
-                            {l.currentTeamCount}/{l.teamSlots} · {l.status}
+                            {tInterpolate('tournament.progress.teamsOf', { count: String(l.currentTeamCount), slots: String(l.teamSlots) })}
+                            {' · '}
+                            {tournamentStatusWord(l.status, t)}
                           </p>
                         </div>
                       )
@@ -118,7 +121,7 @@ export default function TournamentProgressPage() {
           </div>
 
           <div className="tournament-panel p-4">
-            <h2 className="text-[13px] font-bold text-white">Participants by round</h2>
+            <h2 className="text-[13px] font-bold text-white">{t('tournament.progress.funnelTitle')}</h2>
             <ul className="mt-2 space-y-2 text-[12px] text-[var(--tournament-text-mid)]">
               {rounds.map((r) => {
                 const tls = byRound.get(r.id) ?? []
@@ -131,7 +134,7 @@ export default function TournamentProgressPage() {
                 )
               })}
               <li className="flex justify-between pt-2 font-bold text-[var(--tournament-gold)]">
-                <span>Champion</span>
+                <span>{t('tournament.progress.champion')}</span>
                 <span>{championName ?? '🏆'}</span>
               </li>
             </ul>

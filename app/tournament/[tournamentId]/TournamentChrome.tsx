@@ -19,6 +19,7 @@ import {
   Trophy,
   Wrench,
 } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiContext'
 import { useTournamentParticipantState } from '@/lib/tournament/useTournamentParticipantState'
 import { TournamentSettingsModalEditable } from '@/app/tournament/[tournamentId]/components/TournamentSettingsModalEditable'
@@ -35,6 +36,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
   const ctx = useTournamentUi()
   const { shell, conferences, participant, isCommissioner, viewerUserId } = ctx
   const state = useTournamentParticipantState(ctx)
+  const { t } = useLanguage()
 
   const [collapsed, setCollapsed] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -298,14 +300,20 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
           </header>
 
           {state.status === 'bubble' ? (
-            <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-[12px] font-semibold text-amber-100">
-              ⚠ You are in the bubble — every point counts.
+            <div
+              className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-[12px] font-semibold text-amber-100"
+              data-tournament-status-banner
+            >
+              {t('tournament.status.banner.bubble')}
             </div>
           ) : null}
 
           {state.status === 'advanced' && state.hasSeenAdvancement ? (
-            <div className="border-b border-yellow-500/25 bg-yellow-500/10 px-4 py-2 text-center text-[12px] font-semibold text-yellow-100">
-              🏆 You advanced! Check your new league and draft window.
+            <div
+              className="border-b border-yellow-500/25 bg-yellow-500/10 px-4 py-2 text-center text-[12px] font-semibold text-yellow-100"
+              data-tournament-status-banner
+            >
+              {t('tournament.status.banner.advanced')}
             </div>
           ) : null}
 

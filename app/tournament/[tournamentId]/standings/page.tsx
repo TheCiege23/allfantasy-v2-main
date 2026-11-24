@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiContext'
 import { useTournamentParticipantState } from '@/lib/tournament/useTournamentParticipantState'
-import { StandingsRow } from '@/app/tournament/components/StandingsRow'
+import { StandingsHeaderRow, StandingsRow } from '@/app/tournament/components/StandingsRow'
 import type { StandingsLeagueRow } from '@/lib/tournament/tournamentStandingsFetch'
 
 type Tab = 'league' | 'conference' | 'global' | 'weekly'
@@ -183,6 +183,9 @@ export default function TournamentStandingsHubPage() {
       {tab === 'league' && myLeague ? (
         <div className="tournament-panel overflow-x-auto p-2">
           <table className="w-full lg:min-w-[560px]">
+            <thead>
+              <StandingsHeaderRow />
+            </thead>
             <tbody>
               {myLeague.participants
                 .filter((r) => filterQ(r.participant.displayName))
@@ -221,6 +224,9 @@ export default function TournamentStandingsHubPage() {
         conferenceRowsSeason.length > 0 ? (
           <div className="tournament-panel overflow-x-auto p-2">
             <table className="w-full lg:min-w-[560px]">
+              <thead>
+                <StandingsHeaderRow />
+              </thead>
               <tbody>
                 {conferenceRowsSeason
                   .filter((r) => filterQ(r.participant.displayName))
@@ -247,6 +253,9 @@ export default function TournamentStandingsHubPage() {
         globalRowsSeason.length > 0 ? (
           <div className="tournament-panel overflow-x-auto p-2">
             <table className="w-full lg:min-w-[560px]">
+              <thead>
+                <StandingsHeaderRow />
+              </thead>
               <tbody>
                 {globalRowsSeason
                   .filter((r) => filterQ(r.participant.displayName))
@@ -282,6 +291,9 @@ export default function TournamentStandingsHubPage() {
             </h2>
             <div className="tournament-panel overflow-x-auto p-2">
               <table className="w-full lg:min-w-[560px]">
+                <thead>
+                  <StandingsHeaderRow variant="weekly" />
+                </thead>
                 <tbody>
                   {[...globalRowsSeason]
                     .sort((a, b) => weekPoints(b) - weekPoints(a))
@@ -308,6 +320,9 @@ export default function TournamentStandingsHubPage() {
               </h2>
               <div className="tournament-panel overflow-x-auto p-2">
                 <table className="w-full lg:min-w-[560px]">
+                  <thead>
+                    <StandingsHeaderRow variant="weekly" />
+                  </thead>
                   <tbody>
                     {[...conferenceRowsSeason]
                       .sort((a, b) => weekPoints(b) - weekPoints(a))
@@ -335,6 +350,9 @@ export default function TournamentStandingsHubPage() {
             {myLeague ? (
               <div className="tournament-panel overflow-x-auto p-2">
                 <table className="w-full lg:min-w-[560px]">
+                  <thead>
+                    <StandingsHeaderRow variant="weekly" />
+                  </thead>
                   <tbody>
                     {myLeague.participants
                       .filter((r) => filterQ(r.participant.displayName))

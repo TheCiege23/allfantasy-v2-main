@@ -2130,6 +2130,11 @@ select, option {
   color: var(--tournament-text-full);
 }
 
+/* Home's status card says where you stand; the strip above every other tournament screen would say it again. */
+.af-tournament-immersive:has([data-tournament-home]) [data-tournament-status-banner] {
+  display: none;
+}
+
 .tournament-panel {
   background: var(--tournament-panel);
   border: 1px solid var(--tournament-border);

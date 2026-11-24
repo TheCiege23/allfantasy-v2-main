@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { toLocalDateTimeInput } from '@/lib/tournament/tournamentWords'
 import type {
   DraftPhaseKey,
   DraftScheduleV1,
@@ -180,11 +181,7 @@ export function TournamentDraftSchedulePanel({
                 type="datetime-local"
                 className="mt-1 w-full rounded-lg border border-white/10 bg-[#0c1220] px-2 py-1.5 text-white"
                 disabled={!canEdit}
-                value={
-                  plan.uniform?.scheduledAt
-                    ? plan.uniform.scheduledAt.slice(0, 16)
-                    : ''
-                }
+                value={toLocalDateTimeInput(plan.uniform?.scheduledAt)}
                 onChange={(e) => {
                   const v = e.target.value
                   updatePlan({
@@ -287,7 +284,7 @@ export function TournamentDraftSchedulePanel({
                           type="datetime-local"
                           className="rounded border border-white/10 bg-[#0c1220] px-2 py-1 text-white"
                           disabled={!canEdit}
-                          value={row.scheduledAt ? row.scheduledAt.slice(0, 16) : ''}
+                          value={toLocalDateTimeInput(row.scheduledAt)}
                           onChange={(e) => {
                             const v = e.target.value
                             const nextStatus: PhaseScheduleFields['status'] = v ? 'scheduled' : 'unset'

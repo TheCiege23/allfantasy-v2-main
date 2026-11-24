@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Bot } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { formatPostedAt } from '@/lib/tournament/tournamentWords'
 
 const typeMeta: Record<
   string,
@@ -30,6 +32,7 @@ export function ForumPostCard({
   readOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const { language } = useLanguage()
   const meta = typeMeta[type] ?? typeMeta.default
   const lines = content.split('\n').filter(Boolean)
   const preview = lines.slice(0, 3).join('\n')
@@ -48,7 +51,7 @@ export function ForumPostCard({
         </div>
         <div className="flex-1">
           <p className="text-[11px] text-[var(--tournament-text-dim)]">
-            {new Date(createdAt).toLocaleString()}
+            {formatPostedAt(createdAt, language)}
           </p>
         </div>
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.className}`}>{meta.label}</span>

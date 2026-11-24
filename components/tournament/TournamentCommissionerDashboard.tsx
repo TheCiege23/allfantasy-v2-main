@@ -47,6 +47,7 @@ import type { AfPlanId } from '@/lib/tournament/af-premium-plans'
 import type { AiAutomationV1State } from '@/lib/tournament/ai-automation-hub'
 import { defaultAiAutomationV1 } from '@/lib/tournament/ai-automation-hub'
 import { roundPhaseLabel, tournamentStatusLabel } from '@/lib/tournament/commissionerLabels'
+import { formatDraftWhen, tournamentStatusWord } from '@/lib/tournament/tournamentWords'
 
 export type TournamentCommissionerTabId = TabId
 
@@ -182,7 +183,7 @@ export function TournamentCommissionerDashboard({
   /** The tab shown first. The page always opens on the overview; the visual-review harness opens any tab. */
   initialTab?: TabId
 }) {
-  const { t, tInterpolate } = useLanguage()
+  const { t, tInterpolate, language } = useLanguage()
   const searchParams = useSearchParams()
   const created = searchParams?.get('created') === '1'
   const [tab, setTab] = useState<TabId>(initialTab)
@@ -256,10 +257,10 @@ export function TournamentCommissionerDashboard({
     return summary.rounds.map((r) => ({
       label: r.name ?? roundPhaseLabel(r.phase),
       phase: r.phase,
-      status: r.status,
+      status: tournamentStatusWord(r.status, t),
       weeks: r.startWeek != null && r.endWeek != null ? `W${r.startWeek}–${r.endWeek}` : '—',
     }))
-  }, [summary])
+  }, [summary, t])
 
   const draftScheduleLines = useMemo(() => {
     const raw = summary?.hub?.draftScheduleV1
@@ -272,14 +273,14 @@ export function TournamentCommissionerDashboard({
       const at = ph?.uniform?.scheduledAt
       if (typeof at === 'string' && at) {
         try {
-          lines.push(`${t(`tournament.draftPhase.${key}`)} · ${new Date(at).toLocaleString()}`)
+          lines.push(`${t(`tournament.draftPhase.${key}`)} · ${formatDraftWhen(at, language)}`)
         } catch {
           /* ignore */
         }
       }
     }
     return lines
-  }, [summary?.hub?.draftScheduleV1, t])
+  }, [summary?.hub?.draftScheduleV1, t, language])
 
   const heroAccent = useMemo((): 'cyan' | 'amber' | 'violet' | 'emerald' => {
     const s = String(summary?.tournament.status ?? '').toLowerCase()
@@ -376,13 +377,7 @@ export function TournamentCommissionerDashboard({
       <div className="mt-6 space-y-6">
         {tab === 'overview' && summary && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <WarRoomStatOrb
-                label={t('tournament.commissioner.stat.currentPhase')}
-                value={tournamentStatusLabel(summary.tournament.status)}
-                hint={t('tournament.commissioner.stat.currentPhaseHint')}
-                accent="cyan"
-              />
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="tournament-commissioner-stats">
               <WarRoomStatOrb
                 label={t('tournament.commissioner.stat.filledCapacity')}
                 value={`${summary.counts.totalFilledTeams} / ${summary.counts.totalCapacity}`}
