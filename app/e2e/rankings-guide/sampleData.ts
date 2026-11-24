@@ -1,0 +1,150 @@
+import { BOARD_META, DEFAULT_FILTERS, type BoardKey } from '@/lib/core-app/rankingsEngine'
+import type { BoardTableRow, RankingsData } from '@/lib/core-app/rankings'
+
+/**
+ * SAMPLE data for /e2e/rankings-guide (and the tests that render the same screen). Every figure is
+ * invented. Kept out of page.tsx because a Next page may not export anything but the page.
+ */
+
+/** SAMPLE portfolio — invented leagues and numbers, shaped like PortfolioView. */
+export function portfolio() {
+  const comp = (key: string, label: string, weight: number, credit: number, value: string) => ({
+    key, label, weight, appliedWeight: weight, credit, points: Math.round(credit * weight * 1000) / 10, value, short: value, basis: 'all leagues', explain: 'Sample.', available: true,
+  })
+  const leagues = ['Sample Dynasty League', 'Sample Redraft League', 'Sample Best Ball', 'Sample Keeper League', 'Sample Guillotine', 'Sample IDP League']
+  const rows = Array.from({ length: 12 }, (_, i) => ({
+    key: `r${i}`,
+    season: 2026 - Math.floor(i / 4),
+    league: leagues[i % leagues.length]!,
+    platform: i % 3 === 0 ? 'ESPN' : 'Sleeper',
+    type: i % 2 ? 'Redraft' : 'Dynasty',
+    format: 'PPR',
+    size: '12 · 6',
+    record: `${8 - (i % 5)}-${5 + (i % 5)}`,
+    ppg: (112 + i).toFixed(1),
+    index: (96 + i).toFixed(1),
+    finish: i === 2 ? 'Champion' : i % 3 === 0 ? 'Playoffs' : 'Missed',
+    score: 40 + i * 1.5,
+    counted: i !== 11,
+    updated: '2026-11-14T05:00:00.000Z',
+  }))
+  return {
+    score: {
+      score: 25.94,
+      components: [comp('winRate', 'Win rate', 0.4, 0.52, '51.2%'), comp('titles', 'Titles', 0.2, 0.3, '1 / 1.6'), comp('playoffs', 'Playoffs', 0.2, 0.4, '0.9×'), comp('scoring', 'Scoring', 0.2, 0.55, '103.0')],
+      sample: { leagueSeasons: 14, resultSeasons: 12, completedSeasons: 8, games: 160, seasons: 3 },
+      totals: { wins: 82, losses: 78, ties: 0, titles: 1, expectedTitles: 1.6, playoffs: 4, expectedPlayoffs: 4.4, winRate: 0.512, adjWinRate: 0.51, scoringIndex: 103, pricedGames: 160, titleRatio: 0.6, playoffRatio: 0.9 },
+      field: { avgSize: 12, avgPlayoffShare: 0.5 },
+      confidence: 'medium',
+      prestige: 12,
+      newestUpdate: '2026-11-14T05:00:00.000Z',
+      oldestUpdate: '2024-01-10T00:00:00.000Z',
+    },
+    globalRank: { rank: 18, of: 19 },
+    movement: { sevenDay: 1, week: 1, season: -2 },
+    seasons: [
+      { season: 2024, record: '20-19', seasonScore: 22.1, careerScore: 22.1 },
+      { season: 2025, record: '31-29', seasonScore: 27.4, careerScore: 24.9 },
+      { season: 2026, record: '31-30', seasonScore: 26.0, careerScore: 25.9 },
+    ],
+    daily: [{ label: 'Nov 12', rank: 19, score: 25.1 }, { label: 'Nov 13', rank: 18, score: 25.9 }],
+    weekly: [{ label: 'Nov 9', rank: 19, score: 25.1 }],
+    trackingSince: '2026-09-16',
+    rows,
+    psort: 'season',
+    pdir: 'desc',
+    freshness: { newestImport: '2026-11-14T05:00:00.000Z', rankCalculatedAt: '2026-11-14T05:40:00.000Z', ledgerRows: 14 },
+  }
+}
+const NAMES = ['SampleManagerOne', 'SampleManagerTwo', 'SampleManagerThree', 'SampleManagerFour', 'SampleManagerFive', 'SampleManagerSix', 'SampleManagerSeven', 'You', 'SampleManagerNine']
+const SCORES = [77.6, 76.2, 72.0, 71.4, 65.4, 61.4, 30.3, 25.9, 19.1]
+
+function rows(youAt: number | null): BoardTableRow[] {
+  return NAMES.map((n, i) => {
+    const isYou = youAt === i
+    const handle = isYou ? 'SampleYou' : n === 'You' ? 'SampleManagerEight' : n
+    return {
+      userId: `u${i}`,
+      rank: i + 1,
+      handle,
+      avatarUrl: null,
+      level: 3 + i,
+      tierGroup: 2,
+      isYou,
+      metric: SCORES[i]!.toFixed(1),
+      score: SCORES[i]!.toFixed(1),
+      winRate: `${(58 - i * 2).toFixed(1)}%`,
+      titles: i % 3 === 0 ? `${i} / 1.2` : '—',
+      playoffs: i % 4 === 0 ? '1.10×' : '—',
+      scoring: (100 + i * 3).toFixed(1),
+      sample: `${10 + i} · ${100 + i * 20} g`,
+      confidence: 'medium',
+      movement: i % 2 === 0 ? 1 : -1,
+      updated: '2026-11-14T05:40:00.000Z',
+      explainHref: `?explain=u${i}`,
+      compareHref: isYou ? null : '#',
+    } as BoardTableRow
+  })
+}
+
+export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: 'global' | 'portfolio' = 'global'): RankingsData {
+  const youAt = you === 'none' ? null : you === 'top' ? 0 : 7
+  const board = rows(youAt)
+  const meta = BOARD_META.overall
+  const tabs = (Object.keys(BOARD_META) as BoardKey[]).map((key) => ({ key, label: BOARD_META[key].label, href: `?board=${key}` }))
+  return {
+    scope,
+    panel: null,
+    signedIn: true,
+    filters: { ...DEFAULT_FILTERS, sport },
+    filtersLabel: sport ?? 'All leagues',
+    options: {
+      sports: [{ value: 'NFL', label: 'NFL', count: 1178 }, { value: 'NBA', label: 'NBA', count: 7 }],
+      platforms: [{ value: 'sleeper', label: 'Sleeper', count: 1149 }],
+      types: [],
+      formats: [],
+      seasons: [{ value: 2026, label: '2026', count: 400 }],
+    },
+    baseQuery: '',
+    you: { handle: 'SampleYou', level: 14, levelName: 'All-Pro', tier: 'All-Pro', tierGroup: 5, totalLevels: 25, xp: 46956, progressPct: 62, xpToNext: 8044, nextLevelName: 'First-Team All-Pro' },
+    xpRows:
+      scope === 'portfolio'
+        ? [
+            { key: 'wins', detail: '82 wins × 10', xp: 820, share: 1, hasBar: true },
+            { key: 'playoffs', detail: '4 playoff berths × 30', xp: 120, share: 0.15, hasBar: true },
+            { key: 'seasons', detail: '3 seasons × 10', xp: 30, share: 0.04, hasBar: true },
+          ]
+        : [],
+    reconciliation: scope === 'portfolio' ? { computed: 970, stored: 970, storedAt: '2026-11-14T05:40:00.000Z', matches: true } : null,
+    ladder: [],
+    population: 35,
+    computedAt: '2026-11-14T05:40:00.000Z',
+    shareUrl: null,
+    global: {
+      board: 'overall',
+      label: meta.label,
+      metricLabel: meta.metricLabel,
+      unavailable: null,
+      tabs,
+      rows: board,
+      sort: 'rank',
+      dir: 'asc',
+      belowSample: 16,
+      unmeasured: 0,
+      movementTracked: true,
+      trackingSince: '2026-09-16',
+      you: youAt == null ? null : { rank: youAt + 1, of: board.length, display: SCORES[youAt]!.toFixed(1), movement: { sevenDay: null, week: 1, season: -13 } },
+      explain: null,
+      freshness: { newestImport: '2026-11-14T05:00:00.000Z', stalestManager: '2026-05-23T00:00:00.000Z', ledgerRows: 1196 },
+      divisionFilter: null,
+      rivals:
+        youAt === 7
+          ? [{ userId: 'u6', handle: 'SampleManagerSeven', rank: 7, level: 9, display: '30.3', yourDisplay: '25.9', headToHead: { wins: 1, losses: 2, ties: 0, lastSeason: 2025 }, compareHref: '#' }]
+          : [],
+    },
+    portfolio: scope === 'portfolio' ? portfolio() : null,
+    league: null,
+    classView: null,
+  } as unknown as RankingsData
+}
+
