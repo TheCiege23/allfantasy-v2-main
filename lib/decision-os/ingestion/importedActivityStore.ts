@@ -40,12 +40,20 @@ export interface PersistedActivityRecord {
 export type UpsertResult =
   | { status: 'created' }
   | { status: 'updated' }
+  /** Already persisted with identical content — no write was made (see `prefetch`). */
+  | { status: 'unchanged' }
   | { status: 'skipped'; reason: string }
 
 /** Provider-neutral persistence boundary consumed by the writer. */
 export interface ImportedActivityStore {
   /** Idempotent by `record.naturalKey`. Transaction-safe when DB-backed. */
   upsertByNaturalKey(record: PersistedActivityRecord): Promise<UpsertResult>
+  /**
+   * OPTIONAL: read the rows for a batch of natural keys in one go, so the upserts that follow need no
+   * per-row existence read and can skip rows whose content has not changed. A store without it keeps the
+   * one-at-a-time behaviour. See the 2026-11-23 note in prismaImportedActivityStore.ts.
+   */
+  prefetch?(naturalKeys: readonly string[]): Promise<void>
   /** Number of persisted rows (verification/tests). */
   count(): Promise<number>
   /** Fetch a persisted row by natural key (verification/tests). */
