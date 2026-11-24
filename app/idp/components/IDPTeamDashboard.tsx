@@ -59,7 +59,7 @@ function OffensePlayerCard({
       onClick={onOpen}
       className="relative w-full rounded-lg border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-2 text-left transition hover:border-blue-500/30"
     >
-      <span className="absolute right-2 top-2 rounded border border-idp-offense/45 bg-idp-offense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-100">
+      <span className="absolute right-2 top-2 rounded border border-idp-offense/45 bg-idp-offense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[color:var(--idp-offense)]">
         OFF
       </span>
       <div className="flex gap-2 pr-11">
@@ -226,6 +226,12 @@ export function IDPTeamDashboard({
   }, [starterIds, benchIds, players, weekPoints])
 
   const total = Math.round((offTotal + defTotal) * 10) / 10
+  const pointsOf = (id: string) => {
+    const o = weekPoints?.points?.[id]
+    return o?.scored ? o.points : null
+  }
+  // Before the draft there is nothing to total; "TOTAL: 0 pts" read as a team that scored nothing.
+  const noTeamYet = totalStarters === 0 && benchOff.length + benchDef.length === 0
   const offPct = total > 0 ? Math.round((offTotal / total) * 100) : 50
 
   const modalPlayer = modalId ? resolvePlayerName(modalId, players) : null
@@ -249,8 +255,11 @@ export function IDPTeamDashboard({
   return (
     <div className="space-y-4" data-idp-dashboard data-league-id={leagueId}>
       <div
-        className={`sticky top-0 z-10 mb-1 flex flex-col gap-2 rounded-xl border border-[color:var(--idp-border)] bg-[#080a12]/95 p-3 backdrop-blur-sm md:flex-row md:items-center md:justify-between ${idpViewMode !== 'full' ? 'lg:static' : ''}`}
+        className={`sticky top-0 z-10 mb-1 flex flex-col gap-2 rounded-xl border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-3 backdrop-blur-sm md:flex-row md:items-center md:justify-between ${idpViewMode !== 'full' ? 'lg:static' : ''}`}
       >
+        {noTeamYet ? (
+          <p className="text-center text-[12px] text-white/60 md:text-left">Your points show here after your draft.</p>
+        ) : (
         <p className="text-center text-[11px] font-semibold text-white/70 md:text-left">
           <span className="text-[color:var(--idp-offense)]">OFFENSE: {offTotal} pts</span>
           <span className="mx-2 text-white/25">—</span>
@@ -263,17 +272,19 @@ export function IDPTeamDashboard({
             often snaps-only — so the denominator travels with the number instead of leaving a
             reader to assume every starter is in it.
           */}
+          {' '}
           {weekPoints?.scored && pricedStarters < totalStarters ? (
-            <span className="text-white/35">
-              {pricedStarters}/{totalStarters} starters priced
-              {weekPoints.week ? ` · wk ${weekPoints.week}` : ''}
+            <span className="block font-normal text-white/40 md:ml-2 md:inline">
+              {pricedStarters} of {totalStarters} starters scored
+              {weekPoints.week ? ` · week ${weekPoints.week}` : ''}
             </span>
           ) : null}
           {weekPoints && !weekPoints.scored && weekPoints.reason ? (
-            <span className="text-amber-200/70">{weekPoints.reason}</span>
+            <span className="block font-normal text-amber-200/70 md:ml-2 md:inline">No points yet: {weekPoints.reason}</span>
           ) : null}
         </p>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 md:max-w-md">
+        )}
+        {noTeamYet ? null : <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 md:max-w-md">
           <div
             className="flex h-full w-full"
             title={`Offense ${offPct}% / Defense ${100 - offPct}%`}
@@ -287,7 +298,7 @@ export function IDPTeamDashboard({
               style={{ width: `${100 - offPct}%` }}
             />
           </div>
-        </div>
+        </div>}
       </div>
 
       <div
@@ -297,7 +308,7 @@ export function IDPTeamDashboard({
           ? column(
               <>
                 <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-idp-offense/30 bg-blue-950/30 px-3 py-2 lg:static lg:top-auto">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-blue-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--idp-offense)]">
                     ⚔️ OFFENSE
                   </span>
                   <span className="text-sm font-bold text-[color:var(--idp-offense)]">{offTotal} pts</span>
@@ -348,7 +359,7 @@ export function IDPTeamDashboard({
           ? column(
               <>
                 <div className="sticky top-[4.5rem] z-[9] flex items-center justify-between rounded-lg border border-idp-defense/35 bg-red-950/25 px-3 py-2 lg:static">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-red-200">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--idp-defense)]">
                     🛡️ DEFENSE
                   </span>
                   <span className="text-sm font-bold text-[color:var(--idp-defense)]">{defTotal} pts</span>
@@ -373,7 +384,7 @@ export function IDPTeamDashboard({
                         isStarter
                         maxPills={maxPills}
                         onOpen={() => setModalId(id)}
-                        onToggleStart={() => {}}
+                        points={pointsOf(id)}
                         {...contractDisplay(id)}
                       />
                     </div>
@@ -401,7 +412,7 @@ export function IDPTeamDashboard({
                         isStarter={false}
                         maxPills={maxPills}
                         onOpen={() => setModalId(id)}
-                        onToggleStart={() => {}}
+                        points={pointsOf(id)}
                         {...contractDisplay(id)}
                       />
                     ))}

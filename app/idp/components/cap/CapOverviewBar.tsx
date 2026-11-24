@@ -50,7 +50,7 @@ export function CapOverviewBar({
               type="button"
               onClick={() => onYearChange(y)}
               className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${
-                y === year ? 'bg-sky-500/20 text-sky-100' : 'text-white/45 hover:bg-white/[0.04]'
+                y === year ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'text-[var(--muted)] hover:bg-white/[0.04]'
               }`}
             >
               {y}
@@ -79,38 +79,38 @@ export function CapOverviewBar({
         />
       </div>
       <div className="flex flex-wrap gap-2 text-[11px]">
-        <span className="rounded-full border border-cap-contract/30 bg-cap-contract/10 px-2 py-1 font-semibold text-blue-100">
+        <span className="rounded-full border border-cap-contract/30 bg-cap-contract/10 px-2 py-1 font-semibold text-[var(--accent)]">
           Active: ${a.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-cap-dead/30 bg-white/[0.04] px-2 py-1 font-semibold text-white/60">
+        <span className="rounded-full border border-cap-dead/30 bg-white/[0.04] px-2 py-1 font-semibold text-[var(--text2)]">
           Dead: ${d.toFixed(1)}M
         </span>
-        <span className="rounded-full border border-cap-green/30 bg-cap-green/10 px-2 py-1 font-semibold text-emerald-100">
+        <span className="rounded-full border border-cap-green/30 bg-cap-green/10 px-2 py-1 font-semibold text-[var(--good)]">
           Available: ${v.toFixed(1)}M
         </span>
       </div>
 
       {capAdviceLoading ? (
-        <p className="text-[11px] text-white/40">Loading Chimmy cap tips…</p>
+        <p className="text-[11px] text-[var(--muted)]">Loading Chimmy cap tips…</p>
       ) : capAdvice?.recommendations?.length ? (
-        <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-3" data-testid="cap-overview-ai-moves">
-          <h3 className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Best cap moves</h3>
-          <ul className="mt-2 space-y-2 text-[12px] text-white/85">
+        <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3" data-testid="cap-overview-ai-moves">
+          <h3 className="text-[11px] font-bold uppercase tracking-wide text-[var(--accent)]">Best cap moves</h3>
+          <ul className="mt-2 space-y-2 text-[12px] text-[var(--text)]">
             {capAdvice.recommendations.slice(0, 3).map((r, i) => (
               <li key={i}>
-                <span className="font-semibold text-cyan-100/95">{r.action}</span>
+                <span className="font-semibold text-[var(--accent)]">{r.action}</span>
                 {r.player ? ` · ${r.player}` : ''} — {r.savingsOrCost}. {r.reason}
               </li>
             ))}
           </ul>
           {capAdvice.summary ? (
-            <p className="mt-2 text-[11px] text-white/50">{capAdvice.summary}</p>
+            <p className="mt-2 text-[11px] text-[var(--muted)]">{capAdvice.summary}</p>
           ) : null}
           {onOpenFullCapAnalysis ? (
             <button
               type="button"
               onClick={onOpenFullCapAnalysis}
-              className="mt-3 rounded-lg border border-cyan-500/40 px-3 py-2 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950/40"
+              className="mt-3 rounded-lg border border-[var(--accent-line)] px-3 py-2 text-[11px] font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
             >
               See Full Chimmy Cap Analysis
             </button>

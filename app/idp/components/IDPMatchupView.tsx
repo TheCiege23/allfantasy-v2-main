@@ -94,14 +94,14 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
 
   if (error) {
     return (
-      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/50">
+      <p className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-4 text-[12px] text-[var(--muted)]">
         We couldn’t load this matchup. Nothing is shown rather than something wrong.
       </p>
     )
   }
   if (!data) {
     return (
-      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/40">
+      <p className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-4 text-[12px] text-[var(--muted)]">
         Loading matchup…
       </p>
     )
@@ -115,7 +115,7 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
       ids_unreadable: `${FOREIGN_IDS_UNREADABLE}, so this matchup can’t be scored here.`,
     }
     return (
-      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/50">
+      <p className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-4 text-[12px] text-[var(--muted)]">
         {copy[data.state] ?? 'Nothing to show for this matchup.'}
       </p>
     )
@@ -126,55 +126,58 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3">
-        <div className="mb-2 flex items-baseline justify-between text-[11px] uppercase tracking-wide text-white/35">
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3">
+        <div className="mb-2 flex items-baseline justify-between text-[11px] uppercase tracking-wide text-[var(--faint)]">
           <span>Week {data.week}</span>
           <span>{data.season} season</span>
         </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
           <ScoreSide side={you} align="left" leading={youLead} />
-          <span className="text-[11px] font-bold text-white/30">vs</span>
+          <span className="text-[11px] font-bold text-[var(--faint)]">vs</span>
           <ScoreSide side={opponent} align="right" leading={!youLead} />
         </div>
       </div>
 
-      {/* The caveat rides with the numbers rather than sitting in a tooltip nobody opens. */}
-      {data.notes.map((n) => (
-        <p key={n} className="text-[11px] leading-relaxed text-white/35">
-          {n}
+      {/*
+        The caveat rides with the numbers, in one short line (2026-11-23): it was a four-line paragraph plus a
+        "priced 17 of 19" line per team, repeating what each score already says under it.
+      */}
+      {data.notes.length ? (
+        <p className="text-[11px] leading-relaxed text-[var(--faint)]">
+          The score is the league’s own. Player points are our count from each stat line, so they won’t add up to it.
         </p>
-      ))}
+      ) : null}
 
       <button
         type="button"
         onClick={runChimmyMatchup}
         disabled={chimmyLoading || !userId}
-        className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--accent)] disabled:opacity-50"
       >
         {chimmyLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
         Chimmy matchup analysis
       </button>
 
       {chimmyReport ? (
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3">
-          <p className="text-xs text-cyan-50/90">{chimmyReport.analysis}</p>
+        <div className="rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3">
+          <p className="text-xs text-[var(--accent)]">{chimmyReport.analysis}</p>
           {chimmyReport.defensiveHighlights ? (
-            <p className="mt-2 text-xs text-emerald-200/85">{chimmyReport.defensiveHighlights}</p>
+            <p className="mt-2 text-xs text-[var(--good)]">{chimmyReport.defensiveHighlights}</p>
           ) : null}
           {chimmyReport.opponentAdvantage ? (
-            <p className="mt-1 text-xs text-amber-200/80">Opponent angle: {chimmyReport.opponentAdvantage}</p>
+            <p className="mt-1 text-xs text-[var(--warn)]">Opponent angle: {chimmyReport.opponentAdvantage}</p>
           ) : null}
         </div>
       ) : null}
 
-      <div className="flex gap-1 rounded-lg border border-white/[0.08] bg-black/20 p-1">
+      <div className="flex gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-1">
         {(['OFFENSE', 'DEFENSE', 'ALL'] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`flex-1 rounded-md py-2 text-[11px] font-bold ${
-              tab === t ? 'bg-white/15 text-white' : 'text-white/45 hover:text-white/75'
+              tab === t ? 'bg-[var(--chip)] text-[var(--text)]' : 'text-[var(--muted)] hover:text-[var(--text)]'
             }`}
           >
             {t}
@@ -182,7 +185,7 @@ export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchu
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2">
         <PlayerColumn side={you} tab={tab} />
         <PlayerColumn side={opponent} tab={tab} />
       </div>
@@ -200,17 +203,17 @@ function ScoreSide({
   leading: boolean
 }) {
   return (
-    <div className={align === 'right' ? 'text-right' : ''}>
-      <p className="truncate text-[12px] font-semibold text-white/85">{side.teamName}</p>
+    <div className={`min-w-0 ${align === 'right' ? 'text-right' : ''}`}>
+      <p className="truncate text-[12px] font-semibold text-[var(--text)]">{side.teamName}</p>
       {/*
         The platform's own score. A dash when the matchup carries none — an unplayed fixture has
         no score, and rendering 0.0 would say both teams were shut out.
       */}
-      <p className={`text-2xl font-bold ${leading ? 'text-white' : 'text-white/55'}`}>
-        {side.officialScore != null ? fmt(side.officialScore) : <span className="text-white/25">—</span>}
+      <p className={`text-2xl font-bold ${leading ? 'text-[var(--text)]' : 'text-[var(--muted)]'}`}>
+        {side.officialScore != null ? fmt(side.officialScore) : <span className="text-[var(--faint)]">—</span>}
       </p>
-      <p className="text-[11px] text-white/30">
-        priced {side.scoredPlayers}/{side.totalPlayers} rostered
+      <p className="text-[11px] text-[var(--faint)]">
+        {side.scoredPlayers} of {side.totalPlayers} players scored
       </p>
     </div>
   )
@@ -221,20 +224,20 @@ function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
     tab === 'ALL' ? true : tab === 'DEFENSE' ? p.side === 'defense' : p.side === 'offense',
   )
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 space-y-1">
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-white/[0.06] p-2 text-[11px] text-white/30">
+        <p className="rounded-lg border border-[var(--line)] p-2 text-[11px] text-[var(--faint)]">
           No players on this side of the ball.
         </p>
       ) : null}
       {rows.map((p) => (
         <div
           key={p.sleeperId}
-          className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] px-2 py-1.5"
+          className="flex items-center justify-between gap-2 rounded-lg border border-[var(--line)] px-2 py-1.5"
         >
           <div className="min-w-0">
-            <p className="truncate text-[11px] font-medium text-white/85">{p.name}</p>
-            <p className="text-[11px] text-white/35">
+            <p className="truncate text-[11px] font-medium text-[var(--text)]">{p.name}</p>
+            <p className="text-[11px] text-[var(--faint)]">
               {p.position ?? '—'} {p.team ? `· ${p.team}` : ''}
             </p>
           </div>
@@ -244,7 +247,7 @@ function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
             a manager his starter blanked.
           */}
           <span
-            className="shrink-0 font-mono text-[12px] font-bold text-white/90"
+            className="shrink-0 font-mono text-[12px] font-bold text-[var(--text)]"
             title={
               p.points.scored
                 ? undefined
@@ -253,7 +256,7 @@ function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
                   : 'we hold a line for him but none of the stats this league scores'
             }
           >
-            {p.points.scored ? fmt(p.points.points) : <span className="text-white/25">—</span>}
+            {p.points.scored ? fmt(p.points.points) : <span className="text-[var(--faint)]">—</span>}
           </span>
         </div>
       ))}

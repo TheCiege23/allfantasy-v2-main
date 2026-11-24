@@ -1,10 +1,10 @@
+import '@/components/core-app/af-core.css'
+
 /**
- * The IDP salary-cap screens (Cap Room, Contract Center) are dark in every mode. They are built on fixed dark
- * grounds (#040915), and the site-wide light-mode clamp in app/globals.css recoloured parts of them — the
- * active-salary chip, the cap ring's label, the timeline names, the extension simulator — near-invisible in
- * light mode (2026-11-09 IDP audit). `af-draft-dark` is the app's "always dark" opt-out from that clamp.
- * Not on /idp/defense-hub: that screen is token-styled (af-core) and has its own light mode.
+ * The IDP salary-cap screens (Cap Room, Contract Center) follow the app's mode (2026-11-23). They were always dark
+ * (`af-draft-dark`, 2026-11-09) because they sat on fixed dark grounds that the light clamp recoloured near-invisible;
+ * they now read the af-core tokens, which carry both modes, so the opt-out is gone.
  */
 export default function IdpCapLayout({ children }: { children: React.ReactNode }) {
-  return <div className="af-draft-dark">{children}</div>
+  return <div className="af-core">{children}</div>
 }

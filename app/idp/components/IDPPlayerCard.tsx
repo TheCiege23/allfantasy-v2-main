@@ -146,7 +146,7 @@ export function IDPPlayerCard({
       className="relative rounded-lg border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-2 shadow-sm transition hover:border-red-500/25"
       data-testid={`idp-card-${playerId}`}
     >
-      <span className="absolute right-2 top-2 rounded border border-idp-defense/45 bg-idp-defense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-100">
+      <span className="absolute right-2 top-2 rounded border border-idp-defense/45 bg-idp-defense/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[color:var(--idp-defense)]">
         IDP
       </span>
       <div className="flex gap-2 pr-12">
@@ -164,7 +164,7 @@ export function IDPPlayerCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-semibold text-white" title={name}>
-            {name.length > 16 ? `${name.slice(0, 16)}…` : name}
+            {name}
           </p>
           <p className="text-[11px] text-white/45">
             {team ?? '—'} · {position}
@@ -214,7 +214,7 @@ export function IDPPlayerCard({
           <p className="text-lg font-bold text-[color:var(--idp-defense)]">
             {points != null ? points.toFixed(1) : <span className="text-white/25">—</span>}
           </p>
-          <div className="text-[11px] text-white/35 inline-flex justify-end">
+          {projection != null ? <div className="text-[11px] text-white/35 inline-flex justify-end">
             <span className="mr-0.5">proj</span>
             <ProjectionDisplay
               projection={projection ?? undefined}
@@ -229,7 +229,7 @@ export function IDPPlayerCard({
                 season: new Date().getFullYear(),
               }}
             />
-          </div>
+          </div> : null}
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1">
@@ -243,7 +243,7 @@ export function IDPPlayerCard({
           <span className="rounded bg-amber-950/40 px-1.5 py-0.5 text-[11px] text-amber-200">⚠ LOW SNAP</span>
         ) : null}
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
+      {onToggleStart ? <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
           className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
@@ -258,7 +258,7 @@ export function IDPPlayerCard({
         >
           {isStarter ? 'Start' : 'Sit'}
         </button>
-      </div>
+      </div> : null}
     </div>
   )
 }
