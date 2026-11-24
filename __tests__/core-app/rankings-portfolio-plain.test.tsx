@@ -85,3 +85,33 @@ describe('One league, plain', () => {
     expect(css).toMatch(/@media \(max-width: 720px\) \{\s*\.af-rk-scope-grid \.af-rk-pfchart \{ display: none; \}\s*\}/)
   })
 })
+
+/*
+ * Class, simplified (2026-11-24): the note on how the rating moves is one closed row under the weeks, and
+ * a board row whose only visible chip is "More" puts it beside the sub-line (CSS; Playwright at 320–430px:
+ * ~100px → 62px a row, no name/score overlap). /e2e/rankings-guide?scope=class: 3,005px → 2,609px.
+ */
+describe('Class, plain', () => {
+  it('folds how the rating moves under the rated weeks', () => {
+    const c = render(<Rankings data={data('mid', null, 'class') as never} />).container
+    const fold = c.querySelector('[data-testid="rk-class-why"]') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('How your rating moves')
+    expect(fold.textContent).toContain('everyone in your league')
+    expect(c.querySelector('#rk-class-games')?.contains(fold)).toBe(true)
+  })
+
+  it('puts a lone More beside the sub-line, on phones only, without touching rows with chips', () => {
+    const css = readFileSync(resolve(process.cwd(), 'components/core-app/af-rankings-screen.css'), 'utf8')
+    const lone = "tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone)))"
+    // In order: the note, the phone media query that opens right after it, then the rule inside it.
+    const note = css.indexOf('Phone rows whose only visible chip is "More"')
+    const media = css.indexOf('@media (max-width: 720px) {', note)
+    const rule = css.indexOf(`.af-rk-cards ${lone} {`, media)
+    expect(note).toBeGreaterThan(-1)
+    expect(media).toBeGreaterThan(note)
+    expect(rule).toBeGreaterThan(media)
+    expect(css.slice(media, rule)).not.toContain('}\n}')
+    expect(css).toContain(`.af-rk-cards ${lone} > td.af-rk-phonemore {\n    grid-column: 2;\n    grid-row: 2;`)
+  })
+})

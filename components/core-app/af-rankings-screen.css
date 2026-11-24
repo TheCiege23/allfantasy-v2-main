@@ -1631,3 +1631,36 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 @media (max-width: 720px) {
   .af-rk-scope-grid .af-rk-pfchart { display: none; }
 }
+
+.af-rk-classwhy { margin-top: 8px; }
+.af-rk-classwhy > .af-rk-note { margin-top: 4px; }
+
+/*
+ * Phone rows whose only visible chip is "More" (the Class board, 2026-11-24): "More" sits at the right of
+ * the sub-line instead of a third line of its own. An open "More" drops to a full-width line.
+ */
+@media (max-width: 720px) {
+  .af-rk-cards tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone))) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+  .af-rk-cards tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone))) > [data-card='title'] {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    /* The score sits top-right over the second column, so the name needs no reserved gap of its own. */
+    padding-right: 8px;
+  }
+  .af-rk-cards tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone))) > td.af-rk-phonemore {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0 0 0 8px;
+  }
+  .af-rk-cards tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone))) > td.af-rk-phonemore:has(details[open]) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin: 6px 0 0;
+  }
+  .af-rk-cards tr[data-phonemore]:not(:has(> [data-card='detail']:not(.af-rk-hide-phone))) .af-rk-phonemore-list dt { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+}
