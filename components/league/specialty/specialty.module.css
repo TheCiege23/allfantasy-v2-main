@@ -167,7 +167,9 @@
 /* ---------- light mode, Guilly only (2026-11-06) ----------
  * The one rule that sets --sp-* tokens. Values follow /core's light ladder (components/core-app/af-core.css) with its
  * literals as fallbacks; text tokens are measured >= 4.5:1 on every ground below in guillotineLightHub.test.ts. */
-:global(html[data-mode='light']) .sp[data-specialty='guillotine'] {
+/* Devy joined 2026-11-23: its body read as a dark block on a light page. */
+:global(html[data-mode='light']) .sp[data-specialty='guillotine'],
+:global(html[data-mode='light']) .sp[data-specialty='devy'] {
   --sp-bg: var(--surface2, #eef1f9);
   --sp-card: var(--surface, #ffffff);
   --sp-card2: #f7f8fc;
@@ -198,10 +200,13 @@
   --sp-muted-soft: rgba(11, 16, 32, .06);
   --sp-prop: #765400;
   --sp-prop-line: rgba(118, 84, 0, .5);
+  --sp-blue: #1d4ed8;
+  --sp-blue-soft: rgba(37, 99, 235, .1);
 }
 /* Primary buttons are often <a>: `.nl-workspace a { color: inherit }` beats `.btnP`, so they take the panel's text
  * colour. In dark that inherited colour is near-white; in light it would be dark text on the accent. Keep the ink. */
-:global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP { color: var(--accInk); }
+:global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP,
+:global(html[data-mode='light']) .sp[data-specialty='devy'] .btnP { color: var(--accInk); }
 /* On dark artwork (the hero) or staged dark on purpose (.stayDark): every token back to its dark fallback.
  * `color` is re-declared because an INHERITED colour is computed where it is declared (.sp, from the light tokens):
  * resetting the tokens here does not recompute it, and `.nl-workspace a { color: inherit }` (0,1,1) beats `.btn`,
@@ -214,6 +219,6 @@
   --sp-text: initial; --sp-text-strong: initial; --sp-t2: initial; --sp-t3: initial; --sp-acc-text: initial;
   --sp-safe: initial; --sp-safe-soft: initial; --sp-danger: initial; --sp-danger-soft: initial; --sp-zone: initial;
   --sp-zone-soft: initial; --sp-gold: initial; --sp-gold-soft: initial; --sp-pink: initial; --sp-pink-soft: initial;
-  --sp-muted: initial; --sp-muted-soft: initial; --sp-prop: initial; --sp-prop-line: initial;
+  --sp-muted: initial; --sp-muted-soft: initial; --sp-prop: initial; --sp-prop-line: initial; --sp-blue: initial; --sp-blue-soft: initial;
   --gl-safe-big: initial; --gl-danger-big: initial; --gl-zone-big: initial; --gl-me-row: initial; --gl-me-line: initial;
 }

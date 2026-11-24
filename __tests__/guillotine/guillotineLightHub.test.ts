@@ -5,7 +5,8 @@
  * How, so that nine formats cannot move:
  *  - every colour in specialty.module.css reads `var(--sp-x, <the literal it had>)`. Unset, that IS the literal, so
  *    dark mode — and every other format in either mode — renders the bytes it rendered before.
- *  - ONE rule sets the --sp-* tokens: light mode AND [data-specialty='guillotine'].
+ *  - ONE rule sets the --sp-* tokens: light mode AND [data-specialty='guillotine'] — or 'devy', which joined the same
+ *    rule on 2026-11-23 (one selector list, one set of values).
  *  - the hero (on dark artwork) and anything marked .stayDark (the chop moment, the phone header) reset every token
  *    to `initial` — a guaranteed-invalid value, so var() falls back to the dark literal inside them.
  * Text tokens are measured here against every light ground they sit on.
@@ -47,7 +48,10 @@ function decls(body: string): Record<string, string> {
   return out
 }
 const LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='guillotine']"
-const lightRule = rules(SP).find(([s]) => s === LIGHT_SEL)
+const DEVY_LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='devy']"
+/** A rule's selector list, one selector per entry. */
+const sels = (s: string) => s.split(',').map((x) => x.trim())
+const lightRule = rules(SP).find(([s]) => sels(s).includes(LIGHT_SEL))
 const LIGHT = lightRule ? decls(lightRule[1]) : {}
 const GL_LIGHT_SEL = ":global(html[data-mode='light']) .home"
 const glLightRule = rules(GL).find(([s]) => s === GL_LIGHT_SEL)
@@ -89,11 +93,11 @@ describe('the shared shell stays byte-identical in dark mode and for every other
     expect(TSX).not.toMatch(/var\(--(sp|gl)-[\w-]+\s*\)/)
   })
 
-  it('exactly one rule sets --sp-* values, and it is light mode + guillotine', () => {
+  it('exactly one rule sets --sp-* values, and it is light mode + guillotine (and devy)', () => {
     expect(lightRule, `no rule "${LIGHT_SEL}"`).toBeTruthy()
     // The lookahead holds the whitespace too: `\s*(?!initial)` would match zero spaces and slip past " initial".
     const setters = rules(SP).filter(([, b]) => /--sp-[\w-]+\s*:(?!\s*initial)/.test(b)).map(([s]) => s)
-    expect(setters).toEqual([LIGHT_SEL])
+    expect(setters.map(sels)).toEqual([[LIGHT_SEL, DEVY_LIGHT_SEL]])
   })
 
   it('the hero and .stayDark reset every token the light rule sets, so they stay dark', () => {
@@ -110,7 +114,7 @@ describe('the shared shell stays byte-identical in dark mode and for every other
 
 describe('link-buttons, which inherit their colour', () => {
   it('a primary button keeps its ink in light mode (an <a> inherits the panel text otherwise)', () => {
-    const r = rules(SP).find(([s]) => s === `${LIGHT_SEL} .btnP`)
+    const r = rules(SP).find(([s]) => sels(s).includes(`${LIGHT_SEL} .btnP`))
     expect(r, 'no light-mode .btnP ink rule').toBeTruthy()
     expect(decls(r![1]).color).toBe('var(--accInk)')
   })

@@ -71,7 +71,7 @@ export function DevySpecialtyHome({
   const maxPipe = Math.max(1, ...(my?.pipeline ?? []).map((p) => p.count))
   const rosterTotal = lg?.rosterSize ?? null
   const proUsed = my?.proRosterCount ?? 0
-  const gridCells = rosterTotal ?? Math.max(proUsed, 1)
+  const anyEligible = stash.some((s) => s.promotionEligible)
 
   const headline = declared
     ? `${declared.name} has declared for the draft`
@@ -101,8 +101,9 @@ export function DevySpecialtyHome({
           <SpecialtyCountdown
             label="Promotion deadline"
             target={win?.deadlineIso ?? null}
-            fallback={win?.timingLabel ? 'Open' : '—'}
-            caption={win?.timingLabel ?? 'Promotions open after the NFL draft'}
+            // No deadline set: say when promotions happen, not 'Open' (it read 'Open' mid-season and in an empty league).
+            fallback={anyEligible ? 'Now' : 'After the draft'}
+            caption={anyEligible ? (win?.timingLabel ?? 'Promote before the rookie draft') : 'Promotions open after the NFL draft'}
           />
         }
       />
@@ -115,11 +116,8 @@ export function DevySpecialtyHome({
                   <p className={spStyles.t2} style={{ margin: 0 }}>
                     Starters score every week.{rosterTotal && rosterTotal > proUsed ? ` ${rosterTotal - proUsed} open ${rosterTotal - proUsed === 1 ? 'spot' : 'spots'}.` : ''}
                   </p>
-                  <div className={d.slotGrid} role="img" aria-label={`${proUsed} pro roster spots used${rosterTotal ? ` of ${rosterTotal}` : ''}`}>
-                    {Array.from({ length: Math.min(gridCells, 48) }, (_, i) => (
-                      <i key={i} className={i < proUsed ? undefined : d.slotOpen} />
-                    ))}
-                  </div>
+                  {/* The 25 identical squares named nobody; the roster itself is one tap away (2026-11-23). */}
+                  <a className={d.rosterLink} href={`/devy/${encodeURIComponent(leagueId)}/roster`}>See your roster</a>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                     <span className={spStyles.lbl}>Taxi squad</span>
                     <span className={d.count}>{config.taxiSize} spots</span>
@@ -209,7 +207,7 @@ export function DevySpecialtyHome({
                         <span style={{ width: `${(p.count / maxPipe) * 100}%`, background: ['#e8701e', '#6aa8f0', '#5a6190'][Math.min(i, 2)] }} />
                       </span>
                       <span>
-                        {p.count} {p.count === 1 ? 'pro' : 'pros'}
+                        {p.count} {p.count === 1 ? 'player' : 'players'}
                       </span>
                     </li>
                   ))}

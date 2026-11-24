@@ -6,6 +6,7 @@ import { canCommissionerAct } from '@/lib/league/commissionerAccess'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { isDevyLeague, listPendingOverrides, resolveCommissionerOverride, createCommissionerOverride } from '@/lib/devy'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,11 @@ export async function GET(
   if (!isDevy) return NextResponse.json({ error: 'Not a devy dynasty league' }, { status: 404 })
 
   const pending = await listPendingOverrides(leagueId)
-  return NextResponse.json({ overrides: pending })
+  // Names for the commissioner's list (2026-11-23): it showed raw devy player ids.
+  const ids = [...new Set(pending.map((o) => o.devyPlayerId))]
+  const players = ids.length ? await prisma.devyPlayer.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : []
+  const nameOf = new Map(players.map((p) => [p.id, p.name]))
+  return NextResponse.json({ overrides: pending.map((o) => ({ ...o, playerName: nameOf.get(o.devyPlayerId) ?? null })) })
 }
 
 export async function POST(

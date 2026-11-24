@@ -71,10 +71,9 @@ export function DevyRosterClient({
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [weeklyByPlayer, setWeeklyByPlayer] = useState<Record<string, WeeklyEntry>>({})
   const [scoreContext, setScoreContext] = useState<{ week: number; season: number } | null>(null)
-  const [benchBannerDismissed, setBenchBannerDismissed] = useState(false)
   const [irOpen, setIrOpen] = useState(false)
   const [taxiOpen, setTaxiOpen] = useState(false)
-  const [devyOpen, setDevyOpen] = useState(false)
+  const [devyOpen, setDevyOpen] = useState(true)
   const [modal, setModal] = useState<{ open: boolean; payload: DevyPlayerModalPayload | null }>({
     open: false,
     payload: null,
@@ -172,6 +171,8 @@ export function DevyRosterClient({
   )
   const ir = useMemo(() => playerStates.filter((s) => s.bucketState === 'ir'), [playerStates])
   const taxiStateIds = useMemo(() => new Set(playerStates.filter((s) => s.bucketState === 'taxi').map((s) => s.playerId)), [playerStates])
+  /** Taxi players, each once: the slots plus any taxi state not already in a slot (2026-11-23: "Show taxi (2)" for one player). */
+  const taxiCount = taxiSlots.length + [...taxiStateIds].filter((id) => !taxiSlots.some((t) => t.playerId === id)).length
 
   const activeNflCount = useMemo(
     () => playerStates.filter((s) => ['active_starter', 'active_bench', 'ir'].includes(s.bucketState)).length,
@@ -223,7 +224,7 @@ export function DevyRosterClient({
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center text-[13px] text-white/45">
+      <div className="flex min-h-[40vh] items-center justify-center text-[13px] text-[var(--muted)]">
         Loading roster…
       </div>
     )
@@ -231,10 +232,10 @@ export function DevyRosterClient({
 
   if (err) {
     return (
-      <div className="px-4 py-10 text-center text-[13px] text-red-300">
+      <div className="px-4 py-10 text-center text-[13px] text-[var(--bad)]">
         {err}
         <div className="mt-4">
-          <Link href={`/league/${leagueId}`} className="text-cyan-300 underline">
+          <Link href={`/league/${leagueId}`} className="text-[var(--accent)] underline">
             Back to league
           </Link>
         </div>
@@ -243,13 +244,13 @@ export function DevyRosterClient({
   }
 
   return (
-    <div className="min-h-screen bg-[#040915] text-white">
+    <div className="min-h-screen bg-[var(--surface)] text-[var(--text)]">
       <TeamSummaryBar
         leagueId={leagueId}
         rosterId={rosterId}
         hasAfSub={hasAfSub}
         activeCount={activeNflCount}
-        taxiCount={taxiSlots.length}
+        taxiCount={taxiCount}
         devyCount={devySlots.length}
         rookiePickCount={pickCounts.rookie}
         devyPickCount={pickCounts.devy}
@@ -257,26 +258,26 @@ export function DevyRosterClient({
       />
 
       {seasonSnap && scoreContext ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#080c14] px-4 py-2">
-          <p className="text-[11px] text-white/50">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[var(--surface)] px-4 py-2">
+          <p className="text-[11px] text-[var(--muted)]">
             Fantasy points · Week {scoreContext.week} · {scoreContext.season} season
           </p>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="min-h-[44px] rounded-lg border border-white/[0.1] px-3 py-1 text-[12px] text-white/80 md:min-h-0"
+              className="min-h-[44px] rounded-lg border border-white/[0.1] px-3 py-1 text-[12px] text-[var(--text)] md:min-h-0"
               onClick={() => setSelectedWeek(scoreContext.week - 1)}
               disabled={scoreContext.week <= 1}
               data-testid="devy-week-prev"
             >
               ←
             </button>
-            <span className="min-w-[2rem] text-center text-[12px] font-mono text-cyan-200/90">
+            <span className="min-w-[2rem] text-center text-[12px] font-mono text-[var(--accent)]">
               {scoreContext.week}
             </span>
             <button
               type="button"
-              className="min-h-[44px] rounded-lg border border-white/[0.1] px-3 py-1 text-[12px] text-white/80 md:min-h-0"
+              className="min-h-[44px] rounded-lg border border-white/[0.1] px-3 py-1 text-[12px] text-[var(--text)] md:min-h-0"
               onClick={() => setSelectedWeek(scoreContext.week + 1)}
               disabled={scoreContext.week >= seasonSnap.totalWeeks}
               data-testid="devy-week-next"
@@ -285,7 +286,7 @@ export function DevyRosterClient({
             </button>
             <button
               type="button"
-              className="ml-2 text-[11px] text-cyan-400/80 underline"
+              className="ml-2 text-[11px] text-[var(--accent)] underline"
               onClick={() => setSelectedWeek(null)}
               data-testid="devy-week-reset"
             >
@@ -295,13 +296,13 @@ export function DevyRosterClient({
         </div>
       ) : null}
 
-      <div className="mx-auto max-w-3xl space-y-4 px-3 py-4 pb-24">
+      <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 pb-24">
         <SectionTitle
           accent="var(--devy-active)"
           title="⚡ Starters"
-          subtitle="Points count toward team score where eligible."
+          subtitle="These count toward your score."
         />
-        <div className="space-y-2">
+        <div className="grid gap-2 lg:grid-cols-2">
           {starters.map((s) => (
             <DevyPlayerCard
               key={s.playerId}
@@ -309,7 +310,6 @@ export function DevyRosterClient({
               playerId={s.playerId}
               name={s.playerName}
               position={s.position}
-              statusLabel="STARTER"
               pointsDisplay={formatPts(s.playerId)}
               onMove={(a) => {
                 if (a === 'bench') void patchRoster({ playerId: s.playerId, action: 'move_to_bench' })
@@ -333,20 +333,69 @@ export function DevyRosterClient({
           ))}
         </div>
 
-        <SectionTitle accent="white" title="🏈 Bench" subtitle="Display only for scoring" />
-        {!benchBannerDismissed ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
-            📊 Points shown — do not count
-            <button
-              type="button"
-              className="ml-2 text-white/60 underline"
-              onClick={() => setBenchBannerDismissed(true)}
-            >
-              Dismiss
-            </button>
-          </div>
-        ) : null}
-        <div className="space-y-2 opacity-90">
+        <div
+          id="devy-section"
+          className="rounded-xl border border-[var(--devy-violet-line)] bg-[color:var(--devy-badge-devy)]"
+        >
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-[var(--devy-violet)]"
+            onClick={() => setDevyOpen((v) => !v)}
+          >
+            🎓 Devy prospects
+            <span className="text-[var(--devy-violet)]">{devyOpen ? '▾' : '▸'}</span>
+          </button>
+          {devyOpen ? (
+            <div className="space-y-2 border-t border-[var(--devy-violet-line)] px-3 py-3">
+              <div className="rounded-lg border border-[var(--devy-violet-line)] bg-[var(--surface2)] px-3 py-2 text-[11px] text-[var(--devy-violet)]">
+                College players don’t score until you promote them.
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+              {devySlots.map((d) => (
+                <DevyPlayerCard
+                  key={d.playerId}
+                  variant="devy"
+                  playerId={d.playerId}
+                  name={d.playerName}
+                  position={d.position}
+                  subtitle={d.school ?? undefined}
+                  schoolLogoUrl={d.schoolLogoUrl}
+                  classYear={d.classYear ?? undefined}
+                  projectedYear={d.projectedDeclarationYear ?? undefined}
+                  onOpen={() =>
+                    setModal({
+                      open: true,
+                      payload: {
+                        kind: 'devy',
+                        playerId: d.playerId,
+                        name: d.playerName,
+                        position: d.position,
+                        school: d.school,
+                        classYear: d.classYear,
+                        projectedDeclaration: d.projectedDeclarationYear ? String(d.projectedDeclarationYear) : null,
+                        hasEnteredNfl: d.hasEnteredNFL,
+                        nflEntryYear: d.nflEntryYear ?? null,
+                      },
+                    })
+                  }
+                />
+              ))}
+              </div>
+            </div>
+          ) : (
+            <div className="px-3 pb-3">
+              <button
+                type="button"
+                className="text-[12px] font-semibold text-[var(--devy-violet)] underline"
+                onClick={() => setDevyOpen(true)}
+              >
+                Show devy ({devySlots.length})
+              </button>
+            </div>
+          )}
+        </div>
+        <SectionTitle accent="white" title="🏈 Bench" subtitle="Points shown here don’t count." />
+        <div className="grid gap-2 lg:grid-cols-2">
           {bench.map((s) => (
             <DevyPlayerCard
               key={s.playerId}
@@ -354,7 +403,6 @@ export function DevyRosterClient({
               playerId={s.playerId}
               name={s.playerName}
               position={s.position}
-              statusLabel="BENCH"
               pointsDisplay={formatPts(s.playerId)}
               onMove={(a) => {
                 if (a === 'ir') void patchRoster({ playerId: s.playerId, action: 'move_to_ir' })
@@ -377,18 +425,18 @@ export function DevyRosterClient({
           ))}
         </div>
 
-        <div className="sticky top-0 z-10 rounded-xl border border-white/[0.06] bg-[#0a1228]/95 backdrop-blur">
+        <div className="rounded-xl border border-white/[0.06] bg-[var(--surface)]">
           <button
             type="button"
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-white/75"
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-[var(--text2)]"
             onClick={() => setIrOpen((v) => !v)}
           >
             🩺 IR
-            <span className="text-white/40">{irOpen ? '▾' : '▸'}</span>
+            <span className="text-[var(--muted)]">{irOpen ? '▾' : '▸'}</span>
           </button>
           {irOpen ? (
             <div className="space-y-2 border-t border-white/[0.06] px-3 py-3">
-              <p className="text-[11px] text-white/45">Injured reserve — points do not count.</p>
+              <p className="text-[11px] text-[var(--muted)]">Injured reserve — points do not count.</p>
               {ir.map((s) => (
                 <DevyPlayerCard
                   key={s.playerId}
@@ -396,7 +444,6 @@ export function DevyRosterClient({
                   playerId={s.playerId}
                   name={s.playerName}
                   position={s.position}
-                  statusLabel="IR"
                   pointsDisplay={formatPts(s.playerId)}
                   onMove={(a) => {
                     if (a === 'bench') void patchRoster({ playerId: s.playerId, action: 'move_to_bench' })
@@ -419,19 +466,19 @@ export function DevyRosterClient({
           ) : null}
         </div>
 
-        <div id="taxi-section" className="sticky top-0 z-10 rounded-xl border border-amber-500/20 bg-[color:var(--devy-badge-taxi)]">
+        <div id="taxi-section" className="rounded-xl border border-[var(--devy-amber-line)] bg-[color:var(--devy-badge-taxi)]">
           <button
             type="button"
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-amber-100"
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-[var(--devy-amber)]"
             onClick={() => setTaxiOpen((v) => !v)}
           >
             🚕 Taxi
-            <span className="text-amber-200/60">{taxiOpen ? '▾' : '▸'}</span>
+            <span className="text-[var(--devy-amber)]">{taxiOpen ? '▾' : '▸'}</span>
           </button>
           {taxiOpen ? (
-            <div className="space-y-2 border-t border-amber-500/20 px-3 py-3">
-              <div className="rounded-lg border border-amber-500/25 bg-black/20 px-3 py-2 text-[11px] text-amber-100/90">
-                📊 Taxi points do not count toward team score.
+            <div className="space-y-2 border-t border-[var(--devy-amber-line)] px-3 py-3">
+              <div className="rounded-lg border border-[var(--devy-amber-line)] bg-[var(--surface2)] px-3 py-2 text-[11px] text-[var(--devy-amber)]">
+                Taxi points don’t count toward your score.
               </div>
               {taxiSlots.map((t) => (
                 <DevyPlayerCard
@@ -484,69 +531,10 @@ export function DevyRosterClient({
                 ))}
             </div>
           ) : (
-            <p className="px-3 pb-3 text-[11px] text-amber-100/70">Show taxi ({taxiSlots.length + taxiStateIds.size})</p>
+            <p className="px-3 pb-3 text-[11px] text-[var(--devy-amber)]">Show taxi ({taxiCount})</p>
           )}
         </div>
 
-        <div
-          id="devy-section"
-          className="sticky top-0 z-10 rounded-xl border border-violet-500/25 bg-[color:var(--devy-badge-devy)]"
-        >
-          <button
-            type="button"
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] font-bold text-violet-100"
-            onClick={() => setDevyOpen((v) => !v)}
-          >
-            🎓 Devy prospects
-            <span className="text-violet-200/60">{devyOpen ? '▾' : '▸'}</span>
-          </button>
-          {devyOpen ? (
-            <div className="space-y-2 border-t border-violet-500/20 px-3 py-3">
-              <div className="rounded-lg border border-violet-500/25 bg-black/20 px-3 py-2 text-[11px] text-violet-100/90">
-                College players — no fantasy scoring while devy.
-              </div>
-              {devySlots.map((d) => (
-                <DevyPlayerCard
-                  key={d.playerId}
-                  variant="devy"
-                  playerId={d.playerId}
-                  name={d.playerName}
-                  position={d.position}
-                  subtitle={d.school ?? undefined}
-                  schoolLogoUrl={d.schoolLogoUrl}
-                  classYear={d.classYear ?? undefined}
-                  projectedYear={d.projectedDeclarationYear ?? undefined}
-                  onOpen={() =>
-                    setModal({
-                      open: true,
-                      payload: {
-                        kind: 'devy',
-                        playerId: d.playerId,
-                        name: d.playerName,
-                        position: d.position,
-                        school: d.school,
-                        classYear: d.classYear,
-                        projectedDeclaration: d.projectedDeclarationYear ? String(d.projectedDeclarationYear) : null,
-                        hasEnteredNfl: d.hasEnteredNFL,
-                        nflEntryYear: d.nflEntryYear ?? null,
-                      },
-                    })
-                  }
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="px-3 pb-3">
-              <button
-                type="button"
-                className="text-[12px] font-semibold text-violet-200 underline"
-                onClick={() => setDevyOpen(true)}
-              >
-                Show devy ({devySlots.length})
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       <DevyPlayerModal
@@ -562,11 +550,11 @@ export function DevyRosterClient({
 
 function SectionTitle({ title, subtitle, accent }: { title: string; subtitle?: string; accent: string }) {
   return (
-    <div className="border-b pb-1" style={{ borderColor: `${accent}44` }}>
-      <h2 className="text-[14px] font-bold" style={{ color: accent === 'white' ? 'rgba(255,255,255,0.85)' : accent }}>
+    <div className="border-b pb-1" style={{ borderColor: accent === 'white' ? 'var(--line2)' : `color-mix(in srgb, ${accent} 30%, transparent)` }}>
+      <h2 className="text-[14px] font-bold" style={{ color: accent === 'white' ? 'var(--text)' : accent }}>
         {title}
       </h2>
-      {subtitle ? <p className="text-[11px] text-white/40">{subtitle}</p> : null}
+      {subtitle ? <p className="text-[11px] text-[var(--muted)]">{subtitle}</p> : null}
     </div>
   )
 }
