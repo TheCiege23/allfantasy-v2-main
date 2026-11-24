@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { useMessages } from '@/components/i18n/useMessages'
 import type { PulseRow, SeasonPulse } from '@/lib/core-app/homeGuide'
 import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
@@ -80,9 +81,7 @@ export function HomeSeasonPulse({ pulse }: { pulse: SeasonPulse }) {
           {pulse.unranked > 0 ? <p className="af-hg-note">{g.pulseUnranked(pulse.unranked)}</p> : null}
         </>
       )}
-      <p className="af-decision-why af-hg-why">
-        <b>{g.why}</b> {g.pulseTeach}
-      </p>
+      <WhyFold label={g.why}>{g.pulseTeach}</WhyFold>
       <Link className="af-hg-more" href="/core/standings">
         {g.pulseStandings} →
       </Link>

@@ -252,3 +252,61 @@
 .af-cal-run { margin: 3px 0 0; color: var(--text2); font-size: 13px; }
 .af-cal-run b { color: var(--accent); font-weight: 800; }
 .af-cal-unread { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+
+/*
+ * The home's simplify pass (2026-11-24): teaching lines, the inactive-manager ladder and the two
+ * reference cards (waiver calendar, league formats) are closed until tapped.
+ */
+.af-core .af-hg-whyfold { margin: 8px 0 0; }
+.af-core .af-hg-whyfold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-hg-whyfold > summary::-webkit-details-marker { display: none; }
+.af-core .af-hg-whyfold > summary::after { content: '▾'; font-size: 11px; transition: transform 0.15s; }
+.af-core .af-hg-whyfold[open] > summary::after { transform: rotate(180deg); }
+.af-core .af-hg-whyfold > p {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent-line, var(--line));
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.af-core .af-hg-foldrow { margin-top: 12px; border-top: 1px solid var(--line); }
+.af-core .af-hg-foldrow > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  min-height: 44px;
+  padding: 8px 22px 8px 0;
+  position: relative;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-hg-foldrow > summary::-webkit-details-marker { display: none; }
+.af-core .af-hg-foldrow > summary b { color: var(--text); font-size: 14px; }
+.af-core .af-hg-foldrow > summary span { color: var(--muted); font-size: 12.5px; }
+.af-core .af-hg-foldrow > summary::after { content: '▾'; position: absolute; right: 0; top: 50%; translate: 0 -50%; color: var(--muted); }
+.af-core .af-hg-foldrow[open] > summary::after { rotate: 180deg; }
+
+.af-core .af-hg-cardfold > details > summary { list-style: none; cursor: pointer; margin-bottom: 0; padding-right: 22px; position: relative; }
+.af-core .af-hg-cardfold > details > summary::-webkit-details-marker { display: none; }
+.af-core .af-hg-cardfold > details > summary::after {
+  content: '▾';
+  position: absolute;
+  right: 0;
+  top: 2px;
+  color: var(--muted);
+}
+.af-core .af-hg-cardfold > details[open] > summary { margin-bottom: 12px; }
+.af-core .af-hg-cardfold > details[open] > summary::after { transform: rotate(180deg); }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { useMessages } from '@/components/i18n/useMessages'
 import { homeLearnMessages } from '@/lib/core-app/messages/homeLearn'
 import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
@@ -54,11 +55,13 @@ export function HomePlatformCalendar({
   const kickoff = mounted && nextKickoffIso ? localWhen(nextKickoffIso, locale, false, t.calDaily) : null
 
   return (
-    <section className="af3a-card af-hg-card" aria-labelledby="af-cal-title">
-      <header className="af-hg-cardhead">
+    <section className="af3a-card af-hg-card af-hg-cardfold" aria-labelledby="af-cal-title">
+      {/* Closed by default (2026-11-24): a reference card, opened when you want it. */}
+      <details data-testid="home-calendar-fold">
+      <summary className="af-hg-cardhead">
         <h2 id="af-cal-title">{t.calTitle}</h2>
         <span>{t.calSub}</span>
-      </header>
+      </summary>
       {nextKickoffIso ? (
         <div className="af-cal-kickoff">
           <p className="af-hg-label">{t.calNextKickoff}</p>
@@ -104,9 +107,8 @@ export function HomePlatformCalendar({
           ))}
         </ul>
       )}
-      <p className="af-decision-why af-hg-why">
-        <b>{g.why}</b> {t.calTeach}
-      </p>
+      <WhyFold label={g.why}>{t.calTeach}</WhyFold>
+      </details>
     </section>
   )
 }
