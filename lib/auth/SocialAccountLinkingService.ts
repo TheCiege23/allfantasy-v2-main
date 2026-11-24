@@ -378,9 +378,10 @@ export async function linkSocialAccountToAppUser(
             const { cookies, headers } = await import("next/headers");
             const partnerCode = (await cookies()).get(PARTNER_CODE_COOKIE)?.value?.trim();
             if (partnerCode) {
-              const forwarded = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+              const { clientIpFromHeaders } = await import("@/lib/http/clientIp");
+              const ip = clientIpFromHeaders(await headers());
               const { attachReferral } = await import("@/lib/partner-codes/service");
-              await attachReferral({ userId: user.id, rawCode: partnerCode, email: user.email, ip: forwarded });
+              await attachReferral({ userId: user.id, rawCode: partnerCode, email: user.email, ip });
             }
           }
         } catch (partnerErr) {
