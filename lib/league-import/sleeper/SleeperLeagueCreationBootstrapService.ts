@@ -10,7 +10,7 @@ import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRos
 import { changeAwareWritesEnabled } from '../changeAwareWrites'
 import { importedRosterUnchanged } from '../rosterWriteEquivalence'
 import { writeTeamPerformances, type TeamPerformanceWrite } from '../teamPerformanceWrites'
-import { writeCurrentSeasonMatchupFacts } from './currentSeasonMatchupFacts'
+import { isMatchupFactProvider, writeCurrentSeasonMatchupFacts } from './currentSeasonMatchupFacts'
 import { stripCommissionerFlagsFromUnprovenClaims } from '../espn/espnPublicMemberImport'
 
 interface SleeperLeagueBootstrapResult {
@@ -511,14 +511,17 @@ export async function bootstrapLeagueFromNormalizedImport(
 
   /*
    * The same schedule, as head-to-head rows in `dw_matchup_facts`. This is what keeps the season
-   * being played current there on every sync; see `currentSeasonMatchupFacts.ts` for why the
-   * four-hourly history refresh could not. Sleeper only: the other providers' history services key
-   * their rows differently. A failure here never fails the sync.
+   * being played current there on every sync; see `currentSeasonMatchupFacts.ts`. Sleeper, ESPN and
+   * Fantrax, each in its own history service's row conventions. Yahoo and MFL are left to their
+   * history services until their conventions are checked the same way. A failure here never fails
+   * the sync.
    */
-  if (normalized.source.source_provider === 'sleeper') {
+  const matchupFactProvider = normalized.source.source_provider
+  if (isMatchupFactProvider(matchupFactProvider)) {
     try {
       await writeCurrentSeasonMatchupFacts({
         leagueId,
+        provider: matchupFactProvider,
         sport: normalized.league.sport,
         season: normalized.league.season,
         schedule: normalized.schedule,
@@ -526,6 +529,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     } catch (err) {
       console.error('[bootstrapLeagueFromNormalizedImport] could not refresh current-season matchup facts', {
         leagueId,
+        provider: matchupFactProvider,
         error: err instanceof Error ? err.name : 'unknown',
       })
     }

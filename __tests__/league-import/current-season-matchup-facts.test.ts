@@ -139,3 +139,55 @@ describe('writeCurrentSeasonMatchupFacts', () => {
     expect(db.transaction).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * ESPN and Fantrax: each history service writes its own conventions, and this writer must match
+ * them or every sync would rewrite every week (and flip home/away for readers).
+ */
+describe('provider conventions', () => {
+  const pair = (roster_id_1: string, roster_id_2: string, points_1?: number, points_2?: number) =>
+    points_1 === undefined ? { roster_id_1, roster_id_2 } : { roster_id_1, roster_id_2, points_1, points_2 }
+  const week = (n: number, ...matchups: ReturnType<typeof pair>[]) => ({ week: n, season: 2026, matchups })
+
+  it('ESPN keeps its own team order (teamA is not the lower id), as EspnHistoricalBackfillService does', () => {
+    const rows = matchupFactsFromSchedule([week(4, pair('7', '3', 111.96, 91.56))], 'espn')
+    expect(rows).toEqual([{ weekOrPeriod: 4, teamA: '7', teamB: '3', scoreA: 111.96, scoreB: 91.56, winnerTeamId: '7' }])
+  })
+
+  it('ESPN stores an undecided matchup as 0-0 with no winner, as its history service does', () => {
+    expect(matchupFactsFromSchedule([week(12, pair('7', '3'))], 'espn')).toEqual([
+      { weekOrPeriod: 12, teamA: '7', teamB: '3', scoreA: 0, scoreB: 0, winnerTeamId: null },
+    ])
+  })
+
+  it('Fantrax keeps its order, accepts its non-numeric team ids, and does not write unplayed matchups', () => {
+    const rows = matchupFactsFromSchedule(
+      [week(8, pair('zk3x9', 'ab12q', 88.5, 101.25)), week(12, pair('zk3x9', 'ab12q'))],
+      'fantrax',
+    )
+    expect(rows).toEqual([{ weekOrPeriod: 8, teamA: 'zk3x9', teamB: 'ab12q', scoreA: 88.5, scoreB: 101.25, winnerTeamId: 'ab12q' }])
+  })
+
+  it('Sleeper is unchanged: lower roster id first, numeric ids only', () => {
+    expect(matchupFactsFromSchedule([week(4, pair('9', '2', 120, 98))], 'sleeper')).toEqual([
+      { weekOrPeriod: 4, teamA: '2', teamB: '9', scoreA: 98, scoreB: 120, winnerTeamId: '9' },
+    ])
+    expect(matchupFactsFromSchedule([week(4, pair('zk3x9', 'ab12q', 1, 2))], 'sleeper')).toEqual([])
+  })
+
+  it('an ESPN league: a week frozen at import as 0-0 is filled, the stored order is kept', async () => {
+    db.findMany.mockResolvedValue([fact(3, '7', '3', 111.96, 91.56), fact(4, '7', '3', 0, 0)])
+    const result = await writeCurrentSeasonMatchupFacts({
+      leagueId: 'L1',
+      provider: 'espn',
+      sport: 'NFL',
+      season: 2026,
+      schedule: [week(3, pair('7', '3', 111.96, 91.56)), week(4, pair('7', '3', 80, 99))],
+    })
+    expect(result).toMatchObject({ weeksWritten: 1 })
+    expect(deletedWeeks()).toEqual([4])
+    expect(created()).toEqual([
+      { leagueId: 'L1', sport: 'NFL', season: 2026, weekOrPeriod: 4, teamA: '7', teamB: '3', scoreA: 80, scoreB: 99, winnerTeamId: '3' },
+    ])
+  })
+})
