@@ -216,13 +216,14 @@ describe('badges — LIVE and the rankings level', () => {
 
   it('the phone’s More sheet reads Spanish too', () => {
     const b = sheetBadges('es')
-    expect(b).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12', '3']))
+    // The live-game count ('3') is on the bar's Live tab, which the sheet no longer repeats (2026-11-24).
+    expect(b).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12']))
     expect(b).not.toContain('LIVE')
     expect(b).not.toContain('LVL 12')
   })
 
   it('CONTROL — the More sheet in English', () => {
-    expect(sheetBadges('en')).toEqual(expect.arrayContaining(['LIVE', 'LVL 12', '3']))
+    expect(sheetBadges('en')).toEqual(expect.arrayContaining(['LIVE', 'LVL 12']))
   })
 
   it('badgeText: words translate, counts pass through', () => {
