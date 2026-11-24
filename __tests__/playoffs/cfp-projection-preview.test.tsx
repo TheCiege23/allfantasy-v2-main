@@ -61,4 +61,28 @@ describe("CFP projection preview", () => {
     const { container } = render(<CfpProjectionPreview />)
     expect(container.querySelector(".cfp-slot-rank")).toBeNull()
   })
+
+  /*
+   * 2026-11-23 (owner): the standalone page — where the /core home CFP card sends people — leads with a
+   * "Start a CFP challenge" button above the bracket. On a phone the bracket is several screens tall, and
+   * the only way to start one was a small footnote link at the very bottom.
+   */
+  it("the standalone page leads with Start a CFP challenge, above the bracket, into the playoff-challenge create flow", () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")))
+    const { container } = render(<CfpProjectionPreview standalone />)
+    const button = screen.getByTestId("cfp-start-challenge")
+    expect(button.textContent).toBe("Start a CFP challenge")
+    expect(button.getAttribute("href")).toBe("/brackets/leagues/new?sport=NCAAF&challengeType=playoff_challenge")
+    // Before the bracket in the page, not after it.
+    const board = container.querySelector(".cfp-board")!
+    expect(button.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The footnote link goes to the same flow.
+    expect(screen.getByRole("link", { name: "Create a CFP pool" }).getAttribute("href")).toBe(button.getAttribute("href"))
+  })
+
+  it("the version embedded in a challenge's own page has no start button — that page already is a challenge", () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")))
+    render(<CfpProjectionPreview />)
+    expect(screen.queryByTestId("cfp-start-challenge")).toBeNull()
+  })
 })
