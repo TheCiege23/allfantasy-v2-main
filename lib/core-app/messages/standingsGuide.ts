@@ -33,8 +33,8 @@ export const standingsGuideMessages = defineMessages({
      */
     intro: (p: { headToHead: boolean; seasonComplete: boolean; week: number; throughWeek: number | null }) =>
       `${p.headToHead
-        ? 'See where you stand, what it takes to make the playoffs, and whose games to root for this week. Your record decides the seeding.'
-        : 'See where you stand and how far you are from the next spot. In this league points decide the order — there are no head-to-head records.'}${p.seasonComplete ? ` Season complete after week ${p.week}.` : p.throughWeek != null ? ` Results through week ${p.throughWeek}.` : ''}`,
+        ? 'Your record decides the seeding.'
+        : 'Points decide the order in this league — there are no head-to-head records.'}${p.seasonComplete ? ` Season complete after week ${p.week}.` : p.throughWeek != null ? ` Results through week ${p.throughWeek}.` : ''}`,
     ifTheyWin: 'if they win',
     ifNot: 'if not',
     why: 'Why it matters',
@@ -71,8 +71,8 @@ export const standingsGuideMessages = defineMessages({
       `Vas ${seed}.º de ${of}, ${gb != null && gb > 0 ? `a ${gb} ${gb === 1 ? 'partido' : 'partidos'} de los playoffs` : bubble ? 'justo fuera de los playoffs' : 'fuera de los playoffs'}`,
     intro: (p: { headToHead: boolean; seasonComplete: boolean; week: number; throughWeek: number | null }) =>
       `${p.headToHead
-        ? 'Mira dónde estás, qué te falta para llegar a playoffs y a quién apoyar esta semana. Tu récord determina los puestos de playoffs.'
-        : 'Mira dónde estás y cuánto te falta para el siguiente puesto. En esta liga los puntos determinan el orden: no hay récords de enfrentamientos directos.'}${p.seasonComplete ? ` Temporada terminada tras la semana ${p.week}.` : p.throughWeek != null ? ` Resultados hasta la semana ${p.throughWeek}.` : ''}`,
+        ? 'Tu récord determina los puestos de playoffs.'
+        : 'En esta liga los puntos determinan el orden: no hay récords de enfrentamientos directos.'}${p.seasonComplete ? ` Temporada terminada tras la semana ${p.week}.` : p.throughWeek != null ? ` Resultados hasta la semana ${p.throughWeek}.` : ''}`,
     ifTheyWin: 'si ganan',
     ifNot: 'si no',
     why: 'Por qué importa',

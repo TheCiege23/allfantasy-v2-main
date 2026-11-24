@@ -29,6 +29,7 @@ import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButt
 import { getAppIntlLocale } from '@/lib/i18n/appLocale'
 import { defineMessages, messagesFor } from '@/lib/i18n/messages'
 import { MoreDetail } from '@/components/core-app/MoreDetail'
+import { WhyFold } from '@/components/core-app/home/WhyFold'
 import { useMessages } from '@/components/i18n/useMessages'
 import { standingsScreenMessages } from '@/lib/core-app/messages/standingsScreen'
 import { standingsGuideMessages } from '@/lib/core-app/messages/standingsGuide'
@@ -294,14 +295,14 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
         </div>
       ) : null}
 
-      {stakes ? (
-        <p className="af-st-stakes-basis">
-          {m.stakesBasis}
-        </p>
-      ) : null}
-      <p className="af-stg-teach">
-        <b>{guide.why}</b> {guide.stakesTeach}
-      </p>
+      {/*
+        Closed until tapped (2026-11-24, the simplify pass): the lesson and the note on how these odds are
+        computed were two more paragraphs at the foot of the card on every visit. Same words, one tap away.
+      */}
+      <WhyFold label={guide.why}>
+        {guide.stakesTeach}
+        {stakes ? ` ${m.stakesBasis}` : ''}
+      </WhyFold>
     </section>
   )
 }

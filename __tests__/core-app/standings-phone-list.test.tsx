@@ -59,13 +59,14 @@ afterEach(() => {
 })
 
 describe('cards fold to one row per team', () => {
-  it('puts the record in each summary, opens only your own card, and keeps the full sheet in the DOM', () => {
+  it('puts the record in each summary, starts every card closed (yours too), and keeps the full sheet in the DOM', () => {
     const { container } = render(<StandingsBoardView board={board()} initial={{ ...DEFAULT_STANDINGS_VIEW, layout: 'cards' }} />)
     const folds = [...container.querySelectorAll('details.af-stb-cardfold')] as HTMLDetailsElement[]
     expect(folds).toHaveLength(6)
-    const open = folds.filter((d) => d.open)
-    expect(open).toHaveLength(1)
-    expect(open[0].querySelector('summary')?.textContent).toContain('Team 3')
+    /* 2026-11-24: your own card no longer starts open — the tiles above the table say the same. */
+    expect(folds.filter((d) => d.open)).toHaveLength(0)
+    const yours = folds.find((d) => d.closest('[data-you="true"]'))
+    expect(yours?.querySelector('summary')?.textContent).toContain('Team 3')
 
     const first = folds[0]
     expect(first.querySelector('summary .af-stb-cardkey')?.textContent).toBe('2-0')
