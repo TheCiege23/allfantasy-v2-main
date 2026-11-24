@@ -12,7 +12,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cfpPromoLive } from '@/lib/brackets/hubTournaments'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 const nav = vi.hoisted(() => ({ router: { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {} } }))
@@ -51,10 +52,38 @@ describe('rail crown', () => {
   })
 })
 
-describe('bracket promo', () => {
+/*
+ * 2026-11-23 (owner): the generic "Bracket leagues — Explore and create" ad is gone. In its place, during
+ * the college playoff window only (Nov 1 – Jan 25), a College Football Playoff card.
+ */
+describe('bracket promo — the College Football Playoff card', () => {
+  afterEach(() => vi.useRealTimers())
+  const at = (iso: string) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(iso))
+  }
+
   it('says when it is inside a league, so the phone layout can slim it', () => {
+    at('2026-11-24T12:00:00Z')
     expect(shell({ selectedLeagueId: 'l1' }).querySelector('[data-testid=core-bracket-entry]')?.getAttribute('data-in-league')).toBe('true')
     expect(shell({}).querySelector('[data-testid=core-bracket-entry]')?.hasAttribute('data-in-league')).toBe(false)
+  })
+
+  it('in playoff season it is the CFP card: the projected bracket, and a challenge to start', () => {
+    at('2026-11-24T12:00:00Z')
+    const card = shell({ selectedLeagueId: 'l1' }).querySelector('[data-testid=core-bracket-entry]')!
+    expect(card.getAttribute('data-promo')).toBe('cfp')
+    expect(card.textContent).toContain('COLLEGE FOOTBALL PLAYOFF')
+    expect(card.textContent).not.toMatch(/BRACKET LEAGUES|Explore and create/)
+    const links = [...card.querySelectorAll('a')].map((a) => a.getAttribute('href'))
+    expect(links).toEqual(['/brackets/cfp/preview', '/brackets/leagues/new?sport=NCAAF&challengeType=playoff_challenge'])
+  })
+
+  it('still runs through the bowls in January, and is gone out of season — no generic ad comes back', () => {
+    at('2027-01-10T12:00:00Z')
+    expect(shell({}).querySelector('[data-testid=core-bracket-entry]')).not.toBeNull()
+    at('2026-06-15T12:00:00Z')
+    expect(shell({}).querySelector('[data-testid=core-bracket-entry]')).toBeNull()
   })
 })
 
@@ -109,5 +138,16 @@ describe('CSS', () => {
     const mt = read('components/core-app/af-my-team.css')
     expect(depthAt(mt, '@media (min-width: 721px)')).toBe(0)
     expect(depthAt(mt, '.af-core .af-mt-player-name { flex-wrap: wrap')).toBe(1)
+  })
+})
+
+describe('cfpPromoLive — the CFP card window', () => {
+  it('opens Nov 1 with the weekly rankings (the hub window opens Dec 1 — 0-based months) and closes after Jan 25', () => {
+    expect(cfpPromoLive(new Date('2026-10-31T23:00:00Z'))).toBe(false)
+    expect(cfpPromoLive(new Date('2026-11-01T00:00:00Z'))).toBe(true)
+    expect(cfpPromoLive(new Date('2026-12-06T18:00:00Z'))).toBe(true)
+    expect(cfpPromoLive(new Date('2027-01-25T20:00:00Z'))).toBe(true)
+    expect(cfpPromoLive(new Date('2027-01-27T00:00:00Z'))).toBe(false)
+    expect(cfpPromoLive(new Date('2027-06-15T00:00:00Z'))).toBe(false)
   })
 })
