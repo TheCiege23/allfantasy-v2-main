@@ -83,6 +83,11 @@ export type BestAvailableAutopickResolved = {
   byeWeek: number | null
   reason: string
   strategy: 'need-based' | 'bpa' | 'draft-as-me'
+  /**
+   * Chimmy Queue only: which engine chose. `draft-os` = the Draft OS pick decision (what the draft card and Chimmy
+   * recommend); `recommender` = the clock's own recommender, when the decision had no pick in time.
+   */
+  source?: 'draft-os' | 'recommender'
 }
 
 function normalizeName(value: string): string {
@@ -451,12 +456,32 @@ export async function resolveBestAvailableAutopickCandidate(
     }
   }
 
-  const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
-
   // Chimmy Queue (the manager's own AF Pro auto-pick mode): with the queue spent, Chimmy picks for this
   // team's needs rather than the league's plain best available. A failed read means the ordinary pick.
-  const { personalChimmyQueueOn } = await import('@/lib/live-draft-engine/chimmyQueueAutopick')
-  const chimmyQueue = await personalChimmyQueueOn(draftSession.id, rid).catch(() => false)
+  const { chimmyQueueManagerFor, draftOsChimmyQueuePick } = await import('@/lib/live-draft-engine/chimmyQueueAutopick')
+  const chimmyManager = await chimmyQueueManagerFor(draftSession.id, rid).catch(() => null)
+  const chimmyQueue = chimmyManager !== null
+
+  // "Chimmy's pick" is the Draft OS decision's — the player the draft card and Chimmy name — taken from this
+  // clock's vetted pool. Bounded and never throws; with no decision pick the recommender below picks as before.
+  if (chimmyManager) {
+    const os = await draftOsChimmyQueuePick({ leagueId, userId: chimmyManager, rosterId: rid, draftType: draftSession.draftType, board }).catch(() => null)
+    if (os) {
+      const picked: BestAvailableAutopickResolved = {
+        playerName: os.entry.playerName,
+        position: os.entry.position,
+        team: os.entry.team,
+        playerId: os.entry.playerId,
+        byeWeek: os.entry.byeWeek,
+        reason: `Chimmy's pick for your team: ${os.reason || 'Draft OS recommendation.'}`,
+        strategy: 'need-based',
+        source: 'draft-os',
+      }
+      return draftAsMeNote ? { ...picked, reason: draftAsMeNote } : picked
+    }
+  }
+
+  const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
 
   if (autopickBehavior === 'need-based' || chimmyQueue) {
     const rec = computeDraftRecommendation({
@@ -497,6 +522,7 @@ export async function resolveBestAvailableAutopickCandidate(
           byeWeek: fromPool.byeWeek,
           reason: chimmyQueue ? `Chimmy's pick for your team: ${why}` : why,
           strategy: 'need-based',
+          ...(chimmyQueue ? { source: 'recommender' as const } : {}),
         }
       }
     }
@@ -608,7 +634,7 @@ export async function submitBestAvailableAutopickForExpiredTimer(
     source: 'auto',
     expectedOverall,
     // Why it was picked, shown on the board's player card (autoPickReason in the session snapshot).
-    pickMetadata: { autopick: { strategy: selected.strategy, reason: selected.reason } },
+    pickMetadata: { autopick: { strategy: selected.strategy, reason: selected.reason, ...(selected.source ? { source: selected.source } : {}) } },
   })
 
   if (!result.success) return { ok: false, error: 'submit_failed' }

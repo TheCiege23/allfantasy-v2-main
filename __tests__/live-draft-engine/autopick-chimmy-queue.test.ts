@@ -25,6 +25,12 @@ const hm = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/draft-room/draftAsMeAutopick', () => ({ tryDraftAsMePick: hm.tryDraftAsMePick }))
+// No Draft OS decision here, so these cover the recommender fallback; the decision path has its own suite
+// (autopick-chimmy-queue-draft-os.test.ts).
+vi.mock('@/lib/shared-services/draft/pickDecision', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/shared-services/draft/pickDecision')>()),
+  decideDraftPickForRoster: vi.fn(async () => ({ ok: false, reason: 'no_draft' })),
+}))
 vi.mock('@/lib/live-draft-engine/LiveDraftAutopickPreferenceService', () => ({
   getViewerAutopickPreference: hm.getViewerAutopickPreference,
 }))
