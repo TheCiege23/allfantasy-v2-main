@@ -154,8 +154,18 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
   email/password sign-in remains, which the demo account uses. Verified on a real
   iPhone 2026-11-23: an account created with Continue with Apple on build 20.
   ⚠ Every new build must keep `sign_in_with_apple` ticked (with `push_notifications`,
-  `universal_links`, `career_widget`, `notification_images`) — a build without it
-  silently drops the button, and the review notes below say it exists.
+  `universal_links`, `career_widget`, `notification_images` and, from 1.3, `passkeys`) —
+  a build without it silently drops the button, and the review notes below say it exists.
+- **Face ID passkeys (from 1.3).** The `passkeys` input adds
+  `webcredentials:www.allfantasy.ai` to Associated Domains and the `AFPasskeys` switch
+  `AppBridgeViewController` reads to register `PasskeyHandler.swift`; it refuses to run
+  without `universal_links`, and checks both on the exported build. The site's
+  apple-app-site-association lists the app under `webcredentials`
+  (`lib/platform/appSiteAssociation.ts`), so passkeys made on www.allfantasy.ai work in
+  the app and the reverse. The page reaches Face ID through the app
+  (`lib/auth/native-passkey-bridge.ts`); a build without the handler shows no Face ID
+  button rather than a broken one. Nothing to enable on the App ID beyond Associated
+  Domains, which `universal_links` already needs.
 - **App Review's network.** Apple's corporate range (17.0.0.0/8,
   2620:149::/32) is not treated as a VPN (`lib/geo/appleNetwork.ts`), so a
   reviewer is not sent to `/vpn-blocked`. State rules still apply to it, and an

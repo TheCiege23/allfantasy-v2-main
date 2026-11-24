@@ -27,6 +27,18 @@ class AppBridgeViewController: CAPBridgeViewController {
                 }
                 webView.configuration.userContentController.add(appleSignIn, name: AppleSignInHandler.messageName)
             }
+
+            // Face ID passkeys for www.allfantasy.ai, only in a build signed with
+            // `webcredentials:www.allfantasy.ai` (PasskeyHandler.swift) and on iOS 16+: the page
+            // offers Face ID only when this handler exists.
+            if #available(iOS 16.0, *) {
+                if PasskeyHandler.isEnabledInThisBuild {
+                    let passkeys = PasskeyHandler(webView: webView) { [weak self] in
+                        self?.view.window?.windowScene
+                    }
+                    webView.configuration.userContentController.add(passkeys, name: PasskeyHandler.messageName)
+                }
+            }
         }
     }
 }

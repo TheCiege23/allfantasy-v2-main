@@ -22,6 +22,8 @@ const read = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'ut
 describe('the apple-app-site-association document', () => {
   it('names the app and claims only the verify-email link', () => {
     expect(appSiteAssociation('ABCDE12345')).toEqual({
+      // Lets the app use this site's passkeys; opens no links.
+      webcredentials: { apps: ['ABCDE12345.ai.allfantasy.app'] },
       applinks: {
         details: [
           {
@@ -182,13 +184,31 @@ describe('the pieces this depends on', () => {
   it('the TestFlight workflow ships associated-domains only when universal_links is ticked', () => {
     const wf = read('.github/workflows/ios-testflight.yml')
     expect(wf).toMatch(/universal_links:\s*\n\s*description:/)
-    // The career widget (phase 6), the notification image extension and Sign in with Apple joined
-    // this step's condition; universal links must still be in it.
+    // The career widget (phase 6), the notification image extension, Sign in with Apple and passkeys
+    // joined this step's condition; universal links must still be in it.
     expect(wf).toMatch(
-      /if: \$\{\{ inputs\.push_notifications \|\| inputs\.universal_links( \|\| inputs\.career_widget)?( \|\| inputs\.notification_images)?( \|\| inputs\.sign_in_with_apple)? \}\}/,
+      /if: \$\{\{ inputs\.push_notifications \|\| inputs\.universal_links( \|\| inputs\.career_widget)?( \|\| inputs\.notification_images)?( \|\| inputs\.sign_in_with_apple)?( \|\| inputs\.passkeys)? \}\}/,
     )
     expect(wf).toMatch(/\[ "\$LINKS" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :com\.apple\.developer\.associated-domains"/)
     expect(wf).toMatch(/\[ "\$PUSH" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :aps-environment"/)
     expect(wf).toMatch(/universal_links was requested but the signed build has no associated-domains entitlement/)
+  })
+
+  it('passkeys: the build carries webcredentials for the site AND the switch the app reads, or fails', () => {
+    const wf = read('.github/workflows/ios-testflight.yml')
+    expect(wf).toMatch(/passkeys:\s*\n\s*description:/)
+    // Refuses without universal_links: webcredentials rides that entitlement.
+    expect(wf).toMatch(/if \[ "\$LINKS" != "true" \]; then\s*\n\s*echo "::error::passkeys needs universal_links/)
+    expect(wf).toContain('Add :com.apple.developer.associated-domains: string webcredentials:www.allfantasy.ai')
+    expect(wf).toContain('Add :AFPasskeys bool true')
+    // Both are checked on the exported, App Store-signed build.
+    expect(wf).toMatch(/passkeys was requested but the signed build has no webcredentials:www\.allfantasy\.ai/)
+    expect(wf).toMatch(/Print :AFPasskeys/)
+    // The app reads that exact switch, and the site's rpID is the domain it claims.
+    const swift = read('ios-app/ios/App/App/PasskeyHandler.swift')
+    expect(swift).toContain('forInfoDictionaryKey: "AFPasskeys"')
+    expect(swift).toContain('private let allowedRpId = "www.allfantasy.ai"')
+    expect(read('ios-app/ios/App/App/AppBridgeViewController.swift')).toContain('PasskeyHandler.isEnabledInThisBuild')
+    expect(read('ios-app/ios/App/App.xcodeproj/project.pbxproj')).toContain('PasskeyHandler.swift in Sources')
   })
 })
