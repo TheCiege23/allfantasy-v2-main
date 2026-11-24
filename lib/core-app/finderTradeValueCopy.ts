@@ -138,6 +138,8 @@ export type TradeValueCopy = {
   noStatsYet: string
   scoringUnknown: string
   sharesFootLeague: (leagueName: string) => string
+  /** The closed row that holds how the shares list is ranked (2026-11-24). */
+  sharesFootLabel: string
   sharesFootAll: string
   // TeamSplit
   splitHeading: string
