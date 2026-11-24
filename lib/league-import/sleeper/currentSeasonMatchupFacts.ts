@@ -1,6 +1,12 @@
 /**
- * Keeps the season being played current in `dw_matchup_facts` for an imported Sleeper league, from
- * the schedule the league sync has already fetched. No provider call is made here.
+ * Keeps the season being played current in `dw_matchup_facts` for an imported league, from the
+ * schedule the league sync has already fetched. No provider call is made here.
+ *
+ * Covers Sleeper, ESPN and Fantrax. Each provider's history service writes these rows at import
+ * with its own conventions, and this writer matches them exactly (see `MATCHUP_FACT_CONVENTIONS`),
+ * so the two never fight over a row. ESPN and Fantrax have no scheduled history refresh at all:
+ * measured 2026-11-24, every in-season ESPN league's rows were frozen at its import date (six of
+ * twelve were all 0-0) while `team_performances` was current to week 11.
  *
  * WHY THIS EXISTS (measured on production 2026-11-20, NFL week 11). The only writer of these rows
  * was `SleeperHistoricalMatchupSyncService`, reached at import and from
@@ -31,6 +37,34 @@ import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
 import type { NormalizedMatchup } from '../types'
 
+export type MatchupFactProvider = 'sleeper' | 'espn' | 'fantrax'
+
+type MatchupFactConvention = {
+  /**
+   * `lowerFirst`: teamA is the lower numeric roster id (Sleeper's history sync sorts the pair).
+   * `asProvided`: teamA is the provider's first team (ESPN and Fantrax keep their own order).
+   */
+  order: 'lowerFirst' | 'asProvided'
+  /** Whether a matchup with no score yet is stored (as 0-0, no winner) or left out. */
+  writeUnplayed: boolean
+}
+
+/**
+ * What each provider's history service writes, which this writer must reproduce:
+ *   sleeper  `SleeperHistoricalMatchupSyncService`   lower roster id first, unplayed weeks as 0-0
+ *   espn     `EspnHistoricalBackfillService`         ESPN's order, undecided matchups as 0-0
+ *   fantrax  `FantraxHistoricalBackfillService`      Fantrax's order, unplayed matchups not written
+ */
+export const MATCHUP_FACT_CONVENTIONS: Record<MatchupFactProvider, MatchupFactConvention> = {
+  sleeper: { order: 'lowerFirst', writeUnplayed: true },
+  espn: { order: 'asProvided', writeUnplayed: true },
+  fantrax: { order: 'asProvided', writeUnplayed: false },
+}
+
+export function isMatchupFactProvider(value: unknown): value is MatchupFactProvider {
+  return value === 'sleeper' || value === 'espn' || value === 'fantrax'
+}
+
 export type CurrentSeasonMatchupFact = {
   weekOrPeriod: number
   teamA: string
@@ -54,23 +88,41 @@ function rosterNumber(id: string): number | null {
   return id.trim() !== '' && Number.isInteger(n) && n > 0 ? n : null
 }
 
-function score(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+function isScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }
 
-/** The schedule as matchup-fact rows. Pure. A pairing without two distinct rosters is not a game. */
-export function matchupFactsFromSchedule(schedule: ReadonlyArray<NormalizedMatchup>): CurrentSeasonMatchupFact[] {
+function score(value: unknown): number {
+  return isScore(value) ? value : 0
+}
+
+/**
+ * The schedule as matchup-fact rows, in the given provider's conventions. Pure. A pairing without
+ * two distinct teams is not a game.
+ */
+export function matchupFactsFromSchedule(
+  schedule: ReadonlyArray<NormalizedMatchup>,
+  provider: MatchupFactProvider = 'sleeper',
+): CurrentSeasonMatchupFact[] {
+  const convention = MATCHUP_FACT_CONVENTIONS[provider]
   const out: CurrentSeasonMatchupFact[] = []
   const seen = new Set<string>()
   for (const week of schedule) {
     if (!Number.isInteger(week.week) || week.week <= 0) continue
     for (const mu of week.matchups ?? []) {
-      const one = rosterNumber(String(mu.roster_id_1 ?? ''))
-      const two = rosterNumber(String(mu.roster_id_2 ?? ''))
-      if (one == null || two == null || one === two) continue
-      const firstIsA = one < two
-      const teamA = String(firstIsA ? one : two)
-      const teamB = String(firstIsA ? two : one)
+      const id1 = String(mu.roster_id_1 ?? '').trim()
+      const id2 = String(mu.roster_id_2 ?? '').trim()
+      if (!id1 || !id2 || id1 === id2) continue
+      if (!convention.writeUnplayed && !(isScore(mu.points_1) && isScore(mu.points_2))) continue
+      let firstIsA = true
+      if (convention.order === 'lowerFirst') {
+        const one = rosterNumber(id1)
+        const two = rosterNumber(id2)
+        if (one == null || two == null) continue
+        firstIsA = one < two
+      }
+      const teamA = firstIsA ? id1 : id2
+      const teamB = firstIsA ? id2 : id1
       const key = `${week.week}:${teamA}:${teamB}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -124,6 +176,8 @@ export function liveMatchupFactsEnabled(env: Record<string, string | undefined> 
 
 export async function writeCurrentSeasonMatchupFacts(input: {
   leagueId: string
+  /** Defaults to Sleeper, the first provider this covered. */
+  provider?: MatchupFactProvider
   sport: string
   /** The season the schedule belongs to. Null means the provider did not say, and nothing is written. */
   season: number | null
@@ -133,7 +187,7 @@ export async function writeCurrentSeasonMatchupFacts(input: {
   if (!liveMatchupFactsEnabled()) return none('switched off')
   if (input.season == null || !Number.isInteger(input.season)) return none('no season')
 
-  const incoming = matchupFactsFromSchedule(input.schedule)
+  const incoming = matchupFactsFromSchedule(input.schedule, input.provider ?? 'sleeper')
   if (incoming.length === 0) return none('no pairings in schedule')
   const incomingWeeks = [...new Set(incoming.map((r) => r.weekOrPeriod))]
 
