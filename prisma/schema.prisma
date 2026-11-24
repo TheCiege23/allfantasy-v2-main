@@ -20911,6 +20911,8 @@ model PartnerPayout {
   externalRef   String?
   /// Why the last automatic transfer did not go through (shown in admin; never Stripe's raw text).
   transferError String?
+  /// Definite transfer refusals so far; part of the idempotency key so a retry is not a replayed failure.
+  transferAttempts Int     @default(0)
   approvedAt    DateTime?
   approvedBy    String?
   paidAt        DateTime?

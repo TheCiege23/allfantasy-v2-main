@@ -1,6 +1,7 @@
 import 'server-only'
 import type Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
+import { createOnboardingLink, createPayoutTransfer, createRecipientAccount, retrieveTransfersStatus, transfersStatusOf, type TransfersStatus } from './connectStripe'
 
 /**
  * Commissioner Partner Codes — paying commissioners through Stripe Connect.
@@ -11,32 +12,22 @@ import { prisma } from '@/lib/prisma'
  * Stripe's hosted onboarding collects identity, bank details and US tax info, which replaces
  * the hand-kept W-9.
  *
- * Readiness is ALWAYS the v2 capability path, re-checked before money moves:
- *   configuration.recipient.capabilities.stripe_balance.stripe_transfers.status === 'active'
- * (never the deprecated v1 payouts_enabled / charges_enabled).
+ * The Stripe calls themselves live in ./connectStripe (no database), which the sandbox drill
+ * (scripts/partner-connect-sandbox-drill.ts) runs against a test sandbox. This file adds the
+ * AllFantasy records around them.
  *
- * The platform needs Connect enabled in the Stripe Dashboard. That is a one-time step by the owner;
- * until it is done, account creation fails and the page says payouts aren't available yet.
+ * The platform needs Connect enabled in the Stripe Dashboard ("Marketplace" model). That is a
+ * one-time step by the owner; until it is done, account creation fails and the page says payouts
+ * aren't available yet.
  */
 
-export type TransfersStatus = 'active' | 'pending' | 'restricted' | 'unsupported' | 'none'
-
-type V2Account = {
-  id: string
-  configuration?: { recipient?: { capabilities?: { stripe_balance?: { stripe_transfers?: { status?: string } } } } | null } | null
-}
-
-export function transfersStatusOf(account: V2Account | null | undefined): TransfersStatus {
-  const s = account?.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status
-  return s === 'active' || s === 'pending' || s === 'restricted' || s === 'unsupported' ? s : 'none'
-}
+export { transfersStatusOf, type TransfersStatus }
 
 /** Read the account from Stripe and store its status (and, once active, that tax info is on file). */
 export async function refreshConnectStatus(stripe: Stripe, ownerUserId: string): Promise<TransfersStatus> {
   const profile = await prisma.partnerTaxProfile.findUnique({ where: { ownerUserId } })
   if (!profile?.stripeAccountId) return 'none'
-  const account = (await stripe.v2.core.accounts.retrieve(profile.stripeAccountId, { include: ['configuration.recipient'] })) as unknown as V2Account
-  const status = transfersStatusOf(account)
+  const status = await retrieveTransfersStatus(stripe, profile.stripeAccountId)
   await prisma.partnerTaxProfile.update({
     where: { ownerUserId },
     data: {
@@ -50,23 +41,20 @@ export async function refreshConnectStatus(stripe: Stripe, ownerUserId: string):
 }
 
 /** The commissioner's connected account, created on first use. */
+export class PayoutSetupNeedsEmailError extends Error {
+  constructor() {
+    super('Add an email address to your AllFantasy account to set up payouts')
+    this.name = 'PayoutSetupNeedsEmailError'
+  }
+}
+
 export async function ensureConnectedAccount(stripe: Stripe, args: { ownerUserId: string; email: string | null; displayName: string }): Promise<string> {
   const existing = await prisma.partnerTaxProfile.findUnique({ where: { ownerUserId: args.ownerUserId } })
   if (existing?.stripeAccountId) return existing.stripeAccountId
-  const account = (await stripe.v2.core.accounts.create(
-    {
-      display_name: args.displayName.slice(0, 100),
-      ...(args.email ? { contact_email: args.email } : {}),
-      dashboard: 'express',
-      identity: { country: 'us' },
-      defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
-      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
-      include: ['configuration.recipient'],
-      metadata: { af_user_id: args.ownerUserId, af_program: 'partner_codes' },
-    } as Stripe.V2.Core.AccountCreateParams,
-    // Two clicks on "Set up payouts" must not make two accounts.
-    { idempotencyKey: `partner-connect-account-${args.ownerUserId}` },
-  )) as unknown as V2Account
+  // Stripe requires a contact email on a recipient account; members who signed up by phone may have none.
+  const email = args.email?.trim()
+  if (!email) throw new PayoutSetupNeedsEmailError()
+  const account = await createRecipientAccount(stripe, { ...args, email })
   await prisma.partnerTaxProfile.upsert({
     where: { ownerUserId: args.ownerUserId },
     create: { ownerUserId: args.ownerUserId, stripeAccountId: account.id, stripeTransfersStatus: transfersStatusOf(account) },
@@ -77,18 +65,7 @@ export async function ensureConnectedAccount(stripe: Stripe, args: { ownerUserId
 
 /** Stripe-hosted onboarding (or "update my details" once onboarded). */
 export async function onboardingLink(stripe: Stripe, args: { accountId: string; baseUrl: string; update: boolean }): Promise<string> {
-  const urls = {
-    configurations: ['recipient' as const],
-    refresh_url: `${args.baseUrl}/partner-code?payouts=refresh`,
-    return_url: `${args.baseUrl}/partner-code?payouts=return`,
-  }
-  const link = await stripe.v2.core.accountLinks.create({
-    account: args.accountId,
-    use_case: args.update
-      ? { type: 'account_update', account_update: urls }
-      : { type: 'account_onboarding', account_onboarding: urls },
-  } as Stripe.V2.Core.AccountLinkCreateParams)
-  return (link as unknown as { url: string }).url
+  return createOnboardingLink(stripe, args)
 }
 
 /** A one-time link into their Express dashboard, where they see deposits to their bank. */
@@ -99,7 +76,7 @@ export async function dashboardLink(stripe: Stripe, accountId: string): Promise<
 
 export type SendResult =
   | { ok: true; transferId: string }
-  | { ok: false; reason: 'not_ready' | 'no_account' | 'insufficient_balance' | 'stripe_error'; message: string }
+  | { ok: false; reason: 'not_ready' | 'no_account' | 'insufficient_balance' | 'stripe_error'; message: string; definite: boolean }
 
 export const SEND_ERROR_COPY: Record<Exclude<SendResult, { ok: true }>['reason'], string> = {
   no_account: "They haven't set up payouts yet",
@@ -113,29 +90,21 @@ export const SEND_ERROR_COPY: Record<Exclude<SendResult, { ok: true }>['reason']
  * as the idempotency key, so a double click, a retry or a crash between "sent" and "recorded" can
  * never pay twice: Stripe returns the original transfer.
  */
-export async function sendPayoutTransfer(stripe: Stripe, payout: { id: string; ownerUserId: string; totalCents: number; periodMonth: string; partnerCodeId: string }): Promise<SendResult> {
+export async function sendPayoutTransfer(stripe: Stripe, payout: { id: string; ownerUserId: string; totalCents: number; periodMonth: string; partnerCodeId: string; transferAttempts?: number }): Promise<SendResult> {
   const profile = await prisma.partnerTaxProfile.findUnique({ where: { ownerUserId: payout.ownerUserId } })
-  if (!profile?.stripeAccountId) return { ok: false, reason: 'no_account', message: SEND_ERROR_COPY.no_account }
+  // Refused before Stripe is called: nothing was attempted, so these never use up an attempt.
+  if (!profile?.stripeAccountId) return { ok: false, reason: 'no_account', message: SEND_ERROR_COPY.no_account, definite: false }
   const status = await refreshConnectStatus(stripe, payout.ownerUserId)
-  if (status !== 'active') return { ok: false, reason: 'not_ready', message: SEND_ERROR_COPY.not_ready }
-  try {
-    const transfer = await stripe.transfers.create(
-      {
-        amount: payout.totalCents,
-        currency: 'usd',
-        destination: profile.stripeAccountId,
-        transfer_group: `partner-payout-${payout.id}`,
-        description: `AllFantasy Partner Code commission, ${payout.periodMonth}`,
-        metadata: { af_partner_payout_id: payout.id, af_partner_code_id: payout.partnerCodeId, period: payout.periodMonth },
-      },
-      { idempotencyKey: `partner-payout-${payout.id}` },
-    )
-    return { ok: true, transferId: transfer.id }
-  } catch (error) {
-    const code = (error as { code?: string })?.code
-    if (code === 'balance_insufficient') return { ok: false, reason: 'insufficient_balance', message: SEND_ERROR_COPY.insufficient_balance }
-    // Never pass Stripe's own message on: it can name key details and internal ids. Log it, show the code.
-    console.error('[partner-codes] transfer failed', { payoutId: payout.id, code, type: (error as { type?: string })?.type })
-    return { ok: false, reason: 'stripe_error', message: `${SEND_ERROR_COPY.stripe_error} (${code ?? 'unknown'})` }
-  }
+  if (status !== 'active') return { ok: false, reason: 'not_ready', message: SEND_ERROR_COPY.not_ready, definite: false }
+  const out = await createPayoutTransfer(stripe, {
+    payoutId: payout.id,
+    accountId: profile.stripeAccountId,
+    amountCents: payout.totalCents,
+    periodMonth: payout.periodMonth,
+    partnerCodeId: payout.partnerCodeId,
+    attempt: payout.transferAttempts ?? 0,
+  })
+  if (out.ok) return { ok: true, transferId: out.transferId }
+  if (out.insufficientBalance) return { ok: false, reason: 'insufficient_balance', message: SEND_ERROR_COPY.insufficient_balance, definite: out.definite }
+  return { ok: false, reason: 'stripe_error', message: `${SEND_ERROR_COPY.stripe_error} (${out.code ?? 'unknown'})`, definite: out.definite }
 }

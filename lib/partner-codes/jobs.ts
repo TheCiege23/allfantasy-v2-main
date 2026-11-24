@@ -301,7 +301,11 @@ export async function payPayout(payoutId: string, by: 'admin' | 'auto', adminUse
   if (!result.ok) {
     return prisma.partnerPayout.update({
       where: { id: p.id },
-      data: { status: 'approved', approvedAt: p.approvedAt ?? now, approvedBy: p.approvedBy ?? (by === 'auto' ? 'auto' : adminUserId), transferError: result.message },
+      data: {
+        status: 'approved', approvedAt: p.approvedAt ?? now, approvedBy: p.approvedBy ?? (by === 'auto' ? 'auto' : adminUserId), transferError: result.message,
+        // A definite refusal frees the next retry to use a fresh idempotency key (see createPayoutTransfer).
+        ...(result.definite ? { transferAttempts: { increment: 1 } } : {}),
+      },
     })
   }
   const paid = await prisma.$transaction(async (tx) => {

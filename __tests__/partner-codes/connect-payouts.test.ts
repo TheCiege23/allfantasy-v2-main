@@ -25,7 +25,11 @@ vi.mock('@/lib/prisma', () => ({
     },
     partnerPayout: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (db.payouts.has(where.id) ? { ...db.payouts.get(where.id) } : null)),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Row }) => Object.assign(db.payouts.get(where.id)!, data)),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Row }) => {
+        const row = db.payouts.get(where.id)!
+        for (const [k, v] of Object.entries(data)) row[k] = v && typeof v === 'object' && 'increment' in v ? (row[k] ?? 0) + v.increment : v
+        return row
+      }),
       findMany: vi.fn(async ({ where }: { where: Row }) =>
         Array.from(db.payouts.values()).filter((p) => p.status === where.status && p.totalCents <= (where.totalCents?.lte ?? Infinity) && p.transferError == null),
       ),
@@ -44,7 +48,7 @@ vi.mock('@/lib/prisma', () => ({
 
 const stripe = {
   v2: { core: { accounts: { retrieve: vi.fn() } } },
-  transfers: { create: vi.fn() },
+  transfers: { create: vi.fn(), list: vi.fn(async () => ({ data: [] as Row[] })) },
 }
 vi.mock('@/lib/stripe-client', () => ({ getStripeClient: () => stripe }))
 vi.mock('@/lib/resend-client', () => ({ sendNotificationEmail: vi.fn(async () => ({ ok: true })) }))
@@ -60,7 +64,7 @@ const accountWith = (status: string) => ({ id: 'acct_1', configuration: { recipi
 
 function seed(over: Row = {}) {
   db.profile = { ownerUserId: 'u1', stripeAccountId: 'acct_1', w9Status: 'verified', stripeTransfersStatus: 'active' }
-  db.payouts = new Map([['po_1', { id: 'po_1', ownerUserId: 'u1', partnerCodeId: 'pc1', periodMonth: '2026-10', totalCents: 3512, status: 'pending_review', approvedAt: null, approvedBy: null, transferError: null, ...over }]])
+  db.payouts = new Map([['po_1', { id: 'po_1', ownerUserId: 'u1', partnerCodeId: 'pc1', periodMonth: '2026-10', totalCents: 3512, status: 'pending_review', approvedAt: null, approvedBy: null, transferError: null, transferAttempts: 0, ...over }]])
   db.entries = [{ payoutId: 'po_1', status: 'accrued', flagged: false }]
 }
 
@@ -78,15 +82,16 @@ describe('payPayout', () => {
     seed()
   })
 
-  it('sends the statement as a transfer keyed on the payout id, then marks it and its entries paid', async () => {
+  it('sends the statement as a transfer keyed on the payout id + attempt, then marks it and its entries paid', async () => {
     stripe.v2.core.accounts.retrieve.mockResolvedValue(accountWith('active'))
     stripe.transfers.create.mockResolvedValue({ id: 'tr_1' })
     const { payPayout } = await import('@/lib/partner-codes/jobs')
     const out = await payPayout('po_1', 'admin', 'admin-1')
     expect(stripe.transfers.create).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 3512, currency: 'usd', destination: 'acct_1' }),
-      { idempotencyKey: 'partner-payout-po_1' },
+      { idempotencyKey: 'partner-payout-po_1-a0' },
     )
+    expect(stripe.transfers.create.mock.calls[0][0]).toMatchObject({ transfer_group: 'partner-payout-po_1' })
     expect(out).toMatchObject({ status: 'paid', method: 'stripe_connect', externalRef: 'tr_1', transferError: null })
     expect(db.entries[0].status).toBe('paid')
   })
@@ -123,6 +128,45 @@ describe('payPayout', () => {
     const { payPayout } = await import('@/lib/partner-codes/jobs')
     await expect(payPayout('po_1', 'admin')).rejects.toThrow(/hold/)
     expect(stripe.transfers.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('retrying a failed statement (found by the sandbox drill)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    seed()
+    stripe.v2.core.accounts.retrieve.mockResolvedValue(accountWith('active'))
+  })
+
+  it('a definite refusal moves the next retry to a fresh key, so Stripe does not replay the failure', async () => {
+    stripe.transfers.create.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'balance_insufficient', type: 'StripeInvalidRequestError' }))
+    stripe.transfers.create.mockResolvedValueOnce({ id: 'tr_ok' })
+    const { payPayout } = await import('@/lib/partner-codes/jobs')
+    expect((await payPayout('po_1', 'admin')).status).toBe('approved')
+    expect(db.payouts.get('po_1')!.transferAttempts).toBe(1)
+    expect((await payPayout('po_1', 'admin')).status).toBe('paid')
+    expect(stripe.transfers.create.mock.calls.map((c) => c[1].idempotencyKey)).toEqual(['partner-payout-po_1-a0', 'partner-payout-po_1-a1'])
+  })
+
+  it('an uncertain failure (connection error) keeps the same key, so a retry cannot make a second transfer', async () => {
+    stripe.transfers.create.mockRejectedValueOnce(Object.assign(new Error('socket hang up'), { type: 'StripeConnectionError' }))
+    const { payPayout } = await import('@/lib/partner-codes/jobs')
+    await payPayout('po_1', 'admin')
+    expect(db.payouts.get('po_1')!.transferAttempts).toBe(0)
+  })
+
+  it('if a transfer already exists for the statement, it is recorded as paid and nothing new is sent', async () => {
+    stripe.transfers.list.mockResolvedValueOnce({ data: [{ id: 'tr_earlier', reversed: false }] })
+    const { payPayout } = await import('@/lib/partner-codes/jobs')
+    expect(await payPayout('po_1', 'admin')).toMatchObject({ status: 'paid', externalRef: 'tr_earlier' })
+    expect(stripe.transfers.create).not.toHaveBeenCalled()
+  })
+
+  it('refusals before Stripe is called (not ready) never use up an attempt', async () => {
+    stripe.v2.core.accounts.retrieve.mockResolvedValue(accountWith('pending'))
+    const { payPayout } = await import('@/lib/partner-codes/jobs')
+    await payPayout('po_1', 'admin')
+    expect(db.payouts.get('po_1')!.transferAttempts).toBe(0)
   })
 })
 

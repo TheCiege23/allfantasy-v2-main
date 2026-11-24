@@ -6,7 +6,7 @@ import { checkCodeAvailability, claimPartnerCode } from '@/lib/partner-codes/ser
 import { CODE_REASON_COPY } from '@/lib/partner-codes/code'
 import { SHARE_LOGOS, isShareLook } from '@/lib/partner-codes/shareLooks'
 import { LOGO_ERROR_COPY, removePartnerLogo, uploadPartnerLogo } from '@/lib/partner-codes/logo'
-import { dashboardLink, ensureConnectedAccount, onboardingLink, refreshConnectStatus } from '@/lib/partner-codes/connect'
+import { dashboardLink, ensureConnectedAccount, onboardingLink, PayoutSetupNeedsEmailError, refreshConnectStatus } from '@/lib/partner-codes/connect'
 import { getStripeClient } from '@/lib/stripe-client'
 import { getBaseUrl } from '@/lib/get-base-url'
 
@@ -77,6 +77,7 @@ async function payoutsAction(userId: string, email: string | null, action: 'payo
     const status = await refreshConnectStatus(stripe, userId)
     return NextResponse.json({ url: await onboardingLink(stripe, { accountId, baseUrl: getBaseUrl(), update: status === 'active' }) })
   } catch (error) {
+    if (error instanceof PayoutSetupNeedsEmailError) return NextResponse.json({ error: error.message, reason: 'needs_email' }, { status: 400 })
     // Never Stripe's raw text to the browser (it can name key details). The likely cause before launch
     // is Connect not yet enabled on the platform account.
     console.error('[partner-codes] payouts action failed', { action, code: (error as { code?: string })?.code, type: (error as { type?: string })?.type })
