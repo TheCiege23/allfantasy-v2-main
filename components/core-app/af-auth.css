@@ -132,6 +132,11 @@
   color: var(--muted);
 }
 
+/* The same line in the error colour: a Partner Code on /signup that did not check out. */
+.af-au-hint--error {
+  color: var(--bad);
+}
+
 .af-au-field-head {
   display: flex;
   align-items: baseline;

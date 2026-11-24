@@ -8,7 +8,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-vi.mock('next-auth/react', () => ({ signIn: vi.fn(async () => ({ error: undefined })) }))
+const auth = vi.hoisted(() => ({
+  signIn: vi.fn(async (..._a: unknown[]) => ({ error: undefined as string | undefined })),
+  social: false,
+}))
+vi.mock('next-auth/react', () => ({ signIn: (...a: unknown[]) => auth.signIn(...a) }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -20,18 +24,32 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }))
-vi.mock('@/lib/auth/SocialProviderResolver', () => ({ isSocialProviderEnabled: () => false }))
+vi.mock('@/lib/auth/SocialProviderResolver', () => ({ isSocialProviderEnabled: (p: string) => auth.social && p === 'google' }))
 
 import { AuthV4 } from '@/components/core-app/screens/AuthV4'
 
-const fetchMock = vi.fn(async (_url: unknown, _init?: unknown) => ({
-  ok: true,
-  status: 200,
-  json: async () => ({ ok: true }),
-  text: async () => JSON.stringify({ ok: true, userId: 'u1' }),
-}))
+let rememberStatus = 200
+const fetchMock = vi.fn(async (url: unknown, _init?: unknown) => {
+  if (url === '/api/partner-codes/remember') {
+    const ok = rememberStatus === 200
+    return {
+      ok,
+      status: rememberStatus,
+      json: async () => (ok ? { ok: true, code: 'TheCiege' } : { error: "We don't recognize that partner code. Check it, or leave the box empty." }),
+    }
+  }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true }),
+    text: async () => JSON.stringify({ ok: true, userId: 'u1' }),
+  }
+})
 beforeEach(() => {
   fetchMock.mockClear()
+  auth.signIn.mockClear()
+  auth.social = false
+  rememberStatus = 200
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
@@ -80,5 +98,51 @@ describe('sign-up Partner code box', () => {
     fillAndSubmit()
     await waitFor(() => expect(registerBody()).not.toBeNull())
     expect(registerBody().partnerCode).toBe('TheCiege')
+  })
+})
+
+describe('the code box with Apple and Google sign-in', () => {
+  const calls = () => fetchMock.mock.calls.map((c) => c[0])
+
+  it('sits above the social buttons', async () => {
+    auth.social = true
+    render(<AuthV4 mode="signup" />)
+    const open = await screen.findByTestId('signup-partner-code-open')
+    const grid = screen.getByTestId('signup-oauth-lead')
+    expect(open.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('saves a typed code before Google opens', async () => {
+    auth.social = true
+    render(<AuthV4 mode="signup" />)
+    fireEvent.click(await screen.findByTestId('signup-partner-code-open'))
+    fireEvent.change(screen.getByPlaceholderText('Their code'), { target: { value: 'TheCiege' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }))
+    await waitFor(() => expect(auth.signIn).toHaveBeenCalledWith('google', expect.anything()))
+    expect(calls()).toContain('/api/partner-codes/remember')
+    const body = JSON.parse((fetchMock.mock.calls.find((c) => c[0] === '/api/partner-codes/remember')![1] as { body: string }).body)
+    expect(body).toEqual({ code: 'TheCiege' })
+    // Saved first, then the provider: the order is what makes the new account carry the code.
+    const rememberAt = fetchMock.mock.invocationCallOrder[fetchMock.mock.calls.findIndex((c) => c[0] === '/api/partner-codes/remember')]
+    expect(rememberAt).toBeLessThan(auth.signIn.mock.invocationCallOrder[0])
+  })
+
+  it('a code that does not check out stops Google and says why', async () => {
+    auth.social = true
+    rememberStatus = 400
+    render(<AuthV4 mode="signup" />)
+    fireEvent.click(await screen.findByTestId('signup-partner-code-open'))
+    fireEvent.change(screen.getByPlaceholderText('Their code'), { target: { value: 'Typo1' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/don't recognize that partner code/)
+    expect(auth.signIn).not.toHaveBeenCalled()
+  })
+
+  it('with no code, Google opens straight away and nothing is saved', async () => {
+    auth.social = true
+    render(<AuthV4 mode="signup" />)
+    fireEvent.click(await screen.findByRole('button', { name: /continue with google/i }))
+    await waitFor(() => expect(auth.signIn).toHaveBeenCalled())
+    expect(calls()).not.toContain('/api/partner-codes/remember')
   })
 })

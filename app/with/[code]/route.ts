@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isPartnerCodesEnabled, PARTNER_CODE_COOKIE, PARTNER_CODE_COOKIE_MAX_AGE } from '@/lib/partner-codes/flags'
+import { isPartnerCodesEnabled, PARTNER_CODE_COOKIE, partnerCodeCookieOptions } from '@/lib/partner-codes/flags'
 import { findPartnerCode } from '@/lib/partner-codes/service'
 import { getBaseUrl } from '@/lib/get-base-url'
 
@@ -19,12 +19,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ code: string }
   const code = await findPartnerCode(decodeURIComponent(raw ?? '')).catch(() => null)
   if (!code || code.status !== 'active') return NextResponse.redirect(`${base}/signup`)
   const res = NextResponse.redirect(`${base}/signup?code=${encodeURIComponent(code.code)}`)
-  res.cookies.set(PARTNER_CODE_COOKIE, code.code, {
-    maxAge: PARTNER_CODE_COOKIE_MAX_AGE,
-    path: '/',
-    sameSite: 'lax',
-    secure: base.startsWith('https://'),
-    httpOnly: true,
-  })
+  res.cookies.set(PARTNER_CODE_COOKIE, code.code, partnerCodeCookieOptions(base.startsWith('https://')))
   return res
 }
