@@ -20747,6 +20747,8 @@ model PartnerProgramSettings {
   activeWindowDays            Int      @default(28)
   paymentClearDays            Int      @default(30)
   minPayoutCents              Int      @default(2500)
+  /// Statements up to this amount are sent without admin approval when nothing about them is flagged. 0 = off.
+  autoSendMaxCents            Int      @default(0)
   maxCodeChangesPerYear       Int      @default(2)
   /// Stripe coupons built from the settings above; rebuilt when they change.
   stripeMonthlyCouponId       String?
@@ -20907,6 +20909,8 @@ model PartnerPayout {
   /// manual | stripe_connect (later)
   method        String?
   externalRef   String?
+  /// Why the last automatic transfer did not go through (shown in admin; never Stripe's raw text).
+  transferError String?
   approvedAt    DateTime?
   approvedBy    String?
   paidAt        DateTime?
@@ -20927,5 +20931,10 @@ model PartnerTaxProfile {
   w9Status     String   @default("missing")
   payoutMethod String?
   legalName    String?
+  /// Stripe Connect (v2) recipient account that receives commission transfers.
+  stripeAccountId       String?   @unique
+  /// active | pending | restricted | unsupported | none: the stripe_transfers capability.
+  stripeTransfersStatus String?
+  stripeStatusCheckedAt DateTime?
   updatedAt    DateTime @updatedAt
 }

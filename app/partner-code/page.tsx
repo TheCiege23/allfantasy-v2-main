@@ -5,6 +5,8 @@ import { isPartnerCodesEnabled, isPartnerDemoEnabled } from '@/lib/partner-codes
 import { getPartnerDashboard } from '@/lib/partner-codes/dashboard'
 import { PartnerCodeDashboard } from '@/components/partner-codes/PartnerCodeDashboard'
 import { prisma } from '@/lib/prisma'
+import { refreshConnectStatus } from '@/lib/partner-codes/connect'
+import { getStripeClient } from '@/lib/stripe-client'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -14,7 +16,7 @@ export const metadata = { title: 'Partner Code · AllFantasy', robots: { index: 
  * The commissioner's Partner Code page (docs/partner-codes/README.md).
  * `?demo=1` shows the seeded DEMOCOMMISH data, only where PARTNER_DEMO is on.
  */
-export default async function PartnerCodePage(props: { searchParams?: Promise<{ demo?: string }> }) {
+export default async function PartnerCodePage(props: { searchParams?: Promise<{ demo?: string; payouts?: string }> }) {
   if (!isPartnerCodesEnabled()) notFound()
   const sp = (await props.searchParams) ?? {}
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -29,6 +31,10 @@ export default async function PartnerCodePage(props: { searchParams?: Promise<{ 
       viewUserId = demoCode.ownerUserId
       demo = true
     }
+  }
+  // Back from Stripe's payout setup: read the account's status now rather than waiting for the daily job.
+  if (!demo && (sp.payouts === 'return' || sp.payouts === 'refresh')) {
+    await refreshConnectStatus(getStripeClient(), userId).catch(() => null)
   }
   const data = await getPartnerDashboard(viewUserId)
   return <PartnerCodeDashboard initial={data} demo={demo} />

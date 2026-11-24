@@ -41,6 +41,7 @@ const after: PartnerDashboard = {
       { periodMonth: '2026-08', totalCents: 5236, status: 'paid', heldReason: null },
     ],
     taxFormStatus: 'verified',
+    payoutSetup: 'active',
   },
 }
 
@@ -49,7 +50,7 @@ const before: PartnerDashboard = {
   code: {
     ...after.code!, paidSubs: 6, activeUsers: 21, pendingPaid: 3, freePlan: 'commissioner', cashOn: false, cashUnlockedAt: null, signups: 27,
     mix: [{ plan: 'AF Pro', month: 5, year: 0 }, { plan: 'AF Supreme', month: 1, year: 0 }],
-    earnings: { thisMonthCents: 0, lifetimeCents: 0, paidOutCents: 0, pendingCents: 0 }, payouts: [], taxFormStatus: 'missing',
+    earnings: { thisMonthCents: 0, lifetimeCents: 0, paidOutCents: 0, pendingCents: 0 }, payouts: [], taxFormStatus: 'missing', payoutSetup: 'none',
   },
 }
 

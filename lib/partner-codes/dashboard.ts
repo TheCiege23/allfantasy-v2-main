@@ -28,6 +28,8 @@ export type PartnerDashboard = {
     earnings: { thisMonthCents: number; lifetimeCents: number; paidOutCents: number; pendingCents: number }
     payouts: Array<{ periodMonth: string; totalCents: number; status: string; heldReason: string | null }>
     taxFormStatus: string
+    /** none | pending | restricted | unsupported | active: their Stripe payout account. */
+    payoutSetup: string
   }
 }
 
@@ -109,6 +111,7 @@ export async function getPartnerDashboard(userId: string, now = new Date()): Pro
       },
       payouts: payouts.map((p) => ({ periodMonth: p.periodMonth, totalCents: p.totalCents, status: p.status, heldReason: p.heldReason })),
       taxFormStatus: tax?.w9Status ?? 'missing',
+      payoutSetup: tax?.stripeAccountId ? tax.stripeTransfersStatus ?? 'pending' : 'none',
     },
   }
 }

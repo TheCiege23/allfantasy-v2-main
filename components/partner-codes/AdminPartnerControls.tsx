@@ -13,7 +13,7 @@ async function post(body: Record<string, unknown>): Promise<string | null> {
 
 const small = 'min-h-10 rounded-lg px-3.5 font-semibold'
 
-export function AdminPartnerActions({ kind, id, status }: { kind: 'payout' | 'referral'; id: string; status: string }) {
+export function AdminPartnerActions({ kind, id, status, sendsAutomatically = false, failed = false }: { kind: 'payout' | 'referral'; id: string; status: string; sendsAutomatically?: boolean; failed?: boolean }) {
   const router = useRouter()
   const [err, setErr] = useState<string | null>(null)
   const run = async (action: string) => {
@@ -26,8 +26,11 @@ export function AdminPartnerActions({ kind, id, status }: { kind: 'payout' | 're
     <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
       {kind === 'payout' ? (
         <>
-          {status !== 'approved' ? <button type="button" onClick={() => run('approve')} className={`${small} bg-purple-500 text-white`}>Approve</button> : null}
-          {status === 'approved' ? <button type="button" onClick={() => run('mark_paid')} className={`${small} bg-emerald-600 text-white`}>Mark paid</button> : null}
+          {status !== 'approved' ? (
+            <button type="button" onClick={() => run('approve')} className={`${small} bg-purple-500 text-white`}>{sendsAutomatically ? 'Approve & send' : 'Approve'}</button>
+          ) : null}
+          {status === 'approved' && failed ? <button type="button" onClick={() => run('send')} className={`${small} bg-purple-500 text-white`}>Retry send</button> : null}
+          {status === 'approved' && !sendsAutomatically ? <button type="button" onClick={() => run('mark_paid')} className={`${small} bg-emerald-600 text-white`}>Mark paid</button> : null}
           {status !== 'held' ? <button type="button" onClick={() => run('hold')} className={`${small} border border-[#3b3f6e]`}>Hold</button> : null}
         </>
       ) : (
@@ -82,6 +85,7 @@ const FIELDS: Array<{ key: keyof PartnerSettings; label: string; kind?: 'select'
   { key: 'rewardGraceDays', label: 'Grace days before losing it' },
   { key: 'paymentClearDays', label: 'Days before a payment counts' },
   { key: 'minPayoutCents', label: 'Minimum payout (cents)' },
+  { key: 'autoSendMaxCents', label: 'Send without approval up to (cents, 0 = off)' },
   { key: 'maxCodeChangesPerYear', label: 'Code changes per year' },
 ]
 

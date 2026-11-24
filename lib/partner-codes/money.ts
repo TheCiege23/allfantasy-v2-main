@@ -194,7 +194,7 @@ export function buildPayout(args: {
   if (totalCents < 0) return { kind: 'none', totalCents, reason: 'negative_balance' }
   if (totalCents < args.settings.minPayoutCents) return { kind: 'none', totalCents, reason: 'below_minimum' }
   if (!args.hasTaxForm) {
-    return { kind: 'payout', totalCents, status: 'held', heldReason: 'Waiting on the W-9 tax form' }
+    return { kind: 'payout', totalCents, status: 'held', heldReason: 'Waiting for payout setup (bank and tax info)' }
   }
   return { kind: 'payout', totalCents, status: 'pending_review', heldReason: null }
 }

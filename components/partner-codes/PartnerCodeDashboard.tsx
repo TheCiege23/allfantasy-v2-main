@@ -44,7 +44,7 @@ export function PartnerCodeDashboard({ initial, demo, imageBase = '/api/partner-
             <Earnings c={c} />
             <div className="grid gap-6 lg:grid-cols-2">
               <Mix c={c} />
-              <Statements c={c} s={s} />
+              <Statements c={c} s={s} demo={demo} />
             </div>
             <ShareMaker c={c} demo={demo} imageBase={imageBase} onLogoChanged={reload} />
           </>
@@ -290,15 +290,54 @@ const PAYOUT_PILL: Record<string, string> = {
 }
 const PAYOUT_LABEL: Record<string, string> = { paid: 'Paid', approved: 'Approved', pending_review: 'In review', held: 'Held' }
 
-function Statements({ c, s }: { c: C; s: S }) {
+function PayoutSetup({ c, demo }: { c: C; demo: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const go = async (action: 'payouts_setup' | 'payouts_dashboard') => {
+    if (demo) return
+    setBusy(true)
+    setErr(null)
+    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action }) })
+    const j = await res.json().catch(() => ({}))
+    if (res.ok && j.url) { window.location.href = j.url; return }
+    setBusy(false)
+    setErr(j.error ?? 'Something went wrong')
+  }
+  const ready = c.payoutSetup === 'active'
+  const started = c.payoutSetup !== 'none'
+  const line = ready
+    ? 'Payouts go straight to your bank.'
+    : c.payoutSetup === 'pending'
+      ? 'Stripe is checking your details. This usually takes a few minutes.'
+      : started
+        ? 'Stripe needs a bit more information before it can pay you.'
+        : 'Add your bank and tax info through Stripe so we can pay you. It takes about 5 minutes.'
+  return (
+    <div className={`mt-3 flex flex-col gap-2 rounded-xl border p-4 ${ready ? 'border-emerald-500/40 bg-[#0f2e22]/40' : 'border-[#5b3a86] bg-[#0a0e1a]'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className={ready ? 'text-emerald-400' : 'text-amber-300'}>{ready ? 'Payouts are set up' : started ? 'Finish payout setup' : 'Set up payouts'}</strong>
+        {ready ? (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy || demo} onClick={() => go('payouts_dashboard')} className={`${btnGhost} disabled:opacity-60`}>See payouts in Stripe</button>
+            <button type="button" disabled={busy || demo} onClick={() => go('payouts_setup')} className="min-h-11 px-2 text-sm font-semibold text-[#a3a8c9] underline disabled:opacity-60">Update bank or tax info</button>
+          </div>
+        ) : (
+          <button type="button" disabled={busy || demo} onClick={() => go('payouts_setup')} className={`${btnPrimary} disabled:opacity-60`}>{busy ? 'Opening Stripe…' : started ? 'Continue setup' : 'Set up payouts'}</button>
+        )}
+      </div>
+      <p className="text-[13px] text-[#c7cbe6]">{line}</p>
+      {err ? <p className="text-[13px] font-semibold text-rose-300">{err}</p> : null}
+    </div>
+  )
+}
+
+function Statements({ c, s, demo }: { c: C; s: S; demo: boolean }) {
   return (
     <section className={card} aria-labelledby="st-h">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="st-h" className="text-lg font-bold">Monthly statements</h2>
-        <span className={`text-[13px] font-semibold ${c.taxFormStatus === 'missing' ? 'text-amber-300' : 'text-emerald-400'}`}>
-          {c.taxFormStatus === 'missing' ? 'W-9 needed before payouts' : 'W-9 on file'}
-        </span>
       </div>
+      <PayoutSetup c={c} demo={demo} />
       {c.payouts.length ? (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">

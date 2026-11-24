@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
 /**
  * POST { action: 'settings', settings: {...} }
- *      { action: 'approve' | 'hold' | 'mark_paid', payoutId, note? }
+ *      { action: 'approve' | 'send' | 'hold' | 'mark_paid', payoutId, note? }   (approve sends on Stripe Connect; send retries)
  *      { action: 'clear' | 'reject', referralId }
  *      { action: 'logo_approve' | 'logo_reject', partnerCodeId, reason? }
  */
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       const settings = await updatePartnerSettings((body?.settings ?? {}) as Record<string, unknown>, adminId)
       return NextResponse.json({ ok: true, settings })
     }
-    if (action === 'approve' || action === 'hold' || action === 'mark_paid') {
+    if (action === 'approve' || action === 'send' || action === 'hold' || action === 'mark_paid') {
       const payout = await setPayoutStatus(String(body?.payoutId ?? ''), action, adminId, typeof body?.note === 'string' ? body.note : undefined)
       return NextResponse.json({ ok: true, status: payout.status })
     }
