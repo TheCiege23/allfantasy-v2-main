@@ -209,14 +209,15 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
   const myPlayers = context.teams.find((t) => t.isUserTeam)?.players ?? []
   const otherTeams = context.teams.filter((t) => !t.isUserTeam && t.players.length > 0)
   const deadline = k.selectionDeadline
-    ? new Date(k.selectionDeadline).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    ? new Date(k.selectionDeadline).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : null
 
   return (
     <section className="kp-panel space-y-3 rounded-xl p-4" data-testid="keeper-war-room-panel">
       <div className="flex flex-wrap items-center gap-2">
         <Sparkles className="kp-accent h-4 w-4" />
-        <h2 className="kp-text text-sm font-bold">AF Legacy — Keeper</h2>
+        {/* Named for where it lives (the War Room tab), as Best Ball's and Guilly's are — not "AF Legacy — Keeper". */}
+        <h2 className="kp-text text-sm font-bold">Keeper War Room</h2>
         <span className="kp-chip rounded-full px-2 py-0.5 text-[11px] font-semibold">
           {context.sport} · {context.scoring.scoringPreset}
         </span>
@@ -312,9 +313,8 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
             {TOOL_LABEL[t]}
           </button>
         ))}
-        {(['waivers', 'lineup'] as const).map((t) => (
-          <button key={t} type="button" onClick={() => void runTool(t)} disabled={toolBusy || !seasonActive}
-            title={seasonActive ? undefined : 'Available once the season starts'}
+        {(seasonActive ? (['waivers', 'lineup'] as const) : []).map((t) => (
+          <button key={t} type="button" onClick={() => void runTool(t)} disabled={toolBusy}
             aria-pressed={tool === t}
             data-testid={`keeper-war-room-tool-${t}`}
             className="kp-btn min-h-[36px] rounded-lg px-3 py-1.5 text-[12px] font-semibold disabled:opacity-50">
@@ -394,7 +394,7 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
             <div className="kp-text2 mt-2 space-y-1" data-testid="keeper-war-room-trade-analyze-result">
               {/* 🛑 THE GRADE IS THE VERDICT (2026-09-29). The engine's own accept/reject/neutral is never shown. */}
               <WarRoomTradeGradeLine grade={tradeGrade} testId="keeper-war-room-trade-grade" />
-              {tradeAnalysis.explanationFacts.map((f) => (<p key={f}>{f}</p>))}
+              {tradeAnalysis.explanationFacts.filter((f) => !/^You give .+ and get /.test(f)).map((f) => (<p key={f}>{f}</p>))}
               {tradeAnalysis.keeperImpact.map((f) => (<p key={f} className="kp-good">{f}</p>))}
               {tradeAnalysis.riskFlags.length > 0 && <ul className="mt-2 space-y-1">{tradeAnalysis.riskFlags.map((f) => (<Flag key={f}>{f}</Flag>))}</ul>}
             </div>

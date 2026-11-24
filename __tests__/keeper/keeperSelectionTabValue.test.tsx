@@ -21,17 +21,19 @@ function stub(valueReport: unknown) {
 }
 
 describe('keeper screen — value report', () => {
+  // In rounds, as the War Room says it (2026-11-24): the cost round is on the card's line above, so not repeated.
   it('formats a player above, at and below his cost', () => {
-    expect(keeperValueLine({ marketRank: 10, pickSlot: 102, surplus: 92 })).toBe('Worth 92 picks more than he costs (drafted around pick 10, costs pick 102)')
-    expect(keeperValueLine({ marketRank: 30, pickSlot: 30, surplus: 0 })).toBe('Worth about what he costs (drafted around pick 30, costs pick 30)')
-    expect(keeperValueLine({ marketRank: 80, pickSlot: 30, surplus: -50 })).toBe('Worth 50 picks less than he costs (drafted around pick 80, costs pick 30)')
+    expect(keeperValueLine({ marketRank: 10, pickSlot: 102, surplus: 92 }, 9, 12)).toEqual({ text: '8 rounds of value · usually goes in round 1', tone: 'good' })
+    expect(keeperValueLine({ marketRank: 30, pickSlot: 30, surplus: 0 }, 3, 12)).toEqual({ text: 'About what he costs · usually goes in round 3', tone: 'even' })
+    expect(keeperValueLine({ marketRank: 80, pickSlot: 30, surplus: -50 }, 3, 12)).toEqual({ text: "Costs 4 rounds more than he's worth · usually goes in round 7", tone: 'bad' })
+    expect(keeperValueLine({ marketRank: 13, pickSlot: 24, surplus: 11 }, 3, 12).text).toBe('1 round of value · usually goes in round 2')
   })
 
   it('shows each candidate’s value when the league has the report', async () => {
     stub({ available: true, values: { p1: { marketRank: 10, pickSlot: 102, surplus: 92 }, p2: { marketRank: 80, pickSlot: 30, surplus: -50 } } })
     render(<KeeperSelectionTab leagueId="L" />)
-    expect(await screen.findByText('Worth 92 picks more than he costs (drafted around pick 10, costs pick 102)')).toBeTruthy()
-    expect(screen.getByText(/Worth 50 picks less/)).toBeTruthy()
+    expect(await screen.findByText('8 rounds of value · usually goes in round 1')).toBeTruthy()
+    expect(screen.getByText(/Costs 4 rounds more than he's worth/)).toBeTruthy()
     expect(screen.getByTestId('keeper-value-note')).toBeTruthy()
   })
 
