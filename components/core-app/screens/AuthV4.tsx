@@ -194,10 +194,13 @@ function OAuthGrid({
   callbackUrl,
   lead = false,
   leadDivider = 'Or sign up with email',
+  beforeSignIn,
 }: {
   callbackUrl: string
   lead?: boolean
   leadDivider?: string
+  /** Runs before the provider opens; `false` stays on the page (a Partner Code that did not check out). */
+  beforeSignIn?: () => Promise<boolean>
 }) {
   const [pending, setPending] = useState<SocialProvider | null>(null)
 
@@ -234,6 +237,7 @@ function OAuthGrid({
                 if (lead) trackSignupMethod(p.id)
                 setPending(p.id)
                 try {
+                  if (beforeSignIn && !(await beforeSignIn())) return
                   await signIn(p.id, { callbackUrl })
                 } finally {
                   setPending(null)
@@ -680,9 +684,35 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
    * sets a cookie, but someone who saw the code on a share image and installed the app has neither —
    * typing it is how they count for the commissioner. Folded behind a link unless the URL carries one,
    * so most people never see an extra box. /api/auth/register checks it before creating anything.
+   *
+   * It sits ABOVE the Apple and Google buttons, and those buttons first send a typed code to
+   * /api/partner-codes/remember, which checks it and sets the same cookie /with/CODE sets; the
+   * social account is created in lib/auth/SocialAccountLinkingService, which reads that cookie.
+   * A code that does not check out stops the button with the reason, rather than signing up
+   * someone who will never count for the commissioner they meant.
    */
   const [partnerCode, setPartnerCode] = useState('')
   const [partnerOpen, setPartnerOpen] = useState(false)
+  const [partnerError, setPartnerError] = useState<string | null>(null)
+  async function rememberPartnerCode(): Promise<boolean> {
+    setPartnerError(null)
+    if (!partnerCode) return true
+    try {
+      const res = await fetch('/api/partner-codes/remember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: partnerCode }),
+      })
+      // 404: the program is off, so there is nothing to remember and nothing to block.
+      if (res.ok || res.status === 404) return true
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      setPartnerError(readableApiError(data, 'We could not check that partner code. Please try again.'))
+      return false
+    } catch {
+      setPartnerError('We could not check that partner code. Please try again.')
+      return false
+    }
+  }
   useEffect(() => {
     const fromUrl = (new URLSearchParams(window.location.search).get('code') ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20)
     if (fromUrl) {
@@ -874,13 +904,50 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
         </div>
       </header>
 
+      {partnerOpen ? (
+        <label className="af-au-field" data-testid="signup-partner-code">
+          <span className="af-label">Partner code (optional)</span>
+          <input
+            type="text"
+            name="partnerCode"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            placeholder="Their code"
+            maxLength={20}
+            value={partnerCode}
+            aria-invalid={partnerError ? true : undefined}
+            aria-describedby="signup-partner-code-hint"
+            onChange={(e) => {
+              setPartnerCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))
+              setPartnerError(null)
+            }}
+          />
+          {partnerError ? (
+            <span id="signup-partner-code-hint" className="af-au-hint af-au-hint--error" role="alert">{partnerError}</span>
+          ) : (
+            <span id="signup-partner-code-hint" className="af-au-hint">From the commissioner who invited you. Works with every way to sign up below.</span>
+          )}
+        </label>
+      ) : (
+        <button
+          type="button"
+          className="af-au-link-btn"
+          data-testid="signup-partner-code-open"
+          onClick={() => setPartnerOpen(true)}
+        >
+          Have a partner code?
+        </button>
+      )}
+
       {/* iOS app only: one tap, no username or password (the social grid is hidden there). */}
-      <AppleNativeSignInButton callbackUrl={callbackUrl} showTerms />
+      <AppleNativeSignInButton callbackUrl={callbackUrl} showTerms beforeSignIn={rememberPartnerCode} />
 
       <OAuthGrid
         callbackUrl={callbackUrl}
         lead
         leadDivider={method === 'phone' ? 'Or sign up with your phone' : 'Or sign up with email'}
+        beforeSignIn={rememberPartnerCode}
       />
 
       <form className="af-au-form" onSubmit={onSubmit}>
@@ -949,33 +1016,6 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
               : 'Link it now and your Sleeper leagues import in one click, right after you sign up.'}
           </span>
         </label>
-
-        {partnerOpen ? (
-          <label className="af-au-field" data-testid="signup-partner-code">
-            <span className="af-label">Partner code (optional)</span>
-            <input
-              type="text"
-              name="partnerCode"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              placeholder="Their code"
-              maxLength={20}
-              value={partnerCode}
-              onChange={(e) => setPartnerCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))}
-            />
-            <span className="af-au-hint">From the commissioner who invited you.</span>
-          </label>
-        ) : (
-          <button
-            type="button"
-            className="af-au-link-btn"
-            data-testid="signup-partner-code-open"
-            onClick={() => setPartnerOpen(true)}
-          >
-            Have a partner code?
-          </button>
-        )}
 
         <label className="af-au-check">
           <input

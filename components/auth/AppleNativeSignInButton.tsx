@@ -18,12 +18,15 @@ export default function AppleNativeSignInButton({
   callbackUrl,
   showTerms = false,
   onSignedIn,
+  beforeSignIn,
 }: {
   callbackUrl?: string
   /** On sign-up: the 18+ / terms line the hidden social grid would otherwise carry. */
   showTerms?: boolean
   /** Instead of navigating to `callbackUrl`. */
   onSignedIn?: () => void | Promise<void>
+  /** Runs first; `false` stops the sign-in (e.g. a Partner Code on /signup that did not check out). */
+  beforeSignIn?: () => Promise<boolean>
 }) {
   const [available, setAvailable] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -37,6 +40,10 @@ export default function AppleNativeSignInButton({
     if (busy) return
     setBusy(true)
     setError(null)
+    if (beforeSignIn && !(await beforeSignIn())) {
+      setBusy(false)
+      return
+    }
     const result = await signInWithAppleNative()
     if (result.ok) {
       if (onSignedIn) await onSignedIn()
