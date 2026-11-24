@@ -48,7 +48,8 @@ export function LineupVerification({
             {stale ? m.verifyStale : null}
           </>
         ) : (
-          m.verifyNone
+          /* 2026-11-24: "advice is paused" sat above a page full of lineup advice. Say what is true. */
+          m.verifyNoneCompact(platform)
         )}{' '}
         · {refresh}
       </p>

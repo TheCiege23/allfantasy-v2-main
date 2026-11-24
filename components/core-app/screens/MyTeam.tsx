@@ -992,8 +992,17 @@ export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: st
   return Boolean(check && fixHref && check.items.length > 0 && check.items.some((i) => i.kind !== 'questionable'))
 }
 
-function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean }) {
+/**
+ * `also`: the card's title already named one slot, so that item is left out of `check` and the list is
+ * "Also check" (2026-11-24: "Cover Logan Kowalski's bye" then "Logan Kowalski is on bye — find a replacement").
+ * With nothing else to name it draws only the kickoff note — never the all-clear under a problem title.
+ */
+function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false, also = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean; also?: boolean }) {
   const m = useMessages(myTeamScreenMessages)
+  if (also && check.items.length === 0) {
+    const note = check.locked ? m.lockedNote(check.locked).trim() : ''
+    return note ? <p className="af-mt-check-locked">{note}</p> : null
+  }
   const certain = check.items.some((i) => i.kind !== 'questionable')
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
@@ -1010,7 +1019,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false 
             <path d="M12 10v4M12 17.5v.01" />
           </svg>
         </span>
-        {m.lineupCheck}
+        {also ? m.lineupCheckAlso : m.lineupCheck}
       </h2>
       {check.unresolved ? <p role="status">{m.unresolvedSlots(check.unresolved)}</p> : null}
       {embedded ? null : <p className="af-mt-footnote">{m.lineupCheckFootnote}</p>}
@@ -1312,16 +1321,8 @@ function BenchRow({
  */
 function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
   const m = useMessages(myTeamScreenMessages)
-  if (!tenure) {
-    return (
-      <span
-        className="af-mt-taxi-years af-mt-taxi-years--none"
-        title={m.taxiUnknownTitle}
-      >
-        {m.taxiUnknown}
-      </span>
-    )
-  }
+  // Unknown says nothing per row (2026-11-24: "years left unknown" under every taxi player).
+  if (!tenure) return null
   const n = tenure.yearsRemaining
   return (
     <span className="af-mt-taxi-years af-num" data-last={n <= 1}>
@@ -1758,6 +1759,18 @@ export function MyTeam({ data }: MyTeamProps) {
    * STARTS at that same lock time, so the server render and the first client render still agree; after
    * that both move together.
    */
+  /* The slot the "What to do" title names, left out of the list under it (see LineupCheckCard `also`). */
+  const titledSlot =
+    !decisionStarted && decisionSlot && (decisionSlot.empty || decisionSlot.player?.ruledOut || decisionSlot.player?.onBye || decisionSlot.benchCheck?.verdict === 'swap')
+      ? decisionSlot
+      : null
+  const embeddedCheck = (() => {
+    if (!lineupCheck || !titledSlot) return lineupCheck
+    const i = lineupCheck.items.findIndex((it) =>
+      titledSlot.player ? it.playerId === titledSlot.player.sleeperId : it.kind === 'empty' && it.slotLabel === titledSlot.slotLabel,
+    )
+    return i < 0 ? lineupCheck : { ...lineupCheck, items: lineupCheck.items.filter((_, k) => k !== i) }
+  })()
   const guideHead = myTeamHeadline({ bestBall, check: lineupCheck, optimizer: data.lineupOptimizer ?? null })
   const guideKickoff = data.lock?.available && data.lock.data.daysAway < DISTANT_LOCK_DAYS ? new Date(data.lock.data.at).toISOString() : null
   const guideProjected =
@@ -2033,7 +2046,8 @@ export function MyTeam({ data }: MyTeamProps) {
             {lineupCheck ? (
               <LineupCheckCard
                 embedded
-                check={lineupCheck}
+                also={embeddedCheck !== lineupCheck}
+                check={embeddedCheck ?? lineupCheck}
                 platform={platform}
                 leagueId={data.league.id}
                 fixHref={data.league.sourceLink?.href ?? null}
@@ -2310,7 +2324,9 @@ export function MyTeam({ data }: MyTeamProps) {
           <header className="af-mt-section-head">
             <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
-              {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
+              {data.taxi.data.some((p) => p.tenure)
+                ? copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')
+                : copy('Not eligible to start.')}
             </span>
           </header>
           <ul className="af-mt-list" data-look="h2h">

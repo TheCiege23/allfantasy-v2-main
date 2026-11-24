@@ -22,6 +22,7 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${pick != null ? `Pick ${pick}${total != null ? ` of ${total}` : ''}` : 'Drafting now'} · ${next ? `your next pick is ${next}${awayEn(away)}` : 'you have no picks left'}`,
     headBefore: (slot: number | null, teams: number | null) =>
       slot != null ? `Not started · you pick ${ordinalEn(slot)}${teams != null ? ` of ${teams}` : ''}` : 'Not started yet',
+    headBeforeFirst: (label: string) => `Not started · your first pick is ${label}`,
     headDone: (drafted: number | null) =>
       drafted != null && drafted > 0 ? `Draft done · you drafted ${drafted} ${drafted === 1 ? 'player' : 'players'}` : 'This draft is done',
     introBefore: 'Your home for this league’s draft: when you pick, your queue and your prep. The board goes live here when the draft starts.',
@@ -57,6 +58,7 @@ export const draftHqLeagueGuideMessages = defineMessages({
       `${pick != null ? `Selección ${pick}${total != null ? ` de ${total}` : ''}` : 'Draft en curso'} · ${next ? `tu próxima es la ${next}${awayEs(away)}` : 'ya no te quedan selecciones'}`,
     headBefore: (slot, teams) =>
       slot != null ? `Sin empezar · eliges ${slot}.º${teams != null ? ` de ${teams}` : ''}` : 'Aún no ha empezado',
+    headBeforeFirst: (label) => `Sin empezar · tu primera selección es la ${label}`,
     headDone: (drafted) =>
       drafted != null && drafted > 0 ? `Draft terminado · elegiste ${drafted} ${drafted === 1 ? 'jugador' : 'jugadores'}` : 'Este draft ha terminado',
     introBefore: 'Tu centro para el draft de esta liga: cuándo eliges, tu cola y tu preparación. El tablero se activa aquí cuando empieza el draft.',

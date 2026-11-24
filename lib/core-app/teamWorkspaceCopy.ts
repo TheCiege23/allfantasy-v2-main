@@ -5,6 +5,7 @@ const ES: Record<string,string> = {
   "Best Ball scoring selects your scoring lineup automatically.": "La puntuación Best Ball selecciona automáticamente tu alineación.",
   "Compare eligible players before taking action.": "Compara jugadores elegibles antes de actuar.",
   "Verify provider lineup": "Verificar alineación en la plataforma",
+  "Sync this league": "Sincronizar esta liga",
   "No issues found in readable roster evidence. Provider eligibility and positional limits still apply.": "No se encontraron problemas en los datos legibles de la plantilla. Se siguen aplicando la elegibilidad y los límites de posiciones de la plataforma.",
   "Start/sit comparison": "Comparar titulares y suplentes",
   "Starting slot": "Plaza titular",

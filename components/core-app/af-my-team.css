@@ -2892,3 +2892,14 @@ li[data-kind='questionable'] .af-mt-check-tag {
     overflow: hidden;
   }
 }
+
+/*
+ * 2026-11-24 (dynasty audit): when the side column holds nothing but the folded "More detail", it was a
+ * 320px strip of empty page beside a squeezed roster. The roster takes the width; the fold goes below.
+ */
+@container af-mt (min-width: 900px) {
+  .af-mt-body:not(:has(> .af-mt-aside > :not(.af-mt-more))) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'main' 'aside';
+  }
+}

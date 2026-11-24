@@ -8,7 +8,7 @@ export const teamRosterMessages = defineMessages({
   en: {
     askPrefill: (league: string, starter: string | null | undefined, slotLabel: string | undefined, bench: string | null | undefined) =>
       `In ${league}, compare ${starter ?? 'the empty ' + slotLabel + ' slot'} with ${bench ?? 'eligible bench players'}. Use this league’s scoring, injury status, and individual kickoff evidence. Explain missing data and provider eligibility.`,
-    rosterHealth: (n: number) => `Roster health · ${n} checks to review`,
+    rosterHealth: (n: number) => `Roster health · ${n} ${n === 1 ? "check" : "checks"} to review`,
     projected: 'Projected: ',
     projectedUnder: 'projected points under this league’s scoring.',
     estimates: 'Projections are estimates.',
@@ -19,7 +19,7 @@ export const teamRosterMessages = defineMessages({
   es: {
     askPrefill: (league, starter, slotLabel, bench) =>
       `En ${league}, compara ${starter ?? 'la plaza vacía ' + slotLabel} con ${bench ?? 'suplentes elegibles'}. Usa la puntuación de esta liga, el estado de lesión y el inicio de cada partido. Explica los datos faltantes y la elegibilidad en la plataforma.`,
-    rosterHealth: (n) => `Estado de plantilla · ${n} revisiones pendientes`,
+    rosterHealth: (n) => `Estado de plantilla · ${n} ${n === 1 ? "revisión pendiente" : "revisiones pendientes"}`,
     projected: 'Proyección: ',
     projectedUnder: 'puntos proyectados según la puntuación de esta liga.',
     estimates: 'Las proyecciones son estimaciones.',

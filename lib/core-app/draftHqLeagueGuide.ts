@@ -31,7 +31,8 @@ export type LeagueDraftHeadline =
   | { kind: 'paused'; yours: boolean; next: string | null }
   /** Running, not your pick: where the draft is and when you are up. */
   | { kind: 'live'; pick: number | null; total: number | null; next: string | null; away: number | null }
-  | { kind: 'before'; slot: number | null; teams: number | null }
+  /** `first`: your first pick's label when it is not your own slot's (a traded-in pick comes earlier). */
+  | { kind: 'before'; slot: number | null; teams: number | null; first?: string | null }
   | { kind: 'done'; drafted: number | null }
 
 type LeagueDraftHeadlineInput = {
@@ -60,7 +61,12 @@ export function leagueDraftHeadline(input: LeagueDraftHeadlineInput): LeagueDraf
   const phase = leagueDraftPhase(input.status)
   if (!phase) return { kind: 'none' }
   if (phase === 'done') return { kind: 'done', drafted: input.drafted }
-  if (phase === 'before') return { kind: 'before', slot: input.yourSlot, teams: input.teamCount }
+  if (phase === 'before') {
+    // 2026-11-24: "you pick 9th of 12" while your first pick was 1.03 (via a trade). Name the pick then.
+    const first = nextHeld(input.held, null)
+    const differs = first != null && (input.yourSlot == null || first.overall !== input.yourSlot)
+    return { kind: 'before', slot: input.yourSlot, teams: input.teamCount, first: differs ? first.label : null }
+  }
 
   const next = nextHeld(input.held, input.currentPickOverall)
   if (phase === 'paused') return { kind: 'paused', yours: input.yoursOnClock, next: next?.label ?? null }

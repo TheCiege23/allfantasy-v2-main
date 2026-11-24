@@ -91,7 +91,9 @@ export function overviewWeekLine(head: OverviewHeadline): OverviewWeekLine {
  * The standings rows the Overview lists: the top `top`, plus your own team when it sits below them, so
  * the table always answers "where am I" (12th of 14 was not on a six-row table).
  */
-export function standingsRowsToShow<T extends { isYou: boolean }>(rows: T[], top = 6): T[] {
+export function standingsRowsToShow<T extends { isYou: boolean; rank?: number | null }>(rows: T[], top = 6): T[] {
+  // In rank order whenever every row has one (2026-11-24: a loader that listed you first put 4th above 1st–3rd).
+  if (rows.length > 1 && rows.every((r) => typeof r.rank === 'number')) rows = [...rows].sort((a, b) => (a.rank as number) - (b.rank as number))
   const head = rows.slice(0, top)
   if (head.some((r) => r.isYou)) return head
   const you = rows.slice(top).find((r) => r.isYou)
