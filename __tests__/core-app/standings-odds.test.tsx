@@ -288,6 +288,22 @@ describe('Standings — what is at stake', () => {
     expect(panel.querySelector('.af-st-stakes-root')).toBeNull()
   })
 
+  it('keeps the lesson and the note on how the odds are made behind one closed "Why it matters" (2026-11-24)', () => {
+    const { container } = render(<Standings data={data()} odds={ODDS} />)
+    const panel = container.querySelector('.af-st-stakes')!
+    const fold = panel.querySelector('details[data-testid="home-why"]') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toBe('Why it matters')
+    expect(fold.textContent).toMatch(/Rooting for the right teams/)
+    expect(panel.querySelector('.af-st-stakes-basis')).toBeNull()
+    expect(panel.querySelector('.af-stg-teach')).toBeNull()
+  })
+
+  it('opens with one short line under the headline, not a paragraph (2026-11-24)', () => {
+    const { container } = render(<Standings data={data()} />)
+    expect(container.querySelector('.af-st-sub')?.textContent).toBe('Your record decides the seeding. Results through week 4.')
+  })
+
   it('adds your odds, your game’s swing and who to root for from the simulation', () => {
     const { container } = render(<Standings data={data()} odds={ODDS} />)
     const panel = container.querySelector('.af-st-stakes')!

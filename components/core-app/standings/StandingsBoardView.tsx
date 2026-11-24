@@ -972,9 +972,12 @@ function Cards({
                       ⚠ ONE ROW PER TEAM UNTIL TAPPED. Every card used to open as a full stat sheet, ~800px
                       tall on a phone, so twelve teams were a 10,000px page and nobody could see the table.
                       The summary carries what a standings glance needs; everything else is one tap away and
-                      stays in the DOM, so nothing below it was removed. Your own card starts open.
+                      stays in the DOM, so nothing below it was removed.
+                      Your own card starts CLOSED too since 2026-11-24 (the simplify pass): the tiles above the
+                      table already say your record, power and points, and the open sheet was ~400px on a phone.
+                      It is still marked "You" and highlighted, so it is the obvious one to tap.
                     */}
-                    <details className="af-stb-cardfold" open={t.isYou || undefined}>
+                    <details className="af-stb-cardfold">
                     <summary className="af-stb-cardsum">
                     <header className="af-stb-cardhead">
                       <span className="af-stb-cardrank af-num" aria-hidden>
