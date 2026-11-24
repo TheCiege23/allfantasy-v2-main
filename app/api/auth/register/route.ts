@@ -11,6 +11,8 @@ import { sha256Hex, makeToken, isStrongPassword } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { attributeSignup } from "@/lib/referral"
+import { attachReferral } from "@/lib/partner-codes/service"
+import { isPartnerCodesEnabled, PARTNER_CODE_COOKIE } from "@/lib/partner-codes/flags"
 import { attributeSignupFromLandingInviteToken } from "@/lib/dashboard/attributeSignupFromLandingInvite"
 import { recordAttribution } from "@/lib/viral-loop"
 import { recordFunnelEvent } from "@/lib/analytics/recordFunnelEvent"
@@ -642,6 +644,18 @@ export async function POST(req: Request) {
       userId: user.id,
       username: user.username,
     })
+
+    // Commissioner Partner Codes (lib/partner-codes): a signup that came through /with/CODE is tied
+    // to that commissioner now, so it counts on their active-user meter before it ever pays.
+    // Best-effort and off unless PARTNER_CODES_ENABLED=1.
+    if (!isE2ERequest && isPartnerCodesEnabled()) {
+      const partnerCode = cookieStore.get(PARTNER_CODE_COOKIE)?.value?.trim()
+      if (partnerCode) {
+        await attachReferral({ userId: user.id, rawCode: partnerCode, email: user.email, ip }).catch((err) =>
+          console.warn("[register] partner code not attached (non-blocking):", err?.message ?? err),
+        )
+      }
+    }
 
     // Growth attribution is best-effort and should not block account creation.
     if (!isE2ERequest) {
