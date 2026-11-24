@@ -675,6 +675,21 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
    * purpose: not everyone plays on Sleeper.
    */
   const [sleeperHandle, setSleeperHandle] = useState('')
+  /*
+   * A commissioner's Partner Code, typed (2026-11-24). /with/CODE lands here as ?code=CODE and also
+   * sets a cookie, but someone who saw the code on a share image and installed the app has neither —
+   * typing it is how they count for the commissioner. Folded behind a link unless the URL carries one,
+   * so most people never see an extra box. /api/auth/register checks it before creating anything.
+   */
+  const [partnerCode, setPartnerCode] = useState('')
+  const [partnerOpen, setPartnerOpen] = useState(false)
+  useEffect(() => {
+    const fromUrl = (new URLSearchParams(window.location.search).get('code') ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20)
+    if (fromUrl) {
+      setPartnerCode(fromUrl)
+      setPartnerOpen(true)
+    }
+  }, [])
   const [disclaimer, setDisclaimer] = useState(false)
   const [terms, setTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -776,6 +791,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             ? { phone: codeSentTo ?? phone.trim(), phoneVerificationCode: code.replace(/\s/g, '') }
             : {}),
           ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
+          ...(partnerCode ? { partnerCode } : {}),
           /*
            * A friend's code in this page's own URL (`/signup?ref=CODE`, 2026-11-15). The auth pages do not
            * mount ReferralTracker, so the `af_ref` cookie is only there when the visitor came through the
@@ -933,6 +949,33 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
               : 'Link it now and your Sleeper leagues import in one click, right after you sign up.'}
           </span>
         </label>
+
+        {partnerOpen ? (
+          <label className="af-au-field" data-testid="signup-partner-code">
+            <span className="af-label">Partner code (optional)</span>
+            <input
+              type="text"
+              name="partnerCode"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="Their code"
+              maxLength={20}
+              value={partnerCode}
+              onChange={(e) => setPartnerCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))}
+            />
+            <span className="af-au-hint">From the commissioner who invited you.</span>
+          </label>
+        ) : (
+          <button
+            type="button"
+            className="af-au-link-btn"
+            data-testid="signup-partner-code-open"
+            onClick={() => setPartnerOpen(true)}
+          >
+            Have a partner code?
+          </button>
+        )}
 
         <label className="af-au-check">
           <input
