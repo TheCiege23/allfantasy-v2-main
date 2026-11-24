@@ -14,6 +14,7 @@ import { data } from './sampleData'
  *   /e2e/rankings-guide?sport=NFL     a filter set: the filter fold opens
  *   /e2e/rankings-guide?scope=portfolio  the My portfolio tab (2026-11-24)
  *   /e2e/rankings-guide?scope=league     the One league tab (2026-11-24)
+ *   /e2e/rankings-guide?scope=class      the Class tab (2026-11-24)
  */
 
 export default async function RankingsGuideHarnessPage({
@@ -24,7 +25,7 @@ export default async function RankingsGuideHarnessPage({
   const sp = await searchParams
   const you = sp.you === 'top' ? 'top' : sp.you === 'none' ? 'none' : 'mid'
   const sport = typeof sp.sport === 'string' ? sp.sport : null
-  const scope = sp.scope === 'portfolio' ? 'portfolio' : sp.scope === 'league' ? 'league' : 'global'
+  const scope = sp.scope === 'portfolio' ? 'portfolio' : sp.scope === 'league' ? 'league' : sp.scope === 'class' ? 'class' : 'global'
   return (
     <AfCoreShell
       active="rankings"

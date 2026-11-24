@@ -82,6 +82,53 @@ export function leagueView() {
   }
 }
 
+/** SAMPLE Class view — invented managers, ratings and weeks, shaped like ClassView. */
+export function classView() {
+  const handles = ['SampleManagerOne', 'SampleManagerTwo', 'SampleManagerThree', 'SampleYou', 'SampleManagerFive', 'SampleManagerSix', 'SampleManagerSeven', 'SampleManagerEight']
+  const board = handles.map((handle, i) => ({
+    userId: `c${i}`,
+    rank: i + 1,
+    handle,
+    level: 4 + i,
+    rating: 1720 - i * 28,
+    rd: 60 + i * 3,
+    conservative: 1600 - i * 30,
+    classLevel: 9 - Math.floor(i / 2),
+    division: 1 + Math.floor(i / 3),
+    record: `${40 - i}-${20 + i}`,
+    games: 60,
+    percentile: 0.95 - i * 0.08,
+    isYou: handle === 'SampleYou',
+  }))
+  const log = Array.from({ length: 6 }, (_, i) => ({
+    leagueId: `l${i % 2}`,
+    leagueName: i % 2 ? 'Sample Redraft League' : 'Sample Keeper League',
+    season: 2026,
+    week: 11 - Math.floor(i / 2),
+    pointsFor: 118 + i * 4.3,
+    allPlayWins: 7 + (i % 4),
+    allPlayGames: 11,
+    opponentLabel: `Sample Opponent ${i + 1}`,
+    opponentClassNow: 1580 + i * 12,
+    result: (i % 3 === 0 ? 'L' : 'W') as 'W' | 'L',
+    pointsAgainst: 112 + i * 2.1,
+    weekChange: i % 3 === 0 ? -6.2 : 8.4,
+    leagueShare: 0.5,
+    ratingAfter: 1636 - i * 3,
+  }))
+  return {
+    sport: 'NFL',
+    computedAt: '2026-11-14T05:40:00.000Z',
+    rated: 412,
+    established: 288,
+    board,
+    you: { status: 'established', rating: 1636.4, rd: 64, conservative: 1508, games: 60, record: '37-23', percentile: 0.71, classLevel: 8, division: 2, band: [1560, 1680], boardRank: 4, rdToEstablish: 0 },
+    log,
+    divisionFilter: { active: false, band: [1560, 1680], href: '?scope=class&division=mine', offHref: '?scope=class' },
+    empty: null,
+  }
+}
+
 const NAMES = ['SampleManagerOne', 'SampleManagerTwo', 'SampleManagerThree', 'SampleManagerFour', 'SampleManagerFive', 'SampleManagerSix', 'SampleManagerSeven', 'You', 'SampleManagerNine']
 const SCORES = [77.6, 76.2, 72.0, 71.4, 65.4, 61.4, 30.3, 25.9, 19.1]
 
@@ -113,7 +160,7 @@ function rows(youAt: number | null): BoardTableRow[] {
   })
 }
 
-export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: 'global' | 'portfolio' | 'league' = 'global'): RankingsData {
+export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: 'global' | 'portfolio' | 'league' | 'class' = 'global'): RankingsData {
   const youAt = you === 'none' ? null : you === 'top' ? 0 : 7
   const board = rows(youAt)
   const meta = BOARD_META.overall
@@ -170,7 +217,7 @@ export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: '
     },
     portfolio: scope === 'portfolio' ? portfolio() : null,
     league: scope === 'league' ? leagueView() : null,
-    classView: null,
+    classView: scope === 'class' ? classView() : null,
   } as unknown as RankingsData
 }
 

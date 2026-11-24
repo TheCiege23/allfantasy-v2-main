@@ -1169,11 +1169,15 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
               emptyText="No rated weeks yet."
             />
           </div>
-          <p className="af-rk-note">
-            Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
-            so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
-            it. Every league you played that week folds into one update; the Leagues column shows each one&apos;s share.
-          </p>
+          {/* Closed until tapped (2026-11-24, the simplify pass): the same lesson under every visit's log. */}
+          <details className="af-rk-earnfold af-rk-classwhy" data-testid="rk-class-why">
+            <summary>How your rating moves</summary>
+            <p className="af-rk-note">
+              Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
+              so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
+              it. Every league you played that week folds into one update; the Leagues column shows each one&apos;s share.
+            </p>
+          </details>
         </section>
       ) : null}
 
