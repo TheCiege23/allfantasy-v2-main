@@ -30,7 +30,8 @@ export async function GET(req: Request) {
   const lookKey = q.get('look') ?? code.shareLook
   const s = await loadPartnerSettings()
   const name = (q.get('name') ?? code.code).replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 24) || code.code
-  const logo = code.shareLogo === 'af' || code.shareLogo === 'upload' ? code.shareLogo : 'initials'
+  const asked = q.get('logo') ?? code.shareLogo
+  const logo = asked === 'af' || asked === 'upload' ? asked : 'initials'
   return renderShareCard({
     code: code.code,
     name,

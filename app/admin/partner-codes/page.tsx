@@ -3,7 +3,7 @@ import { getAdminAccessState } from '@/lib/adminAuth'
 import { prisma } from '@/lib/prisma'
 import { loadPartnerSettings } from '@/lib/partner-codes/service'
 import { FLAG_COPY, type FlagReason } from '@/lib/partner-codes/fraud'
-import { AdminPartnerActions, AdminPartnerSettingsForm } from '@/components/partner-codes/AdminPartnerControls'
+import { AdminLogoReview, AdminPartnerActions, AdminPartnerSettingsForm } from '@/components/partner-codes/AdminPartnerControls'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,11 +19,12 @@ export default async function AdminPartnerCodesPage() {
     return <main className="min-h-dvh bg-[#020817] p-8 text-white"><p className="text-rose-300">Forbidden — admin access required.</p></main>
   }
 
-  const [settings, payouts, flagged, codes] = await Promise.all([
+  const [settings, payouts, flagged, codes, logos] = await Promise.all([
     loadPartnerSettings(),
     prisma.partnerPayout.findMany({ where: { status: { in: ['pending_review', 'approved', 'held'] } }, orderBy: [{ periodMonth: 'desc' }, { totalCents: 'desc' }], take: 100, include: { partnerCode: { select: { code: true } } } }),
     prisma.partnerReferral.findMany({ where: { status: 'flagged' }, orderBy: { createdAt: 'desc' }, take: 100, include: { partnerCode: { select: { code: true } } } }),
     prisma.partnerCode.findMany({ orderBy: { paidSubsCount: 'desc' }, take: 50 }),
+    prisma.partnerCode.findMany({ where: { logoStatus: 'pending', logoUrl: { not: null } }, orderBy: { updatedAt: 'asc' }, take: 50, select: { id: true, code: true, logoUrl: true } }),
   ])
   const tax = await prisma.partnerTaxProfile.findMany({ where: { ownerUserId: { in: payouts.map((p) => p.ownerUserId) } } })
   const taxBy = new Map(tax.map((t) => [t.ownerUserId, t.w9Status]))
@@ -62,6 +63,25 @@ export default async function AdminPartnerCodesPage() {
               </table>
             </div>
           ) : <p className="mt-3 text-[#a3a8c9]">Nothing to review.</p>}
+        </section>
+
+        <section className={panel} aria-labelledby="logo-h">
+          <h2 id="logo-h" className="text-lg font-bold">Logos to review <span className="text-amber-300">· {logos.length}</span></h2>
+          <p className="mt-1 text-[#a3a8c9]">Nothing shows on a share image until you approve it. Reject team, league and brand logos, and anything not fit for a share image.</p>
+          {logos.length ? (
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {logos.map((l) => (
+                <li key={l.id} className="flex items-center gap-3 rounded-xl border border-[#2a2f5a] bg-[#0a0e1a] p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={l.logoUrl!} alt={`Logo uploaded for ${l.code}`} width={80} height={80} className="h-20 w-20 rounded-lg bg-white/5 object-cover" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <strong className="truncate">{l.code}</strong>
+                    <AdminLogoReview partnerCodeId={l.id} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="mt-3 text-[#a3a8c9]">None waiting.</p>}
         </section>
 
         <div className="flex flex-wrap gap-6">
