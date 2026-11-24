@@ -155,6 +155,14 @@ function ClaimCode({ onClaimed, settings, demo }: { onClaimed: () => void; setti
       <button type="button" disabled={!canClaim} onClick={claim} className={`${btnPrimary} mt-4 disabled:opacity-50`}>
         {busy ? 'Saving…' : 'Claim this code'}
       </button>
+      {/* New tab, so reading the terms never loses the code typed above. */}
+      <p className="mt-3 text-[12px] text-[#a3a8c9]">
+        By claiming a code you agree to the{' '}
+        <a href="/commissioner-partners/terms" target="_blank" rel="noopener" className="font-semibold text-purple-300 underline underline-offset-2">
+          Partner Program Terms
+        </a>
+        .
+      </p>
       {demo ? <p className="mt-3 text-[12px] text-[#a3a8c9]">Claiming is turned off in the demo.</p> : null}
     </section>
   )
