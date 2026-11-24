@@ -39,7 +39,7 @@
   background: var(--accent);
   font: 900 13px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
 }
-.af-sg-label { flex: 0 0 auto; color: var(--text); font-weight: 800; }
+.af-sg-line .af-sg-label { flex: 0 0 auto; color: var(--text); font-weight: 800; }
 .af-sg-what {
   flex: 1 1 auto;
   min-width: 0;
@@ -78,7 +78,13 @@
 .af-sg-actions .af-sg-primary { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
 
 @media (max-width: 720px) {
-  .af-sg-label { display: none; }
+  /*
+   * Scoped to the strip's own button (2026-11-24). The bare `.af-sg-label` also matched the Schedule
+   * page's "What's next" row names (LeagueSchedule.tsx shares the class — and its root carried `.af-sg`
+   * too, which drew this strip's border around the whole page top), so on every phone those rows lost
+   * their names and read "weeks 15–16 · 6 teams make it" with nothing saying it was the playoffs.
+   */
+  .af-sg-line .af-sg-label { display: none; }
   .af-sg-panel { padding-left: 14px; }
   .af-sg-actions button { flex: 1 1 auto; }
 }
