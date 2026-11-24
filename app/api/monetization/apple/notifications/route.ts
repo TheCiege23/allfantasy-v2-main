@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getMonetizationCatalogItemBySku, type MonetizationSku } from "@/lib/monetization/catalog"
 import { ApplePurchaseError, applyApplePurchase, expireAppleSubscription, markAppleBillingRetry } from "@/lib/monetization/applePurchases"
+import { onPartnerAppleNotification } from "@/lib/partner-codes/storeLedger"
 import {
   appleIapConfigured,
   getCurrentAppleTransaction,
@@ -88,6 +89,10 @@ export async function POST(request: Request) {
         // A cancellation turns off future renewals; access remains until the paid period ends.
         break
     }
+    // Commissioner Partner Codes (lib/partner-codes/storeLedger.ts): commission, refunds and churn for
+    // a subscriber a commissioner brought. After the purchase is applied; never throws; off unless
+    // PARTNER_CODES_ENABLED=1. The transaction id is its no-double-pay key, so Apple's retries are safe.
+    await onPartnerAppleNotification(payload.notificationType ?? "", transaction)
     return NextResponse.json({ ok: true })
   } catch (error) {
     if (error instanceof ApplePurchaseError && error.status < 500) {

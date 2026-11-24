@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { movePlayer } from '@/lib/c2c/rosterEngine'
+import { c2cPlayerWeekPoints } from '@/lib/c2c/playerWeekPoints'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,15 @@ export async function GET(req: NextRequest) {
     devy: rows.filter((r) => r.bucketState === 'devy'),
     ir: rows.filter((r) => r.bucketState === 'ir'),
   }
-  return NextResponse.json({ roster: byBucket, raw: rows })
+  // This week's stored points per player, when the screen names a week (2026-11-23): the same PlayerWeeklyScore rows
+  // the C2C score engine sums, so a card's number adds up to the side's total. A player with no stored row is
+  // absent from the map (no college stats are ingested yet), never a fabricated 0.
+  const week = Number(req.nextUrl.searchParams?.get('week'))
+  const season = Number(req.nextUrl.searchParams?.get('season'))
+  const points = Number.isInteger(week) && week > 0 && Number.isInteger(season) && season > 0
+    ? await c2cPlayerWeekPoints(rows, week, season)
+    : undefined
+  return NextResponse.json({ roster: byBucket, raw: rows, ...(points ? { points } : {}) })
 }
 
 export async function PATCH(req: NextRequest) {

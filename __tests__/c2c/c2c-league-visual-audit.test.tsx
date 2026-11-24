@@ -24,14 +24,17 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('C2C league is dark in every mode', () => {
-  it('wraps every league screen in the always-dark opt-out', () => {
+// Superseded 2026-11-23: the screens follow the app's mode with /core tokens (__tests__/c2c/c2cVisualUpgrade.test.tsx).
+describe('C2C league follows the app mode', () => {
+  it('wraps every league screen in the /core token scope, not the always-dark opt-out', () => {
     const { container } = render(
       <C2CLeagueLayout>
         <p>screen</p>
       </C2CLeagueLayout>,
     )
-    expect((container.firstElementChild as HTMLElement).className.split(/\s+/)).toContain('af-draft-dark')
+    const classes = (container.firstElementChild as HTMLElement).className.split(/\s+/)
+    expect(classes).toContain('af-core')
+    expect(classes).not.toContain('af-draft-dark')
     expect(container.textContent).toBe('screen')
   })
 })
@@ -60,21 +63,25 @@ describe('C2C picks', () => {
       const url = String(input)
       const json = (body: unknown, ok = true) => ({ ok, json: async () => body })
       if (url.startsWith('/api/c2c/picks')) {
-        return json({ picks: [{ id: 'k1', pickSide: 'campus', season: 2027, round: 1, originalOwnerId: 'ckroster0001', currentOwnerId: 'ckroster0001', isUsed: false }] })
+        return json({ picks: [
+          { id: 'k1', pickSide: 'campus', season: 2027, round: 1, originalOwnerId: 'ckroster0001', currentOwnerId: 'ckroster0001', isUsed: false },
+          { id: 'k2', pickSide: 'campus', season: 2027, round: 2, originalOwnerId: 'ckroster0002', currentOwnerId: 'ckroster0001', isUsed: false },
+        ] })
       }
       if (url.startsWith('/api/c2c')) return json({ c2c: { sportPair: 'NFL_CFB', scoringMode: 'combined_total', campusScoreWeight: 0.4, cantonScoreWeight: 0.6, futureDraftFormat: 'separate_campus_and_canton' } })
       if (url.startsWith('/api/redraft/season')) {
-        return seasonOk ? json({ season: { rosters: [{ id: 'ckroster0001', teamName: 'Saturday to Sunday Pipeline' }] } }) : json({}, false)
+        return seasonOk ? json({ season: { rosters: [{ id: 'ckroster0001', teamName: 'Saturday to Sunday Pipeline' }, { id: 'ckroster0002', teamName: 'Gridiron Graduates' }] } }) : json({}, false)
       }
       return json({}, false)
     }))
   }
 
-  it('names the team that owns each pick', async () => {
+  // 2026-11-23: a row names a team only for a pick that came from someone else; your own picks are the page itself.
+  it('names the team a traded pick came from', async () => {
     stubApi(true)
     const { container } = render(<C2CPicksClient leagueId="L1" rosterId="ckroster0001" />)
-    expect(await screen.findByText('Saturday to Sunday Pipeline · R1 · 2027')).toBeTruthy()
-    expect(container.querySelector('[data-testid="c2c-pick-row-k1"]')?.textContent).toContain('Saturday to Sunday Pipeline')
+    expect(await screen.findByText('via Gridiron Graduates')).toBeTruthy()
+    expect(container.querySelector('[data-testid="c2c-pick-row-k1"]')?.textContent).not.toContain('via')
     expect(container.textContent).not.toContain('ckrost')
   })
 
@@ -82,7 +89,7 @@ describe('C2C picks', () => {
   it('falls back to a label, never an id, when team names are unavailable', async () => {
     stubApi(false)
     const { container } = render(<C2CPicksClient leagueId="L1" rosterId="ckroster0001" />)
-    expect(await screen.findByText('Your team · R1 · 2027')).toBeTruthy()
+    expect(await screen.findByText('via another team')).toBeTruthy()
     expect(container.textContent).not.toContain('ckrost')
   })
 })

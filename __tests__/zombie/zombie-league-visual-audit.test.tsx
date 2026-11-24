@@ -75,13 +75,14 @@ describe('Zombie command hero over its scene art', () => {
   it('puts a near-opaque base under each stat tile, keeping the tone tint on top', () => {
     const { container } = render(hero)
     const tiles = [...container.querySelectorAll('.zombie-hero-stat')]
-    expect(tiles).toHaveLength(4)
+    // One tile, the pot: the survivor/horde/whisperer counts live in the sidebar (2026-11-23).
+    expect(tiles).toHaveLength(1)
     for (const tile of tiles) {
       const base = /bg-\[rgba\(\d+,\d+,\d+,(0?\.\d+)\)\]/.exec(tile.className)
       expect(Number(base?.[1])).toBeGreaterThanOrEqual(0.75)
       expect((tile.firstElementChild as HTMLElement).className).toMatch(/\bborder\b/)
     }
-    expect(container.textContent).toContain('Still in the fight')
+    expect(container.textContent).not.toContain('Still in the fight')
   })
 
   it('evens out the scene below lg, where the hero stacks', () => {
