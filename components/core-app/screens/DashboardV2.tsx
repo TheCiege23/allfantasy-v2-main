@@ -16,6 +16,7 @@ import { LivePlays } from '@/components/core-app/dash-v2/LivePlays'
 import { TopBar } from '@/components/core-app/dash-v2/TopBar'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { MobileChrome } from '@/components/core-app/dash-v2/MobileChrome'
+import { PartnerCodeNudge } from '@/components/partner-codes/PartnerCodeNudge'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
@@ -237,6 +238,13 @@ function DashboardV2({
           />
           <Priorities data={data} />
         </section>
+
+        {/*
+          Partner Codes: commissioners only, and only while the program is on.
+          Below the priorities so it never pushes the day's work down; it renders
+          nothing at all for everyone else.
+        */}
+        <PartnerCodeNudge variant="card" />
 
         {/*
           ⚠ REPLACES "Needs your call — all leagues", WHICH RENDERED `dash34.next24`.

@@ -48,6 +48,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { ScreenGuide } from '@/components/core-app/ScreenGuide'
 import { HowItWorks } from '@/components/core-app/HowItWorks'
 import { HomePromptSlot } from '@/components/core-app/HomePromptSlot'
+import { PartnerCodeMenuLink } from '@/components/partner-codes/PartnerCodeMenuLink'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { RailScoresContext, withRailScores, type RailScores } from '@/components/core-app/railScores'
@@ -2932,6 +2933,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                     </Link>
                   ) : null}
                   <Link href="/pricing">{copy('Plans & tokens')}</Link>
+                  <PartnerCodeMenuLink />
                   <Link href="/settings">{msg.profileAndSettings}</Link>
                 </nav>
               </div>

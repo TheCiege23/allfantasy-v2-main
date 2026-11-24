@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { partnerApiUser } from '@/lib/partner-codes/http'
 import { getPartnerDashboard } from '@/lib/partner-codes/dashboard'
+import { getPartnerNudge } from '@/lib/partner-codes/nudge'
 import { checkCodeAvailability, claimPartnerCode } from '@/lib/partner-codes/service'
 import { CODE_REASON_COPY } from '@/lib/partner-codes/code'
 import { SHARE_LOGOS, isShareLook } from '@/lib/partner-codes/shareLooks'
@@ -18,6 +19,7 @@ export const runtime = 'nodejs'
  * keeps its route count down):
  *   GET                → dashboard
  *   GET ?check=CODE    → live availability while typing
+ *   GET ?nudge=1       → the home card / account menu line (commissioners and code owners only)
  *   POST { code }      → claim, or change your code
  *   POST { action: 'payouts_setup' }     → Stripe-hosted payout setup link (creates the account first)
  *   POST { action: 'payouts_dashboard' } → a link into their Stripe Express dashboard
@@ -28,7 +30,9 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const auth = await partnerApiUser()
   if (!auth.ok) return auth.res
-  const check = new URL(req.url).searchParams.get('check')
+  const params = new URL(req.url).searchParams
+  if (params.get('nudge') === '1') return NextResponse.json(await getPartnerNudge(auth.userId))
+  const check = params.get('check')
   if (check !== null) {
     const res = await checkCodeAvailability(check, auth.userId)
     if (!res.ok) return NextResponse.json({ available: false, message: CODE_REASON_COPY[res.reason] })
