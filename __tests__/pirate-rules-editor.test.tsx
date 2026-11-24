@@ -36,7 +36,7 @@ beforeEach(() => {
 describe('Pirate rules in commissioner settings', () => {
   it('saves through the shared bar and reloads server-confirmed values', async () => {
     const first = center()
-    const input = await screen.findByLabelText('Protected players')
+    const input = await screen.findByLabelText('Locks per team')
     expect((input as HTMLInputElement).value).toBe('3')
     expect(screen.queryByTestId('lsh-savebar')).toBeNull()
     fireEvent.change(input, { target: { value: '2' } })
@@ -48,32 +48,32 @@ describe('Pirate rules in commissioner settings', () => {
     expect(fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH')?.[0]).toBe('/api/leagues/test-league/pirate')
     first.unmount()
     center()
-    expect((await screen.findByLabelText('Protected players') as HTMLInputElement).value).toBe('2')
+    expect((await screen.findByLabelText('Locks per team') as HTMLInputElement).value).toBe('2')
   })
 
   it('keeps unsaved edits when a category switch is cancelled and discards only on confirmation', async () => {
     center()
-    fireEvent.change(await screen.findByLabelText('Protected players'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Locks per team'), { target: { value: '2' } })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     fireEvent.change(screen.getByLabelText('Settings category'), { target: { value: 'general' } })
     expect(confirm).toHaveBeenCalledTimes(1)
-    expect((screen.getByLabelText('Protected players') as HTMLInputElement).value).toBe('2')
+    expect((screen.getByLabelText('Locks per team') as HTMLInputElement).value).toBe('2')
     confirm.mockReturnValue(true)
     fireEvent.change(screen.getByLabelText('Settings category'), { target: { value: 'general' } })
     expect(screen.getByText('General editor')).toBeTruthy()
     fireEvent.click(screen.getByTestId('cc-nav-pirate-rules'))
-    expect((await screen.findByLabelText('Protected players') as HTMLInputElement).value).toBe('3')
+    expect((await screen.findByLabelText('Locks per team') as HTMLInputElement).value).toBe('3')
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
   })
 
   it('retains edits and shows the server error when save is rejected', async () => {
     failSave = true
     center()
-    fireEvent.change(await screen.findByLabelText('Protected players'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Locks per team'), { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await screen.findByText('Settings are locked.')
     expect(screen.queryByText('Pirate rules saved.')).toBeNull()
-    expect((screen.getByLabelText('Protected players') as HTMLInputElement).value).toBe('2')
+    expect((screen.getByLabelText('Locks per team') as HTMLInputElement).value).toBe('2')
     expect(persisted.protectionLimit).toBe(3)
     await waitFor(() => expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(false))
   })
