@@ -38,6 +38,8 @@ export interface PlayerAvatarProps {
   className?: string
   /** When true, render a colored ring around the avatar (used for selection / on-clock). */
   highlighted?: boolean
+  /** Team-logo badge size in px. Default: about a third of `size`. */
+  badgeSize?: number
 }
 
 export function PlayerAvatar({
@@ -50,6 +52,7 @@ export function PlayerAvatar({
   testIdBase = 'player-avatar',
   className = '',
   highlighted = false,
+  badgeSize: badgeSizeProp,
 }: PlayerAvatarProps) {
   const source = classifyAvatarSource(headshotUrl)
   const [imgError, setImgError] = useState(false)
@@ -70,7 +73,7 @@ export function PlayerAvatar({
   const ringClass = highlighted ? 'ring-2 ring-white/60' : 'ring-1 ring-white/10'
   // For DEF rows the badge would duplicate the primary avatar — suppress it.
   const showBadge = !isDefRow
-  const badgeSize = Math.max(12, Math.round(size * 0.36))
+  const badgeSize = badgeSizeProp ?? Math.max(12, Math.round(size * 0.36))
 
   return (
     <div

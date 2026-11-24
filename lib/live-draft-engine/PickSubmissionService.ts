@@ -55,6 +55,9 @@ import { createDraftCollegeRight } from '@/lib/devy/nbaDraftRights'
 import { isDevyLeague } from '@/lib/devy/DevyLeagueConfig'
 import { isC2CLeague } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 
+/** How close to its deadline an automatic pick still counts as the clock having run out. */
+const TIMEOUT_AUTO_GRACE_MS = 3_000
+
 export interface SubmitPickInput {
   leagueId: string
   playerName: string
@@ -593,6 +596,26 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       }
     }
     throw error
+  }
+
+  // The system picked because this team's clock ran out: the team stays on auto for the rest of the
+  // draft (./instantAutopick.ts). Read off the clock this pick was made against, so an instant
+  // "Auto-pick me" or Chimmy pick on a running clock is not counted. A few seconds of grace covers
+  // the room's own expiry call landing just before the server's deadline.
+  if (
+    input.source === 'auto' &&
+    session.status === 'in_progress' &&
+    session.timerEndAt != null &&
+    session.timerEndAt.getTime() <= Date.now() + TIMEOUT_AUTO_GRACE_MS
+  ) {
+    await import('./instantAutopick')
+      .then(({ markTeamAutoAfterTimeout }) => markTeamAutoAfterTimeout({ draftSessionId: session.id, rosterId: effectiveRosterId }))
+      .catch((error) =>
+        logStructured('warn', 'submit_pick', 'mark_auto_after_timeout_failed', {
+          leagueId: input.leagueId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
   }
 
   // Sampled: record successful pick submission for draft-room analytics.

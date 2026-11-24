@@ -53,9 +53,14 @@ describe('mock room v2 — the live room\'s shell and header', () => {
     expect(mockPickLabel(24, 12)).toBe('2.12')
   })
 
-  it('Pause / Resume sit in the header; Reset and Export are ⋯ menu rows; no auto-pick or commissioner rows', async () => {
+  it('Pause / Resume sit in the header; Reset and Export are ⋯ menu rows; no commissioner rows', async () => {
     await renderRoom()
-    expect(screen.queryByTestId('draft-topbar-autopick-pill')).toBeNull()
+    // The AUTO pill: a missed clock turns it on (as in a live draft), and this is how it goes off.
+    const autoPill = screen.getByTestId('draft-topbar-autopick-pill')
+    expect(autoPill.textContent).toMatch(/off/i)
+    fireEvent.click(autoPill)
+    expect(screen.getByTestId('draft-topbar-autopick-pill').textContent).toMatch(/on/i)
+    fireEvent.click(screen.getByTestId('draft-topbar-autopick-pill'))
     fireEvent.click(screen.getByTestId('mock-draft-resume'))
     expect(await screen.findByTestId('mock-draft-pause')).toBeTruthy()
     fireEvent.click(screen.getByTestId('draft-topbar-menu-toggle'))

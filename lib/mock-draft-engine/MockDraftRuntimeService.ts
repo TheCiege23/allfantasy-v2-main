@@ -215,9 +215,13 @@ function getProgress(
   const startedAtRaw = values.currentPickStartedAt ? String(values.currentPickStartedAt) : null
   const startedAt = startedAtRaw ? new Date(startedAtRaw) : null
   const validStart = startedAt && !Number.isNaN(startedAt.getTime()) ? startedAt : null
+  // A manager whose clock already ran out once in this mock is on auto: their turn ends as it starts,
+  // so the next read picks for them (the live-draft rule, lib/live-draft-engine/instantAutopick.ts).
+  const onAuto =
+    slotType === 'human' && results.some((entry) => entry.slot === currentSlot && entry.source === 'autopick')
   const timerEndsAt =
     status === 'in_progress' && validStart && settings.timerSeconds > 0
-      ? new Date(validStart.getTime() + settings.timerSeconds * 1000)
+      ? new Date(validStart.getTime() + (onAuto ? 0 : settings.timerSeconds * 1000))
       : null
   return {
     totalPicks,

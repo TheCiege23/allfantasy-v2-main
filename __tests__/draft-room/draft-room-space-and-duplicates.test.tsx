@@ -19,6 +19,8 @@ vi.mock('@/lib/prisma', () => ({
     league: { findUnique: vi.fn(async () => ({ settings: db.settings })) },
     roster: { findMany: vi.fn(async () => db.rosters) },
     liveDraftAutopickPreference: { findMany: vi.fn(async () => db.prefs) },
+    // No automatic picks yet, so no seat is on auto for having missed its clock.
+    draftPick: { findMany: vi.fn(async () => []) },
   },
 }))
 vi.mock('@/lib/inactive-manager/chimmyPlayable', () => ({
