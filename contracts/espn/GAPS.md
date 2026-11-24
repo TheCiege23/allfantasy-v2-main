@@ -239,7 +239,16 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 
 ## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
 
-- `PS-01` OPEN: nothing in production reads an ESPN player's fantasy points for a week, so
+- `PS-01` SHAPE RESOLVED 2026-11-24 (writer still to build): `scripts/probe.sh fantasy-matchup NFL`
+  captured week 11 of the owner-chosen public league, with his explicit approval, as
+  `fixtures/fantasy-matchup.NFL.2026.week11.json` (see `fantasy_nfl_matchup` in ENDPOINTS.yaml). Do not
+  re-probe for shape. Established from the full body: `rosterForCurrentScoringPeriod` carries EVERY
+  rostered player with his real slot and own week points, bench included (36 of 70 bench entries scored);
+  non-bench points sum exactly to the side's total on all 10 sides; `lineupLocked: false` means the game
+  has not started (0 is not a score); `rosterForMatchupPeriod` reports slot 0 for everyone and must not
+  be read for slots. Still open: a PAST week by `scoringPeriodId` (`S-01`), and post-week stat corrections.
+  The text below is the original 2026-11-23 record.
+- `PS-01` WAS OPEN: nothing in production reads an ESPN player's fantasy points for a week, so
   `league_player_weekly_scores` has no ESPN writer and the bench-check ledger
   (`lib/core-app/benchCheckLedger.ts`) does not record ESPN calls — they could never be graded.
   `EspnLeagueFetchService` requests `mMatchup`/`mScoreboard` but parses only team totals
