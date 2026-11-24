@@ -225,8 +225,10 @@ export async function dispatchBreakingNewsAlerts(input: { now?: Date; budget?: R
     }
     const [playing, sportAudience] = await Promise.all([listUserIdsPlayingSport(sport), listSportsAlertAudience(sport)])
     const split = splitNewsAudience({ playing, namedTeamFollowers, sportAudience })
-    // A highlights or video clip goes to the bell for everyone who would have had it, pushes included.
-    const bellOnly = isBellOnlyStory(c.row)
+    // A highlights or video clip goes to the bell for everyone who would have had it, pushes included —
+    // unless it is classified BREAKING (a firing, a trade, an injury told as a clip): those still push
+    // (owner, 2026-11-23; ~31 a week).
+    const bellOnly = !c.classification && isBellOnlyStory(c.row)
     const pushIds = bellOnly ? [] : split.push
     const feedOnly = bellOnly ? [...split.push, ...split.feedOnly] : split.feedOnly
     if (pushIds.length + feedOnly.length === 0) continue
