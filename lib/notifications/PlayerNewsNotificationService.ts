@@ -34,6 +34,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { isFantasyColumnHeadline } from '@/lib/news/fantasyColumnHeadline'
 import { newsDeliveryKey } from '@/lib/news/newsroomFilter'
 import { decidePlayerNewsEligibility } from '@/lib/notifications/playerNewsEligibility'
 import {
@@ -418,6 +419,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   teamFollowerRecipients: number
   /** Team followers not told because they hit today's team-alert cap. */
   teamFollowCapped: number
+  /** Rows not sent to team followers because the headline is a fantasy column (fantasyColumnHeadline.ts). */
+  teamFollowFantasySkipped: number
   /** Rows with no rostering manager AND no follower — nobody to tell. Includes `unboundPlayer`. */
   noRoster: number
   /** Rows about ONE team rather than a player (see `teamNewsSubject`), routed to that team's followers. */
@@ -467,6 +470,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let followerRecipients = 0
   let teamFollowerRecipients = 0
   let teamFollowCapped = 0
+  let teamFollowFantasySkipped = 0
   let noRoster = 0
   let unboundPlayer = 0
   let teamNews = 0
@@ -563,6 +567,12 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
         continue
       }
       teamNews++
+      // A team story's ONLY audience is team followers, and they get news, not fantasy columns.
+      if (isFantasyColumnHeadline(row.headline)) {
+        teamFollowFantasySkipped++
+        await settle(row, 'policy-skipped')
+        continue
+      }
       const fans = (await listFollowerIdsForTeam(row.sport, clubAbbr).catch(() => null)) ?? []
       if (fans.length === 0) {
         noRoster++
@@ -685,7 +695,10 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       binding.teamRoutable && playerTeam
         ? await resolveNewsTeam(row.sport, playerTeam, null).catch(() => null)
         : null
-    const teamFollowers = teamAbbr ? await listFollowerIdsForTeam(row.sport, teamAbbr).catch(() => null) : null
+    // Team followers get the team's news, not fantasy columns about its players (2026-11-24).
+    const fantasyColumn = isFantasyColumnHeadline(row.headline)
+    const teamFollowers = teamAbbr && !fantasyColumn ? await listFollowerIdsForTeam(row.sport, teamAbbr).catch(() => null) : null
+    if (teamAbbr && fantasyColumn) teamFollowFantasySkipped++
     const playerFollowerSet = new Set(allFollowersOnly)
     const allTeamFollowersOnly = (teamFollowers ?? []).filter((id) => !rostered.has(id) && !playerFollowerSet.has(id))
 
@@ -935,6 +948,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     followerRecipients,
     teamFollowerRecipients,
     teamFollowCapped,
+    teamFollowFantasySkipped,
     noRoster,
     unboundPlayer,
     teamNews,
