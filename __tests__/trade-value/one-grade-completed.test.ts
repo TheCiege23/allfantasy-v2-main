@@ -88,7 +88,7 @@ describe('oneGradeBreakdown reads only the grade', () => {
     ])
     const out = oneGradeBreakdown({ grade: g, receiverLabel: 'You', partnerLabel: 'Gridiron Vultures' })
     expect(out[0]).toBe('You came out well ahead — 9,000 in league value for 3,000.')
-    expect(out[1]).toBe('The most valuable asset was Alpha Back, and You got him.')
+    expect(out[1]).toBe('The most valuable asset was Alpha Back, and you got him.')
     expect(out.at(-1)).toContain('Dynasty · 1QB · 12 teams · PPR')
   })
 

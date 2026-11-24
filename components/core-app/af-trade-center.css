@@ -3546,3 +3546,25 @@ html[data-mode='light'] .af-tc-pos[data-pos='db'] { color: #4338ca; }
   min-height: 44px;
   margin-top: 10px;
 }
+
+/*
+ * "Open in Sleeper" under the Trades headline had no link styling at all (2026-11-23, measured): 18px
+ * body-white text, `display: block`, its arrow icon wrapping onto a second line — it read as a stray
+ * sentence. A compact accent link, icon inline, 44px tap height. The truncation rules above still apply.
+ */
+.af-core .af-tc-handoff .af-tc-handoff-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-tc-handoff .af-tc-handoff-link > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
