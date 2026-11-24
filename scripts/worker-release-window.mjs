@@ -11,7 +11,8 @@
  * attempts an hour apart, and:
  *   - an attempt outside the window skips (the next morning catches up), and
  *   - an attempt within BACKUP_GAP_H of an earlier successful run skips (a backup, already done).
- * Manual dispatches never come here; they have their own cooldown in the workflow.
+ * Manual dispatches never come here; they have their own cooldown in the workflow. A catch-up
+ * dispatched by allfantasy-cron (scripts/worker-release-catchup.mjs) does, and so uses the same rule.
  */
 
 export const WINDOW_START_MIN = 13 * 60 // 13:00 UTC

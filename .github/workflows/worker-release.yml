@@ -62,8 +62,19 @@ on:
     - cron: "20 13 * * *"
     - cron: "20 14 * * *"
     - cron: "20 15 * * *"
+    #
+    # 🛑 AND GITHUB CAN DROP ALL THREE (2026-11-24: none was created at all). So the `allfantasy-cron`
+    # Railway service, which ticks on its own clock, checks at 13:50/14:50/15:50 UTC and, if no attempt
+    # has succeeded, dispatches this workflow with catchup=true (scripts/worker-release-catchup.mjs).
+    # A catch-up run is treated exactly like a scheduled attempt: same window, same "already done"
+    # check, no cooldown override.
   workflow_dispatch:
     inputs:
+      catchup:
+        description: 'Run as a scheduled attempt (window rules apply). Set by the allfantasy-cron service.'
+        required: false
+        default: false
+        type: boolean
       dry_run:
         description: 'Report the lag without moving the branch'
         required: false
@@ -99,14 +110,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # A scheduled attempt runs only inside the quiet window, and only if no earlier attempt has
+      # A scheduled attempt (or a catch-up dispatched by allfantasy-cron) runs only inside the quiet window, and only if no earlier attempt has
       # already advanced today. It stands down by CANCELLING itself, never by succeeding: the backup
       # check below reads "a successful run in the last 3 hours" as "already advanced", so a skip
       # that exited 0 would make the next attempt skip too, and the day would go by with nothing
       # deployed. The decision itself is scripts/worker-release-window.mjs, which is unit-tested.
       - name: Scheduled attempt - inside the quiet window, and not already done
         id: window
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || inputs.catchup == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -132,7 +143,7 @@ jobs:
       # two hours and two of those builds overlapped and hung. A manual run inside the cooldown is
       # now refused unless it says why. The scheduled run is never refused.
       - name: Refuse a manual advance inside the cooldown
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true && inputs.catchup != true
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force }}

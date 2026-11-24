@@ -189,6 +189,16 @@ async function reaperLoop() {
   }
 }
 
+/** Once a minute at second 45; catchupOnce never throws and returns at once outside its minutes. */
+async function catchupLoop() {
+  while (!stopping) {
+    const wait = Math.floor(Date.now() / 60_000) * 60_000 + 105_000 - Date.now()
+    await sleep(wait > 60_000 ? wait - 60_000 : wait)
+    if (stopping) break
+    await catchupOnce({ log: (...a) => log(...a) })
+  }
+}
+
 async function main() {
   const live = process.env.CRON_SCHEDULER_LIVE === '1'
   const schedules = slowTierSchedules(readCronSchedule(path.resolve(here, '..')))
@@ -217,7 +227,7 @@ async function main() {
   process.on('SIGTERM', () => stop('SIGTERM'))
   process.on('SIGINT', () => stop('SIGINT'))
 
-  await Promise.all([fastTier(live), slowTier(live, compiled), reaperLoop()])
+  await Promise.all([fastTier(live), slowTier(live, compiled), reaperLoop(), catchupLoop()])
   // Only reachable once stopping; let in-flight children finish inside the grace period.
   while (children.size) await sleep(250)
   process.exit(0)
