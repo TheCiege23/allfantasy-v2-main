@@ -10,6 +10,11 @@ export type C2CPickRow = {
   isUsed: boolean
 }
 
+/**
+ * Your future picks, each listed once (2026-11-23). A row says the round and year; it names a team only when the
+ * pick came from someone else ("via Gridiron Graduates"), and "Used" only once it is. The section heading already
+ * says Campus or Canton, and the old disabled "Trade" button did nothing, so neither repeats on every row.
+ */
 export function C2CPicksBoard({
   picks,
   format,
@@ -25,61 +30,48 @@ export function C2CPicksBoard({
   const combined = picks.filter((p) => p.pickSide === 'combined' || (!sep && p.pickSide !== 'campus' && p.pickSide !== 'canton'))
 
   function PickRow({ p }: { p: C2CPickRow }) {
-    const sideClass =
-      p.pickSide === 'campus'
-        ? 'border-violet-500/40 bg-violet-600/15'
-        : p.pickSide === 'canton'
-          ? 'border-blue-500/40 bg-blue-600/15'
-          : 'border-white/[0.08] bg-gradient-to-r from-violet-600/20 to-blue-600/20'
+    const via = p.originalOwnerId !== p.currentOwnerId ? (teamLabel ? teamLabel(p.originalOwnerId) : 'another team') : null
     return (
-      <div
-        className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[11px] ${sideClass}`}
+      <li
+        className="flex min-h-[44px] items-center justify-between gap-3 border-t border-[var(--line)] px-3 py-2 text-[13px] first:border-t-0"
         data-testid={`c2c-pick-row-${p.id}`}
       >
-        <span className="font-mono text-white/90">
-          R{p.round} · {p.season}
+        <span className="font-semibold text-[var(--text)]">
+          Round {p.round} <span className="font-normal text-[var(--muted)]">· {p.season}</span>
         </span>
-        <span className="uppercase text-white/55">{p.pickSide}</span>
-        <span className="text-white/70">{teamLabel ? teamLabel(p.currentOwnerId) : p.currentOwnerId.slice(0, 8)}</span>
-        <span className={p.isUsed ? 'text-emerald-300' : 'text-amber-200/80'}>{p.isUsed ? 'Used' : 'Available'}</span>
-        <button type="button" disabled className="text-[11px] text-cyan-300/50">
-          Trade
-        </button>
-      </div>
+        <span className="flex min-w-0 items-center gap-2 text-[12px]">
+          {via ? <span className="truncate text-[var(--text2)]">via {via}</span> : null}
+          {p.isUsed ? <span className="rounded-full bg-[var(--good-soft)] px-2 py-0.5 font-bold text-[var(--good)]">Used</span> : null}
+        </span>
+      </li>
     )
   }
+
+  const Section = ({ title, rows, tone, testId }: { title: string; rows: C2CPickRow[]; tone: 'campus' | 'canton' | 'both'; testId: string }) => (
+    <section data-testid={testId}>
+      <h3 className={`mb-2 text-[13px] font-bold ${tone === 'campus' ? 'text-[var(--campus)]' : tone === 'canton' ? 'text-[var(--canton)]' : 'text-[var(--text)]'}`}>
+        {title} <span className="font-normal text-[var(--muted)]">· {rows.length}</span>
+      </h3>
+      {rows.length ? (
+        <ul className="rounded-xl border border-[var(--line)] bg-[var(--surface)]">
+          {rows.map((p) => (
+            <PickRow key={p.id} p={p} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12px] text-[var(--muted)]">No picks.</p>
+      )}
+    </section>
+  )
 
   if (sep) {
     return (
-      <div className="space-y-6">
-        <section data-testid="c2c-picks-campus">
-          <h3 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-violet-200">🎓 Campus picks</h3>
-          <div className="space-y-2">
-            {campusPicks.map((p) => (
-              <PickRow key={p.id} p={p} />
-            ))}
-          </div>
-        </section>
-        <section data-testid="c2c-picks-canton">
-          <h3 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-blue-200">🏙 Canton picks</h3>
-          <div className="space-y-2">
-            {cantonPicks.map((p) => (
-              <PickRow key={p.id} p={p} />
-            ))}
-          </div>
-        </section>
+      <div className="grid gap-6 md:grid-cols-2">
+        <Section title="🎓 Campus picks" rows={campusPicks} tone="campus" testId="c2c-picks-campus" />
+        <Section title="🏙 Canton picks" rows={cantonPicks} tone="canton" testId="c2c-picks-canton" />
       </div>
     )
   }
 
-  return (
-    <section data-testid="c2c-picks-combined">
-      <h3 className="mb-2 text-[12px] font-bold uppercase text-white/80">Incoming player picks</h3>
-      <div className="space-y-2">
-        {(combined.length ? combined : picks).map((p) => (
-          <PickRow key={p.id} p={p} />
-        ))}
-      </div>
-    </section>
-  )
+  return <Section title="Your picks" rows={combined.length ? combined : picks} tone="both" testId="c2c-picks-combined" />
 }

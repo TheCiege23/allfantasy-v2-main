@@ -93,7 +93,16 @@ const theirs: RosterBuckets = {
   bench: [], taxi: [], devy: [], ir: [],
 }
 
-const rosters: Record<string, { roster: RosterBuckets }> = { 'ro-me': { roster: mine }, 'ro-opp': { roster: theirs } }
+/**
+ * This week's stored points (GET /api/c2c/roster with week and season). Canton only: no college weekly stats are
+ * ingested, so campus players have no row and show no number. Each side's eight Canton starters sum to its
+ * cantonStarterScore below (141.2 and 149.8).
+ */
+const pts = (ids: string[], values: number[]) => Object.fromEntries(ids.map((id, i) => [id, values[i]]))
+const rosters: Record<string, { roster: RosterBuckets; points: Record<string, number> }> = {
+  'ro-me': { roster: mine, points: { ...pts(['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'], [22.4, 17.1, 12.6, 19.8, 14.2, 13.3, 9.7, 19.5]), ...pts(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8'], [24.6, 18.2, 15.9, 21.4, 17.3, 12.8, 13.5, 17.5]), b1: 9.4 } },
+  'ro-opp': { roster: theirs, points: { ...pts(['oc0', 'oc1', 'oc2', 'oc3', 'oc4', 'oc5', 'oc6', 'oc7'], [18.9, 15.2, 11.4, 16.6, 14.1, 12.8, 9.9, 13.4]), ...pts(['on0', 'on1', 'on2', 'on3', 'on4', 'on5', 'on6', 'on7'], [26.1, 19.4, 22.0, 16.8, 18.3, 14.2, 15.6, 17.4]) } },
+}
 
 const score = (rosterId: string, campusScore: number, cantonScore: number, campusResult: string | null, cantonResult: string | null): C2CMatchupScore => ({
   id: `s-${rosterId}`, leagueId: 'e2e-c2c', matchupId: 'mu-10', rosterId, week: 10, season: 2026,
