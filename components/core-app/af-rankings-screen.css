@@ -1626,3 +1626,8 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-xpfold[open] > summary::after { content: '▴'; }
 .af-rk-xpfold-total { margin-left: auto; font-variant-numeric: tabular-nums; }
 .af-rk-xpfold[open] > summary { margin-bottom: 10px; }
+
+/* One league: the Points-for chart repeats the table's PF column — not drawn on a phone (2026-11-24). */
+@media (max-width: 720px) {
+  .af-rk-scope-grid .af-rk-pfchart { display: none; }
+}

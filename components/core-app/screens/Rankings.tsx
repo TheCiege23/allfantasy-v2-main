@@ -940,7 +940,10 @@ function LeagueBody({ league }: { league: LeagueView }) {
             })}
             emptyText="No team in this league has a scored week yet."
           />
-          {/* Phone: drawn as horizontal bars (CSS), so ten team names fit in full instead of ten ellipses. */}
+          {/*
+            Not drawn on a phone since 2026-11-24 (CSS, the simplify pass): it is the table's PF column again
+            ("same data as the table") and was ~400px under it. On a wider screen it sits beside the table.
+          */}
           <div className="af-rk-pfchart">
             <WorkbookBarChart
               title="Points for"
@@ -1464,8 +1467,12 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
         }
         actions={g?.you ? null : headActions}
         you={data.you}
-        // My portfolio carries the full level card (crest, tier, XP breakdown) in its own body.
-        showLevel={data.scope !== 'portfolio'}
+        /*
+          The level card on the Community board only (2026-11-24, the simplify pass). My portfolio carries the
+          full level card in its own body; One league and Class are about one league's table and the Class
+          rating, which career XP plays no part in — there it was ~180px of something else above the page.
+        */
+        showLevel={data.scope === 'global'}
       />
 
       <ScopeTabs data={data} leagueId={leagueId} />

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
@@ -60,5 +62,26 @@ describe('My portfolio, plain', () => {
     const warn = c.querySelector('.af-rk-note--warn')!
     expect(warn.textContent).toContain('Your saved total is 900 XP')
     expect(warn.closest('details')).toBeNull()
+  })
+})
+
+/*
+ * One league, simplified (2026-11-24): the level card (career XP) is the Community board's, not this tab's,
+ * and the Points-for chart — the table's PF column again — is not drawn on a phone (CSS; measured with
+ * Playwright: hidden at 390px, shown at 1280px). /e2e/rankings-guide?scope=league: 2,747px → 2,141px.
+ */
+describe('One league, plain', () => {
+  it('draws the standings without the level card; the Community board keeps it', () => {
+    const league = render(<Rankings data={data('mid', null, 'league') as never} />).container
+    expect(league.querySelector('[data-testid="rk-levelcard"]')).toBeNull()
+    expect(league.querySelectorAll('.af-rk-cards tbody tr').length).toBeGreaterThanOrEqual(12)
+    cleanup()
+    const community = render(<Rankings data={data('mid', null, 'global') as never} />).container
+    expect(community.querySelector('[data-testid="rk-levelcard"]')).not.toBeNull()
+  })
+
+  it('hides the Points-for chart on a phone only', () => {
+    const css = readFileSync(resolve(process.cwd(), 'components/core-app/af-rankings-screen.css'), 'utf8')
+    expect(css).toMatch(/@media \(max-width: 720px\) \{\s*\.af-rk-scope-grid \.af-rk-pfchart \{ display: none; \}\s*\}/)
   })
 })
