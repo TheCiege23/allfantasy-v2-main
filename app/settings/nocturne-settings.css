@@ -1094,3 +1094,30 @@
   text-transform: uppercase;
   color: var(--ns-muted);
 }
+
+/*
+ * Phone hub, grouped like iOS Settings (2026-11-24, the simplify pass): each group is ONE panel and its
+ * sections are rows inside it, divided by a hairline — not a stack of separate bordered cards with gaps.
+ * Same rows, same targets (each row is still the whole button, ≥ 56px); a section in a state the user
+ * probably did not choose keeps its warning as an amber edge on its row.
+ */
+@media (max-width: 560px) {
+  .nocturne-settings .ns-hub-group { gap: 8px; }
+  .nocturne-settings .ns-hub-grid {
+    gap: 0;
+    border: 1px solid var(--ns-border-soft);
+    border-radius: 14px;
+    background: var(--ns-panel);
+    overflow: hidden;
+  }
+  .nocturne-settings .ns-hub-grid > li + li { border-top: 1px solid var(--ns-border-soft); }
+  .nocturne-settings .ns-hub-card {
+    min-height: 56px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .nocturne-settings .ns-hub-card[data-tone='warn'] { box-shadow: inset 3px 0 0 var(--ns-warn); }
+}
