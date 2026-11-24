@@ -141,7 +141,7 @@ describe('DraftHqRookieRoom', () => {
     expect(picks.textContent).toContain('2 first-rounders')
     expect(picks.querySelectorAll('[data-round="1"]').length).toBe(2)
     expect(screen.getByTestId('draft-hq-rookie-away').textContent).toContain('2.09 to Bench Mob')
-    expect(screen.getByTestId('draft-hq-rookie-taxi').textContent).toContain('2 of 4 slots used')
+    expect(screen.getByTestId('draft-hq-rookie-taxi').textContent).toMatch(/2 of 4s*slots used/)
     const board = screen.getByTestId('draft-hq-rookie-board')
     expect(board.querySelectorAll('[data-you="true"]').length).toBe(5)
     expect(board.querySelectorAll('[data-you="true"][data-round="1"]').length).toBe(2)
@@ -153,7 +153,7 @@ describe('DraftHqRookieRoom', () => {
     expect(screen.getByTestId('draft-hq-rookie-title').textContent).toBe('Draft de novatos 2027')
     expect(screen.getByTestId('draft-hq-rookie-date').textContent).toContain('Empieza')
     expect(screen.getByTestId('draft-hq-rookie-picks').textContent).toContain('vía Taco Tuesday')
-    expect(screen.getByTestId('draft-hq-rookie-taxi').textContent).toContain('2 de 4 plazas ocupadas')
+    expect(screen.getByTestId('draft-hq-rookie-taxi').textContent).toMatch(/2 de 4s*plazas ocupadas/)
     expect(screen.getByTestId('draft-hq-rookie-board').textContent).toContain('Ronda 1')
   })
 

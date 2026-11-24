@@ -254,6 +254,7 @@ const spanish: Record<string, string> = {
   Bench: 'Suplentes',
   'Injured reserve': 'Reserva de lesionados',
   'Taxi squad': 'Equipo de desarrollo',
+  'Not eligible to start.': 'No puede ser titular.',
   'Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.': 'No puede ser titular. Los años restantes se calculan según el límite de desarrollo de tu liga.',
   'Projections are not shown because': 'No se muestran proyecciones porque',
   'Games started': 'Partidos iniciados',

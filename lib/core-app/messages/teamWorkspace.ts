@@ -31,9 +31,8 @@ export const teamWorkspaceMessages = defineMessages({
     irReview: (name: string): string => `${name}: review IR eligibility`,
     irReviewDetail:
       'The saved injury designation does not match this league’s allowed IR statuses. Verify current status before moving.',
-    irGeneral: 'Review injured reserve eligibility',
-    irGeneralDetail:
-      'Injury labels alone do not establish your provider’s IR eligibility. Verify before adding or moving a player.',
+    irGeneral: 'Check who can go on IR',
+    irGeneralDetail: 'Your platform sets its own IR rules — check them before moving a player.',
 
     taxiOverCapacity: 'Taxi squad exceeds capacity',
     taxiOverCapacityDetail: (players: number, slots: number): string => `${players} players for ${slots} saved slots.`,
@@ -62,9 +61,8 @@ export const teamWorkspaceMessages = defineMessages({
     irReview: (name) => `${name}: revisar elegibilidad para IR`,
     irReviewDetail:
       'El estado de lesión guardado no coincide con los estados permitidos en IR en esta liga. Verifica el estado actual antes de mover al jugador.',
-    irGeneral: 'Revisar elegibilidad para reserva por lesión',
-    irGeneralDetail:
-      'El estado de lesión por sí solo no determina la elegibilidad para IR en tu plataforma. Verifica antes de añadir o mover a un jugador.',
+    irGeneral: 'Revisa quién puede ir a IR',
+    irGeneralDetail: 'Tu plataforma tiene sus propias reglas de IR: revísalas antes de mover a un jugador.',
 
     taxiOverCapacity: 'La plantilla taxi supera la capacidad',
     taxiOverCapacityDetail: (players, slots) => `${players} jugadores para ${slots} plazas guardadas.`,
