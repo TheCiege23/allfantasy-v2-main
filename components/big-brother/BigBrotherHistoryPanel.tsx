@@ -40,7 +40,7 @@ export function BigBrotherHistoryPanel({ leagueId, names = {} }: { leagueId: str
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-white/60">
+      <div className="rounded-2xl border border-[var(--line)] bg-white/[0.03] p-6 text-sm text-[var(--text2)]">
         Loading ceremony log…
       </div>
     )
@@ -48,18 +48,18 @@ export function BigBrotherHistoryPanel({ leagueId, names = {} }: { leagueId: str
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-amber-500/25 bg-amber-950/15 p-4 text-sm text-amber-200/90">
+      <div className="rounded-2xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4 text-sm text-[var(--warn)]">
         {error}
       </div>
     )
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-cyan-500/15 bg-gradient-to-b from-[#0c1428]/95 to-[#050814] p-5">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-cyan-200/75">House log</h3>
-      <ul className="max-h-[min(55vh,28rem)] space-y-2 overflow-y-auto pr-1 text-[13px]">
+    <div className="space-y-3 rounded-2xl border border-[var(--accent-line)] bg-[var(--surface2)] p-5">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">House log</h3>
+      <ul className="space-y-2 text-[13px]">
         {log.length === 0 ? (
-          <li className="text-white/45">No events yet.</li>
+          <li className="text-[var(--muted)]">No events yet.</li>
         ) : (
           log.map((row, i) => {
             // Each row as a sentence. It printed the event code over a JSON dump of its metadata (2026-11-09 audit).
@@ -67,15 +67,15 @@ export function BigBrotherHistoryPanel({ leagueId, names = {} }: { leagueId: str
             return (
               <li
                 key={`${row.createdAt}-${i}`}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/80"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[var(--text)]"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-cyan-100/90">{title}</span>
-                  <time className="text-[11px] text-white/40" dateTime={row.createdAt}>
-                    {new Date(row.createdAt).toLocaleString()}
+                  <span className="font-medium text-[var(--accent)]">{title}</span>
+                  <time className="text-[11px] text-[var(--muted)]" dateTime={row.createdAt}>
+                    {new Date(row.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </time>
                 </div>
-                {detail ? <p className="mt-1 text-[12px] text-white/60">{detail}</p> : null}
+                {detail ? <p className="mt-1 text-[12px] text-[var(--text2)]">{detail}</p> : null}
               </li>
             )
           })
