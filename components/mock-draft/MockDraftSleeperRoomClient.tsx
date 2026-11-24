@@ -305,6 +305,16 @@ interface DraftState {
   auctionValues?: Record<string, number>
   /** When the draft was paused, so auction clocks can resume where they stopped. */
   pausedAtMs?: number
+  /**
+   * The user's team picks as soon as it is on the clock. Turned on when the user's clock runs out
+   * (the same rule as a live draft: a missed clock puts the team on auto), and by the AUTO pill.
+   */
+  userAutoPick?: boolean
+}
+
+/** The next turn's length: none for the user's team while it is on auto (it picks at once). */
+function userTurnMs(state: DraftState, isUser: boolean): number {
+  return isUser && state.userAutoPick ? 0 : mockTurnDurationMs(state.settings.speed, isUser)
 }
 
 interface SaveResponse {
@@ -1229,6 +1239,22 @@ export default function MockDraftSleeperRoomClient({
     [draftId, leaguePayload?.leagueId],
   )
 
+  /** The AUTO pill. Turning auto off while on the clock gives the user a full clock again. */
+  const toggleUserAutoPick = useCallback(() => {
+    setDraftState((current) => {
+      if (!current) return current
+      const next = !current.userAutoPick
+      const userOnClock = current.status === 'drafting' && Boolean(current.teams.find((team) => team.slot === current.onTheClock)?.isUser)
+      if (next || !userOnClock) return { ...current, userAutoPick: next }
+      return {
+        ...current,
+        userAutoPick: false,
+        timerSeconds: current.settings.speed,
+        turnDeadlineMs: Date.now() + mockTurnDurationMs(current.settings.speed, true),
+      }
+    })
+  }, [])
+
   const handlePick = useCallback(
     (player: AvailablePlayer, isAiPick: boolean, expectedOverall?: number) => {
       setDraftState((current) => {
@@ -1281,7 +1307,7 @@ export default function MockDraftSleeperRoomClient({
               : current.onTheClock,
           status: nextCurrentPick > totalPicks ? 'complete' : current.status,
           timerSeconds: current.settings.speed,
-          turnDeadlineMs: Date.now() + mockTurnDurationMs(current.settings.speed,
+          turnDeadlineMs: Date.now() + userTurnMs(current,
             Boolean(updatedTeams.find((entry) => entry.slot === getOnTheClockSlot(updatedTeams, current.settings, nextCurrentPick))?.isUser)),
           pausedRemainingMs: undefined,
           chatMessages:
@@ -1365,7 +1391,7 @@ export default function MockDraftSleeperRoomClient({
 
   useEffect(() => {
     if (!draftState || draftState.status !== 'drafting' || draftState.auction || !onTheClockTeam?.isUser) return
-    if (draftState.settings.speed === 0 || draftState.timerSeconds > 0) return
+    if (!draftState.userAutoPick && (draftState.settings.speed === 0 || draftState.timerSeconds > 0)) return
 
     const queuedPlayer = queue
       .map((id) => draftState.availablePlayers.find((player) => player.id === id))
@@ -1377,6 +1403,8 @@ export default function MockDraftSleeperRoomClient({
       null
 
     if (fallbackPlayer) {
+      // A missed clock puts the user's team on auto for the rest of the draft (the AUTO pill turns it off).
+      setDraftState((current) => (current && !current.userAutoPick ? { ...current, userAutoPick: true } : current))
       handlePick(fallbackPlayer, false, draftState.currentPick)
     }
   }, [draftState, draftedIds, handlePick, onTheClockTeam?.isUser, queue])
@@ -2829,7 +2857,9 @@ export default function MockDraftSleeperRoomClient({
           timerSeconds={draftState.settings.speed > 0 && !draftState.auction ? draftState.settings.speed : null}
           isCommissioner={false}
           draftStatus={status === 'drafting' ? 'in_progress' : status === 'complete' ? 'completed' : 'paused'}
-          showAutoPickPill={false}
+          showAutoPickPill={!draftState.auction}
+          autoPickEnabled={Boolean(draftState.userAutoPick)}
+          onToggleAutoPick={toggleUserAutoPick}
           showInvite={false}
           controlsSlot={pausePill}
           extraMenuItems={[

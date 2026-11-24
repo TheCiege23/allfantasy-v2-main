@@ -68,6 +68,7 @@ function TinyHeadshot({
   teamLogoUrl,
   teamAbbr,
   size = 26,
+  badgeSize,
 }: {
   name: string | null
   src: string | null
@@ -78,6 +79,7 @@ function TinyHeadshot({
   teamLogoUrl?: string | null
   teamAbbr?: string | null
   size?: number
+  badgeSize?: number
 }) {
   /** E.1: delegate to the shared PlayerAvatar so the URL classifier (which rejects data URIs and
    * team logos) is applied uniformly. The board cell stays at 22px and skips the team-logo badge
@@ -90,6 +92,7 @@ function TinyHeadshot({
       teamAbbr={teamAbbr}
       position={position}
       size={size}
+      badgeSize={badgeSize}
       testIdBase="draft-board-cell-headshot"
     />
   )
@@ -466,31 +469,32 @@ function DraftBoardCellInner({
         </div>
       ) : (
         /*
-         * Room v2 (2026-11): the headshot sits centred at the top of the tile, the name under it
-         * as "A. Runner", then position · team. Centred rather than tucked into a corner is the
-         * AF tile; it also keeps the name from wrapping around the photo on narrow boards.
+         * Room v2 (2026-11): on a phone the photo sits centred at the top of the tile, the name under
+         * it as "A. Runner", then position · team. On a desktop board (a tile 150px or wider —
+         * `af-tile-*` in globals.css; 2026-11-24, owner's call) the photo and team logo sit on the
+         * LEFT and the text on the right. A crowded 12-team board's narrow tiles keep the stack.
+         * The logo is the avatar's corner badge, drawn larger than before and no longer clipped by a
+         * round frame (it had shrunk to a sliver).
          */
         <div
-          className={`flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
+          className={`af-tile-body flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-px text-center ${onFill ? 'text-[#14172a]' : 'text-white'}`}
           data-testid={`draft-board-cell-body-${pick.overall}`}
         >
           {/* Only a real photo: with none, an initials circle read as a dark blob over the name. A tile
               already carrying a badge row (keeper, devy, trade) gives the photo's height to the text. */}
           {hasRealHeadshot && !hasStatusBadges ? (
-            <div
-              className={`shrink-0 overflow-hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}
-              data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}
-            >
-              <TinyHeadshot
-                name={pick.playerName}
-                src={headshotSrc}
-                position={pick.position}
-                teamLogoUrl={teamLogoSrc}
-                teamAbbr={pick.team}
-                size={26}
-              />
+            <div className="shrink-0" data-testid={`draft-board-cell-headshot-wrap-${pick.overall}`}>
+              <span className={`af-tile-photo-sm block rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}>
+                <TinyHeadshot name={pick.playerName} src={headshotSrc} position={pick.position}
+                  teamLogoUrl={teamLogoSrc} teamAbbr={pick.team} size={32} badgeSize={16} />
+              </span>
+              <span className={`af-tile-photo-lg hidden rounded-full ${onFill ? 'bg-black/15 ring-2 ring-white/40' : 'ring-1 ring-white/20'}`}>
+                <TinyHeadshot name={pick.playerName} src={headshotSrc} position={pick.position}
+                  teamLogoUrl={teamLogoSrc} teamAbbr={pick.team} size={46} badgeSize={22} />
+              </span>
             </div>
           ) : null}
+          <div className="af-tile-text flex min-w-0 max-w-full flex-col items-center gap-px">
           {viaOwner ? (
             <span
               className={`max-w-full truncate rounded-[3px] px-0.5 text-[11px] font-semibold leading-[12px] ${onFill ? 'bg-black/20 text-[#14172a]' : 'bg-white/15 text-white'}`}
@@ -500,7 +504,7 @@ function DraftBoardCellInner({
               {tInterpolate('draftRoom.board.viaOwner', { owner: viaOwner })}
             </span>
           ) : null}
-          <span className="block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
+          <span className="af-tile-name block max-w-full truncate text-[12px] leading-[14px] tracking-tight" title={pick.playerName ?? undefined}>
             {/* "A. Runner" for the eye; the full name for screen readers and text search. */}
             <span aria-hidden>
               {firstName ? <span className="font-medium opacity-80">{firstName.slice(0, 1)}. </span> : null}
@@ -515,7 +519,7 @@ function DraftBoardCellInner({
             (`af-tile-squeezable`, globals.css), where it no longer fits beside the chip.
           */}
           <span
-            className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 ${
+            className={`flex max-w-full min-w-0 items-center justify-center gap-x-1 text-[11px] font-semibold leading-[13px] opacity-80 af-tile-info ${
               pick.signatureChip || pick.slotSalary ? 'flex-nowrap' : 'flex-wrap'
             }`}
             data-testid={`draft-board-cell-info-${pick.overall}`}
@@ -601,6 +605,7 @@ function DraftBoardCellInner({
               ) : pick.isViewerKeeper ? `Costs your Rd ${pick.round}` : `Costs Rd ${pick.round}`}
             </span>
           ) : null}
+          </div>
         </div>
       )}
     </div>
