@@ -141,11 +141,21 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
   page that should sell through Apple means adding it to
   `IOS_APP_IAP_PAGE_PREFIXES` AND making it check out through
   `lib/monetization/checkout-client.ts`.
-- **Guideline 4.8, sign-in.** Sign in with Apple is not live, so the
-  Google/Facebook/X/Discord/Spotify buttons are hidden and email sign-in
-  remains. Google also refuses sign-in inside embedded WebViews, so its button
-  would fail there regardless. Once Sign in with Apple is configured
-  (`APPLE_CLIENT_ID`/`APPLE_CLIENT_SECRET`), social sign-in can come back.
+- **Guideline 4.8, sign-in.** Native Sign in with Apple ships from **1.2 (build
+  20)**: a black "Continue with Apple" button on /login and /signup, rendered only
+  when the app carries the `apple-signin` handler
+  (`ios-app/ios/App/App/AppleSignInHandler.swift`, registered only if Info.plist
+  has `AFSignInWithApple`; page side `components/auth/AppleNativeSignInButton.tsx`;
+  server `lib/auth/appleNativeSignIn.ts`). A build gets it only when
+  `ios-testflight.yml` runs with **`sign_in_with_apple` ticked** — the App ID
+  `ai.allfantasy.app` has the capability enabled; an unticked build has no button
+  rather than a broken one. The Google/Facebook/X/Discord/Spotify buttons stay
+  hidden in the app (Google refuses sign-in inside embedded WebViews anyway), and
+  email/password sign-in remains, which the demo account uses. Verified on a real
+  iPhone 2026-11-23: an account created with Continue with Apple on build 20.
+  ⚠ Every new build must keep `sign_in_with_apple` ticked (with `push_notifications`,
+  `universal_links`, `career_widget`, `notification_images`) — a build without it
+  silently drops the button, and the review notes below say it exists.
 - **App Review's network.** Apple's corporate range (17.0.0.0/8,
   2620:149::/32) is not treated as a VPN (`lib/geo/appleNetwork.ts`), so a
   reviewer is not sent to `/vpn-blocked`. State rules still apply to it, and an
@@ -154,7 +164,8 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
 ## Before pressing "Add for Review"
 
 - **Demo account** under App Review Information: an email/password account (not
-  a social login, which is hidden in the app) with 1–2 imported leagues. Its
+  a social or Apple login — App Review types a username and password) with 1–2
+  imported leagues. Its
   credentials go in App Store Connect's own fields — never in this repo, which is
   public.
 - **Notes** under App Review Information: paste the block below. Re-read it
@@ -169,6 +180,8 @@ The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
 
   SIGN-IN: use the demo account above (email and password). The demo account
   already has imported leagues, so every tab has real data.
+  Sign in with Apple is also available on the sign-in and sign-up screens. Other
+  social sign-in buttons are hidden in the app.
 
   PURCHASES: subscriptions (AF Pro, AF Commissioner, AF Supreme, AF Legacy)
   and token packs are sold in the app with Apple In-App Purchase: More (bottom
