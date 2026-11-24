@@ -15,12 +15,13 @@ const hm = vi.hoisted(() => ({
   bpa: vi.fn(),
   submitPick: vi.fn(),
   getDraftConfigForLeague: vi.fn(),
+  pickFindMany: vi.fn(),
 }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftSession: { findMany: hm.sessionFindMany, findFirst: hm.sessionFindFirst, findUnique: hm.sessionFindFirst },
-    draftPick: { findFirst: vi.fn(async () => null) },
+    draftPick: { findFirst: vi.fn(async () => null), findMany: hm.pickFindMany },
     league: { findUnique: hm.leagueFindUnique },
     roster: { findUnique: hm.rosterFindUnique },
     liveDraftAutopickPreference: { findUnique: hm.prefFindUnique },
@@ -66,6 +67,7 @@ beforeEach(() => {
   hm.tryQueueAutoPick.mockResolvedValue({ success: false })
   hm.bpa.mockResolvedValue({ ok: true, pick: { playerName: 'Rookie A', position: 'WR', team: 'X', playerId: 'p', byeWeek: null } })
   hm.getDraftConfigForLeague.mockResolvedValue({ autopick_behavior: 'queue-first' })
+  hm.pickFindMany.mockResolvedValue([])
 })
 
 describe('shouldPickNow', () => {
@@ -135,5 +137,37 @@ describe('the draft tick', () => {
     const summary = await processExpiredDraftPicks({ now })
     expect(summary).toMatchObject({ scanned: 1, processed: 1 })
     expect(hm.bpa).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a seat with no manager that has timed out (2026-11-21)', () => {
+  beforeEach(() => hm.rosterFindUnique.mockResolvedValue({ platformUserId: null, managerUserId: null }))
+
+  it('waits out its first clock', async () => {
+    expect(await processExpiredDraftPickForLeague('L', now)).toMatchObject({ outcome: 'skipped', reason: 'timer_not_expired' })
+    expect(hm.bpa).not.toHaveBeenCalled()
+  })
+
+  it('after the clock has picked for it once, picks at once for the rest of the draft', async () => {
+    hm.pickFindMany.mockResolvedValue([{ rosterId: 'r1' }])
+    expect(await processExpiredDraftPickForLeague('L', now)).toMatchObject({ outcome: 'processed_bpa' })
+    expect(hm.bpa).toHaveBeenCalledWith('L', 'r1', 1)
+    // Only picks the clock made count, and never a skip.
+    expect(hm.pickFindMany.mock.calls[0][0].where).toMatchObject({
+      sessionId: 'ds-1', rosterId: { in: ['r1'] }, source: { in: ['auto', 'strategy-autopick'] }, NOT: { position: 'SKIP' },
+    })
+  })
+
+  it('an orphan placeholder id counts as no manager', async () => {
+    hm.rosterFindUnique.mockResolvedValue({ platformUserId: 'orphan-3', managerUserId: null })
+    hm.pickFindMany.mockResolvedValue([{ rosterId: 'r1' }])
+    expect(await processExpiredDraftPickForLeague('L', now)).toMatchObject({ outcome: 'processed_bpa' })
+  })
+
+  it('a team with a manager is never switched by a timeout', async () => {
+    hm.rosterFindUnique.mockResolvedValue({ platformUserId: 'user-1' })
+    hm.pickFindMany.mockResolvedValue([{ rosterId: 'r1' }])
+    expect(await processExpiredDraftPickForLeague('L', now)).toMatchObject({ outcome: 'skipped', reason: 'timer_not_expired' })
+    expect(hm.pickFindMany).not.toHaveBeenCalled()
   })
 })
