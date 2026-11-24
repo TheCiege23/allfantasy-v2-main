@@ -32,7 +32,7 @@ export function PartnerCodeDashboard({ initial, demo, imageBase = '/api/partner-
       ) : null}
       <div className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-8 sm:px-6">
         {!c ? (
-          <ClaimCode onClaimed={reload} settings={s} />
+          <ClaimCode onClaimed={reload} settings={s} demo={demo} />
         ) : (
           <>
             <Headline c={c} s={s} />
@@ -44,7 +44,7 @@ export function PartnerCodeDashboard({ initial, demo, imageBase = '/api/partner-
             <Earnings c={c} />
             <div className="grid gap-6 lg:grid-cols-2">
               <Mix c={c} />
-              <Statements c={c} s={s} />
+              <Statements c={c} s={s} demo={demo} />
             </div>
             <ShareMaker c={c} demo={demo} imageBase={imageBase} onLogoChanged={reload} />
           </>
@@ -75,30 +75,64 @@ function Headline({ c, s }: { c: C; s: S }) {
   )
 }
 
-function ClaimCode({ onClaimed, settings }: { onClaimed: () => void; settings: S }) {
+const CODE_SHAPE = /^[A-Za-z0-9]{4,20}$/
+
+type CheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available'; text: string }
+  | { kind: 'unavailable'; text: string }
+  | { kind: 'error' }
+
+function ClaimCode({ onClaimed, settings, demo }: { onClaimed: () => void; settings: S; demo: boolean }) {
   const [value, setValue] = useState('')
-  const [hint, setHint] = useState<{ ok: boolean; text: string } | null>(null)
+  const [check, setCheck] = useState<CheckState>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const shapeOk = CODE_SHAPE.test(value)
 
   useEffect(() => {
-    const v = value.trim()
-    if (v.length < 4) { setHint(null); return }
+    setSaveError(null)
+    if (!CODE_SHAPE.test(value)) { setCheck({ kind: 'idle' }); return }
+    setCheck({ kind: 'checking' })
+    let live = true
     const t = setTimeout(async () => {
-      const res = await fetch(`/api/partner-codes/me?check=${encodeURIComponent(v)}`)
-      const j = await res.json().catch(() => null)
-      if (j) setHint({ ok: !!j.available, text: j.message })
+      try {
+        const res = await fetch(`/api/partner-codes/me?check=${encodeURIComponent(value)}`)
+        const j = res.ok ? await res.json() : null
+        if (!live) return
+        if (!j) { setCheck({ kind: 'error' }); return }
+        setCheck(j.available ? { kind: 'available', text: j.message } : { kind: 'unavailable', text: j.message })
+      } catch {
+        if (live) setCheck({ kind: 'error' })
+      }
     }, 300)
-    return () => clearTimeout(t)
+    return () => { live = false; clearTimeout(t) }
   }, [value])
 
   const claim = async () => {
     setBusy(true)
-    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: value }) })
-    const j = await res.json().catch(() => ({}))
+    setSaveError(null)
+    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: value }) }).catch(() => null)
+    const j = res ? await res.json().catch(() => ({})) : {}
     setBusy(false)
-    if (!res.ok) { setHint({ ok: false, text: j.error ?? 'Could not save that code' }); return }
+    if (!res?.ok) { setSaveError(j.error ?? "Couldn't save that code. Please try again."); return }
     onClaimed()
   }
+
+  // The button only waits on things the commissioner can see and fix: a code that is the wrong shape,
+  // or one we KNOW is taken. A check that fails (offline, server hiccup) no longer locks it: claiming
+  // re-checks everything on the server anyway.
+  const canClaim = shapeOk && check.kind !== 'unavailable' && !busy && !demo
+  const help =
+    saveError ? { text: saveError, tone: 'bad' as const }
+      : value.length === 0 ? { text: 'Letters and numbers, 4 to 20. Shows the way you type it, works typed any way.', tone: 'muted' as const }
+        : !shapeOk ? { text: value.length < 4 ? `Keep going: at least 4 characters (${value.length} so far)` : 'Letters and numbers only', tone: 'muted' as const }
+          : check.kind === 'checking' ? { text: 'Checking…', tone: 'muted' as const }
+            : check.kind === 'available' ? { text: check.text, tone: 'good' as const }
+              : check.kind === 'unavailable' ? { text: check.text, tone: 'bad' as const }
+                : check.kind === 'error' ? { text: "Couldn't check right now. You can still try to claim it.", tone: 'muted' as const }
+                  : { text: '', tone: 'muted' as const }
 
   return (
     <section className={`${card} max-w-xl`} aria-labelledby="claim-h">
@@ -109,16 +143,19 @@ function ClaimCode({ onClaimed, settings }: { onClaimed: () => void; settings: S
         id="pc-code"
         value={value}
         onChange={(e) => setValue(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 20))}
-        placeholder="TheCiege"
+        onKeyDown={(e) => { if (e.key === 'Enter' && canClaim) void claim() }}
+        placeholder="e.g. TheCiege"
+        autoComplete="off"
         aria-describedby="pc-code-help"
-        className="mt-2 min-h-12 w-full rounded-xl border border-[#3b3f6e] bg-[#0a0e1a] px-4 text-lg font-extrabold text-white outline-none focus:border-purple-400"
+        className="mt-2 min-h-12 w-full rounded-xl border border-[#3b3f6e] bg-[#0a0e1a] px-4 text-lg font-extrabold text-white outline-none placeholder:font-medium placeholder:text-[#6b7099] focus:border-purple-400"
       />
-      <p id="pc-code-help" className={`mt-2 text-[13px] font-semibold ${hint ? (hint.ok ? 'text-emerald-400' : 'text-rose-300') : 'text-[#a3a8c9]'}`}>
-        {hint?.text ?? 'Letters and numbers, 4–20. Shows the way you type it, works typed any way.'}
+      <p id="pc-code-help" aria-live="polite" className={`mt-2 text-[13px] font-semibold ${help.tone === 'good' ? 'text-emerald-400' : help.tone === 'bad' ? 'text-rose-300' : 'text-[#a3a8c9]'}`}>
+        {help.text}
       </p>
-      <button type="button" disabled={busy || !hint?.ok} onClick={claim} className={`${btnPrimary} mt-4 disabled:opacity-50`}>
+      <button type="button" disabled={!canClaim} onClick={claim} className={`${btnPrimary} mt-4 disabled:opacity-50`}>
         {busy ? 'Saving…' : 'Claim this code'}
       </button>
+      {demo ? <p className="mt-3 text-[12px] text-[#a3a8c9]">Claiming is turned off in the demo.</p> : null}
     </section>
   )
 }
@@ -290,15 +327,54 @@ const PAYOUT_PILL: Record<string, string> = {
 }
 const PAYOUT_LABEL: Record<string, string> = { paid: 'Paid', approved: 'Approved', pending_review: 'In review', held: 'Held' }
 
-function Statements({ c, s }: { c: C; s: S }) {
+function PayoutSetup({ c, demo }: { c: C; demo: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const go = async (action: 'payouts_setup' | 'payouts_dashboard') => {
+    if (demo) return
+    setBusy(true)
+    setErr(null)
+    const res = await fetch('/api/partner-codes/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action }) })
+    const j = await res.json().catch(() => ({}))
+    if (res.ok && j.url) { window.location.href = j.url; return }
+    setBusy(false)
+    setErr(j.error ?? 'Something went wrong')
+  }
+  const ready = c.payoutSetup === 'active'
+  const started = c.payoutSetup !== 'none'
+  const line = ready
+    ? 'Payouts go straight to your bank.'
+    : c.payoutSetup === 'pending'
+      ? 'Stripe is checking your details. This usually takes a few minutes.'
+      : started
+        ? 'Stripe needs a bit more information before it can pay you.'
+        : 'Add your bank and tax info through Stripe so we can pay you. It takes about 5 minutes.'
+  return (
+    <div className={`mt-3 flex flex-col gap-2 rounded-xl border p-4 ${ready ? 'border-emerald-500/40 bg-[#0f2e22]/40' : 'border-[#5b3a86] bg-[#0a0e1a]'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className={ready ? 'text-emerald-400' : 'text-amber-300'}>{ready ? 'Payouts are set up' : started ? 'Finish payout setup' : 'Set up payouts'}</strong>
+        {ready ? (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy || demo} onClick={() => go('payouts_dashboard')} className={`${btnGhost} disabled:opacity-60`}>See payouts in Stripe</button>
+            <button type="button" disabled={busy || demo} onClick={() => go('payouts_setup')} className="min-h-11 px-2 text-sm font-semibold text-[#a3a8c9] underline disabled:opacity-60">Update bank or tax info</button>
+          </div>
+        ) : (
+          <button type="button" disabled={busy || demo} onClick={() => go('payouts_setup')} className={`${btnPrimary} disabled:opacity-60`}>{busy ? 'Opening Stripe…' : started ? 'Continue setup' : 'Set up payouts'}</button>
+        )}
+      </div>
+      <p className="text-[13px] text-[#c7cbe6]">{line}</p>
+      {err ? <p className="text-[13px] font-semibold text-rose-300">{err}</p> : null}
+    </div>
+  )
+}
+
+function Statements({ c, s, demo }: { c: C; s: S; demo: boolean }) {
   return (
     <section className={card} aria-labelledby="st-h">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="st-h" className="text-lg font-bold">Monthly statements</h2>
-        <span className={`text-[13px] font-semibold ${c.taxFormStatus === 'missing' ? 'text-amber-300' : 'text-emerald-400'}`}>
-          {c.taxFormStatus === 'missing' ? 'W-9 needed before payouts' : 'W-9 on file'}
-        </span>
       </div>
+      <PayoutSetup c={c} demo={demo} />
       {c.payouts.length ? (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">

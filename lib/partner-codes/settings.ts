@@ -57,6 +57,12 @@ export type PartnerSettings = {
   paymentClearDays: number
   /** Balances under this roll over to the next month. */
   minPayoutCents: number
+  /**
+   * Statements up to this amount are sent automatically (no admin approval) when the commissioner's
+   * Stripe payout account is active and none of the statement's subscribers is flagged. 0 = off:
+   * every statement waits for an admin, whose approval then sends it.
+   */
+  autoSendMaxCents: number
   /** Max code changes per rolling 365 days. Old codes keep working. */
   maxCodeChangesPerYear: number
 }
@@ -79,6 +85,7 @@ export const DEFAULT_PARTNER_SETTINGS: PartnerSettings = {
   activeWindowDays: 28,
   paymentClearDays: 30,
   minPayoutCents: 2500,
+  autoSendMaxCents: 0,
   maxCodeChangesPerYear: 2,
 }
 
@@ -97,6 +104,7 @@ const INT_KEYS = [
   'activeWindowDays',
   'paymentClearDays',
   'minPayoutCents',
+  'autoSendMaxCents',
   'maxCodeChangesPerYear',
 ] as const
 
@@ -115,6 +123,7 @@ const LIMITS: Record<(typeof INT_KEYS)[number], [number, number]> = {
   activeWindowDays: [7, 90],
   paymentClearDays: [0, 180],
   minPayoutCents: [0, 100_000],
+  autoSendMaxCents: [0, 500_000],
   maxCodeChangesPerYear: [0, 12],
 }
 
