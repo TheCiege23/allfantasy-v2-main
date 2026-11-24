@@ -11,6 +11,7 @@ import type { NativeCategoryScoringContext } from '@/lib/category-scoring/native
  * `unavailableDomains` rather than silently producing empty output that
  * looks identical to "nothing to recommend right now."
  */
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { prisma } from '@/lib/prisma'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -131,7 +132,7 @@ export async function assembleUserOsContext(args: {
   const [league, teams, injuries] = await Promise.all([
     prisma.league.findUnique({
       where: { id: args.canonicalLeagueId },
-      select: { isDynasty: true, playoffTeams: true, playoffStartWeek: true },
+      select: { isDynasty: true, playoffTeams: true, playoffStartWeek: true, platform: true },
     }),
     prisma.leagueTeam.findMany({
       where: { leagueId: args.canonicalLeagueId },
@@ -227,6 +228,24 @@ export async function assembleUserOsContext(args: {
     playoffForecastByTeamId = map
   }
 
+  /*
+   * 🛑 THIS WAS A CONSTANT 1 FOR EVERY LEAGUE (2026-11-24): both inputs were passed as null. The
+   * recommendations read it, so strategy always said "only 1 week of results", trade recommendations
+   * never fired, and a playoff forecast of any age counted as fresh. The week now comes from the
+   * league's redraft season through the effective-week read (schedule week for imports, stored week
+   * for native leagues); a league with no season keeps the old answer.
+   */
+  const redraftSeason = await prisma.redraftSeason
+    .findFirst({
+      where: { leagueId: args.canonicalLeagueId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, currentWeek: true },
+    })
+    .catch(() => null)
+  const seasonWeek = redraftSeason
+    ? await resolveEffectiveRedraftWeek(redraftSeason, league?.platform ?? null).catch(() => redraftSeason.currentWeek)
+    : null
+
   const unavailableDomains: string[] = []
   if (!active.teamId || !lineup) {
     unavailableDomains.push('lineup', 'roster')
@@ -246,7 +265,7 @@ export async function assembleUserOsContext(args: {
     isDynasty: league?.isDynasty ?? false,
     scoring: active.scoring,
     categoryScoring: active.categoryScoring ?? null,
-    currentWeek: resolveRedraftCurrentWeek({ redraftSeasonCurrentWeek: null, legacySettingsWeek: null }),
+    currentWeek: resolveRedraftCurrentWeek({ redraftSeasonCurrentWeek: seasonWeek, legacySettingsWeek: null }),
     playoffTeams: league?.playoffTeams ?? null,
     playoffStartWeek: league?.playoffStartWeek ?? null,
     teamId: active.teamId,

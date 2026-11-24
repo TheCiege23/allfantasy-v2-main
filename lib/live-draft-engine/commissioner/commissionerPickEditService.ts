@@ -4,6 +4,7 @@ import { isSeasonTournamentDraft, SEASON_DRAFT_MUTATION_BLOCKED } from '@/lib/to
  * Player presentation (playerId / playerImageUrl) uses resolveDraftPickPresentation like submitPick.
  */
 
+import { syncDraftProgressPointer } from '@/lib/live-draft-engine/draftProgressPointer'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
@@ -838,6 +839,7 @@ export async function commissionerPickEdit(params: CommissionerPickEditParams): 
         updatedAt: new Date(),
       },
     })
+    await syncDraftProgressPointer(tx as any, session.id)
 
     return { ok: true as const, shouldResetTimer: shouldResetTimerAfterTx, auditRow }
   }, { timeout: 30_000, maxWait: 10_000 }).catch((e: unknown) => e)

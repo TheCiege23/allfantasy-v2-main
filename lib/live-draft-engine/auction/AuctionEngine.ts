@@ -1,4 +1,5 @@
 import { loadRookieAuctionAvailability } from './rookieAuctionAvailability'
+import { syncDraftProgressPointer } from '@/lib/live-draft-engine/draftProgressPointer'
 import { planRookieAuction, type RookieAuctionTrade } from './rookieAuctionPickPolicy'
 import { parseRookieAuctionSettings } from './rookieAuctionSettings'
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
@@ -569,6 +570,7 @@ async function _resolveAuctionWinCore(
           updatedAt: new Date(),
         },
       })
+      await syncDraftProgressPointer(tx as any, session.id)
     } else {
       await recordArchiveEvent(tx, session, 'auction_pass', { nomination }, now)
       await (tx as any).draftSession.update({

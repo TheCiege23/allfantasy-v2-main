@@ -1,4 +1,5 @@
 import { seasonDraftSessionError } from '@/lib/tournament/seasonDraftBoard'
+import { syncDraftProgressPointer } from '@/lib/live-draft-engine/draftProgressPointer'
 import { prepareSeasonDraftPool } from '@/lib/tournament/seasonDraftRefresh'
 import { loadSeasonDraftContext, validateSeasonDraftPlayer } from '@/lib/tournament/seasonDraftRuntime'
 /**
@@ -561,6 +562,7 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
         archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
           selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
       })}})
+      await syncDraftProgressPointer(tx as any, session.id)
 
       return created
     })

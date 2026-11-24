@@ -11,6 +11,7 @@ import { scoreTeamDefenseRate } from '@/lib/projections/leagueScoring'
 import { buildHeadshotUrl } from '@/lib/player-media-urls'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getGameWeather } from '@/lib/core-app/gameWeather'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { byeWeeksFromSchedule, rankDefensesVsPosition, type AllowedRow, type NflPlayerOutlook, type OpponentRank, type RosterGameWeather, type SeasonFixture } from './nflRosterOutlookModel'
 
 /**
@@ -97,9 +98,15 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
   let week = args.week ?? null
   if (week == null) {
     const own = await db.redraftSeason
-      .findFirst({ where: { leagueId: args.league.id, season }, select: { currentWeek: true } })
+      .findFirst({ where: { leagueId: args.league.id, season }, select: { id: true, currentWeek: true } })
       .catch(() => null)
-    week = own?.currentWeek ?? null
+    // 🛑 Only Sleeper-id leagues reach here, and those are IMPORTS, whose stored currentWeek is 1 forever:
+    // read raw, every player showed his week-1 opponent, kickoff and projection. The effective week takes
+    // an import's week from the schedule (and keeps a native season's own week).
+    // A season that has not started (week 0) stays unstarted: the effective read floors every week at 1.
+    week = own && Number(own.currentWeek) >= 1
+      ? await resolveEffectiveRedraftWeek(own, args.league.platform).catch(() => own.currentWeek ?? null)
+      : own?.currentWeek ?? null
   }
   if (week == null || !Number.isInteger(week) || week < 1) return out
 
