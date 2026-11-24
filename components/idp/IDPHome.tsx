@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Radio, BookOpen, Shield } from 'lucide-react'
 import TabDataState from '@/components/app/tabs/TabDataState'
 import { useLeagueSectionData } from '@/hooks/useLeagueSectionData'
-import { MetricCard, SmartDataView } from '@/components/app/league/SmartDataView'
 import { LeagueDramaWidget } from '@/components/app/league/LeagueDramaWidget'
 import { ShareLeagueLinkCard } from '@/components/social/ShareLeagueLinkCard'
 import { LeagueStoryModal } from '@/components/league-story/LeagueStoryModal'
@@ -38,6 +37,24 @@ function pickFirstIdpPlayer(
   return null
 }
 
+/** The players on the overview: `unifiedRoster` rows, else the ids in the stored roster object. */
+function rosterRows(data: Record<string, unknown> | null | undefined): unknown[] {
+  if (!data) return []
+  if (Array.isArray(data.unifiedRoster)) return data.unifiedRoster
+  if (Array.isArray(data.roster)) return data.roster
+  const players = (data.roster as { players?: unknown } | null | undefined)?.players
+  return Array.isArray(players) ? players : []
+}
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+      <p className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-[var(--text)]">{value}</p>
+    </div>
+  )
+}
+
 /**
  * IDP League overview. Offense + IDP combined; scoring style card, education, Chimmy.
  */
@@ -47,12 +64,16 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
   const [idpConfig, setIdpConfig] = useState<{ scoringPreset: string; positionMode?: string; rosterPreset?: string } | null>(null)
   const [idpConfigLoading, setIdpConfigLoading] = useState(true)
   const { data, loading, error, reload } = useLeagueSectionData<Record<string, unknown>>(leagueId, 'overview')
-  const roster = Array.isArray(data?.roster) ? data?.roster : []
-  const faab = typeof data?.faabRemaining === 'number' ? data.faabRemaining : '-'
+  // The overview's `roster` is the stored roster OBJECT ({ players, starters, … }), never an array, so this counted
+  // 0 for every league (2026-11-23). `unifiedRoster` carries the players with their positions.
+  const roster = rosterRows(data)
+  const faab = typeof data?.faabRemaining === 'number' ? data.faabRemaining : '—'
   const sport = (data as { sport?: string })?.sport
   const season = (data as { season?: number })?.season
-  const week = (data as { week?: number })?.week
-  const weekNum = typeof week === 'number' ? week : 1
+  // The overview names the current week `leagueWeek`; reading `week` (absent) asked for week 1 all season.
+  const d = data as { leagueWeek?: number | null; week?: number | null } | null
+  const week = typeof d?.leagueWeek === 'number' ? d.leagueWeek : typeof d?.week === 'number' ? d.week : undefined
+  const weekNum = week
   const leagueName = (data as { leagueName?: string })?.leagueName ?? 'League'
   const sampleIdp = pickFirstIdpPlayer(roster)
   /*
@@ -79,9 +100,9 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
   return (
     <TabDataState title="Overview" loading={loading} error={error} onReload={() => void reload()}>
       <div className="space-y-4">
-        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-200">
-          <Shield className="h-4 w-4 shrink-0" />
-          <span>IDP League — offense + individual defensive players. Set lineups in Roster; scoring includes defensive stats.</span>
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text2)]">
+          <Shield className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+          <span>You start offense and individual defenders, and defensive stats score. Set your lineup on the Team tab.</span>
         </div>
         <IdpScoringStyleCard
           leagueId={leagueId}
@@ -89,8 +110,8 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
           loading={idpConfigLoading}
           onAskChimmy={onOpenChimmy}
         />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <IDPWaiverSection leagueId={leagueId} week={weekNum} />
+        <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+          <IDPWaiverSection leagueId={leagueId} week={weekNum ?? 1} />
           <IDPMatchupView leagueId={leagueId} week={weekNum} />
         </div>
         {sampleIdp ? (
@@ -99,7 +120,7 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
               type="button"
               size="sm"
               variant="outline"
-              className="border-cyan-500/30 text-cyan-100"
+              className="border-[var(--accent-line)] text-[var(--accent)]"
               onClick={() => setPlayerModalOpen(true)}
               data-testid="idp-open-player-ai-modal"
             >
@@ -117,7 +138,7 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
               position={sampleIdp.position}
               team={sampleIdp.team || null}
               sport={sport ?? 'NFL'}
-              week={weekNum}
+              week={weekNum ?? 1}
               players={idpPlayerMap}
               open={playerModalOpen}
               onOpenChange={setPlayerModalOpen}
@@ -129,7 +150,7 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
           type="button"
           data-testid="league-story-open-button"
           onClick={() => setStoryModalOpen(true)}
-          className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-950/30 px-4 py-2.5 text-sm font-medium text-purple-300 hover:bg-purple-950/50 w-full sm:w-auto"
+          className="flex items-center gap-2 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)] w-full sm:w-auto"
         >
           <BookOpen className="h-4 w-4" /> Create league story
         </button>
@@ -144,20 +165,18 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
           />
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="grid gap-3 sm:grid-cols-3 flex-1 min-w-0">
-            <MetricCard label="Roster Size" value={roster.length} />
-            <MetricCard label="FAAB Remaining" value={faab} />
-            <MetricCard label="League" value={leagueId} hint="Current context" />
+          <div className="grid flex-1 min-w-0 grid-cols-2 gap-3 sm:max-w-sm">
+            <Stat label="Players" value={<span data-testid="idp-roster-count">{roster.length}</span>} />
+            <Stat label="FAAB left" value={faab} />
           </div>
           <Link
             href={`/app/league/${encodeURIComponent(leagueId)}/broadcast`}
-            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2.5 text-sm font-medium text-amber-300 hover:bg-amber-950/50"
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] px-4 py-2.5 text-sm font-medium text-[var(--warn)] hover:bg-[var(--warn-soft)]"
           >
             <Radio className="h-4 w-4" /> Launch broadcast
           </Link>
         </div>
         <LeagueDramaWidget leagueId={leagueId} sport={sport} season={season} />
-        <SmartDataView data={data} />
       </div>
     </TabDataState>
   )
