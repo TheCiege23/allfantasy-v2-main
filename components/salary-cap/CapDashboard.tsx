@@ -28,71 +28,69 @@ export function CapDashboard({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+          className="inline-flex items-center gap-2 text-sm text-[var(--text2)] hover:text-[var(--text)]"
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
       ) : null}
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Wallet className="h-5 w-5 text-emerald-400" />
+      <section className="rounded-2xl border border-[var(--line)] bg-white/[0.03] p-4 sm:p-6">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[var(--text)]">
+          <Wallet className="h-5 w-5 text-[var(--good)]" />
           Cap Dashboard
         </h2>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs text-white/50">Current cap space</p>
-            <p className={`text-2xl font-bold ${isOverCap(ledger?.capSpace) ? 'text-red-300' : 'text-emerald-300'}`}>
-              {ledger ? formatCapMoney(ledger.capSpace) : '—'}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
+            <p className="text-xs text-[var(--muted)]">{overCap ? 'Over the cap by' : 'Current cap space'}</p>
+            <p className={`text-2xl font-bold ${overCap ? 'text-[var(--bad)]' : 'text-[var(--good)]'}`}>
+              {ledger ? (overCap ? formatCapMoney(totalHit - effectiveCap) : formatCapMoney(ledger.capSpace)) : '—'}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
             {/* totalCapHit is active contracts only; dead money is the next tile (CapCalculationService). */}
-            <p className="text-xs text-white/50">Active contracts (this year)</p>
-            <p className="text-2xl font-semibold text-white/90">
+            <p className="text-xs text-[var(--muted)]">Active contracts (this year)</p>
+            <p className="text-2xl font-semibold text-[var(--text)]">
               {ledger ? formatCapMoney(ledger.totalCapHit) : '—'}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs text-white/50">Dead money</p>
-            <p className="text-2xl font-semibold text-amber-300">
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
+            <p className="text-xs text-[var(--muted)]">Dead money</p>
+            <p className="text-2xl font-semibold text-[var(--warn)]">
               {formatCapMoney(summary.deadMoneyTotal)}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs text-white/50">Effective cap (with rollover)</p>
-            <p className="text-xl font-semibold text-white/80">{formatCapMoney(effectiveCap)}</p>
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
+            <p className="text-xs text-[var(--muted)]">Effective cap (with rollover)</p>
+            <p className="text-xl font-semibold text-[var(--text)]">{formatCapMoney(effectiveCap)}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs text-white/50">Rollover used</p>
-            <p className="text-xl font-semibold text-white/80">
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
+            <p className="text-xs text-[var(--muted)]">Rollover used</p>
+            <p className="text-xl font-semibold text-[var(--text)]">
               {formatCapMoney(ledger?.rolloverUsed ?? 0)}
             </p>
           </div>
         </div>
 
-        {(overCap || underFloor) && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
-            <div className="text-sm text-amber-200">
-              {overCap && <p>You are over the cap by {formatCapMoney(totalHit - effectiveCap)}.</p>}
-              {underFloor && <p>You are below the cap floor.</p>}
-            </div>
+        {/* Over the cap is said once, on the first tile (2026-11-23: tile, warning box and the 2026 row all said $12). */}
+        {underFloor && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-[var(--warn)]" />
+            <p className="text-sm text-[var(--warn)]">You are below the cap floor.</p>
           </div>
         )}
 
         <div className="mt-6">
-          <h3 className="mb-2 text-sm font-medium text-white/80">Committed cap by future year</h3>
+          <h3 className="mb-2 text-sm font-medium text-[var(--text)]">Next seasons</h3>
           <ul className="space-y-2">
-            {summary.futureProjection.map((y) => (
+            {summary.futureProjection.filter((y) => y.capYear !== (summary.ledger?.capYear ?? summary.league?.capYear)).map((y) => (
               <li
                 key={y.capYear}
-                className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--surface2)] px-3 py-2 text-sm"
               >
-                <span className="text-white/80">{y.capYear}</span>
-                <span className="tabular-nums text-white/80">{formatCapMoney(y.totalCapHit + y.deadMoney)} committed</span>
-                <span className={`tabular-nums ${isOverCap(y.projectedSpace) ? 'text-red-300' : 'text-emerald-300'}`}>
+                <span className="text-[var(--text)]">{y.capYear}</span>
+                <span className="tabular-nums text-[var(--text)]">{formatCapMoney(y.totalCapHit + y.deadMoney)} committed</span>
+                <span className={`tabular-nums ${isOverCap(y.projectedSpace) ? 'text-[var(--bad)]' : 'text-[var(--good)]'}`}>
                   {isOverCap(y.projectedSpace) ? `${formatCapMoney(-y.projectedSpace)} over` : `${formatCapMoney(y.projectedSpace)} space`}
                 </span>
               </li>

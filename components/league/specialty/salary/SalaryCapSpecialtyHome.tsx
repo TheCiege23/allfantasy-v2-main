@@ -57,7 +57,9 @@ export function SalaryCapSpecialtyHome({
   // A year's commitment is its contracts plus its dead money (FutureCapProjectionService keeps them apart).
   const committedIn = (y: { totalCapHit: number; deadMoney: number }) => y.totalCapHit + Math.max(0, y.deadMoney)
   const maxCol = Math.max(1, ...projection.map((y) => Math.max(y.capCeiling, committedIn(y))))
-  const phase = cfg.offseasonPhase ?? 'in_season'
+  // No phase stored means in season once the league has contracts; a league with none yet has not drafted, and calling
+  // it 'in season' was wrong (2026-11-23).
+  const phase = cfg.offseasonPhase ?? (summary.contracts.length ? 'in_season' : null)
   const dead = summary.deadContracts ?? []
 
   const rules = [
@@ -83,7 +85,8 @@ export function SalaryCapSpecialtyHome({
           cfg.mode === 'bestball' ? 'Salary cap best ball' : 'Salary cap dynasty',
           lg?.teamCount ? `${lg.teamCount} teams` : null,
         ].filter((c): c is string => Boolean(c))}
-        title={lg?.name || 'Salary Cap League'}
+        // The league name is already in the workspace header (and a long one ran to five lines here).
+        title="Your salary cap"
         headline={bar ? `${money(bar.committed)} of ${money(ceiling)} committed` : 'Join a team to see your cap.'}
         blurb="Every player has a salary and a contract length. Stay under the cap, plan for next year, and pay dead money when you cut someone early."
         actions={[

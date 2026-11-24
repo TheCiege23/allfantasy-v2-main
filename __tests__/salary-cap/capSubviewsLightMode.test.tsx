@@ -25,11 +25,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const SUBVIEWS: SalaryCapView[] = ['cap-dashboard', 'contracts', 'team-builder', 'draft', 'ai', 'rules']
 
-describe('every sub-view sits inside the light-mode opt-out', () => {
+// Superseded 2026-11-23: the sub-views follow light mode (Salary Cap joined the shell's light tokens and the views read
+// /core tokens), so none sits inside the always-dark opt-out any more.
+describe('every sub-view renders outside the always-dark opt-out', () => {
   it.each(SUBVIEWS)('%s', async (view) => {
     render(<SalaryCapHome leagueId="l" initialView={view} shellNav />)
     const content = await screen.findByText(`view:${view}`)
-    expect(content.closest('.af-draft-dark')?.getAttribute('data-cap-subview')).toBe(view)
+    expect(content.closest('[data-cap-subview]')?.getAttribute('data-cap-subview')).toBe(view)
+    expect(content.closest('.af-draft-dark')).toBeNull()
   })
   it('the opt-out is the one the global light-mode text rule honours', () => {
     const css = readFileSync('app/globals.css', 'utf8')

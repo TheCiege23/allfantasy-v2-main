@@ -87,6 +87,8 @@
 .hero { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .08); min-height: 250px; }
 .hero>.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .hero>.veil { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7, 8, 13, .95) 0%, rgba(7, 8, 13, .82) 50%, rgba(7, 8, 13, .3) 100%); }
+/* Salary Cap's banner draws a gauge arc and needle that ran through the blurb (2026-11-23): veil the text side fully. */
+.sp[data-specialty='salary'] .hero>.veil { background: linear-gradient(90deg, rgba(7, 8, 13, .96) 0%, rgba(7, 8, 13, .92) 62%, rgba(7, 8, 13, .45) 100%); }
 .hero>.heroIn { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 26px; padding: 26px 30px; min-height: 250px; }
 .emblem { width: 150px; flex: none; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .6)); }
 .heroText { flex: 1 1 420px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -169,7 +171,8 @@
  * literals as fallbacks; text tokens are measured >= 4.5:1 on every ground below in guillotineLightHub.test.ts. */
 /* Devy joined 2026-11-23: its body read as a dark block on a light page. */
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'],
-:global(html[data-mode='light']) .sp[data-specialty='devy'] {
+:global(html[data-mode='light']) .sp[data-specialty='devy'],
+:global(html[data-mode='light']) .sp[data-specialty='salary'] {
   --sp-bg: var(--surface2, #eef1f9);
   --sp-card: var(--surface, #ffffff);
   --sp-card2: #f7f8fc;
@@ -206,7 +209,8 @@
 /* Primary buttons are often <a>: `.nl-workspace a { color: inherit }` beats `.btnP`, so they take the panel's text
  * colour. In dark that inherited colour is near-white; in light it would be dark text on the accent. Keep the ink. */
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP,
-:global(html[data-mode='light']) .sp[data-specialty='devy'] .btnP { color: var(--accInk); }
+:global(html[data-mode='light']) .sp[data-specialty='devy'] .btnP,
+:global(html[data-mode='light']) .sp[data-specialty='salary'] .btnP { color: var(--accInk); }
 /* On dark artwork (the hero) or staged dark on purpose (.stayDark): every token back to its dark fallback.
  * `color` is re-declared because an INHERITED colour is computed where it is declared (.sp, from the light tokens):
  * resetting the tokens here does not recompute it, and `.nl-workspace a { color: inherit }` (0,1,1) beats `.btn`,

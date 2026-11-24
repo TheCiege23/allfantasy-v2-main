@@ -89,7 +89,8 @@ export async function GET(
   let extensionCandidatesCount = 0
   let tagCandidatesCount = 0
   if (config.extensionsEnabled) {
-    extensionCandidatesCount = activeContracts.filter((c) => c.contractYear >= c.yearsTotal).length
+    // A franchise-tagged contract is not extended, so it is not a candidate (2026-11-23).
+    extensionCandidatesCount = activeContracts.filter((c) => c.contractYear >= c.yearsTotal && c.status !== 'tagged').length
   }
   if (config.franchiseTagEnabled) {
     const tagged = contracts.filter((c) => c.status === 'tagged').length
