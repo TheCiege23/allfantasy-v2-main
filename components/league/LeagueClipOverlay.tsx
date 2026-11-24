@@ -13,7 +13,15 @@ export type LeagueClipPayload = {
   displayMode?: 'fullscreen' | 'inline'
   /** Visual accent for concept leagues */
   accent?: 'zombie' | 'survivor'
+  /** One line saying what happened, under the title. A card moment's main text. */
+  detail?: string
+  /** A card moment's big icon (an emoji). */
+  icon?: string
+  /** A card moment's motion: `mauling` shakes, `bomb` flashes, `weapon` pops (see app/globals.css). */
+  anim?: string
 }
+
+const CARD_ANIM: Record<string, string> = { mauling: 'mauling-anim', bomb: 'bomb-anim', weapon: 'weapon-pop-anim' }
 
 type Props = {
   open: boolean
@@ -52,6 +60,8 @@ export function LeagueClipOverlay({ open, payload, onClose }: Props) {
 
   const isVideo = payload.clipType === 'video' && !payload.reducedMotion
   const isImage = payload.clipType === 'image' && !payload.reducedMotion
+  // A moment with no video file: drawn here. Reduced motion still shows it — the classes switch their motion off.
+  const isCard = payload.clipType === 'card'
   const accent =
     payload.accent === 'survivor'
       ? 'border-amber-500/25 shadow-amber-900/20'
@@ -61,7 +71,8 @@ export function LeagueClipOverlay({ open, payload, onClose }: Props) {
 
   const shell =
     payload.displayMode === 'inline'
-      ? 'fixed bottom-6 right-6 z-[96] w-[min(100vw-1.5rem,420px)] max-h-[min(72vh,520px)]'
+      // Clear of the phone's bottom tab bar (~64px plus the home indicator); the desktop corner as before.
+      ? 'fixed bottom-[calc(env(safe-area-inset-bottom)+5rem)] right-3 z-[96] w-[min(100vw-1.5rem,420px)] max-h-[min(72vh,520px)] sm:bottom-6 sm:right-6'
       : 'fixed inset-0 z-[96] flex items-center justify-center p-4 sm:p-8'
 
   return (
@@ -97,7 +108,18 @@ export function LeagueClipOverlay({ open, payload, onClose }: Props) {
         </div>
 
         <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40">
-          {payload.reducedMotion ? (
+          {isCard ? (
+            <div
+              data-testid="league-clip-card"
+              className={`flex w-full flex-col items-center gap-3 px-6 text-center ${payload.displayMode === 'inline' ? 'py-8' : 'py-16'} ${CARD_ANIM[payload.anim ?? ''] ?? ''}`}
+            >
+              <span aria-hidden className={`leading-none ${payload.displayMode === 'inline' ? 'text-5xl' : 'text-7xl'} ${payload.anim === 'weapon' ? 'weapon-pop-anim' : ''}`}>
+                {payload.icon ?? '🧟'}
+              </span>
+              <p className={`font-extrabold text-white ${payload.displayMode === 'inline' ? 'text-xl' : 'text-3xl'}`}>{payload.title ?? 'League moment'}</p>
+              {payload.detail ? <p className="max-w-md text-base text-white/80">{payload.detail}</p> : null}
+            </div>
+          ) : payload.reducedMotion ? (
             <p className="px-6 py-16 text-center text-sm text-white/70">
               Motion reduced — showing title only. {payload.title ? ` ${payload.title}` : ''}
             </p>
@@ -121,6 +143,9 @@ export function LeagueClipOverlay({ open, payload, onClose }: Props) {
             <p className="px-6 py-12 text-sm text-white/60">Unsupported clip type.</p>
           )}
         </div>
+        {!isCard && payload.detail ? (
+          <p data-testid="league-clip-detail" className="border-t border-white/[0.08] px-4 py-3 text-center text-sm text-white/80">{payload.detail}</p>
+        ) : null}
       </div>
     </div>
   )

@@ -415,6 +415,11 @@ export type ProcessExpiredDraftPicksOptions = {
 /**
  * Find in-progress snake/linear/auction drafts with expired timers and process each.
  */
+/** Most picks one league gets in one tick when team after team picks without waiting. */
+export const INSTANT_CHAIN_MAX_PICKS = 40
+/** The tick stops chaining once it has run this long, so one long board cannot hold the cron. */
+export const INSTANT_CHAIN_BUDGET_MS = 25_000
+
 export async function processExpiredDraftPicks(
   options: ProcessExpiredDraftPicksOptions = {},
 ): Promise<ProcessExpiredDraftPicksSummary> {
@@ -462,6 +467,10 @@ export async function processExpiredDraftPicks(
   let processed = 0
   let skipped = 0
 
+  const isPick = (d: ExpiredPickProcessDetail) =>
+    d.outcome === 'processed_queue' || d.outcome === 'processed_bpa' || d.outcome === 'processed_skip' || d.outcome === 'processed_auction'
+  const startedAt = Date.now()
+
   for (const row of candidates) {
     const detail =
       row.draftType === 'auction'
@@ -472,15 +481,27 @@ export async function processExpiredDraftPicks(
       errors.push({ leagueId: detail.leagueId, message: detail.message })
       continue
     }
-    if (
-      detail.outcome === 'processed_queue' ||
-      detail.outcome === 'processed_bpa' ||
-      detail.outcome === 'processed_skip' ||
-      detail.outcome === 'processed_auction'
-    ) {
-      processed += 1
-    } else {
+    if (!isPick(detail)) {
       skipped += 1
+      continue
+    }
+    processed += 1
+    if (row.draftType === 'auction') continue
+    /*
+     * KEEP GOING WHILE THE NEXT TEAM PICKS WITHOUT WAITING. One pick a tick is one pick a minute in
+     * production, so a board of Chimmy teams with nobody in the draft room took hours: a 12-team,
+     * 12-round survivor league is 144 picks. After a pick the clock is fresh, so the next call only
+     * picks when the team now on the clock is one that never waits (../instantAutopick.ts) and stops
+     * at the first manager who gets their clock. Bounded per league and per tick.
+     */
+    for (let chained = 0; chained < INSTANT_CHAIN_MAX_PICKS && Date.now() - startedAt < INSTANT_CHAIN_BUDGET_MS; chained++) {
+      const next = await processExpiredDraftPickForLeague(row.leagueId, new Date())
+      if (next.outcome === 'error') {
+        errors.push({ leagueId: next.leagueId, message: next.message })
+        break
+      }
+      if (!isPick(next)) break
+      processed += 1
     }
   }
 

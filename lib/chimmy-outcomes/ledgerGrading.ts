@@ -3,6 +3,10 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
+import { NATIVE_PLATFORMS } from '@/lib/league/isNativeLeague'
+import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
+import { ESPN_PLAYER_SCORE_SOURCE, espnPlayerScoreLeagueKey } from '@/lib/league-import/espn/espnPlayerWeekScores'
+
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
@@ -25,6 +29,9 @@ import {
   type TradeLetter,
   type WeekCalendar,
 } from './ledgerRecord'
+
+/** `espn:` — the prefix `espnPlayerScoreLeagueKey` puts before an ESPN league's platform id. */
+const ESPN_LEAGUE_KEY_PREFIX = espnPlayerScoreLeagueKey('')
 
 /**
  * ALLFANTASY'S OWN TRACK RECORD — the server half: read what the ledger recorded and what happened,
@@ -111,15 +118,42 @@ type BenchRowSql = {
 
 /** Exported for its fallback test (`__tests__/decision-os/bench-calibration.test.ts`). */
 export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly string[]): Promise<BenchRow[]> {
+  /*
+   * WHOSE WEEKLY SCORES A CALL IS GRADED ON (native NFL leagues since 2026-11-23). A Sleeper league's are the import's,
+   * keyed on its PLATFORM league id. A native league's are our own scoring engine's (`nativePlayerWeeklyScores.ts`):
+   * source 'allfantasy', keyed on OUR `League.id`, because a native league's platformLeagueId is a synthetic string.
+   * Both key the player by the id the roster holds, and a native NFL roster holds Sleeper ids (`rosterIdSpace.ts`), so
+   * the recorded key (`LineupPlayer.sleeperId`, the roster id itself where no crosswalk applies) joins as it is. Each
+   * side reads only its own source, so a native row can never grade a Sleeper call or the reverse.
+   *
+   * An ESPN NFL league's (2026-11-24) are ESPN's own points (`espnPlayerWeekScoresWriter.ts`), source 'espn', stored
+   * under `espn:<platformLeagueId>` and already crosswalked to the CANONICAL Sleeper id — the id My Team records as
+   * `rec_player_key`. Never under the bare platform id: see `espnPlayerScoreLeagueKey` for the readers that protects.
+   */
+  const native = Prisma.sql`lower(coalesce(l.platform, '')) IN (${Prisma.join([...NATIVE_PLATFORMS].filter(Boolean))})`
+  const scoreOn = (alias: 'r' | 's', key: Prisma.Sql) => Prisma.sql`
+      ${Prisma.raw(alias)}."seasonYear" = a.season AND ${Prisma.raw(alias)}.week = a.week AND ${Prisma.raw(alias)}."playerId" = ${key}
+      AND CASE WHEN ${native}
+        THEN ${Prisma.raw(alias)}."leagueId" = l.id AND ${Prisma.raw(alias)}.source = ${NATIVE_PLAYER_SCORE_SOURCE}
+        WHEN lower(coalesce(l.platform, '')) = ${ESPN_PLAYER_SCORE_SOURCE}
+        THEN ${Prisma.raw(alias)}."leagueId" = ${ESPN_LEAGUE_KEY_PREFIX} || l."platformLeagueId" AND ${Prisma.raw(alias)}.source = ${ESPN_PLAYER_SCORE_SOURCE}
+        ELSE ${Prisma.raw(alias)}."leagueId" = l."platformLeagueId" AND ${Prisma.raw(alias)}.source <> ${NATIVE_PLAYER_SCORE_SOURCE} END`
   const from = Prisma.sql`
     FROM chimmy_advice a
     JOIN leagues l ON l.id = a.league_id
     LEFT JOIN league_player_weekly_scores r
-      ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
+      ON ${scoreOn('r', Prisma.sql`a.rec_player_key`)}
     LEFT JOIN league_player_weekly_scores s
-      ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
+      ON ${scoreOn('s', Prisma.sql`a.alt_player_key`)}
     WHERE a.surface = ${MY_TEAM_BENCH_SURFACE} AND a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season}
+      AND upper(a.sport) = 'NFL'
       ${leagueScope(Prisma.sql`a.league_id`, leagueIds)}`
+  /*
+   * 🛑 NFL ONLY (2026-11-23). `season`/`week` here are NFL weeks and the fold decides "is it over" from the NFL
+   * schedule, so a non-NFL league's call — recorded before the writer was gated on sport, when its own week number
+   * happened to equal the NFL's — was graded on the wrong clock. `sport` is in the original table, so both reads
+   * below can filter on it; `foldLedger` drops such a row too, in case one ever arrives another way.
+   */
   /*
    * What each call knew (2026-11-21), for the bench check's own calibration: the sport, both projections when it was
    * made, and when. ⚠ `rec_projected` / `alt_projected` arrive with `20261115000000_chimmy_advice_ledger_inputs`, and
@@ -135,7 +169,7 @@ export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly
       ${from}`
   } catch {
     rows = await db.$queryRaw<BenchRowSql[]>`
-      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts
+      SELECT a.user_id, a.week, a.withdrawn_at IS NOT NULL AS withdrawn, r.points AS rec_pts, s.points AS alt_pts, a.sport
       ${from}`
   }
   return rows.map((r) => ({
@@ -364,10 +398,49 @@ function recorderKeyToOutcomeKey(key: string): string {
  */
 async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<DraftTipLedger> {
   const records = await db.draftRecommendationRecord.findMany({
-    where: { sport: 'NFL', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    // Advice only: an auto-pick is graded on its own (`gradeAutopicks`), never into the card's confidence.
+    where: { sport: 'NFL', surface: { not: 'autopick' }, createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
     select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
     take: 20_000,
   })
+  return gradeRecordedPicks(records, season, cal, now, db, () => 'all').then((byGroup) => byGroup.all ?? {})
+}
+
+/**
+ * The picks the clock made this NFL season, graded the same way as the card's tips, one ledger per strategy
+ * (`draft-as-me`, `queue`, `bpa`…) — how Chimmy's own auto-picks held up (2026-11-22).
+ */
+async function gradeAutopicks(season: number, cal: WeekCalendar, now: Date, db: Db): Promise<Record<string, DraftTipLedger>> {
+  const records = await db.draftRecommendationRecord.findMany({
+    where: { sport: 'NFL', surface: 'autopick', createdAt: { gte: new Date(Date.UTC(season, 5, 1)), lt: new Date(Date.UTC(season + 1, 1, 15)) } },
+    select: { createdAt: true, round: true, servedMode: true, observeName: true, observePosition: true, activeName: true, activePosition: true, detail: true },
+    take: 20_000,
+  })
+  return gradeRecordedPicks(records, season, cal, now, db, (r) => {
+    const s = (r.detail as { autopick?: { strategy?: unknown } } | null)?.autopick?.strategy
+    return typeof s === 'string' && s.trim() ? s.trim() : 'other'
+  })
+}
+
+type RecordedPick = {
+  createdAt: Date
+  round: number
+  servedMode: string
+  observeName: string | null
+  observePosition: string | null
+  activeName: string | null
+  activePosition: string | null
+  detail: unknown
+}
+
+async function gradeRecordedPicks(
+  records: readonly RecordedPick[],
+  season: number,
+  cal: WeekCalendar,
+  now: Date,
+  db: Db,
+  groupOf: (r: RecordedPick) => string,
+): Promise<Record<string, DraftTipLedger>> {
   if (records.length === 0) return {}
   const through = completedThrough(cal, now)
   const [players, gameRaw] = await Promise.all([
@@ -381,7 +454,7 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
   const space = chooseIdSpace(buildIdSpaces(players), game.rows.map((r) => r.playerId)).space
   const { byKey } = weeklyByKey(game.rows, space)
   const windows = new Map<number, Map<string, number>>()
-  const calls: Array<{ round: number; grade: 'held' | 'missed' | null }> = []
+  const calls = new Map<string, Array<{ round: number; grade: 'held' | 'missed' | null }>>()
   for (const r of records) {
     const from = firstWeekNotKickedOff(cal, new Date(r.createdAt))
     if (from == null || from > through) continue
@@ -391,7 +464,10 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
     const servedPos = r.servedMode === 'active' ? r.activePosition : r.observePosition
     const detail = (r.detail ?? {}) as { projections?: Record<string, number> }
     const window = pts
-    calls.push({
+    const group = groupOf(r)
+    let list = calls.get(group)
+    if (!list) calls.set(group, (list = []))
+    list.push({
       round: r.round,
       grade: gradeDraftTip({
         servedKey: servedName ? `${servedName}|${servedPos ?? ''}` : null,
@@ -400,7 +476,7 @@ async function gradeDraftTips(season: number, cal: WeekCalendar, now: Date, db: 
       }),
     })
   }
-  return foldDraftTips(calls)
+  return Object.fromEntries([...calls].map(([group, list]) => [group, foldDraftTips(list)]))
 }
 
 /** Swallow only "this part's table/column is not there"; anything else is the caller's to see. */
@@ -420,12 +496,47 @@ async function part<T>(fn: () => Promise<T>, empty: T): Promise<T> {
  * The whole ledger for the current NFL season. Null when the schedule carries no regular-season weeks
  * for it — then nothing can be proven over, and nothing is written.
  */
+/**
+ * NBA, NHL and MLB bench calls, each sport on its own calendar (`sportBenchGrading.ts`). Each sport is contained there,
+ * and the whole read here: a failure costs only these lines, never the NFL record beside them. The snapshot keeps each
+ * sport's tally and its share-banded calibration, never a call.
+ */
+async function sportBenchLines(now: Date, db: Db, leagueIds?: readonly string[]): Promise<NonNullable<LedgerSnapshot['sportBench']>> {
+  return import('./sportBenchGrading')
+    .then(({ gradeAllSportBench }) => gradeAllSportBench({ now, db, leagueIds }))
+    .then(async (bySport) => {
+      const { sportBenchLineFrom } = await import('./sportBenchRecord')
+      return Object.fromEntries(Object.entries(bySport).map(([sport, line]) => [sport, sportBenchLineFrom(line!)]))
+    })
+    .catch((err: unknown) => {
+      console.warn('[ledgerGrading] sport bench grading failed', err instanceof Error ? err.message : err)
+      return {}
+    })
+}
+
+/**
+ * The NFL offseason is most of baseball's season and the end of basketball's and hockey's: with no NFL weeks to grade,
+ * the snapshot still carries the other sports' bench lines, and nothing else. Null when there are none either.
+ */
+function offseasonSnapshot(season: number, sportBench: NonNullable<LedgerSnapshot['sportBench']>): LedgerSnapshot | null {
+  if (Object.keys(sportBench).length === 0) return null
+  return {
+    season,
+    throughWeek: 0,
+    bench: { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 },
+    pickups: { graded: 0, startable: 0, vsDrop: 0, beatDrop: 0, lostDrop: 0, pending: 0, noStats: 0 },
+    trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 },
+    sportBench,
+    users: {},
+  }
+}
+
 export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}): Promise<LedgerSnapshot | null> {
   const now = opts.now ?? new Date()
   const db = opts.db ?? prisma
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
-  if (cal.size === 0) return null
+  if (cal.size === 0) return offseasonSnapshot(season, await sportBenchLines(now, db))
   const noTrades: GradedTrades = { tally: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, letters: {} }
   const [bench, adds, graded, commissionerGraded, engineClaims] = await Promise.all([
     part(() => loadBenchRows(season, db), [] as BenchRow[]),
@@ -445,7 +556,23 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     console.warn('[ledgerGrading] draft tip grading failed', err instanceof Error ? err.message : err)
     return {} as DraftTipLedger
   })
+  // Chimmy's own auto-picks, per strategy — contained the same way, for the same reason.
+  const autopicks = await gradeAutopicks(season, cal, now, db).catch((err: unknown) => {
+    console.warn('[ledgerGrading] autopick grading failed', err instanceof Error ? err.message : err)
+    return {} as Record<string, DraftTipLedger>
+  })
+  /*
+   * Every other sport and league type's trade letters (`tradeOutcomesAll.ts`) — dynasty on the market, the rest on their
+   * own league's scoring. Contained like the draft parts: a failure costs only these buckets.
+   */
+  const tradeOutcomes = await import('./tradeOutcomesAll')
+    .then(({ gradeAllTradeOutcomes }) => gradeAllTradeOutcomes({ now, db, nflCal: cal, nflSeason: season }))
+    .catch((err: unknown) => {
+      console.warn('[ledgerGrading] trade outcome grading failed', err instanceof Error ? err.message : err)
+      return {}
+    })
   const waiverEngine = gradeEngineClaims(engineClaims, cal, now)
+  const sportBench = await sportBenchLines(now, db)
   return foldLedger({
     season,
     cal,
@@ -458,13 +585,18 @@ export async function recomputeLedgerRecord(opts: { now?: Date; db?: Db } = {}):
     tradeLetters: graded.letters,
     commissionerTradeLetters: commissionerGraded.letters,
     draftTips,
+    autopicks,
+    tradeOutcomes,
+    sportBench,
   })
 }
 
 /**
  * The same ledger, scoped to a set of leagues — a partner workspace's linked leagues (lib/partner-portal).
- * Start/sit (My Team's bench check) and pickups (the waiver panel's #1 add) only: trade evaluations are not
- * keyed to a league in a way a partner scope can trust yet, so they are left out rather than guessed.
+ * Start/sit (My Team's bench check), pickups (the waiver panel's #1 add) and — since 2026-11-22 — the trade letters
+ * graded on what happened in every other sport and league type (`tradeOutcomesAll.ts`): those are read from trade
+ * snapshots that each carry their league, so the scope is exact. NFL redraft letters are still left out: that grade
+ * reads evaluations not keyed to a league in a way a partner scope can trust.
  *
  * The `users` map is EMPTIED: a partner sees counts for its leagues, never which person was given which call.
  * Null when the schedule has no regular-season weeks for the season, or when no league is given.
@@ -478,11 +610,16 @@ export async function recomputeLedgerForLeagues(
   const db = opts.db ?? prisma
   const season = nflSeasonFor(now)
   const cal = await loadNflWeekCalendar(season, db)
-  if (cal.size === 0) return null
-  const [bench, adds] = await Promise.all([
+  if (cal.size === 0) {
+    const off = offseasonSnapshot(season, await sportBenchLines(now, db, leagueIds))
+    return off ? { ...off, users: {} } : null
+  }
+  const [bench, adds, tradeOutcomes] = await Promise.all([
     part(() => loadBenchRows(season, db, leagueIds), [] as BenchRow[]),
     part(() => loadAddRows(season, db, leagueIds), [] as AddRow[]),
+    part(() => import('./tradeOutcomesAll').then(({ gradeAllTradeOutcomes }) => gradeAllTradeOutcomes({ now, db, nflCal: cal, nflSeason: season, leagueIds })), {}),
   ])
-  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 } })
+  const sportBench = await sportBenchLines(now, db, leagueIds)
+  const folded = foldLedger({ season, cal, now, bench, adds, trades: { byLetter: {}, pending: 0, unscored: 0, read: 0, gradable: 0 }, tradeOutcomes, sportBench })
   return { ...folded, users: {} }
 }

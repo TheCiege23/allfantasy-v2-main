@@ -30,7 +30,14 @@ import type {
   EspnImportTransaction,
 } from '@/lib/league-import/adapters/espn/types'
 
-const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mScoreboard', 'mSettings']
+/*
+ * `mMatchupScore` (2026-11-24, GAPS.md PS-01) adds each current-week side's `rosterForCurrentScoringPeriod`:
+ * every rostered player's own week points with his real slot, which `espnPlayerWeekScoresWriter.ts` stores
+ * for the bench ledger. Both committed captures that carry that block requested it (`fantasy_nfl`,
+ * `fantasy_nfl_matchup` in ENDPOINTS.yaml); no capture shows the block without it. One more view on the
+ * same request — no extra request, no other host.
+ */
+const ESPN_IMPORT_VIEWS = ['mTeam', 'mRoster', 'mMatchup', 'mMatchupScore', 'mScoreboard', 'mSettings']
 const ESPN_DISCOVERY_VIEWS = ['mTeam', 'mSettings']
 const ESPN_DRAFT_VIEWS = ['mDraftDetail']
 const ESPN_TRANSACTIONS_MIN_SEASON = 2019
@@ -85,12 +92,19 @@ export interface EspnFetchOptions {
   includePreviousSeasons?: boolean
   maxPreviousSeasons?: number
   minSeason?: number
+  /**
+   * Store the current week's per-player points (`espnPlayerWeekScoresWriter.ts`) from this same response.
+   * Opt-in: only the import pipeline passes it (the scheduled collector sync and an import), so a gate check,
+   * a waiver refresh or the historical backfill reading the league never writes.
+   */
+  recordPlayerWeekScores?: boolean
 }
 
 const DEFAULT_FETCH_OPTIONS: Required<EspnFetchOptions> = {
   includePreviousSeasons: true,
   maxPreviousSeasons: 6,
   minSeason: 2010,
+  recordPlayerWeekScores: false,
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -1435,6 +1449,15 @@ export async function fetchEspnLeagueForImport(
 
   const schedule = parseEspnSchedule(raw, season, currentWeek)
   fillEspnPointsAgainst(teams, schedule)
+  /*
+   * The bench ledger's ESPN scores (GAPS.md PS-01), from THIS response. Fire and forget: never awaited,
+   * never thrown into the import, and a finished season (whose current week is long over) is not read.
+   */
+  if (opts.recordPlayerWeekScores && !league.isFinished) {
+    void import('./espnPlayerWeekScoresWriter')
+      .then(({ recordEspnPlayerWeekScores }) => recordEspnPlayerWeekScores({ platformLeagueId: leagueId, season, raw }))
+      .catch(() => console.warn('[espn-player-week-scores] writer unavailable'))
+  }
   const playerDirectory = buildEspnPlayerDirectory(teams)
   let draftPicks = parseEspnDraftPicks(draftRaw, playerDirectory)
   /*

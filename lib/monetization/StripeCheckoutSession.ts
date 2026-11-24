@@ -78,6 +78,13 @@ export async function buildStripeCheckoutSessionForSku(input: {
    * eligibility is the route's job. Subscriptions only; 0 or absent = no trial.
    */
   trialDays?: number | null
+  /**
+   * Commissioner Partner Codes (lib/partner-codes): the friend-discount coupon the route resolved for a
+   * referred buyer's FIRST subscription, and the code it came from. Lowest priority: a typed sponsor code
+   * or founding pricing wins, and the buyer stays attributed to the commissioner either way.
+   */
+  partnerCouponId?: string | null
+  partnerCodeId?: string | null
   env?: NodeJS.ProcessEnv
 }): Promise<StripeCheckoutSessionResult | null> {
   const env = input.env ?? process.env
@@ -117,6 +124,8 @@ export async function buildStripeCheckoutSessionForSku(input: {
   if (entrySource) metadata.entrySource = entrySource
   const trialDays = mode === "subscription" && item.type === "subscription" ? readTrialDays(input.trialDays) : 0
   if (trialDays > 0) metadata.trialDays = String(trialDays)
+  const partnerCodeId = mode === "subscription" ? input.partnerCodeId?.trim() : null
+  if (partnerCodeId) metadata.partnerCodeId = partnerCodeId
 
   const params: Stripe.Checkout.SessionCreateParams = {
     mode,
@@ -177,6 +186,8 @@ export async function buildStripeCheckoutSessionForSku(input: {
   } else if (foundingCouponId) {
     params.discounts = [{ coupon: foundingCouponId }]
     foundingDiscountApplied = true
+  } else if (partnerCodeId && input.partnerCouponId) {
+    params.discounts = [{ coupon: input.partnerCouponId }]
   } else {
     params.allow_promotion_codes = true
   }

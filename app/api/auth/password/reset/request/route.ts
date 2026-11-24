@@ -133,6 +133,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
+    // US and Canada only (lib/phone/smsRegion): a number verified before that rule gets no text.
+    // Answered like the others; email reset still works.
+    const { isSmsAllowedNumber } = await import("@/lib/phone/smsRegion")
+    if (!isSmsAllowedNumber(phone)) {
+      void logPasswordResetAudit({ outcome: "sms_region_blocked", type: "sms", userId: profile.userId, phone, ip })
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     const code = String(randomInt(100000, 1000000))
     const tokenHash = sha256Hex(code)
     const expiresAt = new Date(Date.now() + 1000 * 60 * 15)

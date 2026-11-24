@@ -152,3 +152,35 @@ export async function refuseCheckoutForRestrictedBillingState(
     refundedChargeId: payment.chargeId,
   }
 }
+
+/**
+ * Undo a checkout that must not stand for a reason other than the billing state:
+ * cancel its subscription and refund what it charged, in full. Idempotent, and a
+ * failure THROWS so the webhook retries, exactly like the refusal above.
+ *
+ * Used by the no-account support checkout (lib/monetization/supportGuestCheckout)
+ * when the email typed on Stripe's page belongs to an account that is ALREADY paying
+ * for that plan — someone who pays twice by mistake gets the second charge back.
+ */
+export async function cancelAndRefundCheckout(
+  stripe: Stripe,
+  session: Stripe.Checkout.Session,
+  reason: string,
+): Promise<void> {
+  const subscriptionId = idOf(session.subscription)
+  if (subscriptionId) await cancelIfLive(stripe, subscriptionId)
+  const target = await paymentOfCheckout(stripe, session)
+  if (!target.paymentIntentId && !target.chargeId) return
+  try {
+    await stripe.refunds.create(
+      {
+        ...(target.paymentIntentId ? { payment_intent: target.paymentIntentId } : { charge: target.chargeId! }),
+        metadata: { af_reason: reason, af_checkout_session: session.id },
+      },
+      { idempotencyKey: `af-${reason}-refund-${session.id}` },
+    )
+  } catch (error) {
+    if ((error as { code?: string })?.code === "charge_already_refunded") return
+    throw error
+  }
+}

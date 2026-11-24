@@ -26,6 +26,8 @@ import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/Roster
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import type { CurrentOnTheClock } from '@/lib/live-draft-engine/types'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { ANNUAL_C2C_DRAFT } from './annualC2CDraft'
+import { loadAnnualC2CPickPool } from './annualC2CPickEligibility'
 import { filterCandidatesForPlayerPool } from '@/lib/live-draft-engine/serverRookieStatus'
 import { guardCandidates, loadStarterGuard } from '@/lib/live-draft-engine/autopickStarterGuard'
 import { loadLeagueRosteredPlayers, rosteredHolder } from '@/lib/live-draft-engine/rosteredPlayerGuard'
@@ -81,6 +83,11 @@ export type BestAvailableAutopickResolved = {
   byeWeek: number | null
   reason: string
   strategy: 'need-based' | 'bpa' | 'draft-as-me'
+  /**
+   * Chimmy Queue only: which engine chose. `draft-os` = the Draft OS pick decision (what the draft card and Chimmy
+   * recommend); `recommender` = the clock's own recommender, when the decision had no pick in time.
+   */
+  source?: 'draft-os' | 'recommender'
 }
 
 function normalizeName(value: string): string {
@@ -167,6 +174,7 @@ export const AUTOPICK_WARM_POOL_MIN_UNDRAFTED = 75
 async function loadWarmPoolCandidates(
   leagueId: string,
   draftedNames: Set<string>,
+  minUndrafted = AUTOPICK_WARM_POOL_MIN_UNDRAFTED,
 ): Promise<AutopickFallbackPoolEntry[] | null> {
   // An expired snapshot is still the right pool mid-draft: take it and let the rebuild run behind.
   let snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
@@ -182,7 +190,7 @@ async function loadWarmPoolCandidates(
   }
   const candidates = (payload.entries as ResolvedPoolEntry[]).map(toFallbackPoolEntry)
   const undrafted = candidates.filter((c) => c.playerName && !draftedNames.has(normalizeName(c.playerName))).length
-  if (undrafted < AUTOPICK_WARM_POOL_MIN_UNDRAFTED) return null
+  if (undrafted < minUndrafted) return null
   return candidates
 }
 
@@ -288,7 +296,14 @@ export async function loadAutopickDraftContextForOnClock(
   const settings = (league?.settings as Record<string, unknown>) ?? {}
   const isSuperflex = getIsSuperflexFromSettings(settings)
 
-  let fallbackPoolRaw = await loadFallbackCandidates(leagueId, sport, draftedNames)
+  const annualCombined = draftSession.draftModeLabel === ANNUAL_C2C_DRAFT
+  let fallbackPoolRaw = annualCombined
+    ? (await loadWarmPoolCandidates(leagueId, draftedNames, 1)) ?? []
+    : await loadFallbackCandidates(leagueId, sport, draftedNames)
+  if (annualCombined) {
+    const eligible = await loadAnnualC2CPickPool(leagueId)
+    fallbackPoolRaw = fallbackPoolRaw.filter(entry => eligible(entry) !== null)
+  }
   if (sport === 'NBA' && league?.leagueVariant === 'survivor') {
     const roster = await loadNbaSurvivorRosterEligibility(totalPicks)
     fallbackPoolRaw = fallbackPoolRaw.filter((candidate) =>
@@ -297,7 +312,7 @@ export async function loadAutopickDraftContextForOnClock(
   }
   const fallbackPool = await filterCandidatesForPlayerPool(
     leagueId,
-    (draftSession as { playerPool?: string | null }).playerPool,
+    annualCombined ? 'all' : draftSession.playerPool,
     fallbackPoolRaw.filter((entry) => {
       if (!entry.playerName || !entry.position) return false
       if (draftedNames.has(normalizeName(entry.playerName))) return false
@@ -403,6 +418,8 @@ export async function resolveBestAvailableAutopickCandidate(
   } = ctx
 
   let selected: BestAvailableAutopickResolved | null = null
+  /** Set when draft as me was on but had too little history: said in front of the fallback's reason. */
+  let draftAsMeNote: string | null = null
 
   /*
    * One starter guard for every branch below (lib/live-draft-engine/autopickStarterGuard.ts). It bites
@@ -426,17 +443,47 @@ export async function resolveBestAvailableAutopickCandidate(
       board,
       ownPositions,
       eligible: draftEligiblePositions,
+      // The same open starting slots the starter guard computed from the league template.
+      openStarters: guard.open,
       aiAdpByKey,
       sport,
+      onNotEnoughHistory: (reason) => {
+        draftAsMeNote = reason
+      },
     }).catch(() => null)
     if (mine && guard.allows(mine.position)) {
       return { playerName: mine.playerName, position: mine.position, team: mine.team, playerId: mine.playerId, byeWeek: mine.byeWeek, reason: mine.reason, strategy: 'draft-as-me' }
     }
   }
 
+  // Chimmy Queue (the manager's own AF Pro auto-pick mode): with the queue spent, Chimmy picks for this
+  // team's needs rather than the league's plain best available. A failed read means the ordinary pick.
+  const { chimmyQueueManagerFor, draftOsChimmyQueuePick } = await import('@/lib/live-draft-engine/chimmyQueueAutopick')
+  const chimmyManager = await chimmyQueueManagerFor(draftSession.id, rid).catch(() => null)
+  const chimmyQueue = chimmyManager !== null
+
+  // "Chimmy's pick" is the Draft OS decision's — the player the draft card and Chimmy name — taken from this
+  // clock's vetted pool. Bounded and never throws; with no decision pick the recommender below picks as before.
+  if (chimmyManager) {
+    const os = await draftOsChimmyQueuePick({ leagueId, userId: chimmyManager, rosterId: rid, draftType: draftSession.draftType, board }).catch(() => null)
+    if (os) {
+      const picked: BestAvailableAutopickResolved = {
+        playerName: os.entry.playerName,
+        position: os.entry.position,
+        team: os.entry.team,
+        playerId: os.entry.playerId,
+        byeWeek: os.entry.byeWeek,
+        reason: `Chimmy's pick for your team: ${os.reason || 'Draft OS recommendation.'}`,
+        strategy: 'need-based',
+        source: 'draft-os',
+      }
+      return draftAsMeNote ? { ...picked, reason: draftAsMeNote } : picked
+    }
+  }
+
   const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
 
-  if (autopickBehavior === 'need-based') {
+  if (autopickBehavior === 'need-based' || chimmyQueue) {
     const rec = computeDraftRecommendation({
       available: board.map((entry) => ({
         name: entry.playerName,
@@ -466,14 +513,16 @@ export async function resolveBestAvailableAutopickCandidate(
             String(entry.position).toUpperCase() === String(candidate.position).toUpperCase()
         ) ?? board[0]
       if (fromPool) {
+        const why = rec.recommendation?.reason || 'Need-based fallback recommendation.'
         selected = {
           playerName: fromPool.playerName,
           position: fromPool.position,
           team: fromPool.team,
           playerId: fromPool.playerId,
           byeWeek: fromPool.byeWeek,
-          reason: rec.recommendation?.reason || 'Need-based fallback recommendation.',
+          reason: chimmyQueue ? `Chimmy's pick for your team: ${why}` : why,
           strategy: 'need-based',
+          ...(chimmyQueue ? { source: 'recommender' as const } : {}),
         }
       }
     }
@@ -499,7 +548,7 @@ export async function resolveBestAvailableAutopickCandidate(
         playerId: top.playerId,
         byeWeek: top.byeWeek,
         reason:
-          autopickBehavior === 'need-based'
+          autopickBehavior === 'need-based' || chimmyQueue
             ? 'Need-based fallback unavailable; selected best ranked available player.'
             : 'Queue empty; selected best ranked available player.',
         strategy: 'bpa',
@@ -507,7 +556,46 @@ export async function resolveBestAvailableAutopickCandidate(
     }
   }
 
-  return selected
+  // A manager on Chimmy Queue chose Chimmy's pick, so its reason stands; the "not enough history" note
+  // (from the league-wide Draft like me stepping aside) would otherwise replace it.
+  return selected && draftAsMeNote && !chimmyQueue ? { ...selected, reason: draftAsMeNote } : selected
+}
+
+/** NFL only (the ledger grades NFL); reads the warm pool's projections, never builds the pool. */
+async function recordAutopickForLedger(leagueId: string, rosterId: string, selected: BestAvailableAutopickResolved): Promise<void> {
+  const session = await prisma.draftSession.findFirst({
+    where: { leagueId },
+    orderBy: CURRENT_DRAFT_SESSION_ORDER,
+    select: { id: true, sessionKind: true, teamCount: true, picks: { where: { rosterId }, orderBy: { overall: 'desc' }, take: 1, select: { overall: true, round: true, playerName: true } } },
+  })
+  const pick = session?.picks[0]
+  if (!session || session.sessionKind === 'mock' || !pick || pick.playerName.trim() !== selected.playerName.trim()) return
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true } })
+  if (String(league?.sport ?? '').toUpperCase() !== 'NFL') return
+  const { getWarmDraftPoolSnapshotFast } = await import('@/lib/draft-room/ensureDraftPoolReady')
+  const snap = await getWarmDraftPoolSnapshotFast(leagueId, { allowStale: true })
+  if (!snap.warm) return
+  const projections = new Map<string, number>()
+  for (const raw of snap.payload.entries as unknown[]) {
+    const e = raw as { name?: unknown; position?: unknown; projectedPoints?: unknown; nflDraftProjectionSplits?: { projectedPoints?: unknown } | null }
+    if (typeof e.name !== 'string' || typeof e.position !== 'string') continue
+    const p = typeof e.projectedPoints === 'number' ? e.projectedPoints : typeof e.nflDraftProjectionSplits?.projectedPoints === 'number' ? e.nflDraftProjectionSplits.projectedPoints : null
+    if (p != null && Number.isFinite(p) && p > 0) projections.set(`${e.name}|${e.position}`, p)
+  }
+  const { recordAutopickDecision } = await import('@/lib/shared-services/draft/recommendationRecorder')
+  await recordAutopickDecision({
+    sport: 'NFL',
+    leagueId,
+    sessionKey: session.id,
+    rosterKey: rosterId,
+    overallPick: pick.overall,
+    round: pick.round,
+    picked: { name: selected.playerName, position: selected.position, team: selected.team ?? null, adp: null },
+    strategy: selected.strategy,
+    reason: selected.reason,
+    projections,
+    poolSize: (snap.payload.entries as unknown[]).length,
+  })
 }
 
 /**
@@ -547,8 +635,13 @@ export async function submitBestAvailableAutopickForExpiredTimer(
     rosterId: onClockRosterId,
     source: 'auto',
     expectedOverall,
+    // Why it was picked, shown on the board's player card (autoPickReason in the session snapshot).
+    pickMetadata: { autopick: { strategy: selected.strategy, reason: selected.reason, ...(selected.source ? { source: selected.source } : {}) } },
   })
 
   if (!result.success) return { ok: false, error: 'submit_failed' }
+  // Decision OS ledger (2026-11-22): the pick, why, and the board's projections, so the six-hourly grading
+  // can say how Chimmy's auto-picks held up. Background only; never delays or fails the pick.
+  void recordAutopickForLedger(leagueId, onClockRosterId, selected).catch(() => undefined)
   return { ok: true, pick: selected }
 }

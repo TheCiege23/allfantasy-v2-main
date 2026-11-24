@@ -8,8 +8,8 @@ import { JuryFinale } from '@/components/survivor/late/JuryFinale'
 import { JuryQaPanel } from '@/components/survivor/late/JuryQaPanel'
 
 const juryPageMessages = defineMessages({
-  en: { kicker: 'Jury chamber', title: 'Justice · Drama · Payoff', intro: 'The jury decides who wins the season.', finale: 'Finale stage →' },
-  es: { kicker: 'Sala del jurado', title: 'Justicia · Drama · Desenlace', intro: 'El jurado decide quién gana la temporada.', finale: 'Escenario de la final →' },
+  en: { kicker: 'Jury chamber', title: 'The jury picks the winner', intro: 'Players voted out after the merge sit on the jury. At the finale they question the finalists, then vote.', finale: 'Finale stage →' },
+  es: { kicker: 'Sala del jurado', title: 'El jurado elige al ganador', intro: 'Los eliminados después de la fusión forman el jurado. En la final interrogan a los finalistas y luego votan.', finale: 'Escenario de la final →' },
 })
 
 export default function SurvivorJuryPage() {
@@ -22,7 +22,7 @@ export default function SurvivorJuryPage() {
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
       <header className="survivor-panel rounded-2xl p-5">
         <p className="sv-eyebrow">{m.kicker}</p>
-        <h1 className="sv-h mt-2 text-2xl uppercase md:text-3xl">{m.title}</h1>
+        <h1 className="sv-h mt-2 text-2xl md:text-3xl">{m.title}</h1>
         <p className="mt-2 text-[13px] text-white/55">{m.intro}</p>
       </header>
 

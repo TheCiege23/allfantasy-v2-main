@@ -186,11 +186,16 @@ export const myTeamScreenMessages = defineMessages({
     benchAskChimmy: 'Ask Chimmy about this swap',
     benchCaveat: 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.',
     /* The bench check's graded record for a swap of this size (2026-11-21, `decision-os/lineup/benchCalibration.ts`). */
-    benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean) => {
-      const edge = band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'
+    /** The same small label as every measured line on /core (`messages/adviceRecord.ts` recordLabel). */
+    benchCheckRecordLabel: 'Track record',
+    benchCheckRecord: (pct: number, n: number, band: 'narrow' | 'clear' | 'wide', low: boolean, scale?: 'points' | 'share') => {
+      // NBA / NHL / MLB are banded by the edge's share of the starter's projection, not by points (benchCalibration.ts).
+      const swaps = scale === 'share'
+        ? `Swaps with an edge of ${band === 'narrow' ? 'under 10%' : band === 'clear' ? '10–25%' : '25% or more'} of the starter's projection`
+        : `Swaps with a ${band === 'narrow' ? '2–4 point' : band === 'clear' ? '4–8 point' : '8+ point'} edge`
       return low
-        ? `Swaps with a ${edge} edge have been right only ${pct}% of the time (${n} graded calls) — closer than the projections suggest.`
-        : `Swaps with a ${edge} edge have been right ${pct}% of the time (${n} graded calls).`
+        ? `${swaps} have been right only ${pct}% of the time (${n} graded calls) — closer than the projections suggest.`
+        : `${swaps} have been right ${pct}% of the time (${n} graded calls).`
     },
 
     // TaxiYears
@@ -391,8 +396,11 @@ export const myTeamScreenMessages = defineMessages({
       `¿Debería poner de titular a ${bench} en lugar de ${starter} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`,
     benchAskChimmy: 'Preguntar a Chimmy por este cambio',
     benchCaveat: 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.',
-    benchCheckRecord: (pct, n, band, low) => {
-      const edge = band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
+    benchCheckRecordLabel: 'Historial',
+    benchCheckRecord: (pct, n, band, low, scale) => {
+      const edge = scale === 'share'
+        ? band === 'narrow' ? 'menos del 10% de la proyección del titular' : band === 'clear' ? 'entre el 10% y el 25% de la proyección del titular' : 'más del 25% de la proyección del titular'
+        : band === 'narrow' ? '2 a 4 puntos' : band === 'clear' ? '4 a 8 puntos' : 'más de 8 puntos'
       return low
         ? `Los cambios con una ventaja de ${edge} solo han acertado el ${pct}% de las veces (${n} decisiones evaluadas): más ajustado de lo que sugieren las proyecciones.`
         : `Los cambios con una ventaja de ${edge} han acertado el ${pct}% de las veces (${n} decisiones evaluadas).`

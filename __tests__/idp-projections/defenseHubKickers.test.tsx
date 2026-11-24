@@ -84,8 +84,10 @@ describe('Defense Hub kicker section', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Your kickers')).toBeInTheDocument())
-    expect(screen.getByText(/does not persist/i)).toBeInTheDocument()
-    expect(screen.getByText(/replacement about K15/i)).toBeInTheDocument()
+    // In plain words since 2026-11-23: the loader's `basis` (Spearman, "replacement about K15") is the
+    // measurement, not an explanation. The reason a manager reads is that rank doesn't carry year to year.
+    expect(screen.getByText(/rank doesn’t carry from one year to the next/i)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/Spearman|replacement about K/)
   })
 
   /**

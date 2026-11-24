@@ -81,7 +81,12 @@ function Side({
       ) : (
         <span className="af-sb-cov" aria-hidden />
       )}
-      {winPct != null ? (
+      {/*
+        Only the favourite's chance is printed (2026-11-23, "crowded"): the other side's is the
+        remainder, and printing both put two percentages on every row and squeezed every team name.
+        A dead heat (50/50) shows on both, since neither is the favourite.
+      */}
+      {winPct != null && winPct >= 50 ? (
         <span
           className="af-sb-win af-num"
           data-fav={winPct >= 50}
@@ -152,8 +157,10 @@ export function LeagueScoreboardPanel({
       </div>
 
       <ul className="af-sb-list">
-        {board.games.map((g) => (
-          <li key={g.matchupId ?? 'x'} className="af-sb-game" data-yours={g.teams.some((t) => t.isYou)}>
+        {board.games.map((g) => {
+          const yours = g.teams.some((t) => t.isYou)
+          return (
+          <li key={g.matchupId ?? 'x'} className="af-sb-game" data-yours={yours}>
             <div className="af-sb-teams">
               {g.teams.map((t, i) => (
                 <Side
@@ -162,23 +169,24 @@ export function LeagueScoreboardPanel({
                   unplayed={g.unplayed}
                   side={i === 0 ? 'home' : 'away'}
                   winPct={
-                    g.winProbability == null
-                      ? null
-                      : // The stored probability is the FIRST team's, so the
-                        // second side is its complement.
-                        Math.round((i === 0 ? g.winProbability : 1 - g.winProbability) * 100)
+                    /*
+                     * YOUR game uses the matchup engine's chance — the one the headline says ("54% to
+                     * win") — never the board's own. Both used to show on your row, 64% beside your name
+                     * and 54% at the end: two models, two answers, one game (found 2026-11-23).
+                     */
+                    yours && winProbability
+                      ? Math.round((t.isYou ? winProbability.pWin : 1 - winProbability.pWin) * 100)
+                      : g.winProbability == null
+                        ? null
+                        : // The stored probability is the FIRST team's, so the
+                          // second side is its complement.
+                          Math.round((i === 0 ? g.winProbability : 1 - g.winProbability) * 100)
                   }
                 />
               ))}
             </div>
-            {g.teams.some((t) => t.isYou) && winProbability ? (
-              <span
-                className="af-sb-winprob af-num"
-                title={`${copy('Win probability')} · ${winProbability.confidence}`}
-              >
-                {Math.round(winProbability.pWin * 100)}%
-              </span>
-            ) : g.margin != null ? (
+            {/* Your chance is on your team's line now (above), so this column is the lead for every game. */}
+            {g.margin != null ? (
               <span className="af-sb-margin af-num">
                 {/* A 0–0 game has not started; "level" read as a result. A real tie says so. */}
                 {g.margin === 0
@@ -187,7 +195,8 @@ export function LeagueScoreboardPanel({
               </span>
             ) : null}
           </li>
-        ))}
+          )
+        })}
       </ul>
 
       {/*

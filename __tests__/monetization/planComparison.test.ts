@@ -17,8 +17,14 @@ describe('plan comparison', () => {
     for (const id of ['leagues', 'season', 'basics', 'dues']) expect(cells(id)).toEqual(['yes', 'yes', 'yes', 'yes'])
   })
 
+  it('puts the OS answers on Pro, Commissioner and Supreme (owner, 2026-11-22)', () => {
+    for (const id of ['trade_breakdown', 'player_depth', 'competitive_edge', 'af_numbers']) {
+      expect(cells(id), id).toEqual(['no', 'yes', 'yes', 'yes'])
+    }
+  })
+
   it('puts the manager tools on Pro and Supreme only', () => {
-    for (const id of ['trade_breakdown', 'player_depth', 'competitive_edge', 'start_sit', 'waivers']) {
+    for (const id of ['start_sit', 'waivers', 'chimmy_drafts', 'chimmy_runs_team']) {
       expect(cells(id), id).toEqual(['no', 'yes', 'no', 'yes'])
     }
   })

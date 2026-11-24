@@ -17,6 +17,8 @@ export type PipelinePick = {
   round: number
   pick: number
   overall: number
+  /** The school he was drafted from, when the store recorded one. */
+  college?: string | null
 }
 
 export type CollegeProPipeline = {
@@ -25,10 +27,16 @@ export type CollegeProPipeline = {
   movingUp: Array<{ playerId: string; name: string; position: string; nflTeam: string; round: number; pick: number }>
   /** The shortened rookie draft's pool: drafted players no team in the league held in college. */
   rookiePool: { drafted: number; heldInCollege: number; unheld: number }
+  /**
+   * Drafted college players the store could not tie to an id (basketball: no CBBD athlete id, or no
+   * ESPN id on the draft-year roster). They are not in `drafted`, and are never matched by name, so
+   * the page says how many could not be checked rather than implying they were not drafted.
+   */
+  unlinked: number
 }
 
 /** The stored row, or null when it is not one. Tolerant: a malformed pick is skipped, not trusted. */
-export function parseStoredDraftPicks(data: unknown): { year: number; picks: PipelinePick[] } | null {
+export function parseStoredDraftPicks(data: unknown): { year: number; picks: PipelinePick[]; unlinked: number } | null {
   const d = data && typeof data === 'object' ? (data as Record<string, unknown>) : null
   const year = Number(d?.year)
   if (!d || !Number.isInteger(year) || !Array.isArray(d.picks)) return null
@@ -46,9 +54,11 @@ export function parseStoredDraftPicks(data: unknown): { year: number; picks: Pip
       round,
       pick,
       overall: Number.isFinite(overall) ? overall : pick,
+      college: typeof p?.collegeTeam === 'string' && p.collegeTeam.trim() ? p.collegeTeam.trim() : typeof p?.college === 'string' && p.college.trim() ? p.college.trim() : null,
     })
   }
-  return { year, picks }
+  // Basketball rows record the picks they could not link (lib/devy/cbbdDraftPicksStore.ts); football's do not.
+  return { year, picks, unlinked: Array.isArray(d.unlinked) ? d.unlinked.length : 0 }
 }
 
 export function buildPipeline(args: {
@@ -58,6 +68,8 @@ export function buildPipeline(args: {
   myPlayers: ReadonlyArray<{ id: string; cfbdId: string | null; name: string }>
   /** Every CFBD athlete id on any college roster in the league, the viewer's included. */
   leagueCfbdIds: ReadonlySet<string>
+  /** Picks the store could not link; reported, never guessed. */
+  unlinked?: number
 }): CollegeProPipeline {
   const byAthlete = new Map(args.picks.map((p) => [p.collegeAthleteId, p]))
   const movingUp = args.myPlayers
@@ -74,5 +86,6 @@ export function buildPipeline(args: {
     year: args.year,
     movingUp,
     rookiePool: { drafted: args.picks.length, heldInCollege, unheld: args.picks.length - heldInCollege },
+    unlinked: args.unlinked ?? 0,
   }
 }

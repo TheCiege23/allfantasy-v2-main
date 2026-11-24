@@ -63,8 +63,9 @@ export default function TournamentDraftsPage() {
           const isMine = l.id === myTl?.id
           const scheduled = l.draftScheduledAt ? new Date(l.draftScheduledAt).toLocaleString() : t('tournament.hub.draftsPage.tbd')
           const slotRow = isMine ? state.myStandingsRow : null
-          const status =
-            l.status === 'drafting' ? 'LIVE' : l.status === 'complete' || l.status === 'archived' ? 'COMPLETE' : 'SCHEDULED'
+          // The league's own draft state when the page data carries it; `l.status` is the round's phase.
+          const draftState = l.draftStatus ?? (l.status === 'drafting' ? 'drafting' : l.status === 'complete' || l.status === 'archived' ? 'complete' : 'scheduled')
+          const status = draftState === 'drafting' ? 'LIVE' : draftState === 'complete' ? 'COMPLETE' : 'SCHEDULED'
           if (eliminated && !isMine) return null
           if (eliminated && isMine)
             return (

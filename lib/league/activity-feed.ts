@@ -10,6 +10,7 @@
  * appears, from the trades source, without reactions.
  */
 import { readReactions, type ViewerReaction } from '@/lib/chat-core/messageReactions'
+import type { LeagueMove } from '@/lib/league-chat/leagueMoves'
 
 type FeedLine = { verb: 'add' | 'drop'; name: string; meta: string | null }
 
@@ -23,6 +24,8 @@ export type FeedItem = {
   /** Set only when the item is a league-chat message, i.e. when it can take a reaction. */
   messageId: string | null
   reactions: ViewerReaction[]
+  /** Overrides the kind's label: a move read off Fantrax roster snapshots is a "Roster change", never a "Free agent". */
+  label?: string
 }
 
 export type ChatMessageLite = { id: string; text?: string | null; createdAt?: string | null; messageType?: string | null; metadata?: unknown }
@@ -84,10 +87,44 @@ export function chatEventItem(message: ChatMessageLite, viewerUserId: string | n
   return null
 }
 
+const MOVE_KIND: Record<LeagueMove['kind'], FeedItem['kind']> = { trade: 'trade', waiver: 'waiver', roster_move: 'free_agent' }
+
+/** One imported move, worded the way the Activity tab words it. */
+function leagueMoveItem(m: LeagueMove): FeedItem[] {
+  const at = validIso(m.occurredAt)
+  if (!at) return []
+  const who = m.kind === 'trade' && m.involvedTeams.length >= 2 ? m.involvedTeams.join(' ⇄ ') : m.teamName?.trim() || m.managerName?.trim() || 'A manager'
+  const meta = (p: LeagueMove['adds'][number]) => [p.position, p.team].filter(Boolean).join(' · ') || null
+  const lines = [
+    ...m.adds.map((p) => ({ verb: 'add' as const, name: p.name, meta: meta(p) })),
+    ...m.drops.map((p) => ({ verb: 'drop' as const, name: p.name, meta: meta(p) })),
+  ]
+  const label = m.inferred ? (m.kind === 'trade' ? 'Looks like a trade' : 'Roster change') : undefined
+  const where = m.league ? `${m.league.label} · ${m.league.name}` : null
+  const bid = m.bid != null ? `Bid $${m.bid}` : null
+  return [{
+    id: `league-move:${m.id}`,
+    kind: MOVE_KIND[m.kind],
+    at,
+    title: who,
+    detail: [where, bid].filter(Boolean).join(' · ') || null,
+    lines,
+    messageId: null,
+    reactions: [],
+    ...(label ? { label } : {}),
+  }]
+}
+
 export function buildActivityFeed(input: {
   chat?: { messages?: ChatMessageLite[]; viewerUserId?: string | null } | null
   shared?: SharedActivityLite[] | null
   moves?: LeagueActivityLite[] | null
+  /**
+   * An imported league's moves as the Activity tab reads them (`/chat/moves?scope=franchise`): its
+   * Sleeper transactions or Fantrax roster diffs, and for half of a paired college + pro league both
+   * halves. When present it REPLACES `moves`, which covers AllFantasy-hosted leagues only.
+   */
+  leagueMoves?: LeagueMove[] | null
 }): FeedItem[] {
   const viewer = input.chat?.viewerUserId ?? null
   const chatItems = (input.chat?.messages ?? []).map((m) => chatEventItem(m, viewer)).filter((x): x is FeedItem & { tradeId?: string } => x !== null)
@@ -101,7 +138,7 @@ export function buildActivityFeed(input: {
       return at ? [{ id: a.id, kind: 'trade' as const, at, title: 'Trade completed', detail: a.description?.trim() || null, lines: [], messageId: null, reactions: [] }] : []
     })
 
-  const moveItems: FeedItem[] = (input.moves ?? [])
+  const moveItems: FeedItem[] = input.leagueMoves ? input.leagueMoves.flatMap(leagueMoveItem) : (input.moves ?? [])
     .filter((m) => m.type === 'waiver')
     .flatMap((m) => {
       const at = validIso(m.occurredAt)

@@ -1837,8 +1837,11 @@ model ChimmyAdvice {
   /// Set when a surface stopped giving the advice BEFORE either player's kickoff (My Team's bench
   /// check after projections flip). A withdrawn call is not graded: the user was not left with it.
   withdrawnAt   DateTime? @map("withdrawn_at")
+  /// The US Eastern day ('YYYY-MM-DD') a DAILY-lineup league's bench check priced; '' (not NULL, so the unique index
+  /// still dedupes) for every weekly row. `20261123120000_chimmy_advice_day`; the writer checks the column exists.
+  adviceDay     String   @default("") @map("advice_day") @db.VarChar(10)
 
-  @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
+  @@unique([userId, leagueId, season, week, adviceDay, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_day_type_rec_alt_key")
   @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
   @@map("chimmy_advice")
 }
@@ -2050,6 +2053,8 @@ model LeagueTrade {
   performanceData   Json?
   platform          String             @default("sleeper")
   playerAgeData     Json?
+  /// The situation around the trade when the live sync first saw it: league settings, both rosters just before, records, FAAB (`lib/trade-market/tradeContextSnapshot.ts`). Null for trades seen only by a backfill.
+  contextSnapshot   Json?
   sport             String             @default("nfl")
   history           LeagueTradeHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
 
@@ -3448,7 +3453,10 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
+  /// Which platform reported it: 'sleeper' (scheduled), 'fantrax' (manual browser-download import only),
+  /// 'allfantasy' (our own engine, native leagues, keyed on League.id), or 'espn' (NFL, current week, from the
+  /// scheduled ESPN sync — lib/league-import/espn/espnPlayerWeekScoresWriter.ts). ⚠ 'espn' rows are keyed
+  /// `espn:<platformLeagueId>` and hold the CANONICAL Sleeper id, not ESPN's (ESPN 12483 is not Sleeper 12483).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -4088,6 +4096,7 @@ model AppUser {
   mockDraftRoomsCreated                    MockDraftRoom[]                        @relation("MockDraftRoomCreator")
   mockDrafts                               MockDraft[]
   passwordResetTokens                      PasswordResetToken[]
+  passkeys                                 AuthPasskey[]
   platformBlockedBy                        PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocked")
   platformBlockedUsers                     PlatformBlockedUser[]                  @relation("PlatformBlockedUserBlocker")
   platformChatMessages                     PlatformChatMessage[]                  @relation("PlatformChatMessageSender")
@@ -6318,6 +6327,30 @@ model EmailVerifyToken {
 
   @@index([userId])
   @@map("email_verify_tokens")
+}
+
+/// A passkey: sign in with Face ID, Touch ID, a fingerprint or Windows Hello (lib/auth/passkeys.ts).
+/// The private key never leaves the person's device; this row holds only the public half.
+model AuthPasskey {
+  id           String    @id @default(uuid())
+  userId       String
+  /// The credential id the browser reports, base64url.
+  credentialId String    @unique
+  publicKey    Bytes
+  /// Signature counter. Synced passkeys (iCloud, Google) always report 0.
+  counter      BigInt    @default(0)
+  transports   String[]
+  /// "singleDevice" or "multiDevice" (synced to the person's other devices).
+  deviceType   String
+  backedUp     Boolean   @default(false)
+  /// What the person sees in settings, e.g. "iPhone" — from the device that made it.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  user         AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_passkeys")
 }
 
 model PasswordResetToken {
@@ -20688,4 +20721,225 @@ model DuesLedgerEntry {
   @@index([connectionId, memberId, occurredAt, id])
   @@index([sourceRawEmailId, connectionId])
   @@index([createdBy])
+}
+
+// ---------------------------------------------------------------------------
+// Commissioner Partner Codes (docs/partner-codes/README.md)
+// User ids are plain strings (AppUser.id) with indexes, not relations, so this
+// feature never has to edit AppUser.
+// ---------------------------------------------------------------------------
+
+/// Single row (id = "singleton"). Every program number is edited here, never hardcoded.
+model PartnerProgramSettings {
+  id                          String   @id @default("singleton")
+  discountPercent             Int      @default(10)
+  discountMonths              Int      @default(3)
+  yearlyDiscountMode          String   @default("prorated")
+  commissionPercent           Int      @default(10)
+  commissionBasis             String   @default("net")
+  /// App Store / Google Play cut used as the fee on store purchases.
+  storeFeePercent             Int      @default(15)
+  commissionCapMonths         Int?
+  cashThresholdPaidSubs       Int      @default(10)
+  freeSupremePaidSubs         Int      @default(10)
+  freeCommissionerActiveUsers Int      @default(15)
+  freeSupremeActiveUsers      Int      @default(50)
+  rewardHoldDays              Int      @default(30)
+  rewardGraceDays             Int      @default(30)
+  activeMinDays               Int      @default(4)
+  activeWindowDays            Int      @default(28)
+  paymentClearDays            Int      @default(30)
+  minPayoutCents              Int      @default(2500)
+  /// Statements up to this amount are sent without admin approval when nothing about them is flagged. 0 = off.
+  autoSendMaxCents            Int      @default(0)
+  maxCodeChangesPerYear       Int      @default(2)
+  /// Stripe coupons built from the settings above; rebuilt when they change.
+  stripeMonthlyCouponId       String?
+  /// JSON map of Stripe price id -> yearly amount_off coupon id.
+  stripeYearlyCouponIds       Json?
+  updatedAt                   DateTime @updatedAt
+  updatedByUserId             String?
+}
+
+model PartnerCode {
+  id                    String     @id @default(cuid())
+  ownerUserId           String     @unique
+  /// As the commissioner typed it ("TheCiege").
+  code                  String
+  /// Upper-cased; what everything matches on.
+  codeNormalized        String     @unique
+  /// active | paused | revoked
+  status                String     @default("active")
+  isDemo                Boolean    @default(false)
+  /// First moment the paid meter reached the cash bar. Payments after it earn.
+  cashUnlockedAt        DateTime?
+  /// none | commissioner | supreme: the free plan currently granted.
+  freePlan              String     @default("none")
+  /// LevelState per reward level (lib/partner-codes/meters.ts).
+  rewardLevels          Json?
+  paidSubsCount         Int        @default(0)
+  activeUsersCount      Int        @default(0)
+  pendingPaidCount      Int        @default(0)
+  metersUpdatedAt       DateTime?
+  shareLook             String     @default("midnight")
+  /// af | initials | upload
+  shareLogo             String     @default("initials")
+  logoUrl               String?
+  /// none | pending | approved | rejected
+  logoStatus            String     @default("none")
+  /// Why an admin rejected the logo, shown to the commissioner.
+  logoReviewNote        String?
+  codeChangedAt         DateTime[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  aliases   PartnerCodeAlias[]
+  referrals PartnerReferral[]
+  entries   PartnerCommissionEntry[]
+  payouts   PartnerPayout[]
+
+  @@index([status])
+}
+
+/// Old names after a code change. They keep working.
+model PartnerCodeAlias {
+  codeNormalized String      @id
+  partnerCodeId  String
+  createdAt      DateTime    @default(now())
+  partnerCode    PartnerCode @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+
+  @@index([partnerCodeId])
+}
+
+/// One per referred user, ever.
+model PartnerReferral {
+  id                   String    @id @default(cuid())
+  partnerCodeId        String
+  userId               String    @unique
+  /// web | ios | android: where they subscribed. "web" until then.
+  platform             String    @default("web")
+  /// pro | commissioner | supreme
+  plan                 String?
+  /// month | year
+  interval             String?
+  /// pending | qualified | churned | refunded | flagged | rejected
+  status               String    @default("pending")
+  flagReasons          String[]
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  storeOriginalTxnId   String?
+  cardFingerprint      String?
+  signupIp             String?
+  emailDomain          String?
+  currentlyPaying      Boolean   @default(false)
+  firstPaidAt          DateTime?
+  qualifiedAt          DateTime?
+  churnedAt            DateTime?
+  paidInvoiceCount     Int       @default(0)
+  /// Payment ids already counted, so a re-delivered event never counts twice.
+  seenPaymentRefs      String[]
+  /// Months of payments that have already earned commission (for the optional cap).
+  commissionMonths     Int       @default(0)
+  activeDaysInWindow   Int       @default(0)
+  isDemo               Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  partnerCode PartnerCode               @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  entries     PartnerCommissionEntry[]
+  activity    PartnerReferralActivity[]
+
+  @@index([partnerCodeId, status])
+  @@index([stripeSubscriptionId])
+  @@index([stripeCustomerId])
+  @@index([cardFingerprint])
+  @@index([partnerCodeId, signupIp, createdAt])
+}
+
+/// One row per referred user per day seen: feeds the active-user meter.
+model PartnerReferralActivity {
+  referralId String
+  day        DateTime        @db.Date
+  referral   PartnerReferral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@id([referralId, day])
+}
+
+/// Append-only ledger. Unique on (source, sourceRef, installment) so a webhook
+/// delivered twice cannot pay twice.
+model PartnerCommissionEntry {
+  id                   String   @id @default(cuid())
+  partnerCodeId        String
+  referralId           String?
+  /// stripe | apple | google | adjustment
+  source               String
+  /// Stripe invoice id, store transaction id, or the refund/dispute id for a clawback.
+  sourceRef            String
+  installment          Int      @default(0)
+  /// YYYY-MM
+  periodMonth          String
+  earnedAt             DateTime
+  grossCents           Int      @default(0)
+  feeCents             Int      @default(0)
+  refundCents          Int      @default(0)
+  basisCents           Int      @default(0)
+  /// 1/1000 cent. Negative for a clawback.
+  commissionMillicents Int
+  /// scheduled | accrued | reversed | paid | clawback
+  status               String   @default("accrued")
+  payoutId             String?
+  isDemo               Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  partnerCode PartnerCode      @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  referral    PartnerReferral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  payout      PartnerPayout?   @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@unique([source, sourceRef, installment])
+  @@index([partnerCodeId, status, earnedAt])
+  @@index([referralId])
+}
+
+model PartnerPayout {
+  id            String    @id @default(cuid())
+  partnerCodeId String
+  ownerUserId   String
+  periodMonth   String
+  totalCents    Int
+  /// pending_review | approved | paid | held
+  status        String    @default("pending_review")
+  heldReason    String?
+  /// manual | stripe_connect (later)
+  method        String?
+  externalRef   String?
+  /// Why the last automatic transfer did not go through (shown in admin; never Stripe's raw text).
+  transferError String?
+  /// Definite transfer refusals so far; part of the idempotency key so a retry is not a replayed failure.
+  transferAttempts Int     @default(0)
+  approvedAt    DateTime?
+  approvedBy    String?
+  paidAt        DateTime?
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  partnerCode PartnerCode              @relation(fields: [partnerCodeId], references: [id], onDelete: Cascade)
+  entries     PartnerCommissionEntry[]
+
+  @@unique([partnerCodeId, periodMonth])
+  @@index([status])
+}
+
+model PartnerTaxProfile {
+  ownerUserId  String   @id
+  /// missing | submitted | verified. Cash payouts are held until submitted.
+  w9Status     String   @default("missing")
+  payoutMethod String?
+  legalName    String?
+  /// Stripe Connect (v2) recipient account that receives commission transfers.
+  stripeAccountId       String?   @unique
+  /// active | pending | restricted | unsupported | none: the stripe_transfers capability.
+  stripeTransfersStatus String?
+  stripeStatusCheckedAt DateTime?
+  updatedAt    DateTime @updatedAt
 }

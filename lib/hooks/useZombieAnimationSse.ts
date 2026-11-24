@@ -62,10 +62,16 @@ export function metaClip(meta: unknown): {
   clipUrl: string | null
   clipType: string
   displayMode: 'fullscreen' | 'inline'
+  /** Card moments (and an optional caption under a video): what the row says happened. */
+  title: string | null
+  detail: string | null
+  icon: string | null
+  anim: string | null
 } {
   const o = parseMeta(meta)
   const clipUrl = typeof o.clipUrl === 'string' ? o.clipUrl : null
   const clipType = typeof o.clipType === 'string' ? o.clipType : 'video'
   const dm = o.displayMode === 'inline' ? 'inline' : 'fullscreen'
-  return { clipUrl, clipType, displayMode: dm }
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null)
+  return { clipUrl, clipType, displayMode: dm, title: str(o.title), detail: str(o.detail), icon: str(o.icon), anim: str(o.anim) }
 }

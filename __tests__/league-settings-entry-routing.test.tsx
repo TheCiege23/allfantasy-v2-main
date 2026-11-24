@@ -56,6 +56,10 @@ describe('resolveLegacySettingsPanel: old settings entries → the League Settin
     expect(resolveLegacySettingsPanel(panel)).toBe(target)
   })
 
+  it('delete-league opens the Delete league sub-page', () => {
+    expect(resolveLegacySettingsPanel('delete-league')).toBe('delete-league')
+  })
+
   it('no panel (header gear, ?view=settings) → the list itself', () => {
     expect(resolveLegacySettingsPanel(null)).toBeNull()
     expect(resolveLegacySettingsPanel(undefined)).toBeNull()

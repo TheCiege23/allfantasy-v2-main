@@ -487,3 +487,30 @@ button.af-scope-chip { cursor: pointer; }
   .af-core .af-scope-panel { inset: auto 8px calc(76px + env(safe-area-inset-bottom, 0px)); padding: 14px; width: auto; max-height: 76dvh; }
   .af-core .af-scope-search input { font-size: 16px; }
 }
+
+/*
+ * Add a league, under the league list (2026-11-23). Two equal buttons side by side, 44px tall — the
+ * phone's only league list now carries what the wide screen's rail foot always had.
+ */
+.af-core .af-scope-add {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 8px;
+}
+.af-core .af-scope-add a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: center;
+}
+.af-core .af-scope-add a:hover { background: var(--accent-soft, transparent); }

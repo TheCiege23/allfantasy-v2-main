@@ -77,6 +77,9 @@ const ES: Record<string, string> = {
   'Are you sure? Your team will be given up and you’ll lose access to this league.': '¿Seguro? Cederás tu equipo y perderás el acceso a esta liga.',
   'Hand the commissioner role to someone else first.': 'Primero pasa el rol de comisionado a otra persona.',
   'LEAVE LEAGUE': 'SALIR DE LA LIGA',
+  'Delete League': 'Eliminar liga',
+  'DELETE LEAGUE': 'ELIMINAR LIGA',
+  'Removes this league, its draft and its history for every member. You’ll type the league name to confirm.': 'Elimina esta liga, su draft y su historial para todos los miembros. Escribirás el nombre de la liga para confirmar.',
 
   /* ---------------------------------------------------------- Setup tab */
   'General Settings': 'Ajustes generales',
@@ -281,6 +284,9 @@ const ES: Record<string, string> = {
   'Scoring Format': 'Formato de puntuación',
   'League Median Game': 'Partido contra la mediana',
   'Every team also plays the weekly median score': 'Cada equipo también juega contra la mediana semanal',
+  'Count Weeks Before the Draft': 'Contar las semanas antes del draft',
+  'Weeks played before this league drafted. Off: for viewing only. On: they count toward every record, including the league median':
+    'Semanas jugadas antes del draft de esta liga. Desactivado: solo para ver. Activado: cuentan en cada récord, incluida la mediana de la liga',
   'Trade Deadline': 'Fecha límite de traspasos',
   'Trade Review': 'Revisión de traspasos',
   'Time to Review Pending Trades': 'Tiempo para revisar traspasos pendientes',

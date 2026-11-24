@@ -43,6 +43,14 @@ export type LeagueMove = {
   /** The winning FAAB bid. NULL IS UNKNOWN, not free: render nothing, never "$0". */
   bid: number | null
   picks: string[]
+  /**
+   * Seen, not recorded: a Fantrax move read off two roster snapshots (`deriveFantraxTransactions`).
+   * The diff cannot tell a waiver claim from a pickup, and a trade is only ever "looks like a trade",
+   * so a card with this set must say so rather than name a kind Fantrax never reported.
+   */
+  inferred?: boolean
+  /** On the franchise feed of a paired college + pro league: which half the move happened in. */
+  league?: { leagueId: string; name: string; label: string }
 }
 
 /**

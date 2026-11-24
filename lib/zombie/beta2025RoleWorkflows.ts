@@ -1,4 +1,6 @@
 import { randomInt } from 'node:crypto'
+import { queueAnimationIn } from './animationEngine'
+import { bashingDetail, maulingMoment, zombieTeamNames } from './beta2025Moments'
 import type { Prisma, ZombieLeague, ZombieRoleWorkflow } from '@prisma/client'
 import { isChimmyRunning, readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { prisma } from '@/lib/prisma'
@@ -85,12 +87,36 @@ export function whispererDrawSeats(
   return { ok: true, managerRosterIds: managers.map(r => r.id) }
 }
 
+/**
+ * The seats Chimmy runs, for the Whisperer draw: the inactive-manager autopilot, or a seat marked
+ * `aiManaged` whose owner is not a registered manager (see `candidatesFor`).
+ */
+export function chimmyDrawSeatIds(
+  rosters: ReadonlyArray<{ id: string; platformUserId: string; settings?: unknown }>,
+  registeredUserIds: ReadonlySet<string>,
+  managed: ReturnType<typeof readManagedLineups>,
+): Set<string> {
+  const aiSeat = (r: { platformUserId: string; settings?: unknown }) =>
+    !registeredUserIds.has(r.platformUserId) &&
+    Boolean(r.settings && typeof r.settings === 'object' && (r.settings as Record<string, unknown>).aiManaged === true)
+  return new Set(rosters.filter(r => isChimmyRunning(managed, r.id, r.platformUserId) || aiSeat(r)).map(r => r.id))
+}
+
 async function candidatesFor(tx: Tx, z: ZombieLeague): Promise<Candidate[]> {
-  const rosters = await tx.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true } })
+  const rosters = await tx.roster.findMany({ where: { leagueId: z.leagueId }, select: { id: true, platformUserId: true, settings: true } })
   const users = await tx.appUser.findMany({ where: { id: { in: rosters.map(r => r.platformUserId) } }, select: { id: true } })
+  const registered = new Set(users.map(u => u.id))
   const managed = readManagedLineups((await tx.league.findUnique({ where: { id: z.leagueId }, select: { settings: true } }))?.settings)
-  const chimmySeats = new Set(rosters.filter(r => isChimmyRunning(managed, r.id, r.platformUserId)).map(r => r.id))
-  const seats = whispererDrawSeats(rosters, new Set(users.map(u => u.id)), chimmySeats, z.teamCount)
+  /*
+   * 🛑 A SEAT HANDED TO THE AI AT CREATION WAS NOT A CHIMMY SEAT HERE. A test league's extra seats (and
+   * the orphan-seat AI switch) mark the roster `settings.aiManaged`, with a placeholder owner; only the
+   * inactive-manager autopilot (`af_managed_lineups`) counted. So the owner's 4-team "Zombie Chimmy
+   * Test" (one manager, three AI seats, drafted 2026-11-22) failed this draw on every post-draft pass,
+   * never became `active`, and the scheduled resolver never ran its week. An AI-managed seat with no
+   * registered owner sits the draw out, as a Chimmy seat does.
+   */
+  const chimmySeats = chimmyDrawSeatIds(rosters, registered, managed)
+  const seats = whispererDrawSeats(rosters, registered, chimmySeats, z.teamCount)
   if (!seats.ok) throw new Error(seats.error)
   const inDraw = new Set(seats.managerRosterIds)
   const teams = await tx.zombieLeagueTeam.findMany({ where: { leagueId: z.leagueId } })
@@ -203,6 +229,8 @@ export async function settleBetaCombat(zombieLeagueId: string, week: number) {
     const kickoff = await trustedZombieWeekStart('NFL', z.season, week, tx)
     if (!kickoff) throw new Error('The saved scoring calendar is required for the combat deadline.')
     const deadline = betaCombatDeadline(kickoff)
+    const names = await zombieTeamNames(tx, z.leagueId)
+    const nameOf = (rosterId: string) => names.get(rosterId) ?? 'A team'
     for (const match of snapshot.itemMatchups) {
       if (match.homeScore === match.awayScore) continue
       const homeWins = match.homeScore > match.awayScore
@@ -224,10 +252,18 @@ export async function settleBetaCombat(zombieLeagueId: string, week: number) {
           winnerStatus: winner.status, loserStatus: loser.status, winnerScore: winScore, loserScore: loseScore, margin,
           bashingType: `survivor_bashes_${loser.status.toLowerCase()}`, requiresDecision: Boolean(kind), decisionDeadline: kind ? deadline : null,
           serumAwarded: loser.status === 'Zombie', resolvedAt: kind ? null : new Date() } })
+        // The bashing video, in this transaction so it never plays for a bashing that rolled back.
+        await queueAnimationIn(tx, z.leagueId, week, 'bashing', winnerId,
+          { margin, bashingType: `survivor_bashes_${loser.status.toLowerCase()}`, policy: 'beta_2025',
+            detail: bashingDetail({ winner: nameOf(winnerRosterId), loser: nameOf(loserRosterId), margin }) }, undefined, loserId)
       } else {
         await tx.zombieMaulingEvent.create({ data: { id: eventId, leagueId: z.leagueId, week, maulerUserId: winnerId, victimUserId: loserId,
           maulerStatus: winner.status, victimStatus: loser.status, maulerScore: winScore, victimScore: loseScore, margin,
           maulingType: `zombie_mauls_${loser.status.toLowerCase()}`, lootMultiplier: 1, serumAutoAwarded: true, resolvedAt: kind ? null : new Date() } })
+        // No mauling video exists: it plays as an animated card (lib/zombie/beta2025Moments.ts), in this transaction.
+        await queueAnimationIn(tx, z.leagueId, week, 'mauling', winnerId,
+          { margin, maulingType: `zombie_mauls_${loser.status.toLowerCase()}`, policy: 'beta_2025',
+            ...maulingMoment({ winner: nameOf(winnerRosterId), loser: nameOf(loserRosterId), margin }) }, undefined, loserId, 5000)
       }
       if (!kind) continue
       const old = loser.status === 'Whisperer' ? await tx.whispererRecord.findUnique({ where: { zombieLeagueId } }) : null

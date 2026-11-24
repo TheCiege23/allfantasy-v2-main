@@ -18,6 +18,7 @@ import { BigBrotherHistoryPanel } from './BigBrotherHistoryPanel'
 import { useUserTimezone } from '@/hooks/useUserTimezone'
 import { BigBrotherSpecialtyHome, type BigBrotherSpecialtySummary } from './BigBrotherSpecialtyHome'
 import { bigBrotherPhaseLabel } from './bigBrotherCopy'
+import { VetoDecisionCard } from '@/app/big-brother/components/chimmy/VetoDecisionCard'
 
 const VIEW_LABELS: Record<BigBrotherView, string> = {
   house: 'House',
@@ -36,9 +37,21 @@ interface BigBrotherHomeProps {
   isCommissioner?: boolean
   /** When set from league shell tabs, opens this lens directly. */
   initialView?: BigBrotherView
+  /**
+   * Rendered inside the league workspace, whose sidebar (desktop) and Section picker (phone) already list House, HOH,
+   * Veto, Voting, Jury, Twists, History and Command, and link League chat, Settings and Chimmy. In that case the
+   * "Big Brother" header card, the four-button row and the in-page tab row / View menu are a third and fourth way to
+   * navigate — about 250px on a phone before any content (2026-11-07, Big Brother audit item 3). They are replaced by
+   * one slim bar: the view's name, your status, and links to the two views the sidebar does not list (Ceremony, and
+   * Admin tools for the commissioner). Without it (the Overview embed) the full chrome stays: it is the only nav there.
+   */
+  shellNav?: boolean
 }
 
-export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house' }: BigBrotherHomeProps) {
+/** Views the league sidebar does not list, so `shellNav` must still offer them. */
+const OFF_SIDEBAR_VIEWS: readonly BigBrotherView[] = ['ceremony', 'commissioner']
+
+export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house', shellNav = false }: BigBrotherHomeProps) {
   const { formatInTimezone } = useUserTimezone()
   const [summary, setSummary] = useState<BigBrotherSpecialtySummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -76,17 +89,17 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
 
   if (loading && !summary) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Big Brother…</p>
+      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[var(--line)] bg-white/[0.03] p-8">
+        <p className="text-sm text-[var(--text2)]">Loading Big Brother…</p>
       </div>
     )
   }
 
   if (error && !summary) {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-        <p className="text-sm text-amber-200">{error}</p>
-        <button type="button" onClick={() => load()} className="mt-2 text-xs text-cyan-400 hover:underline">
+      <div className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4">
+        <p className="text-sm text-[var(--warn)]">{error}</p>
+        <button type="button" onClick={() => load()} className="mt-2 text-xs text-[var(--accent)] hover:underline">
           Retry
         </button>
       </div>
@@ -98,30 +111,63 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
   const nameOf = (id: string) => names[id] ?? 'A houseguest'
   const cycle = summary?.cycle
   const phase = bigBrotherPhaseLabel(cycle?.phase)
+  const vetoDecisionOpen = summary?.myStatus === 'VETO_WINNER' && cycle?.phase === 'VETO_DECISION_OPEN'
 
   const viewOptions = (Object.keys(VIEW_LABELS) as BigBrotherView[]).filter(
     (v) => v !== 'commissioner' || isCommissioner,
   )
 
   return (
-    // `af-draft-dark`: Big Brother is dark in every mode, as its house view already is; the light clamp blanked
-    // the other views' text (2026-11-09 audit).
-    <div className="af-draft-dark relative space-y-6 overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#0c1428]/95 via-[#070b18] to-[#040915] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-6">
+    // Follows the app's mode (2026-11-23): Big Brother joined the specialty shell's light tokens and these views read
+    // /core tokens, so the always-dark af-draft-dark opt-out (2026-11-09) is gone.
+    <div className="relative space-y-6 overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-6">
       <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-amber-500/[0.07] blur-3xl" />
       <div className="pointer-events-none absolute -bottom-28 left-0 h-48 w-48 rounded-full bg-cyan-500/[0.06] blur-3xl" />
       {/* The house view opens with the specialty-league home (2026-10-18), which carries the title and your status. */}
       {view === 'house' && summary ? (
         <BigBrotherSpecialtyHome leagueId={leagueId} summary={summary} onChanged={load} />
       ) : null}
-      {view !== 'house' ? (
-      <header className="relative flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4 backdrop-blur-sm sm:p-6">
+      {/* "You hold the Veto" came with no use / don't-use choice on this page (2026-11-23). */}
+      {(view === 'house' || view === 'veto') && vetoDecisionOpen && summary ? (
+        <VetoDecisionCard leagueId={leagueId} summary={summary} onDone={load} />
+      ) : null}
+      {shellNav ? (
+        <div
+          className={`relative flex flex-wrap items-center justify-between gap-2 ${view !== 'house' ? '!mt-0' : ''}`}
+          data-testid="bb-view-bar"
+        >
+          {view !== 'house' ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <h2 className="text-lg font-semibold text-[var(--text)]">{VIEW_LABELS[view]}</h2>
+              {summary?.myStatus ? <BigBrotherStatusBadge status={summary.myStatus} /> : null}
+            </div>
+          ) : (
+            <span />
+          )}
+          <nav aria-label="More Big Brother views" className="flex flex-wrap gap-1">
+            {OFF_SIDEBAR_VIEWS.filter((v) => viewOptions.includes(v)).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(view === v ? initialView : v)}
+                aria-pressed={view === v}
+                className={`min-h-[36px] rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-[var(--warn-soft)] text-[var(--warn)]' : 'bg-[var(--chip)] text-[var(--text2)] hover:bg-[var(--chip)]'}`}
+              >
+                {v === 'commissioner' ? 'Admin tools' : 'Ceremony'}
+              </button>
+            ))}
+          </nav>
+        </div>
+      ) : null}
+      {view !== 'house' && !shellNav ? (
+      <header className="relative flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[var(--surface)] p-4 backdrop-blur-sm sm:p-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-950/50 to-[#0a1228] shadow-[0_0_24px_rgba(245,158,11,0.12)] sm:h-16 sm:w-16">
-            <Home className="h-7 w-7 text-amber-300 sm:h-8 sm:w-8" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[var(--line2)] bg-[var(--surface2)] sm:h-16 sm:w-16">
+            <Home className="h-7 w-7 text-[var(--warn)] sm:h-8 sm:w-8" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white sm:text-2xl">Big Brother</h1>
-            <p className="text-sm text-white/60">
+            <h1 className="text-xl font-bold text-[var(--text)] sm:text-2xl">Big Brother</h1>
+            <p className="text-sm text-[var(--text2)]">
               HOH · Block · Veto · Eviction · Jury
             </p>
           </div>
@@ -133,104 +179,106 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
       ) : null}
 
       {summary?.sportCalendar?.scoringWindowDisclaimer ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm text-amber-200/90">
-          <p className="font-medium text-amber-200/95">Scoring window note</p>
-          <p className="mt-1 text-amber-200/80">{summary.sportCalendar.scoringWindowDisclaimer}</p>
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-3 text-sm text-[var(--warn)]">
+          <p className="font-medium text-[var(--warn)]">Scoring window note</p>
+          <p className="mt-1 text-[var(--warn)]">{summary.sportCalendar.scoringWindowDisclaimer}</p>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/league/${leagueId}?tab=Chat`}
-          className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2 text-sm text-amber-200 hover:bg-amber-950/50"
-        >
-          <MessageSquare className="h-4 w-4" /> League Chat
-        </Link>
-        <Link href={`/league/${leagueId}?tab=Settings`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
-          <Settings className="h-4 w-4" /> Settings
-        </Link>
-        <Link href={`/league/${leagueId}?tab=Intelligence`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10">
-          <Sparkles className="h-4 w-4" /> Chimmy Host
-        </Link>
-        {isCommissioner ? (
+      {!shellNav ? (
+        <>
+        <div className="flex flex-wrap gap-2">
           <Link
-            href={`/big-brother/${leagueId}/command`}
-            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-2 text-sm text-amber-100 hover:bg-amber-950/40"
-            data-testid="bb-open-command"
+            href={`/league/${leagueId}?tab=Chat`}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] px-4 py-2 text-sm text-[var(--warn)] hover:bg-[var(--warn-soft)]"
           >
-            <Sparkles className="h-4 w-4" /> Command
+            <MessageSquare className="h-4 w-4" /> League Chat
           </Link>
-        ) : null}
-      </div>
-
-      {/* View switcher */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-white/50 sm:hidden">View:</span>
-        <div className="relative sm:hidden">
-          <select
-            value={view}
-            onChange={(e) => setView(e.target.value as BigBrotherView)}
-            className="rounded-xl border border-white/20 bg-white/5 py-2 pl-3 pr-8 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-          >
-            {viewOptions.map((v) => (
-              <option key={v} value={v}>{VIEW_LABELS[v]}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
-        </div>
-        <div className="hidden flex-wrap gap-1 sm:flex">
-          {viewOptions.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-amber-500/20 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.15)]' : 'bg-white/5 text-white/70 hover:bg-white/10'}`}
+          <Link href={`/league/${leagueId}?tab=Settings`} className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--chip)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--chip)]">
+            <Settings className="h-4 w-4" /> Settings
+          </Link>
+          <Link href={`/league/${leagueId}?tab=Intelligence`} className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--chip)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--chip)]">
+            <Sparkles className="h-4 w-4" /> Chimmy Host
+          </Link>
+          {isCommissioner ? (
+            <Link
+              href={`/big-brother/${leagueId}/command`}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] px-4 py-2 text-sm text-[var(--warn)] hover:bg-[var(--warn-soft)]"
+              data-testid="bb-open-command"
             >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
+              <Sparkles className="h-4 w-4" /> Command
+            </Link>
+          ) : null}
         </div>
-      </div>
+
+        {/* View switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--muted)] sm:hidden">View:</span>
+          <div className="relative sm:hidden">
+            <select
+              value={view}
+              onChange={(e) => setView(e.target.value as BigBrotherView)}
+              className="rounded-xl border border-[var(--line)] bg-[var(--chip)] py-2 pl-3 pr-8 text-sm text-[var(--text)] appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            >
+              {viewOptions.map((v) => (
+                <option key={v} value={v}>{VIEW_LABELS[v]}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+          </div>
+          <div className="hidden flex-wrap gap-1 sm:flex">
+            {viewOptions.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded-lg px-3 py-1.5 text-sm ${view === v ? 'bg-[var(--warn-soft)] text-[var(--warn)]' : 'bg-[var(--chip)] text-[var(--text2)] hover:bg-[var(--chip)]'}`}
+              >
+                {VIEW_LABELS[v]}
+              </button>
+            ))}
+          </div>
+        </div>
+        </>
+      ) : null}
 
       {view === 'house' && summary && (
         <div className="space-y-4">
-          {!cycle && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-              <h3 className="text-sm font-medium text-amber-200">No active week</h3>
-              <p className="mt-1 text-sm text-amber-200/80">
-                Week 1 is usually created automatically on league setup. If you still see this, open{' '}
-                <strong>Commissioner</strong> and run <strong>Start week 1</strong> from the admin tools.
+          {!cycle && isCommissioner ? (
+            <div className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4">
+              <h3 className="text-sm font-medium text-[var(--warn)]">Week 1 hasn’t started</h3>
+              <p className="mt-1 text-sm text-[var(--warn)]">
+                It usually starts on its own. If it doesn’t, open <strong>Admin tools</strong> and start week 1.
               </p>
             </div>
-          )}
-          {/* Competition engine (deterministic; AI themes only) */}
+          ) : null}
+          {/* How winners are decided (it read "Competition engine… Chimmy and Chimmy only narrate"). */}
           {summary.config.challengeMode ? (
-            <div className="rounded-xl border border-sky-500/20 bg-gradient-to-br from-sky-950/30 to-[#0a1228]/80 p-4 shadow-[0_8px_32px_rgba(14,165,233,0.08)]">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-200/85">Competition engine</h3>
-              <p className="mt-2 text-sm text-white/85">
+            <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--surface2)] p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">How winners are decided</h3>
+              <p className="mt-2 text-sm text-[var(--text)]">
                 Mode:{' '}
-                <span className="font-medium text-sky-100">
+                <span className="font-medium text-[var(--accent)]">
                   {summary.config.challengeMode === 'hybrid'
                     ? 'Hybrid (fantasy scoring + themed challenges)'
                     : summary.config.challengeMode === 'deterministic_score'
                       ? 'Fantasy scoring'
                       : summary.config.challengeMode === 'ai_theme'
-                        ? 'Themed challenges (engine-resolved)'
+                        ? 'Themed challenges'
                         : summary.config.challengeMode}
                 </span>
               </p>
-              <p className="mt-2 text-[12px] leading-relaxed text-white/45">
-                HOH and Veto winners are computed by the league engine (lineups, seeds, or configured rules). Chimmy and Chimmy
-                only narrate — they never pick the winner.
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">
+                HOH and Veto winners come from your lineups and the league’s rules. Chimmy only tells the story — it never picks a winner.
               </p>
             </div>
           ) : null}
 
           {/* Countdowns */}
           {summary.ballot && !summary.ballot.closed && summary.ballot.voteDeadlineAt && (
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="text-xs font-medium uppercase text-white/50">Vote deadline</h3>
-              <p className="mt-1 text-sm text-white/80">{formatInTimezone(summary.ballot.voteDeadlineAt)}</p>
+            <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+              <h3 className="text-xs font-medium uppercase text-[var(--muted)]">Vote deadline</h3>
+              <p className="mt-1 text-sm text-[var(--text)]">{formatInTimezone(summary.ballot.voteDeadlineAt)}</p>
             </div>
           )}
 
@@ -239,21 +287,21 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
 
       {view === 'hoh' && summary && (
         <div className="relative space-y-4">
-          <div className="rounded-2xl border border-amber-500/35 bg-gradient-to-br from-amber-950/40 to-[#0a1228]/90 p-5 shadow-[0_12px_40px_rgba(180,80,0,0.12)]">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200/85">Head of Household</h3>
+          <div className="rounded-2xl border border-[var(--line2)] bg-[var(--surface2)] p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--warn)]">Head of Household</h3>
             {cycle?.hohRosterId ? (
-              <p className="mt-2 text-2xl font-bold text-amber-100">{nameOf(cycle.hohRosterId)}</p>
+              <p className="mt-2 text-2xl font-bold text-[var(--warn)]">{nameOf(cycle.hohRosterId)}</p>
             ) : (
-              <p className="mt-2 text-sm text-amber-200/75">HOH not set for this week yet.</p>
+              <p className="mt-2 text-sm text-[var(--warn)]">HOH not set for this week yet.</p>
             )}
-            <p className="mt-2 text-[12px] text-white/45">Phase: {phase}</p>
+            {cycle ? <p className="mt-2 text-[12px] text-[var(--muted)]">Now: {phase}</p> : null}
           </div>
-          {summary.eligibility?.canCompeteHOH?.length ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h4 className="text-xs font-medium uppercase text-white/45">Eligible to compete</h4>
-              <ul className="mt-2 flex flex-wrap gap-2 text-sm text-white/75">
+          {!cycle?.hohRosterId && summary.eligibility?.canCompeteHOH?.length ? (
+            <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+              <h4 className="text-xs font-medium uppercase text-[var(--muted)]">Eligible to compete</h4>
+              <ul className="mt-2 flex flex-wrap gap-2 text-sm text-[var(--text2)]">
                 {summary.eligibility.canCompeteHOH.map((id) => (
-                  <li key={id} className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1">
+                  <li key={id} className="rounded-lg border border-white/[0.06] bg-[var(--surface2)] px-2 py-1">
                     {nameOf(id)}
                   </li>
                 ))}
@@ -265,21 +313,32 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
 
       {view === 'veto' && summary && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/25 p-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200/85">Veto</h3>
+          <div className="rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">Veto</h3>
             {cycle?.vetoWinnerRosterId ? (
-              <p className="mt-2 text-lg font-semibold text-cyan-100">
+              <p className="mt-2 text-lg font-semibold text-[var(--accent)]">
                 Winner: {nameOf(cycle.vetoWinnerRosterId)}
               </p>
             ) : (
-              <p className="mt-2 text-sm text-cyan-200/70">Veto not awarded yet.</p>
+              <p className="mt-2 text-sm text-[var(--accent)]">Veto not awarded yet.</p>
             )}
+            {summary.finalNomineeRosterIds.length ? (
+              <p className="mt-3 text-sm text-[var(--text2)]">
+                On the block: <strong>{summary.finalNomineeRosterIds.map(nameOf).join(' and ')}</strong>
+              </p>
+            ) : null}
             {cycle?.vetoParticipantRosterIds && cycle.vetoParticipantRosterIds.length > 0 ? (
-              <ul className="mt-3 text-sm text-white/65">
-                {cycle.vetoParticipantRosterIds.map((id) => (
-                  <li key={id}>• {nameOf(id)}</li>
-                ))}
-              </ul>
+              <>
+                <h4 className="mt-3 text-xs font-medium uppercase text-[var(--muted)]">Playing for the Veto</h4>
+                <ul className="mt-2 flex flex-wrap gap-2 text-sm text-[var(--text2)]">
+                  {cycle.vetoParticipantRosterIds.map((id) => (
+                    <li key={id} className="rounded-lg border border-white/[0.06] bg-[var(--surface2)] px-2 py-1">
+                      {nameOf(id)}
+                      {summary.finalNomineeRosterIds.includes(id) ? ' · nominee' : id === cycle.hohRosterId ? ' · HOH' : ''}
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : null}
           </div>
         </div>
@@ -306,7 +365,7 @@ export function BigBrotherHome({ leagueId, isCommissioner, initialView = 'house'
       )}
 
       {view === 'commissioner' && !isCommissioner && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">
+        <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4 text-sm text-[var(--muted)]">
           Commissioner only.
         </div>
       )}

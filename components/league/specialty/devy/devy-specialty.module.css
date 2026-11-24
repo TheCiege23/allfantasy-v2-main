@@ -10,30 +10,29 @@
 */
 .railWide.railWide { flex: 1 1 380px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; gap: 16px; }
 .slotGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
-.slotGrid>i { display: block; aspect-ratio: 1.15; border-radius: 6px; background: #2a4a8a; }
-.slotGrid>i.slotOpen { background: transparent; border: 1px dashed rgba(255, 255, 255, .22); }
-.count { font: 600 15px 'JetBrains Mono', monospace; color: #e8eaf2; }
+.count { font: 600 15px 'JetBrains Mono', monospace; color: var(--sp-text-strong, #e8eaf2); white-space: nowrap; }
+.rosterLink { align-self: flex-start; font-size: 13px; font-weight: 600; color: var(--sp-acc-text, var(--acc2)); text-decoration: underline; text-underline-offset: 3px; }
 .stashList { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.stashRow { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #10131c; border: 1px solid rgba(255, 255, 255, .06); min-width: 0; flex-wrap: wrap; }
-.pos { display: inline-grid; place-items: center; min-width: 40px; height: 32px; border-radius: 8px; background: #151926; font: 700 12px 'Archivo', sans-serif; color: #a3a9c2; flex: none; }
+.stashRow { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: var(--sp-card2, #10131c); border: 1px solid var(--sp-line, rgba(255, 255, 255, .06)); min-width: 0; flex-wrap: wrap; }
+.pos { display: inline-grid; place-items: center; min-width: 40px; height: 32px; border-radius: 8px; background: var(--sp-chip, #151926); font: 700 12px 'Archivo', sans-serif; color: var(--sp-t2, #a3a9c2); flex: none; }
 .who { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; }
-.who>strong { font-size: 15px; color: #e8eaf2; overflow-wrap: anywhere; }
-.who>span { font-size: 12.5px; color: #7d84a3; }
-.prod { width: 96px; height: 10px; border-radius: 99px; background: #151926; overflow: hidden; flex: none; }
+.who>strong { font-size: 15px; color: var(--sp-text-strong, #e8eaf2); overflow-wrap: anywhere; }
+.who>span { font-size: 12.5px; color: var(--sp-t3, #7d84a3); }
+.prod { width: 96px; height: 10px; border-radius: 99px; background: var(--sp-track, #151926); overflow: hidden; flex: none; }
 .prod>span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #c4561a, #e8701e); }
 .yearTag { min-width: 64px; height: 28px; padding: 0 8px; border-radius: 6px; display: inline-grid; place-items: center; font: 700 13px 'JetBrains Mono', monospace; flex: none; }
-.yDeclared { background: rgba(224, 64, 46, .2); color: #ff9a8a; }
-.yNext { background: rgba(232, 112, 30, .18); color: #ffb36a; }
-.yLater { background: rgba(80, 140, 230, .18); color: #9fc4ff; }
-.callout { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px; border: 1px solid rgba(232, 112, 30, .45); background: linear-gradient(90deg, rgba(232, 112, 30, .14), rgba(7, 8, 13, .9) 60%); }
+.yDeclared { background: var(--sp-zone-soft, rgba(224, 64, 46, .2)); color: var(--sp-zone, #ff9a8a); }
+.yNext { background: var(--sp-danger-soft, rgba(232, 112, 30, .18)); color: var(--sp-danger, #ffb36a); }
+.yLater { background: var(--sp-blue-soft, rgba(80, 140, 230, .18)); color: var(--sp-blue, #9fc4ff); }
+.callout { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 18px 22px; border-radius: 14px; border: 1px solid rgba(232, 112, 30, .45); background: linear-gradient(90deg, rgba(232, 112, 30, .14), var(--sp-card, rgba(7, 8, 13, .9)) 60%); }
 .callout>img { width: 64px; height: 64px; flex: none; }
 .callout>div { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.callout>div>strong { font-size: 20px; color: #fff; }
-.callout>div>p { margin: 0; color: #a3a9c2; font-size: 14px; }
+.callout>div>strong { font-size: 20px; color: var(--sp-text-strong, #fff); }
+.callout>div>p { margin: 0; color: var(--sp-t2, #a3a9c2); font-size: 14px; }
 .pipe { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .pipe>li { display: grid; grid-template-columns: 48px minmax(0, 1fr) 64px; align-items: center; gap: 12px; }
-.pipe>li>b { font: 700 15px 'JetBrains Mono', monospace; color: #e8eaf2; }
-.pipe>li>span { font: 500 13px 'JetBrains Mono', monospace; color: #a3a9c2; text-align: right; }
+.pipe>li>b { font: 700 15px 'JetBrains Mono', monospace; color: var(--sp-text-strong, #e8eaf2); }
+.pipe>li>span { font: 500 13px 'JetBrains Mono', monospace; color: var(--sp-t2, #a3a9c2); text-align: right; }
 
 /* Promotion day (signature moment) — 0.9s 3D card flip, college jersey → pro jersey. */
 .moment { display: flex; flex-wrap: wrap; gap: 32px; align-items: center; justify-content: center; }

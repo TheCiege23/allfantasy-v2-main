@@ -21,6 +21,7 @@
  *   - weeksUntilPlayoffs = max(0, playoffStartWeek - week) when both known.
  */
 
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { prisma } from "@/lib/prisma"
 import { nflWeekForDate } from "@/lib/import-os/season"
 import type { ChimmyContextRequest } from "@/lib/chimmy-context/types"
@@ -144,7 +145,7 @@ export async function resolveCurrentWeek(
     prisma.league
       .findUnique({
         where: { id: leagueId },
-        select: { season: true, playoffStartWeek: true, settings: true, sport: true },
+        select: { season: true, playoffStartWeek: true, settings: true, sport: true, platform: true },
       })
       .catch(() => null),
     prisma.redraftSeason
@@ -152,6 +153,7 @@ export async function resolveCurrentWeek(
         where: { leagueId },
         orderBy: { createdAt: "desc" },
         select: {
+          id: true,
           season: true,
           currentWeek: true,
           playoffStartWeek: true,
@@ -171,8 +173,14 @@ export async function resolveCurrentWeek(
   let source: CurrentWeekSource = week != null ? "requestOverride" : "fallback"
 
   // 2. RedraftSeason wins when available.
-  if (week == null) {
-    const rs = clampWeek(redraftSeason?.currentWeek ?? null)
+  // 🛑 An IMPORTED season's stored currentWeek is 1 forever (nothing maintains it), so it goes through
+  // the same effective-week read the season and roster routes use (schedule week for imports, stored
+  // week for native). Read raw, Chimmy grounded every imported league on its week-1 matchup.
+  if (week == null && redraftSeason) {
+    const effective = league
+      ? await resolveEffectiveRedraftWeek(redraftSeason, league.platform).catch(() => redraftSeason.currentWeek)
+      : redraftSeason.currentWeek
+    const rs = clampWeek(effective ?? null)
     if (rs != null) {
       week = rs
       source = "redraftSeason"

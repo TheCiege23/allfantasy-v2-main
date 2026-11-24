@@ -79,15 +79,15 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
 
   if (loading) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/5 p-6">
-        <span className="text-sm text-white/60">Loading devy league…</span>
+      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--chip)] p-6">
+        <span className="text-sm text-[var(--text2)]">Loading devy league…</span>
       </div>
     )
   }
 
   if (error || !summary) {
     return (
-      <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
+      <div className="rounded-xl border border-[var(--bad)] bg-[var(--bad-soft)] p-4 text-sm text-[var(--bad)]">
         {error ?? 'Summary not available'}
       </div>
     )
@@ -118,11 +118,10 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
   return (
     <SpecialtyShell format="devy" testId="devy-specialty">
     {/*
-      The specialty shell is dark in every mode, so the Tailwind panels under the hero (pool line, Draft Center,
-      promotion panel, commissioner tools) opt out of the light-mode readability clamp, which otherwise turned their
-      text-white dark on this dark panel (Devy audit item 4, 2026-11-08).
+      Follows the app's mode (2026-11-23): the shell carries Devy light tokens (specialty.module.css) and the panels
+      under the hero read /core's tokens, so this no longer needs the always-dark af-draft-dark opt-out.
     */}
-    <div className="af-draft-dark space-y-4" data-devy-home-body>
+    <div className="space-y-4" data-devy-home-body>
       <DevySpecialtyHome
         leagueId={leagueId}
         sport={sport}
@@ -131,7 +130,7 @@ export function DevyHome({ leagueId, isCommissioner, rosterId }: DevyHomeProps) 
         onOpenPromotion={setPromoting}
         draftHref={`/league/${leagueId}?tab=Draft`}
       />
-      <p className="text-xs text-white/50">
+      <p className="text-xs text-[var(--muted)]">
         {adapterLabel} devy pool · {config.devyDraftRounds} devy rounds · {config.rookieDraftRounds} rookie rounds
         {config.bestBallEnabled ? ' · Best ball on: your highest-scoring legal lineup counts each week.' : ''}
       </p>

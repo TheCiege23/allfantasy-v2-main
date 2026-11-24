@@ -129,7 +129,7 @@ describe('applyDailySportToLineup', () => {
   it('returns the period it priced, and marks a team with no game in it — weekly → "week"', async () => {
     h.outlook.mockResolvedValue(weekly({ fx1: { projectedPoints: 11.5, periodGames: 3 }, fx2: { projectedPoints: 6, periodGames: 0 }, fx3: { projectedPoints: 4, periodGames: null } }))
     const m = new Map([['fx1', row('fx1', 'NJ')], ['fx2', row('fx2', 'NYR')], ['fx3', row('fx3', 'SEA')]])
-    expect(await applyDailySportToLineup(m, LEAGUE)).toEqual({ kind: 'week', day: null, week: 4 })
+    expect(await applyDailySportToLineup(m, LEAGUE)).toEqual({ kind: 'week', day: null, week: 4, season: 2026 })
     expect(m.get('fx1')!.noGamePeriod).toBeUndefined()
     expect(m.get('fx2')!.noGamePeriod).toBe('week')
     // An unknown slate (periodGames null) is NOT an idle week.
@@ -144,7 +144,7 @@ describe('applyDailySportToLineup', () => {
     ;(daily.byKey.get('a') as Record<string, unknown>).opponent = null
     h.outlook.mockResolvedValue(daily)
     const m = new Map([['a', row('a', 'BOS', { sport: 'NBA' })], ['b', row('b', 'DEN', { sport: 'NBA' })]])
-    expect(await applyDailySportToLineup(m, { ...LEAGUE, sport: 'NBA' })).toEqual({ kind: 'day', day: '2026-10-30', week: 4 })
+    expect(await applyDailySportToLineup(m, { ...LEAGUE, sport: 'NBA' })).toEqual({ kind: 'day', day: '2026-10-30', week: 4, season: 2026 })
     expect(m.get('a')).toMatchObject({ noGamePeriod: 'day', gameContext: 'no game today' })
     expect(m.get('b')).toMatchObject({ gameContext: 'DEN vs NYK' })
     expect(m.get('b')!.noGamePeriod).toBeUndefined()

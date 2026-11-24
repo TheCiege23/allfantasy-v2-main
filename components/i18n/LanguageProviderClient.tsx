@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { translations } from "@/lib/i18n/translations";
+import { translationsEn } from "@/lib/i18n/translations-en";
 import { LANG_STORAGE_KEY, DEFAULT_LANG, resolveLanguage, type LanguageCode } from "@/lib/i18n/constants";
 import { setStoredLanguage } from "@/lib/preferences/LanguagePreferenceService";
 import { applyLanguageToDocument } from "@/lib/preferences/HtmlPreferenceSync";
@@ -32,8 +32,21 @@ const LanguageContext = createContext<LanguageContextValue | undefined>(
   undefined
 );
 
+/*
+ * 🛑 ONLY ENGLISH IS IN THE SHARED BUNDLE (2026-11-23). This provider is in the root layout, so whatever it
+ * imports statically ships on every page. It used to import every language (~1.15 MB decoded, with the
+ * Spanish parity table) AND re-download the English dictionary from /api/i18n/translations on every page
+ * load (510 KB) — the same strings it already had. Now English makes no request at all. Any other language
+ * loads the full dictionary as its own chunk (`loadBundledDictionary`, so it still works if the API fails)
+ * and then the API's Google-filled copy on top, exactly as before.
+ */
 function fallbackT(key: string) {
-  return translations[DEFAULT_LANG]?.[key] ?? translations.en[key] ?? key;
+  return translationsEn[key] ?? key;
+}
+
+async function loadBundledDictionary(lang: Language): Promise<Record<string, string> | null> {
+  const { translations } = await import("@/lib/i18n/translations");
+  return translations[lang] ?? null;
 }
 
 export const defaultLanguageValue: LanguageContextValue = {
@@ -50,9 +63,10 @@ export function LanguageProviderClient({
   children: React.ReactNode;
 }) {
   const [language, setLanguageState] = useState<Language>(DEFAULT_LANG);
-  const [messages, setMessages] = useState<Record<string, string>>(() => {
-    return translations[language] || translations.en;
-  });
+  // The API's dictionary for a non-English language (may be partial); English needs none.
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  // The bundled dictionary for a non-English language, loaded on demand.
+  const [bundled, setBundled] = useState<Record<string, string>>({});
   const activeLanguageRef = useRef<Language>(language);
   /*
    * 🛑 A LANGUAGE SWITCH MUST RE-RENDER THE SERVER'S TEXT TOO (2026-10-03). Switching only set
@@ -104,27 +118,29 @@ export function LanguageProviderClient({
 
   useEffect(() => {
     applyLanguageToDocument(language);
-    // Immediately reflect language switch with bundled copy while remote dictionary loads.
-    setMessages(translations[language] || translations.en);
+    setMessages({});
+    setBundled({});
+    if (language === "en") return; // Bundled in full — the API would return exactly translationsEn.
 
     let cancelled = false;
+    const current = () => !cancelled && activeLanguageRef.current === language;
+    loadBundledDictionary(language)
+      .then((dict) => {
+        if (current() && dict) setBundled(dict);
+      })
+      .catch(() => {
+        // The chunk failed to load: the API copy, else English.
+      });
     fetch(`/api/i18n/translations?lang=${encodeURIComponent(language)}`, {
       cache: "no-store",
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { messages?: Record<string, string> } | null) => {
-        if (cancelled || activeLanguageRef.current !== language) return;
         const next = data?.messages;
-        if (next && typeof next === "object") {
-          setMessages(next);
-          return;
-        }
-        setMessages(translations[language] || translations.en);
+        if (current() && next && typeof next === "object") setMessages(next);
       })
       .catch(() => {
-        if (!cancelled && activeLanguageRef.current === language) {
-          setMessages(translations[language] || translations.en);
-        }
+        // Keep the bundled dictionary.
       });
 
     return () => {
@@ -167,9 +183,9 @@ export function LanguageProviderClient({
 
   const value = useMemo<LanguageContextValue>(() => {
     const t = (key: string) => {
-      const dict = messages || translations[language] || translations.en;
-      // Remote dictionaries may be partial. Keep bundled Spanish before English.
-      return dict[key] ?? translations[language]?.[key] ?? translations.en[key] ?? key;
+      if (language === "en") return translationsEn[key] ?? key;
+      // Remote dictionaries may be partial. Keep bundled copy for this language before English.
+      return messages[key] ?? bundled[key] ?? translationsEn[key] ?? key;
     };
     return {
       language,
@@ -178,7 +194,7 @@ export function LanguageProviderClient({
       tInterpolate: (key: string, vars: InterpolationVars = {}) =>
         resolveTInterpolate(t, key, vars),
     };
-  }, [language, messages]);
+  }, [language, messages, bundled]);
 
   return (
     <LanguageContext.Provider value={value}>

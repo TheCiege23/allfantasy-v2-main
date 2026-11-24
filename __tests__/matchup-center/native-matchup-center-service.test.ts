@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   rounds: [] as any[],
   players: [] as any[],
   scores: [] as any[],
+  injuries: [] as any[],
   calls: { scores: 0, rounds: 0, seasons: 0 },
 }))
 const engine = vi.hoisted(() => ({ scoreRosterForWeek: vi.fn() }))
@@ -28,7 +29,8 @@ vi.mock('@/lib/prisma', () => ({
     },
     redraftPlayoffRound: { findMany: vi.fn(async () => { db.calls.rounds += 1; return db.rounds }) },
     redraftRosterPlayer: { findMany: vi.fn(async ({ where }: any) => db.players.filter((p) => where.rosterId.in.includes(p.rosterId))) },
-    roster: { findMany: vi.fn(async () => []) },
+    roster: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => ({ id: 'legacy-A' })) },
+    sportsInjury: { findMany: vi.fn(async () => db.injuries) },
     afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
     leaguePlayerWeeklyScore: {
       findMany: vi.fn(async ({ where }: any) => {
@@ -46,6 +48,8 @@ vi.mock('@/lib/matchup-center/afProjections', async (orig) => ({
 const outlookMock = vi.hoisted(() => ({ fn: vi.fn(async (..._a: unknown[]) => new Map<string, unknown>()) }))
 vi.mock('@/lib/redraft/nflRosterOutlook', () => ({ loadNflRosterOutlook: (...a: unknown[]) => outlookMock.fn(...a) }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: engine.scoreRosterForWeek }))
+const survivorPts = vi.hoisted(() => ({ fn: vi.fn(async (..._a: unknown[]) => null as Map<string, { points: number; final: boolean; games: number }> | null) }))
+vi.mock('@/lib/survivor/survivorNbaWeeklyScoring', () => ({ nbaSurvivorStarterPoints: (...a: unknown[]) => survivorPts.fn(...a) }))
 
 import { buildNativeMatchupCenterPayload, loadNativeScoreboard } from '@/server/services/nativeMatchupCenter'
 import { nativeRosterSeat } from '@/lib/redraft/nativePlayerWeeklyScores'
@@ -63,6 +67,7 @@ const ok = <T,>(v: T | { error: string; status: number; code?: string } | null):
 }
 
 beforeEach(() => {
+  db.injuries = []
   db.seasons = [{ id: 'S', season: 2026, currentWeek: 2, playoffStartWeek: 15, rosters: [roster('rA', 'me', 'Aces', 0, 1), roster('rB', 'u2', 'Bears', 1, 0), roster('rC', 'u3', 'Cubs'), roster('rD', 'u4', 'Ducks')] }]
   db.matchups = [
     { id: 'm1', seasonId: 'S', week: 1, homeRosterId: 'rA', awayRosterId: 'rB', homeScore: 681, awayScore: 718, status: 'final', isMedianMatchup: false },
@@ -107,6 +112,27 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     expect(second).toMatchObject({ opponent: null, outlook: null })
   })
 
+  // The stored injuryStatus is a draft-time snapshot; the tab showed it raw (and never drew it).
+  it('flags a starter from his live designation, never from the stored snapshot', async () => {
+    const pg = db.players.find((p) => p.playerId === 'a-pg')
+    const c = db.players.find((p) => p.playerId === 'a-c')
+    pg.injuryStatus = null
+    c.injuryStatus = 'Out' // stale: no live row says so
+    db.injuries = [{ sport: 'NBA', playerId: 'a-pg', playerName: 'Name a-pg', status: 'Questionable', fetchedAt: new Date() }]
+    const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
+    const byId = new Map(p.left.starters.map((s) => [s.playerId, s.injuryStatus]))
+    expect(byId.get('a-pg')).toBe('Questionable')
+    expect(byId.get('a-c')).toBeNull()
+  })
+
+  // NBA Survivor stores no per-player points; the tab read "—" for every starter all week.
+  it('an NBA Survivor starter shows Survivor’s own points: final once counted, live as his games land', async () => {
+    survivorPts.fn.mockResolvedValueOnce(new Map([['a-pg', { points: 31.5, final: true, games: 2 }], ['a-c', { points: 12, final: false, games: 1 }]]))
+    const p = ok(await buildNativeMatchupCenterPayload({ league: { ...LEAGUE, leagueVariant: 'survivor' }, viewerUserId: 'me' }))
+    expect(survivorPts.fn.mock.calls.at(-1)![0]).toMatchObject({ leagueId: 'L', legacyRosterId: 'legacy-A', week: 2 })
+    expect(p.left.starters.map((s) => [s.playerId, s.currentPoints, s.gameStatus])).toEqual([['a-pg', 31.5, 'final'], ['a-c', 12, 'live']])
+  })
+
   it('[control] a failed outlook leaves the matchup standing', async () => {
     outlookMock.fn.mockRejectedValueOnce(new Error('boom'))
     const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
@@ -141,7 +167,9 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
     expect(engine.scoreRosterForWeek).toHaveBeenCalledTimes(2)
     expect(engine.scoreRosterForWeek).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L', week: 2, seasonYear: 2026, collectPlayerPoints: true }))
-    expect(p.left.starters.map((s) => [s.playerId, s.currentPoints, s.gameStatus])).toEqual([['a-pg', 77, 'live']])
+    // Every current starter is listed while the week is live: a-c has no points yet and still shows (owner report, 2026-11-22).
+    expect(p.left.starters.map((s) => s.playerId)).toEqual(['a-pg', 'a-c'])
+    expect(p.left.starters.find((s) => s.playerId === 'a-pg')).toMatchObject({ currentPoints: 77, gameStatus: 'live' })
     expect(p.native.playerPointsAvailable).toBe(true)
   })
 

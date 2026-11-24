@@ -29,6 +29,7 @@ import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSea
 import { toUtc } from '@/lib/timezone'
 import { parseSurvivorDuesUsd } from '@/lib/survivor/survivorCreationAvailability'
 import { checkNewBestBallLeaguePool, type BestBallPoolCheck } from '@/lib/bestball/poolCapacity'
+import { checkNewLeaguePlayerSupply, type PlayerSupplyCheck } from '@/lib/league-creation/playerSupply'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -282,6 +283,8 @@ export function analyzeCreateLeagueCompletion(
   for (const refusal of pool?.refusals ?? []) {
     issues.push({ code: 'best_ball_pool', message: refusal.message })
   }
+  const supply = playerSupplyCheckForWizard(state, options.importedTeamCount != null && options.importedTeamCount === state.teamCount)
+  if (supply && !supply.ok && supply.message) issues.push({ code: 'player_supply', message: supply.message })
 
   return issues
 }
@@ -296,6 +299,18 @@ export function bestBallPoolCheckForWizard(state: CreateLeagueV2State): BestBall
   const leagueType = lt === 'best_ball' && !state.idpSelected ? 'best_ball' : lt === 'guillotine' && state.guillotineBestBall === true ? 'guillotine' : null
   if (!leagueType || !(state.teamCount > 0)) return null
   return checkNewBestBallLeaguePool({ sport: state.sport, leagueType, teamCount: state.teamCount })
+}
+
+/**
+ * The player supply check for the league the wizard is about to create (lib/league-creation/
+ * playerSupply.ts): a pro-sport Redraft or Dynasty league. Null for every other league, and for one
+ * carried over from an import (it keeps the size it has).
+ */
+export function playerSupplyCheckForWizard(state: CreateLeagueV2State, importCarryover = false): PlayerSupplyCheck | null {
+  const lt = getEffectiveLeagueType(state)
+  if (importCarryover || (lt !== 'redraft' && lt !== 'dynasty') || !(state.teamCount > 0)) return null
+  const check = checkNewLeaguePlayerSupply({ sport: state.sport, leagueType: state.idpSelected ? 'idp' : lt, teamCount: state.teamCount })
+  return check.verified ? check : null
 }
 
 export function isFormComplete(state: CreateLeagueV2State): boolean {

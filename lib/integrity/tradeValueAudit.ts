@@ -201,3 +201,20 @@ export async function auditedGapFor(leagueId: string, ref: TradeRef, sideATeamId
   if (row.sideBTeamId === sideATeamId) return { gapPct: -row.gapPct, basis: row.basis }
   return null
 }
+
+/**
+ * How many audited trades in each league completed since `since` with a value gap of `minGapPct` or more (either way).
+ * One grouped read for any number of leagues; an empty map while the table is absent. For the commissioner hub's
+ * "trades worth a look" card — a count, never a verdict.
+ */
+export async function countWideGapAudits(leagueIds: readonly string[], since: Date, minGapPct: number): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (leagueIds.length === 0 || !(await tradeValueAuditsReady())) return out
+  const rows = await prisma.$queryRaw<Array<{ league_id: string; n: number | bigint }>>`
+    SELECT league_id, COUNT(*)::int AS n
+    FROM trade_value_audits
+    WHERE league_id IN (${Prisma.join([...leagueIds])}) AND completed_at >= ${since} AND ABS(gap_pct) >= ${minGapPct}
+    GROUP BY league_id`
+  for (const r of rows) out.set(r.league_id, Number(r.n))
+  return out
+}

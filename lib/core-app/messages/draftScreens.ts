@@ -88,7 +88,7 @@ const PREP_AUTOPICK_ES: Record<string, string> = {
   'Queue settings are unavailable.': 'Las preferencias de cola no están disponibles.',
   'Queue or autopick settings could not be loaded. Retry this page.': 'No se pudieron cargar la cola o las preferencias. Vuelve a intentar.',
   'Your personal autopick is disabled.': 'Tu selección automática personal está desactivada.',
-  'Chimmy queue autopick is enabled.': 'La selección automática de la cola con Chimmy está activada.',
+  "Chimmy Queue is on: as soon as you are on the clock, your queue goes first, then Chimmy picks for your team's needs.": 'Chimmy Queue está activado: cuando te toque elegir, primero va tu cola y luego Chimmy elige según las necesidades de tu equipo.',
   'Standard autopick is enabled; it tries your live queue before fallback rules.': 'La selección automática estándar está activada; usa tu cola antes de las reglas alternativas.',
 }
 

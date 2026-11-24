@@ -5,6 +5,7 @@ import { readPlayoffSeriesLengths } from '@/lib/playoff-runtime/playoffSeries'
 import { capSlotTokens, readGamesLimits, type GamesLimits } from '@/lib/redraft/gamesLimits'
 import { isDailyLineupScoringEnabled } from '@/lib/redraft/dailyLineups'
 import { readMedianGameInPlayoffs } from '@/lib/redraft/medianGame'
+import { readPreLeagueWeeksCount, readPreLeagueWeeksLoaded } from '@/lib/redraft/preLeagueWeeksRules'
 import { readThirdPlaceGameEnabled } from '@/lib/playoff-runtime/thirdPlaceGame'
 import { readLineupMode, type LineupMode } from '@/lib/redraft/lineupModeSwitch'
 
@@ -71,6 +72,13 @@ export type CommissionerSettingsFormData = {
    * lib/redraft/medianGame.ts); false unless stored true. Not a column — PATCHed as `medianGameInPlayoffs`.
    */
   medianGameInPlayoffs?: boolean
+  /**
+   * Whether the weeks played before a late-starting league existed count toward records
+   * (`settings.pre_league_weeks_count`, lib/redraft/preLeagueWeeksRules.ts). PATCHed as `preLeagueWeeksCount`.
+   */
+  preLeagueWeeksCount?: boolean
+  /** How many such weeks the league has loaded (`settings.pre_league_weeks_loaded`) — 0 for a week-1 start. Read-only. */
+  preLeagueWeekCount?: number
   /** `settings.allow_multi_team_managers` (lib/league/multiTeamManagers.ts). PATCHed as `allowMultiTeamManagers`. */
   allowMultiTeamManagers?: boolean
   allowPreDraftMoves?: boolean | null
@@ -227,6 +235,8 @@ export function commissionerLeagueFieldsFromRow(
     leagueType: league.leagueType,
     medianGame: league.medianGame,
     medianGameInPlayoffs: readMedianGameInPlayoffs(league.settings),
+    preLeagueWeeksCount: readPreLeagueWeeksCount(league.settings),
+    preLeagueWeekCount: readPreLeagueWeeksLoaded(league.settings),
     allowMultiTeamManagers: readAllowMultiTeamManagers(league.settings),
     allowPreDraftMoves: league.allowPreDraftMoves,
     preventBenchDrops: league.preventBenchDrops,

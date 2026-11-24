@@ -30,13 +30,13 @@ export default async function DevyHarnessPage({ params }: { params: Promise<{ le
   }
   return (
     <DevyLeagueLayout>
-      <div className="min-h-screen bg-[#040915]">
-        <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0c0c1e]/95 px-4 py-3 backdrop-blur">
+      <div className="min-h-screen bg-[var(--surface)]">
+        <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[var(--surface)] px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
-            <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-cyan-300/90 hover:text-cyan-200">
+            <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-[var(--accent)] hover:text-[var(--accent)]">
               ← League
             </Link>
-            <span className="truncate text-[13px] font-bold text-white">Devy roster</span>
+            <span className="truncate text-[13px] font-bold text-[var(--text)]">Devy roster</span>
             <span className="w-12" />
           </div>
         </header>

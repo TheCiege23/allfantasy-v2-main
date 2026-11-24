@@ -5,9 +5,13 @@ import { rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
 import { lookupProjections } from '@/lib/core-app/playerProjections'
+import { loadNflSpecialistRates } from '@/lib/af-projections/nflSpecialistRates'
+import type { SpecialistRate } from '@/lib/af-projections/nflSpecialistRatesModel'
+import { scoreTeamDefenseRate } from '@/lib/projections/leagueScoring'
 import { buildHeadshotUrl } from '@/lib/player-media-urls'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getGameWeather } from '@/lib/core-app/gameWeather'
+import { resolveEffectiveRedraftWeek } from '@/lib/season-week/effectiveRedraftWeek'
 import { byeWeeksFromSchedule, rankDefensesVsPosition, type AllowedRow, type NflPlayerOutlook, type OpponentRank, type RosterGameWeather, type SeasonFixture } from './nflRosterOutlookModel'
 
 /**
@@ -94,9 +98,15 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
   let week = args.week ?? null
   if (week == null) {
     const own = await db.redraftSeason
-      .findFirst({ where: { leagueId: args.league.id, season }, select: { currentWeek: true } })
+      .findFirst({ where: { leagueId: args.league.id, season }, select: { id: true, currentWeek: true } })
       .catch(() => null)
-    week = own?.currentWeek ?? null
+    // 🛑 Only Sleeper-id leagues reach here, and those are IMPORTS, whose stored currentWeek is 1 forever:
+    // read raw, every player showed his week-1 opponent, kickoff and projection. The effective week takes
+    // an import's week from the schedule (and keeps a native season's own week).
+    // A season that has not started (week 0) stays unstarted: the effective read floors every week at 1.
+    week = own && Number(own.currentWeek) >= 1
+      ? await resolveEffectiveRedraftWeek(own, args.league.platform).catch(() => own.currentWeek ?? null)
+      : own?.currentWeek ?? null
   }
   if (week == null || !Number.isInteger(week) || week < 1) return out
 
@@ -136,6 +146,17 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
   const defenseProjections = defenseIds.length
     ? await lookupProjections(defenseIds, { season: String(season), week }, null, sport).catch((): Awaited<ReturnType<typeof lookupProjections>> => new Map())
     : new Map()
+  /*
+   * A team defense with no number from either source gets its own: this season's per-game rate
+   * (sacks, takeaways, how often it holds a team to each points bracket) in this league's scoring.
+   * Sleeper's number exists only for weeks already imported, so a league that starts next week had
+   * none (owner report, 2026-11-22). A season average: it does not adjust for the opponent.
+   */
+  const unpricedDefenseIds = facts.filter((f) => f.position === 'DEF' && !projections.has(f.id) && !defenseProjections.has(f.id)).map((f) => f.id)
+  const unpricedDefense = new Set(unpricedDefenseIds)
+  const specialistRates = unpricedDefenseIds.length
+    ? await loadNflSpecialistRates(season).catch(() => new Map<string, SpecialistRate>())
+    : new Map<string, SpecialistRate>()
   const nextGame = buildNextGameMap(games, teams)
   // "Bye" is said only of a week whose schedule is stored; an empty week says nothing.
   const weekHasGames = games.some((g) => g.startTime)
@@ -150,7 +171,10 @@ export async function loadNflRosterOutlook(db: Db, args: NflRosterOutlookArgs): 
 
   for (const f of facts) {
     const game = f.team ? nextGame.get(f.team) : undefined
-    const af = projections.get(f.id)
+    // Only where neither source has a number, and only in a week the club plays.
+    const rate = game && unpricedDefense.has(f.id) ? specialistRates.get(f.id) : undefined
+    const ownDefense = rate?.kind === 'DEF' ? scoreTeamDefenseRate(rate.perGame, args.league.settings) : null
+    const af = projections.get(f.id) ?? ownDefense ?? undefined
     const provider = af == null && f.position === 'DEF' ? defenseProjections.get(f.id) : undefined
     const sleeper = provider && String(provider.source ?? '').toLowerCase() === 'sleeper' && Number.isFinite(provider.projectedPoints) ? provider.projectedPoints : null
     const projected = af ?? sleeper

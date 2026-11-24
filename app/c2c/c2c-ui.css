@@ -1,0 +1,28 @@
+/*
+ * Campus to Canton screens (app/c2c/[leagueId]/*), 2026-11-23. They sit inside `.af-core`, so --text, --surface,
+ * --line… switch with the mode. These add the two sides' colours: violet for Campus, blue for Canton, amber for the
+ * taxi squad. Dark values read on /core's dark grounds; the light values are deepened to clear 4.5:1 on white.
+ */
+.c2c-ui {
+  --campus: #c4b5fd;
+  --campus-soft: rgba(124, 58, 237, 0.18);
+  --campus-line: rgba(139, 92, 246, 0.4);
+  --canton: #93c5fd;
+  --canton-soft: rgba(37, 99, 235, 0.18);
+  --canton-line: rgba(59, 130, 246, 0.4);
+  --c2c-amber: #fcd34d;
+  --c2c-amber-soft: rgba(245, 158, 11, 0.12);
+  --c2c-amber-line: rgba(245, 158, 11, 0.35);
+}
+html[data-mode='light'] .af-core.c2c-ui,
+html[data-mode='light'] .af-core .c2c-ui {
+  --campus: #6d28d9;
+  --campus-soft: rgba(124, 58, 237, 0.09);
+  --campus-line: rgba(109, 40, 217, 0.3);
+  --canton: #1d4ed8;
+  --canton-soft: rgba(37, 99, 235, 0.08);
+  --canton-line: rgba(29, 78, 216, 0.28);
+  --c2c-amber: #8a5a00;
+  --c2c-amber-soft: rgba(245, 158, 11, 0.1);
+  --c2c-amber-line: rgba(138, 90, 0, 0.3);
+}

@@ -30,7 +30,7 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { scheduleBenchCheckLedger, type BenchLedgerCall } from './benchCheckLedger'
 import { loadBenchCalibration } from '@/lib/decision-os/lineup/benchCalibrationStore'
-import { benchCallRecord, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
+import { benchCallRecord, benchEdgeScaleFor, type BenchCallRecord } from '@/lib/decision-os/lineup/benchCalibration'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { sleeperLookupId, withTeamDefenseIds } from './rosterIdCrosswalk'
@@ -65,6 +65,7 @@ import {
   startingSlotTemplate,
   storedStarterSlotLabels,
 } from './rosterSlots'
+import { resolveCoreDepth } from '@/lib/core-app/corePaywall'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -87,6 +88,9 @@ import {
  */
 
 export type LineupPlayer = {
+  /** The learned factors that moved `afProjectedPoints` (weekly), with the numbers before them for a viewer without
+   * AF Intelligence (`afIntelligenceWithhold.ts` restores them). Absent when none applied. */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   sleeperId: string
   name: string
   position: string | null
@@ -242,7 +246,7 @@ export type BenchCheck = {
   starterProjected: number
   /**
    * How swaps with an edge this size have held up, graded against what was scored (2026-11-21,
-   * `decision-os/lineup/benchCalibration.ts`). A swap only, NFL Sleeper leagues only, and only once its edge
+   * `decision-os/lineup/benchCalibration.ts`). A swap only, Sleeper and native NFL / NBA / NHL / MLB leagues only, and only once its edge
    * band has enough decided calls. It never changes the verdict — only what is said about how sure it is.
    */
   record?: BenchCallRecord | null
@@ -1489,13 +1493,21 @@ async function loadMyTeamData(
 
   // NBA / NHL / MLB: projection and game from the daily-sport outlook — see lib/core-app/myTeamDailySport.ts.
   // Before the bye pass and everything else that reads a projection; a no-op for every other sport.
+  /*
+   * AF Intelligence (AF Pro, AF Commissioner, AF Supreme), read once: a locked viewer's lineup, bench check and every
+   * total are priced without AF's learned factors. A failed read is locked, like every /core depth after launch.
+   */
+  const afIntelligenceRead = resolveCoreDepth(userId, 'af_intelligence').then((a) => a.unlocked === true).catch(() => false)
   const lineupPeriod = await timing.read('projections', () =>
-    applyDailySportToLineup(resolved, {
+    (async () => applyDailySportToLineup(resolved, {
       sport,
       season: league.season ?? null,
       settings: league.settings,
       platform: league.platform ?? null,
-    }).catch(() => null),
+      // AF Intelligence (AF Pro, AF Commissioner, AF Supreme): a locked viewer's lineup — and its totals — carry no
+      // learned factor. A failed plan read is treated as locked, like every /core depth after launch.
+      afIntelligence: await afIntelligenceRead,
+    }))().catch(() => null),
   )
 
   /*
@@ -1508,19 +1520,26 @@ async function loadMyTeamData(
   const rosterIdsForMetrics = [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])]
   async function priceLeaguePlayers(ids: string[], players: Map<string, LineupPlayer>) {
     const board = await loadLeaguePlayerMetrics({ leagueId, rosterIds: ids,
-      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length })
+      week: sport === 'NFL' ? projectionWeek?.week : lineupPeriod?.week, includeTradeValues: false, limit: ids.length,
+      afIntelligence: await afIntelligenceRead })
     const metricById = new Map(board?.rows.map((r) => [r.rosterPlayerId, r]))
     for (const id of ids) {
       const p = players.get(id)
       if (!p) continue
       const row = metricById.get(id)
+      const noNbaRoster = row?.weeklyUnavailableReason === 'no_nba_roster'
       const total = lineupPeriod?.kind === 'day'
         ? (p.periodGames != null && row ? Math.round(p.periodGames * row.perGame * 100) / 100 : null)
         : row?.weekly ?? null
-      const points = board?.unit === 'fantasy points' ? total : null
-      p.afProjectedPoints = p.ruledOut ? 0 : points
+      const points = board?.unit === 'fantasy points' && !noNbaRoster ? total : null
+      p.afProjectedPoints = p.ruledOut && !noNbaRoster ? 0 : points
       p.afEngineProjectedPoints = p.afProjectedPoints
       p.projectionSource = points == null ? null : 'allfantasy'
+      // The weekly number is the one the factors moved; a day's number is the plain per-game rate.
+      const before = row?.afFactors?.unadjusted?.weekly
+      p.afFactors = points != null && !p.ruledOut && lineupPeriod?.kind !== 'day' && row?.afFactors && before != null
+        ? { multiplier: row.afFactors.multiplier, reasons: row.afFactors.reasons, unadjusted: { afProjectedPoints: before } }
+        : undefined
     }
   }
   await priceLeaguePlayers(rosterIdsForMetrics, resolved)
@@ -1687,7 +1706,7 @@ async function loadMyTeamData(
   const checkBySlot = new Map<number, BenchCheck>()
   const claimedBench = new Set<string>()
   const ledgerCalls: BenchLedgerCall[] = []
-  // The bench check's own graded record, by the size of a swap's edge. Null outside NFL Sleeper leagues.
+  // The bench check's own graded record, by the size of a swap's edge. Null outside Sleeper and native NFL / NBA / NHL / MLB leagues.
   const benchCalibration = base.league.bestBall
     ? null
     : await loadBenchCalibration({ sport, platform: league.platform ?? null }).catch(() => null)
@@ -1695,7 +1714,7 @@ async function loadMyTeamData(
     if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
     claimedBench.add(c.bench.sleeperId)
     const swap = c.gap >= BENCH_SWAP_POINTS
-    const record = swap ? benchCallRecord(c.gap, benchCalibration) : null
+    const record = swap ? benchCallRecord(c.gap, benchCalibration, { scale: benchEdgeScaleFor(sport), starterProjected: c.starterProj }) : null
     checkBySlot.set(c.slotIndex, {
       verdict: swap ? 'swap' : 'close',
       benchName: c.bench.name,
@@ -1725,6 +1744,7 @@ async function loadMyTeamData(
         sport,
         projectionWeek,
         sportsWeek,
+        lineupPeriod: lineupPeriod ?? null,
         fullRender: !savedRosterOnly,
       },
       ledgerCalls,

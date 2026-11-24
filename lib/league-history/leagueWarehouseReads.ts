@@ -304,6 +304,63 @@ export async function readTransactionsByWeek(leagueId: string): Promise<LeagueWa
  * Rows are one per TEAM, not one per key: a claimed manager's older moves carry the provider key and
  * newer ones the AllFantasy key, and co-owners carry two provider keys. Both are one team.
  */
+/**
+ * Sleeper transaction ids are time-ordered snowflakes: `id = (createdMs - SLEEPER_ID_EPOCH_MS) << 22`.
+ * Not documented by Sleeper — DERIVED, and verified on production 2026-11-23 against all 442,870
+ * `dw_transaction_facts` rows that carry both an id and Sleeper's own `createdAt`: every one decoded
+ * to within one second. Used only for rows with no timestamp of their own (the trade backfills).
+ */
+const SLEEPER_ID_EPOCH_MS = 1_454_362_509_000
+
+export function sleeperTransactionIdToDate(id: unknown): Date | null {
+  if (typeof id !== 'string' || !/^\d{15,20}$/.test(id)) return null
+  const ms = Number(BigInt(id) >> BigInt(22)) + SLEEPER_ID_EPOCH_MS
+  // Outside 2017..now+1d is not a Sleeper transaction id, whatever it looks like.
+  if (ms < Date.UTC(2017, 0, 1) || ms > Date.now() + 86_400_000) return null
+  return new Date(ms)
+}
+
+/**
+ * Each team's move times from `dw_transaction_facts` for one season, one entry per distinct
+ * transaction (the table holds one row per player or per side). Rows that cannot be dated are
+ * skipped rather than guessed. Never throws: a failed read leaves the imported-activity answer alone.
+ */
+async function readTransactionFactMoves(
+  leagueId: string,
+  season: number,
+  names: Map<string, string>,
+): Promise<Map<string, Date[]>> {
+  let rows: Array<{ rosterId: string | null; payload: unknown }> = []
+  try {
+    rows = await prisma.transactionFact.findMany({
+      where: { leagueId, season, type: { in: ['trade', 'waiver', 'free_agent'] } },
+      select: { rosterId: true, payload: true },
+    })
+  } catch {
+    rows = []
+  }
+
+  const seen = new Set<string>()
+  const out = new Map<string, Date[]>()
+  for (const row of rows ?? []) {
+    const p = (row.payload ?? {}) as { createdAt?: unknown; rosterIds?: unknown; sleeperTransactionId?: unknown }
+    const stamp = typeof p.createdAt === 'string' ? new Date(p.createdAt) : null
+    const at = stamp && Number.isFinite(stamp.getTime()) ? stamp : sleeperTransactionIdToDate(p.sleeperTransactionId)
+    if (!at) continue
+    const rosterIds = Array.isArray(p.rosterIds) && p.rosterIds.length > 0 ? p.rosterIds : [row.rosterId]
+    const txKey = typeof p.sleeperTransactionId === 'string' ? p.sleeperTransactionId : `${at.getTime()}`
+    for (const rid of rosterIds) {
+      const team = typeof rid === 'string' ? names.get(rid) : undefined
+      if (!team || seen.has(`${txKey}|${team}`)) continue
+      seen.add(`${txKey}|${team}`)
+      const list = out.get(team) ?? []
+      list.push(at)
+      out.set(team, list)
+    }
+  }
+  return out
+}
+
 export async function readManagerActivity(
   leagueId: string,
   lookbackDays: number,
@@ -382,6 +439,33 @@ export async function readManagerActivity(
       if (!acc.lastActionAt || row.occurredAt > acc.lastActionAt) acc.lastActionAt = row.occurredAt
       counts.set(team, acc)
     }
+  }
+
+  /*
+   * ── The fresher second source: the warehouse transaction facts ──────────────────────────────
+   * `decision_os_imported_activity` is refreshed by a daily cron that walks ~800 Sleeper leagues
+   * ~40 at a time, so a league can go two weeks between refreshes. Measured on production
+   * 2026-11-23: TPG Fantasy League's newest imported move was 2026-11-09 while
+   * `dw_transaction_facts` (re-synced that morning) held 52 newer moves — so the inactive-manager
+   * ladder told a commissioner to REPLACE a manager who had moved the day before.
+   *
+   * Merged per team by taking the NEWER last move and the LARGER window count from either source,
+   * never the sum: the two tables hold the same Sleeper transactions and no shared id joins them
+   * (`providerEventId` is null on imported rows), so adding them would double-count.
+   */
+  const facts = await readTransactionFactMoves(leagueId, newestSnapshot.season, names)
+  for (const [team, fact] of facts) {
+    const acc = counts.get(team) ?? { current: 0, prior: 0, lastActionAt: null }
+    let current = 0
+    let prior = 0
+    for (const at of fact) {
+      if (at > windowStart) current += 1
+      else if (at > priorStart) prior += 1
+      if (!acc.lastActionAt || at > acc.lastActionAt) acc.lastActionAt = at
+    }
+    acc.current = Math.max(acc.current, current)
+    acc.prior = Math.max(acc.prior, prior)
+    counts.set(team, acc)
   }
 
   const out: LeagueWarehouseManagerActivity[] = []

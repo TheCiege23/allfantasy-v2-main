@@ -102,7 +102,8 @@ export function friendlyIssueMessage(issue: CreateLeagueCompletionIssue, state: 
   switch (issue.code) {
     case 'team_count_invalid':
     case 'tournament_pool_invalid': {
-      const sizes = lt === 'redraft' ? [] : getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+      const sizes = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
+      if (lt === 'redraft') return `Pick between ${sizes[0] ?? 2} and ${sizes[sizes.length - 1] ?? MAX_NATIVE_TEAMS} teams.`
       if (sizes.length === 1) return `${format} leagues need exactly ${sizes[0]} managers.`
       if (sizes.length > 1) return `${format} leagues need ${listSizes(sizes)} managers. You have ${state.teamCount}.`
       return `Pick between 2 and ${MAX_NATIVE_TEAMS} teams.`

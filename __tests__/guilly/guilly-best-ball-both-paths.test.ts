@@ -105,7 +105,7 @@ describe('GuillySetup: best ball and double chops are offered', () => {
     const steps = buildGuillyFollowUps('L1', { ...named, firstChopWeek: 2, doubleChop: true })
     expect(steps.map((s) => s.label)).toEqual(['First chop week', 'Double-chop week (AF Commissioner)', 'Season FAAB'])
     const advanced = (steps[1].body as Obj).advanced
-    expect(normalizeAdvanced(advanced)).toEqual({ ok: true, value: { steps: [], overrides: { 2: 2 }, immunity: 'off' } })
+    expect(normalizeAdvanced(advanced)).toEqual({ ok: true, value: { steps: [], overrides: { 2: 2 }, immunity: 'off', faab: { mode: 'unchanged', amount: 0 } } })
   })
 
   it('a double-chop week ends the blade a week sooner', () => {

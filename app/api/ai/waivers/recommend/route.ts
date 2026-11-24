@@ -6,7 +6,9 @@ import { authOptions } from "@/lib/auth"
 import { getUserAfProStatus, AfProRequiredError } from "@/lib/entitlements/afAccess"
 import { rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
 import { runWaiverClaimDecision } from "@/lib/decision-os/waiver"
-import { loadWaiverWorldFacts, worldInputFromFacts } from "@/lib/decision-os/waiver/loader"
+import { worldInputFromFacts } from "@/lib/decision-os/waiver/loader"
+import { createWaiverOsLoaders } from "@/lib/decision-os/waiver-os"
+import { emitFeedOutcomes } from "@/lib/decision-os/core/parity"
 import { buildLiveWaiverDecisionDeps } from "@/lib/decision-os/waiver/deps"
 import { loadWaiverPool } from "@/lib/decision-os/waiver/pool"
 import { waiverEngineInputFrom } from "@/lib/decision-os/waiver/engineInput"
@@ -104,7 +106,15 @@ export async function POST(request: Request) {
      * projection feed carries, the one week that exists (future weeks are never projected).
      */
     void week
-    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    /*
+     * THROUGH WAIVER OS (2026-11-21 re-score, Kernel ⚠ → ✅): this panel called `loadWaiverWorldFacts` directly while
+     * Chimmy's waiver answer read the same facts through Waiver OS. Both now read the user-level resource entry —
+     * held five minutes because FAAB and priority move on every processed claim, derived by the same
+     * `loadWaiverWorldFacts` on a miss, and a store problem falls through to that derivation.
+     */
+    const { loadWorldFacts, drainOutcomes } = createWaiverOsLoaders()
+    const facts = await loadWorldFacts(userId, leagueId)
+    emitFeedOutcomes("waiver", drainOutcomes())
     if (!facts) return empty(["roster_not_found"])
 
     const context = {

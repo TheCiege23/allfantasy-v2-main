@@ -54,7 +54,7 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
         type="button"
         data-testid="salary-cap-import-open"
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-300/20"
+        className="rounded-lg border border-[var(--line2)] bg-[var(--warn-soft)] px-3 py-2 text-sm font-semibold text-[var(--warn)] hover:bg-[var(--warn-soft)]"
       >
         Add your league&apos;s contracts
       </button>
@@ -62,10 +62,10 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
   }
 
   return (
-    <section data-testid="salary-cap-import-panel" className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <section data-testid="salary-cap-import-panel" className="space-y-3 rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
       <div>
-        <h3 className="text-sm font-semibold text-white">Add your league&apos;s contracts</h3>
-        <p className="mt-1 text-xs text-white/60">
+        <h3 className="text-sm font-semibold text-[var(--text)]">Add your league&apos;s contracts</h3>
+        <p className="mt-1 text-xs text-[var(--text2)]">
           Paste one contract per line from your spreadsheet: team, player, salary, years on the contract, and (optional) which year of it this
           season is. Team is the team name as it appears here. Saving again replaces what you uploaded before.
         </p>
@@ -81,7 +81,7 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
         rows={8}
         spellCheck={false}
         placeholder={'Team, Player, Salary, Years, Year\nGridiron Kings, Patrick Mahomes, 45, 4, 2'}
-        className="w-full rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-xs text-white placeholder:text-white/30"
+        className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 font-mono text-xs text-[var(--text)] placeholder:text-[var(--muted)]"
       />
       <div className="flex flex-wrap gap-2">
         <button
@@ -89,7 +89,7 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
           data-testid="salary-cap-import-preview"
           disabled={!text.trim() || busy != null}
           onClick={() => void send(false)}
-          className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-40"
         >
           {busy === 'preview' ? 'Checking…' : 'Check the sheet'}
         </button>
@@ -104,18 +104,18 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
         </button>
       </div>
       {error ? (
-        <p role="alert" className="text-sm text-rose-300">
+        <p role="alert" className="text-sm text-[var(--bad)]">
           {error}
         </p>
       ) : null}
       {preview?.saved ? (
-        <p role="status" data-testid="salary-cap-import-saved" className="text-sm text-emerald-300">
+        <p role="status" data-testid="salary-cap-import-saved" className="text-sm text-[var(--good)]">
           Saved {plural(preview.savedCount ?? 0, 'contract')}
           {preview.replacedCount ? `, replacing ${preview.replacedCount} from your earlier upload` : ''}.
         </p>
       ) : null}
       {preview ? (
-        <div className="space-y-3 text-xs text-white/75">
+        <div className="space-y-3 text-xs text-[var(--text2)]">
           <p data-testid="salary-cap-import-summary">
             {plural(preview.matched.length, 'row')} matched a team and a player on it
             {preview.problems.length ? `; ${preview.problems.length} could not be read and will be skipped` : ''}.
@@ -127,7 +127,7 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
                   <span className="truncate">
                     {t.teamName} · {plural(t.contracts, 'contract')}
                   </span>
-                  <span className={t.capHit > preview.startupCap ? 'text-rose-300' : 'text-white'}>
+                  <span className={t.capHit > preview.startupCap ? 'text-[var(--bad)]' : 'text-[var(--text)]'}>
                     {money(t.capHit)} of {money(preview.startupCap)}
                     {t.capHit > preview.startupCap ? ' · over the cap' : ''}
                   </span>
@@ -136,7 +136,7 @@ export function ImportedContractsUpload({ leagueId, onSaved }: { leagueId: strin
             </ul>
           ) : null}
           {preview.problems.length ? (
-            <ul data-testid="salary-cap-import-problems" className="space-y-1 text-rose-200/90">
+            <ul data-testid="salary-cap-import-problems" className="space-y-1 text-[var(--bad)]">
               {preview.problems.slice(0, 50).map((p) => (
                 <li key={`${p.line}-${p.reason}`}>
                   Line {p.line}: {p.reason}

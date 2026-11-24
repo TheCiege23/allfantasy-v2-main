@@ -247,23 +247,29 @@ export async function loadIdentityForKeys(
   const ids = [...new Set(keys.filter(Boolean))]
   if (ids.length === 0) return new Map()
   const field = projectionKeyField(sport)
-  const rows = (await db.playerIdentityMap
-    .findMany({ where: { sport, [field]: { in: ids } }, select: IDENTITY_SELECT })
-    .catch(() => [])) as IdentityRow[]
+  const registryIds = field === 'cfbdId' ? ids.filter(id => /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) : []
+  const [primaryRows, registryRows] = await Promise.all([
+    db.playerIdentityMap.findMany({ where: { sport, [field]: { in: ids } }, select: IDENTITY_SELECT }).catch(() => []),
+    registryIds.length ? db.playerIdentityMap.findMany({ where: { sport, id: { in: registryIds } }, select: IDENTITY_SELECT }).catch(() => []) : [],
+  ])
+  const rows = [...primaryRows, ...registryRows] as IdentityRow[]
 
   const out = new Map<string, KeyIdentity>()
+  const requested = new Set(ids)
   for (const r of rows) {
-    const key = field === 'id' ? r.id : r.cfbdId
-    if (!key) continue
-    const held: KeyIdentity = out.get(key) ?? { team: null, ids: {}, ambiguous: new Set() }
-    held.team = held.team ?? r.currentTeam ?? null
-    for (const col of LEAGUE_ID_COLUMNS) {
-      const v = r[col] ? String(r[col]).trim() : null
-      const prev = held.ids[col]
-      if (prev == null) held.ids[col] = v
-      else if (v != null && v !== prev) held.ambiguous.add(col)
+    const keys = [r.id, ...(field === 'cfbdId' && r.cfbdId ? [r.cfbdId] : [])]
+    for (const key of keys) {
+      if (!requested.has(key)) continue
+      const held: KeyIdentity = out.get(key) ?? { team: null, ids: {}, ambiguous: new Set() }
+      held.team = held.team ?? r.currentTeam ?? null
+      for (const col of LEAGUE_ID_COLUMNS) {
+        const v = r[col] ? String(r[col]).trim() : null
+        const prev = held.ids[col]
+        if (prev == null) held.ids[col] = v
+        else if (v != null && v !== prev) held.ambiguous.add(col)
+      }
+      out.set(key, held)
     }
-    out.set(key, held)
   }
   return out
 }
@@ -285,6 +291,7 @@ export async function resolveRosterIdsToKeys(
   sport: string,
   column: LeagueIdColumn,
   rosterIds: readonly string[],
+  projectedKeys?: ReadonlySet<string>,
 ): Promise<Map<string, string>> {
   const ids = [...new Set(rosterIds.map((x) => String(x).trim()).filter(Boolean))]
   if (ids.length === 0) return new Map()
@@ -296,7 +303,9 @@ export async function resolveRosterIdsToKeys(
   const claims = new Map<string, string | null>()
   for (const r of rows) {
     const from = r[column] ? String(r[column]).trim() : ''
-    const to = field === 'id' ? r.id : r.cfbdId
+    const to = field === 'id' ? r.id
+      : r.cfbdId && (!projectedKeys || projectedKeys.has(r.cfbdId)) ? r.cfbdId
+        : r.rollingInsightsId ? r.id : r.cfbdId
     if (!from || !to) continue
     if (!claims.has(from)) claims.set(from, to)
     else if (claims.get(from) !== to) claims.set(from, null)

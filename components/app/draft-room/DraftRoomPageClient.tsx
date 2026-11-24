@@ -144,6 +144,7 @@ import { buildDraftChatPlayerContextFromDisplay } from '@/lib/draft-room/draft-c
 import { leagueAccentFor } from '@/lib/draft-room/leagueAccent'
 import { PlayerDetailModal, type DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 import { readPlanRefusal } from '@/lib/monetization/planRefusal'
+import { AfAdpLockContext, afAdpLockOf } from './afAdpLock'
 
 type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
@@ -530,6 +531,8 @@ export function DraftRoomPageClient({
   const roundOneBootstrapRef = useRef(false)
   const [pickError, setPickError] = useState<string | null>(null)
   const [draftPool, setDraftPool] = useState<DraftPoolClientPayload | null>(null)
+  // AF ADP's lock for a viewer whose plan does not include it (./afAdpLock.tsx), read off the pool response.
+  const [afAdpLock, setAfAdpLock] = useState<ReturnType<typeof afAdpLockOf>>(null)
   const [poolFetching, setPoolFetching] = useState(true)
   const [poolError, setPoolError] = useState(false)
   const [draftAssistantContext, setDraftAssistantContext] = useState<{
@@ -1184,6 +1187,7 @@ export function DraftRoomPageClient({
         })
       }
       if (res.ok && Array.isArray(data.entries)) {
+        setAfAdpLock(afAdpLockOf(data))
         const nextPool: DraftPoolClientPayload = {
           entries: data.entries,
           sport: data.sport ?? sport,
@@ -3974,6 +3978,7 @@ export function DraftRoomPageClient({
               }
             : undefined)
         }
+        combinedAnnualDraft={dynastyDraftKind === 'combined'}
         currentRound={currentPick?.round}
         formatType={formatType === 'IDP' || Boolean((draftPool as { isIdp?: boolean } | null)?.isIdp) ? 'IDP' : undefined}
         selectedPlayerTarget={helperSelectedPlayer}
@@ -4025,6 +4030,7 @@ export function DraftRoomPageClient({
       handleAuctionNominate,
       draftPool?.devyConfig,
       draftPool?.c2cConfig,
+      dynastyDraftKind,
       session,
       draftRoomState.isAuction,
       formatType,
@@ -4436,7 +4442,7 @@ export function DraftRoomPageClient({
   const myDraftedPicks = viewerDraftedPicks
   const myDevyAssetCount = myDraftedPicks.filter((p) => {
     const source = String((p as { source?: string | null }).source ?? '').toLowerCase()
-    if (source === 'devy' || source === 'college') return true
+    if (p.assetType === 'c2c_college' || source === 'devy' || source === 'college') return true
     if ((session as DraftSessionSnapshot).devy?.enabled && (session as DraftSessionSnapshot).devy?.devyRounds?.includes(p.round)) return true
     if ((session as DraftSessionSnapshot).c2c?.enabled && (session as DraftSessionSnapshot).c2c?.collegeRounds?.includes(p.round)) return true
     return false
@@ -4609,8 +4615,10 @@ export function DraftRoomPageClient({
           {myDraftedPicks.map((p) => {
             const source = String((p as { source?: string | null }).source ?? '').toLowerCase()
             const c2cCollegeRounds = (session as DraftSessionSnapshot).c2c?.collegeRounds ?? []
-            const isCollegeAsset = Boolean((session as DraftSessionSnapshot).c2c?.enabled) && (source === 'college' || c2cCollegeRounds.includes(p.round))
-            const isProAsset = Boolean((session as DraftSessionSnapshot).c2c?.enabled) && !isCollegeAsset
+            const combined = dynastyDraftKind === 'combined'
+            const c2c = Boolean((session as DraftSessionSnapshot).c2c?.enabled)
+            const isCollegeAsset = combined ? p.assetType === 'c2c_college' : c2c && (source === 'college' || c2cCollegeRounds.includes(p.round))
+            const isProAsset = (combined || c2c) && !isCollegeAsset
             return (
               <li
                 key={p.id}
@@ -4788,7 +4796,7 @@ export function DraftRoomPageClient({
   ) : undefined
 
   return (
-    <>
+    <AfAdpLockContext.Provider value={afAdpLock}>
     <DraftIntroGate
       leagueId={leagueId}
       draftSessionId={session.id}
@@ -4867,7 +4875,11 @@ export function DraftRoomPageClient({
           headshotUrl: boardCardPick.playerImageUrl ?? boardCardPool?.display?.assets?.headshotUrl ?? null,
           teamLogoUrl: boardCardPool?.display?.assets?.teamLogoUrl ?? null,
         }}
-        leagueContext={{ draftedPickLabel: boardCardPick.pickLabel, rosteredByTeamName: boardCardPick.displayName ?? null }}
+        leagueContext={{
+          draftedPickLabel: boardCardPick.pickLabel,
+          rosteredByTeamName: boardCardPick.displayName ?? null,
+          autoPickReason: boardCardPick.autoPickReason ?? null,
+        }}
         canDraft={false}
         draftUnavailableReason="already_drafted"
       />
@@ -5539,8 +5551,9 @@ export function DraftRoomPageClient({
       </div>
     )}
     {showCommissionerModal && isCommissioner && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-label="Commissioner control center" data-testid="draft-commissioner-overlay">
-        <div className="w-full max-w-2xl max-h-[90vh] overflow-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4" role="dialog" aria-label="Commissioner control center" data-testid="draft-commissioner-overlay">
+        {/* No overflow here: the modal's own body is the one scroll container. */}
+        <div className="w-full max-w-2xl">
           <CommissionerControlCenterModal
             leagueId={leagueId}
             draftStatus={session?.status ?? 'pre_draft'}
@@ -5580,6 +5593,7 @@ export function DraftRoomPageClient({
             )}
             leagueType={leagueType}
             teamCount={session?.teamCount ?? 0}
+            onTheClock={currentPick ? { teamName: currentPick.displayName, pickLabel: currentPick.pickLabel } : null}
             seats={(session?.slotOrder ?? []).map((entry) => ({
               slot: entry.slot,
               rosterId: entry.rosterId,
@@ -5767,6 +5781,6 @@ export function DraftRoomPageClient({
         }}
       />
     )}
-  </>
+  </AfAdpLockContext.Provider>
   )
 }

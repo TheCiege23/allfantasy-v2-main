@@ -9,8 +9,8 @@
  *    which used a plain `bg-amber-500/35`, showed), the cap bar had no "available" segment, and the cap chips,
  *    player-card badges and draft filters had no tint and a default grey border. The colours are now Tailwind
  *    palettes over RGB-channel tokens (`bg-cap-green/25`, `bg-idp-defense/25`).
- * 2. Always dark: the light-mode clamp recoloured these dark screens near-invisible; their layouts carry
- *    `af-draft-dark`.
+ * 2. Always dark: the light-mode clamp recoloured these dark screens near-invisible; their layouts carried
+ *    `af-draft-dark` until 2026-11-23, when they moved to the af-core tokens and began following the app mode.
  * 3. Internal wording: "AfSub" (the plan's code) and "wire to `zombieHost` jobs" reached users across IDP, C2C
  *    and Zombie AI surfaces; they name the plan, AF Commissioner.
  */
@@ -127,10 +127,13 @@ describe('Contract Center timeline', () => {
   })
 })
 
-describe('IDP cap screens are dark in every mode', () => {
-  it.each([['cap', IdpCapLayout], ['contracts', IdpContractsLayout]])('wraps /idp/%s in the always-dark opt-out', (_n, Layout) => {
+// 2026-11-23: the cap screens follow the app's mode on the af-core tokens; the always-dark opt-out is gone.
+describe('IDP cap screens follow the app mode', () => {
+  it.each([['cap', IdpCapLayout], ['contracts', IdpContractsLayout]])('wraps /idp/%s in af-core, not the always-dark opt-out', (_n, Layout) => {
     const { container } = render(<Layout><p>x</p></Layout>)
-    expect((container.firstElementChild as HTMLElement).className.split(/\s+/)).toContain('af-draft-dark')
+    const cls = (container.firstElementChild as HTMLElement).className.split(/\s+/)
+    expect(cls).toContain('af-core')
+    expect(cls).not.toContain('af-draft-dark')
   })
 })
 

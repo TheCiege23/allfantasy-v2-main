@@ -51,6 +51,7 @@ const prismaMock = {
   $transaction: vi.fn(),
 }
 
+vi.mock('@/lib/zombie/activateDraftedZombieLeagues', () => ({ activateDraftedZombieLeagues: vi.fn(async () => ({ checked: 0, activated: 0, failures: [] })) }))
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
 }))

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({ news: vi.fn(), claim: vi.fn(), remove: vi.fn(), dispatch: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({ prisma: { sportsNews: { findMany: h.news }, sportsDataCache: { create: h.claim, delete: h.remove } } }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatch }))
-vi.mock('@/lib/notifications/sportAudience', () => ({ listSportsAlertAudience: async () => ['fan'] }))
+vi.mock('@/lib/notifications/sportAudience', () => ({ listSportsAlertAudience: async () => ['fan'], listUserIdsPlayingSport: async () => ['fan'] }))
 vi.mock('@/lib/follows/teamFollows', () => ({ isTeamFollowSport: () => false, listFollowerIdsForTeam: async () => [], listTeamsForSport: async () => [], getTeamIndex: async () => null }))
 vi.mock('@/lib/follows/teamResolver', () => ({ resolveTeam: () => null }))
 

@@ -118,10 +118,15 @@ export function draftTipConfidence(round: number | null | undefined, calibration
   return { band, heldPct: Math.round(rec.heldRate * 100), decided: rec.decided, level: rec.heldRate >= 0.7 ? 'high' : rec.heldRate >= 0.55 ? 'medium' : 'low' }
 }
 
-/** The line said beside the pick's own confidence. */
+const LEVEL_LABEL: Record<DraftTipConfidence['level'], string> = { high: 'High', medium: 'Medium', low: 'Low' }
+
+/**
+ * The line said beside the pick's own confidence: a level first, as the trade grade states one (2026-11-21 re-score:
+ * the record read as an appended sentence with no level of its own), then the record behind it.
+ */
 export function draftTipRecordLine(c: DraftTipConfidence): string {
   return (
-    `How Draft OS's picks in ${DRAFT_BAND_LABEL[c.band]} have held up: about ${c.heldPct}% out-scored the typical player still on the board ` +
-    `(${c.decided} graded picks)${c.level === 'low' ? ', so treat this pick as closer than it looks' : ''}.`
+    `How sure, from the record: ${LEVEL_LABEL[c.level]}. Draft OS's picks in ${DRAFT_BAND_LABEL[c.band]} have held up about ${c.heldPct}% of the time ` +
+    `against the typical player still on the board (${c.decided} graded picks)${c.level === 'low' ? ', so treat this pick as closer than it looks' : ''}.`
   )
 }

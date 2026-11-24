@@ -83,20 +83,20 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
 
   if (loading && !summary) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-8">
-        <p className="text-sm text-white/60">Loading Salary Cap League…</p>
+      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[var(--line)] bg-white/[0.03] p-8">
+        <p className="text-sm text-[var(--text2)]">Loading Salary Cap League…</p>
       </div>
     )
   }
 
   if (error && !summary) {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-        <p className="text-sm text-amber-200">{error}</p>
+      <div className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4">
+        <p className="text-sm text-[var(--warn)]">{error}</p>
         <button
           type="button"
           onClick={() => load()}
-          className="mt-2 text-xs text-cyan-400 hover:underline"
+          className="mt-2 text-xs text-[var(--accent)] hover:underline"
         >
           Retry
         </button>
@@ -117,7 +117,7 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
     <div className="space-y-6">
       {/* Shown above every cap view: an imported league whose contracts AllFantasy does not hold. */}
       {summary?.contractsNote ? (
-        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+        <p role="note" data-testid="salary-cap-imported-note" className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4 text-sm text-[var(--warn)]">
           {summary.contractsNote}
         </p>
       ) : null}
@@ -137,25 +137,25 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       <div className="flex flex-wrap gap-2">
         <Link
           href={`/league/${leagueId}?tab=Chat`}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--chip)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--chip)]"
         >
           <MessageSquare className="h-4 w-4" /> Chat
         </Link>
         <Link
           href={`/league/${leagueId}?tab=Waivers`}
-          className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-2 text-sm text-amber-200 hover:bg-amber-950/50"
+          className="inline-flex items-center gap-2 rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] px-4 py-2 text-sm text-[var(--warn)] hover:bg-[var(--warn-soft)]"
         >
           <Zap className="h-4 w-4" /> Waivers
         </Link>
         <Link
           href={`/league/${leagueId}?tab=Trades`}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--chip)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--chip)]"
         >
           Trades
         </Link>
         <Link
           href={`/league/${leagueId}?tab=Settings`}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--chip)] px-4 py-2 text-sm text-[var(--text)] hover:bg-[var(--chip)]"
         >
           <Settings className="h-4 w-4" /> Settings
         </Link>
@@ -163,12 +163,12 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
 
       {/* View switcher (mobile dropdown, desktop tabs) */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-white/50 sm:hidden">View:</span>
+        <span className="text-sm text-[var(--muted)] sm:hidden">View:</span>
         <div className="relative sm:hidden">
           <select
             value={view}
             onChange={(e) => setView(e.target.value as SalaryCapView)}
-            className="rounded-xl border border-white/20 bg-white/5 py-2 pl-3 pr-8 text-sm text-white appearance-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            className="rounded-xl border border-[var(--line)] bg-[var(--chip)] py-2 pl-3 pr-8 text-sm text-[var(--text)] appearance-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
           >
             {(Object.keys(VIEW_LABELS) as SalaryCapView[]).map((v) => (
               <option key={v} value={v}>
@@ -176,7 +176,7 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
         </div>
         <div className="hidden flex-wrap gap-1 sm:flex">
           {(Object.keys(VIEW_LABELS) as SalaryCapView[]).map((v) => (
@@ -186,8 +186,8 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
               onClick={() => setView(v)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
                 view === v
-                  ? 'bg-cyan-500/20 text-cyan-200'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10'
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'bg-[var(--chip)] text-[var(--text2)] hover:bg-[var(--chip)]'
               }`}
             >
               {VIEW_LABELS[v]}
@@ -198,24 +198,30 @@ export function SalaryCapHome({ leagueId, initialView = 'home', shellNav = false
       </>
       ) : null}
 
+      {/* The sub-views follow the app's mode (2026-11-23): Salary Cap joined the shell's light tokens and the views read
+          /core tokens, so the af-draft-dark opt-out (2026-11-07) is gone. */}
+      {view !== 'home' ? (
+      <div data-cap-subview={view}>
       {view === 'cap-dashboard' && summary && (
-        <CapDashboard summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <CapDashboard summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'contracts' && summary && (
-        <ContractsPage summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <ContractsPage summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'team-builder' && summary && (
-        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <TeamBuilderView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'draft' && summary && (
-        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <StartupAuctionView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'ai' && summary && (
-        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapAIPanel summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
       {view === 'rules' && summary && (
-        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={() => setView('home')} />
+        <SalaryCapRulesView summary={summary} leagueId={leagueId} onBack={shellNav ? undefined : () => setView('home')} />
       )}
+      </div>
+      ) : null}
     </div>
     </SpecialtyShell>
   )

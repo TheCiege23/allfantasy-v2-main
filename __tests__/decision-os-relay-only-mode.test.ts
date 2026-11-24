@@ -260,7 +260,7 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
  * afterward.
  */
 describe('decision-os-activity-ingest rotation', () => {
-  /** One league per updatedAt rank, oldest last. `tail` is the very oldest — excluded by any pure demand-desc top-90 slice of 100. */
+  /** One league per updatedAt rank, oldest last. `tail` is the very oldest — excluded by any pure demand-desc top-250 slice of 300. */
   function buildEligibleLeagues(n: number) {
     const now = Date.parse('2026-09-07T12:00:00.000Z')
     return Array.from({ length: n }, (_, i) => ({
@@ -285,7 +285,7 @@ describe('decision-os-activity-ingest rotation', () => {
   }
 
   it('🛑 a league that is oldest by updatedAt (would be excluded by pure recency) is still attempted, because it is maximally starved', async () => {
-    const leagues = buildEligibleLeagues(100)
+    const leagues = buildEligibleLeagues(300)
     mockSleeperEligibleOnly(leagues)
     // Every OTHER league already has a recent rotation timestamp; tail-league is absent from the
     // map entirely, which is what makes it rank first in the starved ordering.
@@ -299,8 +299,8 @@ describe('decision-os-activity-ingest rotation', () => {
       (c) => (c[0] as { afLeagueId: string }).afLeagueId,
     )
     expect(attemptedIds).toContain('tail-league')
-    // The cap (90) is still respected — not all 100 eligible leagues run in one fire.
-    expect(attemptedIds.length).toBeLessThanOrEqual(90)
+    // The cap (250 since 2026-11-23) is still respected — not all 300 eligible leagues run in one fire.
+    expect(attemptedIds.length).toBeLessThanOrEqual(250)
   })
 
   it('persists a fresh timestamp for every league actually attempted this fire', async () => {
@@ -318,13 +318,13 @@ describe('decision-os-activity-ingest rotation', () => {
   })
 
   it('a league NOT selected this fire (over the cap) keeps its OLD rotation timestamp rather than losing its place', async () => {
-    const leagues = buildEligibleLeagues(100)
+    const leagues = buildEligibleLeagues(300)
     mockSleeperEligibleOnly(leagues)
     const oldTimestamp = '2026-08-01T00:00:00.000Z'
     const rotationMap: Record<string, string> = {}
     // Everyone (including tail-league) already has an OLD timestamp, so ordering among the
     // starved bucket falls back to array order — the point here is only that whoever does NOT
-    // get chosen this fire (there are 100 eligible, cap is 90) keeps their prior value untouched.
+    // get chosen this fire (there are 300 eligible, cap is 250) keeps their prior value untouched.
     for (const l of leagues) rotationMap[l.id] = oldTimestamp
     prismaMock.platformConfig.findUnique.mockResolvedValue({ value: JSON.stringify(rotationMap) })
 
@@ -384,5 +384,35 @@ describe('decision-os-activity-ingest ok + platform warnings', () => {
     expect(line).toBe('1 external-provider leagues (ESPN/MFL) served no activity feed')
     // ⚠ A warning, not an error: any `errors` entry marks the whole SyncJobRun `failed`.
     expect(outcome.errors.some((e) => /served no activity feed/.test(e))).toBe(false)
+  })
+})
+
+/*
+ * 2026-11-23: a few failed leagues are a WARNING, so the run reads `partial`, not `failed`. Every daily
+ * fire for weeks was "failed" because two or three of ~90 leagues hit the per-league deadline while the
+ * rest ingested correctly. A fire where nothing was ingested still reports its failures as errors.
+ */
+describe('decision-os-activity-ingest — a few failed leagues do not fail the run', () => {
+  const leagueRow = (id: string) => ({ id, platformLeagueId: `sl-${id}`, season: 2026, updatedAt: new Date() })
+  const outcomeOf = () =>
+    syncRuns.find((r) => r.ctx.jobName === 'cron-decision-os-activity-ingest')!.outcome as { errors: string[]; warnings: string[] }
+
+  it('one of two leagues failing is a warning naming it, not an error', async () => {
+    prismaMock.league.findMany.mockResolvedValueOnce([leagueRow('A'), leagueRow('B')]).mockResolvedValueOnce([])
+    ingestSleeperImportedActivityMock.mockRejectedValueOnce(new Error('deadline_exceeded:league_ingest'))
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+    const outcome = outcomeOf()
+    // (This file's mocks give the league projection no rows, which it reports separately; not a league failure.)
+    expect(outcome.errors.filter((e) => /deadline_exceeded/.test(e))).toEqual([])
+    expect(outcome.warnings.some((w) => /^1 of 2 leagues failed: .*deadline_exceeded:league_ingest/.test(w))).toBe(true)
+  })
+
+  it('every league failing is still an error', async () => {
+    prismaMock.league.findMany.mockResolvedValueOnce([leagueRow('A'), leagueRow('B')]).mockResolvedValueOnce([])
+    ingestSleeperImportedActivityMock
+      .mockRejectedValueOnce(new Error('deadline_exceeded:league_ingest'))
+      .mockRejectedValueOnce(new Error('deadline_exceeded:league_ingest'))
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+    expect(outcomeOf().errors.filter((e) => /deadline_exceeded/.test(e))).toHaveLength(2)
   })
 })

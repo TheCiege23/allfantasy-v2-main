@@ -14,6 +14,7 @@ import { SignInPushSheet } from '@/components/notifications/SignInPushSheet';
 import { AppMusicDock } from '@/components/app-music/AppMusicDock';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
+import { PartnerActivityBeacon } from '@/components/partner-codes/PartnerActivityBeacon';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
@@ -565,6 +566,8 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;var n=d.currentSc
             */}
             <Suspense fallback={null}>
               {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
+              {/* Commissioner Partner Codes active-user meter: once a day, signed-in members only. */}
+              {initialSession?.user && process.env.PARTNER_CODES_ENABLED === '1' ? <PartnerActivityBeacon /> : null}
               <SafeGlobalChrome fbAppId={fbAppId} />
               {/*
                 iOS app only, renders nothing: re-stores this phone's push token and opens a tapped

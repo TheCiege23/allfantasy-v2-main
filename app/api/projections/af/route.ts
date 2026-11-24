@@ -23,6 +23,7 @@ import { listAfProjections } from '@/lib/af-projections/readAfProjections'
 import { loadLeaguePlayerMetrics } from '@/lib/af-projections/leaguePlayerMetrics'
 import { authorizeLeagueRead } from '@/lib/decision-os/leagueReadAuthorization'
 import { isSupportedSport } from '@/lib/sport-scope'
+import { gateAfIntelligence, readAfIntelligenceAccess } from '@/lib/core-app/afIntelligenceGate'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,16 +53,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // AF Intelligence (AF Pro, AF Commissioner, AF Supreme — owner, 2026-11-22). Without it the board keeps
+    // the provider's baseline and loses AF's own number, its reason and its rest-of-season line.
+    const afAccess = await readAfIntelligenceAccess(session.user.id)
     const leagueId = sp.get('leagueId')?.trim()
     if (leagueId) {
       const access = await authorizeLeagueRead(leagueId, session.user.id)
       if (!access.authorized) return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
+      const playerPool = sport === 'NBA' && sp.get('view') === 'weekly-player-pool'
       const result = await loadLeaguePlayerMetrics({
+        afIntelligence: afAccess.unlocked,
         leagueId,
         week: intParam(sp.get('week')),
         position: sp.get('position'),
         playerName: sp.get('player'),
-        limit: intParam(sp.get('limit')) ?? 100,
+        limit: intParam(sp.get('limit')) ?? (playerPool ? undefined : 100),
+        ...(playerPool ? { includePlayerPool: true, includeTradeValues: false } : {}),
       })
       if (!result) return NextResponse.json({ error: 'League metrics unavailable' }, { status: 404 })
       if (sp.has('sport') && result.sport !== sport) {
@@ -70,7 +77,7 @@ export async function GET(req: NextRequest) {
       if (sp.has('season') && intParam(sp.get('season')) !== result.season) {
         return NextResponse.json({ error: 'Season does not match the league' }, { status: 400 })
       }
-      return NextResponse.json(result)
+      return NextResponse.json(gateAfIntelligence(result, afAccess))
     }
     const { rows, season } = await listAfProjections({
       sport,
@@ -89,7 +96,8 @@ export async function GET(req: NextRequest) {
        * "this position has nobody". The projections cron silently wrote nothing for 13 days while
        * reporting success, so this distinction is not hypothetical.
        */
-      rows: rows.map((r) => ({
+      ...(afAccess.unlocked ? {} : { afIntelligenceLock: afAccess }),
+      rows: rows.map((r) => afAccess.unlocked ? ({
         playerId: r.playerId,
         playerName: r.playerName,
         position: r.position,
@@ -103,6 +111,20 @@ export async function GET(req: NextRequest) {
         restOfSeasonWeeks: r.rosWeeksRemaining,
         confidence: r.confidenceLevel,
         reason: r.adjustmentReason,
+        isOutdoorGame: r.isOutdoorGame,
+        computedAt: r.computedAt.toISOString(),
+      }) : ({
+        playerId: r.playerId,
+        playerName: r.playerName,
+        position: r.position,
+        week: r.week,
+        perGame: null,
+        baseline: r.baselineProjection,
+        weatherAdjustment: null,
+        restOfSeason: null,
+        restOfSeasonWeeks: null,
+        confidence: null,
+        reason: null,
         isOutdoorGame: r.isOutdoorGame,
         computedAt: r.computedAt.toISOString(),
       })),

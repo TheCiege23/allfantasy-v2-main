@@ -10,6 +10,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 const h = vi.hoisted(() => ({ signOut: vi.fn(async () => undefined) }))
 vi.mock('@/lib/pwa/signOutAndPurge', () => ({ signOutAndPurge: h.signOut }))
+// The passkey card loads its own list on mount; it has its own tests (__tests__/auth/passkeys.test.ts).
+// Stubbed so "asks first, nothing is fetched" below still measures only the actions under test.
+vi.mock('@/app/settings/components/sections/PasskeysCard', () => ({ default: () => null }))
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }))
 vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()

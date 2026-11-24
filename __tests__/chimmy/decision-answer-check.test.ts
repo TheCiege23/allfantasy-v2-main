@@ -40,7 +40,7 @@ const deps = (over: Partial<Parameters<typeof checkDecisionAnswer>[1]> = {}) => 
 
 describe('which answers the second model reads', () => {
   it('decision turns only — trade, waiver, start/sit, draft — with an answer and facts; never chat; off switch', () => {
-    for (const intent of ['trade', 'waiver', 'start_sit', 'draft']) expect(shouldCheckDecisionAnswer({ ...base, intent })).toBe(true)
+    for (const intent of ['trade', 'waiver', 'start_sit', 'draft', 'commissioner']) expect(shouldCheckDecisionAnswer({ ...base, intent })).toBe(true)
     for (const intent of ['general', 'matchup', 'player_value', null]) expect(shouldCheckDecisionAnswer({ ...base, intent })).toBe(false)
     expect(shouldCheckDecisionAnswer({ ...base, facts: '  ' })).toBe(false)
     expect(shouldCheckDecisionAnswer({ ...base, answer: '' })).toBe(false)
@@ -68,6 +68,34 @@ describe('the verdict', () => {
     expect(p.user).toMatch(/^QUESTION:\nQ\?\n\nFACTS:\n/)
     expect(p.user).toContain('[…facts cut here]')
     expect(p.user.endsWith('ANSWER:\nA.')).toBe(true)
+  })
+})
+
+describe('a commissioner answer (2026-11-24)', () => {
+  const COMMISH_FACTS = 'COMMISSIONER HEALTH: league health 62/100; alert: Team Gamma inactive 3 weeks; suggested action: message Team Gamma.'
+  const commish = { intent: 'commissioner', question: 'Is anyone inactive?', answer: 'Everyone is active — health is 91.', facts: COMMISH_FACTS }
+
+  it('is the commissioner intent the classifier returns, and the checker is told what league-health facts look like', () => {
+    const p = buildDecisionCheckPrompt(commish)
+    expect(p.system).toContain('COMMISSIONER question')
+    expect(p.system).toContain('suggested commissioner actions')
+    // the base rules still bind: no advice, and silence is not a contradiction
+    expect(p.system).toContain('You do not give advice')
+    expect(p.system).toContain('A statement the facts do not mention is NOT a contradiction')
+    expect(p.user).toContain(COMMISH_FACTS)
+    // and other intents do not get the commissioner note
+    expect(buildDecisionCheckPrompt(base).system).not.toContain('COMMISSIONER question')
+  })
+
+  it('is checked and revised like any decision answer', async () => {
+    const d = deps({
+      check: vi.fn(async () => '{"ok":false,"contradictions":[{"claim":"Everyone is active — health is 91","fact":"league health 62/100; Team Gamma inactive 3 weeks"}]}'),
+      revise: vi.fn(async () => 'Team Gamma has been inactive 3 weeks; league health is 62.'),
+    })
+    const r = await checkDecisionAnswer(commish, d)
+    expect(r.outcome).toBe('revised')
+    expect(d.check).toHaveBeenCalledTimes(1)
+    expect(d.check.mock.calls[0]![0].system).toContain('COMMISSIONER question')
   })
 })
 

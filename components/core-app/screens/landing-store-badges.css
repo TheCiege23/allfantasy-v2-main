@@ -1,0 +1,35 @@
+/* ── App Store / Google Play badges (LandingStoreBadges) ──
+   Used on /, /commissioners and /signup — imported by the component itself.
+   OFFICIAL ARTWORK — see LandingStoreBadges.tsx before touching this block.
+   Both badges render at the SAME height (Google: same size or larger than the others;
+   Apple: at least 40px). Every gap around them is at least 1/4 of that height, which is
+   the clear space both stores require. No border, background, hover motion or filter on
+   the badge itself: neither store allows the artwork to be modified or animated. */
+.af-lp-stores {
+  --af-store-h: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px; /* >= 1/4 of --af-store-h (11px) */
+  margin-top: 14px;
+}
+.af-core .af-lp-store {
+  display: inline-flex;
+  line-height: 0;
+  border-radius: 8px;
+}
+.af-core .af-lp-store:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.af-lp-store-img {
+  display: block;
+  height: var(--af-store-h);
+  width: auto;
+}
+
+/* Centered variant (the sign-up page, under the form). The column's own 18px gap is the clear space. */
+.af-lp-stores--center {
+  justify-content: center;
+  margin-top: 0;
+}

@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react'
 import type { ZombieSummary } from './types'
 import { zombieChipStatus } from './ZombieStatusChip'
 
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
 /** The summary is already filtered for this viewer, including secret Whisperer identity. */
 export function ZombieWarRoomShortcuts({ leagueId }: { leagueId: string }) {
   const [summary, setSummary] = useState<ZombieSummary | null>(null)
@@ -30,7 +32,7 @@ export function ZombieWarRoomShortcuts({ leagueId }: { leagueId: string }) {
       <p className="mt-1 text-sm leading-6 text-white/75">
         {role === 'whisperer' ? 'Review your ambushes and use the Chimmy action cards to plan a matchup change.' : role === 'zombie' ? 'Review your serum balance and the rules for returning to the survivors.' : role ? 'Check your matchup and supplies before the week locks.' : failed ? 'Your status is unavailable right now. You can still review the league rules.' : summary ? 'Join a team to see your personal status and supplies.' : 'Loading your league status…'}
       </p>
-      {role && summary?.myResources && <p className="mt-2 text-xs text-lime-100/85">Your supplies: {summary.myResources.serums} serums · {summary.myResources.weapons} weapons{role === 'whisperer' ? ` · ${summary.myResources.ambush} ambushes` : ''}</p>}
+      {role && summary?.myResources && <p className="mt-2 text-xs text-lime-100/85">Your supplies: {count(summary.myResources.serums, 'serum')} · {count(summary.myResources.weapons, 'weapon')}{role === 'whisperer' ? ` · ${count(summary.myResources.ambush, 'ambush', 'ambushes')}` : ''}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         <Link href={`${hub}/matchups`} className="inline-flex min-h-[44px] items-center rounded-xl border border-white/20 bg-black/30 px-3 text-sm font-semibold">Matchups</Link>
         {role && <Link href={role === 'whisperer' ? `${hub}/chat` : `${hub}/items`} className="inline-flex min-h-[44px] items-center rounded-xl border border-lime-300/35 bg-lime-400/15 px-3 text-sm font-semibold text-lime-100">{role === 'whisperer' ? 'Chimmy action cards' : 'Your items'}</Link>}

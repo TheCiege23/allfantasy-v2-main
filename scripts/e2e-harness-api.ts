@@ -13,6 +13,8 @@ import { HARNESS_API as IDP_API } from '../app/e2e/idp/fixtures'
 import { HARNESS_API as TOURNAMENT_API, TOURNAMENT_ID } from '../app/e2e/tournament/fixtures'
 import { COMMISSIONER_HARNESS_API } from '../app/e2e/tournament/commissioner-fixtures'
 import { TOURNAMENT_HARNESS_SCREENS } from '../app/e2e/tournament/screens'
+import { HARNESS_API as ZOMBIE_API } from '../app/e2e/zombie/fixtures'
+import { ZOMBIE_HARNESS_SCREENS } from '../app/e2e/zombie/screens'
 
 type Frame = { name: string; path: string }
 type Harness = { routes: HarnessApiRoute[]; frames: Frame[] }
@@ -36,6 +38,10 @@ const harnesses: Record<string, Harness> = {
     routes: IDP_API,
     // The league header links these with ?rosterId=; the clients read it from the URL.
     frames: IDP_SCREENS.map((s) => ({ name: s, path: `/e2e/idp/e2e-idp/${s}?rosterId=ckidproster00001` })),
+  },
+  zombie: {
+    routes: ZOMBIE_API,
+    frames: ZOMBIE_HARNESS_SCREENS.map((s) => ({ name: s, path: `/e2e/zombie/e2e-zombie/${s}` })),
   },
   tournament: {
     routes: [...TOURNAMENT_API, ...COMMISSIONER_HARNESS_API],

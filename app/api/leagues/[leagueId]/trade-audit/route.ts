@@ -19,6 +19,7 @@ import { broadcastRefusal } from '@/lib/commissioner/broadcastAccess'
 import { postLeagueAnnouncement } from '@/lib/commissioner/postLeagueAnnouncement'
 import { auditTeams, buildTradeReviewText, pairFrequency, teamTradeLines } from '@/lib/integrity/tradeAudit'
 import { readTradeValueAudits, tradeValueAuditsReady } from '@/lib/integrity/tradeValueAudit'
+import { loadTradeMarketContext } from '@/lib/integrity/tradeMarketContext'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { leagueSize: true } }).catch(() => null)
   const teams = auditTeams(rows)
   const teamCount = Math.max(league?.leagueSize ?? 0, teams.length)
-  return NextResponse.json({ ready, rows, teams, pairs: pairFrequency(rows, teamCount) })
+  // The market beside each trade — how unusual its gap is, the records at the trade, what the pick market says.
+  // Facts only; best-effort, so a failure here never costs the commissioner the review itself.
+  const marketContext = rows.length
+    ? await loadTradeMarketContext(prisma as never, rows, { teams: league?.leagueSize ?? null }).catch(() => ({}))
+    : {}
+  return NextResponse.json({ ready, rows, teams, pairs: pairFrequency(rows, teamCount), marketContext })
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {

@@ -1,5 +1,6 @@
 'use client'
 
+import { formatCapMoney } from '@/lib/salary-cap/capMoney'
 import { useState, useCallback } from 'react'
 import { Sparkles, ArrowLeft, Loader2, AlertCircle } from 'lucide-react'
 import type { SalaryCapSummary } from './types'
@@ -32,7 +33,8 @@ export function SalaryCapAIPanel({
 }: {
   summary: SalaryCapSummary
   leagueId: string
-  onBack: () => void
+  /** Absent inside the league workspace, whose sidebar already navigates (SalaryCapHome `shellNav`). */
+  onBack?: () => void
 }) {
   const [type, setType] = useState<SalaryCapAIPanelType>('cap_health')
   const [loading, setLoading] = useState(false)
@@ -74,33 +76,32 @@ export function SalaryCapAIPanel({
 
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-sm text-[var(--text2)] hover:text-[var(--text)]"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+      ) : null}
 
-      <section className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-cyan-200">
+      <section className="rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-4 sm:p-6">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[var(--accent)]">
           <Sparkles className="h-5 w-5" />
           Chimmy Salary Cap Tools
         </h2>
 
-        <p className="mb-4 text-sm text-white/80">
-          Chimmy helps with strategy and advice only. Cap numbers, legality, and eligibility are always
-          computed by the league engine.
+        <p className="mb-4 text-sm text-[var(--text)]">
+          Chimmy gives strategy and advice. Your cap numbers come straight from the league.
         </p>
 
         {/* Deterministic data first */}
-        <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">
-            Deterministic data (from league engine)
-          </p>
-          <ul className="space-y-1 text-sm text-white/80">
-            <li>Cap space: ${summary.ledger?.capSpace ?? 0}</li>
-            <li>Committed: ${summary.ledger?.totalCapHit ?? 0} · Dead money: ${summary.deadMoneyTotal}</li>
+        <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-3">
+          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">Your cap right now</p>
+          <ul className="space-y-1 text-sm text-[var(--text)]">
+            <li>Cap space: {formatCapMoney(summary.ledger?.capSpace ?? 0)}</li>
+            <li>Committed: {formatCapMoney(summary.ledger?.totalCapHit ?? 0)} · Dead money: {formatCapMoney(summary.deadMoneyTotal)}</li>
             <li>Active contracts: {summary.contracts.length}</li>
             <li>Expiring: {summary.expiringCount} · Extension candidates: {summary.extensionCandidatesCount}</li>
             <li>Future years: {summary.futureProjection.length}</li>
@@ -116,8 +117,8 @@ export function SalaryCapAIPanel({
               onClick={() => setType(t)}
               className={`rounded-lg px-3 py-1.5 text-sm ${
                 type === t
-                  ? 'bg-cyan-500/80 text-white'
-                  : 'border border-white/20 bg-white/5 text-white/80 hover:bg-white/10'
+                  ? 'bg-cyan-700 text-[var(--text)]'
+                  : 'border border-[var(--line)] bg-[var(--chip)] text-[var(--text)] hover:bg-[var(--chip)]'
               }`}
             >
               {TYPE_LABELS[t]}
@@ -130,7 +131,7 @@ export function SalaryCapAIPanel({
             type="button"
             onClick={runAI}
             disabled={loading}
-            className="rounded-lg bg-cyan-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <>
@@ -144,25 +145,25 @@ export function SalaryCapAIPanel({
         </FeatureGate>
 
         {error && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 text-sm text-amber-200">
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--line2)] bg-[var(--warn-soft)] p-2 text-sm text-[var(--warn)]">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {error}
           </div>
         )}
 
         {result && (
-          <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-300">
+          <div className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--surface2)] p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--accent)]">
               Chimmy explanation ({result.type.replace(/_/g, ' ')})
             </p>
-            <p className="whitespace-pre-wrap text-sm text-white/90">{result.explanation}</p>
+            <p className="whitespace-pre-wrap text-sm text-[var(--text)]">{result.explanation}</p>
           </div>
         )}
       </section>
 
       <a
         href={`/league/${leagueId}?tab=Intelligence`}
-        className="inline-block text-sm text-cyan-400 hover:underline"
+        className="inline-block text-sm text-[var(--accent)] hover:underline"
       >
         More Chimmy tools (Intelligence tab) →
       </a>

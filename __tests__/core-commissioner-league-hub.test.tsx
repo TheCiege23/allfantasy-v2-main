@@ -361,7 +361,7 @@ describe('<CommissionerHub /> — the answer up top, everything else folded', ()
     expect(screen.getByTestId('hub-fold-ch-members').querySelector('summary')?.textContent).toBe('Actividad de los miembros1 sin actividad')
   })
 
-  it('no "Everything it takes…" paragraph, no Claimed teams tile, and the tournaments link sits by the way back', () => {
+  it('no "Everything it takes…" paragraph, no Claimed teams tile, and the tournaments link sits in the footer', () => {
     const { container } = render(
       <CommissionerHub
         data={hub({
@@ -375,8 +375,33 @@ describe('<CommissionerHub /> — the answer up top, everything else folded', ()
     expect(container.textContent).not.toContain('Everything it takes to run this league')
     expect(container.querySelector('[data-key="claimed"]')).toBeNull()
     const more = screen.getByRole('link', { name: 'Multi-league tournaments and weekly reports →' })
-    expect(more.closest('.af-ch-back-row')).not.toBeNull()
+    // 2026-11-23: a cross-league tool, so it moved from beside the way back to the footer's links.
+    expect(more.closest('.af-ch-back-row')).toBeNull()
+    expect(more.closest('footer')).not.toBeNull()
     expect(more.className).not.toContain('afh-btn')
+  })
+
+  it('groups the folds under five headings, every section in exactly one group, the task tracker folded', () => {
+    const { container } = render(<CommissionerHub data={hub()} />)
+    const groups = [...container.querySelectorAll('section.af-ch-grp')]
+    expect(groups.map((g) => g.querySelector('h2')?.textContent)).toEqual([
+      'Weekly work',
+      'Managers',
+      'Rules and settings',
+      'Reports and history',
+      'Help',
+    ])
+    // No fold sits outside a group, and none is in two.
+    const all = [...container.querySelectorAll('details.af-ch-fold')]
+    const grouped = groups.flatMap((g) => [...g.querySelectorAll(':scope > details.af-ch-fold')])
+    expect(grouped.length).toBe(all.length)
+    expect(new Set(grouped).size).toBe(all.length)
+    const fold = (g: number) => [...groups[g].querySelectorAll(':scope > details')].map((d) => d.getAttribute('data-fold'))
+    expect(fold(0)).toContain('ch-queue')
+    expect(fold(1)).toEqual(expect.arrayContaining(['ch-members', 'ch-access']))
+    expect(fold(3)).toEqual(expect.arrayContaining(['ch-health', 'ch-timeline']))
+    // The task tracker is no longer an open card under "Needs you now".
+    expect(screen.getByTestId('hub-fold-ch-queue').hasAttribute('open')).toBe(false)
   })
 
   it('"Needs you now" stays open; every section below it is a closed fold whose summary names it', () => {

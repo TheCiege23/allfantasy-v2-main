@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-const { leagueFindUnique, leagueTeamFindMany, rosterFindFirst, rosterFindFirstForContext, injuryFindMany, forecastFindFirst } =
+const { leagueFindUnique, leagueTeamFindMany, rosterFindFirst, rosterFindFirstForContext, injuryFindMany, forecastFindFirst, redraftSeasonFindFirst } =
   vi.hoisted(() => ({
     leagueFindUnique: vi.fn(),
     leagueTeamFindMany: vi.fn(),
@@ -13,6 +13,7 @@ const { leagueFindUnique, leagueTeamFindMany, rosterFindFirst, rosterFindFirstFo
     rosterFindFirstForContext: vi.fn(),
     injuryFindMany: vi.fn(),
     forecastFindFirst: vi.fn(),
+    redraftSeasonFindFirst: vi.fn(async (): Promise<unknown> => null),
   }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -28,6 +29,7 @@ vi.mock('@/lib/prisma', () => ({
     } },
     sportsInjury: { findMany: injuryFindMany },
     seasonForecastSnapshot: { findFirst: forecastFindFirst },
+    redraftSeason: { findFirst: redraftSeasonFindFirst },
   },
 }))
 
@@ -141,6 +143,26 @@ describe('assembleUserOsContext', () => {
     const { assembleUserOsContext } = await import('@/lib/shared-services/league-hub/userOsContext')
     const result = await assembleUserOsContext({ appUserId: 'owner-1', canonicalLeagueId: 'league-1' })
     expect(result?.injuryByPlayerId.get('p1')?.status).toBe('questionable')
+  })
+
+  // It was a constant 1 for every league, so strategy said "only 1 week of results" all season.
+  it('reads the week from the league\u2019s redraft season (a native league keeps its stored week)', async () => {
+    leagueFindUnique
+      .mockResolvedValueOnce(baseLeague({ userId: 'owner-1', platform: 'allfantasy' }))
+      .mockResolvedValueOnce({ isDynasty: false, playoffTeams: 6, playoffStartWeek: 15, platform: 'manual' })
+    redraftSeasonFindFirst.mockResolvedValueOnce({ id: 'rs-1', currentWeek: 11 })
+    const { assembleUserOsContext } = await import('@/lib/shared-services/league-hub/userOsContext')
+    const result = await assembleUserOsContext({ appUserId: 'owner-1', canonicalLeagueId: 'league-1' })
+    expect(result?.currentWeek).toBe(11)
+  })
+
+  it('[control] a league with no redraft season still answers week 1', async () => {
+    leagueFindUnique
+      .mockResolvedValueOnce(baseLeague({ userId: 'owner-1', platform: 'allfantasy' }))
+      .mockResolvedValueOnce({ isDynasty: false, playoffTeams: 6, playoffStartWeek: 15, platform: 'manual' })
+    const { assembleUserOsContext } = await import('@/lib/shared-services/league-hub/userOsContext')
+    const result = await assembleUserOsContext({ appUserId: 'owner-1', canonicalLeagueId: 'league-1' })
+    expect(result?.currentWeek).toBe(1)
   })
 
   it('propagates real sync freshness from the active league context, never re-deriving it', async () => {

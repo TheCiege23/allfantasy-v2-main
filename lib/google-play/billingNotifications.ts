@@ -4,6 +4,7 @@ import { PLAY_PACKAGE } from "./billingCatalog"
 import { PlayBillingError, purchaseHash, validatePurchaseToken } from "./billingConfig"
 import { prisma } from "@/lib/prisma"
 import { reverseVoidedPlayPack, syncGooglePlayPurchase, refreshStoredGooglePlayPurchase } from "./billingPurchases"
+import { onPartnerPlayVoided } from "@/lib/partner-codes/storeLedger"
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"))
 export async function authenticatePlayPush(request: Request) {
@@ -43,6 +44,8 @@ export async function applyPlayNotification(body: unknown) {
     else {
       const row = await prisma.googlePlayPurchase.findUnique({ where: { tokenHash: purchaseHash(token) } })
       if (row) await refreshStoredGooglePlayPurchase(row.tokenHash)
+      // Commissioner Partner Codes: a refunded subscription order takes back its commission. Never throws.
+      await onPartnerPlayVoided(event.voidedPurchaseNotification.orderId)
     }
     return
   }

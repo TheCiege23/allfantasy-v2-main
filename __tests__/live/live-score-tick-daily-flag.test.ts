@@ -64,8 +64,8 @@ describe('live-score-tick — daily-sport flag', () => {
 
   it('all supported daily sports are enabled when no flag is configured', async () => {
     await GET(req())
-    expect(h.daily.mock.calls[0][0].sports).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF'])
-    expect(h.meta?.dailyLiveEnabled).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF'])
+    expect(h.daily.mock.calls[0][0].sports).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'])
+    expect(h.meta?.dailyLiveEnabled).toEqual(['NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB'])
   })
 
   it('flag on: runs for the enabled sports, with a budget stop, and reports the outcome', async () => {

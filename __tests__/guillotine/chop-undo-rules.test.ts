@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { chopUndoBlockers, faabReturnPlan, validateChopInstead, type ChopUndoFacts } from '@/lib/guillotine/chopUndo'
+import { chopUndoBlockers, faabResetReturnPlan, faabReturnPlan, validateChopInstead, type ChopUndoFacts } from '@/lib/guillotine/chopUndo'
 import { describeLogEntry, rosterIdsNamedBy } from '@/lib/league-log/leagueLog'
 
 const clear: ChopUndoFacts = {
@@ -87,5 +87,27 @@ describe('the league log', () => {
       'Deshizo la eliminación de la semana 5: Bench Mob vuelve',
     )
     expect(rosterIdsNamedBy([row])).toEqual(['blades'])
+  })
+})
+
+describe('putting back a FAAB top-up or reset (owner, 2026-11-22: undo reverses it)', () => {
+  it('no reset ran this week: nothing to put back', () => {
+    expect(faabResetReturnPlan(null)).toEqual(new Map())
+  })
+  it('each survivor goes back to its balance before the chop; rosters the rule left alone are skipped', () => {
+    const plan = faabResetReturnPlan({
+      changes: [
+        { rosterId: 'a', before: 40, after: 100 },
+        { rosterId: 'b', before: 100, after: 100 },
+        { rosterId: 'c', before: null, after: 25 },
+      ],
+    })
+    expect(plan).toEqual(new Map([['a', { before: 40, after: 100 }], ['c', { before: null, after: 25 }]]))
+  })
+  it('a record it cannot read refuses the undo rather than guessing a balance', () => {
+    expect(faabResetReturnPlan({})).toBeNull()
+    expect(faabResetReturnPlan({ changes: [{ rosterId: 'a', after: 100 }] })).toBeNull()
+    expect(faabResetReturnPlan({ changes: [{ rosterId: 'a', before: 40 }] })).toBeNull()
+    expect(chopUndoBlockers({ ...clear, faabResetWithoutChanges: true })).toEqual(['faab_reset_unknown'])
   })
 })

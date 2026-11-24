@@ -10,12 +10,14 @@ const h = vi.hoisted(() => ({
   redraftRosterId: 'rr-1' as string | null,
   players: [] as Array<{ playerId: string; team: string | null }>,
   games: [] as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null; status: string | null; day?: string }>,
+  nflGames: [] as Array<{ homeTeam: string; awayTeam: string; startTime: Date | null; seasonType?: string | null }>,
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     roster: { findUnique: async () => ({ redraftRosterId: h.redraftRosterId, platformUserId: 'u1' }) },
     redraftRosterPlayer: { findMany: async () => h.players },
+    sportsGame: { findMany: async () => h.nflGames },
   },
 }))
 vi.mock('@/lib/specialty-league/registry', () => ({ getSpecialtySpecByVariant: () => null }))
@@ -85,11 +87,18 @@ describe('daily-sport weekly lineup locks on the roster-engine save path', () =>
     expect(ctx.lockedPlayerIds).toEqual(['mcdavid'])
   })
 
-  it('does not touch past or future weeks, NFL, or leagues with no native redraft roster', async () => {
-    expect((await resolveFullLineupLockContext(args({ editingWeek: 2 }))).lockedPlayerIds).toEqual([])
-    expect((await resolveFullLineupLockContext(args({ sport: 'NFL' }))).lockedPlayerIds).toEqual([])
+  it('leaves a past week to the view-only lock, and a league with no native redraft roster alone', async () => {
+    expect((await resolveFullLineupLockContext(args({ leagueWeek: 2, editingWeek: 1 }))).locked).toBe(true)
     h.redraftRosterId = null
     expect((await resolveFullLineupLockContext(args())).lockedPlayerIds).toEqual([])
+  })
+
+  /*
+   * 🛑 A FUTURE WEEK USED TO SKIP EVERY LOCK. The save still writes the roster's CURRENT slots, so asking
+   * for week 2 moved a week-1 starter who had already played.
+   */
+  it('locks a save for a FUTURE week by this week\'s schedule, since it writes the current lineup', async () => {
+    expect((await resolveFullLineupLockContext(args({ editingWeek: 2 }))).lockedPlayerIds).toEqual(['tatum'])
   })
 
   it('honours a commissioner emergency unlock for the player', async () => {
@@ -129,16 +138,70 @@ describe('a daily-lineup league on the roster-engine save path', () => {
     expect(ctx.perPlayerReasons.brunson).toMatch(/game today has started/)
   })
 
-  it('a weekly league at the same moment keeps the whole-lineup lock (unchanged)', async () => {
+  /*
+   * 🛑 THE 6 PM WHOLE-LINEUP GUESS IS GONE ONCE THE SCHEDULE IS KNOWN (owner's rule 2026-11-23: only a
+   * player whose game has started is locked). It froze the Heat player at 7:45 PM before his 10:30 tip.
+   */
+  it('a weekly league at the same moment locks per player, not the whole lineup', async () => {
     const ctx = await resolveFullLineupLockContext(args({ now: EVENING }))
-    expect(ctx.locked).toBe(true)
-    expect(ctx.policy).toBe('daily_slate')
+    expect(ctx.locked).toBe(false)
+    expect(ctx.policy).toBe('per_player_schedule')
+    expect([...ctx.lockedPlayerIds].sort()).toEqual(['brunson', 'tatum'])
   })
 
   it('fails CLOSED when the schedule cannot be read, since per-player locks are its only lock', async () => {
     h.games = null as never // readWeekGames returning null makes the lock derivation throw
     const ctx = await resolveFullLineupLockContext(args({ settings: DAILY, now: EVENING }))
     expect(ctx.locked).toBe(true)
-    expect(ctx.policy).toBe('daily_lock_unavailable')
+    expect(ctx.policy).toBe('schedule_lock_unavailable')
+  })
+})
+
+/*
+ * 🛑 NFL, NCAAF AND SOCCER HAD NO SCHEDULE LOCK ON THIS PATH (2026-11-23). The football time window's
+ * Thursday branch sat below a Wed–Sat "unlocked" return and never ran, so a Thursday-night starter could be
+ * benched on Friday and his points erased; and from Sunday 1 PM ET it locked EVERY player, so a Sunday- or
+ * Monday-night starter could not be swapped before his own game.
+ */
+describe('NFL on the roster-engine save path', () => {
+  // NFL 2026 week 12: KC plays Thursday night, SF on Sunday night.
+  const TNF = new Date('2026-11-27T01:20:00.000Z')
+  const SNF = new Date('2026-11-30T01:20:00.000Z')
+  const nfl = (now: string) => args({ sport: 'NFL', season: 2026, leagueWeek: 12, editingWeek: 12, now: new Date(now) })
+
+  beforeEach(() => {
+    h.redraftRosterId = 'rr-1'
+    h.players = [
+      { playerId: 'kc-rb', team: 'KC' },
+      { playerId: 'sf-rb', team: 'SF' },
+    ]
+    h.nflGames = [
+      { homeTeam: 'KC', awayTeam: 'DAL', startTime: TNF, seasonType: 'regular' },
+      { homeTeam: 'SF', awayTeam: 'SEA', startTime: SNF, seasonType: 'regular' },
+    ]
+  })
+
+  it('locks the Thursday-night starter from his kickoff through Friday', async () => {
+    const friday = await resolveFullLineupLockContext(nfl('2026-11-27T18:00:00.000Z'))
+    expect(friday.lockedPlayerIds).toEqual(['kc-rb'])
+    expect(movedLockedLineupPlayer(
+      { lineup_sections: { starters: [{ id: 'kc-rb' }], bench: [{ id: 'sf-rb' }] } },
+      { lineup_sections: { starters: [{ id: 'sf-rb' }], bench: [{ id: 'kc-rb' }] } },
+      friday.lockedPlayerIds,
+    )).toBe('kc-rb')
+  })
+
+  it('lets a Sunday-night player be swapped on Sunday afternoon: no whole-lineup lock', async () => {
+    const ctx = await resolveFullLineupLockContext(nfl('2026-11-29T19:00:00.000Z'))
+    expect(ctx.locked).toBe(false)
+    expect(ctx.policy).toBe('per_player_schedule')
+    expect(ctx.lockedPlayerIds).toEqual(['kc-rb'])
+  })
+
+  it('[control] with no games stored for the week it keeps the time-window fallback', async () => {
+    h.nflGames = []
+    const ctx = await resolveFullLineupLockContext(nfl('2026-11-29T19:00:00.000Z'))
+    expect(ctx.locked).toBe(true)
+    expect(ctx.policy).toBe('football_weekly')
   })
 })

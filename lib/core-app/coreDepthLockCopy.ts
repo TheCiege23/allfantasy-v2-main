@@ -39,6 +39,12 @@ export type CoreDepthLockCopy = {
   bodyAlt: string
   cta: (planName: string) => string
   tradeBreakdownBenefit: string
+  /** My Team and Matchup's AF Intelligence lock. */
+  afProjectionsBenefit: string
+  /** /projections' AF Intelligence lock (the board keeps its free baseline). */
+  afProjectionsBoardBenefit: string
+  /** The draft rooms' AF ADP lock, as a tooltip. */
+  afAdpLockedTitle: string
   tradeReviewWithTokens: string
   fullTradeReview: string
   tradeDraftStorageError: string
@@ -59,6 +65,7 @@ const DEPTH_LABEL_ES: Record<CoreDepth, string> = {
   trade_depth: 'Desglose completo de cambios',
   commissioner_depth: 'Análisis para comisionados',
   competitive_edge: 'Competitive Edge',
+  af_intelligence: 'Proyecciones y ADP de AF',
 }
 
 export function depthLabelText(depth: CoreDepth, english: string, language: string | null | undefined): string {

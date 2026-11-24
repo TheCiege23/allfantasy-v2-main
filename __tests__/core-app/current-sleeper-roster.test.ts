@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const get = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/trade-intel/sleeperTradeSync', () => ({ sleeperGet: get }))
-import { currentSleeperRoster } from '@/lib/core-app/currentSleeperRoster'
+import { currentSleeperRoster, forgetSleeperWeeksForTests } from '@/lib/core-app/currentSleeperRoster'
+
+// The remembered week is module state; no test may inherit another's guess.
+beforeEach(() => { forgetSleeperWeeksForTests() })
 
 function mockRosters(rows: unknown) {
   get.mockImplementation(async (path: string) => path.endsWith('/rosters') ? rows : { status: 'pre_draft' })
@@ -151,4 +154,79 @@ describe('malformed connected-provider payloads',()=>{
  it.each([{players:['p',{}],starters:['p']},{players:['p'],starters:[{}]},{players:['p'],starters:['p'],reserve:[{}]},{players:['p'],starters:['p'],co_owners:'owner'}])('holds malformed player assignments %j',async fields=>{
   mockRosters([{roster_id:3,owner_id:'owner',...fields}]);expect(await currentSleeperRoster('league',{platformUserId:'owner'})).toBeNull()
  })
+})
+
+describe('speed: the guessed week and shared in-flight reads (2026-11-22)', () => {
+  beforeEach(() => { get.mockReset() })
+  const roster = [{ roster_id: 3, owner_id: 'owner', players: ['hill', 'sampson'], starters: ['hill'] }]
+  function inSeason(week: number, starters: Record<number, string[]>) {
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/rosters')) return roster
+      const m = /\/matchups\/(\d+)$/.exec(path)
+      if (m) return starters[Number(m[1])] ? [{ roster_id: 3, starters: starters[Number(m[1])] }] : null
+      return { status: 'in_season', settings: { leg: week } }
+    })
+  }
+
+  it('asks for the remembered week beside the league read, not after it', async () => {
+    inSeason(2, { 2: ['hill'] })
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    get.mockClear()
+    let leagueRead!: () => void
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/rosters')) return roster
+      if (path.endsWith('/matchups/2')) return [{ roster_id: 3, starters: ['hill'] }]
+      await new Promise<void>((r) => { leagueRead = r })
+      return { status: 'in_season', settings: { leg: 2 } }
+    })
+    const pending = currentSleeperRoster('league', { platformUserId: 'owner' })
+    try {
+      // The league answer has not arrived, and the matchups read is already out.
+      await vi.waitFor(() => expect(get).toHaveBeenCalledWith('/league/league/matchups/2'))
+    } finally {
+      // Always let the league read land, so its shared in-flight request cannot outlive this test.
+      await vi.waitFor(() => expect(leagueRead).toBeTypeOf('function'))
+      leagueRead()
+    }
+    expect((await pending)?.starters).toEqual(['hill'])
+  })
+
+  it('throws a wrong guess away and reads the week the league reports', async () => {
+    inSeason(2, { 2: ['hill'] })
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    inSeason(3, { 2: ['hill'], 3: ['sampson'] })
+    const result = await currentSleeperRoster('league', { platformUserId: 'owner' })
+    expect(result?.starters).toEqual(['sampson'])
+    expect(result?.verification.week).toBe(3)
+    expect(get).toHaveBeenCalledWith('/league/league/matchups/3')
+  })
+
+  it('forgets the week once the league leaves the season, so nothing is guessed', async () => {
+    inSeason(2, { 2: ['hill'] })
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    mockRosters(roster)
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    get.mockClear()
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    expect(get.mock.calls.map(([p]) => p).filter((p: string) => p.includes('/matchups/'))).toEqual([])
+  })
+
+  it('shares one request between two identical reads in flight, and keeps nothing afterwards', async () => {
+    let release!: () => void
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/rosters')) { await new Promise<void>((r) => { release = r }); return roster }
+      return { status: 'pre_draft' }
+    })
+    const a = currentSleeperRoster('league', { platformUserId: 'owner' })
+    const b = currentSleeperRoster('league', { platformUserId: 'owner' })
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    release()
+    const [ra, rb] = await Promise.all([a, b])
+    expect(ra?.starters).toEqual(['hill']); expect(rb?.starters).toEqual(['hill'])
+    expect(get.mock.calls.filter(([p]) => p === '/league/league/rosters')).toHaveLength(1)
+    // Settled: a later read goes back to Sleeper rather than reusing the answer.
+    mockRosters(roster)
+    await currentSleeperRoster('league', { platformUserId: 'owner' })
+    expect(get.mock.calls.filter(([p]) => p === '/league/league/rosters')).toHaveLength(2)
+  })
 })

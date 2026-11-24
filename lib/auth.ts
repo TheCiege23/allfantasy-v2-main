@@ -349,6 +349,60 @@ const providers: NextAuthOptions["providers"] = [
     },
   }),
   /*
+   * The no-account support checkout's two one-time ways in (lib/monetization/supportGuestAccount):
+   * `claim` — the thank-you page, holding the Checkout Session id, for an account that checkout
+   * just MADE; `link` — the emailed sign-in button. Each token is single-use and stored hashed.
+   */
+  CredentialsProvider({
+    id: "support-link",
+    name: "Support sign-in link",
+    credentials: {
+      kind: { label: "Kind", type: "text" },
+      token: { label: "Token", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizeSupportToken } = await import("@/lib/monetization/supportGuestAccount");
+      return authorizeSupportToken(credentials?.kind, credentials?.token);
+    },
+  }),
+  /*
+   * Sign in with Apple from the iOS app's native sheet (lib/auth/appleNativeSignIn). The web
+   * Apple button cannot work inside the app's WebView; this verifies Apple's signed identity
+   * token (our bundle id, this page's nonce) and links exactly as the web Apple callback does.
+   */
+  CredentialsProvider({
+    id: "apple-native",
+    name: "Sign in with Apple (app)",
+    credentials: {
+      identityToken: { label: "Identity token", type: "text" },
+      nonce: { label: "Nonce", type: "text" },
+      name: { label: "Name", type: "text" },
+    },
+    async authorize(credentials) {
+      const { authorizeAppleNative } = await import("@/lib/auth/appleNativeSignIn");
+      return authorizeAppleNative(credentials as Record<string, unknown> | undefined);
+    },
+  }),
+  /*
+   * Sign in with a passkey — Face ID, Touch ID, a fingerprint, Windows Hello. `response` is the
+   * browser's signed answer to a challenge from /api/auth/passkey/signin/options; it is checked
+   * against the public key saved when the person added the passkey (lib/auth/passkeys.ts).
+   */
+  CredentialsProvider({
+    id: "passkey",
+    name: "Passkey",
+    credentials: {
+      response: { label: "Passkey response", type: "text" },
+    },
+    async authorize(credentials, req) {
+      const { authorizePasskey } = await import("@/lib/auth/passkeys");
+      const headers = (req?.headers ?? {}) as Record<string, string | undefined>;
+      // Used only outside production (passkeyConfig): a dev box's own origin.
+      const origin = headers.origin ?? (headers.host ? `http://${headers.host}` : null);
+      return authorizePasskey(credentials?.response, origin);
+    },
+  }),
+  /*
    * 🛑 THERE IS NO SLEEPER SIGN-IN, AND THERE MUST NOT BE ONE BY USERNAME.
    *
    * A `sleeper` credentials provider lived here: it took a Sleeper USERNAME and nothing

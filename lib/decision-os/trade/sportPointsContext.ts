@@ -1,5 +1,6 @@
 import { fantraxSoccerExportKey, hasFantraxSoccerPool, validateFantraxSoccerExport } from '@/lib/league-import/fantrax/soccerPlayerExport'
 import 'server-only'
+import { readVerifiedNbaInactiveSince, readVerifiedNbaTeam } from '@/lib/af-projections/nbaVerifiedSeasonLines'
 
 import { providerIdentityColumn } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { reduceCrosswalk } from '@/lib/core-app/crosswalkRules'
@@ -43,6 +44,7 @@ import {
   indexBoard,
   meetsSampleBar,
   multiSeasonFormatReason,
+  isFantraxCampusProjectionLeague,
   MIN_SAMPLE_GAMES,
   replacementFromLineups,
   replacementFromRosters,
@@ -274,16 +276,18 @@ export async function loadSportPointsBase(args: {
   format?: SportScoringFormat | null
   now?: Date
   campusOnly?: boolean
+  /** A current-season points board for Fantrax Campus-to-Canton lineups. */
+  projectionOnly?: boolean
 }): Promise<SportPointsBaseResult> {
   const { sport, league } = args
   const now = args.now ?? new Date()
 
-  if (league) {
-    const format = multiSeasonFormatReason(league.leagueType, sport)
-    if (format) return { ok: false, reason: format }
-  }
+  const projectionOnly = Boolean(args.projectionOnly && league?.season && isFantraxCampusProjectionLeague(sport, league))
+  const formatRestriction = league && multiSeasonFormatReason(league.leagueType, sport)
+  if (formatRestriction && !projectionOnly) return { ok: false, reason: formatRestriction }
   const valuation = valuationFor(sport, league, args.format)
   if ('refuse' in valuation) return { ok: false, reason: valuation.refuse }
+  if (projectionOnly && valuation.kind !== 'points' && formatRestriction) return { ok: false, reason: formatRestriction }
   /*
    * NBA, NHL and college projections store the vendor's stat names and go through the box-score
    * normalizer here. MLB's are stored ALREADY in the engine's keys (`mlbPerGameRates`) — the normalizer
@@ -304,7 +308,8 @@ export async function loadSportPointsBase(args: {
   })) : storedRosters
   const canLinkFromRoster = provider === 'yahoo' || provider === 'espn' || (provider === 'fantrax' && sport === 'SOCCER')
   const claims = canLinkFromRoster ? providerRosterClaims(rosterRows, provider) : []
-  const modeled = sport === 'SOCCER' ? await loadSoccerLines(now, column, claims) : await loadSnapshotLines(sport, normalize, now, column, claims)
+  const modeled = sport === 'SOCCER' ? await loadSoccerLines(now, column, claims)
+    : await loadSnapshotLines(sport, normalize, now, column, claims, projectionOnly ? league?.season ?? undefined : undefined)
   // A verified export contains actual accumulated league points and club games;
   // AF can estimate a rate from that history when component box scores are missing.
   const published = !modeled.ok && sport === 'SOCCER' && provider === 'fantrax' && league && valuation.kind === 'points'
@@ -314,7 +319,8 @@ export async function loadSportPointsBase(args: {
   const { season, games, lines, verifiedSoccerOwnGoals } = source
   const sourcedValuation = verifiedSoccerOwnGoals ? valuationFor(sport, league, args.format, true) : valuation
   if ('refuse' in sourcedValuation) return { ok: false, reason: sourcedValuation.refuse }
-  const finished = await finishBoard({ sport, league, valuation: sourcedValuation, season, games, lines, verifiedSoccerOwnGoals, publishedSoccerPoints: Boolean(published), rosterProvider: provider, rosterRows, campusOnly: Boolean(campus) })
+  const finished = await finishBoard({ sport, league, valuation: sourcedValuation, season, games, lines, verifiedSoccerOwnGoals, publishedSoccerPoints: Boolean(published), rosterProvider: provider, rosterRows, campusOnly: Boolean(campus), projectionOnly })
+  if (projectionOnly) return finished
   if (finished.ok && league && league.season === season) {
     const deals = await loadCompletedSportDeals(sport, season, league.leagueType).catch(() => [])
     if (deals.length) {
@@ -633,6 +639,7 @@ async function loadSnapshotLines(
   now: Date,
   column: RosterIdColumn,
   claims: RosterClaim[],
+  projectionSeason?: number,
 ): Promise<LinesResult> {
   /*
    * 🛑 THE NEWEST RUN'S SEASON, NEVER THE HIGHEST SEASON ON FILE. The projection writer stamps MLB with the
@@ -643,13 +650,13 @@ async function loadSnapshotLines(
    * while the day's run sat under 2026 and no MLB deal could be graded. One run writes one season, so the
    * newest row names it.
    */
-  const latest = await prisma.aFProjectionSnapshot
+  const latest = projectionSeason == null ? await prisma.aFProjectionSnapshot
     .findFirst({
       where: { sport: { equals: sport, mode: 'insensitive' }, week: null },
       orderBy: { computedAt: 'desc' },
       select: { season: true },
     })
-    .catch(() => null)
+    .catch(() => null) : { season: projectionSeason }
   if (!latest) return { ok: false, reason: `No ${sport} projections are on file, so this deal cannot be graded yet.`, valuationGap: 'missing_projections' }
   const season = latest.season
 
@@ -703,9 +710,13 @@ async function loadSnapshotLines(
     if (!rates) continue
     const stats = scoringStats(rates)
     if (Object.keys(stats).length === 0) continue
+    const verifiedNbaInactiveSince = sport === 'NBA' ? readVerifiedNbaInactiveSince(r.adjustmentFactors) : undefined
+    const verifiedNbaTeam = sport === 'NBA' ? readVerifiedNbaTeam(r.adjustmentFactors) : undefined
     lines.push({
       id: r.playerId,
       name: r.playerName,
+      ...(verifiedNbaInactiveSince ? { verifiedNbaInactiveSince } : {}),
+      ...(verifiedNbaTeam ? { verifiedNbaTeam } : {}),
       position: String(r.position ?? '').trim().toUpperCase(),
       sampleGames: sampleGamesFromReasons(reasonsOf(r.adjustmentFactors)),
       aliases: aliasesById.get(r.playerId) ?? [],
@@ -811,6 +822,7 @@ async function finishBoard(args: {
   rosterProvider?: string
   rosterRows: readonly RosterRow[]
   campusOnly?: boolean
+  projectionOnly?: boolean
 }): Promise<SportPointsBaseResult> {
   const { sport, league, valuation, season, games, lines, verifiedSoccerOwnGoals, rosterProvider } = args
   const savedTeamCount = league?.leagueSize
@@ -872,12 +884,13 @@ async function finishBoard(args: {
   let verifiedWire = false
   const baseline = baselineSeasonOf(board, season)
 
-  let replacementByPosition = replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
+  let replacementByPosition = args.projectionOnly ? new Map<string, { name: string; perGame: number }>()
+    : replacementFromLineups(board, { teams, slots: lineup.slots, benchPerTeam: lineup.benchPerTeam })
   let rosterIndex: ReadonlyMap<string, BoardPlayer> | undefined
   const requireProviderId = sport === 'SOCCER' && league?.platform?.trim().toLowerCase() === 'fantrax'
   if (league) {
     rosterIndex = indexBoard(board, rosterProvider ? 'provider' : true)
-    const rostered = [...new Set(args.rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
+    const rostered = args.projectionOnly ? [] : [...new Set(args.rosterRows.flatMap((r) => rosteredIdsOf(r.playerData)))]
     if (args.campusOnly && rostered.length === 0) return { ok: false, reason: 'No verified Campus roster IDs are saved.', valuationGap: 'unresolved_player' }
     if (rostered.length > 0) {
       const onBoard = new Set<string>()
@@ -909,8 +922,9 @@ async function finishBoard(args: {
     }
   }
 
-  const notReady = boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport),
-    verifiedWire, rosterDepth: teams * (lineup.benchPerTeam + lineup.slots.reduce((n, s) => n + s.count, 0)) })
+  const notReady = args.projectionOnly ? (board.length ? null : `No league-scored ${sport} projection rates are on file.`)
+    : boardReadinessReason({ sport, board, season, seasonLabel: seasonLabelFor(season, sport),
+      verifiedWire, rosterDepth: teams * (lineup.benchPerTeam + lineup.slots.reduce((n, s) => n + s.count, 0)) })
   if (notReady) return { ok: false, reason: notReady, valuationGap: 'projection_coverage' }
 
   return {

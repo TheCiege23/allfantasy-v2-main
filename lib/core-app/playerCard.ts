@@ -460,7 +460,7 @@ export type PlayerCardData = {
   injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
-  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue'>
+  afLeagueProjection?: Pick<LeaguePlayerMetric, 'rank' | 'positionRank' | 'perGame' | 'weekly' | 'fullSeason' | 'fullSeasonBasis' | 'restOfSeason' | 'tradeValue' | 'tradeValueUnit' | 'dynastyTradeValue' | 'afFactors'>
     & Pick<LeaguePlayerMetrics, 'week' | 'unit'>
   /**
    * Whether the signed-in reader follows him across every league (2026-09-14).
@@ -1839,7 +1839,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
   } as const
   const lookup = await anchorLookupFor(req)
   if (!lookup) return null
-  const anchor = await prisma.sportsPlayer
+  const byGivenId = await prisma.sportsPlayer
     .findFirst({
       where: {
         sport: { equals: sport, mode: 'insensitive' },
@@ -1851,6 +1851,23 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       select,
     })
     .catch(() => null)
+
+  /*
+   * 🛑 A LEAGUE'S FREE-AGENT LIST IDENTIFIES A PLAYER BY HIS `SportsPlayer` ROW ID, NOT A SLEEPER ID
+   * (app/api/waiver-wire/leagues/[leagueId]/players/route.ts: "a pool row's `player_id` is a
+   * SportsPlayer UUID"). The card was opened from that list with the row id in the Sleeper-id slot,
+   * matched nobody, and answered 404: "This player's card could not be loaded" on every free agent
+   * (production, 2026-11-22). A row id is not numeric, so it can never be mistaken for a Sleeper id;
+   * when the id given finds no one it is tried as the row it names, in the same sport.
+   */
+  const givenId = 'sleeperId' in lookup ? lookup.sleeperId : lookup.externalId
+  const anchor =
+    byGivenId ??
+    (/^\d+$/.test(givenId)
+      ? null
+      : await prisma.sportsPlayer
+          .findFirst({ where: { id: givenId, sport: { equals: sport, mode: 'insensitive' } }, select })
+          .catch(() => null))
 
   if (!anchor) return null
 
@@ -2164,6 +2181,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         weekly: afRow.weekly, fullSeason: afRow.fullSeason, fullSeasonBasis: afRow.fullSeasonBasis, restOfSeason: afRow.restOfSeason,
         week: afMetrics.week, unit: afMetrics.unit,
         tradeValue: afRow.tradeValue, tradeValueUnit: afRow.tradeValueUnit, dynastyTradeValue: afRow.dynastyTradeValue,
+        // Why `weekly` moved (its `unadjusted.weekly` lets the response gate revert it for a viewer without the plan).
+        ...(afRow.afFactors ? { afFactors: afRow.afFactors } : {}),
       },
     } : {}),
     ...(follow ? { follow } : {}),

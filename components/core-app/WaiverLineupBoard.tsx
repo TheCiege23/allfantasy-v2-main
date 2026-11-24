@@ -533,7 +533,10 @@ function PriorityCost({
   const last = priority.priority === priority.leagueRosters
   return (
     <p className="af-wlb-priority" data-testid="waiver-priority-cost">
-      <strong>{m.yourPriority(priority.priority, priority.leagueRosters)}</strong>{' '}
+      {/*
+        No "Your priority: #11 of 12." lead (2026-11-23, "crowded"): the Waiver priority tile directly above
+        says it, and this box is only drawn when that tile has the number. It starts at what a claim costs.
+      */}
       {last ? m.alreadyLast : m.claimSendsYouTo(priority.leagueRosters)}
       {!last
         ? next

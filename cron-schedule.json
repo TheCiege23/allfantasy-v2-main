@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/decision-os-activity-ingest?discover=1",
-      "schedule": "0 7 * * *"
+      "schedule": "0 */4 * * *"
     },
     {
       "path": "/api/cron/decision-os-activity-ingest?relayOnly=1",
@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/import-player-game-stats?multiSport=1&days=2",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/import-player-game-stats?gameDay=1",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/import-nfl-team-defense",
@@ -185,7 +189,7 @@
       "schedule": "*/2 * * * *"
     },
     {
-      "path": "/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL",
+      "path": "/api/cron/recompute-allfantasy-adp?sport=NFL,MLB,NBA,NHL,NCAAF,NCAAB,SOCCER",
       "schedule": "0 9 * * *"
     },
     {

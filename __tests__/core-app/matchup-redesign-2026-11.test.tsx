@@ -161,7 +161,8 @@ describe('insight cards — present only with data', () => {
     // How far short, off the scoreboard's own projected finals (101.9 vs 108.9), so the two agree.
     expect(w.short).toBe(7)
     render(<Matchup data={data('live')} />)
-    expect(screen.getByText('70.1 more points to pass them')).toBeTruthy()
+    // Names the target (their projected final), so it cannot be read as their current 49.0.
+    expect(screen.getByText('70.1 more points to beat their projected 108.9')).toBeTruthy()
     expect(screen.getByTestId('matchup-to-win-body').textContent).toBe('On projection you finish 7.0 short, with 3 players still to play.')
   })
 
@@ -189,7 +190,7 @@ describe('insight cards — present only with data', () => {
     render(<Matchup data={data('live')} />)
     expect(screen.getByText('Partido clave')).toBeTruthy()
     expect(screen.getByText('Garrett Wilson no sumará puntos')).toBeTruthy()
-    expect(screen.getByText('70.1 puntos más para superarlos')).toBeTruthy()
+    expect(screen.getByText('70.1 puntos más para superar su proyección de 108.9')).toBeTruthy()
     expect(screen.getByTestId('matchup-to-win-body').textContent).toBe('Según la proyección te quedas a 7.0 puntos, con 3 jugadores por jugar.')
   })
 })

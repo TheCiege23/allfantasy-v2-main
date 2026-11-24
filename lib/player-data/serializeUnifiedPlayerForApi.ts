@@ -29,6 +29,8 @@ import {
 } from '@/lib/player-data/nflRedraftLiveScoringContext'
 
 export type UnifiedPlayerWireDto = {
+  /** The learned factors that moved `projectedPoints` (added by the league pricing passes; stripped by the AF Intelligence gate). */
+  afFactors?: { multiplier: number; reasons: string[]; unadjusted?: Record<string, number | null> }
   id: string
   /**
    * Waiver wire only: a recently dropped player is on waivers until this ISO time

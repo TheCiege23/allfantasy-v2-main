@@ -14,6 +14,7 @@ import type { MatchupsPayload } from '@/app/zombie/[leagueId]/matchups/page'
 import type { InvPayload } from '@/app/zombie/[leagueId]/items/page'
 import type { ZombieRulesDocument } from '@prisma/client'
 import type { ZombieRulesResolved } from '@/lib/zombie/zombieRules'
+import type { HarnessApiRoute } from '../harnessApi'
 
 type Team = TeamRow & Row
 
@@ -169,3 +170,14 @@ export const rulesDocument = {
   sectionPaidVsFree: section('Paid leagues track dues and payouts. Free leagues play for Outbreak Points only.'),
   generatedAt: new Date('2026-09-01T12:00:00.000Z'), lastUpdatedAt: new Date('2026-11-01T12:00:00.000Z'),
 } satisfies ZombieRulesDocument
+
+/**
+ * The full hub's /api/ answers for scripts/e2e-harness-capture.mjs (read through scripts/e2e-harness-api.ts).
+ * Unlisted reads (event-feed, status-board, payment-tracker, commissioner…) get a 503 and show their own states.
+ */
+export const HARNESS_API: HarnessApiRoute[] = [
+  { path: '/api/zombie/league', body: league },
+  { path: '/api/zombie/matchups', body: matchups },
+  { path: '/api/zombie/inventory', body: inventory },
+  { path: '/api/zombie/settings', body: settings },
+]

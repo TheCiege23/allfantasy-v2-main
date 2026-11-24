@@ -7,6 +7,8 @@
  * `leagueType: 'c2c'` with no variant.
  */
 
+import { readLeaguePair } from './pairRecord'
+
 export type CollegeProFormat = 'c2c' | 'devy'
 
 const C2C_TYPES = new Set(['c2c', 'merged_devy_c2c'])
@@ -17,6 +19,28 @@ export function collegeProFormatOf(league: { leagueType?: string | null; leagueV
   if (ids.some((v) => C2C_TYPES.has(v))) return 'c2c'
   if (ids.some((v) => DEVY_TYPES.has(v))) return 'devy'
   return null
+}
+
+/**
+ * Does this league get the one-league views (the two-lineup roster, the classic Team tab)? Its type
+ * says so, OR it is half of a recorded league-wide pair — Road To Glory's college football half is
+ * typed `dynasty`, and the pair is what makes it one league with its pro half, not the label.
+ */
+export function isCollegeProLeague(league: { leagueType?: string | null; leagueVariant?: string | null; settings?: unknown }): boolean {
+  return collegeProFormatOf(league) !== null || readLeaguePair(league.settings) !== null
+}
+
+/**
+ * Our sport code for a college half. Fantrax snapshots say `CFB` / `CBB`. Measured on Cream Bowl
+ * 2026-11-21: `CFB`, which matched none of the 274 NCAAF games on file that day, so the page could
+ * not tell a college game day from any other Saturday.
+ */
+export function normalizeCollegeSport(sport: string | null | undefined): string | null {
+  const s = String(sport ?? '').trim().toUpperCase()
+  if (!s) return null
+  if (s === 'CFB' || s === 'NCAAFB' || s === 'NCAA_FB') return 'NCAAF'
+  if (s === 'CBB' || s === 'NCAABB' || s === 'NCAA_BB') return 'NCAAB'
+  return s
 }
 
 /** The college sport that pairs with a pro sport. */

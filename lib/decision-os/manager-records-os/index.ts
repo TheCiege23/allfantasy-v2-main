@@ -22,7 +22,15 @@ import { MINUTES } from '../domain-os/types'
  * prediction — only what the record already states.
  */
 
-type ManagerRecordsArgs = { userId: string; leagueId: string }
+type ManagerRecordsArgs = {
+  userId: string
+  leagueId: string
+  /**
+   * The commissioner's directory: every manager INCLUDING the viewer (2026-11-21 re-score, Kernel ⚠ → ✅). Its own
+   * entry, because the default view leaves the viewer out — one must never answer for the other.
+   */
+  includeViewer?: boolean
+}
 
 export const MANAGER_RECORDS_TTL_MS = 5 * MINUTES
 
@@ -30,12 +38,13 @@ export const managerRecordsSource: OsFactSource<ManagerRecordsArgs, LeagueManage
   kind: 'records',
   level: 'user',
   ttlMs: MANAGER_RECORDS_TTL_MS,
-  scopeKey: (a) => `${a.userId}:${a.leagueId}`,
+  // The default view keeps the key it always had; the directory adds `:all`.
+  scopeKey: (a) => `${a.userId}:${a.leagueId}${a.includeViewer ? ':all' : ''}`,
   sport: () => 'ALL',
   derive: async (a) => {
     // Lazily imported: the loader reads THROUGH this module, so a static import would be a cycle.
     const { buildLeagueManagerRecords } = await import('@/lib/competitive-edge/managerRecordLoader')
-    const built = await buildLeagueManagerRecords({ leagueId: a.leagueId, userId: a.userId }).catch(() => null)
+    const built = await buildLeagueManagerRecords({ leagueId: a.leagueId, userId: a.userId, includeViewer: a.includeViewer === true }).catch(() => null)
     // An unavailable result is never cached: it is a fact about the read, not about the league.
     return built?.available ? built.data : null
   },

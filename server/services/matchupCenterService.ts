@@ -17,6 +17,9 @@ import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 import { afSideTotal, loadMatchupAfProjections } from '@/lib/matchup-center/afProjections'
 import { buildNativeMatchupCenterPayload } from './nativeMatchupCenter'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
+import { getMatchupData } from '@/lib/core-app/matchup'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { matchupCenterFromMatchupData } from '@/lib/matchup-center/importedMatchupCenter'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
 
@@ -171,6 +174,30 @@ export async function buildMatchupCenterPayload(params: {
     game: params.game,
   })
   if (native) return native
+
+  /*
+   * 🛑 AN IMPORTED LEAGUE'S WEEK LIVES IN `WeeklyMatchup`, NOT `TeamWeekResult` (found live 2026-11-23).
+   * Nothing writes `TeamWeekResult` for an imported league, so the read below answered "No opponent, 0.0"
+   * for every Sleeper, Fantrax and ESPN league while the dashboard strip showed the real game. Read the
+   * same stored week the core Matchup screen reads; fall through only when it has no head-to-head on file.
+   */
+  if (league.platformLeagueId && !isNativePlatform(league.platform)) {
+    const data = await getMatchupData(params.leagueId, params.viewerUserId, params.week ?? null, null, params.game ?? null).catch(() => null)
+    const imported = data
+      ? matchupCenterFromMatchupData(data, {
+          leagueId: params.leagueId,
+          sport: String(league.sport),
+          season: params.season ?? league.season,
+          conceptOverlay: league.leagueVariant ? `Format: ${league.leagueVariant}` : null,
+        })
+      : null
+    if (imported) {
+      return applyMatchupCommandCenterMeta({
+        ...imported,
+        insights: buildMatchupInsightsBlock({ left: imported.left, right: imported.right, sport: String(league.sport) }),
+      })
+    }
+  }
 
   const season = params.season ?? league.season
   /*

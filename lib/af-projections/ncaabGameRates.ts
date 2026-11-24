@@ -6,8 +6,12 @@ import { getDailySportNormalizer } from '@/lib/scoring-runtime/dailySportStatNor
 async function readGameRates(season: number, now: Date) {
   const rows = await prisma.playerGameStat.findMany({
     where: { sportType: 'NCAAB', season, source: 'rolling_insights_live',
-      gameDate: { lt: new Date(now.toISOString().slice(0, 10)) },
-      normalizedStatMap: { path: ['seasonType'], equals: 'regular' } },
+      AND: [{ normalizedStatMap: { path: ['seasonType'], equals: 'regular' } }],
+      OR: [
+        { gameDate: { lt: new Date(now.toISOString().slice(0, 10)) } },
+        { gameDate: { lte: now }, normalizedStatMap: { path: ['gameFinal'], equals: true } },
+      ],
+    },
     select: { playerId: true, normalizedStatMap: true, gameDate: true, team: true },
     orderBy: [{ gameDate: 'asc' }, { id: 'asc' }],
   })
@@ -15,7 +19,7 @@ async function readGameRates(season: number, now: Date) {
   const normalize = getDailySportNormalizer('NCAAB')!
   for (const row of rows) {
     const line = row.normalizedStatMap
-    if (!line || typeof line !== 'object' || Array.isArray(line)) continue
+    if (!line || typeof line !== 'object' || Array.isArray(line) || line.gameFinal === false) continue
     const box = line.stats
     if (!box || typeof box !== 'object' || Array.isArray(box) || !(Number(box.minutes) > 0)) continue
     const { stats } = normalize(box)

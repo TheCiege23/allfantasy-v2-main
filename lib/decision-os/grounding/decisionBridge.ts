@@ -85,6 +85,13 @@ export interface DecisionBridgeArgs {
  * same-artifact typecheck pair caught it — one error appeared that was not in the base — which is
  * the entire argument for running the pair rather than trusting a green suite.
  */
+const MAX_ALERTS = 3
+
+function moreSuffix(total: number, shown: number, noun: string): string {
+  const cut = total - shown
+  return cut > 0 ? ` (+${cut} more ${noun}${cut === 1 ? '' : 's'} not shown)` : ''
+}
+
 function describeCommissionerAssessment(a: CommissionerHealthAssessment): string | null {
   if (!a) return null
   const parts: string[] = []
@@ -93,11 +100,12 @@ function describeCommissionerAssessment(a: CommissionerHealthAssessment): string
   // The alerts are the substance a commissioner acts on; bounded, because a struggling league can
   // carry a lot of them and this line ends up in a prompt.
   const alerts = Array.isArray(a.topAlerts) ? a.topAlerts.filter((x) => typeof x === 'string') : []
-  if (alerts.length > 0) parts.push(`alerts: ${alerts.slice(0, 3).join('; ')}`)
+  // ⚠ What the bound leaves out is COUNTED (2026-11-23): a bare `.slice(0, 3)` read as "these are all the alerts".
+  if (alerts.length > 0) parts.push(`alerts: ${alerts.slice(0, MAX_ALERTS).join('; ')}${moreSuffix(alerts.length, MAX_ALERTS, 'alert')}`)
   const suggestions = Array.isArray(a.suggestedActions)
     ? a.suggestedActions.map((s: CommissionerActionSuggestion) => s?.label).filter((l): l is string => Boolean(l))
     : []
-  if (suggestions.length > 0) parts.push(`suggested: ${suggestions.slice(0, 3).join(', ')}`)
+  if (suggestions.length > 0) parts.push(`suggested: ${suggestions.slice(0, MAX_ALERTS).join(', ')}${moreSuffix(suggestions.length, MAX_ALERTS, 'suggestion')}`)
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
@@ -136,7 +144,10 @@ function notEntitled(): GroundedSlice<DecisionFact> {
  * `getCommissionerHubHealthForUser` runs TEN parallel queries and returns snapshots for every
  * league the user commissions. A single-league version would be cheaper and would duplicate all
  * ten — a rival to working code, which is the mistake this codebase records twice. So the cost is
- * accepted and paid for by the flag instead: `want.commissionerHealthDecision` defaults OFF.
+ * accepted and paid for by the flag instead: `want.commissionerHealthDecision` is set only on a
+ * `commissioner`-classified turn (`deriveWantFromIntent`), and the `get_league_health` tool reads the same
+ * slice on demand. (It said "defaults OFF" until the 2026-11-24 re-score — true of the raw flag, misleading
+ * about the chat, which turns it on for every commissioner question.)
  */
 export async function loadCommissionerHealthDecisionSlice(
   args: DecisionBridgeArgs,

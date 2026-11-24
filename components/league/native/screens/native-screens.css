@@ -42,6 +42,8 @@
 .nls-daypick .nls-seg button { padding: 0 10px; }
 .nls-iconbtn { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line2); border-radius: 8px; background: transparent; color: var(--text2); }
 .nls-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.nls-weeksel { min-height: 44px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; }
+.nls-weeksel:disabled { opacity: .4; cursor: not-allowed; }
 
 /* Buttons local to the screens (same geometry as .nl-button, 6px radius per handoff). */
 .nls-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 1px solid var(--line2); border-radius: 6px; background: transparent; color: var(--text2); font-size: 13px; font-weight: 600; white-space: nowrap; }
@@ -330,7 +332,11 @@
   .nls-mrow { grid-template-columns: minmax(0, 1fr) 48px 48px 48px minmax(0, 1fr); gap: 6px; min-height: 64px; padding: 8px 14px; }
   .nls-mrow .nls-pts { font-size: 16px; }
   .nls-mrow .nls-pos { min-width: 44px; }
-  .nls-mrow .nls-mavatar { display: none; }
+  /* Photo and team crest stay on a phone, above the name: a 40px column is too narrow beside it. */
+  .nls-mrow .nls-pl[data-media=true] { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .nls-mrow .nls-player[data-side=right] .nls-pl[data-media=true] { flex-direction: column; align-items: flex-end; }
+  .nls-mrow .nls-mavatar .nls-pavatar { width: 34px; height: 34px; }
+  .nls-mrow .nls-mavatar .nls-pavatar-crest { width: 17px; height: 17px; }
   .nls-mrow .nls-pl-text > small:not(.nls-oprank) { white-space: normal; overflow: visible; line-height: 1.35; }
   .nls-player strong { font-size: 14px; }
   .nls-player small { font-size: 11px; }
@@ -359,6 +365,41 @@
   .nls-table th, .nls-table td { padding-left: 6px; padding-right: 6px; font-size: 14px; }
   .nls-pcell { gap: 10px; }
   .nls-pcell .nls-pos { min-width: 40px; }
+  /*
+   * Players list on a phone: each row is  [ add ] [ player ] [ projection ]  with the season's
+   * figures in a labelled strip underneath. The table's cells are laid out as a grid; the first cell
+   * is `display: contents`, so the player and the strip inside it are separate grid items.
+   * The old layout let a no-wrap stat line widen the table to twice the phone, which pushed the
+   * projection and the Add / Claim button off the right edge.
+   */
+  .nls-table-players, .nls-table-players tbody { display: block; }
+  .nls-table-players thead { display: none; }
+  .nls-table-players tr { display: grid; grid-template-columns: 56px minmax(0, 1fr) 62px; column-gap: 10px; row-gap: 10px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .nls-table-players tbody tr:first-child { border-top: 0; }
+  .nls-table-players td { padding: 0; border: 0; }
+  .nls-table-players tr > :first-child, .nls-table-players tr > :last-child { padding: 0; }
+  .nls-table-players td:first-child { display: contents; }
+  .nls-table-players .nls-prow { display: contents; }
+  .nls-table-players .nls-pcell { grid-column: 2; grid-row: 1; gap: 8px; }
+  .nls-table-players .nls-prow > [data-watch] { grid-column: 3; grid-row: 2; justify-self: end; margin: 0; min-height: 44px; }
+  .nls-table-players td[data-action] { grid-column: 1; grid-row: 1; }
+  .nls-table-players td[data-action] .nls-btn { width: 100%; min-height: 44px; padding: 0 6px; border-radius: 999px; }
+  .nls-table-players td[data-proj] { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 48px; border: 1px solid var(--line2); border-radius: 8px; background: var(--surface2); font: 700 17px/1.1 var(--nl-mono); text-align: center; }
+  .nls-table-players td[data-proj]::before { content: 'PROJ'; color: var(--faint); font: 700 11px/1.3 var(--nl-mono); letter-spacing: .08em; }
+  .nls-table-players .nls-pstats-wide { grid-column: 1 / 3; grid-row: 2; margin: 0; display: flex; gap: 18px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  .nls-table-players .nls-pstats-wide::-webkit-scrollbar { display: none; }
+  .nls-table-players .nls-pstat { display: flex; flex: none; flex-direction: column; gap: 2px; }
+  .nls-table-players .nls-pstat + .nls-pstat::before, .nls-table-players .nls-pstat em::after { content: none; }
+  .nls-table-players .nls-pstat em { color: var(--faint); font: 700 11px/1.2 var(--nl-mono); letter-spacing: .06em; text-transform: uppercase; }
+  .nls-table-players .nls-pstat b { color: var(--text); font: 600 14px/1.2 var(--nl-mono); }
+  .nls-table-players .nls-pstat[data-phone-only] { display: flex; }
+  .nls-table-players .nls-player { flex: 1 1 0; }
+  .nls-table-players .nls-player small { display: flex; align-items: center; gap: 6px; }
+  .nls-table-players .nls-player small[data-game] { display: block; white-space: normal; overflow: visible; }
+  .nls-table-players .nls-player small[data-held] { display: block; white-space: normal; overflow: visible; }
+  .nls-table-players .nls-pcell-pos .nls-pos { min-width: 0; min-height: 0; height: auto; padding: 1px 6px; font-size: 11px; border-radius: 5px; }
+  .nls-table-players .nls-pcell > .nls-pos { display: none; }
+  .nls-table-players .nls-pcell-pos { display: inline-flex; }
   .nls-oddsbar > span:first-child { width: 56px; }
   .nls-team .nls-avatar { display: none; }
   .nls-team strong { font-size: 14px; }
@@ -430,3 +471,42 @@
 .nls-gl-pts { color: var(--text); font: 600 18px var(--nl-mono); font-variant-numeric: tabular-nums; }
 .nls-gl-cut { display: flex; align-items: center; gap: 10px; padding: 4px 20px; color: var(--bad); font: 700 11px var(--nl-mono); letter-spacing: .1em; text-transform: uppercase; }
 .nls-gl-cut::before, .nls-gl-cut::after { content: ''; flex: 1; border-top: 2px dashed color-mix(in srgb, var(--bad) 60%, transparent); }
+
+.nls-pcell-pos { display: none; }
+/* The season's figures on a wide screen: one line under the name, "RUSH YDS 766 · TD 7". */
+.nls-pstats-wide { display: block; margin: 2px 0 0 132px; color: var(--faint); font: 12px/1.4 var(--nl-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Player, then the watch star at the row's right edge. */
+.nls-prow { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.nls-prow > .nls-pcell { flex: 1 1 auto; }
+.nls-prow > [data-watch] { flex: none; border: 0; color: var(--faint); }
+.nls-prow > [data-watch][aria-pressed=true] { color: var(--warn); }
+.nls-pstat em { font-style: normal; }
+.nls-pstat em::after { content: ' '; }
+.nls-pstat b { font-weight: inherit; }
+.nls-pstat + .nls-pstat::before { content: ' · '; }
+.nls-pstat[data-phone-only] { display: none; }
+.nls-player small[data-game] { color: var(--text2); }
+/* Whose roster a listed player is on (Search / Leaders / Trade). */
+.nls-player small[data-held] { color: var(--text2); font-weight: 600; }
+/* A player's name as a button that opens his card: it keeps the look of the text it replaces. */
+.nls-namebtn { appearance: none; background: none; border: 0; padding: 0; margin: 0; max-width: 100%; overflow: hidden; color: inherit; font: inherit; text-align: inherit; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.nls-namebtn:hover, .nls-namebtn:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.nls-namebtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* Lineup: the slot badge is the swap control (Sleeper's model). */
+.nls-slotbtn { appearance: none; display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; cursor: pointer; }
+.nls-slotbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-slotbtn[aria-pressed=true] .nls-pos { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nls-slotbtn:disabled { cursor: default; }
+
+/* Survivor matchup: the tribe race and each castaway's week. */
+.nls-survivor-tribe { padding: 10px 0; border-top: 1px solid var(--line); }
+.nls-survivor-tribe:first-child { border-top: 0; padding-top: 0; }
+.nls-survivor-tribe[data-attending] .nls-board-line span:first-child { color: var(--warn, #f5a524); }
+.nls-survivor-members { list-style: none; margin: 6px 0 0; padding: 0 0 0 12px; display: grid; gap: 4px; }
+.nls-survivor-members li { display: flex; justify-content: space-between; gap: 12px; min-height: 24px; font-size: 13px; color: var(--text2); }
+.nls-survivor-members li[data-mine] { color: var(--text); font-weight: 600; }
+.nls-survivor-members li span:last-child { font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-survivor-starters { display: grid; gap: 10px; }
+.nls-survivor-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.nls-survivor-pts { display: grid; justify-items: end; gap: 2px; font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-survivor-pts strong { font-size: 15px; color: var(--text); }

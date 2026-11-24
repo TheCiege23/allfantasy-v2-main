@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import type { PrismaClient } from '@prisma/client'
 
 import { leagueWeekFromSettings, playoffSpots, regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
@@ -78,7 +79,7 @@ export async function notifyRebuildPlans(
     const state = assessContention({ standings, teamId: r.id, ...shape })
     if (state?.posture !== 'selling') continue
     const userId = r.ownerId ?? ''
-    if (!userId || userId.startsWith('orphan-') || userId.startsWith('ai-manager-')) continue
+    if (!userId || isSeatPlaceholderUserId(userId)) continue
     const sent = await args.prisma.platformNotification.findFirst({ where: { sourceKey: `${prefix}:${userId}` }, select: { id: true } })
     if (sent) continue
     if (!(await d.hasAfPro(userId).catch(() => false))) continue

@@ -112,6 +112,23 @@ describe('the sheet', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('never paints the welcome guide and the alerts sheet together, even for one frame', async () => {
+    // CI caught both on screen at once (2026-11-22, two unrelated PRs). The sheet used to announce itself in a
+    // passive effect, which runs AFTER the DOM is committed, so there was a window with both prompts painted. A
+    // MutationObserver fires in that window (before passive effects), which is what a user would see.
+    const both: boolean[] = []
+    const seen = new MutationObserver(() => {
+      if (document.querySelector('[data-testid="signin-push-sheet"]')) both.push(Boolean(document.querySelector('.af-welcome')))
+    })
+    seen.observe(document.body, { childList: true, subtree: true })
+    render(<><HomePromptSlot enabled><CoreWelcomeTour leagueCount={1} /></HomePromptSlot><SignInPushSheet /></>)
+    await screen.findByTestId('signin-push-sheet')
+    await new Promise((r) => setTimeout(r, 0))
+    seen.disconnect()
+    expect(both.length).toBeGreaterThan(0)
+    expect(both).not.toContain(true)
+  })
+
   it('shows after sign-in, and counts the ask', async () => {
     render(<SignInPushSheet />)
     await waitFor(() => expect(screen.getByText(TITLE)).toBeTruthy())

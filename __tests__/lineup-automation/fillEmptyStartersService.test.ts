@@ -26,6 +26,7 @@ const m = vi.hoisted(() => {
     players: vi.fn(),
     persist: vi.fn(),
     notify: vi.fn(async () => ({})),
+    swap: vi.fn(),
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma }))
@@ -34,6 +35,8 @@ vi.mock('@/lib/roster-lineup-engine/lineupService', () => ({ persistRosterLineup
 vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({ getNormalizedPlayerData: m.players }))
 vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({ serializeUnifiedPlayerForApi: (r: unknown) => r }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.notify }))
+// The plan / opt-in / commissioner decision is aiSwapPolicy's own suite; here it is an input.
+vi.mock('@/lib/lineup-automation/aiSwapPolicy', () => ({ aiSwapAllowedForTeam: m.swap }))
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateForLeague: async () => ({ slots: [] }) }))
 vi.mock('@/lib/sport-defaults/LeagueVariantRegistry', () => ({ getFormatTypeForVariant: () => 'standard' }))
 vi.mock('@/lib/league/lineupStarterSlots', () => ({
@@ -67,6 +70,7 @@ beforeEach(() => {
     { id: 'rb', name: 'Bench Back', position: 'RB', projectedPoints: 9, product: { byeWeek: 12 } },
   ])
   m.persist.mockResolvedValue({ ok: true })
+  m.swap.mockResolvedValue({ allowed: true, reason: 'owner_opted_in' })
   // The owner was told seven hours ago (./automationHeadsUp.ts), so this run fills.
   m.state.cache = new Map([['af-heads-up:fill_empty_starters:r1:2026:7', { createdAt: OLD }]])
 })
@@ -150,5 +154,22 @@ describe('runFillEmptyStarters', () => {
     m.state.league = { ...m.state.league, platform: 'sleeper' }
     const r = await runFillEmptyStarters({ now: NOW })
     expect(r.skipped).toEqual({ not_native: 1 })
+  })
+
+  /*
+   * 🛑 THIS WAS ON BY DEFAULT FOR EVERYONE, FREE (2026-11-23). Filling a manager's lineup is an AI swap: AF
+   * Pro / Supreme, their own switch on, the commissioner's league switch not off.
+   */
+  it.each(['owner_not_pro', 'owner_off', 'league_off'])('does not fill a manager’s lineup without AI swap (%s)', async (reason) => {
+    m.swap.mockResolvedValue({ allowed: false, reason })
+    const r = await runFillEmptyStarters({ now: NOW })
+    expect(r.skipped).toEqual({ [reason]: 1 })
+    expect(m.persist).not.toHaveBeenCalled()
+  })
+
+  it('treats an unclaimed open-slot seat as having no owner, not as a person', async () => {
+    m.state.rosters = [{ id: 'r1', platformUserId: 'open-slot-L-2', playerData, updatedAt: OLD }]
+    expect((await runFillEmptyStarters({ now: NOW })).skipped).toEqual({ no_owner: 1 })
+    expect(m.swap).not.toHaveBeenCalled()
   })
 })

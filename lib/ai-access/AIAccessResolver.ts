@@ -33,8 +33,14 @@ export type AIAccessReason =
 export type AIAccessStatus = {
   hasAccess: boolean
   reason: AIAccessReason
-  /** Truthy when an active AI-eligible subscription is in effect. */
+  /**
+   * Truthy when an active AI-eligible subscription is in effect — a plan that includes `ai_chat`
+   * (AF Pro, or AF Supreme which bundles it). ⚠ NOT "has a paid plan": AF Commissioner holds no
+   * `ai_chat`, so it reads false here. Use `hasPlan` for "is this viewer on a plan".
+   */
   hasSubscription: boolean
+  /** Truthy when ANY paid plan is active or in grace (`subscription.plans` is non-empty). */
+  hasPlan: boolean
   subscription: EntitlementSnapshot
   /** Trial details derived from signup date. */
   trial: {
@@ -110,6 +116,8 @@ export class AIAccessResolver {
       gracePeriodEnd: null,
     }
     const hasSubscription = Boolean(entitlement?.hasAccess)
+    // The snapshot lists only plans whose subscription is active or in grace, so non-empty = on a plan.
+    const hasPlan = subscriptionSnapshot.plans.length > 0
     const trial = computeTrial(input.createdAt ?? null, now)
     const tokenBalance = Number(tokens?.balance ?? 0)
 
@@ -144,6 +152,7 @@ export class AIAccessResolver {
       hasAccess: hasSubscription || trial.inTrial || tokenBalance > 0,
       reason,
       hasSubscription,
+      hasPlan,
       subscription: subscriptionSnapshot,
       trial,
       tokenBalance,

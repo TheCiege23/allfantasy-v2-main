@@ -91,6 +91,50 @@ describe('R2.2 — decisions reach the prompt with their substance intact', () =
     expect(text).toContain('Roster would exceed 16')
   })
 
+  it('🛑 a decision with MORE verdicts than shown says how many were cut and names them (2026-11-23)', () => {
+    // Commissioner health can emit up to 13 attention verdicts; this used to keep 3 and say nothing.
+    const verdicts = Array.from({ length: 10 }, (_, i) => ({
+      rule: `commissioner.health.r${i}`,
+      verdict: 'requires_approval' as const,
+      message: `message ${i}`,
+      severity: 'warning' as const,
+    }))
+    const slice = decisionToSlice(makeDecision({ rule_verdicts: verdicts }), GAP)
+    const text = serializeDecisionOsGroundingForPrompt(packet({ commissionerHealthDecision: slice }), NOW)
+    expect(text).toContain('message 5')
+    expect(text).not.toContain('message 6')
+    expect(text).toMatch(/\(\+4 more rule verdicts not shown here: commissioner\.health\.r6, commissioner\.health\.r7, commissioner\.health\.r8, commissioner\.health\.r9\)/)
+  })
+
+  it('🛑 attention verdicts come before plain legal ones, critical first — a cut never drops the urgent one', () => {
+    const legal = Array.from({ length: 6 }, (_, i) => ({ rule: `ok${i}`, verdict: 'legal' as const, message: `fine ${i}`, severity: 'info' as const }))
+    const slice = decisionToSlice(
+      makeDecision({
+        rule_verdicts: [
+          ...legal,
+          { rule: 'commissioner.health.missed_lineups', verdict: 'requires_approval', message: 'MISSED-LINEUPS', severity: 'warning' },
+          { rule: 'commissioner.health.abandoned_teams', verdict: 'requires_approval', message: 'ABANDONED', severity: 'critical' },
+        ],
+      }),
+      GAP,
+    )
+    const text = serializeDecisionOsGroundingForPrompt(packet({ commissionerHealthDecision: slice }), NOW)
+    expect(text).toContain('ABANDONED')
+    expect(text).toContain('MISSED-LINEUPS')
+    expect(text.indexOf('ABANDONED')).toBeLessThan(text.indexOf('MISSED-LINEUPS'))
+    expect(text.indexOf('MISSED-LINEUPS')).toBeLessThan(text.indexOf('fine 0'))
+    expect(text).toMatch(/\(\+2 more rule verdicts not shown here: ok4, ok5\)/)
+  })
+
+  it('a decision with few verdicts adds no "+N more" line', () => {
+    const slice = decisionToSlice(
+      makeDecision({ rule_verdicts: [{ rule: 'r', verdict: 'requires_approval', message: 'one', severity: 'warning' }] }),
+      GAP,
+    )
+    const text = serializeDecisionOsGroundingForPrompt(packet({ commissionerHealthDecision: slice }), NOW)
+    expect(text).not.toMatch(/more rule verdict/)
+  })
+
   it('states the action COUNT even when the actions are not itemised', () => {
     // No describer supplied — the count is still true and must not read as "no actions".
     const slice = decisionToSlice(makeDecision(), GAP)

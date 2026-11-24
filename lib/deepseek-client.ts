@@ -41,6 +41,12 @@ export interface DeepSeekResult {
   finishReason?: string | null
   /** HTTP status of a failed call, when the provider sent one (429, 500…). */
   status?: number
+  /**
+   * Length of the model's reasoning (`reasoning_content`), 0 when it sent none. A reasoning model can
+   * spend the whole maxTokens thinking and return an EMPTY answer with HTTP 200 — this says whether
+   * that is what happened, which nothing recorded before (2026-11-23).
+   */
+  reasoningChars?: number
 }
 
 export async function deepseekChat(
@@ -99,10 +105,14 @@ async function _deepseekChatUncached(
       { signal: options.signal },
     )
 
-    const content = response.choices[0]?.message?.content ?? ''
+    const message = response.choices[0]?.message
+    const content = message?.content ?? ''
+    // Not in the OpenAI SDK's types: DeepSeek's own field for a reasoning model's thinking.
+    const reasoning = (message as { reasoning_content?: unknown } | undefined)?.reasoning_content
     return {
       content,
       finishReason: response.choices[0]?.finish_reason ?? null,
+      reasoningChars: typeof reasoning === 'string' ? reasoning.length : 0,
       model: runtimeModel,
       usage: {
         promptTokens: response.usage?.prompt_tokens ?? 0,

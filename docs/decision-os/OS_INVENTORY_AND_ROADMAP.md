@@ -191,6 +191,153 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**CODE RE-SCORE, 2026-11-24 at `0ff89d652c` — supersedes the 2026-11-21 table below and every mark it carries forward.**
+A read-only re-score at `0ff89d652c`, every gap re-checked in code, followed by one change closing the small ones. Same
+seven axes and weights.
+
+| OS | Score | What decides the mark |
+|---|---|---|
+| League | **100** | Cron n/a by §3 footnote 2 (a 60 s ruleset is read-through, not warmed). 85 if Cron is scored strictly |
+| Import | **100** | Cron ✅ rests on `FANTASY_OS_EXEC_SYNC_LIVE` being set on the worker (owner-confirmed 2026-11-23) |
+| Projection | **100** | Non-NFL projections are now warmed by `domain-os-refresh` (below) |
+| Player Value | **100** | — |
+| Lineup | **100** | — |
+| Waiver | **100** | Kernel ⚠ → **n/a by design** (owner's ruling, 2026-11-24): `lib/core-app/waiversBoard.ts` reads `roster.faabRemaining` and `leagueWaiverSettings` directly because Waiver OS holds FAAB 5 min and a reload right after a claim must show the live budget — the Import-screen reasoning. The board's decision paths (AI panel, FAAB bids, packet, engine) read through Waiver OS. 93.3 before the ruling |
+| Trade | **100** | — |
+| Draft | **93.3** | Kernel ⚠: live auto-pick bypasses Draft OS — **fix in flight** in a parallel change |
+| Commissioner | **100** | `get_league_health` (2026-11-23) is the commissioner tool the 2026-11-21 row said did not exist |
+| Manager Psychology | **100** | — |
+| **Decision OS hub** | **100** | Chimmy ⚠ → ✅: the second-model check skipped commissioner turns; `commissioner` is now a checked intent (below). 92.5 before |
+
+**Recorded n/a-by-design marks** (each an owner's call, not a gap): League Cron (§3 fn 2); Import Kernel (2026-11-23);
+Projection Kernel and Player Value Kernel (2026-11-21); Commissioner Kernel (the hub is the feed's writer); Trade Kernel
+and Lineup Feed/Kernel (the Lineup rule); **Waiver Kernel for the Waivers board (2026-11-24, above)**.
+
+**Closed in this change (no migration, no behaviour change outside these):**
+- **Non-NFL projections are pre-warmed.** `refreshAppSources` warmed only NFL, so the first Chimmy read per 6 h window
+  for NBA/MLB/NHL/NCAAF paid the derive inside the packet's slice deadline. It now warms each non-NFL sport
+  `AFProjectionSnapshot` holds, at that sport's newest season, after NFL and on the same run budget; a sport with no rows
+  is absent. Market is not warmed for them — `loadMarketValues` answers `no_producer` for non-NFL without a read.
+- **The projection row cap is visible.** `loadProjectionFacts` (`take: 2000`) logs a count-only warning when a read
+  comes back full. The cap is unchanged, and the fact array carries no truncated flag (its shape has no field for one).
+- **The second-model check reads commissioner answers** (`DECISION_CHECK_INTENTS` gains `commissioner`, with a
+  checker note on what league-health facts look like). Now five intents, not four.
+- **`get_manager_record` honours the `managerRecords` kill switch**, as `get_league_health` honours its own.
+  ⚠ The packet's `managerRecords` slice is still stamped `servedFrom: 'live'` / `asOf: now`: the loader returns the
+  value without its feed envelope, so the true source and time do not reach the packet. Named, not fixed.
+- Stale comments corrected (value-os, the two `domain_os_facts` "never migrated" notes, waiver-os, decisionBridge,
+  managerRecordLoader). ⚠ `waiverSettingsSource` has **no reader** — only tests and the unreferenced `waiverOsSources`.
+
+**Production fact, verified 2026-11-24:** migration `20261123120000_chimmy_advice_day` IS applied (ledger row and
+column both present), so daily-lineup bench learning is live.
+
+**INDEPENDENT CODE RE-SCORE, 2026-11-21 — supersedes the "~100" column below (owner's "continue": re-measure from
+code).** Three read-only audits at `7adb7a9ad1`, each told to treat the roadmap's ~100 as a claim to break, every mark
+cited to a file and line. 🛑 **The "~100" marks were the building session scoring its own work, and they did not
+survive.** Same seven axes and weights. Where an audit was stricter than this file's own recorded rules (the owner's
+"n/a by design" decisions), both readings are given.
+
+| OS | Audit | Under this file's rules | What is genuinely left |
+|---|---|---|---|
+| League | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: three live redraft runtimes read rules directly — `resolveNflRedraftTradeRuntime.ts`, `resolveNflRedraftWaiverRuntime.ts`, `resolveNflRedraftLiveScoringRuntime.ts`. Their GET routes read through League OS now (below) |
+| Import | ~82 | ~82 | Kernel ⚠: only the packet reads the feed. Cron ⚠: `fantasy-os-exec-sync` writes nothing unless `FANTASY_OS_EXEC_SYNC_LIVE=true` (code default off; production not read here) |
+| Projection | ~93 | ~93 → **~100, n/a by design** | Kernel ⚠ → **n/a, not ⚠** (owner's call, 2026-11-21): the three display readers (`readAfProjections`: the projections route, Chimmy's tool, the draft pool) stay on their indexed table reads — the feed cannot serve them without making them worse (below). Engine is ✅, not n/a: graded accuracy moves the projected number |
+| Player Value | ~90 | ~90 → **~100, n/a by design** | Kernel ⚠ → **n/a, not ⚠**: the NFL market lane (the card, Chimmy's value tool) reads `playerValueSnapshot` directly, on purpose — the feed holds today's value only (below). The non-NFL league board reads through the feed |
+| Waiver | ~93 | ~93 → **~100, rewired** | Kernel ⚠ → ✅: the AI waiver panel's route (`/api/ai/waivers/recommend`) called `loadWaiverWorldFacts` directly. It reads through Waiver OS now (below) |
+| Lineup | ~72.5 | ~85 → **~100 in this change** | Feed is n/a by this file's rule, not ❌. Cron ⚠ was REAL: the lineup and slate-lock alerts used the weekly-feed optimizer, not My Team's `optimizeLineup` — **fixed in this change** (below) |
+| Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
+| Commissioner | ~78 | ~85 → ~93 | Kernel ⚠ → **n/a, not ⚠**: the hub builds health live because it is the feed's WRITER — it primes the entry Chimmy reads (below). Chimmy ⚠ stands: no commissioner tool — the slice arrives only on a commissioner-classified turn. ⚠ superseded 2026-11-24: `get_league_health` (2026-11-23) is that tool |
+| Draft | ~93 | ~93 → ~100 in this change | Engine ⚠: the record was an appended sentence with no level — **it now states High / Medium / Low** (below) |
+| Manager Psychology | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: both user screens (`ManagerRecordSheet`, the commissioner Managers view) built live; only Chimmy read the feed. Both read through it now (below) |
+| **Decision OS hub** | ~86 | ~93 → ~100 in this change | Learning ✅ by the waiver, bench and trade evidence the second audit verified (the third missed them). Operability ⚠: a late slice inside an on-time packet was never logged — **logged now** (below) |
+
+`DECISION_OS_GROUNDING_ENABLED` gates the whole packet (code default off); **the owner confirmed it is on in Railway**,
+so the Packet and Chimmy marks stand.
+
+**The one class of gap left is Kernel: live paths that read around their feed.** Rewiring them is the build list, one
+system per PR: League → Waiver → Projection → Player Value → Commissioner hub → the manager-record screens.
+
+**Rewired: League (1 of 6).** The trade, waiver and live-scoring screens' GET routes (`app/api/redraft/{trade-runtime,
+waiver-runtime,live-scoring}`) build `createLeagueOsLoaders()` and hand its `loadRules` to the resolver, which reads the
+ruleset through it (60 s), then report League OS's outcomes (`emitFeedOutcomes('league', …)`). Only the GET reads moved:
+every POST, proposal validation, waiver processing, stat ingest and matchup completion passes nothing and still reads the
+ruleset live, as League OS's own header requires of anything that persists on the result. Tests:
+`__tests__/redraft/runtime-rules-through-league-os.test.ts`, `__tests__/redraft/runtime-routes-league-os-loaders.test.ts`.
+
+**Rewired: Waiver (2 of 6).** The AI waiver panel (`/api/ai/waivers/recommend`) reads its facts through Waiver OS's
+user-level resource entry (`createWaiverOsLoaders().loadWorldFacts`) — the entry Chimmy's waiver answer already reads,
+held five minutes because FAAB and priority move on every processed claim — and reports the feed's outcomes. A miss or a
+store problem derives through the same `loadWaiverWorldFacts`. Test: `__tests__/ai/waiver-recommendation-through-waiver-os.test.ts`.
+
+**Projection (3 of 6): n/a by design, not rewired** (owner's call, 2026-11-21, after the widening was costed). Projection
+OS's feed holds what the DECISION path needs (points, rescore state, stored components) and none of what these screens
+show (weather, rest of season, the pre-weather number, the reason a number moved). Widening it was costed and refused,
+because the feed would make every one of the three worse:
+- `createOsFeed` stores a whole result as ONE `domain_os_facts` row and has no in-memory layer, so the projections
+  route would load and parse a sport-week's full list per request to show 100 rows, where it reads ~300 indexed rows now.
+- The canonical source reads at most 2,000 rows per sport-week (`loadProjectionFacts`, `take: 2000`, newest first), so
+  the draft pool — which reads by player id, uncapped — would silently lose a projection for every player past the cap.
+  It also falls back to an earlier season's baseline (`season: { lte }`), which a per-season feed key cannot do.
+- Chimmy's projection tool, asked with no week, takes the newest week-scoped row of ANY week; the feed holds one week.
+So these readers stay on `lib/af-projections/readAfProjections.ts`, as Lineup's screens stay live. The packet's
+projection slice still reads through the feed, where the shape fits.
+
+**Player Value (4 of 6): n/a by design, not rewired.** The same finding as Projection. Value OS's `marketValueSource`
+caches today's `CanonicalValue` per player — a value and its provenance — and the card and Chimmy's value tool show the
+overall and position ranks and the 7-day move (`loadPlayerMarketValue` reads up to 40 snapshots per player to find the
+one closest to seven days back). The feed holds neither, so they stay on `lib/core-app/playerMarketValue.ts`, one
+indexed per-player read.
+
+**Commissioner hub (5 of 6): n/a, not ⚠ — the hub is the writer.** `lib/core-app/commissionerHub.ts` builds the
+health snapshot live and hands it to Commissioner OS (`primeCommissionerHealthSnapshot`), so Chimmy's next read inside
+five minutes serves exactly the numbers the commissioner is looking at (2026-11-20). Reading the hub back through the
+feed would show a commissioner a five-minute-old count right after they cleared it — approve a trade, reload, still
+pending. The screen stays live and keeps writing.
+
+**Rewired: the manager-record screens (6 of 6).** `loadLeagueManagerRecords` serves both from the `psychology` feed:
+- the record sheet (one team) from the viewer's default view, which holds every leaguemate but the viewer and is built
+  from the same history and the same viewer as a one-team build — so it is the same record. The viewer's own team is not
+  in that view and still builds live;
+- the commissioner's Managers directory from its own entry (`includeViewer`, scope key `…:all`), because the default
+  view leaves the viewer out and one must never answer for the other.
+Membership is still proved on every call before either is read. Test: `__tests__/competitive-edge-manager-records-feed.test.ts`.
+
+**Where the Kernel series ends:** League, Waiver and the manager-record screens read through their feeds; Projection and
+Player Value are n/a by design (the feed cannot serve their screens without making them worse); the commissioner hub is
+n/a as the feed's writer.
+
+**Import Kernel: n/a by design, not ⚠ (owner's call, 2026-11-23).** The 2026-11-23 re-score marked Import Kernel ⚠
+because the League Sync screen (`lib/core-app/leagueSync.ts`, `getLeagueSync`) reads `LeagueSyncState` directly while
+only the packet reads Import OS. Rewiring it was costed and refused, for the same reason as Projection and Value:
+- **The feed would make the screen wrong exactly when it matters.** Import OS holds its assertions for five minutes
+  (`lib/decision-os/import-os/index.ts`), and this screen has a **Sync now** button (`SyncNowButton`). Read through the
+  feed, a user who syncs and reloads would be shown the pre-sync status for up to five minutes — on the one screen whose
+  job is to say how current their league is.
+- **The feed does not hold what the screen shows.** `ImportAssertions` carries freshness, status, failures, scopes and
+  parity. The screen also shows the paused state, per-row roster / score / transaction times, seasons on file, the last
+  job run and its killed-mid-run signature, the provider-gone state, the last error and the imported-Guilly card — so it
+  would still read all of those directly and gain only an older copy of its headline field.
+
+So the screen stays on its direct indexed reads, as Lineup's screens stay live, and the packet keeps reading through
+Import OS where a five-minute freshness claim is the right shape. With `FANTASY_OS_EXEC_SYNC_LIVE` confirmed set on the
+worker by the owner (2026-11-23), Import Cron is ✅ too, so neither Import mark is a gap any more.
+
+**Built in this change (no migration):**
+- **The lineup alerts answer from My Team's best lineup.** `runLineupCheck` and `runSlateLockCheck` priced the roster
+  with `buildLineupOptimization` (the weekly-feed optimizer and the Trade Center's greedy fill), while My Team and
+  Chimmy use `optimizeLineup` — so an alert could push a swap the screen it opened did not show.
+  `lib/chimmy-alerts/myTeamLineupOptimization.ts` turns My Team's own load into the shape the alerts read: My Team's
+  changes, only on a `swap` verdict (a `close` call is not pushed), byes and ruled-out players at 0 as My Team prices
+  them, and no alert at all from a lineup My Team cannot answer honestly (an unidentified starter, best ball, no
+  projections).
+- **The draft record states a level**, as the trade grade does: "How sure, from the record: High / Medium / Low", then
+  the record behind it.
+- **A late slice is logged even inside an on-time packet** (`[decision-os/packet] slices did not finish in time`, names
+  and times only).
+- `FANTASY_OS_EXEC_SYNC_LIVE` is **left as it is**: switching it on is a Railway variable write (a redeploy) that starts
+  scheduled provider syncs, and the "35 syncs" measured earlier suggests production already has it on. To confirm.
+  ⚠ superseded 2026-11-24: confirmed — the owner confirmed it set on the worker on 2026-11-23 (Import Kernel note above).
+
 **FRESH RE-SCORE, 2026-11-20 — every OS and the hub re-measured from code at `ffab3b550c`, not carried forward
 (owner's choice).** Four independent read-only audits; every surprising claim below was re-read by hand before it went
 in. Same seven axes and weights. ⚠ **One rule is now stricter, and it is the main reason numbers fell: Kernel ✅ needs
@@ -209,12 +356,14 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
 | Manager Psychology | ~90 | ~63 | ~100 | Feed ❌ → ✅ and Kernel ⚠ → ✅: manager records read through the `psychology` feed (below). Cron ⚠ → ✅ in this change (owner's "daily current-season refresh", 2026-11-21, reversing the import-only quota choice): ESPN and MFL waiver claims are re-read once a day, this season only. Fantrax trades stay upload-only — Fantrax has no feed to schedule, so that half is n/a (below) |
-| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below) |
+| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below). ⚠ superseded 2026-11-24: "every" was four intents (trade, waiver, start/sit, draft); commissioner is the fifth now |
 
 **Stale or false claims this re-score corrected** (each checked in code):
 - "Retired label engine still runs in two crons" — false since 2026-11-19 (item 10 already said so; the gap column did not).
 - "ESPN/Yahoo/MFL/Fantrax/Fleaflicker records carry no trades or drafts" — partly: Fantrax trades now count (from the
   commissioner's upload); drafts are still absent for every non-Sleeper platform; ESPN/Yahoo/MFL/Fleaflicker trades too.
+  ⚠ superseded 2026-11-24: ESPN, MFL and Yahoo drafts and Yahoo trades now count (`lib/competitive-edge/providerManagerHistory.ts`,
+  2026-11-23); still absent: Fantrax/Fleaflicker drafts, and ESPN/MFL/Fleaflicker trades.
 - "Manager facts reach Chimmy … never the packet" (Manager Psychology row of the OS census) — false since the
   `managerRecords` slice.
 - "Every packet slice has its own kill switch" — false for two slices until this build.
@@ -943,7 +1092,7 @@ class of truth, a **Decision domain** owns a class of question, and a hub, page 
 | Player Value OS | **Fact OS** — market · IDP · kicker · devy | `decision-os/grounding/*Slice` |
 | Projection OS | **Fact OS** | `domain-os` projection source |
 | Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
-| Manager Psychology OS | **Retired from the hub 2026-11-17.** Manager facts reach Chimmy through the paid `get_manager_record` tool, never the packet | `psychological-profiles/*` (the feed `decision-os/psychology-os` is deleted) |
+| Manager Psychology OS | **Retired from the hub 2026-11-17.** Manager facts reach Chimmy through the paid `get_manager_record` tool, never the packet. ⚠ superseded 2026-11-24: the label engine was retired, not the domain — the `psychology` feed (`lib/decision-os/manager-records-os`) and the packet's `managerRecords` slice serve manager facts now | `psychological-profiles/*` (the feed `decision-os/psychology-os` is deleted) |
 | Lineup · Waiver · Trade · Commissioner | **Decision domains.** Lineup's second engine was deleted 2026-11-17; My Team's `optimizeLineup` (`decision-os/lineup/bestLineup.ts`) is the one start/sit answer | `decision-os/{waiver,trade,commissioner-health}` + `lineup/bestLineup.ts` |
 | Draft | **Decision domain — engine exists** (2026-11-14 correction): `decision-os/draft/decision.ts` wraps `draft-helper/RecommendationEngine.ts`; duplicate rankers converging, see `docs/os/OS_BACKBONE_PRINCIPLES.md` §2 | `decision-os/draft` |
 | Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
@@ -4095,6 +4244,8 @@ full `world → rules → decision → outcome` shape plus shadow/parity.
 
 ## 3. The scorecard
 
+> ⚠ superseded 2026-11-24: the marks below are historical. Current scores: "CODE RE-SCORE, 2026-11-24 at `0ff89d652c`" in §0.47.
+
 Seven axes, scored per OS. Weighting: axes 1–3 (does it exist) = 40%,
 axes 4–5 (is it fed and connected) = 30%, axes 6–7 (does it reach a human) = 30%.
 
@@ -4191,6 +4342,8 @@ things that already exist".
 ---
 
 ## 5. Connection map — API / cron / Chimmy
+
+> ⚠ superseded 2026-11-24: this map is historical (most ❌ here are wired now). Current state: "CODE RE-SCORE, 2026-11-24 at `0ff89d652c`" in §0.47.
 
 | OS | Upstream source | Cron | Reaches Chimmy? |
 |---|---|---|---|

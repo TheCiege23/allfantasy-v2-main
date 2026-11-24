@@ -3582,3 +3582,9 @@ html[data-ios-iap] [data-ios-purchase-alt] {
 }
 .af-lcp .af-chat-send:not(:disabled):hover { background: #22d3ee; color: #04050c; filter: brightness(1.08); }
 .af-lcp .af-chat-send svg { width: 16px; height: 16px; }
+
+/* IDP cards and totals bar follow light mode (2026-11-23): they kept #0b0d14 behind the light clamp's dark text. */
+html[data-mode="light"] {
+  --idp-panel: #ffffff;
+  --idp-border: rgba(2, 6, 23, 0.1);
+}

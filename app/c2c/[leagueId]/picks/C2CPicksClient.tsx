@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { C2CPicksBoard, type C2CPickRow } from '@/app/c2c/components/C2CPicksBoard'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 
@@ -47,64 +46,19 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
   }, [load])
 
   if (err) {
-    return <p className="px-4 py-10 text-center text-[13px] text-red-300/90">{err}</p>
+    return <p className="px-4 py-10 text-center text-[13px] text-[var(--bad)]">{err}</p>
   }
   if (!cfg) {
-    return <p className="px-4 py-10 text-center text-[13px] text-white/45">Loading…</p>
+    return <p className="px-4 py-10 text-center text-[13px] text-[var(--muted)]">Loading picks…</p>
   }
 
   const fmt = cfg.futureDraftFormat ?? 'combined'
-  const teamLabel = (ownerRosterId: string) => teamNames[ownerRosterId] ?? (ownerRosterId === rosterId ? 'Your team' : 'Another team')
+  const teamLabel = (ownerRosterId: string) => teamNames[ownerRosterId] ?? (ownerRosterId === rosterId ? 'your team' : 'another team')
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-12 pt-4">
-      <div className="scrollbar-none mb-4 flex gap-2 overflow-x-auto">
-        <span className="rounded-full border border-violet-500/35 bg-violet-500/15 px-3 py-1 text-[11px] font-bold uppercase text-violet-100">
-          Campus
-        </span>
-        <span className="rounded-full border border-blue-500/35 bg-blue-500/15 px-3 py-1 text-[11px] font-bold uppercase text-blue-100">
-          Canton
-        </span>
-      </div>
-
+    <div className="mx-auto max-w-6xl px-4 pb-12 pt-4">
+      <p className="mb-4 text-[13px] text-[var(--text2)]">Your future draft picks. Picks you got in a trade say who they came from.</p>
       <C2CPicksBoard picks={picks} format={fmt} teamLabel={teamLabel} />
-
-      <div className="mt-10 overflow-x-auto rounded-xl border border-white/[0.06]">
-        <table className="w-full min-w-[480px] text-left text-[11px] text-white/70">
-          <thead>
-            <tr className="border-b border-white/[0.06] text-white/45">
-              <th className="p-2">Team × Round</th>
-              <th className="p-2">Side</th>
-            </tr>
-          </thead>
-          <tbody>
-            {picks.slice(0, 24).map((p) => (
-              <tr key={p.id} className="border-b border-white/[0.04]">
-                <td className="p-2 text-white/80">
-                  {teamLabel(p.currentOwnerId)} · R{p.round} · {p.season}
-                </td>
-                <td className="p-2">
-                  <span
-                    className={
-                      p.pickSide === 'campus'
-                        ? 'text-violet-300'
-                        : p.pickSide === 'canton'
-                          ? 'text-blue-300'
-                          : 'text-white/80'
-                    }
-                  >
-                    {p.pickSide}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Link href={`/league/${leagueId}`} className="mt-8 block text-center text-[12px] text-cyan-300/90">
-        ← League hub
-      </Link>
     </div>
   )
 }

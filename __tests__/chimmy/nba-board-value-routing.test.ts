@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({ board: vi.fn(), metrics: vi.fn(), nfl: vi.fn() }))
 vi.mock('@/lib/af-projections/leaguePlayerMetrics', () => ({ loadLeaguePlayerMetrics: h.metrics }))
 vi.mock('@/lib/chimmy/sportBoardValue', () => ({ buildSportBoardValueContext: h.board }))
 vi.mock('@/lib/chimmy/tools/playerValueTool', () => ({ buildPlayerValueContext: h.nfl }))
+// The league sport read that routes an NFL league to the card's value (nfl-league-value-card-parity.test.ts).
+vi.mock('@/lib/prisma', () => ({ prisma: { league: { findUnique: async () => ({ sport: 'NBA' }) } } }))
 
 import { executeChimmyTool, type ChimmyToolContext } from '@/lib/chimmy/tools/chimmyTools'
 
@@ -19,7 +21,8 @@ describe('get_player_value', () => {
     h.board.mockResolvedValue('NBA VALUE for Nikola Jokic')
     const out = await executeChimmyTool('get_player_value', { player: 'Nikola Jokic' }, { leagueId: 'L1', userId: 'u1' } as ChimmyToolContext)
     expect(out).toContain('Nikola Jokic has an AF trade value of 125.00 fantasy points over replacement')
-    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'L1', playerName: 'Nikola Jokic', limit: 2 })
+    // No Chimmy plan in this context, so the board is read without AF's learned factors (AF Intelligence).
+    expect(h.metrics).toHaveBeenCalledWith({ leagueId: 'L1', playerName: 'Nikola Jokic', limit: 2, afIntelligence: false })
     expect(h.nfl).not.toHaveBeenCalled()
   })
 

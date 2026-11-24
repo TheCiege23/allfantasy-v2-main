@@ -293,12 +293,15 @@ function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
   }, [data.rest, data.unread])
 
   const match = useCallback(
-    (r: NotificationRow) => (!league || r.leagueId === league) && (filter === 'all' || r.kind === filter),
+    // A paired college + pro league is one entry: its filter key is the franchise, matching either half.
+    (r: NotificationRow) => (!league || (r.franchiseId ?? r.leagueId) === league) && (filter === 'all' || r.kind === filter),
     [filter, league],
   )
 
   const leagues = useMemo(() => [...new Map([...data.actToday, ...data.rest].flatMap((row) =>
-    row.leagueId && row.leagueName ? [[row.leagueId, row.leagueName] as const] : []))].sort((a, b) => a[1].localeCompare(b[1])), [data.actToday, data.rest])
+    row.franchiseId && row.franchiseName
+      ? [[row.franchiseId, row.franchiseName] as const]
+      : row.leagueId && row.leagueName ? [[row.leagueId, row.leagueName] as const] : []))].sort((a, b) => a[1].localeCompare(b[1])), [data.actToday, data.rest])
   const actToday = useMemo(() => data.actToday.filter(match), [data.actToday, match])
   const rest = useMemo(
     () =>

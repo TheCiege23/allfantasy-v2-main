@@ -115,10 +115,13 @@ describe('🛑 an unplayed starter has no points, not zero points', () => {
     expect(pts.textContent).toMatch(/0\.0/)
   })
 
-  it('prints "—" for a board total with nothing priced on that side', () => {
+  it('draws no total row under the slots — the scoreboard is the score (2026-11-23)', () => {
+    // It summed only the cells on file, so it disagreed with the scoreboard whenever one was missing:
+    // 53.6–61.9 under a scoreboard reading 132.2–125.9 on the matchup harness.
     const { container } = render(<Matchup data={data()} />)
-    const totals = [...container.querySelectorAll('.af-mu-board-foot .af-mu-foot-total')].map((n) => n.textContent)
-    expect(totals[0]).toBe('—')
+    expect(container.querySelector('.af-mu-board-foot:not(.af-mu-board-foot--af)')).toBeNull()
+    expect(container.textContent).not.toMatch(/Built from \d+ of your/)
+    expect(container.querySelector('.af-mu-score')).not.toBeNull()
   })
 })
 

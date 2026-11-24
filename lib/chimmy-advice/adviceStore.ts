@@ -2,9 +2,13 @@ import 'server-only'
 
 import { randomUUID } from 'node:crypto'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer'
 import { LEDGER_ONLY_SURFACES, MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE } from './adviceSurfaces'
+import { isAdviceDay } from './adviceDay'
+
+export { isAdviceDay } from './adviceDay'
 
 /**
  * Advice Chimmy gave — the storage half of Chimmy receipts (retention item 6, user decisions
@@ -68,13 +72,27 @@ export type AdviceInput = {
    * before that the insert falls back to the original columns and the call is still recorded.
    */
   projected?: { rec: number | null; alt: number | null } | null
+  /**
+   * A DAILY-lineup league's bench check (2026-11-23): the US Eastern day ('YYYY-MM-DD') the call priced. Stored in
+   * `advice_day` once `20261123120000_chimmy_advice_day` is applied, and part of the unique key, so two days of one
+   * week are two rows. Before that a dated call is `unavailable` and nothing is written — a day must never be filed
+   * under its week. Absent / '' for every weekly call.
+   */
+  day?: string | null
 }
 
-export type ChimmyAdvice = Omit<AdviceInput, 'userId' | 'projected'> & { givenAt: Date }
+export type ChimmyAdvice = Omit<AdviceInput, 'userId' | 'projected' | 'day'> & { givenAt: Date }
 
 export type RecordAdviceResult = 'recorded' | 'unavailable' | 'invalid'
 
-const validWeek = (n: number) => Number.isInteger(n) && n >= 1 && n <= 25
+/**
+ * NFL weeks stop at 25 (regular season plus playoffs). Basketball, hockey and baseball run on their own weekly
+ * calendars of up to ~27 weeks (`dailySportSeasonStarts.ts`) — My Team's bench check records those since 2026-11-23,
+ * so their ceiling is 30. Every other sport keeps the NFL ceiling.
+ */
+const LONG_WEEK_SPORTS: ReadonlySet<string> = new Set(['NBA', 'NHL', 'MLB'])
+const validWeek = (n: number, sport?: string | null) =>
+  Number.isInteger(n) && n >= 1 && n <= (LONG_WEEK_SPORTS.has(String(sport ?? '').trim().toUpperCase()) ? 30 : 25)
 const validSeason = (n: number) => Number.isInteger(n) && n >= 2000 && n <= 2100
 
 /**
@@ -94,7 +112,7 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
     !ADVICE_TYPES.includes(input.adviceType) ||
     !ADVICE_SURFACES.includes(input.surface) ||
     !validSeason(input.season) ||
-    !validWeek(input.week) ||
+    !validWeek(input.week, input.sport) ||
     (input.adviceType !== 'add' && !altKey) ||
     altKey === recKey
   ) {
@@ -105,6 +123,34 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
       ? Math.max(0, Math.min(100, Math.round(input.confidencePct)))
       : null
 
+  const day = typeof input.day === 'string' ? input.day.trim() : ''
+  if (day !== '' && !isAdviceDay(day)) return 'invalid'
+  const v: NormalizedAdvice = { recKey, recName, altKey, confidence, day }
+
+  /*
+   * 🛑 THE DAY COLUMN DECIDES WHICH STATEMENTS RUN, AND THE LEGACY ONES ARE BYTE-FOR-BYTE TODAY'S. Code deploys before
+   * `20261123120000_chimmy_advice_day` is applied by hand. Until `advice_day` exists a dated call writes nothing
+   * (`unavailable`) and an undated one runs exactly the statements it always did. Once it exists, every upsert must
+   * target the NEW key — the old index is dropped, and an ON CONFLICT naming its columns fails with 42P10. A process
+   * that cached "absent" and then meets that error re-checks and retries on the new key.
+   */
+  if (await hasAdviceDayColumn()) return recordAdviceDayKeyed(input, v)
+  if (day !== '') return 'unavailable'
+  try {
+    return await recordAdviceLegacy(input, v)
+  } catch (err) {
+    if (!isNoConflictTargetError(err)) throw err
+    resetAdviceDayColumnCache()
+    if (await hasAdviceDayColumn()) return recordAdviceDayKeyed(input, v)
+    throw err
+  }
+}
+
+type NormalizedAdvice = { recKey: string; recName: string; altKey: string; confidence: number | null; day: string }
+
+/** Before `advice_day` exists: today's statements, unchanged. */
+async function recordAdviceLegacy(input: AdviceInput, v: NormalizedAdvice): Promise<RecordAdviceResult> {
+  const { recKey, recName, altKey, confidence } = v
   /*
    * 🛑 A LEDGER-ONLY SURFACE NEVER TAKES OVER ANOTHER SURFACE'S ROW. The row is unique per (user,
    * league, week, type, pair) and the original upsert rewrites `surface` — fine between two Chimmy
@@ -221,6 +267,124 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
   }
 }
 
+/**
+ * After `advice_day` exists: the same four statements, keyed on the new unique index
+ * (`chimmy_advice_user_league_week_day_type_rec_alt_key`) and writing the day ('' for a weekly call).
+ */
+async function recordAdviceDayKeyed(input: AdviceInput, v: NormalizedAdvice): Promise<RecordAdviceResult> {
+  const { recKey, recName, altKey, confidence, day } = v
+  const ownRowsOnly = LEDGER_ONLY_SURFACES.includes(input.surface)
+  const recProjected = finiteOrNull(input.projected?.rec)
+  const altProjected = finiteOrNull(input.projected?.alt)
+  const columns = Prisma.raw(
+    `"id", "user_id", "league_id", "sport", "season", "week", "advice_type", "surface",
+             "rec_player_key", "rec_name", "alt_player_key", "alt_name", "slot", "confidence_pct", "advice_day"`,
+  )
+  const values = Prisma.sql`${randomUUID()}, ${input.userId}, ${input.leagueId}, ${String(input.sport ?? '').trim().toUpperCase()},
+             ${input.season}, ${input.week}, ${input.adviceType}, ${input.surface},
+             ${recKey}, ${recName}, ${altKey}, ${input.alt?.name?.trim() || null}, ${input.slot?.trim() || null}, ${confidence},
+             ${day}`
+  const target = Prisma.raw(ADVICE_DAY_CONFLICT_TARGET)
+  const refresh = Prisma.raw(`"surface"        = EXCLUDED."surface",
+            "rec_name"       = EXCLUDED."rec_name",
+            "alt_name"       = EXCLUDED."alt_name",
+            "slot"           = EXCLUDED."slot",
+            "confidence_pct" = EXCLUDED."confidence_pct",`)
+  if (ownRowsOnly || input.projected) {
+    try {
+      // See recordAdviceLegacy: a ledger-only surface updates only its own (or the unshown engine's) row.
+      const scope = ownRowsOnly
+        ? Prisma.sql`WHERE "chimmy_advice"."surface" = ${input.surface} OR "chimmy_advice"."surface" = ${WAIVER_ENGINE_SURFACE}`
+        : Prisma.empty
+      await prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "chimmy_advice" (${columns}, "rec_projected", "alt_projected")
+        VALUES (${values}, ${recProjected}, ${altProjected})
+        ON CONFLICT ${target} DO UPDATE SET
+          ${refresh}
+          "rec_projected"  = EXCLUDED."rec_projected",
+          "alt_projected"  = EXCLUDED."alt_projected",
+          "withdrawn_at"   = NULL,
+          "given_at"       = CURRENT_TIMESTAMP
+        ${scope}
+      `)
+      return 'recorded'
+    } catch (err) {
+      if (!isUndefinedColumnError(err)) {
+        if (isMissingDatabaseObjectError(err)) return 'unavailable'
+        throw err
+      }
+    }
+    if (ownRowsOnly) {
+      try {
+        await prisma.$executeRaw(Prisma.sql`
+          INSERT INTO "chimmy_advice" (${columns})
+          VALUES (${values})
+          ON CONFLICT ${target} DO NOTHING
+        `)
+        return 'recorded'
+      } catch (err) {
+        if (isMissingDatabaseObjectError(err)) return 'unavailable'
+        throw err
+      }
+    }
+  }
+  try {
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "chimmy_advice" (${columns})
+      VALUES (${values})
+      ON CONFLICT ${target} DO UPDATE SET
+        ${refresh}
+        "given_at"       = CURRENT_TIMESTAMP
+    `)
+    return 'recorded'
+  } catch (err) {
+    if (isMissingDatabaseObjectError(err)) return 'unavailable'
+    throw err
+  }
+}
+
+/** The unique key after `20261123120000_chimmy_advice_day` — the old one plus the day. */
+export const ADVICE_DAY_CONFLICT_TARGET =
+  '("user_id", "league_id", "season", "week", "advice_day", "advice_type", "rec_player_key", "alt_player_key")'
+
+/*
+ * IS `advice_day` THERE? Asked once per process and cached: "present" for good (a column is never un-added),
+ * "absent" for ADVICE_DAY_RECHECK_MS, so a process that started before the migration picks it up without a restart.
+ * An unreadable answer (the query failed, or returned nothing usable) is "absent" and NOT cached.
+ */
+export const ADVICE_DAY_RECHECK_MS = 10 * 60_000
+let adviceDayColumn: { present: boolean; at: number } | null = null
+
+export async function hasAdviceDayColumn(nowMs: number = Date.now()): Promise<boolean> {
+  if (adviceDayColumn && (adviceDayColumn.present || nowMs - adviceDayColumn.at < ADVICE_DAY_RECHECK_MS)) {
+    return adviceDayColumn.present
+  }
+  try {
+    const rows = await prisma.$queryRaw<Array<{ present: unknown }>>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'chimmy_advice' AND column_name = 'advice_day'
+      ) AS "present"`
+    const present = Array.isArray(rows) ? rows[0]?.present : undefined
+    if (typeof present !== 'boolean') return false
+    adviceDayColumn = { present, at: nowMs }
+    return present
+  } catch {
+    return false
+  }
+}
+
+/** Forget the cached answer (a 42P10 says it is stale; tests start clean). */
+export function resetAdviceDayColumnCache(): void {
+  adviceDayColumn = null
+}
+
+/** Postgres 42P10 — the ON CONFLICT columns match no unique index (the old key was dropped by the day migration). */
+function isNoConflictTargetError(err: unknown): boolean {
+  const e = err as { code?: unknown; meta?: { code?: unknown } } | null | undefined
+  return e?.code === '42P10' || e?.meta?.code === '42P10'
+}
+
 function finiteOrNull(n: number | null | undefined): number | null {
   return typeof n === 'number' && Number.isFinite(n) ? Math.round(n * 100) / 100 : null
 }
@@ -247,10 +411,40 @@ export async function withdrawStaleMyTeamAdvice(args: {
   keep: ReadonlyArray<{ rec: string; alt: string }>
   /** Players on the roster whose games have not started. */
   openPlayerKeys: readonly string[]
+  /**
+   * A daily-lineup render: the day it priced. Only that day's calls are touched — another day of the same week is a
+   * different call. Before `advice_day` exists a dated withdraw is 'unavailable' and runs nothing.
+   */
+  day?: string | null
 }): Promise<number | 'unavailable'> {
   const open = [...new Set(args.openPlayerKeys.map((k) => String(k).trim()).filter(Boolean))]
   if (!args.userId || !args.leagueId || open.length === 0) return 0
   const keep = args.keep.map((k) => `${k.rec}>${k.alt}`)
+  const day = typeof args.day === 'string' ? args.day.trim() : ''
+  if (day !== '' && !isAdviceDay(day)) return 0
+  if (await hasAdviceDayColumn()) {
+    // After the day migration: a weekly render touches only weekly rows (''), a daily one only its own day's.
+    try {
+      return await prisma.$executeRaw`
+        UPDATE "chimmy_advice" SET "withdrawn_at" = CURRENT_TIMESTAMP
+        WHERE "user_id" = ${args.userId}
+          AND "league_id" = ${args.leagueId}
+          AND "season" = ${args.season}
+          AND "week" = ${args.week}
+          AND "advice_day" = ${day}
+          AND "surface" = ${MY_TEAM_BENCH_SURFACE}
+          AND "advice_type" = 'start_sit'
+          AND "withdrawn_at" IS NULL
+          AND "rec_player_key" = ANY(${open}::text[])
+          AND "alt_player_key" = ANY(${open}::text[])
+          AND NOT (("rec_player_key" || '>' || "alt_player_key") = ANY(${keep}::text[]))
+      `
+    } catch (err) {
+      if (isMissingDatabaseObjectError(err)) return 'unavailable'
+      throw err
+    }
+  }
+  if (day !== '') return 'unavailable'
   try {
     return await prisma.$executeRaw`
       UPDATE "chimmy_advice" SET "withdrawn_at" = CURRENT_TIMESTAMP

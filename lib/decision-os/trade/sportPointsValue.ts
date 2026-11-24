@@ -66,6 +66,9 @@ export type BoardPlayer = {
   /** The season the projection's numbers come from (last season, until this one has games). */
   tradeMarket?: { percent: number; trades: number }
   currentSeasonParticipant?: boolean
+  /** NBA date (Eastern) when a verified roster review found the player outside the NBA. */
+  verifiedNbaInactiveSince?: string
+  verifiedNbaTeam?: string
   sourceSeason?: number | null
   /** Set when the projection blends this season with last (`af-projections/seasonBlend.ts`): each season's games. */
   seasonBlend?: { currentGames: number; previousGames: number; currentWeight: number } | null
@@ -281,6 +284,21 @@ export function categoryLeagueReason(settings: unknown, sport: PointsGradedSport
         ? 'category grades cover the standard 5x5 and 6x6 setups so far'
         : `there are no ${SPORT_LABEL[sport]} category grades yet`
   return `This league scores ${SPORT_LABEL[sport]} by categories we could not read — ${covered} — and a points total would answer a different question, so this deal is not graded.`
+}
+
+export function isFantraxNbaCampusLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return sport === 'NBA' && isFantraxCampusProjectionLeague(sport, league)
+}
+
+export function isFantraxCampusProjectionLeague(
+  sport: string,
+  league: { platform?: string | null; leagueType?: string | null },
+): boolean {
+  return (sport === 'NBA' || sport === 'NCAAB') &&
+    league.platform?.trim().toLowerCase() === 'fantrax' && league.leagueType?.trim().toLowerCase() === 'c2c'
 }
 
 /**

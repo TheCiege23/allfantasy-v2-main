@@ -136,6 +136,12 @@ function validRanks(projection: CfpProjection | null): readonly number[] | null 
   return Array.isArray(ranks) && ranks.length === 12 && ranks.every(rank => Number.isInteger(rank) && rank >= 1 && rank <= 25) ? ranks : null
 }
 
+/**
+ * Where "Start a CFP challenge" goes — the same create flow the /core home CFP card opens, pre-set to a
+ * college football playoff challenge.
+ */
+export const CFP_START_CHALLENGE_HREF = "/brackets/leagues/new?sport=NCAAF&challengeType=playoff_challenge"
+
 export default function CfpProjectionPreview({ standalone = false }: { standalone?: boolean }) {
   const [projection, setProjection] = useState<CfpProjection | null>(null)
   useEffect(() => {
@@ -165,6 +171,12 @@ export default function CfpProjectionPreview({ standalone = false }: { standalon
       <span className="cfp-preview-tag">PREVIEW ONLY</span>
     </div>
     <p className="cfp-preview-description">Based on the {rankingLabel} CFP rankings. {projection?.groupSix ?? "Boise State"} is shown as the projected Group of Six qualifier. Conference qualifiers are projected using the highest-ranked team in each conference. Teams, seeds and paths are not official; the committee announces the final field December 6.</p>
+    {/*
+      The standalone page's one action, ABOVE the bracket (2026-11-23, owner). It is where the /core home
+      CFP card sends people, and on a phone the bracket is several screens tall — the only way to start a
+      challenge from here was a small "Create a CFP pool" link in the footnote at the very bottom.
+    */}
+    {standalone ? <div className="cfp-preview-cta"><Link href={CFP_START_CHALLENGE_HREF} className="cfp-preview-cta-button" data-testid="cfp-start-challenge">Start a CFP challenge</Link><span>Set it up with your league now; the bracket fills in when the committee announces the field on December 6.</span></div> : null}
     <div className="cfp-board">
       <div className="cfp-stage" data-testid="cfp-bracket-stage" role="region" aria-label="Projected bracket">
         <div className="cfp-stage-inner">
@@ -197,6 +209,6 @@ export default function CfpProjectionPreview({ standalone = false }: { standalon
       </div>
     </div>
     {standalone ? <CfpBowlSchedule season={2026} series={[]} live /> : null}
-    <p className="cfp-preview-footnote">Illustrative bracket paths and bowl assignments may change. This preview does not save picks or affect standings. <a href="https://collegefootballplayoff.com/rankings" target="_blank" rel="noreferrer">CFP rankings source</a>{standalone ? <> · <Link href="/brackets/leagues/new?sport=NCAAF">Create a CFP pool</Link></> : <> · <Link href="/brackets/cfp/preview">Open shareable preview</Link></>}</p>
+    <p className="cfp-preview-footnote">Illustrative bracket paths and bowl assignments may change. This preview does not save picks or affect standings. <a href="https://collegefootballplayoff.com/rankings" target="_blank" rel="noreferrer">CFP rankings source</a>{standalone ? <> · <Link href={CFP_START_CHALLENGE_HREF}>Create a CFP pool</Link></> : <> · <Link href="/brackets/cfp/preview">Open shareable preview</Link></>}</p>
   </section>
 }

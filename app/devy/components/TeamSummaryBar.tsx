@@ -36,8 +36,8 @@ export function TeamSummaryBar({
   const label = ratio >= 0.66 ? 'Strong' : ratio >= 0.33 ? 'Average' : 'Thin'
 
   return (
-    <div className="border-b border-white/[0.06] bg-[color:var(--devy-panel)] px-4 py-3">
-      <div className="scrollbar-none flex gap-2 overflow-x-auto pb-2">
+    <div className="border-b border-white/[0.06] bg-[var(--surface)] px-4 py-3">
+      <div className="mx-auto grid max-w-6xl grid-cols-3 gap-2 pb-2 sm:grid-cols-5">
         <Chip emoji="🏈" label="NFL Players" value={activeCount} color="var(--devy-active)" />
         <Chip emoji="🚕" label="Taxi" value={taxiCount} color="var(--devy-taxi)" />
         <Chip emoji="🎓" label="Devy" value={devyCount} color="var(--devy-devy)" />
@@ -45,11 +45,11 @@ export function TeamSummaryBar({
         <Chip emoji="🎓" label="Devy picks" value={devyPickCount} color="var(--devy-devy)" />
       </div>
       <div className="mt-2">
-        <div className="flex items-center justify-between gap-2 text-[11px] text-white/55">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--muted)]">
           <span>
-            Pipeline: <span className="font-semibold text-white/80">{pipeline}</span> prospects in system
+            Pipeline: <span className="font-semibold text-[var(--text)]">{pipeline}</span> prospects in system
           </span>
-          <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-wide text-white/60">
+          <span className="rounded-full border border-white/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-wide text-[var(--text2)]">
             {label}
           </span>
         </div>
@@ -108,14 +108,14 @@ export function TeamSummaryBar({
                   setPipeBusy(false)
                 }
               }}
-              className="w-full rounded-lg border border-cyan-500/30 bg-cyan-500/10 py-2 text-[11px] font-semibold text-cyan-100 min-h-[40px] disabled:opacity-50"
+              className="w-full rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] py-2 text-[11px] font-semibold text-[var(--accent)] min-h-[40px] disabled:opacity-50"
               data-testid="devy-pipeline-ai"
             >
               {pipeBusy ? 'Analyzing pipeline…' : 'Chimmy pipeline health'}
             </button>
-            {pipeErr ? <p className="text-[11px] text-amber-200/90">{pipeErr}</p> : null}
+            {pipeErr ? <p className="text-[11px] text-[var(--devy-amber)]">{pipeErr}</p> : null}
             {pipeText ? (
-              <p className="text-[11px] leading-snug text-white/55">{pipeText}</p>
+              <p className="text-[11px] leading-snug text-[var(--muted)]">{pipeText}</p>
             ) : null}
           </div>
         ) : null}
@@ -137,12 +137,12 @@ function Chip({
 }) {
   return (
     <div
-      className="flex min-w-[120px] flex-shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-black/25 px-3 py-2"
+      className="flex min-w-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-[var(--surface2)] px-2.5 py-2"
       style={{ borderColor: `${color}33` }}
     >
       <span className="text-[16px]">{emoji}</span>
       <div className="min-w-0">
-        <p className="truncate text-[11px] uppercase tracking-wide text-white/45">{label}</p>
+        <p className="text-[11px] leading-tight text-[var(--muted)]">{label}</p>
         <p className="text-[15px] font-bold tabular-nums" style={{ color }}>
           {value}
         </p>

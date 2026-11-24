@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { zombieClipForAnimation } from '@/lib/zombie/videoAssets'
 
@@ -43,6 +44,26 @@ export async function queueAnimation(
   durationMs?: number,
   reducedMotion?: boolean,
 ) {
+  return queueAnimationIn(prisma, leagueId, week, animationType, primaryUserId, metadata, displayLocation, secondaryUserId, durationMs, reducedMotion)
+}
+
+/**
+ * `queueAnimation` on a given client — pass a transaction so the animation commits (or rolls back) with
+ * the event it shows. The 2025 item rules settle combat and revivals inside one transaction; an animation
+ * written beside it could play for a bashing or revival that then rolled back.
+ */
+export async function queueAnimationIn(
+  client: Pick<Prisma.TransactionClient, 'zombieEventAnimation'>,
+  leagueId: string,
+  week: number,
+  animationType: string,
+  primaryUserId: string,
+  metadata: object,
+  displayLocation?: string,
+  secondaryUserId?: string | null,
+  durationMs?: number,
+  reducedMotion?: boolean,
+) {
   const clip = zombieClipForAnimation(animationType)
   const baseMeta =
     metadata && typeof metadata === 'object' && !Array.isArray(metadata)
@@ -54,7 +75,7 @@ export async function queueAnimation(
     enriched.clipType = clip.type
   }
 
-  return prisma.zombieEventAnimation.create({
+  return client.zombieEventAnimation.create({
     data: {
       leagueId,
       week,

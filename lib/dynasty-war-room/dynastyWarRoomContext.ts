@@ -21,7 +21,7 @@
 
 import { isRosterManagedBy } from '@/lib/league/rosterManager'
 import { prisma } from '@/lib/prisma'
-import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -403,7 +403,7 @@ export async function buildDynastyWarRoomContext(
       rosterId: r.id,
       ownerId: r.platformUserId,
       // An orphan's key is a placeholder, not a name (imported orphans used to be keyed '').
-      ownerName: team?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId) ? '' : r.platformUserId),
+      ownerName: team?.ownerName ?? (isSeatPlaceholderUserId(r.platformUserId) ? '' : r.platformUserId),
       teamName: team?.teamName ?? null,
       wins: team?.wins ?? 0,
       losses: team?.losses ?? 0,

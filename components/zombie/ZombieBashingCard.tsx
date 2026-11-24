@@ -63,7 +63,12 @@ export function ZombieBashingCard({
   } else {
     caption = 'Not final yet.'
   }
-
+
+  // One marker per line: NFL's bash and maul lines are both 60, and two labels at one spot printed on top of each
+  // other (and shared a React key). 2026-11-23.
+  const markers = rules.bashingThreshold === rules.maulingThreshold
+    ? [{ at: rules.bashingThreshold, label: `Bash or maul ${rules.bashingThreshold}` }]
+    : [{ at: rules.bashingThreshold, label: `Bash ${rules.bashingThreshold}` }, { at: rules.maulingThreshold, label: `Maul ${rules.maulingThreshold}` }]
   return (
     <article
       className={clsx(
@@ -100,17 +105,16 @@ export function ZombieBashingCard({
             )}
             style={{ width: at(m.margin) }}
           />
-          {[rules.bashingThreshold, rules.maulingThreshold].map((line) => (
-            <span key={line} className="absolute -top-1 h-[18px] w-0.5 bg-white/70" style={{ left: at(line) }} />
+          {markers.map((mk) => (
+            <span key={mk.at} className="absolute -top-1 h-[18px] w-0.5 bg-white/70" style={{ left: at(mk.at) }} />
           ))}
         </div>
         <div className="relative mt-1.5 h-4 text-[11px] text-white/55">
-          <span className="absolute -translate-x-1/2" style={{ left: at(rules.bashingThreshold) }}>
-            Bash {rules.bashingThreshold}
-          </span>
-          <span className="absolute -translate-x-1/2" style={{ left: at(rules.maulingThreshold) }}>
-            Maul {rules.maulingThreshold}
-          </span>
+          {markers.map((mk) => (
+            <span key={mk.at} className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: at(mk.at) }}>
+              {mk.label}
+            </span>
+          ))}
         </div>
         <p className="mt-1 font-mono text-xs text-white/70">
           {m.leader ? `${m.final ? 'Won' : 'Leading'} by ${fmt(m.margin)}` : 'Level'}

@@ -6,6 +6,7 @@ const syncPlayerWeeklyScoresForRedraftSeasonMock = vi.fn()
 const recalculateMatchupsForSeasonWeekMock = vi.fn()
 const updateStandingsMock = vi.fn()
 
+vi.mock('@/lib/zombie/activateDraftedZombieLeagues', () => ({ activateDraftedZombieLeagues: vi.fn(async () => ({ checked: 0, activated: 0, failures: [] })) }))
 vi.mock("@/lib/adminAuth", () => ({
   requireAdminOrBearer: requireAdminOrBearerMock,
 }))

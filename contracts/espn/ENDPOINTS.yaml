@@ -71,6 +71,7 @@ support_matrix:
       fixtures: [fixtures/scoreboard.NFL.20260110.json, fixtures/scoreboard.NFL.20260117.json, fixtures/scoreboard.NFL.20260125.json, fixtures/scoreboard.NFL.20260208.json]
     fantasy_league: { status: probed, fixture: fixtures/fantasy-league.NFL.2026.json, captured: 2026-11-08, see: fantasy_nfl }
     fantasy_communication: { status: http_401_without_cookies, captured: 2026-11-08, see: fantasy_nfl.communication }
+    fantasy_matchup: { status: probed, fixture: fixtures/fantasy-matchup.NFL.2026.week11.json, captured: 2026-11-24, see: fantasy_nfl_matchup }
   # Every other sport: not in this contract. Adding one = probe + fixture + this
   # matrix, in one commit.
 
@@ -298,3 +299,55 @@ fantasy_nfl:
     note: The activity feed needs a signed-in ESPN account even for a PUBLIC league. Not captured.
   notes:
     - Public read only. A private league, prior seasons, keepers, IDP, EDR and trades are not in this capture (GAPS.md).
+
+fantasy_nfl_matchup:
+  # One week's per-player fantasy points, bench included (GAPS.md PS-01). Captured with the owner's
+  # explicit approval 2026-11-24 ~01:00Z (Monday night ET), public league chosen by the owner.
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl
+  query: view=mTeam&view=mMatchup&view=mMatchupScore&scoringPeriodId={week}
+  captured_season: 2026
+  captured_week: 11              # status.currentMatchupPeriod = latestScoringPeriod = 11
+  captured_state: in_progress    # Monday night: all five week-11 matchups winner UNDECIDED
+  http_status: 200
+  full_body_bytes: {pretty: 18398687, compact: 6006930}
+  full_counts: {members: 10, teams: 10, schedule_entries: 70, week_matchups: 5, roster_entries: 164, bench_entries: 70, bench_entries_with_points: 36}
+  fixture: fixtures/fantasy-matchup.NFL.2026.week11.json
+  fixture_bytes: 995962
+  sanitization: scripts/redact-fantasy.mjs via probe.sh (10 member ids, 10 member names, 10 teams; 21 values verified absent; league id -> 123456).
+  trim: trim-fixture.mjs --keep-all entries (3146 key paths before and after), then compacted. All five week-11 matchups and every roster entry kept.
+  lineup_slots_seen: {0: QB 10, 2: RB 20, 4: WR 20, 6: TE 10, 16: D/ST 10, 17: K 10, 20: BE 70, 21: IR 4, 23: FLEX 10}
+  fields:
+    schedule[].home|away.rosterForCurrentScoringPeriod:
+      shape: "{ appliedStatTotal, entries[] }"
+      note: >
+        THE BLOCK TO READ. Every rostered player of that side, bench (20) and IR (21) included, with his
+        REAL lineupSlotId and his own points in entries[].playerPoolEntry.appliedStatTotal. Measured on
+        all 10 sides: the sum over non-bench, non-IR entries equals the block's appliedStatTotal exactly,
+        and equals the side's totalPointsLive and pointsByScoringPeriod["11"]. Bench players carry their
+        own points (36 of 70 bench entries > 0), which is what grades a bench call.
+    schedule[].home|away.rosterForMatchupPeriod:
+      note: >
+        🛑 DO NOT READ SLOTS FROM THIS. It holds only the starters who have recorded stats (70 entries
+        across 10 sides, none of them bench/IR in the current block) and reports lineupSlotId 0 for EVERY
+        entry, QB or not. Its points agree with the current block; its slots are not slots.
+    schedule[].home|away.rosterForMatchupPeriodDelayed: { example: "{entries: []}" }
+    entries[].playerPoolEntry.lineupLocked:
+      note: >
+        false <=> the player's game has not started. All 37 unlocked entries had no actual stat line and
+        appliedStatTotal 0; every locked entry had one. So 0 with lineupLocked false is "not played yet",
+        NOT a zero-point game. A writer stores a player's points only once lineupLocked is true.
+    entries[].playerPoolEntry.player.stats[]:
+      note: >
+        Only scoringPeriodId 11, statSplitTypeId 1 (that single week). statSourceId 0 = ACTUAL (present
+        only once the game has started; appliedTotal equals playerPoolEntry.appliedStatTotal),
+        statSourceId 1 = ESPN's PROJECTION. Never read appliedTotal without filtering statSourceId 0.
+    entries[].playerId:
+      note: >
+        ESPN player id. D/ST is NEGATIVE, -16000 - proTeamId (-16014 Rams, -16034 Texans). 🛑 Not a
+        Sleeper id: ESPN 12483 is Matthew Stafford, Sleeper 12483 is Jack Bech. Crosswalk before storing.
+    schedule[].home|away.totalPoints: { note: "0 while winner is UNDECIDED. totalPointsLive carries the running score." }
+    schedule[] (other weeks): { note: "Past weeks carry only totals (totalPoints, pointsByScoringPeriod, winner); no roster block. Future weeks the same with 0." }
+  unverified:
+    - Whether scoringPeriodId=N returns week N's roster block for a PAST N (GAPS S-01). Here N was the current week, so the parameter's effect is not shown. A writer that reads the current week on each sync and keeps the last value for locked players does not need it.
+    - Stat corrections ESPN applies after the week rolls over are not seen by such a writer.

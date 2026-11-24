@@ -24,6 +24,7 @@ const h = vi.hoisted(() => {
     lockContext: vi.fn(),
     playerRows: vi.fn(),
     gameLock: vi.fn(),
+    aiSwapPref: vi.fn(),
   }
 })
 
@@ -38,6 +39,8 @@ vi.mock('@/lib/subscription/EntitlementResolver', () => ({
   },
 }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: h.dispatchNotification }))
+// The owner's AI swap switch (lib/lineup-automation/aiSwapPolicy.ts); the plan check still runs for real.
+vi.mock('@/lib/core-app/teamPreferenceStore', () => ({ readTeamPreference: h.aiSwapPref, saveTeamPreference: vi.fn() }))
 vi.mock('@/lib/lineup-automation/autoBenchByeService', () => ({ autoBenchByeLeagueBlock: () => null }))
 vi.mock('@/lib/core-app/seasonTimeline', () => ({ leagueWeekFromSettings: () => 12 }))
 vi.mock('@/lib/multi-sport/MultiSportRosterService', () => ({ getRosterTemplateForLeague: async () => null }))
@@ -69,6 +72,7 @@ beforeEach(() => {
   h.db.roster.update.mockResolvedValue({})
   h.logAction.mockResolvedValue({ id: 'a' })
   h.dispatchNotification.mockResolvedValue(undefined)
+  h.aiSwapPref.mockResolvedValue({ on: true, decidedAt: '2026-11-23T00:00:00.000Z' })
 })
 
 describe('setAutoSwitchInjured', () => {
@@ -77,9 +81,21 @@ describe('setAutoSwitchInjured', () => {
     h.db.roster.findUnique.mockResolvedValue({ settings: { other: 1 }, platformUserId: 'owner' })
   })
 
-  it('refuses to let the manager switch it on', async () => {
+  /*
+   * 🛑 THIS WAS THE OTHER WAY ROUND UNTIL 2026-11-23: the commissioner turned it on and the owner could only
+   * turn it off. Owner's rule: AI swap is the subscriber's own choice; the commissioner's say is the
+   * league-wide off switch.
+   */
+  it('lets the manager switch it on for their own team', async () => {
     h.isElevatedCommissioner.mockResolvedValue(false)
     const r = await setAutoSwitchInjured('L', 'owner', 'R1', { on: true })
+    expect(r).toMatchObject({ ok: true, setting: { byUserId: 'owner', ownerUserId: 'owner' } })
+    expect(h.db.roster.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses to let the commissioner switch it on for someone else', async () => {
+    h.isElevatedCommissioner.mockResolvedValue(true)
+    const r = await setAutoSwitchInjured('L', 'commish', 'R1', { on: true })
     expect(r).toMatchObject({ ok: false, status: 403 })
     expect(h.db.roster.update).not.toHaveBeenCalled()
   })
@@ -98,15 +114,21 @@ describe('setAutoSwitchInjured', () => {
     expect(h.dispatchNotification).not.toHaveBeenCalled()
   })
 
-  it('lets the commissioner switch it on for the current owner, and tells the manager', async () => {
+  it('lets the commissioner switch it OFF for a team', async () => {
     h.isElevatedCommissioner.mockResolvedValue(true)
-    const r = await setAutoSwitchInjured('L', 'commish', 'R1', { on: true, level: 'doubtful', timing: 'night_before' })
-    expect(r).toMatchObject({ ok: true, setting: { level: 'doubtful', timing: 'night_before', byUserId: 'commish', ownerUserId: 'owner' } })
+    h.db.roster.findUnique.mockResolvedValue({ settings: { other: 1, [AUTO_SWITCH_INJURED_KEY]: SETTING }, platformUserId: 'owner' })
+    const r = await setAutoSwitchInjured('L', 'commish', 'R1', { on: false })
+    expect(r).toEqual({ ok: true, setting: null })
+    expect(h.db.roster.update).toHaveBeenCalledWith({ where: { id: 'R1' }, data: { settings: { other: 1 } } })
+  })
+
+  it('saves the manager’s level and timing with the team’s other settings', async () => {
+    h.isElevatedCommissioner.mockResolvedValue(false)
+    const r = await setAutoSwitchInjured('L', 'owner', 'R1', { on: true, level: 'doubtful', timing: 'night_before' })
+    expect(r).toMatchObject({ ok: true, setting: { level: 'doubtful', timing: 'night_before', byUserId: 'owner', ownerUserId: 'owner' } })
     const written = h.db.roster.update.mock.calls[0]![0].data.settings
     expect(written.other).toBe(1)
     expect(written[AUTO_SWITCH_INJURED_KEY]).toMatchObject({ on: true, level: 'doubtful', ownerUserId: 'owner' })
-    expect(h.dispatchNotification).toHaveBeenCalledTimes(1)
-    expect(h.dispatchNotification.mock.calls[0]![0]).toMatchObject({ userIds: ['owner'], type: 'auto_switch_injured_on' })
     expect(h.logAction).toHaveBeenCalledWith(expect.objectContaining({ actionType: 'auto_switch_injured.on', entityId: 'R1' }))
   })
 })
@@ -144,6 +166,22 @@ describe('runAutoSwitchInjured', () => {
     expect(save.automationAudit.action).toBe('auto_switch_injured.applied')
     expect(save.nextPlayerData.lineup_sections.starters.map((p: { id: string }) => p.id)).toEqual(['qb1', 'rb-ok'])
     expect(h.dispatchNotification.mock.calls[0]![0]).toMatchObject({ userIds: ['owner'], type: 'auto_switch_injured' })
+  })
+
+  it('does nothing for a Pro owner who has not turned AI swap on', async () => {
+    h.hasPro.mockReturnValue(true)
+    h.aiSwapPref.mockResolvedValue(null)
+    const r = await runAutoSwitchInjured({ now: () => now })
+    expect(r.skipped).toEqual({ owner_off: 1 })
+    expect(h.persist).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the commissioner switched AI swaps off for the league', async () => {
+    h.hasPro.mockReturnValue(true)
+    h.db.league.findUnique.mockResolvedValue({ ...LEAGUE, autoCoachEnabled: false })
+    const r = await runAutoSwitchInjured({ now: () => now })
+    expect(r.skipped).toEqual({ league_off: 1 })
+    expect(h.persist).not.toHaveBeenCalled()
   })
 
   it('waits when the game is further away than the window', async () => {

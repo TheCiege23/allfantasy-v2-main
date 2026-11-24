@@ -1,0 +1,41 @@
+# CollegeBasketballData (CBBD) — captured endpoints.
+#
+# Same key and same monthly call quota as CollegeFootballData (CFBD): every CBBD call spends
+# football's budget too. Auth is `Authorization: Bearer <key>`, the key from CFBD_API_KEY /
+# CFBD_KEY / COLLEGE_FOOTBALL_DATA_API_KEY (lib/cfbd-env.ts). Each response carries
+# `x-calllimit-remaining`, the shared count.
+#
+# Capture: ./scripts/probe.sh. Shapes below come from the committed fixtures, not from docs.
+
+base_url: https://api.collegebasketballdata.com
+auth: bearer (shared CFBD key)
+json_case: camelCase   # the Python client's snake_case names are NOT the wire names
+
+endpoints:
+  draft_picks:
+    path: /draft/picks
+    params: { year: "draft year, e.g. 2025 for the June 2025 NBA draft" }
+    returns: array of picks
+    fixture: fixtures/draft-picks-2025.json   # 59 picks, captured 2026-11-22
+    fields: [athleteId, draftTeamId, draftTeam, sourceTeamId, sourceTeamLocation, sourceTeamName,
+             sourceTeamLeagueAffiliation, sourceTeamCollegeId, year, overall, round, pick, name,
+             overallRank, positionRank, height, weight, position]
+    notes:
+      - athleteId is CBBD's own athlete id — the same id as teams/roster players[].id (B-01).
+      - Non-college picks (France, China, Serbia...) have athleteId null and sourceTeamCollegeId null,
+        and name their league in sourceTeamLeagueAffiliation. 13 of 59 in 2025.
+      - A college pick CAN have athleteId null: Egor Demin (BYU, 8th overall, 2025). 1 of 46.
+
+  team_roster:
+    path: /teams/roster
+    params: { season: "season END year: 2025 = 2024-25", team: "school name, e.g. Duke" }
+    returns: array with one team object
+    fixtures: [fixtures/roster-2025-duke.json, fixtures/roster-2026-duke.json]
+    team_fields: [teamId, teamSourceId, team, conference, season, players]
+    player_fields: [id, sourceId, name, firstName, lastName, jersey, position, height, weight,
+                    hometown, dateOfBirth, startSeason, endSeason]
+    notes:
+      - players[].sourceId is the ESPN athlete id, as a STRING (B-01).
+      - teamSourceId is the ESPN team id (Duke = 150, the same id contracts/espn uses).
+      - dateOfBirth was null for every player in both captures.
+      - position is a word ("Forward", "Guard"), not a letter.

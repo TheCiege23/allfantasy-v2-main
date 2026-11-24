@@ -168,11 +168,14 @@ export interface DraftPickSnapshot {
   pickEditorEmpty?: boolean
   tradedPickMeta: TradedPickMeta | null
   source: string
+  assetType?: string | null
   pickLabel: string
   /** Auction: winning bid amount. */
   amount?: number | null
   /** Market ADP when the pick was made (`pickMetadata.adpAtPick`); absent on older picks. */
   adpAtPick?: number | null
+  /** Why the clock picked this player (`pickMetadata.autopick.reason`); absent on a pick a person made. */
+  autoPickReason?: string | null
   createdAt: string
 }
 

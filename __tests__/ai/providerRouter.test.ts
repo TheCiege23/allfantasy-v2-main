@@ -246,6 +246,66 @@ describe("routeTextCall — fallback chain", () => {
   })
 })
 
+// ─── DeepSeek: an empty answer cut off at the length limit (2026-11-23) ───────
+// From 2026-11-17 the router's DeepSeek calls answered HTTP 200 with no text, 101 times in production.
+
+describe("routeTextCall — DeepSeek empty answers", () => {
+  const originalEnv = process.env.AI_PROVIDER_ORDER
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.AI_PROVIDER_ORDER = "deepseek"
+  })
+  afterEach(() => {
+    // Like every block here: the next block asserts DeepSeek was never called, so leave no history.
+    vi.clearAllMocks()
+    mockDeepseek.mockReset()
+    if (originalEnv === undefined) delete process.env.AI_PROVIDER_ORDER
+    else process.env.AI_PROVIDER_ORDER = originalEnv
+  })
+  const cutOff = { content: "", finishReason: "length", reasoningChars: 3600, usage: { promptTokens: 400, completionTokens: 900 } }
+
+  it("an empty answer cut off at the limit is retried once, uncached, with room to answer", async () => {
+    mockDeepseek.mockResolvedValueOnce(cutOff).mockResolvedValueOnce({ ...deepseekSuccess("the answer"), finishReason: "stop" })
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }], maxTokens: 900 })
+    expect(result).toMatchObject({ ok: true, provider: "deepseek", text: "the answer" })
+    expect(mockDeepseek).toHaveBeenCalledTimes(2)
+    expect(mockDeepseek.mock.calls[0][0]).toMatchObject({ maxTokens: 900, skipCache: false })
+    expect(mockDeepseek.mock.calls[1][0]).toMatchObject({ maxTokens: 4000, skipCache: true })
+  })
+
+  it("the retry is capped, and a caller's larger budget is multiplied", async () => {
+    mockDeepseek.mockResolvedValueOnce(cutOff).mockResolvedValueOnce(deepseekSuccess("ok"))
+    await routeTextCall({ messages: [{ role: "user", content: "test" }], maxTokens: 1400 })
+    expect(mockDeepseek.mock.calls[1][0]).toMatchObject({ maxTokens: 5600 })
+    mockDeepseek.mockClear()
+    mockDeepseek.mockResolvedValueOnce(cutOff).mockResolvedValueOnce(deepseekSuccess("ok"))
+    await routeTextCall({ messages: [{ role: "user", content: "test" }], maxTokens: 3000 })
+    expect(mockDeepseek.mock.calls[1][0]).toMatchObject({ maxTokens: 8000 })
+  })
+
+  it("still empty after the retry: fails once, and says why", async () => {
+    mockDeepseek.mockResolvedValue(cutOff)
+    const result = await routeTextCall({ messages: [{ role: "user", content: "test" }], maxTokens: 900 })
+    expect(result.ok).toBe(false)
+    expect(mockDeepseek).toHaveBeenCalledTimes(2)
+  })
+
+  it("🛑 an empty answer that was NOT cut off, or an error, is not retried", async () => {
+    mockDeepseek.mockResolvedValue({ content: "", finishReason: "stop" })
+    expect((await routeTextCall({ messages: [{ role: "user", content: "test" }] })).ok).toBe(false)
+    expect(mockDeepseek).toHaveBeenCalledTimes(1)
+    mockDeepseek.mockClear()
+    mockDeepseek.mockResolvedValue(deepseekFailure())
+    expect((await routeTextCall({ messages: [{ role: "user", content: "test" }] })).ok).toBe(false)
+    expect(mockDeepseek).toHaveBeenCalledTimes(1)
+  })
+
+  it("whitespace alone is not an answer", async () => {
+    mockDeepseek.mockResolvedValue({ content: "  \n ", finishReason: "stop" })
+    expect((await routeTextCall({ messages: [{ role: "user", content: "test" }] })).ok).toBe(false)
+  })
+})
+
 // ─── routeTextCall — content filter stops fallback ───────────────────────────
 
 describe("routeTextCall — content filter stops fallback", () => {

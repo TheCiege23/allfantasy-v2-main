@@ -30,6 +30,8 @@ import { startersOnBye } from '@/lib/league/native/lineupMoves'
 import { readManagedLineups } from '@/lib/inactive-manager/inactiveManagerMode'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { autoBenchByeLeagueBlock } from './autoBenchByeService'
+import { aiSwapAllowedForTeam } from './aiSwapPolicy'
+import { isSeatPlaceholderUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { HEADS_UP_MS, headsUpDecision, headsUpKey } from './automationHeadsUp'
 import { FILL_EMPTY_STARTERS_IDLE_MS, FILL_EMPTY_STARTERS_KEY, emptyStarterSlots, fillEmptyStartersOn, planFillEmptyStarters } from './fillEmptyStarters'
 
@@ -113,7 +115,11 @@ async function fillOneTeam(args: {
   const { league, week, season, slots, roster, now } = args
   const leagueId = league.id
   if (args.managed) return 'managed_by_autopilot'
-  if (!roster.platformUserId || /^(orphan-|ai-manager-)/.test(roster.platformUserId)) return 'no_owner'
+  // An unclaimed or AI seat has no owner to tell; `open-slot-` used to slip through as a person.
+  if (!roster.platformUserId || isSeatPlaceholderUserId(roster.platformUserId)) return 'no_owner'
+  // Filling a person's lineup is an AI swap: AF Pro / Supreme, their own switch on, the league's not off.
+  const swap = await aiSwapAllowedForTeam({ roster, league })
+  if (!swap.allowed) return swap.reason
   if (now.getTime() - roster.updatedAt.getTime() < FILL_EMPTY_STARTERS_IDLE_MS) return 'recently_edited'
 
   const lock = await resolveFullLineupLockContext({

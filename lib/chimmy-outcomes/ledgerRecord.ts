@@ -31,7 +31,9 @@
 import type { TrackRecordLine } from './trackRecord'
 import type { WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { foldBenchEdgeBands, type BenchEdgeLedger, type GradedBenchCall } from '@/lib/decision-os/lineup/benchCalibration'
+import type { SportBenchLine, SportBenchSport } from './sportBenchRecord'
 import type { DraftTipLedger } from '@/lib/decision-os/draft/tipCalibration'
+import type { TradeOutcomeLedger } from './tradeOutcomesAll'
 import {
   readTradeLetterCalibration,
   tradeLetterCalibrationFrom,
@@ -189,6 +191,23 @@ export type LedgerSnapshot = {
    * own confidence (`lib/decision-os/draft/tipCalibration.ts`). Absent before 2026-11-21 and with none graded.
    */
   draftTips?: DraftTipLedger
+  /**
+   * The picks the clock made (Draft like me, queue, best available), by strategy then round band, held up or not
+   * against the board they were made on (2026-11-22). Never mixed into `draftTips`.
+   */
+  autopicks?: Record<string, DraftTipLedger>
+  /**
+   * Trade letters graded on what happened, for everything the NFL redraft record above does not cover: every other
+   * sport, and dynasty, keeper, devy, C2C, best ball, guillotine, survivor, zombie and the rest — one bucket per
+   * `SPORT:kind` (`tradeOutcomesAll.ts`). Absent on a snapshot written before 2026-11-22.
+   */
+  tradeOutcomes?: TradeOutcomeLedger
+  /**
+   * My Team's bench calls in NBA, NHL and MLB weekly-points leagues, graded on each sport's own calendar and under each
+   * league's scoring (`sportBenchRecord.ts`, 2026-11-23) — one line per sport, never mixed into `bench` (the NFL
+   * record). Absent on a snapshot written before 2026-11-23 and for a sport with no recorded call.
+   */
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
   /** userId → { b: [right, wrong, same] bench calls, p: [graded, startable] pickups }. */
   users: Record<string, { b?: [number, number, number]; p?: [number, number] }>
 }
@@ -207,6 +226,9 @@ export function foldLedger(input: {
   tradeLetters?: TradeLetterLedger
   commissionerTradeLetters?: TradeLetterLedger
   draftTips?: DraftTipLedger
+  autopicks?: Record<string, DraftTipLedger>
+  tradeOutcomes?: TradeOutcomeLedger
+  sportBench?: Partial<Record<SportBenchSport, SportBenchLine>>
 }): LedgerSnapshot {
   const { cal, now } = input
   const bench: BenchTally = { right: 0, wrong: 0, same: 0, gain: 0, pending: 0, unscored: 0, withdrawn: 0 }
@@ -220,6 +242,10 @@ export function foldLedger(input: {
   }
 
   for (const r of input.bench) {
+    // 🛑 NFL only: the week and the "is it over" clock below are the NFL's. A row that names another sport is not
+    // this record's at all — not withdrawn, not pending, not graded (2026-11-23). A row with no sport is an old read.
+    const sport = String(r.sport ?? '').trim().toUpperCase()
+    if (sport && sport !== 'NFL') continue
     if (r.withdrawn) {
       bench.withdrawn++
       continue
@@ -298,6 +324,9 @@ export function foldLedger(input: {
       ? { commissionerTradeLetters: input.commissionerTradeLetters }
       : {}),
     ...(input.draftTips && Object.keys(input.draftTips).length > 0 ? { draftTips: input.draftTips } : {}),
+    ...(input.autopicks && Object.keys(input.autopicks).length > 0 ? { autopicks: input.autopicks } : {}),
+    ...(input.tradeOutcomes && Object.keys(input.tradeOutcomes).length > 0 ? { tradeOutcomes: input.tradeOutcomes } : {}),
+    ...(input.sportBench && Object.keys(input.sportBench).length > 0 ? { sportBench: input.sportBench } : {}),
     users: Object.fromEntries(kept.map(([id, { b, p }]) => [id, { ...(b ? { b } : {}), ...(p ? { p } : {}) }])),
   }
 }
@@ -327,6 +356,18 @@ export type LedgerRecordView = {
   tradeConfidence?: TradeLetterCalibration | null
   /** The same over only the trades a commissioner reviewed. */
   commissionerTradeConfidence?: TradeLetterCalibration | null
+  /**
+   * Every other sport and league type's trade letters, graded on what happened (`tradeOutcomesAll.ts`), by
+   * `SPORT:kind`. Letters below MIN_TRADES_PER_LETTER are left out, exactly as above. Absent when none qualify.
+   */
+  tradeOutcomes?: Record<string, TradeOutcomeView>
+}
+
+export type TradeOutcomeView = {
+  sport: string
+  kind: 'points' | 'value' | 'categories'
+  letters: Array<{ letter: TradeLetter; n: number; net: number; aheadPct: number | null }>
+  confidence: TradeLetterCalibration | null
 }
 
 const nat = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0)
@@ -386,7 +427,9 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
   const tradeConfidence = tradeLetterCalibrationFrom(ledger.tradeLetters)
   const commissionerTradeConfidence = tradeLetterCalibrationFrom(ledger.commissionerTradeLetters)
 
-  if (!bench && !pickups && letters.length === 0) return null
+  const tradeOutcomes = tradeOutcomeViews(ledger.tradeOutcomes)
+
+  if (!bench && !pickups && letters.length === 0 && !tradeOutcomes) return null
   return {
     season: nat(ledger.season),
     bench,
@@ -395,7 +438,28 @@ export function ledgerRecordFor(ledger: LedgerSnapshot | null | undefined, userI
     ...(commissionerLetters.length ? { commissionerTrades: commissionerLetters } : {}),
     ...(tradeConfidence ? { tradeConfidence } : {}),
     ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
+    ...(tradeOutcomes ? { tradeOutcomes } : {}),
   }
+}
+
+/** The view of the other sports' and league types' buckets: only letters with enough graded deals. PURE. */
+function tradeOutcomeViews(ledger: TradeOutcomeLedger | undefined): Record<string, TradeOutcomeView> | null {
+  if (!ledger || typeof ledger !== 'object') return null
+  const out: Record<string, TradeOutcomeView> = {}
+  for (const [key, b] of Object.entries(ledger)) {
+    if (!b || typeof b !== 'object' || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories')) continue
+    const letters = TRADE_LETTERS.flatMap((letter) => {
+      const t = b.byLetter?.[letter]
+      if (!t || nat(t.n) < MIN_TRADES_PER_LETTER || typeof t.net !== 'number' || !Number.isFinite(t.net)) return []
+      const ahead = nat(t.ahead)
+      const decided = ahead + nat(t.behind)
+      return [{ letter, n: nat(t.n), net: round1(t.net), aheadPct: decided > 0 ? Math.round((100 * ahead) / decided) : null }]
+    })
+    const confidence = tradeLetterCalibrationFrom(b.letters)
+    if (letters.length === 0 && !confidence) continue
+    out[key] = { sport: String(b.sport ?? key.split(':')[0]), kind: b.kind, letters, confidence }
+  }
+  return Object.keys(out).length ? out : null
 }
 
 /** Only a well-formed view survives a trip to the client; anything else renders nothing. */
@@ -433,7 +497,8 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
   if (!okLetters(trades)) return null
   // A malformed commissioner list drops only itself: the rest of the record is still good.
   const commissionerTrades = okLetters(v.commissionerTrades) ? (v.commissionerTrades as LedgerRecordView['commissionerTrades']) ?? null : null
-  if (bench == null && pickups == null && trades == null) return null
+  const tradeOutcomes = readTradeOutcomeViews(v.tradeOutcomes)
+  if (bench == null && pickups == null && trades == null && !tradeOutcomes) return null
   // A malformed confidence drops only itself, as the commissioner list does.
   const tradeConfidence = readTradeLetterCalibration(v.tradeConfidence)
   const commissionerTradeConfidence = readTradeLetterCalibration(v.commissionerTradeConfidence)
@@ -445,5 +510,19 @@ export function readLedgerRecordView(value: unknown): LedgerRecordView | null {
     ...(commissionerTrades?.length ? { commissionerTrades } : {}),
     ...(tradeConfidence ? { tradeConfidence } : {}),
     ...(commissionerTradeConfidence ? { commissionerTradeConfidence } : {}),
+    ...(tradeOutcomes ? { tradeOutcomes } : {}),
   }
+}
+
+/** A malformed bucket drops only itself. PURE. */
+function readTradeOutcomeViews(value: unknown): Record<string, TradeOutcomeView> | null {
+  if (!value || typeof value !== 'object') return null
+  const out: Record<string, TradeOutcomeView> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const b = raw as Partial<TradeOutcomeView> | null
+    if (!b || (b.kind !== 'points' && b.kind !== 'value' && b.kind !== 'categories') || typeof b.sport !== 'string' || !Array.isArray(b.letters)) continue
+    const letters = b.letters.filter((t) => t && TRADE_LETTERS.includes(t.letter) && typeof t.n === 'number' && typeof t.net === 'number')
+    out[key] = { sport: b.sport, kind: b.kind, letters, confidence: readTradeLetterCalibration(b.confidence) }
+  }
+  return Object.keys(out).length ? out : null
 }

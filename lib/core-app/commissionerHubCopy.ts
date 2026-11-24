@@ -76,6 +76,13 @@ const ES: Record<string, string> = {
   'This league right now': 'Esta liga ahora mismo',
   'Gone quiet:': 'Sin actividad:',
   'Member activity': 'Actividad de los miembros',
+  // The fold groups (2026-11-23).
+  'Weekly work': 'Trabajo de la semana',
+  Managers: 'Mánagers',
+  'Rules and settings': 'Reglas y ajustes',
+  'Reports and history': 'Informes e historial',
+  Help: 'Ayuda',
+  'Task tracker': 'Seguimiento de tareas',
   '1 team isn’t connected to an AllFantasy account yet.': '1 equipo aún no está conectado a una cuenta de AllFantasy.',
   'Invite managers': 'Invitar mánagers',
   'Not measured yet': 'Aún sin medir',

@@ -7,9 +7,17 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
+/** "manual_map_pending" → "Manual map pending". */
+const overrideActionLabel = (action: string) => {
+  const words = action.replace(/[_-]+/g, ' ').trim()
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Needs review'
+}
+
 interface OverrideRow {
   id: string
   devyPlayerId: string
+  /** From the overrides route (2026-11-23); absent from an older route. */
+  playerName?: string | null
   proPlayerId: string | null
   action: string
   notes: string | null
@@ -73,11 +81,11 @@ export function DevyCommissionerTools({ leagueId }: Props) {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
-      <h3 className="text-base font-semibold text-white">Devy commissioner tools</h3>
+    <div className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--chip)] p-4">
+      <h3 className="text-base font-semibold text-[var(--text)]">Devy commissioner tools</h3>
       {message && (
         <p
-          className={`text-sm ${message.type === 'ok' ? 'text-emerald-400' : 'text-amber-400'}`}
+          className={`text-sm ${message.type === 'ok' ? 'text-[var(--good)]' : 'text-[var(--warn)]'}`}
         >
           {message.text}
         </p>
@@ -87,7 +95,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={() => post('automation', {
             seasonYear: new Date().getFullYear(),
             enableAutoPromotion: true,
@@ -99,7 +107,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={() => post('recalc')}
         >
           Recalc devy status
@@ -107,7 +115,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={() => post('reopen-window')}
         >
           Reopen promotion window
@@ -115,7 +123,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={() => post('regenerate-rookie-pool')}
         >
           Regenerate rookie pool
@@ -123,7 +131,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={() => post('regenerate-devy-pool')}
         >
           Regenerate devy pool
@@ -131,7 +139,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
         <button
           type="button"
           disabled={loading}
-          className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
+          className="rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--chip)] disabled:opacity-50"
           onClick={async () => {
             const result = await post('repair-duplicate-rights')
             if (result.ok && result.duplicateCount != null) {
@@ -147,15 +155,15 @@ export function DevyCommissionerTools({ leagueId }: Props) {
       </div>
 
       <div>
-        <h4 className="text-sm font-medium text-white">Ambiguous mapping overrides</h4>
+        <h4 className="text-sm font-medium text-[var(--text)]">Ambiguous mapping overrides</h4>
         {overrides.length === 0 ? (
-          <p className="mt-1 text-xs text-white/50">No pending overrides.</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">No pending overrides.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-xs">
             {overrides.map((o) => (
-              <li key={o.id} className="flex items-center justify-between rounded bg-white/5 px-2 py-1">
-                <span className="text-white/80">{o.devyPlayerId} → {o.action}</span>
-                <span className="text-white/50">{o.notes ?? '—'}</span>
+              <li key={o.id} className="flex items-center justify-between rounded bg-[var(--chip)] px-2 py-1">
+                <span className="text-[var(--text)]">{o.playerName ?? 'A devy player'} · {overrideActionLabel(o.action)}</span>
+                {o.notes ? <span className="text-[var(--muted)]">{o.notes}</span> : null}
               </li>
             ))}
           </ul>
@@ -164,7 +172,7 @@ export function DevyCommissionerTools({ leagueId }: Props) {
 
       <Link
         href={`/league/${leagueId}?tab=Settings&devy=audit`}
-        className="block text-sm text-white/70 hover:text-white"
+        className="block text-sm text-[var(--text2)] hover:text-[var(--text)]"
       >
         View audit log →
       </Link>

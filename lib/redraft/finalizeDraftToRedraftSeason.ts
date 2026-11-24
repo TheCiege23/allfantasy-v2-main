@@ -14,6 +14,7 @@ import { readConferenceSeasonPlan } from '@/lib/tournament/divisions/conferenceS
 import { resolveCreatedSeasonWeeks, resolveGuillotineSeasonWeeks } from './createdSeasonLength'
 import { maxPlayoffStartWeekFor } from './regularSeasonCap'
 import { prisma } from '@/lib/prisma'
+import { ANNUAL_C2C_DRAFT } from '@/lib/live-draft-engine/annualC2CDraft'
 import { isDraftPickRowEmpty, isDraftPickSkipped } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdentity'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
@@ -32,6 +33,7 @@ import { isExtraTeamOwnerKey } from '@/lib/league/rosterManager'
 import { matchStarterSlots } from '@/lib/redraft/nativeDraftRosterTemplate'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot } from '@/lib/redraft/lineupValidation'
+import { relabelSeasonStarters } from '@/lib/redraft/relabelStarters'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -52,6 +54,7 @@ const EMPTY_SUMMARY: RedraftDraftFinalizationSummary = {
 }
 
 type DraftPickForRedraftSync = {
+  assetType?: string | null
   id: string
   overall: number
   round: number
@@ -596,6 +599,7 @@ export async function syncCompletedDraftToRedraftSeason(
 
   for (const pick of session.picks as DraftPickForRedraftSync[]) {
     if (
+      (session.draftModeLabel === ANNUAL_C2C_DRAFT && pick.assetType === 'c2c_college') ||
       isDraftPickSkipped(pick) ||
       isDraftPickRowEmpty({
         playerName: pick.playerName,
@@ -652,16 +656,30 @@ export async function syncCompletedDraftToRedraftSeason(
       : await resolveMissingNflPickPlayerId({ sport: season.sport || String(session.sportType ?? ''), playerName: pick.playerName, position: pick.position })
     const playerId = registryId ?? stablePlayerId(session.id, pick)
 
-    // A replay must not resurrect a drafted player who was later dropped or traded.
-    // Survivor Guillotine permits roster moves immediately after draft finalization.
-    const existingActive = await prisma.redraftRosterPlayer.findFirst({
-      where: {
-        rosterId: mapping.redraftRoster.id,
-        playerId,
-        ...(league.leagueVariant === 'survivor_guillotine' ? {} : { droppedAt: null }),
-      },
-      select: { id: true },
-    })
+    /*
+     * 🛑 A REPLAY MUST NOT RESURRECT A DRAFTED PLAYER WHO WAS LATER DROPPED OR TRADED — IN ANY FORMAT.
+     * Any row for this pick on this season roster, active OR dropped, means the pick was already
+     * materialized; a dropped one means a roster move happened after it. This replay runs on every
+     * post-draft artifact pass (roster and draft-room requests, the draft-room poll), so a filter on
+     * `droppedAt: null` re-created the player every time someone opened the league.
+     *
+     * Measured 2026-11-22, Zombie Chimmy Test (NFL redraft): Kyren Williams dropped for Bhayshul
+     * Tuten at 21:02:55, back on the roster as "drafted" at 21:08:36 — the second the next pass ran.
+     * `33e4a268e` had fixed exactly this for Survivor Guillotine only; the rule was never format-specific.
+     *
+     * ⚠ AND A TRADE LEAVES NO ROW BEHIND: it MOVES the row to the receiving roster (applyRedraftRosterMoves,
+     * tradeSettlement), so the drafting roster has nothing to find. A player active anywhere in this
+     * season is already placed, and re-creating him here puts one player on two teams.
+     */
+    const existingActive =
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { rosterId: mapping.redraftRoster.id, playerId },
+        select: { id: true },
+      })) ??
+      (await prisma.redraftRosterPlayer.findFirst({
+        where: { playerId, droppedAt: null, roster: { seasonId: season.id } },
+        select: { id: true },
+      }))
 
     if (existingActive) {
       redraftPlayersAlreadyPresent += 1
@@ -761,6 +779,20 @@ export async function syncCompletedDraftToRedraftSeason(
     })
   }
 
+  /*
+   * Starter labels that fit the league's layout (./relabelStarters.ts): the picks above are written as
+   * each starter's POSITION, so a FLEX starter read as a third RB and the lineup looked illegal. Labels
+   * only — who starts is unchanged. This pass re-runs on roster and draft-room views, so a season
+   * drafted before it heals on its next view. Must not fail draft completion.
+   */
+  await relabelSeasonStarters(prisma, { seasonId: season.id, sport: season.sport || String(session.sportType ?? 'NFL'), leagueSettings: league.settings }).catch((err) => {
+    console.warn('[syncCompletedDraftToRedraftSeason] starter labels not normalized', {
+      leagueId,
+      seasonId: season.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
+
   await ensureScheduleForNewSeason({
     seasonId: season.id,
     leagueId,
@@ -776,6 +808,27 @@ export async function syncCompletedDraftToRedraftSeason(
       error: err instanceof Error ? err.message : String(err),
     })
   })
+
+  /*
+   * A late start: load the weeks played before the draft, scored on the drafted rosters, so managers
+   * can look back at them (lib/redraft/preLeagueWeeks.ts). Not awaited — it pulls one stat payload per
+   * missed week, and draft completion must not wait on that or fail with it. Idempotent, so a re-sync
+   * fills any week it missed. `scheduleStartWeek > 1` only happens for the formats that start late.
+   */
+  if (scheduleStartWeek > 1) {
+    void import('@/lib/redraft/preLeagueWeeks')
+      .then(({ backfillPreLeagueWeeks }) => backfillPreLeagueWeeks({ seasonId: season.id, firstLeagueWeek: scheduleStartWeek }))
+      .then((r) => {
+        if (r.failures.length > 0) console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks partly loaded', r)
+      })
+      .catch((err) => {
+        console.warn('[syncCompletedDraftToRedraftSeason] pre-league weeks not loaded', {
+          leagueId,
+          seasonId: season.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+  }
 
   // G15.2 / G12: DRAFT_COMPLETED is now emitted generically from completeDraftSession
   // (all league types). SEASON_ACTIVATED remains here — it carries the season-specific

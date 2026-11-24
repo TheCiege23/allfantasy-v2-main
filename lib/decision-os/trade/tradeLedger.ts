@@ -18,6 +18,8 @@
  *     by-name evaluation has no moves and is counted as ungradable, never guessed.
  */
 
+import { EVIDENCE_KINDS, evidenceKindsOf, type EvidenceKind } from '@/lib/trade-market/evidenceKinds'
+
 export type TradeLedgerRow = {
   surface: string
   /** The letter for the GIVE side ("you"), first character only: A, B, C, D or F. */
@@ -31,6 +33,13 @@ export type TradeLedgerRow = {
   nonPlayerAssets: boolean
   /** The evaluation was of a real proposal/trade (tradeId set), not an ad-hoc what-if. */
   isTrade: boolean
+  /** The measured evidence the grade rested on (`evidenceKindsOf`) — empty for a grade on the chart alone. */
+  evidence?: EvidenceKind[]
+  /**
+   * The league-value letter when the headline was the YOUR-TEAM letter and the two differ — the counterfactual the
+   * outcome check compares against (did the roster-adjusted letter or the market letter hold up?). Null otherwise.
+   */
+  marketLetter?: string | null
 }
 
 type TradeLedgerSkip = 'ungraded' | 'no_moves' | 'no_players' | 'season_over'
@@ -78,7 +87,74 @@ export function tradeLedgerRow(input: {
     givePlayerIds: [...new Set(giveIds)],
     nonPlayerAssets: assets.some((a) => a.kind === 'pick' || a.kind === 'faab'),
     isTrade: input.isTrade,
+    evidence: evidenceKindsOf(grade),
+    marketLetter: marketLetterIfDifferent(grade, letter),
   }
+}
+
+function marketLetterIfDifferent(grade: Json, letter: string): string | null {
+  if (grade.letterBasis !== 'your_team') return null
+  const m = obj(grade.market)
+  const ml = typeof m.letter === 'string' ? m.letter.trim().charAt(0).toUpperCase() : ''
+  return ml && 'ABCDF'.includes(ml) && ml !== letter ? ml : null
+}
+
+/** A directional letter held up when its side came out the way it promised (the `letterCalibration.ts` rule). */
+export function letterHeld(letter: string, netPerWeek: number): boolean | null {
+  if (netPerWeek === 0) return null
+  if (letter === 'A' || letter === 'B') return netPerWeek > 0
+  if (letter === 'D' || letter === 'F') return netPerWeek < 0
+  return null
+}
+
+export type EvidenceOutcome = { group: string; scored: number; decided: number; held: number; heldPct: number | null; netPerWeek: number | null }
+
+/**
+ * PURE. The held-up record split by the evidence each grade rested on: one group per kind (a grade with two kinds
+ * counts in both), "none" for grades on the chart alone, and "any" for every grade with some evidence.
+ */
+export function outcomesByEvidence(scored: ReadonlyArray<{ row: TradeLedgerRow; netPerWeek: number }>): EvidenceOutcome[] {
+  const groups = new Map<string, Array<{ row: TradeLedgerRow; netPerWeek: number }>>()
+  const add = (g: string, s: { row: TradeLedgerRow; netPerWeek: number }) => groups.set(g, [...(groups.get(g) ?? []), s])
+  for (const s of scored) {
+    const kinds = s.row.evidence ?? []
+    if (kinds.length === 0) add('none', s)
+    else {
+      add('any', s)
+      for (const k of kinds) add(k, s)
+    }
+  }
+  const order = ['none', 'any', ...EVIDENCE_KINDS]
+  return order.flatMap((group) => {
+    const list = groups.get(group)
+    if (!list?.length) return []
+    const verdicts = list.map((s) => letterHeld(s.row.letter, s.netPerWeek)).filter((v): v is boolean => v != null)
+    const held = verdicts.filter(Boolean).length
+    const net = list.reduce((n, s) => n + s.netPerWeek, 0) / list.length
+    return [{ group, scored: list.length, decided: verdicts.length, held, heldPct: verdicts.length ? Math.round((held / verdicts.length) * 1000) / 10 : null, netPerWeek: Math.round(net * 10) / 10 }]
+  })
+}
+
+/**
+ * PURE. Where the your-team letter and the market letter disagreed: which one held up. The fair test of the roster
+ * adjustments (need, posture) — same deal, same outcome, two letters.
+ */
+export function yourTeamVsMarket(scored: ReadonlyArray<{ row: TradeLedgerRow; netPerWeek: number }>): { deals: number; yourTeamHeld: number; marketHeld: number; bothDecided: number } {
+  let deals = 0
+  let yourTeamHeld = 0
+  let marketHeld = 0
+  let bothDecided = 0
+  for (const s of scored) {
+    if (!s.row.marketLetter) continue
+    deals++
+    const a = letterHeld(s.row.letter, s.netPerWeek)
+    const b = letterHeld(s.row.marketLetter, s.netPerWeek)
+    if (a == null || b == null) continue
+    bothDecided++
+    if (a) yourTeamHeld++
+    if (b) marketHeld++
+  }
+  return { deals, yourTeamHeld, marketHeld, bothDecided }
 }
 
 type LetterSummary = { n: number; netPerWeek: number; positive: number; negative: number }

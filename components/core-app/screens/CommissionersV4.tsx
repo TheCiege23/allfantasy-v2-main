@@ -9,6 +9,7 @@ import { NoBreakHyphens, Shield } from '@/components/core-app/screens/LandingV4'
 import { CommissionersCtaLink } from '@/components/core-app/screens/CommissionersCtaLink'
 import { CommissionerScreenshot } from '@/components/core-app/screens/CommissionerScreenshot'
 import { AllLeaguesChimmy } from '@/components/core-app/screens/AllLeaguesChimmy'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 import {
   COMMISSIONERS_ALL_LEAGUES,
   COMMISSIONER_FEATURES,
@@ -155,6 +156,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
                 {h.ctaSecondary}
               </CommissionersCtaLink>
             </div>
+            <LandingStoreBadges page="commissioners" testId="commissioners-store-badges" />
             <p className="af-lp-reassure">{h.reassure}</p>
           </div>
 
@@ -348,6 +350,7 @@ export function CommissionersV4({ signedIn = false }: { signedIn?: boolean }) {
           <span>© 2026 AllFantasy.ai</span>
         </div>
         <p className="af-lp-footer-compliance">{footerCopy.footer.compliance}</p>
+        <p className="af-lp-footer-compliance">{footerCopy.footer.storeTrademarks}</p>
       </footer>
     </div>
   )

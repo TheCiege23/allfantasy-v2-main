@@ -150,7 +150,7 @@ async function fetchGamesPlayed(
  * earned them. Understating is the safe direction — it never invents production
  * a player did not have.
  */
-function dkFantasyPoints(stats: Record<string, number | string>): number | null {
+export function dkFantasyPoints(stats: Record<string, number | string>): number | null {
   const n = (key: string): number => {
     const v = stats[key]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
@@ -223,7 +223,7 @@ const FANTASY_POSITIONS = new Set([...OFFENSIVE_POSITIONS, ...DEFENSIVE_POSITION
  *   - Sacks are also tackles for loss. Most IDP formats pay both, and this
  *     follows that convention rather than trying to de-duplicate them.
  */
-function idpFantasyPoints(stats: Record<string, number | string>): number | null {
+export function idpFantasyPoints(stats: Record<string, number | string>): number | null {
   const n = (key: string): number => {
     const v = stats[key]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0

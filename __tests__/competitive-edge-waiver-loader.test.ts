@@ -150,9 +150,12 @@ describe('🛑 the /core page wires it through the gate', () => {
 
   it('resolves the paywall on Waivers, loads the edge only through the gate, and hands both to the screen', () => {
     const paywallRead = page.slice(page.indexOf('const corePaywallRead ='), page.indexOf('resolveCorePaywall(userId'))
-    expect(paywallRead).toContain("activeKey === 'waivers'")
+    // Since 2026-11-22 the plan is read on EVERY screen (AF Intelligence reaches all of them), so the read
+    // is unconditional — which covers this screen too. A conditional read must still name it.
+    const unconditional = /const corePaywallRead = resolveCorePaywall\(userId/.test(page)
+    expect(unconditional || paywallRead.includes("activeKey === 'waivers'")).toBe(true)
     expect(page).toContain('await loadWaiverEdgeForScreen({ waivers, access: waiverEdgeAccess, userId })')
-    expect(page).toContain('<Waivers data={waivers} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />')
+    expect(page).toContain('<Waivers data={afGate(waivers)} edge={waiverEdge} edgeAccess={waiverEdgeAccess} />')
     // Never the ungated loader straight from the page.
     expect(page).not.toMatch(/\bloadWaiverEdge\(/)
   })

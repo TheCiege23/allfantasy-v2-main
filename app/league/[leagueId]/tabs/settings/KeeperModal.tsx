@@ -1,8 +1,16 @@
 'use client'
 
+/**
+ * League settings → "Keepers & carryover": every team's roster at a glance, and the way to the Keepers tab.
+ *
+ * Colours come from ../keeper/keeper-surfaces.css (tokens). It was hard-coded dark, and in light mode the global
+ * `.mode-readable` rule turned its text dark on the still-dark panel (keeper audit 2026-11-22). The disabled
+ * checkbox beside each player did nothing and is gone; keepers are picked in the Keepers tab.
+ */
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { LeagueTeamBrief } from './types'
+import '../keeper/keeper-surfaces.css'
 
 type RosterPlayerLite = { id: string; label: string }
 
@@ -71,7 +79,7 @@ export function KeeperModal({
       )
       setByTeam(next)
     } catch {
-      setError('Could not load rosters.')
+      setError('Couldn’t load the rosters. Try again in a moment.')
     } finally {
       setLoading(false)
     }
@@ -81,59 +89,59 @@ export function KeeperModal({
     if (open) void load()
   }, [open, load])
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
 
+  const titleId = `keeper-carryover-title-${leagueId}`
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#0c1220] p-6 shadow-xl">
-        <h3 className="text-[16px] font-bold text-white">Keepers & carryover</h3>
-        <p className="mt-1 text-[12px] text-white/45">
-          Quick roster snapshot by team. Use the <strong className="text-white/70">Keepers</strong> tab for declaration
-          deadlines and eligibility, and the <strong className="text-white/70">Draft</strong> tab for pre-draft keeper
-          locks when your draft session is live.
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ background: 'color-mix(in srgb, var(--bg) 55%, transparent)', backdropFilter: 'blur(3px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="keeper-carryover-dialog"
+        className="kp-panel max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-xl sm:p-6">
+        <h3 id={titleId} className="kp-text text-[16px] font-bold">Keepers &amp; carryover</h3>
+        <p className="kp-muted mt-1 text-[13px] leading-snug">
+          Every team’s roster at a glance. Managers pick their keepers in the Keepers tab.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-          <Link
-            href={`/league/${leagueId}?tab=keeper`}
-            className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20"
-          >
+        <div className="mt-3 flex flex-wrap gap-2 text-[13px]">
+          <Link href={`/league/${leagueId}?tab=keeper`} className="kp-btn-primary rounded-lg px-3 py-2 font-semibold">
             Open Keepers tab
           </Link>
-          <Link
-            href={`/league/${leagueId}?tab=draft`}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 font-semibold text-white/80 hover:bg-white/[0.08]"
-          >
-            Open Draft tab
+          <Link href={`/league/${leagueId}?tab=draft`} className="kp-btn rounded-lg px-3 py-2 font-semibold">
+            Open draft
           </Link>
         </div>
-        {loading ? <p className="mt-4 text-[12px] text-[#ff3d81]/80">Loading rosters…</p> : null}
-        {error ? <p className="mt-2 text-[12px] text-red-400">{error}</p> : null}
-        <div className="mt-4 space-y-4">
-          {teams.map((team) => (
-            <div key={team.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-              <p className="text-[13px] font-semibold text-white">{team.teamName}</p>
-              <p className="text-[11px] text-white/35">{team.ownerName}</p>
-              <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-[11px] text-white/55">
-                {(byTeam[team.id] ?? []).length === 0 ? (
-                  <li className="text-white/30">No structured players in roster payload (import/sync may be required).</li>
+        {loading ? <p className="kp-muted mt-4 text-[13px]" role="status">Loading rosters…</p> : null}
+        {error ? <p className="kp-bad mt-2 text-[13px]" role="alert">{error}</p> : null}
+        <div className="mt-4 space-y-3">
+          {teams.map((team) => {
+            const players = byTeam[team.id] ?? []
+            return (
+              <div key={team.id} className="kp-card rounded-xl p-3" data-testid={`keeper-carryover-team-${team.id}`}>
+                <p className="kp-text text-[14px] font-semibold">{team.teamName}</p>
+                <p className="kp-muted text-[12px]">{team.ownerName || 'Open team'}</p>
+                {!team.claimedByUserId ? (
+                  <p className="kp-faint mt-2 text-[12px]">No manager yet.</p>
+                ) : loading ? null : players.length === 0 ? (
+                  <p className="kp-faint mt-2 text-[12px]">No players on this roster yet.</p>
                 ) : (
-                  byTeam[team.id]!.map((p) => (
-                    <li key={p.id} className="flex items-center gap-2">
-                      <input type="checkbox" disabled className="rounded border-white/20" />
-                      <span>{p.label}</span>
-                    </li>
-                  ))
+                  <ul className="kp-text2 mt-2 grid max-h-40 grid-cols-1 gap-x-4 gap-y-1 overflow-y-auto text-[13px] sm:grid-cols-2">
+                    {players.map((p) => (
+                      <li key={p.id}>{p.label}</li>
+                    ))}
+                  </ul>
                 )}
-              </ul>
-            </div>
-          ))}
+              </div>
+            )
+          })}
         </div>
         <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl bg-[#ff3d81] px-4 py-2 text-[13px] font-bold text-black hover:bg-[#ff3d81]"
-          >
+          <button type="button" onClick={onClose} className="kp-btn rounded-xl px-4 py-2 text-[13px] font-bold">
             Close
           </button>
         </div>
