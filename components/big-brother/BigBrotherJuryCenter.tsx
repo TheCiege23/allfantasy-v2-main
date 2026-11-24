@@ -12,6 +12,9 @@ interface BigBrotherJuryCenterProps {
   summary: BigBrotherSummary
 }
 
+/** "1 Veto win", "2 Veto wins", "nominated 1 time" (it printed "1 Veto wins" and "0x nominated"). */
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`
+
 export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenterProps) {
   const names = summary.rosterDisplayNames ?? {}
   const jury = summary.jury ?? []
@@ -53,18 +56,18 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
   return (
     <div className="space-y-4">
       {/* Jury members */}
-      <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-4">
-        <h3 className="flex items-center gap-2 text-sm font-medium text-purple-200">
+      <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-4">
+        <h3 className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
           <span className="text-base">&#9878;</span> Jury members
         </h3>
         {jury.length === 0 ? (
-          <p className="mt-2 text-sm text-white/50">No jury yet. Jury starts per league config (after X eliminations or when X players remain).</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">No jury yet. It starts later in the season, as set in your league settings.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {jury.map((j) => (
-              <li key={j.rosterId} className="flex items-center justify-between rounded-lg border border-purple-500/10 bg-purple-950/10 px-3 py-1.5">
-                <span className="text-purple-100">{names[j.rosterId] ?? j.rosterId}</span>
-                <span className="text-[11px] text-white/40">evicted week {j.evictedWeek}</span>
+              <li key={j.rosterId} className="flex items-center justify-between rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-1.5">
+                <span className="text-[var(--accent)]">{names[j.rosterId] ?? j.rosterId}</span>
+                <span className="text-[11px] text-[var(--muted)]">evicted week {j.evictedWeek}</span>
               </li>
             ))}
           </ul>
@@ -73,23 +76,23 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
 
       {/* Finalists */}
       {finaleReached && (
-        <div className="rounded-xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 to-transparent p-4">
-          <h3 className="flex items-center gap-2 text-sm font-medium text-amber-200">
+        <div className="rounded-xl border border-[var(--line2)] bg-[var(--warn-soft)] p-4">
+          <h3 className="flex items-center gap-2 text-sm font-medium text-[var(--warn)]">
             <span className="text-base">&#127942;</span> Final {finaleSize}
           </h3>
-          <p className="mt-1 text-xs text-white/50">
+          <p className="mt-1 text-xs text-[var(--muted)]">
             These houseguests made it to the end. The jury will now decide the winner.
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {finalists.map((f) => (
               <div
                 key={f.rosterId}
-                className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-3"
+                className="rounded-lg border border-[var(--line2)] bg-[var(--warn-soft)] p-3"
               >
-                <p className="text-sm font-medium text-amber-100">{names[f.rosterId] ?? f.rosterId}</p>
+                <p className="text-sm font-medium text-[var(--warn)]">{names[f.rosterId] ?? f.rosterId}</p>
                 {f.stats && (
-                  <p className="mt-1 text-[11px] text-white/50">
-                    {f.stats.hohWins ?? 0} HOH wins · {f.stats.vetoWins ?? 0} Veto wins · {f.stats.timesNominated ?? 0}x nominated
+                  <p className="mt-1 text-[11px] text-[var(--muted)]">
+                    {plural(f.stats.hohWins ?? 0, 'HOH win')} · {plural(f.stats.vetoWins ?? 0, 'Veto win')} · nominated {plural(f.stats.timesNominated ?? 0, 'time')}
                   </p>
                 )}
               </div>
@@ -100,16 +103,16 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
 
       {/* Finale vote ballot — inline for jury members */}
       {isJuryMember && finaleReached && (
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/15 p-4">
-          <h3 className="flex items-center gap-2 text-sm font-medium text-cyan-200">
+        <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-4">
+          <h3 className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
             <span className="text-base">&#128499;</span> Your finale vote
           </h3>
-          <p className="mt-1 text-xs text-white/50">
-            As a jury member, you decide who wins. Your vote is private and counted by the game engine.
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            As a jury member, you decide who wins. Your vote is private.
           </p>
 
           {voteResult ? (
-            <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
+            <div className="mt-3 rounded-lg border border-[var(--good)] bg-[var(--good-soft)] px-3 py-2 text-xs text-[var(--good)]">
               {voteResult}
             </div>
           ) : (
@@ -120,8 +123,8 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
                     key={f.rosterId}
                     className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${
                       selectedFinalist === f.rosterId
-                        ? 'border-cyan-500/40 bg-cyan-500/10'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]'
+                        ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]'
+                        : 'border-[var(--line)] bg-white/[0.02] hover:bg-white/[0.04]'
                     }`}
                   >
                     <input
@@ -132,13 +135,13 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
                       onChange={() => setSelectedFinalist(f.rosterId)}
                       className="accent-cyan-500"
                     />
-                    <span className="text-sm text-white/90">{names[f.rosterId] ?? f.rosterId}</span>
+                    <span className="text-sm text-[var(--text)]">{names[f.rosterId] ?? f.rosterId}</span>
                   </label>
                 ))}
               </div>
 
               {voteError && (
-                <div className="mt-2 rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">
+                <div className="mt-2 rounded-lg border border-[var(--bad)] bg-[var(--bad-soft)] px-3 py-2 text-xs text-[var(--bad)]">
                   {voteError}
                 </div>
               )}
@@ -147,7 +150,7 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
                 type="button"
                 disabled={!selectedFinalist || submitting}
                 onClick={submitFinaleVote}
-                className="mt-3 rounded-lg bg-gradient-to-r from-cyan-600/80 to-purple-600/80 px-4 py-2 text-sm font-medium text-white hover:from-cyan-600 hover:to-purple-600 disabled:opacity-50"
+                className="mt-3 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] hover:opacity-90 disabled:opacity-50"
               >
                 {submitting ? 'Submitting...' : 'Cast finale vote'}
               </button>
@@ -156,9 +159,7 @@ export function BigBrotherJuryCenter({ leagueId, summary }: BigBrotherJuryCenter
         </div>
       )}
 
-      <p className="text-xs text-white/40">
-        Finalist summaries and season narratives are available from Chimmy Finale Moderator (Chimmy / Big Brother Chimmy).
-      </p>
+      <p className="text-xs text-[var(--muted)]">Ask Chimmy for each finalist’s season story.</p>
     </div>
   )
 }

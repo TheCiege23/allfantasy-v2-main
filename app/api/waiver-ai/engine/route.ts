@@ -231,10 +231,10 @@ const paidToolPost = withApiUsage({
      * accepts `loadWorldFacts` as an optional dependency with a live default, so supplying it swaps
      * grounding and nothing else.
      *
-     * SAFE BEFORE THE TABLE EXISTS. `domain_os_facts` is declared in schema.prisma but has never been
-     * migrated, so in production every read throws 42P01, `safeRead` swallows it, and the feed falls
-     * through to the live derivation -- byte-identical to not wiring this at all. That is deliberate:
-     * it lets the hit rate be MEASURED before anyone migrates a table for it.
+     * `domain_os_facts` IS MIGRATED (`prisma/migrations/20260901220000_domain_os_facts`), so the feed
+     * serves real cache hits. This used to say it "has never been migrated" — stale since that migration
+     * (corrected 2026-11-24 re-score). `safeRead` still swallows a read failure and falls through to the
+     * live derivation, so an outage of the table degrades to the unwired behaviour rather than an error.
      */
     const { drainOutcomes: drainWaiverOsOutcomes, ...waiverOsLoaders } = createWaiverOsLoaders()
 

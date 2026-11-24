@@ -62,7 +62,9 @@ export async function loadLeagueManagerRecords(input: LoadLeagueManagerRecordsIn
    * you) is now held for five minutes per viewer (`lib/decision-os/manager-records-os`). ⚠ Membership is proved above
    * on EVERY call, before the cache is read; the plan gate stays in the caller; and the entry is per viewer because
    * your own FAAB is found through your roster (`waiverEdgeLoader.ts`), so one viewer's view is never another's. A
-   * single team's record and the commissioner's whole directory still build live. An unavailable result is not cached.
+   * single team's record and the commissioner's whole directory read through the feed too (see below; "still build
+   * live" here was stale since 2026-11-21 — only the viewer's OWN team, and a call with `now`, build live). An
+   * unavailable result is not cached.
    */
   if (!input.now) {
     const { loadViewerManagerRecords } = await import('@/lib/decision-os/manager-records-os')

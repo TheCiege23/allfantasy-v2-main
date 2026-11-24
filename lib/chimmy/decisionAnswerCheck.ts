@@ -7,7 +7,7 @@
  * (`tradeGradeCheck.ts`) and observe numbers (`toolLoopGuardObservation.ts`), but a start/sit call that swapped the two
  * players, a waiver pick named against the panel's #1, or a projection quoted wrong all reached the user.
  *
- * Now, on a DECISION turn only (trade, waiver, start/sit, draft), a small fast model reads the question, the answer and
+ * Now, on a DECISION turn only (trade, waiver, start/sit, draft, commissioner), a small fast model reads the question, the answer and
  * the league facts Chimmy was given, and lists every statement the facts CONTRADICT. A contradiction sends the answer
  * back to Chimmy once with the list; the revised answer is what the user sees.
  *
@@ -22,7 +22,12 @@
  * when something was contradicted. `CHIMMY_DECISION_CHECK=off` switches it off.
  */
 
-export const DECISION_CHECK_INTENTS: ReadonlySet<string> = new Set(['trade', 'waiver', 'start_sit', 'draft'])
+/*
+ * `commissioner` joined 2026-11-24: a commissioner turn carries the commissioner-health decision (health score, alerts,
+ * suggested actions) in its packet — `deriveWantFromIntent` sets `commissionerHealthDecision` on exactly this intent —
+ * so a veto/inactivity/rule-change answer has facts it can contradict, and before this nothing compared them.
+ */
+export const DECISION_CHECK_INTENTS: ReadonlySet<string> = new Set(['trade', 'waiver', 'start_sit', 'draft', 'commissioner'])
 export const DECISION_CHECK_ENV = 'CHIMMY_DECISION_CHECK'
 export const DECISION_CHECK_TIMEOUT_MS = 4_000
 /** The facts handed to the checker, at most. The head is kept: the packet leads with the slice that answers. */
@@ -58,11 +63,27 @@ const CHECK_SYSTEM = [
   'Reply with JSON only, no prose: {"ok":true} or {"ok":false,"contradictions":[{"claim":"<the answer\'s words>","fact":"<what the facts say>"}]}',
 ].join(' ')
 
+/*
+ * A commissioner answer is about the LEAGUE, not a player call, so the checker is told what its facts look like. Same
+ * rule as every other intent — only a stated contradiction counts — and the same refusal to advise: whether to veto is
+ * the commissioner's call, and general league-management advice is neither a fact nor a contradiction of one.
+ */
+const COMMISSIONER_CHECK_NOTE = [
+  'This is a COMMISSIONER question. Its facts are league-health facts: a health score or grade, alerts, inactive or',
+  'at-risk managers, and suggested commissioner actions. A different score, alert, manager or suggested action than',
+  'the facts state is a contradiction; general advice on running a league, a vote or a veto is not.',
+].join(' ')
+
 /** The checker's prompt. The facts are cut to a bound, keeping the head. */
-export function buildDecisionCheckPrompt(input: { question: string; answer: string; facts: string }): { system: string; user: string } {
+export function buildDecisionCheckPrompt(input: {
+  question: string
+  answer: string
+  facts: string
+  intent?: string | null
+}): { system: string; user: string } {
   const facts = input.facts.length > DECISION_CHECK_MAX_FACTS_CHARS ? `${input.facts.slice(0, DECISION_CHECK_MAX_FACTS_CHARS)}\n[…facts cut here]` : input.facts
   return {
-    system: CHECK_SYSTEM,
+    system: input.intent === 'commissioner' ? `${CHECK_SYSTEM} ${COMMISSIONER_CHECK_NOTE}` : CHECK_SYSTEM,
     user: `QUESTION:\n${input.question}\n\nFACTS:\n${facts}\n\nANSWER:\n${input.answer}`,
   }
 }

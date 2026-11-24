@@ -449,6 +449,8 @@ async function nflWaiversBoard(
     faabRemaining: number | null
   }
 
+  // Owner ruling 2026-11-24: these two DIRECT reads (faabRemaining, leagueWaiverSettings) are Waiver Kernel n/a by design —
+  // Waiver OS holds FAAB 5 min and a reload right after a claim must show the live budget; decision paths read through Waiver OS.
   const [rosters, waiverSettings, topProjections, market] = await Promise.all([
     prisma.roster
       .findMany({

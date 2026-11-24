@@ -173,6 +173,7 @@
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'],
 :global(html[data-mode='light']) .sp[data-specialty='devy'],
 :global(html[data-mode='light']) .sp[data-specialty='salary'],
+:global(html[data-mode='light']) .sp[data-specialty='bigbrother'],
 :global(html[data-mode='light']) .sp[data-specialty='survguil'] {
   --sp-bg: var(--surface2, #eef1f9);
   --sp-card: var(--surface, #ffffff);
@@ -212,6 +213,7 @@
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP,
 :global(html[data-mode='light']) .sp[data-specialty='devy'] .btnP,
 :global(html[data-mode='light']) .sp[data-specialty='salary'] .btnP,
+:global(html[data-mode='light']) .sp[data-specialty='bigbrother'] .btnP,
 :global(html[data-mode='light']) .sp[data-specialty='survguil'] .btnP { color: var(--accInk); }
 /* On dark artwork (the hero) or staged dark on purpose (.stayDark): every token back to its dark fallback.
  * `color` is re-declared because an INHERITED colour is computed where it is declared (.sp, from the light tokens):

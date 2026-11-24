@@ -142,16 +142,16 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
   const total = summary?.totalCap ?? 200
 
   return (
-    <div className="min-h-screen bg-[#040915] px-4 py-6 text-white">
-      <div className="mx-auto max-w-3xl space-y-6">
+    <div className="min-h-screen bg-[var(--bg)] px-4 py-6 text-[var(--text)]">
+      <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-2">
-          <Link href={`/league/${leagueId}`} className="text-[12px] text-cyan-300/90 hover:underline">
+          <Link href={`/league/${leagueId}`} className="text-[12px] text-[var(--accent)] hover:underline">
             ← League
           </Link>
-          <h1 className="text-lg font-bold text-white">Cap Room</h1>
+          <h1 className="text-lg font-bold text-[var(--text)]">Cap Room</h1>
         </div>
         {err ? (
-          <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
+          <p className="rounded-lg border border-[var(--line2)] bg-[var(--warn-soft)] px-3 py-2 text-sm text-[var(--warn)]">
             {err}
           </p>
         ) : null}
@@ -175,11 +175,11 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
             <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
               <CapPieChart activeSalary={activeSal} deadMoney={deadM} availableCap={avail} size={160} />
               <div className="min-w-0 flex-1 space-y-2">
-                <h2 className="text-[12px] font-bold uppercase tracking-wide text-white/45">Future years</h2>
-                {projections.slice(0, 5).map((p) => (
-                  <div key={p.projectionYear} className="space-y-1 rounded-lg border border-white/[0.06] p-2">
-                    <p className="text-[11px] font-semibold text-white/80">{p.projectionYear}</p>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                <h2 className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted)]">Future years</h2>
+                {projections.filter((p) => p.projectionYear !== year && (year == null || p.projectionYear > year)).slice(0, 4).map((p) => (
+                  <div key={p.projectionYear} className="space-y-1 rounded-lg border border-[var(--line)] p-2">
+                    <p className="text-[11px] font-semibold text-[var(--text)]">{p.projectionYear}</p>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--chip)]">
                       <div
                         className="h-full bg-[color:var(--cap-contract)]"
                         style={{
@@ -187,7 +187,7 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
                         }}
                       />
                     </div>
-                    <p className="text-[11px] text-white/45">
+                    <p className="text-[11px] text-[var(--muted)]">
                       Committed ${p.committedSalary.toFixed(1)}M · Dead ${p.deadCapHits.toFixed(1)}M · Open $
                       {p.availableCap.toFixed(1)}M
                     </p>
@@ -203,11 +203,11 @@ export function CapRoomClient({ leagueId }: { leagueId: string }) {
             ) : null}
 
             {!hasSub ? (
-              <p className="text-[11px] text-white/40">Chimmy cap recommendations come with AF Commissioner.</p>
+              <p className="text-[11px] text-[var(--muted)]">Chimmy cap recommendations come with AF Commissioner.</p>
             ) : null}
           </>
         ) : !err ? (
-          <p className="text-sm text-white/45">Loading cap data…</p>
+          <p className="text-sm text-[var(--muted)]">Loading cap data…</p>
         ) : null}
       </div>
     </div>

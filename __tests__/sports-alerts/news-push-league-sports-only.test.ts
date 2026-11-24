@@ -154,3 +154,24 @@ describe('ESPN video clips', () => {
     expect(calls.find((c) => !c.skipChannels.push)?.userIds).toEqual(['in-league'])
   })
 })
+
+/* Breaking news told as a video clip still pushes (owner, 2026-11-23): only non-breaking clips go to the bell. */
+describe('breaking news in a video clip', () => {
+  const video = 'https://www.espn.com/video/clip/_/id/50576429/orlando-city-fires-perelman'
+  it('a clip classified as breaking still pushes to league members', async () => {
+    h.news.mockResolvedValue([{ ...story('Orlando City fires interim coach Perelman, assistant Setti after playoff exit'), sourceUrl: video }])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    const calls = h.dispatch.mock.calls.map(([arg]) => arg)
+    const pushCall = calls.find((c) => !c.skipChannels.push)
+    expect(pushCall?.userIds).toEqual(['in-league'])
+    expect(pushCall?.type).toBe('breaking_news')
+  })
+
+  it('[control] a clip that is not breaking stays bell only', async () => {
+    h.news.mockResolvedValue([{ ...story("Bayless: I'm closing my eyes and taking Arch Manning at No. 1"), sourceUrl: video }])
+    await dispatchBreakingNewsAlerts({ now: NOW })
+    const calls = h.dispatch.mock.calls.map(([arg]) => arg)
+    expect(calls.find((c) => !c.skipChannels.push)).toBeUndefined()
+  })
+})
+

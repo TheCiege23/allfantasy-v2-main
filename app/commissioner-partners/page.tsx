@@ -61,8 +61,15 @@ export default async function CommissionerPartnersPage() {
             <li>Yearly plans pay you 1/12 each month. Refunds come off your next statement.</li>
             <li>Free plans stay on while you keep that many users.</li>
             <li>The {s.discountPercent}% off is for subscribing on the web at allfantasy.ai. Friends who subscribe in the iPhone or Android app don't get it, but they still count for you and still earn you cash.</li>
-            <li>You can't use your own code. We need a W-9 before we can send cash.</li>
+            <li>You can't use your own code. We need your tax info (through Stripe) before we can send cash.</li>
           </ul>
+          <p className="text-sm text-[#a3a8c9]">
+            The full rules are in the{' '}
+            <Link href="/commissioner-partners/terms" className="font-semibold text-purple-300 underline underline-offset-2">
+              Commissioner Partner Program Terms
+            </Link>
+            .
+          </p>
         </section>
       </div>
     </main>

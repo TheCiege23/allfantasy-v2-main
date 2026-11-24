@@ -48,25 +48,25 @@ export function IdpScoringStyleCard({ leagueId, config, loading, onAskChimmy }: 
     }
   }
 
-  if (loading) return <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">Loading IDP settings…</div>
+  if (loading) return <div className="rounded-xl border border-[var(--line)] bg-[var(--chip)] p-4 text-sm text-[var(--muted)]">Loading IDP settings…</div>
   if (!config) return null
 
   const label = IDP_SCORING_PRESET_LABELS[config.scoringPreset] ?? config.scoringPreset
   const tip = SCORING_TIPS[config.scoringPreset] ?? SCORING_TIPS.balanced
 
   return (
-    <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-4">
-      <div className="flex items-center gap-2 text-cyan-200">
+    <div className="rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-4">
+      <div className="flex items-center gap-2 text-[var(--accent)]">
         <Shield className="h-5 w-5 shrink-0" />
         <h3 className="font-medium">IDP scoring: {label}</h3>
       </div>
-      <p className="mt-2 text-sm text-white/80">{tip}</p>
+      <p className="mt-2 text-sm text-[var(--text)]">{tip}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={fetchEducator}
           disabled={loadingNarrative}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--chip)]"
         >
           <BookOpen className="h-3.5 w-3.5" />
           {loadingNarrative ? 'Loading…' : 'Learn more'}
@@ -75,7 +75,7 @@ export function IdpScoringStyleCard({ leagueId, config, loading, onAskChimmy }: 
           <button
             type="button"
             onClick={onAskChimmy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-950/50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line2)] bg-[var(--warn-soft)] px-3 py-1.5 text-xs font-medium text-[var(--warn)] hover:bg-[var(--warn-soft)]"
           >
             <MessageSquare className="h-3.5 w-3.5" />
             Ask Chimmy about IDP
@@ -83,12 +83,12 @@ export function IdpScoringStyleCard({ leagueId, config, loading, onAskChimmy }: 
         )}
       </div>
       {educatorOpen && narrative && (
-        <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white/90">
+        <div className="mt-3 rounded-lg border border-[var(--line)] bg-[var(--surface2)] p-3 text-sm text-[var(--text)]">
           {narrative}
           <button
             type="button"
             onClick={() => setEducatorOpen(false)}
-            className="mt-2 text-xs text-cyan-300 hover:underline"
+            className="mt-2 text-xs text-[var(--accent)] hover:underline"
           >
             Close
           </button>
