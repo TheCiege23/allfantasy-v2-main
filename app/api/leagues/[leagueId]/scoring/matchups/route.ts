@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { loadNativeScoreboard } from '@/server/services/nativeMatchupCenter'
+import { loadImportedScoreboard } from '@/server/services/importedScoreboard'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -14,7 +16,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
   const leagueId = params.leagueId
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { id: true, season: true, sport: true, settings: true, leagueVariant: true, platform: true, playoffWeeksPerRound: true },
+    select: { id: true, season: true, sport: true, settings: true, leagueVariant: true, platform: true, platformLeagueId: true, playoffWeeksPerRound: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -65,6 +67,21 @@ export async function GET(req: NextRequest, props: { params: Promise<{ leagueId:
       g.away && g.status !== 'upcoming' ? [side(g.home, g.away, g.status), side(g.away, g.home, g.status)] : [],
     )
     return NextResponse.json({ season: native.season, week: native.week, matchups, games: native.games })
+  }
+
+  /*
+   * 🛑 AN IMPORTED LEAGUE'S WEEK LIVES IN `WeeklyMatchup` (found live 2026-11-23). Nothing writes
+   * `teamWeekResult` for one, so the read below said "Scores appear here once week N is scored" in a
+   * scored week. `games` only: the per-team `matchups` rows are the native contract, and the screen
+   * draws one line per game from `games`.
+   */
+  if (league.platformLeagueId && !isNativePlatform(league.platform)) {
+    const imported = await loadImportedScoreboard({
+      leagueId,
+      viewerUserId: session.user.id,
+      week: Number.isInteger(askedWeek) && askedWeek >= 1 && askedWeek <= 60 ? askedWeek : undefined,
+    }).catch(() => null)
+    if (imported) return NextResponse.json({ season: imported.season, week: imported.week, matchups: [], games: imported.games })
   }
 
   const season = Math.max(2000, Math.min(2100, Number(sp.get('season')) || league.season))
