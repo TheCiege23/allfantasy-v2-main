@@ -40,6 +40,8 @@ export const LEGAL_LAST_UPDATED_BY_PAGE = {
   contact: "March 2026",
   mission: "March 2026",
   noGamblingPolicy: "November 2026",
+  // Commissioner Partner Program Terms (/commissioner-partners/terms), first published 2026-11-24.
+  partnerTerms: "November 24, 2026",
 } as const
 
 export type LegalPageKey = keyof typeof LEGAL_LAST_UPDATED_BY_PAGE
