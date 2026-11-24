@@ -28,7 +28,7 @@ describe('NativeMatchupScreen in a Survivor league', () => {
         }), { status: 200 })
       }
       if (url.includes('/matchup-center')) {
-        return new Response(JSON.stringify({ payload: { left: { starters: [{ playerId: 'p1', name: 'Derrick White', position: 'PG', team: 'Boston Celtics', opponent: 'MIA', headshotUrl: null, currentPoints: 0, projectedPoints: 30, hasRealProjection: true, afProjectedPoints: 30.5, injuryStatus: 'Questionable', newsBlurb: null, weatherSummary: null, gameStatus: 'upcoming', gameLabel: 'Scheduled', aiInsight: null, outlook: { homeAway: 'home', kickoffTimeIso: null, opponentRank: null, teamLogoUrl: null, byeWeek: null, gamesThisWeek: 3, weather: null } }] } } }), { status: 200 })
+        return new Response(JSON.stringify({ payload: { left: { starters: [{ playerId: 'p1', name: 'Derrick White', position: 'PG', team: 'Boston Celtics', opponent: 'MIA', headshotUrl: null, currentPoints: 0, projectedPoints: 30, hasRealProjection: true, afProjectedPoints: 30.5, injuryStatus: 'Questionable', newsBlurb: null, weatherSummary: null, gameStatus: 'upcoming', gameLabel: 'Scheduled', aiInsight: null, outlook: { homeAway: 'home', kickoffTimeIso: null, opponentRank: null, teamLogoUrl: null, byeWeek: null, gamesThisWeek: 3, weather: null } }, { playerId: 'p2', name: 'Nikola Jokic', position: 'C', team: 'Denver Nuggets', opponent: 'LAL', headshotUrl: null, currentPoints: 61.5, projectedPoints: 55, hasRealProjection: true, afProjectedPoints: 55, injuryStatus: null, newsBlurb: null, weatherSummary: null, gameStatus: 'final', gameLabel: 'Final', aiInsight: null, outlook: null }] } } }), { status: 200 })
       }
       return new Response('{}', { status: 404 })
     }))
@@ -40,6 +40,11 @@ describe('NativeMatchupScreen in a Survivor league', () => {
     expect(screen.getByText('Derrick White')).toBeTruthy()
     expect(screen.getByText(/3 games/)).toBeTruthy()
     expect(screen.queryByText(/has no game/)).toBeNull()
+    // Each starter's own Survivor points: a dash before his games, the counted number after.
+    const pts = screen.getAllByTestId('survivor-starter-points').map((el) => el.textContent)
+    expect(pts[0]).toContain('—')
+    expect(pts[1]).toContain('61.5')
+    expect(pts[1]).toContain('Final')
     expect(calls.some((u) => u.includes('/survivor/summary'))).toBe(true)
   })
 })

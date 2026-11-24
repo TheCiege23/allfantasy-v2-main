@@ -246,7 +246,14 @@ function SurvivorMatchupScreen({ league, onSelectTab }: ScreenProps) {
                 {mine.map((p) => (
                   <div key={p.playerId} className="nls-survivor-starter">
                     <SlotCell p={p} side="left" sport={league.sport} />
-                    <small className="nls-muted">{p.afProjectedPoints != null ? `Proj ${fmt1(p.afProjectedPoints)}` : ''}</small>
+                    <span className="nls-survivor-pts" data-testid="survivor-starter-points" data-state={p.gameStatus}>
+                      {/* Survivor's own points for him this week: final once counted, live as his games land. */}
+                      <strong>{p.gameStatus === 'upcoming' ? '—' : fmt1(p.currentPoints)}</strong>
+                      <small className="nls-muted">
+                        {p.gameStatus === 'final' ? 'Final' : p.gameStatus === 'live' ? 'Live' : ''}
+                        {p.afProjectedPoints != null ? `${p.gameStatus === 'upcoming' ? '' : ' · '}Proj ${fmt1(p.afProjectedPoints)}` : ''}
+                      </small>
+                    </span>
                   </div>
                 ))}
               </div>

@@ -110,7 +110,14 @@ export async function saveNbaSurvivorGamePick(input: { leagueId: string; rosterI
   })
 }
 
-async function scoreNbaSurvivorRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }, oneGamePerPlayer: boolean): Promise<{ pts: number; allFinalized: boolean }> {
+/** One starter's Survivor points this week: what counted (`final`), or what his played games are worth so far. */
+export type NbaSurvivorPlayerPoints = { points: number; final: boolean; games: number }
+
+async function scoreNbaSurvivorRoster(
+  input: { leagueId: string; legacyRosterId: string; week: number; season: number },
+  oneGamePerPlayer: boolean,
+  opts: { breakdown?: boolean } = {},
+): Promise<{ pts: number; allFinalized: boolean; byPlayer?: Map<string, NbaSurvivorPlayerPoints> }> {
   const week = await loadRosterWeek(input.leagueId, input.legacyRosterId, input.week, new Date(), true)
   if (!week || week.league.season !== input.season || week.games.length === 0) return { pts: 0, allFinalized: false }
   const lineups = await loadWeekLineups(prisma, { redraftRosterIds: [week.roster.redraftRosterId!], season: input.season, week: input.week })
@@ -122,13 +129,29 @@ async function scoreNbaSurvivorRoster(input: { leagueId: string; legacyRosterId:
   if (!starters.length) return { pts: 0, allFinalized: false }
   let points = 0
   let allFinalized = true
+  /*
+   * The per-starter breakdown the Matchup tab shows (opts.breakdown). The TOTAL is unchanged: it still
+   * counts a player only once his NBA week is finalized. The breakdown also prices the games he has
+   * already played in a week not yet final, marked `final: false`, so a manager sees points as they
+   * land rather than "—" until the week closes.
+   */
+  const byPlayer = opts.breakdown ? new Map<string, NbaSurvivorPlayerPoints>() : undefined
   for (const player of starters) {
     const fixtures = gamesForTeam(week.games, player.team, player.addedAt, player.droppedAt)
     const pick = week.pickByPlayer.get(player.playerId)
     const countingGames = oneGamePerPlayer ? [pick ? fixtures.find(game => gameKey(game) === pick.gameKey) : fixtures[0]].filter((game): game is WeekGameRow => Boolean(game)) : fixtures
-    if (!countingGames.length) continue
+    if (!countingGames.length) {
+      byPlayer?.set(player.playerId, { points: 0, final: true, games: 0 })
+      continue
+    }
     const weekly = await prisma.playerWeeklyScore.findUnique({ where: { playerId_week_season_sport: { playerId: player.playerId, week: input.week, season: input.season, sport: 'NBA' } }, select: { isFinalized: true } })
-    if (!weekly?.isFinalized) { allFinalized = false; continue }
+    const final = Boolean(weekly?.isFinalized)
+    if (!final) {
+      allFinalized = false
+      if (!byPlayer) continue
+    }
+    let playerPoints = 0
+    let played = 0
     for (const fixture of countingGames) {
       const gameDate = fixture.startTime && easternCalendarDay(fixture.startTime)
       if (!gameDate) { allFinalized = false; continue }
@@ -138,10 +161,28 @@ async function scoreNbaSurvivorRoster(input: { leagueId: string; legacyRosterId:
       const matched = stats.filter(row => nbaTeamKey(row.team) === team && nbaTeamKey(row.opponent) === opponent)
       if (matched.length > 1) { allFinalized = false; continue }
       // A finalized week with no line for this game means a DNP, worth zero.
-      if (matched.length === 1) points += await calculateScoreFromSportConfig(input.leagueId, player.playerId, input.week, matched[0].normalizedStatMap as Record<string, number>, player.position)
+      if (matched.length === 1) {
+        const value = await calculateScoreFromSportConfig(input.leagueId, player.playerId, input.week, matched[0].normalizedStatMap as Record<string, number>, player.position)
+        playerPoints += value
+        played += 1
+        if (final) points += value
+      }
     }
+    byPlayer?.set(player.playerId, { points: Math.round(playerPoints * 100) / 100, final, games: played })
   }
-  return { pts: Math.round(points * 100) / 100, allFinalized }
+  return { pts: Math.round(points * 100) / 100, allFinalized, ...(byPlayer ? { byPlayer } : {}) }
+}
+
+/**
+ * Each starter's Survivor points for the week, in the league's own counting mode (one game per player
+ * or every game), for the Matchup tab. Null for a league or roster this cannot score.
+ */
+export async function nbaSurvivorStarterPoints(input: { leagueId: string; legacyRosterId: string; week: number; season: number }): Promise<Map<string, NbaSurvivorPlayerPoints> | null> {
+  const league = await prisma.league.findUnique({ where: { id: input.leagueId }, select: { sport: true, survivorMode: true, settings: true } })
+  if (!league?.survivorMode || league.sport !== 'NBA') return null
+  const oneGame = normalizeSurvivorFoundationSettings(league.settings as Record<string, unknown>).nbaWeeklyScoringMode === 'one_game_per_player'
+  const r = await scoreNbaSurvivorRoster(input, oneGame, { breakdown: true })
+  return r.byPlayer ?? null
 }
 
 export async function scoreNbaSurvivorOneGameRoster(input: { leagueId: string; legacyRosterId: string; week: number; season: number }) {

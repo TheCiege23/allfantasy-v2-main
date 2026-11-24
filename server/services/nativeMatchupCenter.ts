@@ -11,6 +11,7 @@
 import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { resolveStoredHeadshotsBatch } from '@/lib/draft-room/storedPickHeadshot'
 import { prisma } from '@/lib/prisma'
+import { nbaSurvivorStarterPoints } from '@/lib/survivor/survivorNbaWeeklyScoring'
 import { loadNbaRosterOutlook } from '@/lib/redraft/nbaRosterOutlook'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
@@ -400,9 +401,27 @@ export async function buildNativeMatchupCenterPayload(params: {
     for (const [id, o] of nba) if (!outlook.has(id)) outlook.set(id, o)
   }
 
+  /*
+   * An NBA Survivor league plays no head-to-head game, so nothing here writes per-player points and every
+   * starter read "—" all week (owner report, 2026-11-24). Its points are Survivor's own (one game per
+   * player, or every game), from the same scorer as the weekly total: final once his NBA week is
+   * finalized, otherwise what his played games are worth so far.
+   */
+  let survivorPoints: Map<string, { points: number; final: boolean; games: number }> | null = null
+  if (sport === 'NBA' && league.leagueVariant === 'survivor') {
+    try {
+      const legacy = await prisma.roster.findFirst({ where: { leagueId: league.id, redraftRosterId: myRosterId }, select: { id: true } })
+      survivorPoints = legacy ? await nbaSurvivorStarterPoints({ leagueId: league.id, legacyRosterId: legacy.id, week, season: season.season }) : null
+    } catch {
+      // Points are a read; the matchup stands without them.
+      survivorPoints = null
+    }
+  }
+
   const toSlot = (rosterId: string, row: NativeStarter): MatchupPlayerSlot => {
-    const pts = row.points ?? 0
-    const status = slotGameStatus(game, row.points != null)
+    const sv = rosterId === myRosterId ? survivorPoints?.get(row.playerId) : undefined
+    const pts = sv ? sv.points : row.points ?? 0
+    const status = sv ? (sv.final ? 'final' : sv.games > 0 ? 'live' : 'upcoming') : slotGameStatus(game, row.points != null)
     const o = outlook.get(row.playerId)
     return sanitizeStarterRow({
       playerId: row.playerId,

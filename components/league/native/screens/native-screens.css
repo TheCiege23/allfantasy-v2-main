@@ -508,3 +508,5 @@
 .nls-survivor-members li span:last-child { font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
 .nls-survivor-starters { display: grid; gap: 10px; }
 .nls-survivor-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.nls-survivor-pts { display: grid; justify-items: end; gap: 2px; font-family: var(--nl-mono); font-variant-numeric: tabular-nums; }
+.nls-survivor-pts strong { font-size: 15px; color: var(--text); }

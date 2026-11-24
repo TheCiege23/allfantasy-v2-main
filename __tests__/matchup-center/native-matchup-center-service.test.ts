@@ -29,7 +29,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     redraftPlayoffRound: { findMany: vi.fn(async () => { db.calls.rounds += 1; return db.rounds }) },
     redraftRosterPlayer: { findMany: vi.fn(async ({ where }: any) => db.players.filter((p) => where.rosterId.in.includes(p.rosterId))) },
-    roster: { findMany: vi.fn(async () => []) },
+    roster: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => ({ id: 'legacy-A' })) },
     sportsInjury: { findMany: vi.fn(async () => db.injuries) },
     afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
     leaguePlayerWeeklyScore: {
@@ -48,6 +48,8 @@ vi.mock('@/lib/matchup-center/afProjections', async (orig) => ({
 const outlookMock = vi.hoisted(() => ({ fn: vi.fn(async (..._a: unknown[]) => new Map<string, unknown>()) }))
 vi.mock('@/lib/redraft/nflRosterOutlook', () => ({ loadNflRosterOutlook: (...a: unknown[]) => outlookMock.fn(...a) }))
 vi.mock('@/lib/redraft/scoringEngine', () => ({ scoreRosterForWeek: engine.scoreRosterForWeek }))
+const survivorPts = vi.hoisted(() => ({ fn: vi.fn(async (..._a: unknown[]) => null as Map<string, { points: number; final: boolean; games: number }> | null) }))
+vi.mock('@/lib/survivor/survivorNbaWeeklyScoring', () => ({ nbaSurvivorStarterPoints: (...a: unknown[]) => survivorPts.fn(...a) }))
 
 import { buildNativeMatchupCenterPayload, loadNativeScoreboard } from '@/server/services/nativeMatchupCenter'
 import { nativeRosterSeat } from '@/lib/redraft/nativePlayerWeeklyScores'
@@ -121,6 +123,14 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     const byId = new Map(p.left.starters.map((s) => [s.playerId, s.injuryStatus]))
     expect(byId.get('a-pg')).toBe('Questionable')
     expect(byId.get('a-c')).toBeNull()
+  })
+
+  // NBA Survivor stores no per-player points; the tab read "—" for every starter all week.
+  it('an NBA Survivor starter shows Survivor’s own points: final once counted, live as his games land', async () => {
+    survivorPts.fn.mockResolvedValueOnce(new Map([['a-pg', { points: 31.5, final: true, games: 2 }], ['a-c', { points: 12, final: false, games: 1 }]]))
+    const p = ok(await buildNativeMatchupCenterPayload({ league: { ...LEAGUE, leagueVariant: 'survivor' }, viewerUserId: 'me' }))
+    expect(survivorPts.fn.mock.calls.at(-1)![0]).toMatchObject({ leagueId: 'L', legacyRosterId: 'legacy-A', week: 2 })
+    expect(p.left.starters.map((s) => [s.playerId, s.currentPoints, s.gameStatus])).toEqual([['a-pg', 31.5, 'final'], ['a-c', 12, 'live']])
   })
 
   it('[control] a failed outlook leaves the matchup standing', async () => {
