@@ -77,9 +77,15 @@ describe('Commissioner review folds away until it is needed (4)', () => {
     expect(review.tagName).toBe('DETAILS')
     expect(review.open).toBe(false)
   })
-  it('opens itself when the losing lineup is flagged', async () => {
-    await deck(data([claim({})], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
+  it('opens itself when the losing lineup is flagged on another team’s claim', async () => {
+    await deck(data([claim({ winnerRosterId: 'other' })], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
     expect((screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement).open).toBe(true)
+  })
+  it('stays folded on the commissioner’s own claim, and says it needs a look (2026-11-24)', async () => {
+    await deck(data([claim({})], { lineupPreviews: { c: { issues: ['TE slot empty at lock'], reason: 'No tight end started.' } } }))
+    const review = screen.getByTestId('pirate-commish-review-c') as HTMLDetailsElement
+    expect(review.open).toBe(false)
+    expect(review.querySelector('summary')?.textContent).toBe('Commissioner review · needs a look')
   })
 })
 

@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 async function editor() {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rules: { protectionLimit: 3, claimHours: 24, selectionHours: 24, overflowGraceHours: 24, playoffClaims: false } }) }))
   render(<PirateRulesEditor leagueId="L" />)
-  await screen.findByLabelText('Protected players')
+  await screen.findByLabelText('Locks per team')
   return screen.getByTestId('pirate-rules-editor')
 }
 
@@ -31,7 +31,7 @@ describe('Pirate rules editor', () => {
 
   it('keeps every field labelled', async () => {
     await editor()
-    for (const label of ['Protected players', 'Winner selection (hours)', 'Claim response (hours)', 'Roster drop deadline (hours)']) {
+    for (const label of ['Locks per team', 'Time to pick a player', 'Time to answer a claim', 'Time to free a roster spot']) {
       expect(screen.getByLabelText(label)).toBeTruthy()
     }
     expect(screen.getByRole('checkbox', { name: /Allow steals in playoffs/ })).toBeTruthy()

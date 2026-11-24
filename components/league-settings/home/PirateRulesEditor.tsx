@@ -86,17 +86,17 @@ export function PirateRulesEditor({ leagueId, onSaved }: { leagueId: string; onS
       {rules ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
-            <RuleNumber label="Protected players" description="Maximum players each manager can protect from a steal." value={rules.protectionLimit} min={1} max={10} onChange={(protectionLimit) => { setRules({ ...rules, protectionLimit }); setSaved(false) }} />
-            <RuleNumber label="Winner selection (hours)" description="Time the winner has to choose an unprotected player." value={rules.selectionHours} min={1} max={72} onChange={(selectionHours) => { setRules({ ...rules, selectionHours }); setSaved(false) }} />
-            <RuleNumber label="Claim response (hours)" description="Time to accept or counter a claim before the player moves automatically." value={rules.claimHours} min={1} max={72} onChange={(claimHours) => { setRules({ ...rules, claimHours }); setSaved(false) }} />
-            <RuleNumber label="Roster drop deadline (hours)" description="Time to clear an extra roster spot after receiving a stolen player." value={rules.overflowGraceHours} min={0} max={72} onChange={(overflowGraceHours) => { setRules({ ...rules, overflowGraceHours }); setSaved(false) }} />
+            <RuleNumber label="Locks per team" unit="players" description="How many players each manager can lock so they can’t be taken." value={rules.protectionLimit} min={1} max={10} onChange={(protectionLimit) => { setRules({ ...rules, protectionLimit }); setSaved(false) }} />
+            <RuleNumber label="Time to pick a player" unit="hours" description="How long the winner has to choose an unlocked player." value={rules.selectionHours} min={1} max={72} onChange={(selectionHours) => { setRules({ ...rules, selectionHours }); setSaved(false) }} />
+            <RuleNumber label="Time to answer a claim" unit="hours" description="How long the team that lost has to accept or ask for a player back, before the player moves." value={rules.claimHours} min={1} max={72} onChange={(claimHours) => { setRules({ ...rules, claimHours }); setSaved(false) }} />
+            <RuleNumber label="Time to free a roster spot" unit="hours" description="How long a team over its roster limit after a steal has to drop someone. 0 means before its next move." value={rules.overflowGraceHours} min={0} max={72} onChange={(overflowGraceHours) => { setRules({ ...rules, overflowGraceHours }); setSaved(false) }} />
           </div>
           <label className="pr-well pr-text flex min-h-[52px] items-center gap-3 rounded-xl px-4 text-sm font-semibold">
             <input type="checkbox" checked={rules.playoffClaims} onChange={(event) => { setRules({ ...rules, playoffClaims: event.target.checked }); setSaved(false) }} className="size-5" style={{ accentColor: 'var(--pr-gold)' }} />
             Allow steals in playoffs
           </label>
           <p className="pr-muted text-xs leading-5">Set the playoff start week in Playoff settings.</p>
-          {!valid ? <p role="alert" className="pr-warn text-sm">Enter whole numbers within the ranges shown above.</p> : null}
+          {!valid ? <p role="alert" className="pr-warn text-sm">Use whole numbers in the ranges under each box.</p> : null}
           {!inSaveScope ? <button type="button" onClick={() => void save()} disabled={!valid || saving} className="pr-btn-gold min-h-[48px] w-full rounded-xl px-4 py-3 text-sm font-black disabled:opacity-45" data-testid="pirate-rules-save">
             {saving ? 'Saving…' : 'Save Pirate rules'}
           </button> : null}
@@ -107,12 +107,15 @@ export function PirateRulesEditor({ leagueId, onSaved }: { leagueId: string; onS
   )
 }
 
-function RuleNumber({ label, description, value, min, max, onChange }: { label: string; description: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+function RuleNumber({ label, unit, description, value, min, max, onChange }: { label: string; unit: string; description: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   return (
     <label className="pr-text text-sm font-semibold">
       {label}
-      <input aria-label={label} type="number" inputMode="numeric" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} className="pr-field mt-2 min-h-[48px] w-full rounded-xl px-3 text-base" />
-      <span className="pr-muted mt-1 block text-xs font-normal leading-5">{description} Allowed: {min}–{max}.</span>
+      <span className="mt-2 flex items-center gap-2">
+        <input aria-label={label} type="number" inputMode="numeric" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} className="pr-field min-h-[48px] w-24 rounded-xl px-3 text-base" />
+        <span className="pr-muted text-sm font-normal">{unit}</span>
+      </span>
+      <span className="pr-muted mt-1 block text-xs font-normal leading-5">{description} {min} to {max} {unit}.</span>
     </label>
   )
 }
