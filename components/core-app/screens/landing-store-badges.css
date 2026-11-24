@@ -1,5 +1,5 @@
 /* ── App Store / Google Play badges (LandingStoreBadges) ──
-   Used on /, /commissioners and /signup — imported by the component itself.
+   Used on /, /commissioners, /signup and /partner-code — imported by the component itself.
    OFFICIAL ARTWORK — see LandingStoreBadges.tsx before touching this block.
    Both badges render at the SAME height (Google: same size or larger than the others;
    Apple: at least 40px). Every gap around them is at least 1/4 of that height, which is
@@ -13,6 +13,7 @@
   gap: 12px; /* >= 1/4 of --af-store-h (11px) */
   margin-top: 14px;
 }
+.af-lp-store,
 .af-core .af-lp-store {
   display: inline-flex;
   line-height: 0;
