@@ -121,10 +121,31 @@ describe('Chimmy follow-up chips', () => {
     expect(chimmyCalls(fetchMock)).toHaveLength(1)
   })
 
+  /*
+   * The simplify pass (2026-11-24): an answer's Copy buttons and its thumbs share one row at its foot,
+   * and the evidence line is itself the toggle — no separate "What is this based on?" line.
+   */
+  it('puts Copy and the thumbs on one row, and makes the evidence line its own toggle', async () => {
+    ask('Set my best lineup for this week')
+    await screen.findByRole('group', { name: 'Ask next' }, COLD_MOUNT)
+    const foot = document.querySelector('[data-testid="chimmy-answer-foot"]')!
+    expect(foot.querySelector('.af-cm-copy')).not.toBeNull()
+    expect(foot.querySelector('.af-cm-rate')).not.toBeNull()
+    expect(document.querySelectorAll('.af-cm-copy')).toHaveLength(1)
+
+    const line = screen.getByRole('button', { name: /^What is this based on\?/ })
+    expect(line.classList.contains('af-cm-ev-row')).toBe(true)
+    expect(line.textContent).toContain('1 source')
+    expect(document.querySelector('.af-cm-evidence button.af-cm-ev-toggle')).toBeNull()
+    expect(line.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(line)
+    expect(line.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('labels the new analyst tools as readable sources', async () => {
     ask('Set my best lineup for this week')
     await screen.findByRole('group', { name: 'Ask next' }, COLD_MOUNT)
-    fireEvent.click(await screen.findByRole('button', { name: 'What is this based on?' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^What is this based on\?/ }))
     expect(await screen.findByText("Your best lineup, scored under your league's rules")).toBeTruthy()
   })
 })

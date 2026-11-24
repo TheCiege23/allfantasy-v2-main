@@ -1328,7 +1328,6 @@ export function ChimmyPanel({
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
                   {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
                   {readProUpsell(t.proUpsell).length > 0 ? <ChimmyProUpsell tools={readProUpsell(t.proUpsell)} /> : null}
-                  <ChimmyCopyActions text={t.text} />
                 </>
               ) : (
                 <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
@@ -1459,17 +1458,27 @@ export function ChimmyPanel({
                 Thumbs up / down — delivered answers only. Tagged with the tools the answer used
                 and the screen it was asked from, so a rating joins to the question it is about.
               */}
-              {t.role === 'chimmy' && t.answerId ? (
-                <ChimmyAnswerRating
-                  answerId={t.answerId}
-                  rating={t.rating ?? null}
-                  leagueId={(t.grounding?.grounded === true ? t.grounding.leagueId : null) ?? scopeId ?? null}
-                  surface={drawerFeedbackSurface(pageSurface, Boolean(scopeId))}
-                  mode={t.mode ?? answerMode}
-                  entry={questionEntry({ coreSurface: pageSurface, source })}
-                  tools={t.tools ?? []}
-                  onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
-                />
+              {/*
+                Copy and the thumbs share ONE row at the foot of an answer (2026-11-24, the simplify pass).
+                They were two rows — Copy under the prose, the thumbs at the bottom — around four more, so an
+                answer carried seven rows of controls. Copy is offered for a written answer only, as before.
+              */}
+              {t.role === 'chimmy' && (t.answerId || !readDeepAnalysisPreview(t.analysisPreview)) ? (
+                <div className="af-cm-answer-foot" data-testid="chimmy-answer-foot">
+                  {!readDeepAnalysisPreview(t.analysisPreview) ? <ChimmyCopyActions text={t.text} /> : null}
+                  {t.answerId ? (
+                    <ChimmyAnswerRating
+                      answerId={t.answerId}
+                      rating={t.rating ?? null}
+                      leagueId={(t.grounding?.grounded === true ? t.grounding.leagueId : null) ?? scopeId ?? null}
+                      surface={drawerFeedbackSurface(pageSurface, Boolean(scopeId))}
+                      mode={t.mode ?? answerMode}
+                      entry={questionEntry({ coreSurface: pageSurface, source })}
+                      tools={t.tools ?? []}
+                      onRated={(rating) => setTurns((all) => all.map((x) => (x.id === t.id ? { ...x, rating } : x)))}
+                    />
+                  ) : null}
+                </div>
               ) : null}
 
               {/*
