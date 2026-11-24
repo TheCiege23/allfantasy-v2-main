@@ -238,3 +238,10 @@
 .af-lsh-modal-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .af-lsh-modal-row .af-lsh-input { flex: 1 1 220px; width: auto; }
 .af-lsh-modal-foot { display: flex; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255,255,255,.06); }
+
+/* Folded section cards (2026-11-24, the simplify pass): the head is the summary, with a chevron. */
+.af-lsh-fold > summary.af-lsh-card-head { list-style: none; cursor: pointer; align-items: center; position: relative; padding-right: 40px; }
+.af-lsh-fold > summary::-webkit-details-marker { display: none; }
+.af-lsh-fold > summary::after { content: '▾'; position: absolute; right: 18px; top: 50%; translate: 0 -50%; color: var(--lsh-muted); font-size: 14px; }
+.af-lsh-fold[open] > summary::after { rotate: 180deg; }
+.af-lsh-fold:not([open]) > summary.af-lsh-card-head { padding-bottom: 18px; }

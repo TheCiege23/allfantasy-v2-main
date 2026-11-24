@@ -157,3 +157,37 @@ describe('Record Book by sport', () => {
     expect(screen.getAllByText(/College Basketball/).length).toBeGreaterThan(0)
   })
 })
+
+/*
+ * League Setup, simplified (2026-11-24): every section after General starts as one closed row, the
+ * Edit button in a closed row still opens its editor without toggling the row, and a section chip
+ * opens what it jumps to.
+ */
+describe('League Setup folds', () => {
+  const folds = () => [...document.querySelectorAll<HTMLDetailsElement>('details.af-lsh-fold')]
+  const fold = (id: string) => document.querySelector<HTMLDetailsElement>(`[data-testid="league-settings-fold-${id}"]`)!
+
+  it('opens General and closes every other section, each titled in its summary', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="setup" />)
+    expect(fold('general').open).toBe(true)
+    const closed = folds().filter((d) => !d.open).map((d) => d.querySelector('summary h2')?.textContent)
+    expect(closed).toEqual(expect.arrayContaining(['Waiver Settings', 'Roster Settings', 'Scoring Settings', 'Draft Settings']))
+    expect(folds().filter((d) => d.open)).toHaveLength(1)
+  })
+
+  it('Edit in a closed row opens the editor and leaves the row closed', () => {
+    const c = cb()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={c} initialTab="setup" />)
+    const edit = within(fold('draft').querySelector('summary') as HTMLElement).getByRole('button', { name: 'Edit' })
+    fireEvent.click(edit)
+    expect(c.onOpenEditor).toHaveBeenCalledWith('draft')
+    expect(fold('draft').open).toBe(false)
+  })
+
+  it('a section chip opens the section it jumps to', () => {
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={cb()} initialTab="setup" />)
+    expect(fold('scoring').open).toBe(false)
+    fireEvent.click(document.querySelector('.af-lsh-chips a[href="#af-lsh-scoring"]')!)
+    expect(fold('scoring').open).toBe(true)
+  })
+})
