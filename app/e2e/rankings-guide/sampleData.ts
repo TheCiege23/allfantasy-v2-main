@@ -56,6 +56,32 @@ export function portfolio() {
     freshness: { newestImport: '2026-11-14T05:00:00.000Z', rankCalculatedAt: '2026-11-14T05:40:00.000Z', ledgerRows: 14 },
   }
 }
+/** SAMPLE one-league view — twelve invented teams. */
+export function leagueView() {
+  const teams = ['Sample Leaders', 'Sample Longshots', 'Sample Chasers', 'Sample You', 'Sample Bubble', 'Sample Rivals', 'Sample Comeback', 'Sample Hawks', 'Sample Birds', 'Sample Donkeys', 'Sample Zebras', 'Sample Checks']
+  return {
+    leagues: [{ id: 'l1', name: 'Sample Keeper League', platform: 'sleeper', season: 2026 }],
+    selected: { id: 'l1', name: 'Sample Keeper League', platform: 'sleeper', season: 2026, lastSyncedAt: '2026-11-14T05:00:00.000Z' },
+    board: {
+      available: true,
+      reason: null,
+      week: 11,
+      seasonComplete: false,
+      rows: teams.map((name, i) => ({
+        rosterId: String(i + 1),
+        rank: i + 1,
+        name,
+        record: `${10 - Math.floor(i * 0.8)}-${Math.floor(i * 0.8)}`,
+        pointsFor: 1420 - i * 31.4,
+        average: (1420 - i * 31.4) / 11,
+        movement: i % 3 === 0 ? 1 : i % 3 === 1 ? -1 : 0,
+        isYou: name === 'Sample You',
+      })),
+    },
+    power: null,
+  }
+}
+
 const NAMES = ['SampleManagerOne', 'SampleManagerTwo', 'SampleManagerThree', 'SampleManagerFour', 'SampleManagerFive', 'SampleManagerSix', 'SampleManagerSeven', 'You', 'SampleManagerNine']
 const SCORES = [77.6, 76.2, 72.0, 71.4, 65.4, 61.4, 30.3, 25.9, 19.1]
 
@@ -87,7 +113,7 @@ function rows(youAt: number | null): BoardTableRow[] {
   })
 }
 
-export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: 'global' | 'portfolio' = 'global'): RankingsData {
+export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: 'global' | 'portfolio' | 'league' = 'global'): RankingsData {
   const youAt = you === 'none' ? null : you === 'top' ? 0 : 7
   const board = rows(youAt)
   const meta = BOARD_META.overall
@@ -143,7 +169,7 @@ export function data(you: 'mid' | 'top' | 'none', sport: string | null, scope: '
           : [],
     },
     portfolio: scope === 'portfolio' ? portfolio() : null,
-    league: null,
+    league: scope === 'league' ? leagueView() : null,
     classView: null,
   } as unknown as RankingsData
 }
