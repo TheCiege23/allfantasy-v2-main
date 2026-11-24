@@ -64,39 +64,39 @@ export function C2CPlayerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm md:items-center md:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-[var(--surface2)] p-0 backdrop-blur-sm md:items-center md:p-4"
       role="dialog"
       aria-modal="true"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       data-testid="c2c-player-modal"
     >
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/[0.08] bg-[#0a1228] p-5 shadow-2xl md:rounded-2xl">
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/[0.08] bg-[var(--surface)] p-5 shadow-2xl md:rounded-2xl">
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-[16px] font-bold text-white">{campus ? '🎓 Campus player' : '🏙 Canton player'}</h2>
+          <h2 className="text-[16px] font-bold text-[var(--text)]">{campus ? '🎓 Campus player' : '🏙 Canton player'}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-white/[0.06] px-2 py-1 text-[12px] text-white/60"
+            className="rounded-lg bg-white/[0.06] px-2 py-1 text-[12px] text-[var(--text2)]"
             data-testid="c2c-player-modal-close"
           >
             Close
           </button>
         </div>
 
-        <div className="mt-4 space-y-3 text-[13px] text-white/80">
-          <p className="text-[18px] font-bold text-white">{player.playerName}</p>
-          <p className="text-white/55">
+        <div className="mt-4 space-y-3 text-[13px] text-[var(--text)]">
+          <p className="text-[18px] font-bold text-[var(--text)]">{player.playerName}</p>
+          <p className="text-[var(--muted)]">
             {player.position}
             {campus && player.school ? ` · ${player.school}` : ''}
             {!campus && player.nflNbaTeam ? ` · ${player.nflNbaTeam}` : ''}
           </p>
 
           {countsTowardScore ? (
-            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-100">
+            <p className="rounded-lg border border-[var(--good)] bg-[var(--good-soft)] px-3 py-2 text-[12px] text-[var(--good)]">
               Counts toward team score: YES
             </p>
           ) : (
-            <p className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[12px] text-white/55">
+            <p className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[12px] text-[var(--muted)]">
               Display only — does not count
             </p>
           )}
@@ -105,34 +105,34 @@ export function C2CPlayerModal({
             <>
               {player.classYear ? (
                 <p>
-                  <span className="text-white/45">Class: </span>
+                  <span className="text-[var(--muted)]">Class: </span>
                   {player.classYear}
                 </p>
               ) : null}
               {player.projectedDeclarationYear ? (
                 <p>
-                  <span className="text-white/45">Declaration: </span>
+                  <span className="text-[var(--muted)]">Declaration: </span>
                   {player.projectedDeclarationYear}
                 </p>
               ) : null}
               {player.hasEnteredPro && player.proEntryYear ? (
                 <p>
-                  <span className="text-white/45">Pro entry: </span>
+                  <span className="text-[var(--muted)]">Pro entry: </span>
                   {player.proEntryYear}
                 </p>
               ) : null}
-              <p className="text-[11px] text-white/40">
+              <p className="text-[11px] text-[var(--muted)]">
                 Season stats and a weekly breakdown appear here once this player has scored games.
               </p>
             </>
           ) : (
             <>
               <p>
-                <span className="text-white/45">Rookie: </span>
+                <span className="text-[var(--muted)]">Rookie: </span>
                 {player.isRookieEligible ? 'Yes' : 'No'}
               </p>
               <p>
-                <span className="text-white/45">Taxi: </span>
+                <span className="text-[var(--muted)]">Taxi: </span>
                 {player.isTaxiEligible ? `Eligible (${player.taxiYearsUsed ?? 0} yrs used)` : 'N/A'}
               </p>
             </>
@@ -140,38 +140,38 @@ export function C2CPlayerModal({
         </div>
 
         {aiErr ? (
-          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100" data-testid="c2c-player-ai-error">
+          <p className="mt-3 rounded-lg border border-[var(--c2c-amber-line)] bg-[var(--c2c-amber-soft)] px-3 py-2 text-[12px] text-[var(--c2c-amber)]" data-testid="c2c-player-ai-error">
             {aiErr}
           </p>
         ) : null}
 
         {aiEval ? (
           <div
-            className="mt-4 space-y-2 rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3 text-[12px] text-white/85"
+            className="mt-4 space-y-2 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3 text-[12px] text-[var(--text)]"
             data-testid="c2c-player-ai-panel"
           >
-            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Chimmy — campus + canton</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--accent)]">Chimmy — campus + canton</p>
             <p>
-              <span className="text-white/45">Campus grade: </span>
+              <span className="text-[var(--muted)]">Campus grade: </span>
               {aiEval.campusGrade}
             </p>
             <p>
-              <span className="text-white/45">Canton projection: </span>
+              <span className="text-[var(--muted)]">Canton projection: </span>
               {aiEval.cantonProjection}
             </p>
             <p>
-              <span className="text-white/45">Start: </span>
+              <span className="text-[var(--muted)]">Start: </span>
               {aiEval.startRec}
             </p>
             <p>
-              <span className="text-white/45">Declaration risk: </span>
+              <span className="text-[var(--muted)]">Declaration risk: </span>
               {aiEval.declarationRisk}
             </p>
             <p>
-              <span className="text-white/45">Hold: </span>
+              <span className="text-[var(--muted)]">Hold: </span>
               {aiEval.holdRecommendation}
             </p>
-            <p className="text-white/75">{aiEval.verdict}</p>
+            <p className="text-[var(--text2)]">{aiEval.verdict}</p>
           </div>
         ) : null}
 
@@ -180,7 +180,7 @@ export function C2CPlayerModal({
             <button
               type="button"
               disabled
-              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[12px] text-white/35"
+              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[12px] text-[var(--faint)]"
               title="Available after player enters the league"
             >
               Move to Canton Bench (after pro entry)
@@ -189,7 +189,7 @@ export function C2CPlayerModal({
             <button
               type="button"
               disabled
-              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-200/80"
+              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-[var(--bad)]"
             >
               Move to Campus — not allowed
             </button>
@@ -198,23 +198,23 @@ export function C2CPlayerModal({
             <button
               type="button"
               disabled
-              className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-white/45"
+              className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-[var(--muted)]"
             >
               Drop
             </button>
             <button
               type="button"
               disabled
-              className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-white/45"
+              className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-[var(--muted)]"
             >
               Trade
             </button>
             {!campus ? (
               <>
-                <button type="button" disabled className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-white/45">
+                <button type="button" disabled className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-[var(--muted)]">
                   Taxi
                 </button>
-                <button type="button" disabled className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-white/45">
+                <button type="button" disabled className="rounded-lg border border-white/[0.08] px-3 py-2 text-[12px] text-[var(--muted)]">
                   IR
                 </button>
               </>
@@ -225,15 +225,15 @@ export function C2CPlayerModal({
               type="button"
               onClick={() => void runCampusAi()}
               disabled={aiLoading}
-              className="mt-2 inline-flex justify-center rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-200 hover:bg-cyan-500/15 disabled:opacity-50"
+              className="mt-2 inline-flex justify-center rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-[12px] font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
               data-testid="c2c-player-modal-ai"
             >
               {aiLoading ? 'Analyzing…' : 'Chimmy Analysis (AF Commissioner)'}
             </button>
           ) : campus ? (
-            <p className="text-center text-[11px] text-white/35">Chimmy analysis requires AF Commissioner.</p>
+            <p className="text-center text-[11px] text-[var(--faint)]">Chimmy analysis requires AF Commissioner.</p>
           ) : (
-            <p className="text-center text-[11px] text-white/35">Campus Chimmy evaluates college prospects (open a campus player).</p>
+            <p className="text-center text-[11px] text-[var(--faint)]">Campus Chimmy evaluates college prospects (open a campus player).</p>
           )}
         </div>
       </div>

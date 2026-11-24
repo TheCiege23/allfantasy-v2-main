@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { C2CPageFrame } from '@/app/c2c/components/C2CPageFrame'
 import { notFound } from 'next/navigation'
 import C2CLeagueLayout from '@/app/c2c/[leagueId]/layout'
 import { C2CRosterClient } from '@/app/c2c/[leagueId]/roster/C2CRosterClient'
@@ -9,7 +9,7 @@ import { HARNESS_USER_ID } from '../../fixtures'
 const SCREENS = ['roster', 'campus', 'canton', 'matchup', 'picks'] as const
 type Screen = (typeof SCREENS)[number]
 const TITLE: Record<Screen, string> = {
-  roster: 'C2C franchise', campus: 'Campus', canton: 'Canton', matchup: 'C2C Matchup', picks: 'C2C Picks',
+  roster: 'C2C franchise', campus: '🎓 Campus', canton: '🏙 Canton', matchup: 'C2C matchup', picks: 'C2C picks',
 }
 
 /**
@@ -30,16 +30,7 @@ export default async function C2CHarnessPage({ params }: { params: Promise<{ lea
   const screen = raw as Screen
   return (
     <C2CLeagueLayout>
-      <div className="min-h-screen bg-[#040915]">
-        <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0c0c1e]/95 px-4 py-3 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-2">
-            <Link href={`/league/${leagueId}`} className="text-[12px] font-semibold text-cyan-300/90 hover:text-cyan-200">
-              ← League
-            </Link>
-            <span className="truncate text-[13px] font-bold text-white">{TITLE[screen]}</span>
-            <span className="w-12" />
-          </div>
-        </header>
+      <C2CPageFrame leagueId={leagueId} title={TITLE[screen]} tone={screen === 'campus' || screen === 'canton' ? screen : 'neutral'}>
         {screen === 'roster' || screen === 'campus' || screen === 'canton' ? (
           <C2CRosterClient
             leagueId={leagueId}
@@ -50,7 +41,7 @@ export default async function C2CHarnessPage({ params }: { params: Promise<{ lea
         ) : null}
         {screen === 'matchup' ? <C2CMatchupClient leagueId={leagueId} userId={HARNESS_USER_ID} /> : null}
         {screen === 'picks' ? <C2CPicksClient leagueId={leagueId} rosterId="ro-me" /> : null}
-      </div>
+      </C2CPageFrame>
     </C2CLeagueLayout>
   )
 }
