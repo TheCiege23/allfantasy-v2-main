@@ -227,3 +227,17 @@ describe('GuillotineFirstChopEditor', () => {
     expect(screen.queryByTestId('lsh-save')).toBeNull()
   })
 })
+
+describe('Delete league has its own row (2026-11-24)', () => {
+  const rowIds = (i: BuildSettingsHomeInput) => buildLeagueSettingsHome(i).flatMap((s) => s.rows.map((r) => r.id))
+
+  it('the head commissioner gets a Delete league row that opens its own sub-page', () => {
+    const row = buildLeagueSettingsHome(input({ canDelete: true })).flatMap((s) => s.rows).find((r) => r.id === 'delete-league')
+    expect(row).toMatchObject({ label: 'Delete league', target: 'delete-league' })
+  })
+
+  it('a co-commissioner (canEdit, not canDelete) and a member get no Delete league row', () => {
+    expect(rowIds(input())).not.toContain('delete-league')
+    expect(rowIds(input({ canEdit: false, canDelete: false }))).not.toContain('delete-league')
+  })
+})

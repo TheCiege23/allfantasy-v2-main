@@ -35,6 +35,7 @@ export const SETTINGS_SUB_PAGE_IDS: readonly SettingsSubPageId[] = [
   'settings-lock',
   'score-adjustments',
   'survivor-tribes',
+  'delete-league',
 ]
 
 /**

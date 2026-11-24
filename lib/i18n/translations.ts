@@ -73,6 +73,8 @@ export const translations: Record<string, Record<string, string>> = {
     "lsh.cc.sub.survivorTribes": "Tribus y asignación",
     "lsh.cc.nav.ai": "Chimmy de la liga",
     "lsh.cc.sub.ai": "Asistentes e inteligencia",
+    "lsh.cc.nav.deleteLeague": "Eliminar liga",
+    "lsh.cc.sub.deleteLeague": "La elimina para todos los miembros",
     "lsh.cc.paneFallback": "Ajustes",
     "lsh.cc.unavailable": "Esta sección no está disponible para esta liga.",
     "lsh.cc.tools.title": "Más herramientas del comisionado",

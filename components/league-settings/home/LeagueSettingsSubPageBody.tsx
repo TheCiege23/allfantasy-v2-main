@@ -95,11 +95,14 @@ export function LeagueSettingsSubPageBody({
         <div className="space-y-10">
           <CommissionerControlPanel leagueId={leagueId} initialView={ctx.commissionerToolsView ?? null} />
           <LeagueHistoryPanel leagueId={leagueId} />
-          {ctx.isHeadCommissioner ? (
-            <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} platform={ctx.league.platform} leagueName={ctx.league.name} />
-          ) : null}
         </div>
       )
+      break
+    case 'delete-league':
+      // Its own section now (it sat at the bottom of Lineups, locks & schedule, below the league history).
+      body = ctx.isHeadCommissioner ? (
+        <DeleteLeagueFromAfPanel leagueId={leagueId} currentUserId={ctx.userId} leagueOwnerUserId={ctx.league.userId} platform={ctx.league.platform} leagueName={ctx.league.name} />
+      ) : null
       break
     case 'dues':
       // Its own section now (it was buried in Commissioner tools). Tracking only — see DuesTrackingNote.
