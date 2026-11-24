@@ -1558,3 +1558,55 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-earnfold > summary::after { content: '▾'; font-size: 11px; }
 .af-rk-earnfold[open] > summary::after { content: '▴'; }
 .af-rk-earnfold[open] > .af-rk-earn { margin-top: 4px; }
+
+/*
+ * Phone rows in two lines, not three (2026-11-24, the simplify pass). A leaderboard card was the name,
+ * its sub-line, then a third line holding only the 7-day move, Why and More — ~103px a row. Now the title
+ * cell (name over sub-line) is the left column of two lines and the visible chips sit to the right of the
+ * sub-line. The NAME may run past its column into line one's empty right side (the score is top-right, as
+ * before), capped short of the score, so it stays on one line; the sub-line ends with an ellipsis. Only the
+ * Community board's rows (the ones with a Why button, `.af-rk-cellbtn`) — the portfolio, league and Class
+ * tables keep their layout. An open "More" drops to a full-width line of its own.
+ */
+@media (max-width: 720px) {
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+    grid-template-rows: 22px auto;
+    row-gap: 4px;
+    align-items: center;
+  }
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > [data-card='title'] {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    padding-right: 8px;
+    overflow: visible;
+  }
+  /* The name: one line, allowed past the column, capped short of the score. */
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > [data-card='title'] .af-rk-namebody,
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > [data-card='title'] .af-rk-namecell {
+    display: block;
+    width: max-content;
+    max-width: calc(100vw - 168px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The sub-line: only as wide as the column, ending in an ellipsis before the chips. */
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > [data-card='title'] .af-rk-cellsub {
+    max-width: calc(100vw - 296px);
+  }
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > [data-card='detail'],
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > td.af-rk-phonemore {
+    grid-row: 2;
+    margin: 0 0 0 8px;
+  }
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) > td.af-rk-phonemore:has(details[open]) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin: 6px 0 0;
+  }
+  /* A long label in the open list wraps instead of running under its number. */
+  .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) .af-rk-phonemore-list dt { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+}
