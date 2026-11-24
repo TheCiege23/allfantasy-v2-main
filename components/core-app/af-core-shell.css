@@ -5063,3 +5063,24 @@ button.af-rail-sport:focus-visible {
     min-height: 44px;
   }
 }
+
+/*
+ * The More sheet, two to a row (2026-11-24, the simplify pass). One screen per 48px row made a list
+ * ~2.4x the sheet's height; two columns of the same rows halve it, and each row keeps its 48px tap
+ * height. Group headings span both columns. Import and Create lead the sheet in the accent.
+ */
+@media (max-width: 720px) {
+  .af-core .af-mobile-more-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 6px;
+  }
+  .af-core .af-mobile-more-group > .af-label { grid-column: 1 / -1; }
+  .af-core .af-mobile-more-link { padding: 0 8px; gap: 8px; line-height: 1.2; }
+  .af-core .af-mobile-more-link > span:not(.af-mobile-more-icon) { min-width: 0; overflow-wrap: anywhere; }
+  .af-core .af-mobile-more-add {
+    border: 1px solid var(--accent-line);
+    color: var(--accent);
+  }
+  .af-core .af-mobile-more-group + .af-mobile-more-group:not(:has(> .af-label)) { margin-top: 8px; }
+}

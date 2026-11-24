@@ -55,11 +55,14 @@ function shell(props: Record<string, unknown> = {}) {
   }))
   fireEvent.click(getByRole('button', { name: 'More' }))
   const more = Array.from(document.querySelectorAll('.af-mobile-more a')).map((a) => a.getAttribute('href') ?? '')
+  // The phone's bar: since 2026-11-24 the More sheet leaves out what the bar already shows, so a
+  // phone reaches those screens here instead.
+  const bar = Array.from(container.querySelectorAll('.af-tabbar a')).map((a) => a.getAttribute('href') ?? '')
   const hrefs = groups.flatMap((g) => g.hrefs)
   // Inside a league the rail is Sleeper's tabs; the open tab's screens are the links above the screen.
   const tabs = Array.from(rail.querySelectorAll('[data-league-tab]')).map((a) => a.getAttribute('data-league-tab') ?? '')
   const subtabs = Array.from(container.querySelectorAll('[data-testid=af-subtabs] a')).map((a) => a.getAttribute('href') ?? '')
-  return { container, groups, hrefs, tabs, subtabs, more, reachable: [...hrefs, ...more] }
+  return { container, groups, hrefs, tabs, subtabs, more, bar, reachable: [...hrefs, ...more, ...bar] }
 }
 
 /**
@@ -227,7 +230,7 @@ describe('the rail, grouped by job', () => {
 })
 
 describe('nothing the tab row carried became unreachable', () => {
-  it('every tab-row view is a rail link — and so a tablet and phone More sheet link too', () => {
+  it('every tab-row view is a rail link — and so a phone bar or More sheet link too', () => {
     const keys = tabRowKeys()
     expect(keys.length).toBeGreaterThan(10)
     const { reachable } = shell()

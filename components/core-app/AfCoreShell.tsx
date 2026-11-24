@@ -1406,6 +1406,18 @@ function AfCoreShell(incoming: AfCoreShellProps) {
       return item ? [item] : []
     })
   }, [props])
+  /*
+   * The phone's More sheet, without what the bar below it already shows (2026-11-24, the simplify pass).
+   * It listed every screen — 27 rows, ~1,420px in a ~590px sheet — and five of them (Home, My team,
+   * Matchup, Waivers, Trades) were the bar's own tabs, visible under the sheet the whole time. The sheet
+   * is only opened from that bar, so nothing here becomes unreachable. A group left empty is dropped.
+   */
+  const moreSections = useMemo(() => {
+    const onBar = new Set(mobileItems.map((i) => i.key))
+    return sections
+      .map((section) => ({ ...section, items: section.items.filter((item) => !onBar.has(item.key)) }))
+      .filter((section) => section.items.length > 0)
+  }, [sections, mobileItems])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
   /*
    * The nav entry to light for this screen. Portfolio has no entry of its own since 2026-11-12; it
@@ -3229,6 +3241,20 @@ function AfCoreShell(incoming: AfCoreShellProps) {
               </div>
             ) : (
             <div className="af-mobile-more-list">
+              <div className="af-mobile-more-group" data-testid="af-more-add">
+                {/*
+                  Import and Create, first thing in More (2026-11-24, owner: adding a league on a phone
+                  "shouldn't be so hard"). They were only on the computer's rail and in the league switcher.
+                */}
+                <Link href="/import" className="af-mobile-more-link af-mobile-more-add" data-testid="af-more-import" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
+                  <span className="af-mobile-more-icon" aria-hidden>⇣</span>
+                  <span>{copy('Import a league')}</span>
+                </Link>
+                <Link href="/create-league" className="af-mobile-more-link af-mobile-more-add" data-testid="af-more-create" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
+                  <span className="af-mobile-more-icon" aria-hidden>＋</span>
+                  <span>{copy('Create a league')}</span>
+                </Link>
+              </div>
               {/* The league tray, which had its own bar tab until Waivers took the slot (see MOBILE_BAR_KEYS). */}
               <div className="af-mobile-more-group">
                 <button
@@ -3268,7 +3294,7 @@ function AfCoreShell(incoming: AfCoreShellProps) {
                   </ScopeResetLink>
                 ) : null}
               </div>
-              {sections.map((section) => (
+              {moreSections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
                   {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
                   {section.items.map((item) => (
