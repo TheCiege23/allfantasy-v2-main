@@ -103,7 +103,8 @@ function statusOf(r: DraftHqAllRow, m: Copy): { label: string; sev: 'bad' | 'war
 /** The one line under a card. Computed from the row, never generated — it cannot say what the board does not show. */
 function lineOf(r: DraftHqAllRow, m: Copy): string | null {
   if (r.rawStatus === 'paused') return m.linePaused
-  if (r.yoursOnClock) return m.lineYourPick
+  /* No line on your own pick (2026-11-24): the card's tag says YOUR PICK and "On the clock" says You. */
+  if (r.yoursOnClock) return null
   if (r.phase === 'live' && r.yourSlot == null) return m.lineSlotUnknown
   if (r.phase === 'live') return r.onClockName ? m.lineOnClock(r.onClockName) : m.lineRunning
   return null
@@ -159,8 +160,15 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
 
   return (
     <div className="af-bd-card-body">
-      <div className="af-bd-side">
-        <span className="af-bd-side-label">{m.lastPicks}</span>
+      {/*
+        Last picks, closed until tapped (2026-11-24, the simplify pass): four rows per running draft, on a
+        page that can hold several, and the board one tap away shows every pick anyway.
+      */}
+      <details className="af-bd-side af-bd-sidefold" data-testid="draft-last-picks">
+        <summary className="af-bd-side-label">
+          {m.lastPicks}
+          {board.length > 0 ? <span className="af-bd-sidefold-n"> · {board.length}</span> : null}
+        </summary>
         {board.length > 0 ? (
           board.map((p) => (
             <span className="af-bd-asset" key={p.overall}>
@@ -202,7 +210,7 @@ function LiveDetail({ row, picks, m }: { row: DraftHqAllRow; picks: LiveDraftPic
             <span className="af-bd-asset-name">{m.noPicks}</span>
           </span>
         )}
-      </div>
+      </details>
 
       {queue.length > 0 ? (
         <div className="af-bd-side">
@@ -315,9 +323,15 @@ function Row({ row, m }: { row: DraftHqAllRow; m: Copy }) {
           </span>
         ) : null}
       </span>
-      <span className="af-bd-tag" data-sev={status.sev}>
-        {status.label}
-      </span>
+      {/*
+        The plain "Not started" / "Complete" tag is not drawn (2026-11-24): the section heading above these
+        rows already says it. A raw provider status we could not place still shows, since nothing else does.
+      */}
+      {row.phase === 'upcoming' || row.phase === 'done' ? null : (
+        <span className="af-bd-tag" data-sev={status.sev}>
+          {status.label}
+        </span>
+      )}
       <Link className="af-bd-btn af-dh-row-btn" href={boardHref(row)}>
         {buttonLabel(row, m)}
       </Link>
