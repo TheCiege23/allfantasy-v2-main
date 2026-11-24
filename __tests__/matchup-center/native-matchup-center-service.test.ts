@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   rounds: [] as any[],
   players: [] as any[],
   scores: [] as any[],
+  injuries: [] as any[],
   calls: { scores: 0, rounds: 0, seasons: 0 },
 }))
 const engine = vi.hoisted(() => ({ scoreRosterForWeek: vi.fn() }))
@@ -29,6 +30,7 @@ vi.mock('@/lib/prisma', () => ({
     redraftPlayoffRound: { findMany: vi.fn(async () => { db.calls.rounds += 1; return db.rounds }) },
     redraftRosterPlayer: { findMany: vi.fn(async ({ where }: any) => db.players.filter((p) => where.rosterId.in.includes(p.rosterId))) },
     roster: { findMany: vi.fn(async () => []) },
+    sportsInjury: { findMany: vi.fn(async () => db.injuries) },
     afRosterLineupAssignment: { findMany: vi.fn(async () => []) },
     leaguePlayerWeeklyScore: {
       findMany: vi.fn(async ({ where }: any) => {
@@ -63,6 +65,7 @@ const ok = <T,>(v: T | { error: string; status: number; code?: string } | null):
 }
 
 beforeEach(() => {
+  db.injuries = []
   db.seasons = [{ id: 'S', season: 2026, currentWeek: 2, playoffStartWeek: 15, rosters: [roster('rA', 'me', 'Aces', 0, 1), roster('rB', 'u2', 'Bears', 1, 0), roster('rC', 'u3', 'Cubs'), roster('rD', 'u4', 'Ducks')] }]
   db.matchups = [
     { id: 'm1', seasonId: 'S', week: 1, homeRosterId: 'rA', awayRosterId: 'rB', homeScore: 681, awayScore: 718, status: 'final', isMedianMatchup: false },
@@ -105,6 +108,19 @@ describe('the viewer’s matchup, from the league’s own season', () => {
     expect(first).toMatchObject({ opponent: 'NYG', headshotUrl: 'h', outlook: { homeAway: 'away', kickoffTimeIso: '2026-11-22T18:00:00.000Z', opponentRank: rank, teamLogoUrl: 't', byeWeek: 7, weather: null } })
     // A player the outlook says nothing about is as he was.
     expect(second).toMatchObject({ opponent: null, outlook: null })
+  })
+
+  // The stored injuryStatus is a draft-time snapshot; the tab showed it raw (and never drew it).
+  it('flags a starter from his live designation, never from the stored snapshot', async () => {
+    const pg = db.players.find((p) => p.playerId === 'a-pg')
+    const c = db.players.find((p) => p.playerId === 'a-c')
+    pg.injuryStatus = null
+    c.injuryStatus = 'Out' // stale: no live row says so
+    db.injuries = [{ sport: 'NBA', playerId: 'a-pg', playerName: 'Name a-pg', status: 'Questionable', fetchedAt: new Date() }]
+    const p = ok(await buildNativeMatchupCenterPayload({ league: LEAGUE, viewerUserId: 'me' }))
+    const byId = new Map(p.left.starters.map((s) => [s.playerId, s.injuryStatus]))
+    expect(byId.get('a-pg')).toBe('Questionable')
+    expect(byId.get('a-c')).toBeNull()
   })
 
   it('[control] a failed outlook leaves the matchup standing', async () => {

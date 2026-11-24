@@ -249,7 +249,21 @@ export async function attachPlayerMediaBatch(
 
   if (toResolve.length === 0) return results
 
-  const sleeperIds = toResolve.map(p => p.playerId)
+  /*
+   * 🛑 EVERY LOOKUP HERE IS PER SPORT (2026-11-24). This batch matched `SportsPlayer.sleeperId` across
+   * ALL sports and `SportsPlayerRecord.id` by the bare id. Record ids are `<SPORT>:<id>`, so the second
+   * never matched; and a hosted NBA league's Rolling Insights id that equals some other sport's Sleeper
+   * id put that other player's face — often an NFL player's — on the NBA player. The single-player
+   * resolver above already filtered by sport. Results are keyed `<SPORT>|<id>` for the same reason.
+   */
+  const keyOf = (sport: string, id: string) => `${sport.toUpperCase()}|${id}`
+  const idsBySport = new Map<string, string[]>()
+  for (const p of toResolve) {
+    const sp = p.sport.toUpperCase()
+    const list = idsBySport.get(sp) ?? []
+    list.push(p.playerId)
+    idsBySport.set(sp, list)
+  }
 
   let identityMap = new Map<string, { currentTeam: string | null }>()
   let sportsPlayerMap = new Map<string, { imageUrl: string | null; team: string | null }>()
@@ -258,42 +272,49 @@ export async function attachPlayerMediaBatch(
 
   try {
     const prisma = await getPrismaClient()
-    const identities = await prisma.playerIdentityMap.findMany({
-      where: { sleeperId: { in: sleeperIds } },
-      select: { sleeperId: true, currentTeam: true },
-    })
-    for (const id of identities) {
-      if (id.sleeperId) identityMap.set(id.sleeperId, { currentTeam: id.currentTeam })
-    }
-
-    const sportsPlayers = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: sleeperIds } },
-      select: SPORTS_PLAYER_ROW,
-      orderBy: { fetchedAt: 'desc' },
-    }))
-    const authoritative = authoritativeRowsBySleeperId(sportsPlayers)
-    for (const id of sleeperIds) {
-      const sp = authoritative.get(id.trim().toLowerCase())
-      if (sp) sportsPlayerMap.set(id, { imageUrl: sp.imageUrl, team: sp.team })
-    }
-
-    const sportsPlayerRecords = await prisma.sportsPlayerRecord.findMany({
-      where: { id: { in: sleeperIds } },
-      select: { id: true, headshotUrl: true, team: true, logoUrl: true },
-    })
-    for (const row of sportsPlayerRecords) {
-      sportsPlayerRecordMap.set(row.id, {
-        headshotUrl: row.headshotUrl,
-        team: row.team,
-        logoUrl: row.logoUrl,
+    // The identity map is a Sleeper NFL crosswalk.
+    const nflIds = idsBySport.get('NFL') ?? []
+    if (nflIds.length > 0) {
+      const identities = await prisma.playerIdentityMap.findMany({
+        where: { sleeperId: { in: nflIds } },
+        select: { sleeperId: true, currentTeam: true },
       })
+      for (const id of identities) {
+        if (id.sleeperId) identityMap.set(keyOf('NFL', id.sleeperId), { currentTeam: id.currentTeam })
+      }
+    }
+
+    for (const [sport, ids] of idsBySport) {
+      const sportsPlayers = await scrubWrongHeadshots(await prisma.sportsPlayer.findMany({
+        where: { sleeperId: { in: ids }, sport },
+        select: SPORTS_PLAYER_ROW,
+        orderBy: { fetchedAt: 'desc' },
+      }))
+      const authoritative = authoritativeRowsBySleeperId(sportsPlayers)
+      for (const id of ids) {
+        const sp = authoritative.get(id.trim().toLowerCase())
+        if (sp) sportsPlayerMap.set(keyOf(sport, id), { imageUrl: sp.imageUrl, team: sp.team })
+      }
+
+      const sportsPlayerRecords = await prisma.sportsPlayerRecord.findMany({
+        where: { id: { in: ids.map((id) => `${sport}:${id}`) } },
+        select: { id: true, headshotUrl: true, team: true, logoUrl: true },
+      })
+      for (const row of sportsPlayerRecords) {
+        sportsPlayerRecordMap.set(keyOf(sport, row.id.slice(sport.length + 1)), {
+          headshotUrl: row.headshotUrl,
+          team: row.team,
+          logoUrl: row.logoUrl,
+        })
+      }
     }
 
     const uniqueTeams = Array.from(new Set(toResolve
       .map((player) => {
-        const identity = identityMap.get(player.playerId)
-        const sportsPlayer = sportsPlayerMap.get(player.playerId)
-        const sportsRecord = sportsPlayerRecordMap.get(player.playerId)
+        const k = keyOf(player.sport, player.playerId)
+        const identity = identityMap.get(k)
+        const sportsPlayer = sportsPlayerMap.get(k)
+        const sportsRecord = sportsPlayerRecordMap.get(k)
         return `${player.sport.toUpperCase()}:${identity?.currentTeam || sportsPlayer?.team || sportsRecord?.team || player.teamAbbr || ''}`
       })
       .filter((key) => key.split(':')[1])))
@@ -323,9 +344,10 @@ export async function attachPlayerMediaBatch(
   }
 
   for (const p of toResolve) {
-    const identity = identityMap.get(p.playerId)
-    const sportsPlayer = sportsPlayerMap.get(p.playerId)
-    const sportsPlayerRecord = sportsPlayerRecordMap.get(p.playerId)
+    const k = keyOf(p.sport, p.playerId)
+    const identity = identityMap.get(k)
+    const sportsPlayer = sportsPlayerMap.get(k)
+    const sportsPlayerRecord = sportsPlayerRecordMap.get(k)
 
     const dbTeamAbbr = identity?.currentTeam || sportsPlayer?.team || sportsPlayerRecord?.team || null
     const effectiveTeam = dbTeamAbbr || p.teamAbbr

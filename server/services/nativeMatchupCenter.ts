@@ -8,6 +8,8 @@
  * each player counted for when the week has no stored player rows (playoff weeks store none).
  */
 
+import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
+import { resolveStoredHeadshotsBatch } from '@/lib/draft-room/storedPickHeadshot'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
@@ -318,7 +320,42 @@ export async function buildNativeMatchupCenterPayload(params: {
   }
   const myStarters = startersOf(myRosterId)
   const oppStarters = oppRosterId ? startersOf(oppRosterId) : []
-  const injuryOf = new Map(players.filter((p) => p.droppedAt == null).map((p) => [`${p.rosterId}|${p.playerId}`, p.injuryStatus]))
+  /*
+   * 🛑 THE STORED STATUS IS STALE BY CONSTRUCTION (2026-11-24). `RedraftRosterPlayer.injuryStatus` is a
+   * snapshot from draft/import time; the roster route already discards it for the live `SportsInjury`
+   * designation (app/api/redraft/roster/route.ts), and the matchup tab read it raw. Same read here: the
+   * snapshot is cleared and only a live row (id + name agreeing, see rosterInjuryStatus.ts) sets a status.
+   */
+  const activeRows = players.filter((p) => p.droppedAt == null)
+  const injuryOf = new Map<string, string | null>()
+  try {
+    const starterIds = new Set([...myStarters, ...oppStarters].map((s) => s.playerId))
+    const wanted = activeRows.filter((p) => starterIds.has(p.playerId))
+    const leagueSport = String(league.sport ?? 'NFL').toUpperCase()
+    if (wanted.length > 0) {
+      const rows = await prisma.sportsInjury.findMany({
+        where: {
+          sport: leagueSport,
+          expiresAt: { gte: new Date() },
+          AND: [
+            { OR: [{ playerId: { in: wanted.map((p) => p.playerId) } }, { playerName: { in: wanted.map((p) => p.playerName) } }] },
+            { OR: [{ season: season.season }, { season: null }] },
+            // An NFL designation is for a week; a daily sport's rows are not week-tagged.
+            ...(leagueSport === 'NFL' ? [{ OR: [{ week }, { week: null }] }] : []),
+          ],
+        },
+        orderBy: [{ fetchedAt: 'desc' }],
+        take: Math.max(50, wanted.length * 3),
+      })
+      const stamped = applyInjuryStatuses(
+        wanted.map((p) => ({ rosterId: p.rosterId, playerId: p.playerId, playerName: p.playerName, sport: leagueSport, injuryStatus: null as string | null })),
+        rows,
+      )
+      for (const p of stamped) injuryOf.set(`${p.rosterId}|${p.playerId}`, p.injuryStatus ?? null)
+    }
+  } catch {
+    // No live read: no flag, rather than last month's.
+  }
 
   const sport = normalizeToSupportedSport(String(league.sport)) ?? 'NFL'
   let mediaMap: Awaited<ReturnType<typeof attachPlayerMediaBatch>> | null = null
@@ -329,6 +366,11 @@ export async function buildNativeMatchupCenterPayload(params: {
   } catch {
     mediaMap = null
   }
+  // Outside the NFL a hosted league's ids are Rolling Insights ids, which collide with Sleeper ids, so the
+  // photo comes from the RI row (name-checked) and the Sleeper-id media is never used for it.
+  const storedHeadshots = sport === 'NFL'
+    ? new Map<string, string>()
+    : await resolveStoredHeadshotsBatch(sport, [...myStarters, ...oppStarters].map((p) => ({ playerId: p.playerId, playerName: p.name, team: p.team ?? null })))
   const afByPlayer = await loadMatchupAfProjections({
     leagueId: league.id,
     playerIds: [...myStarters, ...oppStarters].map((p) => p.playerId),
@@ -357,7 +399,9 @@ export async function buildNativeMatchupCenterPayload(params: {
       position: row.position,
       team: row.team,
       opponent: o?.opponent ?? null,
-      headshotUrl: mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null,
+      headshotUrl: sport === 'NFL'
+        ? mediaMap?.get(row.playerId)?.media.headshotUrl ?? o?.headshotUrl ?? null
+        : storedHeadshots.get(row.playerId) ?? o?.headshotUrl ?? null,
       currentPoints: pts,
       projectedPoints: afByPlayer.get(row.playerId) ?? pts,
       hasRealProjection: afByPlayer.has(row.playerId),

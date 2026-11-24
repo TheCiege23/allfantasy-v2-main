@@ -10,6 +10,7 @@
  * request path.
  */
 import { prisma } from '@/lib/prisma'
+import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
@@ -44,6 +45,16 @@ export async function backfillPreLeagueWeeks(params: {
     select: { id: true, leagueId: true, sport: true, currentWeek: true },
   })
   if (!season) return result
+
+  /*
+   * 🛑 NO HEAD-TO-HEAD WEEKS FOR A FORMAT WITH NO HEAD-TO-HEAD (2026-11-24). Survivor and guillotine
+   * play no schedule — `ensureScheduleForNewSeason` skips both on purpose — but this built a round-robin
+   * for the missed weeks anyway, so a Survivor league drafted in NBA week 6 showed five weeks of fake
+   * games and opponents on its Matchup tab and scoreboard. Same skip as the schedule.
+   */
+  const format = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { survivorMode: true } })
+  if (format?.survivorMode) return result
+  if (await isGuillotineLeague(season.leagueId).catch(() => false)) return result
 
   // Same deterministic roster order as the regular schedule (ensureScheduleForNewSeason).
   const rosters = await prisma.redraftRoster.findMany({

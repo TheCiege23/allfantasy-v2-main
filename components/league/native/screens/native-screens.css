@@ -42,6 +42,8 @@
 .nls-daypick .nls-seg button { padding: 0 10px; }
 .nls-iconbtn { display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line2); border-radius: 8px; background: transparent; color: var(--text2); }
 .nls-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.nls-weeksel { min-height: 44px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; }
+.nls-weeksel:disabled { opacity: .4; cursor: not-allowed; }
 
 /* Buttons local to the screens (same geometry as .nl-button, 6px radius per handoff). */
 .nls-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 1px solid var(--line2); border-radius: 6px; background: transparent; color: var(--text2); font-size: 13px; font-weight: 600; white-space: nowrap; }

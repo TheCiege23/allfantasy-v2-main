@@ -12,7 +12,7 @@ import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
 import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
 import { GuillotineMatchupScreen } from './NativeGuillotineScreens'
 import { isRotisserieLeagueSettings } from '@/lib/category-scoring/nativeCategoryScoringContext'
-import { Card, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
+import { Card, InjuryFlag, PosPill, ScreenHead, Segmented, OpponentRankChip, PlayerAvatar, PlayerNameButton, WeatherChip, useNativePlayerCard } from './NativeScreenParts'
 import { TournamentBracketCard } from './TournamentBracketCard'
 import { slotGameState } from '@/lib/league-media/redraftScreens'
 import { RedraftScoreBug, RedraftScreen, useRedraftScreen, useRedraftScreenContext } from './RedraftScreenParts'
@@ -80,6 +80,7 @@ function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left
               <span className="nls-long">{p.name}</span>
               <span className="nls-short">{shortPlayerName(p.name)}</span>
             </PlayerNameButton>
+            <InjuryFlag status={p.injuryStatus} />
           </strong>
           <small data-live={p.gameStatus === 'live' || undefined} data-game={rd ? slotGameState(p.gameStatus) ?? undefined : undefined}>
             {side === 'left' ? <>{team}{status}</> : <>{status}{p.team ? <span data-long> · {p.team}</span> : null}</>}
@@ -261,6 +262,21 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
       <button type="button" className="nls-iconbtn" aria-label="Previous week" disabled={week <= 1 || loading} onClick={() => goToWeek(week - 1)}>
         <ChevronLeft size={18} aria-hidden />
       </button>
+      {/* Any week at once: past weeks to review, later weeks for their projections. */}
+      <select
+        className="nls-weeksel"
+        aria-label="Choose a week"
+        data-testid="matchup-week-select"
+        value={week}
+        disabled={loading}
+        onChange={(e) => goToWeek(Number(e.target.value))}
+      >
+        {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
+          <option key={w} value={w}>
+            {`Week ${w}${league.currentWeek != null && w === league.currentWeek ? ' (now)' : ''}`}
+          </option>
+        ))}
+      </select>
       <button type="button" className="nls-iconbtn" aria-label="Next week" disabled={week >= maxWeek || loading} onClick={() => goToWeek(week + 1)}>
         <ChevronRight size={18} aria-hidden />
       </button>
