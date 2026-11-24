@@ -530,7 +530,9 @@ export async function resolveBestAvailableAutopickCandidate(
     }
   }
 
-  return selected && draftAsMeNote ? { ...selected, reason: draftAsMeNote } : selected
+  // A manager on Chimmy Queue chose Chimmy's pick, so its reason stands; the "not enough history" note
+  // (from the league-wide Draft like me stepping aside) would otherwise replace it.
+  return selected && draftAsMeNote && !chimmyQueue ? { ...selected, reason: draftAsMeNote } : selected
 }
 
 /** NFL only (the ledger grades NFL); reads the warm pool's projections, never builds the pool. */

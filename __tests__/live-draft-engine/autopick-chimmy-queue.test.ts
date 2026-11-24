@@ -147,6 +147,25 @@ describe('Chimmy Queue in the timeout pick', () => {
     expect(r).toMatchObject({ ok: true, pick: { playerName: 'Top Center', strategy: 'bpa' } })
   })
 
+  it("league Draft like me without enough history does not overwrite Chimmy's reason", async () => {
+    hm.getViewerAutopickPreference.mockResolvedValue({ enabled: true, mode: 'ai_queue', isProEligible: true, updatedAt: null })
+    hm.tryDraftAsMePick.mockImplementation(async (args: { onNotEnoughHistory?: (r: string) => void }) => {
+      args.onNotEnoughHistory?.('Draft like me needs 10 of your own picks from past drafts and has 4.')
+      return null
+    })
+    const r = await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')
+    expect(r).toMatchObject({ ok: true, pick: { strategy: 'need-based', reason: expect.stringMatching(/^Chimmy's pick for your team: /) } })
+  })
+
+  it('without Chimmy Queue the not-enough-history note still explains the fallback', async () => {
+    hm.tryDraftAsMePick.mockImplementation(async (args: { onNotEnoughHistory?: (r: string) => void }) => {
+      args.onNotEnoughHistory?.('Draft like me needs 10 of your own picks from past drafts and has 4.')
+      return null
+    })
+    const r = await submitBestAvailableAutopickForExpiredTimer('L1', 'on-clock')
+    expect(r).toMatchObject({ ok: true, pick: { strategy: 'bpa', reason: expect.stringMatching(/^Draft like me needs 10/) } })
+  })
+
   it('Draft like me still goes before Chimmy Queue when it has an answer', async () => {
     hm.getViewerAutopickPreference.mockResolvedValue({ enabled: true, mode: 'ai_queue', isProEligible: true, updatedAt: null })
     hm.tryDraftAsMePick.mockResolvedValue({ playerName: 'Guard 9', position: 'PG', team: 'BOS', playerId: 'id-Guard 9', byeWeek: null, adp: 9, reason: 'Picked the way you draft.' })
