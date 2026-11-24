@@ -86,9 +86,10 @@ export function createValueOs(deps: Parameters<typeof createOsFeed>[1] = {}): Os
  *
  * ⚠ BOTH ARE SCHEDULABLE — app-level, long TTL, derive satisfiable from the scope key alone — so
  * unlike League OS's 60s ruleset these ARE legitimate `refresh()` targets for
- * `/api/cron/domain-os-refresh`. They are not wired into it yet: that cron walks LEAGUES and these
- * are keyed on sport+format, so it needs a second walk rather than a bigger list. Named here so
- * the next person does not have to rediscover that the shapes differ.
+ * `/api/cron/domain-os-refresh`, and both ARE wired into it: its app-level walk (`refreshAppSources`)
+ * warms every market format/qbFormat combination the snapshot table holds and the devy board. (This
+ * comment said "not wired into it yet" until the 2026-11-24 re-score; the per-league walk it was
+ * contrasting with is retired.)
  */
 export function createValueOsLoaders(deps: Parameters<typeof createOsFeed>[1] = {}) {
   const feed = createValueOs(deps)

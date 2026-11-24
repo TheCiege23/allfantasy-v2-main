@@ -95,8 +95,10 @@ export function createWaiverOs(deps: Parameters<typeof createOsFeed>[1] = {}): O
  * module warns about: it would let the system tell someone they can afford a bid they cannot.
  * The header names the user entry as "the entry most likely to be derived live"; this is it.
  *
- * The 6h league entry is not dead — it is a `refresh()` target for a scheduler that does not
- * exist yet (see `OsFeed.refresh`: "the gathering half; it needs a scheduler").
+ * ⚠ The 6h league entry (`waiverSettingsSource`) currently has NO reader and NO writer (2026-11-24
+ * re-score). The scheduler this comment once promised exists — `/api/cron/domain-os-refresh` — but it
+ * stopped warming this entry on 2026-11-17 precisely because nothing read it (see that route's header).
+ * Only tests and the unreferenced `waiverOsSources` list name it. Kept, not deleted, pending a ruling.
  */
 export function createWaiverOsLoaders(deps: Parameters<typeof createOsFeed>[1] = {}) {
   const feed = createWaiverOs(deps)

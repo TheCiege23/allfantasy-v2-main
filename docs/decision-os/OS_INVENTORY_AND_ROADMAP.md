@@ -191,6 +191,46 @@ every deal; NFL redraft only. Reported, never applied: the approve / veto recomm
 ⚠ Still not graded: the recommendation itself (approve / review / consider veto) and the inactive-manager flag.
 Neither is stored when shown; grading either needs it recorded first.
 
+**CODE RE-SCORE, 2026-11-24 at `0ff89d652c` — supersedes the 2026-11-21 table below and every mark it carries forward.**
+A read-only re-score at `0ff89d652c`, every gap re-checked in code, followed by one change closing the small ones. Same
+seven axes and weights.
+
+| OS | Score | What decides the mark |
+|---|---|---|
+| League | **100** | Cron n/a by §3 footnote 2 (a 60 s ruleset is read-through, not warmed). 85 if Cron is scored strictly |
+| Import | **100** | Cron ✅ rests on `FANTASY_OS_EXEC_SYNC_LIVE` being set on the worker (owner-confirmed 2026-11-23) |
+| Projection | **100** | Non-NFL projections are now warmed by `domain-os-refresh` (below) |
+| Player Value | **100** | — |
+| Lineup | **100** | — |
+| Waiver | **100** | Kernel ⚠ → **n/a by design** (owner's ruling, 2026-11-24): `lib/core-app/waiversBoard.ts` reads `roster.faabRemaining` and `leagueWaiverSettings` directly because Waiver OS holds FAAB 5 min and a reload right after a claim must show the live budget — the Import-screen reasoning. The board's decision paths (AI panel, FAAB bids, packet, engine) read through Waiver OS. 93.3 before the ruling |
+| Trade | **100** | — |
+| Draft | **93.3** | Kernel ⚠: live auto-pick bypasses Draft OS — **fix in flight** in a parallel change |
+| Commissioner | **100** | `get_league_health` (2026-11-23) is the commissioner tool the 2026-11-21 row said did not exist |
+| Manager Psychology | **100** | — |
+| **Decision OS hub** | **100** | Chimmy ⚠ → ✅: the second-model check skipped commissioner turns; `commissioner` is now a checked intent (below). 92.5 before |
+
+**Recorded n/a-by-design marks** (each an owner's call, not a gap): League Cron (§3 fn 2); Import Kernel (2026-11-23);
+Projection Kernel and Player Value Kernel (2026-11-21); Commissioner Kernel (the hub is the feed's writer); Trade Kernel
+and Lineup Feed/Kernel (the Lineup rule); **Waiver Kernel for the Waivers board (2026-11-24, above)**.
+
+**Closed in this change (no migration, no behaviour change outside these):**
+- **Non-NFL projections are pre-warmed.** `refreshAppSources` warmed only NFL, so the first Chimmy read per 6 h window
+  for NBA/MLB/NHL/NCAAF paid the derive inside the packet's slice deadline. It now warms each non-NFL sport
+  `AFProjectionSnapshot` holds, at that sport's newest season, after NFL and on the same run budget; a sport with no rows
+  is absent. Market is not warmed for them — `loadMarketValues` answers `no_producer` for non-NFL without a read.
+- **The projection row cap is visible.** `loadProjectionFacts` (`take: 2000`) logs a count-only warning when a read
+  comes back full. The cap is unchanged, and the fact array carries no truncated flag (its shape has no field for one).
+- **The second-model check reads commissioner answers** (`DECISION_CHECK_INTENTS` gains `commissioner`, with a
+  checker note on what league-health facts look like). Now five intents, not four.
+- **`get_manager_record` honours the `managerRecords` kill switch**, as `get_league_health` honours its own.
+  ⚠ The packet's `managerRecords` slice is still stamped `servedFrom: 'live'` / `asOf: now`: the loader returns the
+  value without its feed envelope, so the true source and time do not reach the packet. Named, not fixed.
+- Stale comments corrected (value-os, the two `domain_os_facts` "never migrated" notes, waiver-os, decisionBridge,
+  managerRecordLoader). ⚠ `waiverSettingsSource` has **no reader** — only tests and the unreferenced `waiverOsSources`.
+
+**Production fact, verified 2026-11-24:** migration `20261123120000_chimmy_advice_day` IS applied (ledger row and
+column both present), so daily-lineup bench learning is live.
+
 **INDEPENDENT CODE RE-SCORE, 2026-11-21 — supersedes the "~100" column below (owner's "continue": re-measure from
 code).** Three read-only audits at `7adb7a9ad1`, each told to treat the roadmap's ~100 as a claim to break, every mark
 cited to a file and line. 🛑 **The "~100" marks were the building session scoring its own work, and they did not
@@ -206,7 +246,7 @@ survive.** Same seven axes and weights. Where an audit was stricter than this fi
 | Waiver | ~93 | ~93 → **~100, rewired** | Kernel ⚠ → ✅: the AI waiver panel's route (`/api/ai/waivers/recommend`) called `loadWaiverWorldFacts` directly. It reads through Waiver OS now (below) |
 | Lineup | ~72.5 | ~85 → **~100 in this change** | Feed is n/a by this file's rule, not ❌. Cron ⚠ was REAL: the lineup and slate-lock alerts used the weekly-feed optimizer, not My Team's `optimizeLineup` — **fixed in this change** (below) |
 | Trade | ~93 | ~100 | Kernel ⚠ in the audit is the recorded n/a (pending trades are graded on rosters loaded live) |
-| Commissioner | ~78 | ~85 → ~93 | Kernel ⚠ → **n/a, not ⚠**: the hub builds health live because it is the feed's WRITER — it primes the entry Chimmy reads (below). Chimmy ⚠ stands: no commissioner tool — the slice arrives only on a commissioner-classified turn |
+| Commissioner | ~78 | ~85 → ~93 | Kernel ⚠ → **n/a, not ⚠**: the hub builds health live because it is the feed's WRITER — it primes the entry Chimmy reads (below). Chimmy ⚠ stands: no commissioner tool — the slice arrives only on a commissioner-classified turn. ⚠ superseded 2026-11-24: `get_league_health` (2026-11-23) is that tool |
 | Draft | ~93 | ~93 → ~100 in this change | Engine ⚠: the record was an appended sentence with no level — **it now states High / Medium / Low** (below) |
 | Manager Psychology | ~90 | ~90 → **~100, rewired** | Kernel ⚠ → ✅: both user screens (`ManagerRecordSheet`, the commissioner Managers view) built live; only Chimmy read the feed. Both read through it now (below) |
 | **Decision OS hub** | ~86 | ~93 → ~100 in this change | Learning ✅ by the waiver, bench and trade evidence the second audit verified (the third missed them). Operability ⚠: a late slice inside an on-time packet was never logged — **logged now** (below) |
@@ -296,6 +336,7 @@ worker by the owner (2026-11-23), Import Cron is ✅ too, so neither Import mark
   and times only).
 - `FANTASY_OS_EXEC_SYNC_LIVE` is **left as it is**: switching it on is a Railway variable write (a redeploy) that starts
   scheduled provider syncs, and the "35 syncs" measured earlier suggests production already has it on. To confirm.
+  ⚠ superseded 2026-11-24: confirmed — the owner confirmed it set on the worker on 2026-11-23 (Import Kernel note above).
 
 **FRESH RE-SCORE, 2026-11-20 — every OS and the hub re-measured from code at `ffab3b550c`, not carried forward
 (owner's choice).** Four independent read-only audits; every surprising claim below was re-read by hand before it went
@@ -315,12 +356,14 @@ scope, or that a live path bypasses, is ⚠. Applied to every OS alike. Code-sch
 | Lineup | ~86 | ~80 | ~100 | Feed and Kernel are **n/a, not ⚠**: a stored lineup would round-trip `kickoff: Date` to a string and unlock every started player. Engine ⚠ → ✅ in this change (owner's call): the bench check's graded calls set the confidence stated beside each swap, by the size of its edge — never the call (below). NFL Sleeper leagues, where the ledger grades |
 | Commissioner | ~85 | ~85 | ~100 | The hub-prime PR makes Cron n/a. User ⚠ → ✅ in this change: the hub's quiet-manager warning cites the graded record in the decision's own bands (below). `decisionOsShadow` still has no reader — dead output, not an axis |
 | Manager Psychology | ~90 | ~63 | ~100 | Feed ❌ → ✅ and Kernel ⚠ → ✅: manager records read through the `psychology` feed (below). Cron ⚠ → ✅ in this change (owner's "daily current-season refresh", 2026-11-21, reversing the import-only quota choice): ESPN and MFL waiver claims are re-read once a day, this season only. Fantrax trades stay upload-only — Fantrax has no feed to schedule, so that half is n/a (below) |
-| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below) |
+| Decision OS hub | ~86 | ~79 | ~100 | Operability ⚠ → ✅: `rosterProjections` and `leaguePlayerMetrics` had no switch of their own. Multi-model ❌ → ✅ in this change (owner's "get the hub up to 100%", 2026-11-21, choosing a second-model check over the three-brain synthesis): a small model checks every decision answer against the facts Chimmy read (below). ⚠ superseded 2026-11-24: "every" was four intents (trade, waiver, start/sit, draft); commissioner is the fifth now |
 
 **Stale or false claims this re-score corrected** (each checked in code):
 - "Retired label engine still runs in two crons" — false since 2026-11-19 (item 10 already said so; the gap column did not).
 - "ESPN/Yahoo/MFL/Fantrax/Fleaflicker records carry no trades or drafts" — partly: Fantrax trades now count (from the
   commissioner's upload); drafts are still absent for every non-Sleeper platform; ESPN/Yahoo/MFL/Fleaflicker trades too.
+  ⚠ superseded 2026-11-24: ESPN, MFL and Yahoo drafts and Yahoo trades now count (`lib/competitive-edge/providerManagerHistory.ts`,
+  2026-11-23); still absent: Fantrax/Fleaflicker drafts, and ESPN/MFL/Fleaflicker trades.
 - "Manager facts reach Chimmy … never the packet" (Manager Psychology row of the OS census) — false since the
   `managerRecords` slice.
 - "Every packet slice has its own kill switch" — false for two slices until this build.
@@ -1049,7 +1092,7 @@ class of truth, a **Decision domain** owns a class of question, and a hub, page 
 | Player Value OS | **Fact OS** — market · IDP · kicker · devy | `decision-os/grounding/*Slice` |
 | Projection OS | **Fact OS** | `domain-os` projection source |
 | Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
-| Manager Psychology OS | **Retired from the hub 2026-11-17.** Manager facts reach Chimmy through the paid `get_manager_record` tool, never the packet | `psychological-profiles/*` (the feed `decision-os/psychology-os` is deleted) |
+| Manager Psychology OS | **Retired from the hub 2026-11-17.** Manager facts reach Chimmy through the paid `get_manager_record` tool, never the packet. ⚠ superseded 2026-11-24: the label engine was retired, not the domain — the `psychology` feed (`lib/decision-os/manager-records-os`) and the packet's `managerRecords` slice serve manager facts now | `psychological-profiles/*` (the feed `decision-os/psychology-os` is deleted) |
 | Lineup · Waiver · Trade · Commissioner | **Decision domains.** Lineup's second engine was deleted 2026-11-17; My Team's `optimizeLineup` (`decision-os/lineup/bestLineup.ts`) is the one start/sit answer | `decision-os/{waiver,trade,commissioner-health}` + `lineup/bestLineup.ts` |
 | Draft | **Decision domain — engine exists** (2026-11-14 correction): `decision-os/draft/decision.ts` wraps `draft-helper/RecommendationEngine.ts`; duplicate rankers converging, see `docs/os/OS_BACKBONE_PRINCIPLES.md` §2 | `decision-os/draft` |
 | Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
@@ -4201,6 +4244,8 @@ full `world → rules → decision → outcome` shape plus shadow/parity.
 
 ## 3. The scorecard
 
+> ⚠ superseded 2026-11-24: the marks below are historical. Current scores: "CODE RE-SCORE, 2026-11-24 at `0ff89d652c`" in §0.47.
+
 Seven axes, scored per OS. Weighting: axes 1–3 (does it exist) = 40%,
 axes 4–5 (is it fed and connected) = 30%, axes 6–7 (does it reach a human) = 30%.
 
@@ -4297,6 +4342,8 @@ things that already exist".
 ---
 
 ## 5. Connection map — API / cron / Chimmy
+
+> ⚠ superseded 2026-11-24: this map is historical (most ❌ here are wired now). Current state: "CODE RE-SCORE, 2026-11-24 at `0ff89d652c`" in §0.47.
 
 | OS | Upstream source | Cron | Reaches Chimmy? |
 |---|---|---|---|

@@ -141,10 +141,14 @@ export async function currentProjectionWeek(sport: string, season: number): Prom
  * must not present as "this player has no projection" without checking that the writer has run —
  * `not_computed` and `no_producer` are separate answers and only the caller knows which it needs.
  */
+/** The projection read's default row cap. Exported so the cap-hit warning can be tested against it. */
+export const PROJECTION_FACTS_DEFAULT_LIMIT = 2000
+
 async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<ProjectionFact[]> {
   const sport = args.sport.trim().toUpperCase()
   const week = args.week != null ? args.week : await currentProjectionWeek(sport, args.season)
 
+  const take = args.limit ?? PROJECTION_FACTS_DEFAULT_LIMIT
   const rows = await prisma.aFProjectionSnapshot
     .findMany({
       where: {
@@ -155,7 +159,7 @@ async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Projectio
         ...(args.playerIds?.length ? { playerId: { in: args.playerIds } } : {}),
       },
       orderBy: { computedAt: 'desc' },
-      take: args.limit ?? 2000,
+      take,
       select: {
         playerId: true, playerName: true, sport: true, position: true,
         season: true, week: true, afProjection: true, adjustmentFactors: true,
@@ -163,6 +167,18 @@ async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Projectio
       },
     })
     .catch(() => [])
+
+  /*
+   * ⚠ A FULL PAGE IS A TRUNCATION UNTIL PROVEN OTHERWISE (2026-11-24). The cap is not changed here —
+   * only made visible: a read that returns exactly `take` rows may have dropped players, and silently
+   * so, because the fact array has no field to carry it. Count-only: no ids, no names.
+   */
+  if (rows.length >= take) {
+    console.warn(
+      `[projection-facts] row cap hit: ${rows.length} rows returned at take=${take} ` +
+        `(sport=${sport} season=${args.season} week=${week ?? 'season'}${args.playerIds?.length ? ` playerIds=${args.playerIds.length}` : ''}); later rows may be missing`,
+    )
+  }
 
   return rows.map((row) => {
     const stored = row.afProjection

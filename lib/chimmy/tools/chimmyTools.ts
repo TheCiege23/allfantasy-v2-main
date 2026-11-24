@@ -1096,6 +1096,15 @@ export async function executeChimmyTool(
       }
       case 'get_manager_record': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        /*
+         * The packet's `managerRecords` kill switch turns the tool off too (2026-11-24 re-score), the way
+         * `get_league_health` honours `commissionerHealthDecision` below. Before this, killing the feed emptied the
+         * packet slice while the tool went on reading the same history — a switch that only half switched.
+         */
+        const { resolveDecisionOsFeedFlags } = await import('@/lib/decision-os/flags')
+        if (!(await resolveDecisionOsFeedFlags()).enabled('managerRecords')) {
+          return "Manager records are switched off right now, so nothing was read. Say you cannot check a manager's history at the moment; do not describe any manager's trades, waivers, drafts or habits."
+        }
         const { buildManagerRecordContext } = await import('@/lib/chimmy/managerRecordGrounding')
         const out = await buildManagerRecordContext({
           leagueId: ctx.leagueId,
