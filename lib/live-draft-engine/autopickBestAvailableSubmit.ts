@@ -436,7 +436,12 @@ export async function resolveBestAvailableAutopickCandidate(
 
   const rosterSlots = await getRosterSlotLabelsForLeagueDraft(leagueId, sport)
 
-  if (autopickBehavior === 'need-based') {
+  // Chimmy Queue (the manager's own AF Pro auto-pick mode): with the queue spent, Chimmy picks for this
+  // team's needs rather than the league's plain best available. A failed read means the ordinary pick.
+  const { personalChimmyQueueOn } = await import('@/lib/live-draft-engine/chimmyQueueAutopick')
+  const chimmyQueue = await personalChimmyQueueOn(draftSession.id, rid).catch(() => false)
+
+  if (autopickBehavior === 'need-based' || chimmyQueue) {
     const rec = computeDraftRecommendation({
       available: board.map((entry) => ({
         name: entry.playerName,
@@ -466,13 +471,14 @@ export async function resolveBestAvailableAutopickCandidate(
             String(entry.position).toUpperCase() === String(candidate.position).toUpperCase()
         ) ?? board[0]
       if (fromPool) {
+        const why = rec.recommendation?.reason || 'Need-based fallback recommendation.'
         selected = {
           playerName: fromPool.playerName,
           position: fromPool.position,
           team: fromPool.team,
           playerId: fromPool.playerId,
           byeWeek: fromPool.byeWeek,
-          reason: rec.recommendation?.reason || 'Need-based fallback recommendation.',
+          reason: chimmyQueue ? `Chimmy's pick for your team: ${why}` : why,
           strategy: 'need-based',
         }
       }
@@ -499,7 +505,7 @@ export async function resolveBestAvailableAutopickCandidate(
         playerId: top.playerId,
         byeWeek: top.byeWeek,
         reason:
-          autopickBehavior === 'need-based'
+          autopickBehavior === 'need-based' || chimmyQueue
             ? 'Need-based fallback unavailable; selected best ranked available player.'
             : 'Queue empty; selected best ranked available player.',
         strategy: 'bpa',
