@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { PRE_LEAGUE_MATCHUP_TYPE } from '@/lib/redraft/preLeagueWeeksRules'
 
 /**
  * `RedraftMatchup.status` transitions to `'final'` when scored
@@ -68,7 +69,7 @@ export async function getLastScheduledWeek(seasonId: string): Promise<number | n
  */
 export async function getFirstScheduledWeek(seasonId: string): Promise<number | null> {
   const first = await prisma.redraftMatchup.findFirst({
-    where: { seasonId, awayRosterId: { not: null } },
+    where: { seasonId, awayRosterId: { not: null }, type: { not: PRE_LEAGUE_MATCHUP_TYPE } },
     orderBy: { week: 'asc' },
     select: { week: true },
   })
@@ -84,10 +85,16 @@ export async function getFirstScheduledWeek(seasonId: string): Promise<number | 
  * 2026-11-22: drafted during NFL week 11 with weeks 1-10 final). Starting at week 1 made the resolver
  * replay ten weeks of infections, serums and weapons from games played before the league existed, one
  * week per five-minute tick, the moment the Whisperer was chosen.
+ *
+ * 🛑 AND A PRE-LEAGUE WEEK IS NEVER A ZOMBIE WEEK, FINAL OR NOT (2026-11-24). The weeks a late league
+ * missed are loaded as `pre_league` matchups by a background job (preLeagueWeeks.ts) that the draft does
+ * not wait for, so at activation they can still be open — TheCiege Zombie League (NBA) activated at
+ * week 1 that way, then resolved weeks 1-2 and awarded two serums and two weapons from games played
+ * before the league existed. Excluded by type, so the race cannot matter.
  */
 export async function getFirstUnplayedWeek(seasonId: string): Promise<number | null> {
   const first = await prisma.redraftMatchup.findFirst({
-    where: { seasonId, awayRosterId: { not: null }, status: { notIn: ['final', 'complete', 'completed'] } },
+    where: { seasonId, awayRosterId: { not: null }, status: { notIn: ['final', 'complete', 'completed'] }, type: { not: PRE_LEAGUE_MATCHUP_TYPE } },
     orderBy: { week: 'asc' },
     select: { week: true },
   })

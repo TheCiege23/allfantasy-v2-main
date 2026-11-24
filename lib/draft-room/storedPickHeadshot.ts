@@ -94,3 +94,45 @@ export async function resolveStoredPickHeadshot(
     return null
   }
 }
+
+/**
+ * `resolveStoredPickHeadshot` for many players of one sport in a single query, keyed by player id.
+ *
+ * 🛑 A HOSTED LEAGUE'S NON-NFL ID IS A ROLLING INSIGHTS ID, AND IT COLLIDES WITH SLEEPER IDS. Measured
+ * 2026-11-24: Tari Eason is RI 1479, and Sleeper 1479 is Doron Lamb (NBA) and Keenan Allen (NFL), so a
+ * Sleeper-id lookup — even one scoped to the sport — shows another man's face. This matches the RI row by
+ * id only when its name agrees, then falls back to a unique name, exactly as the single-pick version does.
+ * NFL returns an empty map: its ids are Sleeper ids and its photos come from them.
+ */
+export async function resolveStoredHeadshotsBatch(
+  sport: string | null | undefined,
+  players: ReadonlyArray<{ playerId: string; playerName: string; team?: string | null }>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const sp = String(sport ?? '').trim().toUpperCase()
+  if (!sp || sp === 'NFL' || players.length === 0) return out
+  const names = [...new Set(players.map((p) => p.playerName.trim()).filter(Boolean))]
+  const ids = [...new Set(players.map((p) => String(p.playerId ?? '').trim()).filter(Boolean))]
+  if (names.length === 0) return out
+  try {
+    const rows = await prisma.sportsPlayer.findMany({
+      where: {
+        sport: sp,
+        imageUrl: { not: null },
+        OR: [
+          ...names.map((name) => ({ name: { equals: name, mode: 'insensitive' as const } })),
+          ...(ids.length ? [{ externalId: { in: ids }, source: 'rolling_insights' }] : []),
+        ],
+      },
+      select: { externalId: true, source: true, name: true, team: true, imageUrl: true },
+      take: 2000,
+    })
+    for (const p of players) {
+      const url = chooseStoredPickHeadshot({ sport: sp, playerId: p.playerId, playerName: p.playerName, team: p.team ?? null }, rows)
+      if (url) out.set(p.playerId, url)
+    }
+  } catch {
+    // A photo is decoration; a failed lookup leaves the initials.
+  }
+  return out
+}

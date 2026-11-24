@@ -76,6 +76,8 @@ const ctx = vi.hoisted(() => {
         }),
       },
       draftSession: {
+        // The pointer sync (draftProgressPointer.ts) reads the session back; it has its own suite.
+        findUnique: vi.fn(async () => null),
         update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
           capturedUpdateData = { ...data }
         }),

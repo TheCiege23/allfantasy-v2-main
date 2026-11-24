@@ -60,6 +60,20 @@ const boardGame = (id: string, home: string, hp: number | null, away: string | n
 })
 
 describe('NativeMatchupScreen on the league’s own season', () => {
+  it('jumps straight to any week from the week list', async () => {
+    const calls = stubFetch({
+      '/matchup-center': (u) => payload(Number(new URL(u, 'http://x').searchParams.get('week') ?? 7), {}),
+      '/scoring/matchups': () => ({ season: 2026, week: 7, matchups: [], games: [] }),
+    })
+    render(<NativeMatchupScreen league={league} onSelectTab={() => {}} />)
+    await screen.findByRole('heading', { name: 'Week 7' })
+    const select = screen.getByTestId('matchup-week-select') as HTMLSelectElement
+    expect(select.value).toBe('7')
+    fireEvent.change(select, { target: { value: '2' } })
+    expect(await screen.findByRole('heading', { name: 'Week 2' })).toBeTruthy()
+    expect(calls.some((u) => u.includes('/matchup-center') && u.includes('week=2'))).toBe(true)
+  })
+
   it('🛑 asks for no week on open, and shows the week the league is on', async () => {
     const calls = stubFetch({
       '/matchup-center': () => payload(7, {}),
