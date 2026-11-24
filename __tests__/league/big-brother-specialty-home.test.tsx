@@ -209,7 +209,8 @@ describe('BigBrotherSpecialtyHome', () => {
         }}
       />,
     )
-    expect(screen.getAllByText('Blah House').length).toBeGreaterThan(0)
+    // 2026-11-23: the house view's title is "Big Brother", not the league name.
+    expect(screen.getAllByRole('heading', { name: 'Big Brother' }).length).toBeGreaterThan(0)
     expect(screen.getByText('5 houseguests · 4 in the house')).toBeTruthy()
     expect(screen.getByTestId('specialty-headline').textContent).toBe('Week 6 · Veto meeting')
     expect(screen.getByTestId('bb-phase-tracker').querySelector('[aria-current="step"]')?.textContent).toContain('Veto meeting')
