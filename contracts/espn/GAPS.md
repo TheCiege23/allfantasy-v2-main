@@ -239,7 +239,24 @@ no spoofed headers or bypass retry was attempted. It is not a runtime source.
 
 ## Per-player weekly fantasy points, 2026-11-23 — recorded without probing
 
-- `PS-01` SHAPE RESOLVED 2026-11-24 (writer still to build): `scripts/probe.sh fantasy-matchup NFL`
+- `PS-01` WRITER BUILT 2026-11-24 (current week only). `lib/league-import/espn/espnPlayerWeekScores.ts` (pure
+  parser + crosswalk step, tested against the week-11 fixture in `__tests__/league-import/espn-player-week-scores.test.ts`)
+  and `espnPlayerWeekScoresWriter.ts` (crosswalk to the canonical Sleeper id via `crosswalkToSleeperIds` +
+  `withTeamDefenseIds`, upsert, source `espn`). Hooked into `fetchEspnLeagueForImport` behind the opt-in
+  `recordPlayerWeekScores`, which only the import pipeline passes — so the Fantasy OS collector's scheduled ESPN
+  sync writes from the response it already reads; `mMatchupScore` was added to that request's view list (one view,
+  no extra request). Fire and forget, count-only warnings; `ESPN_PLAYER_WEEK_SCORES=off` disables it.
+  - Rows are keyed `espn:<platformLeagueId>`, NOT the bare id: they hold Sleeper ids, and readers that look a
+    league's rows up by the ids its ESPN roster holds would otherwise match ESPN 12483 (Stafford) to Sleeper
+    12483 (Bech). The bench ledger (`ledgerGrading.ts loadBenchRows`) joins the prefixed key; nothing else reads it.
+  - My Team's bench check now records ESPN NFL calls (`benchLedgerWeek`).
+  - STILL OPEN: past weeks (`S-01`, never requested) — a week is stored only if the sync read it while current,
+    and only players whose game had started (`lineupLocked`) by the last in-week read; post-week stat
+    corrections are not seen; a playoff matchup spanning two NFL weeks (`currentMatchupPeriod` !=
+    `scoringPeriodId`) is skipped, because no capture shows which week its block describes. That the import's
+    view list WITHOUT `scoringPeriodId` returns the block is shown by `fixtures/fantasy-league.NFL.2026.json`
+    (same views plus more, no `scoringPeriodId`), not by a capture of the exact list.
+- `PS-01` SHAPE RESOLVED 2026-11-24: `scripts/probe.sh fantasy-matchup NFL`
   captured week 11 of the owner-chosen public league, with his explicit approval, as
   `fixtures/fantasy-matchup.NFL.2026.week11.json` (see `fantasy_nfl_matchup` in ENDPOINTS.yaml). Do not
   re-probe for shape. Established from the full body: `rosterForCurrentScoringPeriod` carries EVERY

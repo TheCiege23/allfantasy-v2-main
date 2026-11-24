@@ -215,7 +215,8 @@ export async function runImportedLeagueNormalizationPipeline(
       payload = await fetchEspnLeagueForImport(
         input.userId,
         sourceId,
-        currentStateOnly ? { includePreviousSeasons: false } : {},
+        // recordPlayerWeekScores: the bench ledger's ESPN week scores, from the response this already reads.
+        currentStateOnly ? { includePreviousSeasons: false, recordPlayerWeekScores: true } : { recordPlayerWeekScores: true },
       )
     } else if (provider === 'mfl') {
       if (typeof input === 'string' || !input.userId) {

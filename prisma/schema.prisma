@@ -3453,7 +3453,10 @@ model LeaguePlayerWeeklyScore {
   /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
   /// moving well after the whistle. Only a reconcile pass past that window may set this.
   isFinalized Boolean  @default(false)
-  /// Which platform reported it: 'sleeper' (scheduled), or 'fantrax' (manual browser-download import only).
+  /// Which platform reported it: 'sleeper' (scheduled), 'fantrax' (manual browser-download import only),
+  /// 'allfantasy' (our own engine, native leagues, keyed on League.id), or 'espn' (NFL, current week, from the
+  /// scheduled ESPN sync — lib/league-import/espn/espnPlayerWeekScoresWriter.ts). ⚠ 'espn' rows are keyed
+  /// `espn:<platformLeagueId>` and hold the CANONICAL Sleeper id, not ESPN's (ESPN 12483 is not Sleeper 12483).
   source      String   @db.VarChar(16)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
