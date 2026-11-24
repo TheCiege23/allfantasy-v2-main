@@ -172,7 +172,8 @@
 /* Devy joined 2026-11-23: its body read as a dark block on a light page. */
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'],
 :global(html[data-mode='light']) .sp[data-specialty='devy'],
-:global(html[data-mode='light']) .sp[data-specialty='salary'] {
+:global(html[data-mode='light']) .sp[data-specialty='salary'],
+:global(html[data-mode='light']) .sp[data-specialty='survguil'] {
   --sp-bg: var(--surface2, #eef1f9);
   --sp-card: var(--surface, #ffffff);
   --sp-card2: #f7f8fc;
@@ -210,7 +211,8 @@
  * colour. In dark that inherited colour is near-white; in light it would be dark text on the accent. Keep the ink. */
 :global(html[data-mode='light']) .sp[data-specialty='guillotine'] .btnP,
 :global(html[data-mode='light']) .sp[data-specialty='devy'] .btnP,
-:global(html[data-mode='light']) .sp[data-specialty='salary'] .btnP { color: var(--accInk); }
+:global(html[data-mode='light']) .sp[data-specialty='salary'] .btnP,
+:global(html[data-mode='light']) .sp[data-specialty='survguil'] .btnP { color: var(--accInk); }
 /* On dark artwork (the hero) or staged dark on purpose (.stayDark): every token back to its dark fallback.
  * `color` is re-declared because an INHERITED colour is computed where it is declared (.sp, from the light tokens):
  * resetting the tokens here does not recompute it, and `.nl-workspace a { color: inherit }` (0,1,1) beats `.btn`,

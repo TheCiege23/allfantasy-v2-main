@@ -14,8 +14,9 @@ describe('Survivor Guilly league home', () => {
         powers: [], chops: [] }) })
     vi.stubGlobal('fetch', fetcher)
     render(<SurvivorGuillotineLeague leagueId="league" />)
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Your lineup' })).toBeTruthy())
-    expect(screen.getByRole('heading', { name: 'Tribe race' })).toBeTruthy()
+    // 2026-11-24: no lineup card without a team to play; the tribe controls are 'Tribe decisions'.
+    await waitFor(() => expect(screen.getByTestId('sg-visual-set')).toBeTruthy())
+    expect(screen.getByRole('heading', { name: 'Tribe decisions' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Commissioner control' })).toBeNull()
     expect(screen.queryByText(/Concealed reward periods/)).toBeNull()
   })
