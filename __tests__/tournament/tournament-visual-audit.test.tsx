@@ -54,7 +54,7 @@ async function renderHome() {
       <TournamentHomePage />
     </TournamentUiProvider>,
   )
-  await screen.findByText('Quinn')
+  await screen.findByText('Morgan') // 1st in the conference race since it orders by conference rank (2026-11-24)
   return view
 }
 

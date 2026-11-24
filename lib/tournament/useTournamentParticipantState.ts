@@ -103,9 +103,9 @@ export function useTournamentParticipantState(
     return new Date(currentTournamentLeague.draftScheduledAt)
   }, [currentTournamentLeague?.draftScheduledAt])
 
-  const isDraftLive = Boolean(
-    currentTournamentLeague?.status === 'drafting' || currentTournamentLeague?.status === 'active',
-  )
+  // 'active' is the league AFTER its draft (lib/tournament/seasonRounds.ts sets it when the round starts), so only
+  // 'drafting' is a live draft. Counting 'active' put "Draft / matchup" on Home all season (2026-11-24 audit).
+  const isDraftLive = currentTournamentLeague?.status === 'drafting'
 
   const uiStatus: TournamentParticipantUiStatus = useMemo(() => {
     if (!participant) return 'registering'

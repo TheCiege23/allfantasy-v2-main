@@ -5,9 +5,10 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useTournamentUi } from '@/app/tournament/[tournamentId]/TournamentUiContext'
 import { useTournamentParticipantState } from '@/lib/tournament/useTournamentParticipantState'
 import { DraftTransitionCard, RoundResetExplainer } from '@/app/tournament/components/DraftTransitionCard'
+import { draftTypeWord, formatDraftWhen, tournamentDraftState } from '@/lib/tournament/tournamentWords'
 
 export default function TournamentDraftsPage() {
-  const { t, tInterpolate } = useLanguage()
+  const { t, tInterpolate, language } = useLanguage()
   const ctx = useTournamentUi()
   const state = useTournamentParticipantState(ctx)
   const { shell, rounds, tournamentLeagues, conferences } = ctx
@@ -28,7 +29,7 @@ export default function TournamentDraftsPage() {
   const eliminated = state.status === 'eliminated'
 
   const draftLabel = tInterpolate('tournament.hub.draftsPage.draftMeta', {
-    type: String(shell.draftType),
+    type: draftTypeWord(shell.draftType, t),
     clock: String(shell.draftClockSeconds),
   })
 
@@ -61,11 +62,13 @@ export default function TournamentDraftsPage() {
         {tls.map((l) => {
           const conf = conferences.find((c) => c.id === l.conferenceId)
           const isMine = l.id === myTl?.id
-          const scheduled = l.draftScheduledAt ? new Date(l.draftScheduledAt).toLocaleString() : t('tournament.hub.draftsPage.tbd')
+          const status = tournamentDraftState(l.draftStatus, l.status)
+          const scheduled = l.draftScheduledAt
+            ? formatDraftWhen(l.draftScheduledAt, language)
+            : status === 'complete'
+              ? null
+              : t('tournament.hub.draftsPage.tbd')
           const slotRow = isMine ? state.myStandingsRow : null
-          // The league's own draft state when the page data carries it; `l.status` is the round's phase.
-          const draftState = l.draftStatus ?? (l.status === 'drafting' ? 'drafting' : l.status === 'complete' || l.status === 'archived' ? 'complete' : 'scheduled')
-          const status = draftState === 'drafting' ? 'LIVE' : draftState === 'complete' ? 'COMPLETE' : 'SCHEDULED'
           if (eliminated && !isMine) return null
           if (eliminated && isMine)
             return (
@@ -74,7 +77,6 @@ export default function TournamentDraftsPage() {
                 leagueName={l.name}
                 conferenceName={conf?.name ?? null}
                 draftTypeLabel={draftLabel}
-                clockLabel={`${shell.draftClockSeconds}s`}
                 draftSlot={slotRow?.draftSlot ?? null}
                 scheduledLabel={scheduled}
                 status={status}
@@ -89,7 +91,6 @@ export default function TournamentDraftsPage() {
                 leagueName={l.name + (isMine ? t('tournament.hub.draftsPage.youSuffix') : '')}
               conferenceName={conf?.name ?? null}
               draftTypeLabel={draftLabel}
-              clockLabel={`${shell.draftClockSeconds}s`}
               draftSlot={slotRow?.draftSlot ?? null}
               scheduledLabel={scheduled}
               status={status}
