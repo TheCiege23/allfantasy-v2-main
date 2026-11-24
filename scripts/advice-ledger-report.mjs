@@ -71,9 +71,9 @@ try {
         FROM chimmy_advice a
         JOIN leagues l ON l.id = a.league_id
         LEFT JOIN league_player_weekly_scores r
-          ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
+          ON r."leagueId" = CASE WHEN lower(coalesce(l.platform, '')) = 'espn' THEN 'espn:' || l."platformLeagueId" ELSE l."platformLeagueId" END AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
         LEFT JOIN league_player_weekly_scores s
-          ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
+          ON s."leagueId" = CASE WHEN lower(coalesce(l.platform, '')) = 'espn' THEN 'espn:' || l."platformLeagueId" ELSE l."platformLeagueId" END AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
         WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season} AND upper(a.sport) = 'NFL'`
     : await prisma.$queryRaw`
         SELECT a.surface, a.week, a.confidence_pct AS confidence, NULL::float8 AS rec_proj, NULL::float8 AS alt_proj,
@@ -82,9 +82,9 @@ try {
         FROM chimmy_advice a
         JOIN leagues l ON l.id = a.league_id
         LEFT JOIN league_player_weekly_scores r
-          ON r."leagueId" = l."platformLeagueId" AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
+          ON r."leagueId" = CASE WHEN lower(coalesce(l.platform, '')) = 'espn' THEN 'espn:' || l."platformLeagueId" ELSE l."platformLeagueId" END AND r."seasonYear" = a.season AND r.week = a.week AND r."playerId" = a.rec_player_key
         LEFT JOIN league_player_weekly_scores s
-          ON s."leagueId" = l."platformLeagueId" AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
+          ON s."leagueId" = CASE WHEN lower(coalesce(l.platform, '')) = 'espn' THEN 'espn:' || l."platformLeagueId" ELSE l."platformLeagueId" END AND s."seasonYear" = a.season AND s.week = a.week AND s."playerId" = a.alt_player_key
         WHERE a.advice_type = 'start_sit' AND a.alt_player_key <> '' AND a.season = ${season} AND upper(a.sport) = 'NFL'`
 
   const bySurface = new Map()

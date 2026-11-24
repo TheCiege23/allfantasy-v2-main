@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { MY_TEAM_BENCH_SURFACE, WAIVER_ENGINE_SURFACE, WAIVER_PANEL_SURFACE } from '@/lib/chimmy-advice/adviceSurfaces'
 import { NATIVE_PLATFORMS } from '@/lib/league/isNativeLeague'
 import { NATIVE_PLAYER_SCORE_SOURCE } from '@/lib/redraft/nativePlayerWeeklyScores'
+import { ESPN_PLAYER_SCORE_SOURCE, espnPlayerScoreLeagueKey } from '@/lib/league-import/espn/espnPlayerWeekScores'
+
 import { foldWaiverEngineBands, type GradedWaiverClaim, type WaiverEngineLedger } from '@/lib/decision-os/waiver/calibration'
 import { gradeTradeRows, tradeLedgerRow, type TradeLedgerRow } from '@/lib/decision-os/trade/tradeLedger'
 import { foldTradeLetterCalls, type TradeLetterLedger } from '@/lib/decision-os/trade/letterCalibration'
@@ -27,6 +29,9 @@ import {
   type TradeLetter,
   type WeekCalendar,
 } from './ledgerRecord'
+
+/** `espn:` — the prefix `espnPlayerScoreLeagueKey` puts before an ESPN league's platform id. */
+const ESPN_LEAGUE_KEY_PREFIX = espnPlayerScoreLeagueKey('')
 
 /**
  * ALLFANTASY'S OWN TRACK RECORD — the server half: read what the ledger recorded and what happened,
@@ -120,12 +125,18 @@ export async function loadBenchRows(season: number, db: Db, leagueIds?: readonly
    * Both key the player by the id the roster holds, and a native NFL roster holds Sleeper ids (`rosterIdSpace.ts`), so
    * the recorded key (`LineupPlayer.sleeperId`, the roster id itself where no crosswalk applies) joins as it is. Each
    * side reads only its own source, so a native row can never grade a Sleeper call or the reverse.
+   *
+   * An ESPN NFL league's (2026-11-24) are ESPN's own points (`espnPlayerWeekScoresWriter.ts`), source 'espn', stored
+   * under `espn:<platformLeagueId>` and already crosswalked to the CANONICAL Sleeper id — the id My Team records as
+   * `rec_player_key`. Never under the bare platform id: see `espnPlayerScoreLeagueKey` for the readers that protects.
    */
   const native = Prisma.sql`lower(coalesce(l.platform, '')) IN (${Prisma.join([...NATIVE_PLATFORMS].filter(Boolean))})`
   const scoreOn = (alias: 'r' | 's', key: Prisma.Sql) => Prisma.sql`
       ${Prisma.raw(alias)}."seasonYear" = a.season AND ${Prisma.raw(alias)}.week = a.week AND ${Prisma.raw(alias)}."playerId" = ${key}
       AND CASE WHEN ${native}
         THEN ${Prisma.raw(alias)}."leagueId" = l.id AND ${Prisma.raw(alias)}.source = ${NATIVE_PLAYER_SCORE_SOURCE}
+        WHEN lower(coalesce(l.platform, '')) = ${ESPN_PLAYER_SCORE_SOURCE}
+        THEN ${Prisma.raw(alias)}."leagueId" = ${ESPN_LEAGUE_KEY_PREFIX} || l."platformLeagueId" AND ${Prisma.raw(alias)}.source = ${ESPN_PLAYER_SCORE_SOURCE}
         ELSE ${Prisma.raw(alias)}."leagueId" = l."platformLeagueId" AND ${Prisma.raw(alias)}.source <> ${NATIVE_PLAYER_SCORE_SOURCE} END`
   const from = Prisma.sql`
     FROM chimmy_advice a

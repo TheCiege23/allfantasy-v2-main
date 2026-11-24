@@ -253,7 +253,13 @@ describe('🛑 native NFL leagues are graded on our own engine\'s weekly scores 
     }
     expect(text).toContain(`r."playerId" = a.rec_player_key`)
     expect(text).toContain(`s."playerId" = a.alt_player_key`)
+    // ESPN NFL (2026-11-24): its own rows only, under the `espn:` key the writer uses — never the bare platform id.
+    for (const alias of ['r', 's']) {
+      expect(text).toContain(`WHEN lower(coalesce(l.platform, '')) = ? THEN ${alias}."leagueId" = ? || l."platformLeagueId" AND ${alias}.source = ?`)
+    }
     const values = valuesOf(call)
+    expect(values).toContain('espn')
+    expect(values).toContain('espn:')
     expect(values).toContain('allfantasy')
     // The native spellings come from the one predicate the app uses, never a local copy — and never ''.
     for (const p of ['allfantasy', 'af', 'manual', 'native']) expect(values).toContain(p)
