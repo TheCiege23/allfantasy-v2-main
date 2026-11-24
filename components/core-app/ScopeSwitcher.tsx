@@ -702,6 +702,20 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                 })
               )}
             </ul>
+            {/*
+              Add a league, right under the leagues (2026-11-23, owner). On a phone the rail — whose foot holds
+              "Create a league" and "Import a league" on a wide screen — is hidden, so after a first import the
+              only way to add another was More → the Play sheet, scrolled. This switcher is the phone's league
+              list, so the two belong at its foot on every width.
+            */}
+            <nav className="af-scope-add" aria-label={m.addLeagueAria} data-testid="scope-add-league">
+              <Link href="/import" prefetch={false} onClick={(event) => navigate(event, '/import')}>
+                <span aria-hidden>⇣</span> {m.importLeague}
+              </Link>
+              <Link href="/create-league" prefetch={false} onClick={(event) => navigate(event, '/create-league')}>
+                <span aria-hidden>＋</span> {m.createLeague}
+              </Link>
+            </nav>
             <p className="af-scope-note">
               {m.favoritesNote}
             </p>
