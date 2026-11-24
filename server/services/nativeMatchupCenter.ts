@@ -11,6 +11,7 @@
 import { applyInjuryStatuses } from '@/lib/redraft/rosterInjuryStatus'
 import { resolveStoredHeadshotsBatch } from '@/lib/draft-room/storedPickHeadshot'
 import { prisma } from '@/lib/prisma'
+import { loadNbaRosterOutlook } from '@/lib/redraft/nbaRosterOutlook'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import { loadWeekLineups, weekSlotType } from '@/lib/redraft/weekLineupSlots'
@@ -388,6 +389,16 @@ export async function buildNativeMatchupCenterPayload(params: {
     players: [...myStarters, ...oppStarters].map((p) => ({ id: p.playerId, team: p.team ?? null, position: p.position ?? null })),
     week,
   }).catch((): Awaited<ReturnType<typeof loadNflRosterOutlook>> => new Map())
+  // NBA: the same picture for a daily sport — next game, its tip-off, the week's game count, crests
+  // and the opponent's rank against the position (./nbaRosterOutlook.ts).
+  if (sport === 'NBA') {
+    const nba = await loadNbaRosterOutlook(prisma, {
+      league: { sport: String(league.sport), season: season.season },
+      players: [...myStarters, ...oppStarters].map((p) => ({ id: p.playerId, team: p.team ?? null, position: p.position ?? null })),
+      week,
+    }).catch((): Awaited<ReturnType<typeof loadNbaRosterOutlook>> => new Map())
+    for (const [id, o] of nba) if (!outlook.has(id)) outlook.set(id, o)
+  }
 
   const toSlot = (rosterId: string, row: NativeStarter): MatchupPlayerSlot => {
     const pts = row.points ?? 0
@@ -413,7 +424,7 @@ export async function buildNativeMatchupCenterPayload(params: {
       gameLabel: status === 'final' ? 'Final' : row.points != null && pts !== 0 ? 'Scoring' : 'Scheduled',
       aiInsight: null,
       outlook: o
-        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, weather: o.weather, providerProjection: o.projectionSource === 'sleeper' && o.projectedPoints != null ? { points: o.projectedPoints, source: 'sleeper' } : null }
+        ? { homeAway: o.homeAway, kickoffTimeIso: o.kickoffTimeIso, opponentRank: o.opponentRank, teamLogoUrl: o.teamLogoUrl, byeWeek: o.byeWeek, gamesThisWeek: o.gamesThisWeek ?? null, weather: o.weather, providerProjection: o.projectionSource === 'sleeper' && o.projectedPoints != null ? { points: o.projectedPoints, source: 'sleeper' } : null }
         : null,
     })
   }

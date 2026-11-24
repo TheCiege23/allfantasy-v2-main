@@ -40,6 +40,8 @@ export type NflPlayerOutlook = {
   opponentLogoUrl: string | null
   /** The club's bye week this season, or null when the stored schedule cannot say. */
   byeWeek: number | null
+  /** A daily sport: how many games the club plays in the week (the kickoff is the next one). */
+  gamesThisWeek?: number | null
   /** The forecast at the game, from the weather cache only; null when none is cached. */
   weather: RosterGameWeather | null
 }
@@ -103,12 +105,16 @@ const MIN_GAMES = 3
  * Rank 1 allows the fewest. `of` is how many defenses were ranked for that position, so "28th of 32"
  * is never printed against a denominator that is not there.
  */
-export function rankDefensesVsPosition(rows: readonly AllowedRow[]): Map<string, OpponentRank> {
+export function rankDefensesVsPosition(
+  rows: readonly AllowedRow[],
+  /** The positions ranked; NFL skill positions by default. The NBA passes its five. */
+  positions: ReadonlySet<string> = RANKED_POSITIONS,
+): Map<string, OpponentRank> {
   const byKey = new Map<string, { defense: string; position: string; total: number; weeks: Set<number> }>()
   for (const r of rows) {
     const position = String(r.position ?? '').toUpperCase()
     const defense = String(r.defense ?? '').toUpperCase()
-    if (!RANKED_POSITIONS.has(position) || !defense || !Number.isFinite(r.points)) continue
+    if (!positions.has(position) || !defense || !Number.isFinite(r.points)) continue
     const key = `${defense}|${position}`
     const hit = byKey.get(key) ?? { defense, position, total: 0, weeks: new Set<number>() }
     hit.total += r.points

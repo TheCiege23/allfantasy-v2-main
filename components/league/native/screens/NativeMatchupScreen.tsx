@@ -48,11 +48,13 @@ function sideLine(rec: MatchupCenterPayload['left']['record'], remaining: number
 function slotGameLine(p: MatchupPlayerSlot): string {
   const label = p.gameLabel || (p.gameStatus === 'final' ? 'Final' : '—')
   if (String(p.opponent ?? '').toUpperCase() === 'BYE') return 'Bye week'
-  if (!p.opponent) return label
+  // A daily sport: a club with no game in the week says so, and one with several says how many.
+  if (!p.opponent) return p.outlook?.gamesThisWeek === 0 ? 'No games this week' : label
+  const games = p.outlook?.gamesThisWeek != null && p.outlook.gamesThisWeek > 1 ? ` · ${p.outlook.gamesThisWeek} games` : ''
   const vs = `${p.outlook?.homeAway === 'away' ? '@' : 'vs'} ${p.opponent}`
-  if (p.gameStatus !== 'upcoming') return `${vs} · ${label}`
+  if (p.gameStatus !== 'upcoming') return `${vs} · ${label}${games}`
   const k = p.outlook?.kickoffTimeIso ? new Date(p.outlook.kickoffTimeIso) : null
-  return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : vs
+  return k && Number.isFinite(k.getTime()) ? `${vs} · ${k.toLocaleString(undefined, { weekday: 'short', month: games ? 'numeric' : undefined, day: games ? 'numeric' : undefined, hour: 'numeric', minute: '2-digit' })}${games}` : `${vs}${games}`
 }
 
 function SlotCell({ p, side, sport }: { p: MatchupPlayerSlot | null; side: 'left' | 'right'; sport: string | null | undefined }) {
