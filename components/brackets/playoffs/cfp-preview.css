@@ -57,3 +57,11 @@
 
 /* The bowl schedule inside the preview: the preview's palette, and its heading and note sized like the rest of this card. */
 .cfp-preview [data-testid="cfp-bowl-schedule"]{--pb-line2:#6b5525;--pb-surface2:#1f190d;--pb-surface:#14100a;--pb-text:#fffdf7;--pb-text2:#eadfbf;--pb-muted:#cdbb8a;margin-top:26px}.cfp-preview [data-testid="cfp-bowl-schedule"]>h2{font-size:15px;font-weight:800;color:#fffdf7;margin:0 0 4px}.cfp-preview [data-testid="cfp-bowl-schedule"] .af-pb-note{font-size:12px;line-height:1.55;color:#d6c9a4;margin:0 0 12px}.cfp-preview [data-testid="cfp-bowl-schedule"] .af-pb-note a{color:#f0cf7a;text-decoration:underline}
+
+/* "Start a CFP challenge" — the standalone page's action, above the bracket (2026-11-23). Gold on the dark field. */
+.cfp-preview-cta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:4px 0 18px}
+.cfp-preview-cta-button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border-radius:12px;background:var(--cfp-gold);color:var(--cfp-ink);font-size:15px;font-weight:850;text-decoration:none}
+.cfp-preview-cta-button:hover{background:#ddb55c}
+.cfp-preview-cta-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.cfp-preview-cta span{font-size:13px;color:var(--cfp-muted)}
+@media(max-width:600px){.cfp-preview-cta-button{width:100%}}
