@@ -22,6 +22,8 @@ export interface WriteImportedActivitySummary {
   total: number
   created: number
   updated: number
+  /** Already stored with identical content, so not written (stores with `prefetch`). Absent from `persistedByActivityType`. */
+  unchanged: number
   skipped: number
   /** Store-reported skip reasons → count (honest, never fabricated). */
   skippedReasons: Record<string, number>
@@ -48,19 +50,29 @@ export async function writeImportedActivity(
     total: records.length,
     created: 0,
     updated: 0,
+    unchanged: 0,
     skipped: 0,
     skippedReasons: {},
     externalOnlyManagerRecords: 0,
     persistedByActivityType: emptyByType(),
   }
 
-  for (const record of records) {
-    const persisted: PersistedActivityRecord = toPersistedActivityRecord(record)
+  const persistedRecords = records.map((record) => toPersistedActivityRecord(record))
+  // One batched read up front where the store supports it (2026-11-23): no per-row existence read,
+  // and unchanged rows are not rewritten. Stores without it behave exactly as before.
+  if (store.prefetch && persistedRecords.length > 0) await store.prefetch(persistedRecords.map((r) => r.naturalKey))
+
+  for (const [i, record] of records.entries()) {
+    const persisted: PersistedActivityRecord = persistedRecords[i]!
     const result = await store.upsertByNaturalKey(persisted)
 
     if (result.status === 'skipped') {
       summary.skipped += 1
       summary.skippedReasons[result.reason] = (summary.skippedReasons[result.reason] ?? 0) + 1
+      continue
+    }
+    if (result.status === 'unchanged') {
+      summary.unchanged += 1
       continue
     }
 

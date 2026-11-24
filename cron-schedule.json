@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/decision-os-activity-ingest?discover=1",
-      "schedule": "0 7 * * *"
+      "schedule": "0 */4 * * *"
     },
     {
       "path": "/api/cron/decision-os-activity-ingest?relayOnly=1",
