@@ -53,7 +53,7 @@ export function BigBrotherVotingBallot({ leagueId, summary, onVoted }: BigBrothe
 
   if (!ballot) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4 text-sm text-[var(--muted)]">
         No active ballot for this week.
       </div>
     )
@@ -61,41 +61,53 @@ export function BigBrotherVotingBallot({ leagueId, summary, onVoted }: BigBrothe
 
   if (ballot.closed) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <h3 className="text-sm font-medium text-white/90">Voting closed</h3>
-        <p className="mt-1 text-sm text-white/50">Eviction results will be announced in league chat.</p>
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+        <h3 className="text-sm font-medium text-[var(--text)]">Voting closed</h3>
+        <p className="mt-1 text-sm text-[var(--muted)]">Eviction results will be announced in league chat.</p>
       </div>
     )
   }
 
   if (!ballot.canVote) {
+    // Why there is no ballot (2026-11-23): before the vote opens a safe player was told "Not eligible to vote".
+    const status = summary.myStatus
+    const voteOpen = summary.cycle?.phase === 'VOTING_OPEN'
+    const [title, body] = !voteOpen
+      ? ['No vote yet this week', 'The eviction vote opens after the Veto meeting.']
+      : status === 'NOMINATED'
+        ? ['You’re on the block', 'Nominees don’t vote. The house decides.']
+        : status === 'HOH'
+          ? ['You don’t vote this time', 'The Head of Household only votes to break a tie.']
+          : status === 'ELIMINATED' || status === 'JURY'
+            ? ['You’re out of the house', 'Evicted houseguests don’t vote on evictions.']
+            : ['You can’t vote this week', 'Only houseguests in the house who aren’t nominated vote.']
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4">
-        <h3 className="text-sm font-medium text-amber-200">Not eligible to vote</h3>
-        <p className="mt-1 text-sm text-amber-200/80">You are either on the block, the HOH (if voting only in tie), or evicted. Only eligible houseguests can submit an eviction vote.</p>
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+        <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
+        <p className="mt-1 text-sm text-[var(--text2)]">{body}</p>
       </div>
     )
   }
 
   if (nominees.length < 2) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">
+      <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4 text-sm text-[var(--muted)]">
         Final nominees not yet set. Check back after the veto ceremony.
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <h3 className="text-sm font-medium text-white/90">Eviction vote</h3>
-      <p className="mt-1 text-xs text-white/50">Vote for who you want to evict. Last vote before the deadline counts. Votes are private.</p>
+    <div className="rounded-xl border border-[var(--line)] bg-white/[0.03] p-4">
+      <h3 className="text-sm font-medium text-[var(--text)]">Eviction vote</h3>
+      <p className="mt-1 text-xs text-[var(--muted)]">Vote for who you want to evict. Last vote before the deadline counts. Votes are private.</p>
       {ballot.voteDeadlineAt && (
-        <p className="mt-1 text-xs text-white/50">Deadline: {formatInTimezone(ballot.voteDeadlineAt)}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">Deadline: {formatInTimezone(ballot.voteDeadlineAt)}</p>
       )}
 
       <div className="mt-4 space-y-2">
         {nominees.map((id) => (
-          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10">
+          <label key={id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--chip)] px-3 py-2 hover:bg-[var(--chip)]">
             <input
               type="radio"
               name="eviction-vote"
@@ -103,19 +115,19 @@ export function BigBrotherVotingBallot({ leagueId, summary, onVoted }: BigBrothe
               onChange={() => setTargetId(id)}
               className="h-4 w-4"
             />
-            <span className="text-white/90">{names[id] ?? id}</span>
+            <span className="text-[var(--text)]">{names[id] ?? id}</span>
           </label>
         ))}
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-      {success && <p className="mt-2 text-sm text-emerald-300">Vote recorded. You can change it until the deadline.</p>}
+      {error && <p className="mt-2 text-sm text-[var(--bad)]">{error}</p>}
+      {success && <p className="mt-2 text-sm text-[var(--good)]">Vote recorded. You can change it until the deadline.</p>}
 
       <button
         type="button"
         onClick={handleSubmit}
         disabled={!targetId || submitting}
-        className="mt-4 rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+        className="mt-4 rounded-xl bg-[var(--warn-soft)] px-4 py-2 text-sm font-medium text-[var(--warn)] hover:bg-[var(--warn-soft)] disabled:opacity-50"
       >
         {submitting ? 'Submitting…' : 'Submit vote'}
       </button>

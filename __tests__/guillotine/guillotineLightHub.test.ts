@@ -50,6 +50,7 @@ function decls(body: string): Record<string, string> {
 const LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='guillotine']"
 const DEVY_LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='devy']"
 const SALARY_LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='salary']"
+const BB_LIGHT_SEL = ":global(html[data-mode='light']) .sp[data-specialty='bigbrother']"
 /** A rule's selector list, one selector per entry. */
 const sels = (s: string) => s.split(',').map((x) => x.trim())
 const lightRule = rules(SP).find(([s]) => sels(s).includes(LIGHT_SEL))
@@ -98,7 +99,7 @@ describe('the shared shell stays byte-identical in dark mode and for every other
     expect(lightRule, `no rule "${LIGHT_SEL}"`).toBeTruthy()
     // The lookahead holds the whitespace too: `\s*(?!initial)` would match zero spaces and slip past " initial".
     const setters = rules(SP).filter(([, b]) => /--sp-[\w-]+\s*:(?!\s*initial)/.test(b)).map(([s]) => s)
-    expect(setters.map(sels)).toEqual([[LIGHT_SEL, DEVY_LIGHT_SEL, SALARY_LIGHT_SEL]])
+    expect(setters.map(sels)).toEqual([[LIGHT_SEL, DEVY_LIGHT_SEL, SALARY_LIGHT_SEL, BB_LIGHT_SEL]])
   })
 
   it('the hero and .stayDark reset every token the light rule sets, so they stay dark', () => {
