@@ -36,6 +36,28 @@ export type DigestItem = {
   starter: boolean
   headline: string
   createdAt: Date
+  /**
+   * Set when the person was told because they follow this player's TEAM (not him, and not through a
+   * roster) — the display name of that team. 🛑 Filing these under "Players you follow" told a Celtics
+   * fan who does not play fantasy basketball that he followed Paul George (2026-11-24).
+   */
+  followedTeam?: string | null
+}
+
+const PLAYERS_YOU_FOLLOW = 'Players you follow'
+
+/** "BOSTON CELTICS" → "Boston Celtics". Abbreviations ("BOS") and mixed case are left alone. */
+export function tidyTeamName(team: string | null | undefined): string | null {
+  const t = typeof team === 'string' ? team.trim() : ''
+  if (!t) return null
+  if (t !== t.toUpperCase() || !/\s/.test(t)) return t
+  return t.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase())
+}
+
+function groupOf(it: DigestItem): { key: string; rank: number } {
+  if (it.leagueName) return { key: it.leagueName, rank: 0 }
+  if (it.followedTeam) return { key: `${it.followedTeam} · a team you follow`, rank: 2 }
+  return { key: PLAYERS_YOU_FOLLOW, rank: 1 }
 }
 
 function localParts(now: Date, timeZone: string): { day: string; hour: number } {
@@ -56,17 +78,20 @@ export function digestDue(now: Date, timeZone: string | null | undefined): { due
 
 /** Pure: the email, grouped league → starters first → team. */
 export function renderPlayerNewsDigest(items: DigestItem[], baseUrl: string): { subject: string; html: string; body: string } {
+  // Leagues first, then players the person follows, then teams they follow.
   const byLeague = new Map<string, DigestItem[]>()
+  const rankOf = new Map<string, number>()
   for (const it of items) {
-    const key = it.leagueName ?? 'Players you follow'
+    const { key, rank } = groupOf(it)
+    rankOf.set(key, rank)
     byLeague.set(key, [...(byLeague.get(key) ?? []), it])
   }
   const starters = items.filter(i => i.starter).length
   const subject = `Roster news: ${items.length} update${items.length === 1 ? '' : 's'}${starters ? ` · ${starters} about your starters` : ''}`
-  const blocks = [...byLeague.entries()].map(([league, rows]) => {
+  const blocks = [...byLeague.entries()].sort((a, b) => rankOf.get(a[0])! - rankOf.get(b[0])!).map(([league, rows]) => {
     rows.sort((a, b) => Number(b.starter) - Number(a.starter) || String(a.team ?? '').localeCompare(String(b.team ?? '')) || a.playerName.localeCompare(b.playerName))
     const lines = rows.map(r => {
-      const tag = [r.position, r.team].filter(Boolean).join(' · ')
+      const tag = [r.position, tidyTeamName(r.team)].filter(Boolean).join(' · ')
       return `<div style="margin:0 0 8px 0;color:#d4d4d8">${r.starter ? '⭐ ' : '• '}<strong style="color:#ffffff">${escapeHtml(r.playerName)}</strong>${tag ? ` <span style="color:#a1a1aa">(${escapeHtml(tag)})</span>` : ''} — ${escapeHtml(r.headline)}</div>`
     }).join('')
     return `<div style="margin:0 0 16px 0"><div style="font-size:15px;font-weight:800;color:#ffffff;margin:0 0 6px 0">${escapeHtml(league)}</div>${lines}</div>`
@@ -74,7 +99,9 @@ export function renderPlayerNewsDigest(items: DigestItem[], baseUrl: string): { 
   const html = renderDigestEmail({
     eyebrow: 'AllFantasy · Roster news',
     title: subject,
-    sub: '⭐ marks a player in your starting lineup. Starters already got a push when it happened; everything else waited for this email.',
+    // 🛑 This used to say "everything else waited for this email". Since every story is sent instantly
+    // (playerNewsLevel.ts), that was false — and it led with lineups for people who have none.
+    sub: `Today's news about the players and teams you follow on AllFantasy.${starters ? ' ⭐ marks a player in your starting lineup.' : ''}`,
     bodyHtml: blocks,
     cta: { href: `${baseUrl}/core/players`, label: 'Open your players' },
     baseUrl,
@@ -85,8 +112,9 @@ export function renderPlayerNewsDigest(items: DigestItem[], baseUrl: string): { 
 
 type Row = { id: string; leagueId: string | null; body: string | null; title: string; meta: unknown; createdAt: Date }
 
-function toItem(row: Row, leagueNames: Map<string, string>): DigestItem | null {
-  const pn = (row.meta as { playerNews?: Record<string, unknown> } | null)?.playerNews
+export function toItem(row: Row, leagueNames: Map<string, string>): DigestItem | null {
+  const meta = row.meta as { playerNews?: Record<string, unknown>; followedTeam?: unknown; teamName?: unknown } | null
+  const pn = meta?.playerNews
   // A lineup alert already went out by push and email, and injury news that changes no lineup is
   // bell-only (lib/notifications/lineupImpactCopy.ts): neither belongs in the digest.
   if (!pn || pn.digest === false) return null
@@ -101,6 +129,11 @@ function toItem(row: Row, leagueNames: Map<string, string>): DigestItem | null {
     starter: pn.starter === true,
     headline: (row.body ?? row.title).split('\n')[0]!.slice(0, 220),
     createdAt: row.createdAt,
+    // Both team-follow senders stamp `followedTeam` (PlayerNewsNotificationService). A league row is a
+    // roster story, whatever else it carries.
+    followedTeam: !row.leagueId && str(meta?.followedTeam)
+      ? tidyTeamName(str(meta?.teamName) ?? str(pn.team)) ?? str(meta?.followedTeam)
+      : null,
   }
 }
 
