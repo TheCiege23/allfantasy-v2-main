@@ -138,7 +138,7 @@ function warRoomState(state: KeeperHarnessState) {
     recommendations: {
       rosterId: 'r-next-1', maxKeepers: 3,
       recommended: [line('p-puka', 'definite_keep', 'Market WR1-tier for a 9th-round price'), line('p-daniels', 'definite_keep', 'QB value far above an 11th'), line('p-nabers', 'keep', 'Worth a 2nd, costs a 6th')],
-      bubble: [line('p-jacobs', 'borderline', 'About what he costs')],
+      bubble: [line('p-bijan', 'keep', 'Worth a 1st, costs a 2nd'), line('p-jacobs', 'borderline', 'About what he costs')],
       avoid: [line('p-kelce', 'let_go', 'Costs a 4th, goes in the 6th')],
       ranked: [], needsMoreData: false, missingDataFlags: [],
     },
@@ -181,6 +181,11 @@ const TEAMS_ROSTERS: Record<string, string[]> = {
   'u-sam': ['Brock Bowers', 'Kyren Williams'],
 }
 
+const TEAMS_POSITIONS: Record<string, string> = {
+  'Bijan Robinson': 'RB', 'Puka Nacua': 'WR', 'CeeDee Lamb': 'WR', 'Travis Kelce': 'TE', "Ja'Marr Chase": 'WR',
+  'Saquon Barkley': 'RB', 'Joe Burrow': 'QB', 'Brock Bowers': 'TE', 'Kyren Williams': 'RB',
+}
+
 export const KEEPER_SETTINGS_TEAMS = [
   { id: 't1', teamName: 'Second Chance Saloon', ownerName: 'You', claimedByUserId: 'u-you' },
   { id: 't2', teamName: 'The Keeper of the Seven Keys', ownerName: 'Morgan', claimedByUserId: 'u-morgan' },
@@ -202,7 +207,7 @@ export function installKeeperHarnessFetch(state: KeeperHarnessState) {
     if (p === '/api/keeper/context' && method === 'GET') return json(context(state))
     if (p === '/api/keeper/eligibility' && method === 'GET') return json({ raw: ELIGIBILITY, valueReport: { available: true, values: VALUES } })
     if (p === '/api/redraft/roster' && method === 'GET') return json({ roster: { players: ROSTER.map((r) => ({ ...r, droppedAt: null })) } })
-    if (p === '/api/keeper/selections' && method === 'GET') return json({ records: state === 'none' ? [] : MY_RECORDS })
+    if (p === '/api/keeper/selections' && method === 'GET') return json({ records: state === 'none' ? [] : state === 'locked' ? MY_RECORDS.map((r) => ({ ...r, status: 'locked' })) : MY_RECORDS })
     if (p === '/api/keeper/commissioner/records' && method === 'GET') return json({ records: url.searchParams.get('seasonId') === SEASON_NEXT && state !== 'none' ? LEAGUE_RECORDS : [] })
     if (p === `/api/leagues/${KEEPER_LEAGUE_ID}/keeper-war-room` && method === 'GET') return json(warRoomState(state))
     if (p === `/api/leagues/${KEEPER_LEAGUE_ID}/keeper-war-room/cut-list`) return json(CUT_LIST)
@@ -212,7 +217,7 @@ export function installKeeperHarnessFetch(state: KeeperHarnessState) {
     }
     if (p === '/api/league/roster' && method === 'GET') {
       const names = TEAMS_ROSTERS[url.searchParams.get('userId') ?? ''] ?? []
-      return json({ roster: { players: names.map((n, i) => ({ playerId: `${n}-${i}`, playerName: n })) } })
+      return json({ roster: { players: names.map((n, i) => ({ playerId: `${n}-${i}`, playerName: n, position: TEAMS_POSITIONS[n] ?? null })) } })
     }
     if (p === '/api/subscription/entitlements') return json({ hasAccess: true, entitlement: { plans: ['pro'], status: 'active' } })
     if (p === '/api/guest-mode/status') return json({ isGuest: false })

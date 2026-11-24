@@ -77,7 +77,8 @@ describe('Keepers tab speaks plainly', () => {
 
   it('says what a keeper costs and where his submission stands', async () => {
     await tab()
-    expect(within(screen.getByTestId('keeper-select-p1')).getByText(/Keeping him costs a round 9 pick/)).toBeTruthy()
-    expect(within(screen.getByTestId('keeper-submitted')).getByText(/Waiting for your commissioner/)).toBeTruthy()
+    expect(within(screen.getByTestId('keeper-select-p1')).getByText(/Costs a round 9 pick/)).toBeTruthy()
+    // Status sits on the player's own card since 2026-11-24, not in a second list under the roster.
+    expect(screen.getByTestId('keeper-status-p1').textContent).toMatch(/Waiting for your commissioner/)
   })
 })
