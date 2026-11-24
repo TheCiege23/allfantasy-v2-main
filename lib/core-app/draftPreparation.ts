@@ -255,7 +255,7 @@ export async function getDraftPreparationData(
               count: 0,
               autopick: pref?.enabled
                 ? pref.mode === "ai_queue"
-                  ? "Chimmy queue autopick is enabled: it picks for you as soon as you are on the clock."
+                  ? "Chimmy Queue is on: as soon as you are on the clock, your queue goes first, then Chimmy picks for your team's needs."
                   : pref.mode === "draft_as_me"
                     ? "Draft like me is on: as soon as you are on the clock, your queue goes first, then Chimmy picks the way you draft."
                     : "Standard autopick is enabled: it picks for you as soon as you are on the clock, trying your live queue before fallback rules."

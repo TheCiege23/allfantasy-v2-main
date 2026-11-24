@@ -1,7 +1,8 @@
 /**
  * A manager's personal auto-pick modes (LiveDraftAutopickPreference.mode).
  *
- * `standard`: queue, then the league's fallback. `ai_queue` (AF Pro): Chimmy's queue.
+ * `standard`: queue, then the league's fallback. `ai_queue` (AF Pro) "Chimmy Queue": queue, then
+ * Chimmy's pick for the team's needs (lib/live-draft-engine/chimmyQueueAutopick.ts).
  * `draft_as_me` (AF Pro): queue, then the pick this manager would make, from how they have drafted
  * before (lib/draft-room/draftAsMe.ts).
  */
