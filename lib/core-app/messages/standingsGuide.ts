@@ -34,7 +34,7 @@ export const standingsGuideMessages = defineMessages({
     intro: (p: { headToHead: boolean; seasonComplete: boolean; week: number; throughWeek: number | null }) =>
       `${p.headToHead
         ? 'Your record decides the seeding.'
-        : 'Points decide the order in this league — there are no head-to-head records.'}${p.seasonComplete ? ` Season complete after week ${p.week}.` : p.throughWeek != null ? ` Results through week ${p.throughWeek}.` : ''}`,
+        : 'In this league, points decide the order — there are no head-to-head records.'}${p.seasonComplete ? ` Season complete after week ${p.week}.` : p.throughWeek != null ? ` Results through week ${p.throughWeek}.` : ''}`,
     ifTheyWin: 'if they win',
     ifNot: 'if not',
     why: 'Why it matters',
