@@ -26,4 +26,5 @@ export const SUB_PAGE_TITLES: Record<SettingsSubPageId, string> = {
   'settings-lock': 'Settings lock',
   'score-adjustments': 'Score adjustments',
   'survivor-tribes': 'Survivor tribes',
+  'delete-league': 'Delete league',
 }

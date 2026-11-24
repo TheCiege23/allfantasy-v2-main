@@ -307,6 +307,7 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
     if (data.typeRules === undefined || data.typeRules.length) out.push({ id: 'rules', label: meta.rulesTitle })
     if (data.afOptions === undefined || data.afOptions.length) out.push({ id: 'afoptions', label: 'AllFantasy options' })
     out.push({ id: 'notes', label: 'Commish Notes' }, { id: 'roster', label: 'Roster' }, { id: 'scoring', label: 'Scoring' }, { id: 'draft', label: 'Draft' })
+    if (data.isHeadCommissioner && !data.importedFrom) out.push({ id: 'delete', label: 'Delete League' })
     return out
   }
   if (tab === 'members') return [{ id: 'commissioners', label: 'Commissioners' }, { id: 'coowners', label: 'Co-Owners' }, { id: 'managers', label: 'Managers' }, { id: 'invite', label: 'Invite' }]
@@ -931,6 +932,20 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
           )}
         </div>
       </Card>
+
+      {/* Head commissioner only. Deleting used to sit at the bottom of Lineups, locks & schedule, under the league history. */}
+      {data.isHeadCommissioner && !data.importedFrom ? (
+        <Card id="delete" title="Delete League">
+          <div className="af-lsh-card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+            <span style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--lsh-muted)' }}>
+              {t('Removes this league, its draft and its history for every member. You’ll type the league name to confirm.')}
+            </span>
+            <button type="button" className="af-lsh-btn" data-variant="danger" onClick={() => cb.onOpenEditor('delete-league')} data-testid="league-settings-hub-delete">
+              {t('DELETE LEAGUE')}
+            </button>
+          </div>
+        </Card>
+      ) : null}
     </>
   )
 }

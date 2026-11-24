@@ -101,6 +101,22 @@ describe('LeagueSettingsHubView', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Co-commissioner: Other' }))
     expect(c.onToggleCoCommissioner).toHaveBeenCalledWith('t2', true)
   })
+
+  it('League Setup ends with Delete League for the head commissioner, opening the delete page', () => {
+    const c = cb()
+    render(<LeagueSettingsHubView data={makeData('redraft', true)} cb={c} initialTab="setup" />)
+    fireEvent.click(screen.getByTestId('league-settings-hub-delete'))
+    expect(c.onOpenEditor).toHaveBeenCalledWith('delete-league')
+  })
+
+  it('a co-commissioner, a member and an imported league see no Delete League card', () => {
+    const co = { ...makeData('redraft', true), isHeadCommissioner: false }
+    const { unmount } = render(<LeagueSettingsHubView data={co} cb={cb()} initialTab="setup" />)
+    expect(screen.queryByTestId('league-settings-hub-delete')).toBeNull()
+    unmount()
+    render(<LeagueSettingsHubView data={{ ...makeData('redraft', true), importedFrom: 'sleeper' } as HubViewData} cb={cb()} initialTab="setup" />)
+    expect(screen.queryByTestId('league-settings-hub-delete')).toBeNull()
+  })
 })
 
 describe('native editor routing helpers', () => {

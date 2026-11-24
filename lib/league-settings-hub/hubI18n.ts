@@ -77,6 +77,9 @@ const ES: Record<string, string> = {
   'Are you sure? Your team will be given up and you’ll lose access to this league.': '¿Seguro? Cederás tu equipo y perderás el acceso a esta liga.',
   'Hand the commissioner role to someone else first.': 'Primero pasa el rol de comisionado a otra persona.',
   'LEAVE LEAGUE': 'SALIR DE LA LIGA',
+  'Delete League': 'Eliminar liga',
+  'DELETE LEAGUE': 'ELIMINAR LIGA',
+  'Removes this league, its draft and its history for every member. You’ll type the league name to confirm.': 'Elimina esta liga, su draft y su historial para todos los miembros. Escribirás el nombre de la liga para confirmar.',
 
   /* ---------------------------------------------------------- Setup tab */
   'General Settings': 'Ajustes generales',

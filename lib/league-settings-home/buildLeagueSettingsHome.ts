@@ -46,6 +46,8 @@ export type SettingsSubPageId =
   | 'score-adjustments'
   /** Survivor leagues only: tribe count, identities and the pre-draft tribe plan (handoff §5.4). */
   | 'survivor-tribes'
+  /** Head commissioner only: delete the league for everyone (name confirmation). Was buried under Lineups, locks & schedule. */
+  | 'delete-league'
 
 export type SettingsHomeRow = {
   id: string
@@ -113,6 +115,8 @@ export type BuildSettingsHomeInput = {
   league: SettingsHomeLeague
   teams: readonly SettingsHomeTeam[]
   canEdit: boolean
+  /** The head commissioner, who alone can delete the league. Absent = no Delete league row. */
+  canDelete?: boolean
   /** e.g. "Guillotine" — from lib/league-media/leagueTypeMedia. */
   formatLabel: string
   /** Scoring preset name, when the league carries one. */
@@ -459,6 +463,9 @@ export function buildLeagueSettingsHome(input: BuildSettingsHomeInput): Settings
         { id: 'score-adjustments', label: 'Score adjustments', value: 'Add or take away points, with a reason', target: 'score-adjustments' },
         ...(isSurvivorSettingsLeague(league)
           ? [{ id: 'survivor-tribes', label: 'Survivor tribes', value: 'Tribes, assignment & announce', target: 'survivor-tribes' as const }]
+          : []),
+        ...(input.canDelete
+          ? [{ id: 'delete-league', label: 'Delete league', value: 'Remove it for every member', target: 'delete-league' as const }]
           : []),
       ],
     })

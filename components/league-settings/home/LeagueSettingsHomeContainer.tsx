@@ -165,6 +165,7 @@ export function LeagueSettingsHomeContainer({
       league: effectiveLeague,
       teams: effectiveLeague.teams ?? [],
       canEdit: ctx.isCommissioner,
+      canDelete: Boolean(ctx.isHeadCommissioner),
       formatLabel: getLeagueTypeMedia(conceptKey).label,
       scoringLabel:
         savedScoringLabel ?? (effectiveLeague.scoringPresetId ? findScoringPresetRule(effectiveLeague.scoringPresetId)?.label : null) ?? null,
@@ -174,7 +175,7 @@ export function LeagueSettingsHomeContainer({
       pirateRules,
       inviteUrl: leagueJoinUrl(nativeLeagueInviteCode(effectiveLeague.settings, effectiveLeague.invites)),
     })
-  }, [effectiveLeague, ctx.isCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
+  }, [effectiveLeague, ctx.isCommissioner, ctx.isHeadCommissioner, rosterSlots, draft, guillotineState, savedScoringLabel, pirateRules])
 
   const subCtx = useMemo(() => ({ ...ctx, league: effectiveLeague, hasAfCommissionerSub }), [ctx, effectiveLeague, hasAfCommissionerSub])
 

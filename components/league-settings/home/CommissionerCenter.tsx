@@ -79,6 +79,8 @@ const NAV_GROUPS: ReadonlyArray<{ key: 'league' | 'rules' | 'ops'; items: Readon
       { id: 'score-adjustments', key: 'scoreAdjustments' },
       { id: 'survivor-tribes', key: 'survivorTribes' },
       { id: 'ai', key: 'ai' },
+      // Last on purpose: the one destructive entry sits at the end of the list, where people look for it.
+      { id: 'delete-league', key: 'deleteLeague' },
     ],
   },
 ]
