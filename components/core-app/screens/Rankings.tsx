@@ -615,9 +615,24 @@ const XP_BAR_TONE: Record<XpRow['key'], string> = {
 function XpBreakdownCard({ data }: { data: RankingsData }) {
   if (!data.you || data.xpRows.length === 0) return null
   const rec = data.reconciliation
+  /*
+    Closed until tapped (2026-11-24, the simplify pass): the level card above already shows the total and
+    how far to the next level; the per-rule bars and the note were ~470px on a phone on every visit. A saved
+    total that disagrees with today's rules stays OUTSIDE the fold — that one is a warning, not a lesson.
+  */
   return (
     <section className="af-rk-card">
-      <p className="af-rk-eyebrow">Where your XP came from</p>
+      {rec && !rec.matches ? (
+        <p className="af-rk-note af-rk-note--warn">
+          Your saved total is {rec.stored?.toLocaleString(getAppIntlLocale())} XP, written {fmtDate(rec.storedAt)}. The published rules over
+          the leagues on file today give {rec.computed.toLocaleString(getAppIntlLocale())}, which is the figure shown here. They will agree
+          after your next import recalculates your rank.
+        </p>
+      ) : null}
+      <details className="af-rk-xpfold" data-testid="rk-xp-fold">
+      <summary className="af-rk-eyebrow">
+        Where your XP came from <span className="af-rk-xpfold-total">{data.you.xp.toLocaleString(getAppIntlLocale())} XP</span>
+      </summary>
       {data.xpRows.map((r) => (
         <div className="af-rk-xprow" key={r.key}>
           <div className="af-rk-xpline">
@@ -635,17 +650,11 @@ function XpBreakdownCard({ data }: { data: RankingsData }) {
         <b>Total</b>
         <span>{data.you.xp.toLocaleString(getAppIntlLocale())}</span>
       </div>
-      {rec && !rec.matches ? (
-        <p className="af-rk-note af-rk-note--warn">
-          Your saved total is {rec.stored?.toLocaleString(getAppIntlLocale())} XP, written {fmtDate(rec.storedAt)}. The published rules over
-          the leagues on file today give {rec.computed.toLocaleString(getAppIntlLocale())}, which is the figure shown here. They will agree
-          after your next import recalculates your rank.
-        </p>
-      ) : null}
       <p className="af-rk-note">
         XP is a ladder, not a ranking: losses never subtract, and imported seasons count the same
         as leagues played here. Playoff berths only count once games have been played.
       </p>
+      </details>
     </section>
   )
 }
@@ -710,9 +719,15 @@ function portfolioColumns(p: PortfolioView, data: RankingsData): RankColumn[] {
     { key: 'size', label: 'Teams', srLabel: 'Teams and playoff cut', align: 'right', hideOnPhone: true, ...col('size') },
     { key: 'record', label: 'Record', align: 'right', ...col('record') },
     { key: 'ppg', label: 'PPG', srLabel: 'Points per game', align: 'right', hideOnPhone: true },
-    { key: 'index', label: 'Index', srLabel: 'Scoring index, 100 is average for the format', align: 'right', ...col('index') },
+    /*
+      2026-11-24 (the simplify pass): Index sits behind a phone row's "More" with the other details, and the
+      score's chip says "Score" — together that puts Finish, Score and More on ONE line under the league, so
+      a season is two lines on a phone instead of three. The desktop table keeps every column; the full name
+      stays the column's accessible name.
+    */
+    { key: 'index', label: 'Index', srLabel: 'Scoring index, 100 is average for the format', align: 'right', hideOnPhone: true, ...col('index') },
     { key: 'finish', label: 'Finish' },
-    { key: 'score', label: 'Manager score', align: 'right' },
+    { key: 'score', label: 'Score', srLabel: 'Manager score', align: 'right' },
   ]
 }
 

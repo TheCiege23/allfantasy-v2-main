@@ -1610,3 +1610,19 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   /* A long label in the open list wraps instead of running under its number. */
   .af-rk-cards tr[data-phonemore]:has(.af-rk-cellbtn) .af-rk-phonemore-list dt { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* Where your XP came from, closed until tapped (Rankings XpBreakdownCard, 2026-11-24). */
+.af-rk-xpfold > summary.af-rk-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0;
+  cursor: pointer;
+  list-style: none;
+}
+.af-rk-xpfold > summary::-webkit-details-marker { display: none; }
+.af-rk-xpfold > summary::after { content: '▾'; margin-left: 4px; }
+.af-rk-xpfold[open] > summary::after { content: '▴'; }
+.af-rk-xpfold-total { margin-left: auto; font-variant-numeric: tabular-nums; }
+.af-rk-xpfold[open] > summary { margin-bottom: 10px; }
