@@ -236,7 +236,7 @@ export function LeagueSettingsHubView({
       </div>
 
       <div className="af-lsh-body" id="af-lsh-panel" role="tabpanel" aria-labelledby={`af-lsh-tab-${tab}`}>
-        <nav className="af-lsh-jump" aria-label={t('On this page')}>
+        <nav className="af-lsh-jump" aria-label={t('On this page')} onClick={openLinkedSection}>
           <span className="af-lsh-jump-label">{t('On this page')}</span>
           {sections.map((s) => (
             <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
@@ -248,7 +248,7 @@ export function LeagueSettingsHubView({
           </div>
         </nav>
         <div className="af-lsh-stack">
-          <nav className="af-lsh-chips" aria-label={t('Sections')}>
+          <nav className="af-lsh-chips" aria-label={t('Sections')} onClick={openLinkedSection}>
             {sections.map((s) => (
               <a key={s.id} href={`#af-lsh-${s.id}`}>{t(s.label)}</a>
             ))}
@@ -317,20 +317,47 @@ function sectionsFor(tab: HubTabId, data: HubViewData): Array<{ id: string; labe
 
 /* ------------------------------------------------------------ primitives */
 
-function Card({ id, title, sub, action, children }: { id: string; title: string; sub?: string; action?: ReactNode; children: ReactNode }) {
+/**
+ * A section card. `fold` makes it a <details> whose summary is the card's own head (2026-11-24, the
+ * simplify pass): League Setup drew every section open — ~5,600px on a phone — so all but General now
+ * start closed, as one row each. The Edit button stays in the head and works without opening the card
+ * (a click on a button inside a summary does not toggle it), and the section chips open what they jump to.
+ */
+function Card({ id, title, sub, action, children, fold }: { id: string; title: string; sub?: string; action?: ReactNode; children: ReactNode; fold?: 'open' | 'closed' }) {
   const { t } = useT()
+  const head = (
+    <>
+      <div>
+        <h2 id={`af-lsh-${id}-title`}>{t(title)}</h2>
+        {sub ? <p>{t(sub)}</p> : null}
+      </div>
+      {action}
+    </>
+  )
+  if (fold) {
+    return (
+      <section className="af-lsh-card" id={`af-lsh-${id}`} aria-labelledby={`af-lsh-${id}-title`} data-fold="true">
+        <details className="af-lsh-fold" open={fold === 'open' || undefined} data-testid={`league-settings-fold-${id}`}>
+          <summary className="af-lsh-card-head">{head}</summary>
+          {children}
+        </details>
+      </section>
+    )
+  }
   return (
     <section className="af-lsh-card" id={`af-lsh-${id}`} aria-labelledby={`af-lsh-${id}-title`}>
-      <div className="af-lsh-card-head">
-        <div>
-          <h2 id={`af-lsh-${id}-title`}>{t(title)}</h2>
-          {sub ? <p>{t(sub)}</p> : null}
-        </div>
-        {action}
-      </div>
+      <div className="af-lsh-card-head">{head}</div>
       {children}
     </section>
   )
+}
+
+/** A section link was tapped: open the folded card it points at, then let the browser jump to it. */
+function openLinkedSection(event: { target: EventTarget }) {
+  const link = (event.target as HTMLElement | null)?.closest?.('a[href^="#af-lsh-"]')
+  const id = link?.getAttribute('href')?.slice(1)
+  const fold = id ? document.getElementById(id)?.querySelector<HTMLDetailsElement>(':scope > details.af-lsh-fold') : null
+  if (fold) fold.open = true
 }
 
 function EditButton({ show, onClick, label = 'Edit' }: { show: boolean; onClick: () => void; label?: string }) {
@@ -849,7 +876,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
 
   return (
     <>
-      <Card id="general" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('general')} />}>
+      <Card id="general" fold="open" title="General Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('general')} />}>
         <div className="af-lsh-card-body" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="af-lsh-avatar" aria-hidden>{data.leagueAvatarUrl ? <img src={data.leagueAvatarUrl} alt="" /> : initials(data.leagueName)}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
@@ -864,25 +891,25 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         {data.general === undefined ? <Loading lines={5} /> : <GroupGrid groups={data.general} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
-      <Card id="waivers" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
+      <Card id="waivers" fold="closed" title={data.kind === 'zombie' ? 'Free Agency' : 'Waiver Settings'} action={<EditButton show={edit} onClick={() => cb.onOpenEditor('waivers')} />}>
         {data.waivers === undefined ? <Loading /> : <GroupGrid groups={data.waivers} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
       </Card>
 
       {data.typeRules === undefined || data.typeRules.length ? (
-        <Card id="rules" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
+        <Card id="rules" fold="closed" title={meta.rulesTitle} sub={meta.blurb} action={<EditButton show={edit} onClick={() => cb.onOpenEditor(rulesEditorFor(data.kind))} />}>
           {data.typeRules === undefined ? <Loading /> : <GroupGrid groups={data.typeRules} canEdit={edit} />}
         </Card>
       ) : null}
 
       {data.afOptions === undefined || data.afOptions.length ? (
-        <Card id="afoptions" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
+        <Card id="afoptions" fold="closed" title="AllFantasy options" sub="Rules only AllFantasy has. Each one is also in the Commissioner Hub.">
           {data.afOptions === undefined ? <Loading lines={2} /> : <AfOptionRows options={data.afOptions} cb={cb} canOpen={edit} tagged />}
         </Card>
       ) : null}
 
       <NotesCard note={data.commissionerNote} edit={edit} onSave={cb.onSaveNote} />
 
-      <Card id="roster" title="Roster Settings" sub="Starting positions and roster spots" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('roster')} />}>
+      <Card id="roster" fold="closed" title="Roster Settings" sub="Starting positions and roster spots" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('roster')} />}>
         {data.roster === undefined ? <Loading lines={4} /> : data.roster === null || data.roster.length === 0 ? (
           <p className="af-lsh-empty">{t('Roster positions aren’t available for this league yet.')}</p>
         ) : (
@@ -890,7 +917,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         )}
       </Card>
 
-      <Card id="scoring" title="Scoring Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('scoring')} />}>
+      <Card id="scoring" fold="closed" title="Scoring Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('scoring')} />}>
         {scoring === undefined ? <Loading lines={4} /> : scoring === null || !activeCat ? (
           <p className="af-lsh-empty">{t('Scoring rules aren’t available for this league yet.')}</p>
         ) : (
@@ -909,7 +936,7 @@ function SetupTab({ data, cb, busyField }: { data: HubViewData; cb: HubCallbacks
         )}
       </Card>
 
-      <Card id="draft" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
+      <Card id="draft" fold="closed" title="Draft Settings" action={<EditButton show={edit} onClick={() => cb.onOpenEditor('draft')} />}>
         {data.draft === undefined ? <Loading lines={4} /> : <GroupGrid groups={data.draft} canEdit={edit} busyField={busyField} onToggle={cb.onToggleSetting} />}
         <div className="af-lsh-card-body" style={{ paddingTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
