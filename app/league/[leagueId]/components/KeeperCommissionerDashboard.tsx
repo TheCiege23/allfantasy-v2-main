@@ -189,9 +189,18 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
     }
   }
 
+  // Locking with teams still to pick takes a second tap that names how many (2026-11-24 audit: one tap locked
+  // the window on 5 of 12 teams with nothing said).
+  const [lockArmed, setLockArmed] = useState(false)
   const lockPhase = async () => {
     const sid = ctx?.session?.id
     if (!sid) return
+    const missingTeams = Math.max(0, (ctx?.session?.totalTeams ?? 0) - (ctx?.session?.teamsSubmitted ?? 0))
+    if (missingTeams > 0 && !lockArmed) {
+      setLockArmed(true)
+      return
+    }
+    setLockArmed(false)
     setBusy('lock')
     try {
       const res = await fetch('/api/keeper/session', {
@@ -316,7 +325,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
                 className="kp-btn inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold disabled:opacity-40"
               >
                 {busy === 'lock' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                Lock keepers now
+                {lockArmed ? 'Lock anyway' : 'Lock keepers now'}
               </button>
             ) : (
               <span className="kp-chip rounded-full px-3 py-1 text-[12px] font-semibold">Locked</span>
@@ -329,6 +338,13 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
           <p className="kp-text2 text-[13px]">
             {ctx.session.teamsSubmitted} of {ctx.session.totalTeams} teams have picked their keepers
           </p>
+          {ctx.session.status === 'open' && ctx.session.teamsSubmitted < ctx.session.totalTeams ? (
+            <p className={`text-[13px] ${lockArmed ? 'kp-warn font-semibold' : 'kp-muted'}`} data-testid="keeper-commish-lock-warning">
+              {lockArmed
+                ? `${ctx.session.totalTeams - ctx.session.teamsSubmitted} teams haven’t picked. Locking now closes the window for them too.`
+                : `${ctx.session.totalTeams - ctx.session.teamsSubmitted} teams haven’t picked yet.`}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -409,7 +425,9 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
         )}
       </div>
 
-      <div className="kp-card rounded-lg p-3 text-[13px]">
+      {/* The draft-room route to keepers, only while keepers can still change. */}
+      {ctx.session?.status === 'open' ? (
+      <div className="kp-card rounded-lg p-3 text-[13px]" data-testid="keeper-commish-draft-note">
         <p className="kp-text font-semibold">Draft</p>
         <p className="kp-muted mt-1">
           Before the draft starts, you can still add or change keepers in the draft room’s Keeper panel.
@@ -418,6 +436,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
           Open draft →
         </Link>
       </div>
+      ) : null}
     </div>
   )
 }

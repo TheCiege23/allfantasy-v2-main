@@ -51,7 +51,7 @@ export function recommendKeepers(context: KeeperWarRoomContext, rosterId: string
   // Only eligible, value-known candidates are keepable; rank by surplus desc.
   const keepable = ranked.filter((r) => r.verdict !== 'ineligible' && r.verdict !== 'no_cost')
   const recommended = keepable.slice(0, maxKeepers)
-  const bubble = keepable.slice(maxKeepers, maxKeepers + 3)
+  const bubble = keepable.slice(maxKeepers).filter((r) => (r.surplusRounds ?? 0) >= 0).slice(0, 3)
   const avoid = keepable.filter((r) => (r.surplusRounds ?? 0) < 0)
 
   if (keepable.some((r) => r.verdict === 'no_cost')) {
