@@ -114,6 +114,7 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     scoringUnknown: 'scoring unknown',
     sharesFootLeague: (league) =>
       `Ranked by how many of your rosters hold him. "Value" is ${league}'s format and scoring (* when its scoring moves the market number); points are this season under ${league}'s own scoring, from his game stat lines.`,
+    sharesFootLabel: 'How this list is ranked',
     sharesFootAll:
       'Ranked by how many of your rosters hold him. Pick a league at the top to see who has each of them there, what they are worth in it, and what they have scored under its scoring.',
     splitHeading: 'Where your starters come from',
@@ -241,6 +242,7 @@ export const finderTradeValueMessages = defineMessages<TradeValueCopy>({
     scoringUnknown: 'puntuación desconocida',
     sharesFootLeague: (league) =>
       `Ordenado por cuántas de tus plantillas lo tienen. «Valor» es el formato y la puntuación de ${league} (* cuando su puntuación mueve la cifra de mercado); los puntos son de esta temporada con la puntuación propia de ${league}, según sus estadísticas por partido.`,
+    sharesFootLabel: 'Cómo se ordena esta lista',
     sharesFootAll:
       'Ordenado por cuántas de tus plantillas lo tienen. Elige una liga arriba para ver quién tiene a cada uno ahí, cuánto vale en ella y cuánto ha anotado con su puntuación.',
     splitHeading: 'De dónde vienen tus titulares',
