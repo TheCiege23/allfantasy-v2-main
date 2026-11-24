@@ -51,6 +51,25 @@ and AF Pro; AF Commissioner covers paid AF Commissioner. AF Legacy is never touc
   once, on the day the free plan unlocks.
 - If the free plan later ends, they subscribe again like anyone else.
 
+### App Store and Google Play subscribers
+
+**The friend discount is web-only** (owner's call, 2026-11-23). Apple ties a custom offer code to ONE
+subscription product, and Google Play promo codes can only be made by hand, so a code cannot give 10% off
+every plan in the apps. Friends get the discount by subscribing on the web through the `/with` link.
+Subscribers who pay in the apps still count on both meters and still earn their commissioner commission.
+
+`lib/partner-codes/storeLedger.ts`. Who brought a subscriber comes from their AllFantasy account (the
+`/with` link at signup, or a typed code), exactly like web, so commissioners earn on app subscribers
+with no store setup. Commission is 10% of what the store pays us: the price paid minus
+`storeFeePercent` (15% default, editable in admin).
+
+- **Apple:** App Store Server Notifications. A renewal/new subscription records the payment (keyed on the
+  transaction id); a refund reverses it; expiry stops the subscriber counting. Price comes from the
+  transaction in USD, else the catalog price. A commissioner's offer code redeemed in Apple's own sheet
+  attaches the subscriber to that commissioner.
+- **Google Play:** each new order id seen on sync is a payment (keyed on the order id) at the catalog
+  price, since Play's subscription state does not carry the price; a voided order reverses it.
+
 ## Scheduled work
 
 No cron slot of its own: the repo is at its cron ceiling (`docs/crons.md`). Once a day the existing

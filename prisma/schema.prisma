@@ -20734,6 +20734,8 @@ model PartnerProgramSettings {
   yearlyDiscountMode          String   @default("prorated")
   commissionPercent           Int      @default(10)
   commissionBasis             String   @default("net")
+  /// App Store / Google Play cut used as the fee on store purchases.
+  storeFeePercent             Int      @default(15)
   commissionCapMonths         Int?
   cashThresholdPaidSubs       Int      @default(10)
   freeSupremePaidSubs         Int      @default(10)

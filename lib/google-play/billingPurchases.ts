@@ -7,6 +7,7 @@ import { playProduct } from "./billingCatalog"
 import { decryptPurchaseToken, encryptPurchaseToken, obfuscatedPlayAccountId, PlayBillingError, purchaseHash, validatePurchaseToken } from "./billingConfig"
 import { googlePlayPublisher, type PlayPublisher } from "./billingPublisher"
 import { parsePlayPurchase } from "./billingState"
+import { onPartnerPlayPurchase } from "@/lib/partner-codes/storeLedger"
 
 const subscriptionId = (hash: string) => `google_play:${hash}`
 const purchaseKey = (hash: string) => `google_play:${hash}`
@@ -86,6 +87,10 @@ export async function syncGooglePlayPurchase(input: {
     else if (result.verified.status === "active") await service.grantTokensFromPackagePurchase({ ...context,
       idempotencyKey: purchaseKey(hash), description: `Google Play purchase: ${product.title}`, metadata: { productId: product.productId } })
   } else if (result.verified.status !== "pending") await syncUserProfileFromSubscriptions(result.ownerId)
+  // Commissioner Partner Codes (lib/partner-codes/storeLedger.ts): a new order id is a payment. Never
+  // throws; off unless PARTNER_CODES_ENABLED=1; the order id is its no-double-pay key.
+  await onPartnerPlayPurchase({ ownerId: result.ownerId, sku: product.sku, purchaseType: product.type, tokenHash: hash,
+    status: result.verified.status, orderId: result.verified.orderId, start: result.verified.start, revoked: result.revoked })
 
   let finishPending = false
   if (!result.revoked && result.verified.status !== "pending" && result.verified.status !== "expired") {
