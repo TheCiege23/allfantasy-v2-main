@@ -997,13 +997,27 @@ export function checkDrawsFix(check: LineupCheck | null | undefined, fixHref: st
  * "Also check" (2026-11-24: "Cover Logan Kowalski's bye" then "Logan Kowalski is on bye — find a replacement").
  * With nothing else to name it draws only the kickoff note — never the all-clear under a problem title.
  */
-function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false, also = false }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean; also?: boolean }) {
+function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false, also = false, fillFrom }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string; embedded?: boolean; also?: boolean; fillFrom?: LineupCheck }) {
   const m = useMessages(myTeamScreenMessages)
+  // The free-agent search reads the WHOLE check: the slot the title names is the hole it most needs to fill.
+  const fill = fillFrom ?? check
+  // So does the platform fix: the titled slot is a certain problem even when the list left under it is not.
+  const certain = fill.items.some((i) => i.kind !== 'questionable')
+  const fixButton = certain && fixHref ? (
+    <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+      {m.fixInPlatform(platform)}
+    </a>
+  ) : null
   if (also && check.items.length === 0) {
     const note = check.locked ? m.lockedNote(check.locked).trim() : ''
-    return note ? <p className="af-mt-check-locked">{note}</p> : null
+    return (
+      <>
+        {note ? <p className="af-mt-check-locked">{note}</p> : null}
+        <FreeAgentFill check={fill} leagueId={leagueId} />
+        {fixButton}
+      </>
+    )
   }
-  const certain = check.items.some((i) => i.kind !== 'questionable')
   const lockedNote = check.locked ? m.lockedNote(check.locked) : ''
   return (
     <section
@@ -1042,12 +1056,8 @@ function LineupCheckCard({ check, platform, fixHref, leagueId, embedded = false,
             ))}
           </ul>
           {lockedNote ? <p className="af-mt-check-locked">{lockedNote.trim()}</p> : null}
-          <FreeAgentFill check={check} leagueId={leagueId} />
-          {certain && fixHref ? (
-            <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
-              {m.fixInPlatform(platform)}
-            </a>
-          ) : null}
+          <FreeAgentFill check={fill} leagueId={leagueId} />
+          {fixButton}
         </>
       )}
     </section>
@@ -2048,6 +2058,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 embedded
                 also={embeddedCheck !== lineupCheck}
                 check={embeddedCheck ?? lineupCheck}
+                fillFrom={lineupCheck}
                 platform={platform}
                 leagueId={data.league.id}
                 fixHref={data.league.sourceLink?.href ?? null}
