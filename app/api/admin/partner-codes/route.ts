@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/adminAuth'
 import { loadPartnerSettings, updatePartnerSettings } from '@/lib/partner-codes/service'
 import { PartnerSettingsError } from '@/lib/partner-codes/settings'
 import { payoutsCsv, reviewReferral, setPayoutStatus } from '@/lib/partner-codes/jobs'
+import { LOGO_REJECT_REASONS, reviewPartnerLogo, type LogoRejectReason } from '@/lib/partner-codes/logo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,6 +26,7 @@ export async function GET(req: Request) {
  * POST { action: 'settings', settings: {...} }
  *      { action: 'approve' | 'hold' | 'mark_paid', payoutId, note? }
  *      { action: 'clear' | 'reject', referralId }
+ *      { action: 'logo_approve' | 'logo_reject', partnerCodeId, reason? }
  */
 export async function POST(req: Request) {
   const gate = await requireAdmin()
@@ -40,6 +42,11 @@ export async function POST(req: Request) {
     if (action === 'approve' || action === 'hold' || action === 'mark_paid') {
       const payout = await setPayoutStatus(String(body?.payoutId ?? ''), action, adminId, typeof body?.note === 'string' ? body.note : undefined)
       return NextResponse.json({ ok: true, status: payout.status })
+    }
+    if (action === 'logo_approve' || action === 'logo_reject') {
+      const reason = typeof body?.reason === 'string' && body.reason in LOGO_REJECT_REASONS ? (body.reason as LogoRejectReason) : undefined
+      await reviewPartnerLogo(String(body?.partnerCodeId ?? ''), action === 'logo_approve' ? 'approve' : 'reject', reason)
+      return NextResponse.json({ ok: true })
     }
     if (action === 'clear' || action === 'reject') {
       await reviewReferral(String(body?.referralId ?? ''), action)

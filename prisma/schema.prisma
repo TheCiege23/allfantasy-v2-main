@@ -20782,6 +20782,8 @@ model PartnerCode {
   logoUrl               String?
   /// none | pending | approved | rejected
   logoStatus            String     @default("none")
+  /// Why an admin rejected the logo, shown to the commissioner.
+  logoReviewNote        String?
   codeChangedAt         DateTime[]
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt

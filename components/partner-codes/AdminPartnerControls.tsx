@@ -41,6 +41,31 @@ export function AdminPartnerActions({ kind, id, status }: { kind: 'payout' | 're
   )
 }
 
+/** Approve a commissioner's logo, or reject it with a reason they will see. */
+export function AdminLogoReview({ partnerCodeId }: { partnerCodeId: string }) {
+  const router = useRouter()
+  const [reason, setReason] = useState('brand')
+  const [err, setErr] = useState<string | null>(null)
+  const run = async (action: 'logo_approve' | 'logo_reject') => {
+    const e = await post({ action, partnerCodeId, reason })
+    setErr(e)
+    if (!e) router.refresh()
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button type="button" onClick={() => run('logo_approve')} className={`${small} bg-purple-500 text-white`}>Approve</button>
+      <label className="sr-only" htmlFor={`reason-${partnerCodeId}`}>Reason</label>
+      <select id={`reason-${partnerCodeId}`} value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-10 rounded-lg border border-[#3b3f6e] bg-[#0a0e1a] px-2 text-white">
+        <option value="brand">Team / brand logo</option>
+        <option value="inappropriate">Not appropriate</option>
+        <option value="unclear">Hard to see</option>
+      </select>
+      <button type="button" onClick={() => run('logo_reject')} className={`${small} bg-red-900 text-white`}>Reject</button>
+      {err ? <span className="w-full text-xs text-rose-300">{err}</span> : null}
+    </div>
+  )
+}
+
 const FIELDS: Array<{ key: keyof PartnerSettings; label: string; kind?: 'select'; options?: Array<[string, string]> }> = [
   { key: 'discountPercent', label: 'Friend discount (%)' },
   { key: 'discountMonths', label: 'Discount months' },

@@ -46,7 +46,7 @@ export function PartnerCodeDashboard({ initial, demo, imageBase = '/api/partner-
               <Mix c={c} />
               <Statements c={c} s={s} />
             </div>
-            <ShareMaker c={c} demo={demo} imageBase={imageBase} />
+            <ShareMaker c={c} demo={demo} imageBase={imageBase} onLogoChanged={reload} />
           </>
         )}
       </div>
@@ -323,11 +323,53 @@ function Statements({ c, s }: { c: C; s: S }) {
   )
 }
 
-function ShareMaker({ c, demo, imageBase }: { c: C; demo: boolean; imageBase: string }) {
+type LogoChoice = 'af' | 'initials' | 'upload'
+
+function ShareMaker({ c, demo, imageBase, onLogoChanged }: { c: C; demo: boolean; imageBase: string; onLogoChanged: () => void }) {
   const [look, setLook] = useState<ShareLookKey>((c.shareLook in SHARE_LOOKS ? c.shareLook : 'midnight') as ShareLookKey)
   const [format, setFormat] = useState<ShareFormatKey>('story')
   const [name, setName] = useState(c.code)
-  const src = useMemo(() => `${imageBase}?format=${format}&look=${look}&name=${encodeURIComponent(name)}${demo ? '&demo=1' : ''}`, [imageBase, format, look, name, demo])
+  const [logo, setLogo] = useState<LogoChoice>((['af', 'initials', 'upload'].includes(c.shareLogo) ? c.shareLogo : 'initials') as LogoChoice)
+  const [uploading, setUploading] = useState(false)
+  const [logoMsg, setLogoMsg] = useState<string | null>(null)
+  // `v` busts the browser cache after a logo change, so the preview redraws.
+  const [v, setV] = useState(0)
+  const src = useMemo(
+    () => `${imageBase}?format=${format}&look=${look}&logo=${logo}&approved=${c.logoStatus === 'approved' ? 1 : 0}&name=${encodeURIComponent(name)}${demo ? '&demo=1' : ''}&v=${v}`,
+    [imageBase, format, look, logo, c.logoStatus, name, demo, v],
+  )
+
+  const pickLogo = async (k: LogoChoice) => {
+    setLogo(k)
+    if (demo) return
+    await fetch('/api/partner-codes/me', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ logo: k }) })
+  }
+  const upload = async (file: File | undefined) => {
+    if (!file || demo) return
+    setUploading(true)
+    setLogoMsg(null)
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch('/api/partner-codes/me', { method: 'PUT', body })
+    const j = await res.json().catch(() => ({}))
+    setUploading(false)
+    if (!res.ok) { setLogoMsg(j.error ?? 'Upload failed'); return }
+    setLogo('upload')
+    setV((x) => x + 1)
+    onLogoChanged()
+  }
+  const removeLogo = async () => {
+    if (demo) return
+    await fetch('/api/partner-codes/me', { method: 'DELETE' })
+    setLogo('initials')
+    setV((x) => x + 1)
+    onLogoChanged()
+  }
+  const logoStatusLine =
+    c.logoStatus === 'pending' ? 'In review. Your images use your initials until it’s approved, usually within a day.'
+      : c.logoStatus === 'approved' ? 'Approved. It’s on your share images.'
+        : c.logoStatus === 'rejected' ? `Not approved: ${c.logoReviewNote ?? 'please try a different image.'}`
+          : null
 
   const pickLook = (k: ShareLookKey) => {
     setLook(k)
@@ -364,7 +406,33 @@ function ShareMaker({ c, demo, imageBase }: { c: C; demo: boolean; imageBase: st
             ))}
           </div>
         </fieldset>
-        <p className="text-[12px] text-[#a3a8c9]">Uploading your own logo is coming next. Every share includes: “I get rewards when you join with my code.”</p>
+        <fieldset>
+          <legend className="mb-2.5 text-sm font-bold">Logo</legend>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={logo === 'af'} onClick={() => pickLogo('af')} className={pill(logo === 'af')}>AllFantasy logo</button>
+            <button type="button" aria-pressed={logo === 'initials'} onClick={() => pickLogo('initials')} className={pill(logo === 'initials')}>My initials</button>
+            {c.logoUrl ? (
+              <button type="button" aria-pressed={logo === 'upload'} onClick={() => pickLogo('upload')} className={pill(logo === 'upload')}>My logo</button>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-dashed border-[#5b3a86] p-3.5">
+            <div className="flex flex-wrap items-center gap-3">
+              {c.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.logoUrl} alt="Your uploaded logo" width={56} height={56} className="h-14 w-14 rounded-xl object-cover" />
+              ) : null}
+              <label className={`${btnGhost} cursor-pointer ${uploading || demo ? 'pointer-events-none opacity-60' : ''}`}>
+                {uploading ? 'Uploading…' : c.logoUrl ? 'Upload a different logo' : 'Upload my own logo'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={uploading || demo} onChange={(e) => void upload(e.target.files?.[0])} />
+              </label>
+              {c.logoUrl && !demo ? <button type="button" onClick={removeLogo} className="min-h-11 px-2 text-sm font-semibold text-[#a3a8c9] underline">Remove</button> : null}
+            </div>
+            {logoStatusLine ? <p className={`text-[13px] font-semibold ${c.logoStatus === 'rejected' ? 'text-rose-300' : c.logoStatus === 'approved' ? 'text-emerald-400' : 'text-amber-300'}`}>{logoStatusLine}</p> : null}
+            {logoMsg ? <p className="text-[13px] font-semibold text-rose-300">{logoMsg}</p> : null}
+            <p className="text-[12px] text-[#a3a8c9]">PNG, JPG or WebP, up to 5 MB. Square works best. Use only images you own: no NFL, team, league or other brands’ logos. We review every logo before it appears.</p>
+          </div>
+        </fieldset>
+        <p className="text-[12px] text-[#a3a8c9]">Every share includes: “I get rewards when you join with my code.”</p>
       </div>
       <div className="flex flex-1 flex-col items-center gap-4 rounded-2xl bg-[#0a0e1a] p-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}

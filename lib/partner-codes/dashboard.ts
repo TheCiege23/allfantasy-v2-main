@@ -13,6 +13,8 @@ export type PartnerDashboard = {
     shareLook: string
     shareLogo: string
     logoStatus: string
+    logoUrl: string | null
+    logoReviewNote: string | null
     joinPath: string
     paidSubs: number
     activeUsers: number
@@ -87,6 +89,8 @@ export async function getPartnerDashboard(userId: string, now = new Date()): Pro
       shareLook: code.shareLook,
       shareLogo: code.shareLogo,
       logoStatus: code.logoStatus,
+      logoUrl: code.logoUrl,
+      logoReviewNote: code.logoReviewNote,
       joinPath: `/with/${encodeURIComponent(code.code)}`,
       paidSubs: code.paidSubsCount,
       activeUsers: code.activeUsersCount,

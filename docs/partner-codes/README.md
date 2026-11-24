@@ -70,6 +70,20 @@ with no store setup. Commission is 10% of what the store pays us: the price paid
 - **Google Play:** each new order id seen on sync is a payment (keyed on the order id) at the catalog
   price, since Play's subscription state does not carry the price; a voided order reverses it.
 
+### Commissioner logos
+
+`lib/partner-codes/logo.ts`. A commissioner can upload their own logo for their share images
+(PNG/JPG/WebP, up to 5 MB, at least 128 px, 5 uploads a day).
+
+- Every upload is re-drawn as a 512×512 PNG before it is stored (Blob / UploadThing, folder
+  `partner-logos/`). That strips GPS and camera data, flattens animation, and means we never serve the
+  bytes someone sent.
+- It then waits for review in **Logos to review** at `/admin/partner-codes`. Nothing shows on a share
+  image until it is approved; until then images use initials. A rejection carries a reason the
+  commissioner sees (team/brand logo, not appropriate, hard to see).
+- There is no automatic image check: the app has no image-moderation service today, so admin review
+  is the gate.
+
 ## Scheduled work
 
 No cron slot of its own: the repo is at its cron ceiling (`docs/crons.md`). Once a day the existing
