@@ -3333,7 +3333,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     let loop = await runChimmyToolLoop(loopArgs).catch(() => null)
     /*
      * A SECOND MODEL READS A DECISION ANSWER BEFORE THE USER DOES (hub multi-model, 2026-11-21, owner's choice). On a
-     * trade, waiver, start/sit or draft turn, a small fast model compares the answer with the facts Chimmy read — what
+     * trade, waiver, start/sit, draft or commissioner turn, a small fast model compares the answer with the facts Chimmy read — what
      * the tools returned plus the packet — and a contradiction sends it back to Chimmy once. Before the letter check
      * below on purpose: that deterministic check then holds the FINAL answer, revised or not. Fails open; never on chat.
      * See `lib/chimmy/decisionAnswerCheck.ts`.
@@ -3371,8 +3371,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
             league_id: toolContext.leagueId ?? null,
             surface: 'chimmy_chat',
             mode: selectedAssistantMode,
-            // Checked only on a decision turn, so the intent is one of the four decision topics.
-            topic: chimmyOrchestrationClassification.intent as 'trade' | 'waiver' | 'start_sit' | 'draft',
+            // Checked only on a decision turn, so the intent is one of the five decision topics.
+            topic: chimmyOrchestrationClassification.intent as 'trade' | 'waiver' | 'start_sit' | 'draft' | 'commissioner',
             action: checked.outcome,
             timestamp: new Date().toISOString(),
             metadata: { ms: checked.ms, contradictions: checked.contradictions.length },

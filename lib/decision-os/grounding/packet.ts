@@ -1889,6 +1889,12 @@ export async function buildDecisionOsGroundingPacket(
             detail: 'A leaguemate’s trade, waiver and draft history is part of Competitive Edge, which this user’s plan does not include.',
             remedy: 'Do not describe any manager’s history or habits. If they ask about one, the manager-record tool shows the plan line.',
           })
+        /*
+         * ⚠ `servedFrom: 'live'` / `asOf: now` IS AN APPROXIMATION, KNOWINGLY (2026-11-24 re-score). The default view is
+         * usually served from Manager Psychology OS's five-minute entry, but `buildManagerRecordContext` returns text
+         * only and `loadViewerManagerRecords` returns the value without its envelope, so neither the source nor the
+         * entry's time reaches here. Stamping 'feed' would be a guess the other way; exposing the envelope is the fix.
+         */
         : present(out.text, { servedFrom: 'live', asOf: new Date().toISOString(), conclusive: { ok: true } })
     }
     // A read still running at the deadline is stamped late below.

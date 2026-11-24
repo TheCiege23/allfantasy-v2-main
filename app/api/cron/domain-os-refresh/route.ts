@@ -370,6 +370,33 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
    */
   const season = currentNflSeason(new Date())
 
+  /*
+   * ── NON-NFL PROJECTIONS (2026-11-24 re-score) ──────────────────────────────────────────────
+   * Only NFL used to be warmed, so for NBA/MLB/NHL/NCAAF the first Chimmy read per 6h window paid
+   * the projection derive inside the packet's slice deadline and could come back as a gap. The set
+   * is read from `AFProjectionSnapshot` itself — each non-NFL sport with rows, at its newest season —
+   * so a sport with no data is simply absent (skipped cleanly) and no sport-season calendar is
+   * hardcoded here. ⚠ Market is NOT warmed for these sports: `loadMarketValues` answers
+   * `no_producer` for anything but NFL without touching the database, so there is nothing to pay.
+   * One grouped read per fire; each unit still stops on `budget.exhausted()` like every other.
+   */
+  const otherProjectionSports = await prisma.aFProjectionSnapshot
+    .groupBy({ by: ['sport'], where: { sport: { not: 'NFL' } }, _max: { season: true } })
+    .then((rows) => {
+      const out = new Map<string, number>()
+      for (const r of rows) {
+        const sp = String(r.sport ?? '').trim().toUpperCase()
+        const se = r._max?.season
+        if (!sp || sp === 'NFL' || typeof se !== 'number') continue
+        out.set(sp, Math.max(se, out.get(sp) ?? se))
+      }
+      return [...out.entries()].map(([sport, season]) => ({ sport, season }))
+    })
+    .catch((e: unknown) => {
+      counts.errors.push(`projection_sport_query: ${e instanceof Error ? e.message : String(e)}`)
+      return [] as { sport: string; season: number }[]
+    })
+
   type Unit = { domain: OsDomain; label: string; run: () => Promise<'written' | 'unavailable' | 'write_failed'> }
   const units: Unit[] = [
     ...combos.map((c) => ({
@@ -392,6 +419,12 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
        */
       run: () => projectionOs.refresh(canonicalProjectionSource, { sport: 'NFL', season }),
     },
+    // After NFL on purpose: NFL serves the most leagues, so it keeps first claim on the budget.
+    ...otherProjectionSports.map((p) => ({
+      domain: 'projection' as OsDomain,
+      label: `projection:${p.sport}:${p.season}`,
+      run: () => projectionOs.refresh(canonicalProjectionSource, { sport: p.sport, season: p.season }),
+    })),
   ]
 
   for (const u of units) {

@@ -144,7 +144,10 @@ function notEntitled(): GroundedSlice<DecisionFact> {
  * `getCommissionerHubHealthForUser` runs TEN parallel queries and returns snapshots for every
  * league the user commissions. A single-league version would be cheaper and would duplicate all
  * ten — a rival to working code, which is the mistake this codebase records twice. So the cost is
- * accepted and paid for by the flag instead: `want.commissionerHealthDecision` defaults OFF.
+ * accepted and paid for by the flag instead: `want.commissionerHealthDecision` is set only on a
+ * `commissioner`-classified turn (`deriveWantFromIntent`), and the `get_league_health` tool reads the same
+ * slice on demand. (It said "defaults OFF" until the 2026-11-24 re-score — true of the raw flag, misleading
+ * about the chat, which turns it on for every commissioner question.)
  */
 export async function loadCommissionerHealthDecisionSlice(
   args: DecisionBridgeArgs,
