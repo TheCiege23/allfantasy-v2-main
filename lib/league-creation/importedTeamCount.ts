@@ -21,7 +21,8 @@ import { MAX_NATIVE_TEAMS } from '@/lib/league/teamCountLimits'
  * C2C joined 2026-11-22, when a college C2C league's size was capped at what its pro side can fill:
  * the owner's Road To Glory college C2C leagues run 140 and 180 teams on Fantrax and keep that size.
  */
-const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'c2c']
+/** IDP joined 2026-11-24: Road To Glory's NFL (34) and NCAAF (140) leagues are IDP and keep their size too. */
+const IMPORT_FLEXIBLE_TEAM_COUNT_TYPES: readonly string[] = ['redraft', 'dynasty', 'keeper', 'best_ball', 'c2c', 'idp']
 
 /** Same ceiling as a native redraft league. */
 const IMPORTED_TEAM_COUNT_MAX = MAX_NATIVE_TEAMS

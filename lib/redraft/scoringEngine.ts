@@ -1042,9 +1042,18 @@ export async function scoreRosterForWeek(args: {
   const bestBall = useDevyEngine ? null : await loadBestBallContext(args.leagueId)
   const result = await scoreRosterStarters({ ...args, useDevyEngine, bestBall })
   const league = await prisma.league.findFirst({ where: { id: args.leagueId }, select: { platform: true, sport: true, leagueVariant: true, settings: true } })
-  if (!league || !isNativePlatform(league.platform) || campusSport(league) !== 'basketball') return result
+  const sportOfCampus = league && isNativePlatform(league.platform) ? campusSport(league) : null
+  if (!league || !sportOfCampus) return result
   const settings = settingsForScoringWeek(league.settings as Record<string, any> | null, args.seasonYear, args.week)
   const mode = settings?.scoring_mode ?? settings?.scoringSettings?.scoringMode ?? 'points'
+  if (sportOfCampus === 'football') {
+    // NFL C2C: the campus starters count here exactly as in a regular-season matchup (updateMatchupScores), so a
+    // playoff round no longer drops the college lineup (2026-11-24 audit). Same gate: points, no best ball, no devy engine.
+    if (mode !== 'points' || bestBall || useDevyEngine) return result
+    const footballCampus = await loadCampusPoints(league, { season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
+    if (!footballCampus) return result
+    return { ...result, points: Math.round((result.points + footballCampus.home.points) * 100) / 100 }
+  }
   if (mode !== 'points' || bestBall || useDevyEngine) throw new Error('NBA Campus to Canton currently requires points scoring and a manually selected lineup.')
   const campus = await loadBasketballCampusPoints(league, { leagueId: args.leagueId, season: args.seasonYear, week: args.week, homeRosterId: args.rosterId, awayRosterId: args.rosterId })
   if (!campus) return result

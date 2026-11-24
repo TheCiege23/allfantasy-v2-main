@@ -105,6 +105,21 @@ describe('campus points in the matchup score', () => {
     expect(score.allFinal).toBe(false)
   })
 
+  it('includes football campus points in roster scores used by playoffs', async () => {
+    db.league.findFirst.mockResolvedValue(league())
+    const withCampus = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(campusPointsForMatchup).toHaveBeenCalledWith(db, { season: 2026, nflWeek: 3, homeRosterId: 'H', awayRosterId: 'H' })
+    campusPointsForMatchup.mockResolvedValue(null)
+    const proOnly = await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(withCampus.points).toBe(Math.round((proOnly.points + 21.5) * 100) / 100)
+  })
+
+  it('a non-C2C league’s roster score never asks for campus points', async () => {
+    db.league.findFirst.mockResolvedValue(league({ leagueVariant: 'devy_dynasty' }))
+    await scoreRosterForWeek({ leagueId: 'L1', rosterId: 'H', week: 3, seasonYear: 2026 })
+    expect(campusPointsForMatchup).not.toHaveBeenCalled()
+  })
+
   it('any other league is never asked', async () => {
     for (const over of [{ leagueVariant: 'devy_dynasty' }, { platform: 'sleeper' }, { sport: 'NHL' }, { sport: 'NBA', platform: 'sleeper' }]) {
       db.league.findFirst.mockResolvedValue(league(over))

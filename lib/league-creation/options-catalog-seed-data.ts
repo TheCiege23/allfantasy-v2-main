@@ -353,9 +353,11 @@ const LEAGUE_CREATE_OPTIONS_CATALOG_UNCAPPED: LeagueCreateOptionsCatalog = {
       NCAAB: [4, 6, 8, 10, 12, 14, 16],
       SOCCER: [4, 6, 8, 10, 12, 14, 16],
     },
+    // IDP joined the big-league sizes 2026-11-24: the owner's Road To Glory commissioner runs a 140-team NCAAF
+    // and a 34-team NFL IDP league. NFL stops at the real league (32; an import keeps its own size), college as dynasty.
     idp: {
-      NFL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
+      NFL: NFL_PRO_BOUND_EVEN_TEAM_COUNTS,
+      NCAAF: DYNASTY_CREATE_TEAM_COUNTS,
     },
     salary_cap: {
       NFL: [8, 10, 12, 14, 16],

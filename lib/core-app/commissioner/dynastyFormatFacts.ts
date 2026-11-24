@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { resolveDynastyRolloverSeasons } from '@/lib/season-rollover/dynastyRolloverService'
 import type { DynastyFormatFacts } from './formatCards'
+import { loadC2CLeagueSettings } from '@/lib/c2c/c2cLeagueSettings'
 
 type SeasonRow = Parameters<typeof resolveDynastyRolloverSeasons>[0][number]
 
@@ -58,7 +59,7 @@ export async function loadDynastyFormatFacts(input: {
     variant === 'devy'
       ? prisma.devyLeague.findUnique({ where: { leagueId }, select: { taxiSlots: true, devySlots: true } }).catch(() => null)
       : variant === 'c2c'
-        ? prisma.c2CLeague.findUnique({ where: { leagueId }, select: { taxiSlots: true, devySlots: true } }).catch(() => null)
+        ? loadC2CLeagueSettings(leagueId).then((c) => (c ? { taxiSlots: c.taxiSlots, devySlots: c.devySlots } : null)).catch(() => null)
         : Promise.resolve(null),
     native
       ? prisma.redraftSeason

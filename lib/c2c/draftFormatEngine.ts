@@ -89,7 +89,8 @@ export function getAnnualDraftPool(format: string, sportPair: string, ownedPlaye
 /** Placeholder draft room config — wire to live draft session when C2C draft UI lands. */
 export async function buildC2CDraftRoom(leagueId: string, draftType: string, season: number): Promise<C2CDraftRoom> {
   const { prisma } = await import('@/lib/prisma')
-  const cfg = await prisma.c2CLeague.findUnique({ where: { leagueId } })
+  const { loadC2CLeagueSettings } = await import('@/lib/c2c/c2cLeagueSettings')
+  const cfg = await loadC2CLeagueSettings(leagueId)
   const sportPair = cfg?.sportPair ?? 'NFL_CFB'
   const format = cfg?.futureDraftFormat ?? cfg?.startupDraftFormat ?? 'combined'
   return {
