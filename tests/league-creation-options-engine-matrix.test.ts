@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 import { isAllowedDraftTypeFromCatalog } from '@/lib/league-creation/options-catalog'
 import { getDefaultTeamCount, getDraftTypeOptions, getIdpDraftTypeOptions } from '@/lib/create-league-v2/rules-engine'
@@ -7,7 +7,16 @@ import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEn
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
 describe('every active creation choice reaches the preset engine', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('accepts each offered sport, format, and draft choice', () => {
+    // Survivor's season-fit check reads the clock, so the calendar must not decide this test (2026-11-24:
+    // by late November no NFL Survivor cast fits the remaining season, and it went red on main with no
+    // code change). Midsummer is when every sport's Survivor fits: NFL before its opener, MLB with half
+    // its season left. Early September already loses MLB.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T16:00:00Z') })
     const catalog = LEAGUE_CREATE_OPTIONS_CATALOG_V1
     const failures: string[] = []
     let checked = 0

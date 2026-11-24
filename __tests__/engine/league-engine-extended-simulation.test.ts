@@ -8,7 +8,15 @@ import { LEAGUE_ENGINE_SCENARIO_FIXTURES, getScenarioFixture } from '@/lib/engin
 import { runExtendedLeagueEngineSimulation } from '@/lib/engine-testing/simulation/extendedLeagueSimulation'
 
 describe('runExtendedLeagueEngineSimulation', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('passes for every built-in scenario fixture', () => {
+    // pinned to an early-season date so the calendar cannot decide it (2026-11-24: by late November no
+    // NFL Survivor cast fits the remaining season, and this went red on main with no code change).
+    // The late-season gate path has its own pinned tests below.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-02T16:00:00Z') })
     for (const f of LEAGUE_ENGINE_SCENARIO_FIXTURES) {
       const r = runExtendedLeagueEngineSimulation(f)
       expect(r.extendedOk, `${f.id}: extended`).toBe(true)

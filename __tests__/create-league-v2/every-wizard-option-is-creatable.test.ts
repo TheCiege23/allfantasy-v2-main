@@ -132,7 +132,12 @@ describe('every option the create wizard offers is creatable', () => {
     vi.restoreAllMocks()
   })
 
+  // ⚠ Built while the file is collected, BEFORE beforeEach pins the clock, so it must pin its own:
+  // with the real date the matrix offers whatever fits today and the checks then judge it at
+  // 2026-10-18. They disagreed once late November left no NFL Survivor size fitting (2026-11-24).
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-18T12:00:00Z') })
   const choices = everyReachableChoice()
+  vi.useRealTimers()
 
   it('reaches every sport, and every format tile each sport shows', () => {
     const sports = new Set(choices.map((c) => c.state.sport))
