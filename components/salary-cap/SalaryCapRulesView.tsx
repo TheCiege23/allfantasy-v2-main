@@ -23,58 +23,58 @@ export function SalaryCapRulesView({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+          className="inline-flex items-center gap-2 text-sm text-[var(--text2)] hover:text-[var(--text)]"
         >
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
       ) : null}
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-          <Settings className="h-5 w-5 text-white/60" />
+      <section className="rounded-2xl border border-[var(--line)] bg-white/[0.03] p-4 sm:p-6">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-[var(--text)]">
+          <Settings className="h-5 w-5 text-[var(--text2)]" />
           Rules & settings
         </h2>
 
-        <h3 className="mb-2 text-sm font-medium text-white/80">Salary cap</h3>
+        <h3 className="mb-2 text-sm font-medium text-[var(--text)]">Salary cap</h3>
         <dl className="mb-6 grid gap-2 text-sm sm:grid-cols-2">
-          <div><dt className="text-white/50">Startup cap</dt><dd className="text-white/90">${c.startupCap}</dd></div>
-          <div><dt className="text-white/50">Cap growth</dt><dd className="text-white/90">{c.capGrowthPercent}%</dd></div>
-          <div><dt className="text-white/50">Rollover</dt><dd className="text-white/90">{c.rolloverEnabled ? `Yes (max $${c.rolloverMax})` : 'No'}</dd></div>
+          <div><dt className="text-[var(--muted)]">Startup cap</dt><dd className="text-[var(--text)]">${c.startupCap}</dd></div>
+          <div><dt className="text-[var(--muted)]">Cap growth</dt><dd className="text-[var(--text)]">{c.capGrowthPercent}%</dd></div>
+          <div><dt className="text-[var(--muted)]">Rollover</dt><dd className="text-[var(--text)]">{c.rolloverEnabled ? `Yes (max $${c.rolloverMax})` : 'No'}</dd></div>
         </dl>
 
-        <h3 className="mb-2 text-sm font-medium text-white/80">Contract</h3>
+        <h3 className="mb-2 text-sm font-medium text-[var(--text)]">Contract</h3>
         <dl className="mb-6 grid gap-2 text-sm sm:grid-cols-2">
-          <div><dt className="text-white/50">Min / max years</dt><dd className="text-white/90">{c.contractMinYears}–{c.contractMaxYears}</dd></div>
-          <div><dt className="text-white/50">Rookie contract years</dt><dd className="text-white/90">{c.rookieContractYears}</dd></div>
-          <div><dt className="text-white/50">Minimum salary</dt><dd className="text-white/90">${c.minimumSalary}</dd></div>
-          <div><dt className="text-white/50">Dead money</dt><dd className="text-white/90">{c.deadMoneyEnabled ? 'On' : 'Off'}</dd></div>
-          <div><dt className="text-white/50">Extensions</dt><dd className="text-white/90">{c.extensionsEnabled ? 'On' : 'Off'}</dd></div>
-          <div><dt className="text-white/50">Franchise tag</dt><dd className="text-white/90">{c.franchiseTagEnabled ? 'On' : 'Off'}</dd></div>
+          <div><dt className="text-[var(--muted)]">Min / max years</dt><dd className="text-[var(--text)]">{c.contractMinYears}–{c.contractMaxYears}</dd></div>
+          <div><dt className="text-[var(--muted)]">Rookie contract years</dt><dd className="text-[var(--text)]">{c.rookieContractYears}</dd></div>
+          <div><dt className="text-[var(--muted)]">Minimum salary</dt><dd className="text-[var(--text)]">${c.minimumSalary}</dd></div>
+          <div><dt className="text-[var(--muted)]">Dead money</dt><dd className="text-[var(--text)]">{c.deadMoneyEnabled ? 'On' : 'Off'}</dd></div>
+          <div><dt className="text-[var(--muted)]">Extensions</dt><dd className="text-[var(--text)]">{c.extensionsEnabled ? 'On' : 'Off'}</dd></div>
+          <div><dt className="text-[var(--muted)]">Franchise tag</dt><dd className="text-[var(--text)]">{c.franchiseTagEnabled ? 'On' : 'Off'}</dd></div>
         </dl>
 
-        <h3 className="mb-2 text-sm font-medium text-white/80">Draft</h3>
+        <h3 className="mb-2 text-sm font-medium text-[var(--text)]">Draft</h3>
         <dl className="mb-6 grid gap-2 text-sm sm:grid-cols-2">
-          <div><dt className="text-white/50">Startup</dt><dd className="text-white/90 capitalize">{c.startupDraftType?.replace(/_/g, ' ')}</dd></div>
-          <div><dt className="text-white/50">Future draft</dt><dd className="text-white/90 capitalize">{c.futureDraftType?.replace(/_/g, ' ')}</dd></div>
-          <div><dt className="text-white/50">Auction holdback</dt><dd className="text-white/90">${c.auctionHoldback}</dd></div>
-          <div><dt className="text-white/50">Weighted lottery</dt><dd className="text-white/90">{c.weightedLotteryEnabled ? 'On' : 'Off'}</dd></div>
+          <div><dt className="text-[var(--muted)]">Startup</dt><dd className="text-[var(--text)] capitalize">{c.startupDraftType?.replace(/_/g, ' ')}</dd></div>
+          <div><dt className="text-[var(--muted)]">Future draft</dt><dd className="text-[var(--text)] capitalize">{c.futureDraftType?.replace(/_/g, ' ')}</dd></div>
+          <div><dt className="text-[var(--muted)]">Auction holdback</dt><dd className="text-[var(--text)]">${c.auctionHoldback}</dd></div>
+          <div><dt className="text-[var(--muted)]">Weighted lottery</dt><dd className="text-[var(--text)]">{c.weightedLotteryEnabled ? 'On' : 'Off'}</dd></div>
         </dl>
 
         {c.offseasonPhase && (
-          <p className="text-xs text-white/50">Current offseason phase: {c.offseasonPhase}</p>
+          <p className="text-xs text-[var(--muted)]">Current offseason phase: {c.offseasonPhase}</p>
         )}
 
         <a
           href={`/league/${leagueId}?tab=Settings`}
-          className="mt-4 inline-block text-sm text-cyan-400 hover:underline"
+          className="mt-4 inline-block text-sm text-[var(--accent)] hover:underline"
         >
           League Settings →
         </a>
       </section>
 
         {/* FAQ Section */}
-        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">Salary Cap FAQ</h2>
+        <section className="rounded-2xl border border-[var(--line)] bg-white/[0.03] p-4 sm:p-6">
+          <h2 className="mb-4 text-lg font-semibold text-[var(--text)]">Salary Cap FAQ</h2>
           <div className="space-y-2">
             <FaqItem q="What is a Salary Cap league?">
               A Salary Cap league is a contract-based dynasty format where every player on your roster has a
@@ -183,20 +183,20 @@ export function SalaryCapRulesView({
   function FaqItem({ q, children }: { q: string; children: React.ReactNode }) {
     const [open, setOpen] = useState(false)
     return (
-      <div className="rounded-xl border border-white/10 bg-black/20">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface2)]">
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-4 p-4 text-left text-sm font-medium text-white/90 hover:text-white"
+          className="flex w-full items-center justify-between gap-4 p-4 text-left text-sm font-medium text-[var(--text)] hover:text-[var(--text)]"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >
           <span>{q}</span>
           <ChevronDown
-            className={`h-4 w-4 shrink-0 text-white/40 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${open ? 'rotate-180' : ''}`}
           />
         </button>
         {open && (
-          <div className="border-t border-white/10 px-4 pb-4 pt-3 text-sm text-white/70">
+          <div className="border-t border-[var(--line)] px-4 pb-4 pt-3 text-sm text-[var(--text2)]">
             {children}
           </div>
         )}

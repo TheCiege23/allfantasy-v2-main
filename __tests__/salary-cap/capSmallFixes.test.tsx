@@ -50,12 +50,15 @@ describe('money', () => {
 describe('Cap space screen', () => {
   it('shows over-the-cap money in the warning colour with a real minus, and says what the hit counts', () => {
     render(<CapDashboard summary={over} leagueId="l" />)
-    const space = screen.getByText('−$10', { selector: 'p' })
-    expect(space.className).toMatch(/text-red-300/)
-    expect(space.className).not.toMatch(/emerald/)
+    // 2026-11-23: the tile says "Over the cap by $10" once, in the warning colour (now a token), and the current year's
+    // "$10 over" row is gone — it was the third time the same amount was said.
+    expect(screen.getByText('Over the cap by')).toBeTruthy()
+    const space = screen.getByText('$10', { selector: 'p' })
+    expect(space.className).toMatch(/var\(--bad\)/)
+    expect(space.className).not.toMatch(/emerald|var\(--good\)/)
     expect(screen.getByText('Active contracts (this year)')).toBeTruthy()
     expect(screen.queryByText(/\$-/)).toBeNull()
-    expect(screen.getByText('$10 over').className).toMatch(/text-red-300/)
+    expect(screen.queryByText('$10 over')).toBeNull()
   })
 })
 
@@ -70,16 +73,17 @@ describe('Cap home', () => {
 describe('Contracts and Team builder copy', () => {
   it('readable statuses and years left that count this season, as Cap home does', () => {
     render(<ContractsPage summary={over} leagueId="l" />)
-    const love = screen.getByText('Jordan Love').closest('tr') as HTMLElement
+    // The phone list (2026-11-23) names him too; the table row is the one with the columns.
+    const love = screen.getAllByText('Jordan Love').map((el) => el.closest('tr')).find(Boolean) as HTMLElement
     expect(within(love).getByText('Option exercised')).toBeTruthy()
     expect(within(love).getByText(String(yearsLeftIncludingThisSeason(over.contracts[0])))).toBeTruthy()
     expect(screen.queryByText('option_exercised')).toBeNull()
     expect(contractStatusLabel('some_new_state')).toBe('Some new state')
   })
-  it('"1 contract", not "1 contracts"', () => {
+  // 2026-11-23: positions show salary and a count ("QB · 1"), so the word is gone; "players" stays singular for one.
+  it('no "1 contracts" and no "1 players"', () => {
     render(<TeamBuilderView summary={over} leagueId="l" />)
-    expect(screen.getAllByText('1 contract').length).toBeGreaterThan(0)
-    expect(screen.queryByText('1 contracts')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/\b1 contracts\b|\b1 players\b/)
   })
 })
 
@@ -87,12 +91,12 @@ describe('Back links', () => {
   beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => over })))
   it('are not drawn inside the workspace', async () => {
     render(<SalaryCapHome leagueId="l" initialView="contracts" shellNav />)
-    await screen.findByText('Jordan Love')
+    await screen.findAllByText('Jordan Love')
     expect(screen.queryByRole('button', { name: /Back/ })).toBeNull()
   })
   it('stay outside it', async () => {
     render(<SalaryCapHome leagueId="l" initialView="contracts" />)
-    await screen.findByText('Jordan Love')
+    await screen.findAllByText('Jordan Love')
     expect(screen.getByRole('button', { name: /Back/ })).toBeTruthy()
   })
 })
