@@ -157,3 +157,27 @@
   color: var(--muted);
 }
 
+
+/* Last picks, closed until tapped (2026-11-24, the simplify pass). */
+.af-core .af-bd-sidefold > summary.af-bd-side-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-bd-sidefold > summary::-webkit-details-marker { display: none; }
+.af-core .af-bd-sidefold > summary::after { content: '▾'; margin-left: 2px; }
+.af-core .af-bd-sidefold[open] > summary::after { content: '▴'; }
+.af-core .af-bd-sidefold:not([open]) { gap: 0; }
+
+/*
+ * Phone: a row with no tag (Not started / Complete, 2026-11-24) keeps its button beside the name
+ * instead of on a line of its own — half the row's height, the 44px target unchanged.
+ */
+@container af-board (max-width: 560px) {
+  .af-core .af-dh-row:not(:has(.af-bd-tag)) { flex-wrap: nowrap; }
+  .af-core .af-dh-row:not(:has(.af-bd-tag)) .af-dh-row-main { flex: 1 1 0; }
+  .af-core .af-dh-row:not(:has(.af-bd-tag)) .af-dh-row-btn { flex: none; }
+}
