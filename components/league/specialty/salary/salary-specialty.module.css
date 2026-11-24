@@ -86,5 +86,5 @@
   .years { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .col { height: 96px; }
   .year>b { font-size: 13px; }
-  .year>span { font-size: 10.5px; text-align: center; }
+  .year>span { font-size: 11px; text-align: center; }
 }
