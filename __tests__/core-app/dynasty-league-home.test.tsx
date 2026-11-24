@@ -98,7 +98,9 @@ describe('DynastyHomeDeck', () => {
     expect(text(capital)).toContain('3 first-rounders')
     expect(capital?.querySelector('a')?.getAttribute('href')).toBe('/core/trades?league=L%201')
     expect(text(container.querySelector('[data-testid=dynasty-home-ages]'))).toContain('25.5 median starter age')
-    expect(container.querySelectorAll('[data-testid=dynasty-home-taxi] li[data-filled=true]')).toHaveLength(3)
+    // The count once, and no slot boxes (2026-11-24: drawn empty, the filled ones read as blank).
+    expect(text(container.querySelector('[data-testid=dynasty-home-taxi]'))).toContain('3 of 4')
+    expect(container.querySelector('[data-testid=dynasty-home-taxi] ol')).toBeNull()
   })
 
   it('with nothing on file it still draws the era band, and only that', () => {

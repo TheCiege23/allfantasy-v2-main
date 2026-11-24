@@ -2094,7 +2094,7 @@ async function loadMyTeamData(
            * that no longer existed.
            */
           reason:
-            'We need prices for most of this league’s rosters to rank yours against them, and we don’t have them yet.',
+            'Ranked once most rosters in this league have prices.',
         },
     nextMatchup: matchup
       ? { available: true, data: matchup }

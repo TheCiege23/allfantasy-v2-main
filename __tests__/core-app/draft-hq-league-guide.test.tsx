@@ -33,7 +33,7 @@ describe('leagueDraftHeadline', () => {
 
   it('paused, before and done', () => {
     expect(leagueDraftHeadline({ ...base, status: 'paused', yoursOnClock: true })).toEqual({ kind: 'paused', yours: true, next: '3.04' })
-    expect(leagueDraftHeadline({ ...base, status: 'pre_draft', currentPickOverall: null })).toEqual({ kind: 'before', slot: 4, teams: 12 })
+    expect(leagueDraftHeadline({ ...base, status: 'pre_draft', currentPickOverall: null })).toEqual({ kind: 'before', slot: 4, teams: 12, first: null })
     expect(leagueDraftHeadline({ ...base, status: 'completed' })).toEqual({ kind: 'done', drafted: 2 })
     expect(leagueDraftHeadline({ ...base, status: null })).toEqual({ kind: 'none' })
   })

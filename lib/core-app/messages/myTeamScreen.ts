@@ -157,6 +157,7 @@ export const myTeamScreenMessages = defineMessages({
     lockedNote: (locked: number) =>
       ` ${locked} ${locked === 1 ? 'starter has' : 'starters have'} reached kickoff; confirm individual locks on your platform.`,
     lineupCheck: 'Lineup check',
+    lineupCheckAlso: 'Also check',
     unresolvedSlots: (n: number) => `${n} filled slot(s) could not be checked because the player identity is unresolved.`,
     lineupCheckFootnote: 'These are candidates for review. Confirm eligibility, locks, and AutoSubs on your platform before changing the lineup.',
     lineupCheckClear: 'No issues were identified among the starters we could check. Confirm current news and rules on your platform.',
@@ -370,6 +371,7 @@ export const myTeamScreenMessages = defineMessages({
     lockedNote: (locked) =>
       ` ${locked} ${locked === 1 ? 'titular ya llegó al inicio del partido' : 'titulares ya llegaron al inicio del partido'}.`,
     lineupCheck: 'Revisión de alineación',
+    lineupCheckAlso: 'Revisa también',
     unresolvedSlots: (n) => `${n} puesto(s) ocupado(s) no pudieron revisarse porque no identificamos al jugador.`,
     lineupCheckFootnote: 'Estas son opciones para revisar. Confirma elegibilidad, cierres y AutoSubs en tu plataforma antes de cambiar la alineación.',
     lineupCheckClear: 'No se identificaron problemas entre los titulares que pudimos revisar. Confirma las noticias y las reglas en tu plataforma.',

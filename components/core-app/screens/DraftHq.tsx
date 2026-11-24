@@ -104,7 +104,7 @@ function headlineText(h: LeagueDraftHeadline, g: Guide): string {
     case 'live':
       return g.headLive(h.pick, h.total, h.next, h.away)
     case 'before':
-      return g.headBefore(h.slot, h.teams)
+      return h.first ? g.headBeforeFirst(h.first) : g.headBefore(h.slot, h.teams)
     case 'done':
       return g.headDone(h.drafted)
     default:
@@ -188,10 +188,13 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
             <div className="af-dh-fact-value af-num">{session.draftType}</div>
             <div className="af-label">{copy('Format')} <TopicTip topic="draftFormat" /></div>
           </div>
-          <div className="af-dh-fact">
-            <div className="af-dh-fact-value af-num">{session.rounds}</div>
-            <div className="af-label">{copy('Rounds')}</div>
-          </div>
+          {/* The rookie room's banner says the rounds (2026-11-24: "4 rounds" was on the page twice). */}
+          {room?.rounds != null ? null : (
+            <div className="af-dh-fact">
+              <div className="af-dh-fact-value af-num">{session.rounds}</div>
+              <div className="af-label">{copy('Rounds')}</div>
+            </div>
+          )}
           {/* Before the draft the headline already says "you pick 2nd of 12" — said once. */}
           {headline.kind !== 'before' || headline.slot == null ? (
             <>
@@ -566,7 +569,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null, live = null, boa
   return (
     <div className="af-dh" data-dynasty-room={room ? 'true' : undefined} data-phase={phase ?? 'none'}>
       {header}
-      {room ? <DraftHqRookieRoom room={room} leagueId={data.league.id} /> : null}
+      {room ? <DraftHqRookieRoom room={room} leagueId={data.league.id} hideStatus={Boolean(session)} /> : null}
 
       {done ? (
         <>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PartnerDashboard } from '@/lib/partner-codes/dashboard'
 import { SHARE_FORMATS, SHARE_LOOKS, shareMessage, type ShareFormatKey, type ShareLookKey } from '@/lib/partner-codes/shareLooks'
+import { LandingStoreBadges } from '@/components/core-app/screens/LandingStoreBadges'
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const n = (v: number) => v.toLocaleString('en-US')
@@ -197,6 +198,16 @@ function CodeCard({ c, s, demo, onChanged }: { c: C; s: S; demo: boolean; onChan
       </div>
       {editing ? <ChangeCode current={c.code} onDone={() => { setEditing(false); onChanged() }} /> : null}
       <p className="text-[13px] text-[#a3a8c9]">Friends get {s.discountPercent}% off their first {s.discountMonths} months on the web. People who subscribe in the iPhone or Android app still count for you. Your old codes keep working if you change it.</p>
+      {/*
+        A friend who installs first has no /with/CODE cookie, so the code attaches only if they type
+        it in the sign-up form's Partner code box (/api/auth/register checks it). Social sign-in
+        (Apple, Google) skips that form. The badges hide themselves inside our own iOS app and TWA.
+      */}
+      <div className="flex flex-col gap-1 border-t border-[#2a2f5a] pt-4" data-testid="partner-code-get-app">
+        <h3 className={label}>Get the app</h3>
+        <p className="text-[13px] text-[#a3a8c9]">Friends who sign up in the app should enter your code {c.code} on the sign-up screen, so they count for you.</p>
+        <LandingStoreBadges page="partner-code" testId="partner-code-store-badges" />
+      </div>
     </section>
   )
 }

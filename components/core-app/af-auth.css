@@ -132,10 +132,33 @@
   color: var(--muted);
 }
 
+/* The same line in the error colour: a Partner Code on /signup that did not check out. */
+.af-au-hint--error {
+  color: var(--bad);
+}
+
 .af-au-field-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+/* "Have a partner code?" on /signup: a text link that opens the optional Partner code box.
+   44px tall for touch, like .af-au-forgot. */
+.af-au-link-btn,
+.af-core .af-au-link-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .af-au-forgot {

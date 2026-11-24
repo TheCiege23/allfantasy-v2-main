@@ -24,6 +24,7 @@ describe('store badge taps are tracked', () => {
     ['landing', 'landing-store-google', 'google_play'],
     ['commissioners', 'landing-store-apple', 'app_store'],
     ['signup', 'landing-store-google', 'google_play'],
+    ['partner-code', 'landing-store-apple', 'app_store'],
   ] as const)('%s: tapping %s pushes store=%s', (page, testId, store) => {
     render(<LandingStoreBadges page={page} />)
     expect(badgeEvents()).toHaveLength(0) // nothing fires on render

@@ -668,7 +668,13 @@ export function LeagueHome({
               ? g.headH2h(head.rank, head.teams, head.record, null)
               : league.name
   /* This week, once, under the headline: the game (h2h) or the cut (elimination). */
-  const weekLine = overviewWeekLine(head)
+  /*
+   * 2026-11-24: between seasons (the dynasty deck's Offseason) there is no week — the page still said
+   * "This week vs …", "Review your starters · Check before the first kickoff" and drew a week's games.
+   * The deck's timeline is what this window is about.
+   */
+  const betweenSeasons = Boolean(data.dynasty?.offseason)
+  const weekLine = betweenSeasons ? null : overviewWeekLine(head)
   const winPct = pWin != null ? Math.round(Math.max(0, Math.min(1, pWin)) * 100) : null
   const chips: Array<{ key: string; label: string; href: string }> = []
   // The win chance is said once, on the week's Matchup cell below — not again as a chip here.
@@ -905,7 +911,7 @@ export function LeagueHome({
         </section>
       )}
 
-      <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
+      {betweenSeasons ? null : <LeagueSection id="week"><section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
           <div><h2 id="af-lh-week-summary-title">{data.preSeason && rosteredPlayerCount === 0 ? copy('Before the draft') : copy('This week')}</h2></div>
           <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
@@ -923,9 +929,9 @@ export function LeagueHome({
             <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
           </div>
         </div>
-      </section></LeagueSection>
+      </section></LeagueSection>}
 
-      {elimination ? null : scoreboardSection}
+      {elimination || betweenSeasons ? null : scoreboardSection}
 
       {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
@@ -1124,7 +1130,7 @@ export function LeagueHome({
         )}
       </StatePanel></LeagueSection>}
 
-      {elimination ? scoreboardSection : null}
+      {elimination && !betweenSeasons ? scoreboardSection : null}
 
       {/* ── Power board: all-play + movement ────────────────────────── */}
       {/*

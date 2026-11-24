@@ -1630,6 +1630,8 @@
 .af-lh-kpi--link:hover,
 .af-lh-kpi--link:focus-visible { border-color: var(--accent); }
 .af-lh-kpi--link[data-deadline-state='closed'] .af-lh-kpi-value { color: var(--muted); }
+/* One tile stays a tile (2026-11-24: "Points for" alone stretched across the whole row on a desktop). */
+.af-lh-kpis:has(> .af-lh-kpi:only-child) { grid-template-columns: minmax(180px, 280px); }
 
 .af-lh-attention { display: flex; flex-direction: column; gap: 8px; }
 .af-lh-attention-title { margin: 0; }

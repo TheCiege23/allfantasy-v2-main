@@ -100,6 +100,8 @@
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
 }
+/* One fact stays a tile (2026-11-24: with the rookie room saying the rounds, "Linear" alone spanned the card). */
+.af-dh-facts:has(> .af-dh-fact:only-child) { grid-template-columns: minmax(120px, 240px); }
 
 .af-dh-fact {
   padding: 10px 12px;

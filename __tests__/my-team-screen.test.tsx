@@ -435,7 +435,10 @@ describe('My Team — the reported problems', () => {
         })}
       />,
     )
-    expect(t).toContain('years left unknown')
+    // Unknown is not said per row (2026-11-24), and the note does not promise a years count it cannot give.
+    expect(t).not.toContain('years left unknown')
+    expect(t).not.toMatch(/Years left counts/)
+    expect(t).toContain('Not eligible to start.')
   })
 
   it('marks a preseason game so a meaningless projection cannot pose as a week', () => {

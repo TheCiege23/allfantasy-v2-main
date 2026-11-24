@@ -19,8 +19,6 @@ import '@/components/core-app/af-draft-hq-dynasty.css'
  * `--dyn-gold` is a fill and line colour only.
  */
 
-/** More taxi slots than this draw as a count only — a row of 20 dots says nothing a number does not. */
-const MAX_SLOT_DOTS = 8
 
 function formatWhen(at: string, kind: 'starts' | 'opens', locale: string): string {
   const d = new Date(at)
@@ -33,7 +31,8 @@ function formatWhen(at: string, kind: 'starts' | 'opens', locale: string): strin
   return `${day} · ${time} ET`
 }
 
-export function DraftHqRookieRoom({ room, leagueId }: { room: RookieDraftRoom; leagueId: string }) {
+/** `hideStatus`: Draft HQ's own headline already says the status ("Not started · …"), so the room does not repeat it. */
+export function DraftHqRookieRoom({ room, leagueId, hideStatus = false }: { room: RookieDraftRoom; leagueId: string; hideStatus?: boolean }) {
   const m = useMessages(draftHqRookieRoomMessages)
   const language = useOptionalLanguage().language ?? 'en'
   const { picks, taxi, board, date } = room
@@ -77,7 +76,7 @@ export function DraftHqRookieRoom({ room, leagueId }: { room: RookieDraftRoom; l
                 <dd><strong>{room.teams}</strong></dd>
               </div>
             ) : null}
-            {room.status != null ? (
+            {room.status != null && !hideStatus ? (
               <div className="af-dh-dy-fact" data-status={room.status}>
                 <dt>{m.statusLabel}</dt>
                 <dd><span className="af-dh-dy-status">{m.status(room.status)}</span></dd>
@@ -132,16 +131,10 @@ export function DraftHqRookieRoom({ room, leagueId }: { room: RookieDraftRoom; l
                 <a href={myTeamHref}>{m.myTeam}</a>
               </header>
               <p className="af-dh-dy-big">
-                <strong>{taxi.count}</strong>
-                <span>{taxi.slots > 0 ? m.taxiUsed(taxi.count, taxi.slots) : m.taxiCount(taxi.count)}</span>
+                {/* The count once, as Home says it (2026-11-24): "2", "2 of 4 slots used" and four boxes said it three times. */}
+                <strong>{taxi.slots > 0 ? m.taxiOf(taxi.count, taxi.slots) : taxi.count}</strong>
+                <span>{taxi.slots > 0 ? m.taxiSlotsWord : m.taxiCount(taxi.count)}</span>
               </p>
-              {taxi.slots > 0 && taxi.slots <= MAX_SLOT_DOTS ? (
-                <ol className="af-dh-dy-slots">
-                  {Array.from({ length: taxi.slots }, (_, i) => (
-                    <li key={i} data-filled={i < taxi.count || undefined} aria-label={i < taxi.count ? m.slotFilled : m.slotOpen} />
-                  ))}
-                </ol>
-              ) : null}
               {taxi.slots > 0 ? (
                 <p className="af-dh-dy-note">{taxi.count >= taxi.slots ? m.taxiFull : m.taxiRoom(taxi.slots - taxi.count)}</p>
               ) : null}
