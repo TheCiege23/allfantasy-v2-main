@@ -5,6 +5,7 @@ import { useMessages } from '@/components/i18n/useMessages'
 import { homeGuideMessages } from '@/lib/core-app/messages/homeGuide'
 import { InactiveLadderList } from '@/components/core-app/commissioner/InactiveLadderList'
 import type { LadderEntry } from '@/lib/core-app/commissioner/inactiveLadder'
+import { PartnerCodeNudge } from '@/components/partner-codes/PartnerCodeNudge'
 import '@/components/core-app/home/af-home-guide.css'
 
 /**
@@ -110,6 +111,8 @@ export function HomeCommishCard({
       <Link className="af-hg-more" href="/core/commissioner">
         {g.runOpen} →
       </Link>
+      {/* Partner Codes: draws nothing unless the program is on (the server decides). */}
+      <PartnerCodeNudge variant="row" />
     </section>
   )
 }
