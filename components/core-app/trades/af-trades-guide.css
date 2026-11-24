@@ -85,3 +85,10 @@
   .af-tg-more,
   .af-tg-how > summary { min-height: 44px; }
 }
+
+/* Check a trade, closed until tapped (TradeCenter hub, 2026-11-24): the section head is the summary. */
+.af-core .af-tg-checkfold > summary { list-style: none; cursor: pointer; position: relative; padding-right: 28px; }
+.af-core .af-tg-checkfold > summary::-webkit-details-marker { display: none; }
+.af-core .af-tg-checkfold > summary::after { content: '▾'; position: absolute; right: 4px; top: 4px; color: var(--muted); font-size: 14px; }
+.af-core .af-tg-checkfold[open] > summary::after { content: '▴'; }
+.af-core .af-tg-checkfold[open] > summary { margin-bottom: 12px; }
