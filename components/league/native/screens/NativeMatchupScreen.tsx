@@ -7,6 +7,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 import type { MatchupCenterPayload, MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { maxWeekForSport } from '@/components/matchup-center/MatchupTabContainer'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import { fmt1, formatRecord, initialsOf, pairScoreboard, rowPointTone, shortPlayerName, type ScoreboardRow } from '@/lib/league/native/nativeScreenModels'
 import type { NativeBoardGame } from '@/lib/matchup-center/nativeMatchupModel'
 import { isNativeGuillotineLeague } from '@/lib/guillotine/nativeGuillotineScreens'
@@ -228,7 +229,13 @@ function HeadToHeadMatchupScreen({ league, onSelectTab }: ScreenProps) {
     const ms = payload?.refreshIntervalMs
     if (!ms || !Number.isFinite(ms) || ms <= 0) return
     const t = window.setInterval(() => void load(true), ms)
-    return () => window.clearInterval(t)
+    // While this screen polls its own scores, the league page's 30-second server re-render stands
+    // down (LeagueShell, routeRefreshClaim): the two used to run side by side on every tick.
+    const release = claimRouteRefresh()
+    return () => {
+      window.clearInterval(t)
+      release()
+    }
   }, [payload?.refreshIntervalMs, load])
 
   const rows = useMemo(() => {

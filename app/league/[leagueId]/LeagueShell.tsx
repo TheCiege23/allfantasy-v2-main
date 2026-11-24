@@ -41,6 +41,7 @@ import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { primeDeployBaseline, refreshInBackground } from '@/lib/core-app/deployGuard'
+import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import type { LucideIcon } from 'lucide-react'
 import {
   Anchor,
@@ -437,6 +438,11 @@ export function LeagueShell({
     window.addEventListener('focus', backgroundRefresh)
     document.addEventListener('visibilitychange', backgroundRefresh)
     const interval = setInterval(() => {
+      // 🛑 The matchup screens poll their own scores every 30s during a game. While one is polling it
+      // claims the route (components/core-app/routeRefreshClaim), and this timer stands down: it
+      // re-rendered the whole league page on the server on the same beat, for nothing the screen
+      // showed (measured 2026-11-23 during MNF). Saves, focus and returning to the tab still refresh.
+      if (routeRefreshClaimed()) return
       if (isNativePlatform(league.platform) && !document.querySelector('input:focus, textarea:focus, select:focus')) refresh()
     }, 30000)
     return () => {
