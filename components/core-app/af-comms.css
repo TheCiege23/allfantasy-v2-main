@@ -5027,3 +5027,34 @@ html[data-mode='light'] .af-cm .af-cm-act { box-shadow: 0 1px 2px rgba(11, 16, 3
 /* The base reset strips list markers; without them a list reads as stray indented lines. */
 .af-cm-bubble-text.af-cm-chimmy-text ul { list-style: disc; }
 .af-cm-bubble-text.af-cm-chimmy-text ol { list-style: decimal; }
+
+/*
+ * One row at the foot of an answer: Copy / Copy for socials, then the thumbs (2026-11-24, the simplify
+ * pass). The rating keeps its own 44px targets; the copy row loses its top margin inside the foot.
+ */
+.af-cm-answer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin-top: 4px;
+}
+.af-cm-answer-foot > .af-cm-copy { margin-top: 0; }
+.af-cm-answer-foot > .af-cm-rate { margin: 0 -10px 0 auto; }
+
+/* The evidence line as its own toggle (ChimmyEvidence.tsx, 2026-11-24): a plain row, not a grey UA button. */
+button.af-cm-ev-row {
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+button.af-cm-ev-row .af-cm-ev-toggle { text-decoration: none; font-size: 12px; }
+button.af-cm-ev-row:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; border-radius: 6px; }

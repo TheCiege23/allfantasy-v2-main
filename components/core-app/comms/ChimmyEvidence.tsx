@@ -240,9 +240,30 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
     links.length > 0 ||
     Boolean(syncedAt)
 
+  const RowTag = canExpand ? 'button' : 'div'
+
   return (
     <div className="af-cm-evidence" data-testid="chimmy-evidence">
-      <div className="af-cm-ev-row">
+      {/*
+        THE WHOLE LINE IS THE TOGGLE (2026-11-24, the simplify pass). "What is this based on?" sat after the
+        badges and, on a phone, wrapped onto a line of its own under every answer. Tapping the line itself
+        opens the detail; a screen reader still hears "What is this based on?". Nothing in the line moves
+        behind the tap — the missing count stays visible, closed. No chevron: at 390px the line is already
+        full, and even a 12px mark wrapped onto a line of its own (measured).
+      */}
+      <RowTag
+        className="af-cm-ev-row"
+        {...(canExpand
+          ? {
+              type: 'button' as const,
+              onClick: () => setExpanded((v) => !v),
+              'aria-expanded': expanded,
+              'aria-controls': detailId,
+              'aria-label': `What is this based on? ${[level ? `${level} confidence` : null, fresh, dataSources.length > 0 ? `${dataSources.length} ${dataSources.length === 1 ? 'source' : 'sources'}` : null, missing.length > 0 ? `${missing.length} missing` : null].filter(Boolean).join(', ')}`,
+              'data-toggle': 'true',
+            }
+          : {})}
+      >
         {level ? (
           <span className="af-cm-ev-level af-num" data-level={level}>
             {level} confidence
@@ -274,18 +295,7 @@ export function ChimmyEvidenceBlock({ evidence }: { evidence: ChimmyEvidence }) 
           </span>
         ) : null}
 
-        {canExpand ? (
-          <button
-            type="button"
-            className="af-cm-ev-toggle"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-controls={detailId}
-          >
-            {expanded ? 'Hide' : 'What is this based on?'}
-          </button>
-        ) : null}
-      </div>
+      </RowTag>
 
       {expanded ? (
         <div className="af-cm-ev-detail" id={detailId} data-testid="chimmy-evidence-detail">
